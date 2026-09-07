@@ -38,7 +38,15 @@ const describeRawResponseHeaders = supportsRawResponseHeaders ? describe : descr
 const serverKey = readFileSync(path.join(__dirname, '../../../../datadog-plugin-http2/test/ssl/test.key'))
 const serverCert = readFileSync(path.join(__dirname, '../../../../datadog-plugin-http2/test/ssl/test.crt'))
 const responseSetHeaderFinishChannel = dc.channel('datadog:http:server:response:set-header:finish')
+const responseWriteHeadChannel = dc.channel('apm:http:server:response:writeHead:start')
 const setCookieChannel = dc.channel('datadog:iast:set-cookie')
+
+/**
+ * @param {import('node:http2').ClientHttp2Stream} stream
+ */
+function consumePushedStream (stream) {
+  stream.resume()
+}
 
 function sourceTypeOf (value) {
   const iastContext = getIastContext(storage('legacy').getStore())
@@ -99,13 +107,15 @@ describeSupported('IAST HTTP/2 server', () => {
    * @param {string} path
    * @param {import('node:http2').OutgoingHttpHeaders} [headers]
    * @param {boolean} [secure]
+   * @param {import('node:http2').Settings} [settings]
    * @returns {Promise<void>}
    */
-  function request (path, headers = {}, secure = false) {
+  function request (path, headers = {}, secure = false, settings) {
     return new Promise((resolve, reject) => {
       const protocol = secure ? 'https' : 'http'
-      const options = secure ? { rejectUnauthorized: false } : undefined
+      const options = secure ? { rejectUnauthorized: false, settings } : settings && { settings }
       const client = http2.connect(`${protocol}://localhost:${port}`, options).on('error', reject)
+      client.on('stream', consumePushedStream)
       const req = client.request({ ':path': path, ':method': 'GET', ...headers })
       req.on('error', reject)
       req.on('end', () => {
@@ -240,6 +250,40 @@ describeSupported('IAST HTTP/2 server', () => {
     })
   })
 
+  describe('custom compatibility response', () => {
+    let getHeaderCalls
+    let getHeaderCallsDuringHeaderOperations
+
+    beforeEach(() => listen(() => {
+      class CustomHttp2ServerResponse extends http2.Http2ServerResponse {
+        /** @param {string} name */
+        getHeader (name) {
+          getHeaderCalls++
+          return `application-value-for-${name}`
+        }
+      }
+
+      return http2.createServer({ Http2ServerResponse: CustomHttp2ServerResponse }, (req, res) => {
+        handler(req, res)
+        if (!res.headersSent) res.writeHead(200)
+        res.end()
+      })
+    }))
+
+    it('does not invoke an overridden getter while setting response headers', async () => {
+      getHeaderCalls = 0
+      handler = (req, res) => {
+        res.setHeader('set-cookie', 'first=1; HttpOnly')
+        if (res.appendHeader) res.appendHeader('set-cookie', 'second=2')
+        getHeaderCallsDuringHeaderOperations = getHeaderCalls
+      }
+      await requestAndAssertTraces(traces => {
+        assert.strictEqual(getHeaderCallsDuringHeaderOperations, 0)
+        assertVulnerability(traces, 'NO_SAMESITE_COOKIE')
+      })
+    })
+  })
+
   describe('mixed compatibility and core APIs', () => {
     beforeEach(() => listen(() => {
       const mixedServer = http2.createServer((req, res) => {
@@ -293,8 +337,9 @@ describeSupported('IAST HTTP/2 server', () => {
   describe('mixed compatibility and core APIs with a core listener first', () => {
     beforeEach(() => listen(() => {
       const mixedServer = http2.createServer()
-      mixedServer.prependListener('stream', stream => {
-        stream.respond({ ':status': 200, 'content-type': 'text/html' })
+      mixedServer.prependListener('stream', (stream, headers) => {
+        const statusCode = headers[':path'] === '/not-found' ? 404 : 200
+        stream.respond({ ':status': statusCode, 'content-type': 'text/html' })
         stream.end()
       })
       mixedServer.on('request', () => {})
@@ -303,6 +348,15 @@ describeSupported('IAST HTTP/2 server', () => {
 
     it('reports a missing response header from the core response', async () => {
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'XCONTENTTYPE_HEADER_MISSING'))
+    })
+
+    it('uses the committed core status when the compatibility request is adopted', async () => {
+      await requestAndAssertTraces(traces => {
+        const span = getWebSpanFrom(traces)
+        const iastJson = span.meta['_dd.iast.json'] || ''
+        assert.ok(!iastJson.includes('XCONTENTTYPE_HEADER_MISSING'), `Unexpected report: ${iastJson}`)
+        assert.strictEqual(span.meta['http.status_code'], '404')
+      }, '/not-found')
     })
   })
 
@@ -336,6 +390,126 @@ describeSupported('IAST HTTP/2 server', () => {
     it('reports a response-side vulnerability (cookie without HttpOnly)', async () => {
       handler = (req, stream) => stream.respond({ ':status': 200, 'set-cookie': 'session=abc' })
       await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+    })
+
+    it('reports a response-side vulnerability from a pushed response', async () => {
+      let callbackWasSynchronous
+      const completionOrder = []
+      const pushedWriteHeadResponses = []
+      const pushedCookieResponses = []
+      /** @param {{ res: object, responseHeaders: Record<string, unknown> }} data */
+      function capturePushedWriteHead (data) {
+        if (data.responseHeaders['set-cookie']) pushedWriteHeadResponses.push(data.res)
+      }
+      /** @param {{ name: string, res: object }} data */
+      function capturePushedCookie (data) {
+        if (data.name === 'set-cookie') pushedCookieResponses.push(data.res)
+      }
+      responseWriteHeadChannel.subscribe(capturePushedWriteHead)
+      responseSetHeaderFinishChannel.subscribe(capturePushedCookie)
+
+      handler = (req, stream) => {
+        let synchronous = true
+        queueMicrotask(() => completionOrder.push('microtask'))
+        stream.pushStream(undefined, (error, pushedStream) => {
+          callbackWasSynchronous = synchronous
+          completionOrder.push('callback')
+          assert.ifError(error)
+          assert.throws(() => pushedStream.pushStream(null, null), { code: 'ERR_HTTP2_NESTED_PUSH' })
+          pushedStream.respond({ ':status': 200, 'set-cookie': 'session=abc' })
+          pushedStream.end()
+        })
+        synchronous = false
+      }
+      try {
+        await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+      } finally {
+        responseWriteHeadChannel.unsubscribe(capturePushedWriteHead)
+        responseSetHeaderFinishChannel.unsubscribe(capturePushedCookie)
+      }
+      assert.strictEqual(callbackWasSynchronous, false)
+      assert.deepStrictEqual(completionOrder, ['callback', 'microtask'])
+      assert.strictEqual(pushedWriteHeadResponses.length, 1)
+      assert.strictEqual(pushedCookieResponses.length, 1)
+      assert.strictEqual(pushedCookieResponses[0], pushedWriteHeadResponses[0])
+    })
+
+    it('reports a response-side vulnerability from the three-argument push overload', async () => {
+      const requestHeaders = { ':path': '/asset' }
+      const options = { endStream: '' }
+      let callbackWasSynchronous
+      const completionOrder = []
+      handler = (req, stream) => {
+        let synchronous = true
+        queueMicrotask(() => completionOrder.push('microtask'))
+        stream.pushStream(requestHeaders, options, (error, pushedStream, pushedHeaders) => {
+          callbackWasSynchronous = synchronous
+          completionOrder.push('callback')
+          assert.ifError(error)
+          assert.notStrictEqual(pushedHeaders, requestHeaders)
+          assert.strictEqual(pushedHeaders[':method'], 'GET')
+          pushedStream.respond({ ':status': 200, 'set-cookie': 'session=abc' })
+          pushedStream.end()
+        })
+        synchronous = false
+        assert.deepStrictEqual(requestHeaders, { ':path': '/asset' })
+        assert.deepStrictEqual(options, { endStream: '' })
+      }
+      await requestAndAssertTraces(traces => assertVulnerability(traces, 'NO_HTTPONLY_COOKIE'))
+      assert.strictEqual(callbackWasSynchronous, false)
+      assert.deepStrictEqual(completionOrder, ['callback', 'microtask'])
+    })
+
+    it('preserves truthy push endStream state without mutating options', async () => {
+      const options = { endStream: true }
+      let pushedStreamEnded
+      handler = (req, stream) => {
+        stream.pushStream({ ':path': '/asset' }, options, (error, pushedStream) => {
+          assert.ifError(error)
+          pushedStreamEnded = pushedStream.writableEnded
+          pushedStream.respond({ ':status': 204 }, { endStream: true })
+        })
+        assert.deepStrictEqual(options, { endStream: true })
+      }
+      await requestAndAssertTraces(getWebSpanFrom)
+      assert.strictEqual(pushedStreamEnded, true)
+    })
+
+    it('preserves push validation and callback validation order', async () => {
+      handler = (req, stream) => {
+        for (const callback of [undefined, null, 0, false, '', NaN, true]) {
+          assert.throws(() => stream.pushStream({ ':path': '/asset' }, callback), {
+            code: 'ERR_INVALID_ARG_TYPE',
+          })
+        }
+        for (const options of [null, 0, false, '', NaN]) {
+          assert.throws(() => stream.pushStream({ ':path': '/asset' }, options, () => {}), {
+            code: 'ERR_INVALID_ARG_TYPE',
+          })
+        }
+        for (const headers of [null, 0, false, '', NaN]) {
+          assert.throws(() => stream.pushStream(headers, () => {}), { code: 'ERR_INVALID_ARG_TYPE' })
+        }
+        assert.throws(() => stream.pushStream(null, null, () => {}), {
+          code: 'ERR_INVALID_ARG_TYPE',
+          message: /options/,
+        })
+        assert.throws(() => stream.pushStream(null, null), {
+          code: 'ERR_INVALID_ARG_TYPE',
+          message: /callback/,
+        })
+      }
+      await requestAndAssertTraces(getWebSpanFrom)
+    })
+
+    it('preserves disabled-push rejection before argument validation', async () => {
+      handler = (req, stream) => {
+        assert.throws(() => stream.pushStream(null, null), { code: 'ERR_HTTP2_PUSH_DISABLED' })
+      }
+      await Promise.all([
+        agent.assertSomeTraces(getWebSpanFrom),
+        request('/', {}, false, { enablePush: false }),
+      ])
     })
 
     describeRawResponseHeaders('raw response headers', () => {

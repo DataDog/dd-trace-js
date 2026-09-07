@@ -70,14 +70,17 @@ class Http2ServerPlugin extends ServerPlugin {
     return ctx.currentStore
   }
 
-  // A stream-backed request starts with an adapter. Point its shared context at
-  // the compatibility objects before the user's event handler runs.
+  // A stream-backed request starts with adapters. Keep a committed response
+  // adapter because the new compatibility response has no transmitted state.
   adopt (ctx) {
     const context = web.patch(ctx.req)
+    const response = context.res
     adoptRequest({ req: ctx.req, canonicalRequest: context.req })
     context.req = ctx.req
-    context.res = ctx.res
-    instrumentWriteHead(context)
+    if (!response.headersSent) {
+      context.res = ctx.res
+      instrumentWriteHead(context)
+    }
   }
 
   bindEmit (ctx) {

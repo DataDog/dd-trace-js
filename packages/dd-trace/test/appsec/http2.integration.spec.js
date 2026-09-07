@@ -5,6 +5,7 @@ const { once } = require('node:events')
 const { closeSync, openSync, readFileSync, statSync } = require('node:fs')
 const { open } = require('node:fs/promises')
 const path = require('node:path')
+const { text } = require('node:stream/consumers')
 
 const { after, afterEach, before, describe, it } = require('mocha')
 const semver = require('semver')
@@ -52,6 +53,56 @@ const describeSupported = runtimeSupported ? describe : describe.skip
 /** @type {typeof import('node:https')} */
 let https
 let incomingHttpRequestEndCount = 0
+
+/**
+ * @typedef {object} BlockedCallbackState
+ * @property {string[]} labels
+ * @property {(Error | undefined)[]} errors
+ * @property {boolean[]} synchronousStates
+ * @property {string[]} completionOrder
+ * @property {boolean} synchronous
+ * @property {number} expectedCount
+ * @property {() => void} resolve
+ */
+
+/**
+ * @typedef {object} BlockedPushCallbackState
+ * @property {Error | null | undefined} error
+ * @property {object | undefined} response
+ * @property {boolean} synchronous
+ * @property {boolean | undefined} callbackWasSynchronous
+ * @property {string[]} completionOrder
+ * @property {() => void} resolve
+ */
+
+/**
+ * @param {'write' | 'end' | 'end-with-encoding' | 'end-without-encoding'} label
+ * @param {BlockedCallbackState} state
+ * @returns {(error?: Error) => void}
+ */
+function createBlockedResponseCallback (label, state) {
+  return function (error) {
+    state.labels.push(label)
+    state.errors.push(error)
+    state.synchronousStates.push(state.synchronous)
+    state.completionOrder.push(label)
+    if (state.labels.length === state.expectedCount) state.resolve()
+  }
+}
+
+/**
+ * @param {BlockedPushCallbackState} state
+ * @returns {(error?: Error | null, response?: object) => void}
+ */
+function createBlockedPushCallback (state) {
+  return function (error, response) {
+    state.error = error
+    state.response = response
+    state.callbackWasSynchronous = state.synchronous
+    state.completionOrder.push('callback')
+    state.resolve()
+  }
+}
 
 /**
  * @returns {void}
@@ -129,15 +180,17 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
   /**
    * @param {string} [requestPath]
    * @param {import('node:http2').OutgoingHttpHeaders} [additionalHeaders]
+   * @param {(stream: import('node:http2').ClientHttp2Stream) => void} [onPushedStream]
    * @returns {Promise<{
    *   body: string,
    *   headers: import('node:http2').IncomingHttpHeaders,
    *   informationalHeaders: import('node:http2').IncomingHttpHeaders[]
    * }>}
    */
-  function request (requestPath = '/', additionalHeaders) {
+  function request (requestPath = '/', additionalHeaders, onPushedStream) {
     return new Promise((resolve, reject) => {
       const client = http2.connect(`http://localhost:${port}`).once('error', reject)
+      if (onPushedStream) client.on('stream', onPushedStream)
       const requestHeaders = { ':path': requestPath, ...additionalHeaders }
       if (requestHeaders[':method'] === 'CONNECT') delete requestHeaders[':path']
       const stream = client.request(requestHeaders)
@@ -165,6 +218,54 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       })
       stream.end()
     })
+  }
+
+  /**
+   * @param {string} [requestPath]
+   * @returns {Promise<{
+   *   parent: { body: string, headers: import('node:http2').IncomingHttpHeaders },
+   *   pushed: { body: string, headers: import('node:http2').IncomingHttpHeaders }
+   * }>}
+   */
+  async function requestWithPush (requestPath = '/') {
+    const client = http2.connect(`http://localhost:${port}`)
+    const pushedResponsePromise = new Promise((resolve, reject) => {
+      /**
+       * @param {import('node:http2').ClientHttp2Stream} pushedStream
+       * @returns {Promise<void>}
+       */
+      async function collectPushedResponse (pushedStream) {
+        try {
+          const responseEvent = once(pushedStream, 'push')
+          const [body, [headers]] = await Promise.all([text(pushedStream), responseEvent])
+          resolve({ body, headers })
+        } catch (error) {
+          reject(error)
+        }
+      }
+
+      client.once('stream', collectPushedResponse)
+      client.once('error', reject)
+    })
+
+    const stream = client.request({ ':path': requestPath })
+    const responseEvent = once(stream, 'response')
+    const bodyPromise = text(stream)
+    stream.end()
+
+    try {
+      const [[parentHeaders], parentBody, pushed] = await Promise.all([
+        responseEvent,
+        bodyPromise,
+        pushedResponsePromise,
+      ])
+      return {
+        parent: { body: parentBody, headers: parentHeaders },
+        pushed,
+      }
+    } finally {
+      client.close()
+    }
   }
 
   /**
@@ -202,6 +303,61 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(body, blockedTemplateJson)
   })
 
+  it('completes suppressed compatibility write and end callbacks asynchronously', async () => {
+    /** @type {BlockedCallbackState} */
+    const callbackState = {
+      labels: [],
+      errors: [],
+      synchronousStates: [],
+      completionOrder: [],
+      synchronous: true,
+      expectedCount: 3,
+      resolve: () => {},
+    }
+    const callbacksCompleted = new Promise(resolve => { callbackState.resolve = resolve })
+    let blockedResponse
+    let writeResult
+    let endWithEncodingResult
+    let endWithoutEncodingResult
+
+    await listen(() => http2.createServer((req, res) => {
+      blockedResponse = res
+      res.writeHead(404, { k: '404' })
+      for (const callback of [undefined, null, 0, false, '', NaN]) {
+        assert.strictEqual(res.write('ignored', 'utf8', callback), true)
+        assert.strictEqual(res.end(undefined, undefined, callback), res)
+      }
+
+      queueMicrotask(() => callbackState.completionOrder.push('microtask'))
+      writeResult = res.write('ignored', 'utf8', createBlockedResponseCallback('write', callbackState))
+      endWithEncodingResult = res.end(
+        'ignored',
+        'utf8',
+        createBlockedResponseCallback('end-with-encoding', callbackState)
+      )
+      endWithoutEncodingResult = res.end(
+        'ignored',
+        createBlockedResponseCallback('end-without-encoding', callbackState)
+      )
+      callbackState.synchronous = false
+    }))
+
+    const [{ body, headers }] = await Promise.all([request(), callbacksCompleted])
+
+    assert.deepStrictEqual(callbackState.labels, ['write', 'end-with-encoding', 'end-without-encoding'])
+    assert.deepStrictEqual(callbackState.synchronousStates, [false, false, false])
+    assert.deepStrictEqual(callbackState.errors, [undefined, undefined, undefined])
+    assert.deepStrictEqual(
+      callbackState.completionOrder,
+      ['write', 'end-with-encoding', 'end-without-encoding', 'microtask']
+    )
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+    assert.strictEqual(writeResult, true)
+    assert.strictEqual(endWithEncodingResult, blockedResponse)
+    assert.strictEqual(endWithoutEncodingResult, blockedResponse)
+  })
+
   it('blocks responses sent through the compatibility response stream', async () => {
     let returnValue
     await listen(() => http2.createServer((req, res) => {
@@ -214,6 +370,158 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(headers[':status'], 403)
     assert.strictEqual(body, blockedTemplateJson)
     assert.strictEqual(returnValue, undefined)
+  })
+
+  it('completes suppressed core write and end callbacks asynchronously', async () => {
+    /** @type {BlockedCallbackState} */
+    const callbackState = {
+      labels: [],
+      errors: [],
+      synchronousStates: [],
+      completionOrder: [],
+      synchronous: true,
+      expectedCount: 2,
+      resolve: () => {},
+    }
+    const callbacksCompleted = new Promise(resolve => { callbackState.resolve = resolve })
+    let blockedStream
+    let writeResult
+    let endResult
+
+    await listenCore(stream => {
+      blockedStream = stream
+      stream.respond({ ':status': 404, k: '404' })
+      for (const callback of [undefined, null, 0, false, '', NaN]) {
+        assert.strictEqual(stream.write('ignored', 'utf8', callback), true)
+        assert.strictEqual(stream.end(undefined, undefined, callback), stream)
+      }
+      queueMicrotask(() => callbackState.completionOrder.push('microtask'))
+      writeResult = stream.write('ignored', createBlockedResponseCallback('write', callbackState))
+      endResult = stream.end(createBlockedResponseCallback('end', callbackState))
+      callbackState.synchronous = false
+    })
+
+    const [{ body, headers }] = await Promise.all([request(), callbacksCompleted])
+
+    assert.deepStrictEqual(callbackState.labels, ['write', 'end'])
+    assert.deepStrictEqual(callbackState.synchronousStates, [false, false])
+    assert.deepStrictEqual(callbackState.errors, [undefined, undefined])
+    assert.deepStrictEqual(callbackState.completionOrder, ['write', 'end', 'microtask'])
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+    assert.strictEqual(writeResult, true)
+    assert.strictEqual(endResult, blockedStream)
+  })
+
+  it('blocks core push streams after the parent response is blocked', async () => {
+    /** @type {BlockedPushCallbackState} */
+    const callbackState = {
+      error: undefined,
+      response: undefined,
+      synchronous: true,
+      callbackWasSynchronous: undefined,
+      completionOrder: [],
+      resolve: () => {},
+    }
+    const callbackCompleted = new Promise(resolve => { callbackState.resolve = resolve })
+    let pushedStreamCount = 0
+    let returnValue
+
+    await listenCore(stream => {
+      stream.respond({ ':status': 404, k: '404' })
+      assert.strictEqual(stream.pushStream({ ':path': '/ignored' }), undefined)
+      queueMicrotask(() => callbackState.completionOrder.push('microtask'))
+      returnValue = stream.pushStream(
+        { ':path': '/secret' },
+        createBlockedPushCallback(callbackState)
+      )
+      callbackState.synchronous = false
+    })
+
+    const [{ body, headers }] = await Promise.all([
+      request('/', undefined, () => { pushedStreamCount++ }),
+      callbackCompleted,
+    ])
+
+    assert.strictEqual(pushedStreamCount, 0)
+    assert.ok(callbackState.error instanceof Error)
+    assert.strictEqual(callbackState.response, undefined)
+    assert.strictEqual(callbackState.callbackWasSynchronous, false)
+    assert.deepStrictEqual(callbackState.completionOrder, ['callback', 'microtask'])
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+    assert.strictEqual(returnValue, undefined)
+  })
+
+  it('blocks compatibility push responses after the parent response is blocked', async () => {
+    /** @type {BlockedPushCallbackState} */
+    const callbackState = {
+      error: undefined,
+      response: undefined,
+      synchronous: true,
+      callbackWasSynchronous: undefined,
+      completionOrder: [],
+      resolve: () => {},
+    }
+    const callbackCompleted = new Promise(resolve => { callbackState.resolve = resolve })
+    let pushedStreamCount = 0
+    let returnValue
+
+    await listen(() => http2.createServer((req, res) => {
+      res.writeHead(404, { k: '404' })
+      queueMicrotask(() => callbackState.completionOrder.push('microtask'))
+      returnValue = res.createPushResponse(
+        { ':path': '/secret' },
+        createBlockedPushCallback(callbackState)
+      )
+      callbackState.synchronous = false
+    }))
+
+    const [{ body, headers }] = await Promise.all([
+      request('/', undefined, () => { pushedStreamCount++ }),
+      callbackCompleted,
+    ])
+
+    assert.strictEqual(pushedStreamCount, 0)
+    assert.ok(callbackState.error instanceof Error)
+    assert.strictEqual(callbackState.response, undefined)
+    assert.strictEqual(callbackState.callbackWasSynchronous, false)
+    assert.deepStrictEqual(callbackState.completionOrder, ['callback', 'microtask'])
+    assert.strictEqual(headers[':status'], 403)
+    assert.strictEqual(body, blockedTemplateJson)
+    assert.strictEqual(returnValue, undefined)
+  })
+
+  it('blocks pushed responses without blocking the parent response', async () => {
+    const responses = []
+    /** @param {{ res: object }} data */
+    function captureResponse (data) {
+      responses.push(data.res)
+    }
+    responseWriteHead.subscribe(captureResponse)
+
+    await listenCore(stream => {
+      stream.pushStream({ ':path': '/asset' }, (error, pushedStream) => {
+        assert.ifError(error)
+        pushedStream.respond({ ':status': 404, k: '404' })
+        pushedStream.end('ignored')
+      })
+      stream.respond({ ':status': 200 })
+      stream.end('parent')
+    })
+
+    try {
+      const { parent, pushed } = await requestWithPush()
+
+      assert.strictEqual(parent.headers[':status'], 200)
+      assert.strictEqual(parent.body, 'parent')
+      assert.strictEqual(pushed.headers[':status'], 403)
+      assert.strictEqual(pushed.body, blockedTemplateJson)
+      assert.strictEqual(responses.length, 2)
+      assert.notStrictEqual(responses[0], responses[1])
+    } finally {
+      responseWriteHead.unsubscribe(captureResponse)
+    }
   })
 
   it('drops corked writes from blocked compatibility response streams', async () => {
@@ -1985,6 +2293,14 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
           stream.respondWithFD(fileDescriptor, { ':status': 200 })
         } else if (headers[':path'] === '/file') {
           stream.respondWithFile(__filename, { ':status': 200 })
+        } else if (headers[':path'] === '/push') {
+          stream.pushStream({ ':path': '/asset' }, (error, pushedStream) => {
+            if (error) return stream.destroy(error)
+            pushedStream.respond({ ':status': 201 })
+            pushedStream.end('push')
+            stream.respond({ ':status': 200 })
+            stream.end('parent')
+          })
         } else {
           stream.additionalHeaders({ ':status': 103 })
           stream.respond({ ':status': 200 })
@@ -1994,12 +2310,14 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
       return coreServer
     })
 
-    const [respondResponse, fileDescriptorResponse, fileResponse, additionalHeadersResponse] = await Promise.all([
-      request('/respond'),
-      request('/fd'),
-      request('/file'),
-      request('/additional-headers'),
-    ])
+    const [respondResponse, fileDescriptorResponse, fileResponse, additionalHeadersResponse, pushResponse] =
+      await Promise.all([
+        request('/respond'),
+        request('/fd'),
+        request('/file'),
+        request('/additional-headers'),
+        requestWithPush('/push'),
+      ])
 
     assert.strictEqual(respondResponse.headers[':status'], 200)
     assert.strictEqual(respondResponse.body, 'body')
@@ -2010,6 +2328,10 @@ describeSupported('AppSec HTTP/2 response blocking', () => {
     assert.strictEqual(additionalHeadersResponse.headers[':status'], 200)
     assert.strictEqual(additionalHeadersResponse.informationalHeaders.length, 1)
     assert.strictEqual(additionalHeadersResponse.informationalHeaders[0][':status'], 103)
+    assert.strictEqual(pushResponse.parent.headers[':status'], 200)
+    assert.strictEqual(pushResponse.parent.body, 'parent')
+    assert.strictEqual(pushResponse.pushed.headers[':status'], 201)
+    assert.strictEqual(pushResponse.pushed.body, 'push')
   })
 
   it('does not inspect respondWithFile headers when opening the file fails', async () => {

@@ -157,6 +157,7 @@ function captureResponseHeader ({ name, value }) {
 }
 
 let incomingHttpRequestEndMessage
+let incomingHttpRequestEndMessageCount = 0
 let incomingHttpRequestStartMessage
 let responseWriteHeadMessages
 
@@ -174,6 +175,7 @@ function captureIncomingHttpRequestStart (message) {
  */
 function captureIncomingHttpRequestEnd (message) {
   incomingHttpRequestEndMessage = message
+  incomingHttpRequestEndMessageCount++
 }
 
 /**
@@ -214,6 +216,10 @@ describe('Plugin', () => {
         let requestReceived
         /** @type {() => void} */
         let resolveRequestReceived
+        /** @type {Promise<void>} */
+        let serverRequestClosed
+        /** @type {() => void} */
+        let resolveServerRequestClosed
 
         /** @type {Promise<void>} */
         let allowHandler
@@ -223,6 +229,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           requestReceived = new Promise(resolve => { resolveRequestReceived = resolve })
+          serverRequestClosed = new Promise(resolve => { resolveServerRequestClosed = resolve })
           allowHandler = new Promise(resolve => { resolveAllowHandler = resolve })
           responseSent = false
 
@@ -232,8 +239,13 @@ describe('Plugin', () => {
             // Only invoke `app` after the test has explicitly allowed it.
             // This keeps the test deterministic and removes reliance on wall-clock time.
             let closed = false
-            req.once('close', () => { closed = true })
-            res.once('close', () => { closed = true })
+            function markClosed () {
+              if (closed) return
+              closed = true
+              resolveServerRequestClosed()
+            }
+            req.once('close', markClosed)
+            res.once('close', markClosed)
 
             // Server-side safeguard: if something tries to send a response, record it.
             const writeHead = res.writeHead
@@ -331,12 +343,7 @@ describe('Plugin', () => {
             client.destroy()
           }
 
-          // Give the event loop a chance to process the stream cancellation before allowing
-          // the server handler to proceed (no fixed sleep, just a few turns).
-          await setImmediate()
-          await setImmediate()
-          await setImmediate()
-
+          await serverRequestClosed
           resolveAllowHandler()
 
           await tracesPromise
@@ -1406,6 +1413,40 @@ describe('Plugin', () => {
                 incomingHttpRequestStart.unsubscribe(captureIncomingHttpRequestStart)
                 incomingHttpRequestEnd.unsubscribe(captureIncomingHttpRequestEnd)
                 responseWriteHead.unsubscribe(captureResponseWriteHead)
+              }
+            })
+
+            it('keeps a committed core response when the compatibility request is adopted', async () => {
+              let realResponse
+              const responseHeaders = {}
+              const server = http2.createServer()
+              server.prependListener('stream', stream => {
+                stream.respond({ ':status': 404, 'content-type': 'text/html' })
+                stream.end()
+              })
+              server.on('request', (req, res) => {
+                realResponse = res
+              })
+              await listenAsync(server)
+
+              incomingHttpRequestEndMessage = undefined
+              incomingHttpRequestEndMessageCount = 0
+              incomingHttpRequestEnd.subscribe(captureIncomingHttpRequestEnd)
+
+              try {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({ name: 'web.request', meta: { 'http.status_code': '404' } }),
+                  request(http2, `http://localhost:${port}/user`, { responseHeaders }),
+                ])
+                assert.strictEqual(responseHeaders[':status'], 404)
+                assert.strictEqual(incomingHttpRequestEndMessage.res.statusCode, 404)
+                assert.strictEqual(incomingHttpRequestEndMessage.res.getHeader('content-type'), 'text/html')
+                assert.strictEqual(hookRes.statusCode, 404)
+                assert.strictEqual(hookRes.getHeader('content-type'), 'text/html')
+                assert.strictEqual(realResponse.headersSent, true)
+                assert.strictEqual(incomingHttpRequestEndMessageCount, 1)
+              } finally {
+                incomingHttpRequestEnd.unsubscribe(captureIncomingHttpRequestEnd)
               }
             })
           })
