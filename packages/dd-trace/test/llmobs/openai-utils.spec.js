@@ -83,3 +83,39 @@ describe('OpenAiLLMObsPlugin#_getModelProviderAndClient', () => {
     )
   })
 })
+
+describe('OpenAiLLMObsPlugin#setLLMObsTags', () => {
+  it('preserves null reasoning metadata values', () => {
+    const events = {}
+    const plugin = new OpenAiLLMObsPlugin({}, {})
+    plugin._tagger = {
+      tagLLMIO: (span, input, output) => { events.output = output },
+      tagMetadata: () => {},
+      tagMetrics: () => {},
+      tagModelName: () => {},
+    }
+
+    plugin.setLLMObsTags({
+      methodName: 'responses.create',
+      basePath: 'https://api.openai.com/v1',
+      args: [{ model: 'o4-mini', input: 'Solve this.' }],
+      result: {
+        data: {
+          model: 'o4-mini',
+          output: [{ type: 'reasoning', id: 'rs_1' }],
+        },
+      },
+      currentStore: {
+        span: {
+          context: () => ({ getTag: () => undefined }),
+        },
+      },
+    })
+
+    assert.deepStrictEqual(JSON.parse(events.output[0].content), {
+      summary: [],
+      encrypted_content: null,
+      id: 'rs_1',
+    })
+  })
+})
