@@ -66,6 +66,8 @@
     "@langchain/google-genai": "2.3.0",
     "@langchain/langgraph": "1.4.14",
     "@langchain/openai": "1.5.11",
+    "@llamaindex/core": "0.6.23",
+    "@llamaindex/openai": "0.4.23",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@nats-io/nats-core": "3.4.0",
     "@nats-io/transport-node": "3.4.0",
