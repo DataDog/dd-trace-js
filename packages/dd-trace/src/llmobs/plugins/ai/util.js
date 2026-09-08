@@ -105,7 +105,8 @@ function getOperation (span) {
  *   outputTokens?: number,
  *   totalTokens?: number,
  *   cacheReadTokens?: number,
- *   cacheWriteTokens?: number
+ *   cacheWriteTokens?: number,
+ *   reasoningOutputTokens?: number
  * }}
  */
 function getUsage (tags) {
@@ -132,10 +133,17 @@ function getUsage (tags) {
   // don't actually use prompt caching (e.g. OpenAI).
   const providerCache = getProviderCacheTokens(tags['ai.response.providerMetadata'])
 
-  const cacheReadTokens = tags['ai.usage.cachedInputTokens'] ?? providerCache.cacheReadTokens
+  const cacheReadTokens = tags['ai.usage.cachedInputTokens'] ??
+    tags['ai.usage.inputTokenDetails.cacheReadTokens'] ??
+    providerCache.cacheReadTokens
   if (cacheReadTokens) usage.cacheReadTokens = cacheReadTokens
 
-  if (providerCache.cacheWriteTokens) usage.cacheWriteTokens = providerCache.cacheWriteTokens
+  const cacheWriteTokens = tags['ai.usage.inputTokenDetails.cacheWriteTokens'] ?? providerCache.cacheWriteTokens
+  if (cacheWriteTokens) usage.cacheWriteTokens = cacheWriteTokens
+
+  // Reasoning tokens are only standardized on the usage object starting with AI SDK v5.
+  const reasoningOutputTokens = tags['ai.usage.reasoningTokens'] ?? tags['ai.usage.outputTokenDetails.reasoningTokens']
+  if (reasoningOutputTokens) usage.reasoningOutputTokens = reasoningOutputTokens
 
   // Normalize `inputTokens` to the sum convention used by `bedrockruntime.js`.
   // Some SDK combinations (e.g. `ai@5` + `@ai-sdk/amazon-bedrock@3`) pass the
@@ -423,6 +431,43 @@ function getToolCallResultContent (content) {
 }
 
 /**
+ * Formats a provider-executed tool result part (from an assistant message or model response)
+ * into an LLM Observability tool result.
+ *
+ * @param {ToolCallResultContent & { toolCallId?: string, toolName?: string }} part
+ * @returns {{ result: string, toolId: string, name: string, type: string }}
+ */
+function formatProviderToolResult (part) {
+  return {
+    result: getToolCallResultContent(part),
+    toolId: part.toolCallId ?? '',
+    name: part.toolName ?? '',
+    type: 'tool_result',
+  }
+}
+
+/**
+ * Formats a tool approval response part (from a tool message) into an LLM Observability tool message.
+ * The tool call ID is resolved from the approval requests seen in prior assistant messages.
+ *
+ * @param {{ approvalId?: string, approved?: boolean, reason?: string }} part
+ * @param {Map<string, string>} toolCallIdsByApprovalId
+ * @returns {{ role: string, content: string, toolId?: string }}
+ */
+function formatToolApprovalResponse (part, toolCallIdsByApprovalId) {
+  let content = part.approved ? '[Tool Approval Granted]' : '[Tool Approval Denied]'
+  if (typeof part.reason === 'string' && part.reason) content += `: ${part.reason}`
+
+  /** @type {{ role: string, content: string, toolId?: string }} */
+  const message = { role: 'tool', content }
+
+  const toolId = part.approvalId && toolCallIdsByApprovalId.get(part.approvalId)
+  if (toolId) message.toolId = toolId
+
+  return message
+}
+
+/**
  * Computes the LLM Observability `ai` span name
  * @param {string} operation
  * @param {string} functionId
@@ -463,6 +508,8 @@ module.exports = {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
+  formatProviderToolResult,
+  formatToolApprovalResponse,
   getLlmObsSpanName,
   getTelemetryMetadata,
   getGenerationMetadataFromEvent,
