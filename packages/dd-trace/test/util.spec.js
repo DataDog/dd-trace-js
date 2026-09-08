@@ -62,24 +62,21 @@ describe('util', () => {
       const utilPath = JSON.stringify(require.resolve('../src/util'))
       const script = `
         const { truncateString } = require(${utilPath})
-        const count = 2000
-        const collect = () => {
-          for (let i = 0; i < 5; i++) global.gc()
-        }
-        collect()
-        const before = process.memoryUsage().heapUsed
+        const count = 400
         const values = new Array(count)
         for (let i = 0; i < count; i++) {
-          const value = String(i).padStart(6, '0') + 'x'.repeat(20 * 1024)
+          // Parsing creates independent flat strings instead of ropes that can share storage.
+          const value = JSON.parse(JSON.stringify(String(i).padStart(6, '0') + 'x'.repeat(128 * 1024)))
           values[i] = truncateString(value, 100, '...')
         }
-        collect()
-        process.stdout.write(String((process.memoryUsage().heapUsed - before) / count))
+        let retainedLength = 0
+        for (const value of values) retainedLength += value.length
+        process.stdout.write(String(retainedLength))
       `
-      const result = spawnSync(process.execPath, ['--expose-gc', '-e', script], { encoding: 'utf8' })
+      const result = spawnSync(process.execPath, ['--max-old-space-size=32', '-e', script], { encoding: 'utf8' })
 
       assert.strictEqual(result.status, 0, result.stderr)
-      assert.ok(Number(result.stdout) < 1024, `${result.stdout} bytes retained per value`)
+      assert.strictEqual(result.stdout, '40000')
     })
   })
 
