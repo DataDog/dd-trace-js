@@ -94,6 +94,33 @@ describe('sdk', () => {
     })
   })
 
+  describe('prompts', () => {
+    it('exposes prompt management operations', () => {
+      const names = [
+        'get', 'create', 'createVersion', 'update', 'updateVersion',
+        'delete', 'list', 'listVersions', 'refresh', 'clearCache',
+      ]
+      for (const name of names) assert.strictEqual(typeof llmobs.prompts[name], 'function')
+    })
+
+    it('uses the disabled facade when llmobs is disabled', async () => {
+      const disabled = new LLMObsSDK(null, { disable () {} }, {
+        llmobs: { DD_LLMOBS_ENABLED: false },
+      })
+
+      assert.strictEqual(disabled.prompts, disabled.prompts)
+      const fallback = await disabled.prompts.get('prompt-id', { fallback: 'Hello' })
+      assert.strictEqual(fallback.source, 'fallback')
+      await assert.rejects(disabled.prompts.get('prompt-id'), error => {
+        assert.ok(error instanceof Error && 'status' in error)
+        assert.strictEqual(error.status, 0)
+        assert.strictEqual(error.message, 'LLM Observability is not enabled')
+        return true
+      })
+      disabled.disable()
+    })
+  })
+
   describe('enable', () => {
     it('enables llmobs if it is disabled', () => {
       const config = getConfigFresh({})

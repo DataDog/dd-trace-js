@@ -1,10 +1,12 @@
 'use strict'
 
+const { NoopPrompts } = require('./prompts/noop')
 let NoopExperiments
 
 class NoopLLMObs {
   constructor (noopTracer) {
     this._tracer = noopTracer
+    this._prompts = undefined
   }
 
   get enabled () {
@@ -23,6 +25,11 @@ class NoopLLMObs {
    */
   get evaluators () {
     return require('./evaluators')
+  }
+
+  get prompts () {
+    this._prompts ??= new NoopPrompts({ reason: 'LLM Observability is not enabled' })
+    return this._prompts
   }
 
   enable (options) {}

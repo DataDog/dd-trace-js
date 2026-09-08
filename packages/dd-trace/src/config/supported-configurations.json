@@ -1352,6 +1352,46 @@
         "namespace": "llmobs"
       }
     ],
+    "DD_LLMOBS_PROMPTS_CACHE_TTL": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "configurationNames": [
+          "llmobs.promptsCacheTtl"
+        ],
+        "default": "60"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "llmobs.promptsFileCacheEnabled"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_DIR": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.promptsFileCacheDir"
+        ],
+        "default": null
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_TIMEOUT": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "configurationNames": [
+          "llmobs.promptsTimeout"
+        ],
+        "default": "5"
+      }
+    ],
     "DD_LLMOBS_ML_APP": [
       {
         "implementation": "B",

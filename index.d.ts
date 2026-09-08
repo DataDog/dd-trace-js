@@ -3689,6 +3689,11 @@ declare namespace tracer {
       evaluators: Evaluators,
 
       /**
+       * Prompt Management API. Requires LLM Observability and a DD API key.
+       */
+      readonly prompts: Prompts,
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -4432,6 +4437,142 @@ declare namespace tracer {
       createDatasetFromCsv (options: CreateDatasetFromCsvOptions): Promise<Dataset>
     }
 
+    /** A prompt template message. */
+    interface PromptMessage {
+      role: string
+      content: string
+      [key: string]: JSONType
+    }
+
+    /** A prompt fallback supplied to get(). */
+    type PromptFallback = string | PromptMessage[] | {
+      template?: string | PromptMessage[]
+      chat_template?: PromptMessage[]
+      version?: string
+      label?: string
+    } | (() => PromptFallback)
+
+    /** Options for retrieving a managed prompt. */
+    interface GetPromptOptions {
+      version?: string | number
+      label?: string
+      env?: string
+      targetingKey?: string
+      attributes?: Record<string, JSONType>
+      fallback?: PromptFallback
+      cacheTtl?: number
+    }
+
+    /** A prompt returned by the Prompt Management API. */
+    interface PromptAPIError extends Error {
+      readonly status: number
+      readonly detail?: string
+    }
+
+    /** Options used to create a prompt. */
+    interface PromptCreateOptions {
+      id: string
+      template: string | PromptMessage[]
+      title?: string
+      description?: string
+      userVersion?: string
+      labels?: string[]
+      envIds?: string[]
+    }
+
+    /** Options used to create a prompt version. */
+    interface PromptVersionCreateOptions {
+      template: string | PromptMessage[]
+      description?: string
+      userVersion?: string
+      labels?: string[]
+      envIds?: string[]
+    }
+
+    /** Options used to update prompt metadata. */
+    interface PromptUpdateOptions {
+      title?: string
+      description?: string
+    }
+
+    /** Options used to update a prompt version. */
+    interface PromptVersionUpdateOptions {
+      labels?: string[]
+      description?: string
+      envIds?: string[]
+    }
+
+    /** Prompt response returned by the Prompt Management API. */
+    interface PromptResponse {
+      id?: string
+      prompt_id?: string
+      title?: string
+      description?: string
+      created_at?: string
+      source?: string
+      num_versions?: number
+      in_registry?: boolean
+      created_from?: string
+      author?: string
+      ml_app?: string
+      ml_apps?: string[]
+      last_version_created_at?: string
+      extracted_from?: string
+    }
+
+    /** Prompt version response returned by the Prompt Management API. */
+    interface PromptVersionResponse {
+      id?: string
+      prompt_uuid?: string
+      prompt_id?: string
+      template?: string | PromptMessage[]
+      version?: number
+      user_version?: string
+      labels?: string[]
+      created_at?: string
+      version_created_at?: string
+      author?: string
+      description?: string
+      ml_app?: string
+    }
+
+    /** Deleted prompt response returned by the Prompt Management API. */
+    interface DeletedPromptResponse {
+      id?: string
+      prompt_id?: string
+      deleted_at?: string
+    }
+
+    /** A managed prompt returned by Prompt Management. */
+    interface ManagedPrompt {
+      readonly id: string
+      readonly version: string
+      readonly label?: string
+      readonly labels?: string[]
+      readonly template: string | PromptMessage[]
+      readonly source: 'registry' | 'fallback' | 'cache'
+      readonly isChat: boolean
+      render (variables?: Record<string, unknown>): string | PromptMessage[]
+      renderChat (variables?: Record<string, unknown>): PromptMessage[]
+      toAnnotation (variables?: Record<string, unknown>): Prompt
+    }
+
+    /** Prompt Management client facade. */
+    interface Prompts {
+      get (id: string, options?: GetPromptOptions): Promise<ManagedPrompt>
+      create (options: PromptCreateOptions): Promise<PromptResponse>
+      createVersion (id: string, options: PromptVersionCreateOptions): Promise<PromptVersionResponse>
+      update (id: string, options: PromptUpdateOptions): Promise<PromptResponse>
+      updateVersion (
+        id: string, version: string | number, options: PromptVersionUpdateOptions
+      ): Promise<PromptVersionResponse>
+      delete (id: string): Promise<DeletedPromptResponse>
+      list (): Promise<PromptResponse[]>
+      listVersions (id: string): Promise<PromptVersionResponse[]>
+      refresh (id: string, options?: Pick<GetPromptOptions, 'version' | 'label'>): Promise<ManagedPrompt>
+      clearCache (): void
+    }
+
     interface LLMObservabilitySpan {
       /**
        * The span kind
@@ -4951,6 +5092,30 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       sampleRate?: number,
+
+      /**
+       * In-memory and file prompt cache lifetime in seconds.
+       * @env DD_LLMOBS_PROMPTS_CACHE_TTL
+       */
+      promptsCacheTtl?: number,
+
+      /**
+       * Enables the optional prompt file cache.
+       * @env DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED
+       */
+      promptsFileCacheEnabled?: boolean,
+
+      /**
+       * Directory used by the optional prompt file cache.
+       * @env DD_LLMOBS_PROMPTS_CACHE_DIR
+       */
+      promptsFileCacheDir?: string,
+
+      /**
+       * Prompt API request timeout in seconds.
+       * @env DD_LLMOBS_PROMPTS_TIMEOUT
+       */
+      promptsTimeout?: number,
     }
 
     /** Options accepted by the deprecated runtime `llmobs.enable()` method. */
