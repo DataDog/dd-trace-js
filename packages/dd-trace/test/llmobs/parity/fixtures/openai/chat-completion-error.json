@@ -1,0 +1,16 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 400,
+      "body": {
+        "error": {
+          "message": "bad request",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": null
+        }
+      }
+    }
+  ]
+}
