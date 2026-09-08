@@ -153,12 +153,15 @@ function getB3Priority (sampled, debug) {
  * @returns {DatadogSpanContext | undefined}
  */
 function extractB3Context (b3) {
-  const priority = getB3Priority(b3.sampled, b3.flags === '1')
-  const spanContext = extractGenericContext(b3.traceId, b3.spanId, 16)
+  const debug = b3.flags === '1'
+  const priority = getB3Priority(b3.sampled, debug)
+  let spanContext = extractGenericContext(b3.traceId, b3.spanId, 16)
 
   if (priority !== undefined) {
-    if (!spanContext) {
-      return new DatadogSpanContext({
+    if (spanContext) {
+      spanContext._sampling.priority = priority
+    } else {
+      spanContext = new DatadogSpanContext({
         traceId: id(),
         spanId: null,
         sampling: { priority },
@@ -166,7 +169,7 @@ function extractB3Context (b3) {
       })
     }
 
-    spanContext._sampling.priority = priority
+    if (debug) spanContext._sampling.isProbabilityDecision = false
   }
 
   if (spanContext && b3.traceId) extract128BitTraceId(b3.traceId, spanContext)

@@ -21,6 +21,7 @@ const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
 
 // v5 spells single-header B3 propagation as `'b3 single header'`; v6+ reuses `'b3'` for it.
 const B3_SINGLE_STYLE = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
+const B3_MULTI_STYLE = DD_MAJOR >= 6 ? 'b3multi' : 'b3'
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -1527,6 +1528,35 @@ describe('TextMapPropagator', () => {
       assert.match(carrier.traceparent, /-01$/)
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
     })
+
+    for (const [style, b3Headers] of [
+      [B3_SINGLE_STYLE, { b3: '1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-d' }],
+      [B3_MULTI_STYLE, {
+        'x-b3-traceid': '1111aaaa2222bbbb3333cccc4444dddd',
+        'x-b3-spanid': '5555eeee6666ffff',
+        'x-b3-flags': '1',
+      }],
+    ]) {
+      it(`should clear the W3C threshold when a selected ${style} debug decision agrees with tracecontext`, () => {
+        const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+        const spanId = '5555eeee6666ffff'
+        textMap = {
+          ...b3Headers,
+          traceparent: `00-${traceId}-${spanId}-01`,
+          tracestate: 'ot=rv:ffffffffffffff;th:8;vendor:value',
+        }
+        config.tracePropagationStyle.extract = [style, 'tracecontext']
+        config.tracePropagationStyle.inject = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        const carrier = propagator.inject(spanContext, {})
+
+        assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+        assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+        assert.match(carrier.traceparent, /-01$/)
+        assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;vendor:value(?:,|$)/)
+      })
+    }
 
     it('should clear the W3C threshold when a selected B3 keep conflicts with tracecontext', () => {
       const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
