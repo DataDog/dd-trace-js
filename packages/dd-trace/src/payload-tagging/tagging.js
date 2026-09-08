@@ -1,6 +1,7 @@
 'use strict'
 
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
+const { truncateString } = require('../util')
 
 const redactedKeys = new Set([
   'authorization', 'x-authorization', 'password', 'token',
@@ -67,13 +68,13 @@ function tagsFromObject (object, opts) {
 
     if (['number', 'boolean'].includes(typeof object) || Buffer.isBuffer(object)) {
       tagCount += 1
-      result[prefix] = object.toString().slice(0, 5000)
+      result[prefix] = truncateString(object.toString(), 5000)
       return
     }
 
     if (typeof object === 'string') {
       tagCount += 1
-      result[prefix] = object.slice(0, 5000)
+      result[prefix] = truncateString(object, 5000)
     }
 
     if (typeof object === 'object') {

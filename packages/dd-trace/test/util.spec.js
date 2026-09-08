@@ -1,11 +1,20 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 
 const { describe, it } = require('mocha')
 
 require('./setup/core')
-const { isEmpty, isTrue, isFalse, globMatch, getSegment, stripQueryAndFragment } = require('../src/util')
+const {
+  isEmpty,
+  isTrue,
+  isFalse,
+  globMatch,
+  getSegment,
+  stripQueryAndFragment,
+  truncateString,
+} = require('../src/util')
 
 const TRUES = [
   1,
@@ -39,6 +48,45 @@ const NONMATCH_CASES = [
 ]
 
 describe('util', () => {
+  describe('truncateString', () => {
+    it('returns the original value within the limit', () => {
+      assert.strictEqual(truncateString('value', 5, '...'), 'value')
+    })
+
+    it('includes the suffix in the limit', () => {
+      assert.strictEqual(truncateString('abcdef', 5, '...'), 'ab...')
+    })
+
+    it('preserves UTF-16 code units', () => {
+      const value = `ab\uD83D${'x'.repeat(100)}`
+      assert.strictEqual(truncateString(value, 3), value.slice(0, 3))
+    })
+
+    it('does not retain the full input through the truncated value', () => {
+      const utilPath = JSON.stringify(require.resolve('../src/util'))
+      const script = `
+        const { truncateString } = require(${utilPath})
+        const count = 2000
+        const collect = () => {
+          for (let i = 0; i < 5; i++) global.gc()
+        }
+        collect()
+        const before = process.memoryUsage().heapUsed
+        const values = new Array(count)
+        for (let i = 0; i < count; i++) {
+          const value = String(i).padStart(6, '0') + 'x'.repeat(20 * 1024)
+          values[i] = truncateString(value, 100, '...')
+        }
+        collect()
+        process.stdout.write(String((process.memoryUsage().heapUsed - before) / count))
+      `
+      const result = spawnSync(process.execPath, ['--expose-gc', '-e', script], { encoding: 'utf8' })
+
+      assert.strictEqual(result.status, 0, result.stderr)
+      assert.ok(Number(result.stdout) < 1024, `${result.stdout} bytes retained per value`)
+    })
+  })
+
   it('isTrue works', () => {
     TRUES.forEach((v) => {
       assert.strictEqual(isTrue(v), true)

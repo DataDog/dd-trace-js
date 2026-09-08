@@ -8,7 +8,7 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
-const { isEmpty } = require('../util')
+const { isEmpty, truncateString } = require('../util')
 const { getActiveRequest } = require('./store')
 const {
   incrementWafInitMetric,
@@ -431,7 +431,7 @@ function truncateRequestBody (target, depth = 0) {
   switch (typeof target) {
     case 'string':
       if (target.length > COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH) {
-        return { value: target.slice(0, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH), truncated: true }
+        return { value: truncateString(target, COLLECTED_REQUEST_BODY_MAX_STRING_LENGTH), truncated: true }
       }
       return { value: target, truncated: false }
     case 'object': {

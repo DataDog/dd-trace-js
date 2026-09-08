@@ -3,6 +3,7 @@
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const CachePlugin = require('../../dd-trace/src/plugins/cache')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { truncateString } = require('../../dd-trace/src/util')
 
 const MAX_ARG_LENGTH = 100
 const MAX_COMMAND_LENGTH = 1000
@@ -89,7 +90,7 @@ function formatCommand (command, args, argsStartIndex = 0) {
     if (typeof arg === 'function') continue
 
     result = `${result} ${formatArg(arg)}`
-    if (result.length > MAX_COMMAND_LENGTH) return result.slice(0, MAX_COMMAND_LENGTH - 3) + '...'
+    if (result.length > MAX_COMMAND_LENGTH) return truncateString(result, MAX_COMMAND_LENGTH, '...')
   }
 
   return result
@@ -97,7 +98,7 @@ function formatCommand (command, args, argsStartIndex = 0) {
 
 function formatArg (arg) {
   if (typeof arg === 'string') {
-    return arg.length > MAX_ARG_LENGTH ? arg.slice(0, MAX_ARG_LENGTH - 3) + '...' : arg
+    return truncateString(arg, MAX_ARG_LENGTH, '...')
   }
   // Number stringification is bounded (~23 chars max), so it never hits MAX_ARG_LENGTH.
   if (typeof arg === 'number') return String(arg)

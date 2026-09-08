@@ -144,6 +144,21 @@ function formatKnuthRate (rate) {
   }
 }
 
+/**
+ * Truncates a string without retaining its original backing store.
+ *
+ * @param {string} value
+ * @param {number} maxLength
+ * @param {string} [suffix]
+ * @returns {string}
+ */
+function truncateString (value, maxLength, suffix = '') {
+  if (value.length <= maxLength) return value
+
+  const prefix = value.slice(0, maxLength - suffix.length)
+  return Buffer.from(prefix, 'utf16le').toString('utf16le') + suffix
+}
+
 module.exports = {
   isEmpty,
   isTrue,
@@ -155,4 +170,5 @@ module.exports = {
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
   formatKnuthRate,
+  truncateString,
 }

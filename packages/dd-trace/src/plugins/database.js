@@ -3,6 +3,7 @@
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 const propagationHash = require('../propagation-hash')
+const { truncateString } = require('../util')
 const StoragePlugin = require('./storage')
 
 // Unreserved RFC 3986 set that `encodeURIComponent` leaves untouched (a conservative subset:
@@ -147,7 +148,7 @@ class DatabasePlugin extends StoragePlugin {
       : 5000 // same as what the agent does
 
     if (this.config.truncate && query && query.length > maxLength) {
-      query = `${query.slice(0, maxLength - 3)}...`
+      query = truncateString(query, maxLength, '...')
     }
 
     return query

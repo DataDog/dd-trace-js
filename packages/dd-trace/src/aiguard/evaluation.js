@@ -9,6 +9,7 @@ const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
 const telemetryMetrics = require('../telemetry/metrics')
+const { truncateString } = require('../util')
 const { normalizeRedactionReplacements, redactMessages } = require('./redaction')
 const TAGS = require('./tags')
 
@@ -306,7 +307,7 @@ class EvaluationReporter {
     if (typeof content === 'string') {
       if (content.length <= this.#maxContentSize) return false
 
-      message.content = content.slice(0, this.#maxContentSize)
+      message.content = truncateString(content, this.#maxContentSize)
       return true
     }
 
@@ -319,7 +320,7 @@ class EvaluationReporter {
       if (typeof text !== 'string') continue
 
       if (text.length > remainingContentSize) {
-        part.text = text.slice(0, remainingContentSize)
+        part.text = truncateString(text, remainingContentSize)
         truncated = true
         remainingContentSize = 0
       } else {
