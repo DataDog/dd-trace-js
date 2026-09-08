@@ -28,6 +28,8 @@ const plugins = {
   get '@koa/router' () { return require('../../../datadog-plugin-koa/src') },
   get '@langchain/core' () { return require('../../../datadog-plugin-langchain/src') },
   get '@langchain/openai' () { return require('../../../datadog-plugin-langchain/src') },
+  get '@llamaindex/core' () { return require('../../../datadog-plugin-llamaindex/src') },
+  get '@llamaindex/openai' () { return require('../../../datadog-plugin-llamaindex/src') },
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
@@ -86,6 +88,7 @@ const plugins = {
     return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
   },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
+  get llamaindex () { return require('../../../datadog-plugin-llamaindex/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
   // mercurius is traced under the graphql plugin: its instrumentation opens the

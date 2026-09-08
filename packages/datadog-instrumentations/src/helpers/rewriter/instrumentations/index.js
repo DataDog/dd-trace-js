@@ -9,6 +9,7 @@ module.exports = [
   ...require('./graphql-jit'),
   ...require('./langchain'),
   ...require('./langgraph'),
+  ...require('./llamaindex'),
   ...require('./mercurius'),
   ...require('./modelcontextprotocol-sdk'),
   ...require('./openai-agents'),
