@@ -22,9 +22,7 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
 
     for (const messageSet of inputs) {
       for (const message of messageSet) {
-        const content = message.content || ''
-        const role = getRole(message)
-        inputMessages.push({ content, role })
+        inputMessages.push(this.formatInputMessage(message))
       }
     }
 
@@ -57,8 +55,12 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
         const chatCompletionMessage = chatCompletion.message
         const role = getRole(chatCompletionMessage)
         const content = chatCompletionMessage.text || ''
-        const toolCalls = this.extractToolCalls(chatCompletionMessage)
-        outputMessages.push({ content, role, toolCalls })
+        const outputMessage = { content, role }
+        if (!isWorkflow) {
+          const toolCalls = this.extractToolCalls(chatCompletionMessage)
+          if (toolCalls.length > 0) outputMessage.toolCalls = toolCalls
+        }
+        outputMessages.push(outputMessage)
 
         if (!isWorkflow && !tokensSetTopLevel) {
           const { tokens, runId } = this.checkTokenUsageFromAIMessage(chatCompletionMessage)
@@ -89,6 +91,19 @@ class LangChainLLMObsChatModelHandler extends LangChainLLMObsHandler {
         totalTokens,
       })
     }
+  }
+
+  // Accepts BaseMessage instances, `{ role, content }` dicts, `[role, content]` tuples and plain strings.
+  formatInputMessage (message) {
+    if (typeof message === 'string') return { content: message, role: 'user' }
+    if (Array.isArray(message)) {
+      const [role, content] = message
+      return { content: typeof content === 'string' ? content : '', role: getRole({ role }) }
+    }
+
+    const content = message.content || ''
+    const role = getRole(message)
+    return role ? { content, role } : { content }
   }
 
   extractToolCalls (message) {
