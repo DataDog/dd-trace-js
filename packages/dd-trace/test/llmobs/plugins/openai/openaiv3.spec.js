@@ -116,6 +116,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
@@ -216,6 +217,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
         })
       })

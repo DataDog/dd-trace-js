@@ -182,7 +182,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (details?.cache_write_tokens != null) metrics.cacheWriteTokens = details.cache_write_tokens
 
       const reasoning = (tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details)?.reasoning_tokens
-      if (reasoning != null && reasoning !== 0) metrics.reasoningOutputTokens = reasoning
+      if (reasoning != null) metrics.reasoningOutputTokens = reasoning
     }
 
     return metrics
@@ -388,9 +388,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     this._tagger.tagMetadata(span, getAllowedMetadata(parameters, COMMON_METADATA_KEYS, OPENAI_METADATA_RESPONSE_KEYS))
     const toolDefinitions = getOpenAIToolDefinitions(inputs.tools)
-    if (toolDefinitions.length) this._tagger.tagToolDefinitions(span, toolDefinitions)
 
     if (error) {
+      if (toolDefinitions.length) this._tagger.tagToolDefinitions(span, toolDefinitions)
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
@@ -453,6 +453,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           const name = String(item.name ?? '')
           outputMessages.push({
             role: 'assistant',
+            content: '',
             toolCalls: [{
               toolId: callId,
               name,
@@ -483,7 +484,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
-    if (outputToolDefinitions.length) {
+    if (toolDefinitions.length || outputToolDefinitions.length) {
       this._tagger.tagToolDefinitions(span, [...toolDefinitions, ...outputToolDefinitions])
     }
 
