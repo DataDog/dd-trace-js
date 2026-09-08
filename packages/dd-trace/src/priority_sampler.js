@@ -362,11 +362,13 @@ class PrioritySampler {
   #getPriorityByRule (context, rule, recordDecision) {
     if (recordDecision) context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
     context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
-    context._sampling.mechanism = SAMPLING_MECHANISM_RULE
-    if (rule.provenance === 'customer') {
-      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
-    } else if (rule.provenance === 'dynamic') {
-      context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+    if (recordDecision) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_RULE
+      if (rule.provenance === 'customer') {
+        context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
+      } else if (rule.provenance === 'dynamic') {
+        context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
+      }
     }
 
     if (rule.discard) {
@@ -419,10 +421,10 @@ class PrioritySampler {
     if (recordDecision) context._trace[SAMPLING_AGENT_DECISION] = rate
 
     if (sampler === defaultSampler) {
-      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+      if (recordDecision) context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
     } else {
       context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
-      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+      if (recordDecision) context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
     }
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT

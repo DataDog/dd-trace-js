@@ -613,6 +613,7 @@ describe('PrioritySampler', () => {
 
     it('should not let a manual tag override an AppSec force-keep', () => {
       prioritySampler.setPriority(span, USER_KEEP, ASM)
+      prioritySampler.isSampled(span)
 
       prioritySampler.setPriorityFromTag(span, MANUAL_DROP, true)
 
@@ -636,7 +637,9 @@ describe('PrioritySampler', () => {
     })
 
     it('should not let manual tags override an AI Guard force-keep', () => {
+      prioritySampler = new PrioritySampler('test', { sampleRate: 1 })
       prioritySampler.setPriority(span, USER_KEEP, AI_GUARD)
+      prioritySampler.isSampled(span)
 
       prioritySampler.setPriorityFromTags(span, { [MANUAL_DROP]: true })
 
