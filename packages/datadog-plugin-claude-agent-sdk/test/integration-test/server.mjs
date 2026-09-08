@@ -29,6 +29,7 @@ const stream = query({
     'After that subagent, do it again but for California, not in a subagent. Both should be in fahrenheit.',
   options: {
     model: 'claude-sonnet-4-6',
+    title: 'Claude Agent SDK test',
     mcpServers: { local: localToolsServer },
     tools: ['Agent'],
     allowedTools: ['mcp__local__fetch_weather'],
