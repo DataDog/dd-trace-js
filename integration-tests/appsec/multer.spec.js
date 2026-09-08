@@ -117,9 +117,10 @@ describe('multer', () => {
 
             const formData = new FormData()
             formData.append('command', 'echo 1')
-            await axios.post(`${proc.url}/cmd`, formData)
-
-            return resultPromise
+            await Promise.all([
+              resultPromise,
+              axios.post(`${proc.url}/cmd`, formData),
+            ])
           })
         })
 
@@ -129,9 +130,10 @@ describe('multer', () => {
 
             const formData = new FormData()
             formData.append('command', 'echo 1')
-            await axios.post(`${proc.url}/cmd-no-middleware`, formData)
-
-            return resultPromise
+            await Promise.all([
+              resultPromise,
+              axios.post(`${proc.url}/cmd-no-middleware`, formData),
+            ])
           })
         })
       })
