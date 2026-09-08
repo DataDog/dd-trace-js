@@ -58,7 +58,12 @@ jobs:
 
             const type = match[3]
             const scope = match[5]
-            if (!/^(?:feat|fix|perf)$/.test(type) || !scope) return
+            const scopes = scope?.split(',').map(scope => scope.trim().toLowerCase())
+            if (scopes?.includes('')) {
+              core.setFailed('PR title scope list contains an empty scope.')
+              return
+            }
+            if (!/^(?:feat|fix|perf)$/.test(type) || !scopes) return
 
             const nonProductionScopes = new Map([
               ['agents', 'docs'],
@@ -87,7 +92,6 @@ jobs:
               ['testing', 'test'],
               ['workflows', 'ci'],
             ])
-            const scopes = scope.split(',').map(scope => scope.trim().toLowerCase())
             const suggestedTypes = scopes.map(scope => nonProductionScopes.get(scope))
             if (suggestedTypes.includes(undefined)) return
 
@@ -139,7 +143,12 @@ jobs:
               const labels = new Set()
               if (!parsed.type) return labels
               if (repoLabels.has(parsed.type)) labels.add(parsed.type)
-              if (parsed.scope && repoLabels.has(parsed.scope)) labels.add(parsed.scope)
+              if (parsed.scope) {
+                for (const scope of parsed.scope.split(',')) {
+                  const name = scope.trim()
+                  if (name && repoLabels.has(name)) labels.add(name)
+                }
+              }
               const semver = semverFor(parsed)
               if (semver) labels.add(semver)
               return labels

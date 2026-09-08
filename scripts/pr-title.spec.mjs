@@ -15,6 +15,9 @@ const labelSync = steps.get('Sync labels with PR title')
 const validateTitle = vm.runInNewContext(
   `(async function validateTitle (context, core, process) {\n${validation.with.script}\n})`
 )
+const syncLabels = vm.runInNewContext(
+  `(async function syncLabels (context, github, process) {\n${labelSync.with.script}\n})`
+)
 const validate = async (title) => {
   const failures = []
   const context = { payload: { pull_request: { title } } }
@@ -78,6 +81,18 @@ describe('PR title workflow', () => {
     ])
   })
 
+  it('rejects empty entries in a scope list', async () => {
+    const titles = [
+      'fix(docs,): change',
+      'fix(docs, ): change',
+    ]
+
+    await Promise.all(titles.map(async (title) => {
+      const failures = await validate(title)
+      assert.deepStrictEqual(failures, ['PR title scope list contains an empty scope.'], title)
+    }))
+  })
+
   it('allows production and product scopes', async () => {
     const titles = [
       'feat(http): change',
@@ -101,6 +116,37 @@ describe('PR title workflow', () => {
 
   it('does not call the GitHub API during validation', () => {
     assert.doesNotMatch(validation.with.script, /\bgithub\./)
+  })
+
+  it('syncs each label in a scope list', async () => {
+    let request
+    const context = {
+      repo: { owner: 'DataDog', repo: 'dd-trace-js' },
+      payload: {
+        action: 'opened',
+        pull_request: {
+          number: 1,
+          title: 'fix(http, tests): change',
+          labels: [],
+        },
+      },
+    }
+    const github = {
+      paginate: {
+        iterator: () => [{ data: ['fix', 'http', 'tests'].map(name => ({ name })) }],
+      },
+      rest: {
+        issues: {
+          listLabelsForRepo: Function.prototype,
+          setLabels: value => { request = value },
+        },
+      },
+    }
+    const process = { env: { PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN } }
+
+    await syncLabels(context, github, process)
+
+    assert.deepStrictEqual([...request.labels], ['fix', 'http', 'tests', 'semver-patch'])
   })
 
   it('syncs labels only for events that can require reconciliation', () => {
