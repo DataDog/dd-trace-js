@@ -42,15 +42,9 @@ class OtlpHttpExporterBase {
 
     const isJson = protocol === 'http/json'
 
-    const parsedUrl = new URL(url)
-    this.#transport = parsedUrl.protocol === 'http:' ? http : https
     this.options = {
       method: 'POST',
       timeout,
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: parsedUrl.pathname + parsedUrl.search,
-      agent: parsedUrl.protocol === 'https:' ? getHttpsProxyAgent(parsedUrl) : undefined,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
         'User-Agent': `dd-trace-js/${tracerVersion}`,
@@ -59,9 +53,10 @@ class OtlpHttpExporterBase {
     }
 
     this.telemetryTags = [
-      `protocol:${this.#transport === https ? 'https' : 'http'}`,
+      '',
       `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
+    this.#applyUrl(url)
   }
 
   /**
@@ -164,17 +159,40 @@ class OtlpHttpExporterBase {
   }
 
   /**
+   * @param {string} url
+   */
+  #applyUrl (url) {
+    const parsedUrl = new URL(url)
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new TypeError(`Unsupported OTLP endpoint protocol: ${parsedUrl.protocol}`)
+    }
+
+    const transport = parsedUrl.protocol === 'http:' ? http : https
+    const agent = transport === https ? getHttpsProxyAgent(parsedUrl) : undefined
+
+    this.#transport = transport
+    this.options.hostname = parsedUrl.hostname
+    this.options.port = parsedUrl.port
+    this.options.path = parsedUrl.pathname + parsedUrl.search
+    this.options.agent = agent
+    this.telemetryTags[0] = `protocol:${transport === https ? 'https' : 'http'}`
+  }
+
+  /**
    * Re-targets the exporter to a different URL, updating transport, hostname, port, and path.
    * @param {string} url
    */
   setUrl (url) {
-    const parsedUrl = new URL(url)
-    this.#transport = parsedUrl.protocol === 'http:' ? http : https
-    this.options.hostname = parsedUrl.hostname
-    this.options.port = parsedUrl.port
-    this.options.path = parsedUrl.pathname + parsedUrl.search
-    this.options.agent = parsedUrl.protocol === 'https:' ? getHttpsProxyAgent(parsedUrl) : undefined
-    this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
+    try {
+      this.#applyUrl(url)
+    } catch (error) {
+      log.error(
+        'Invalid OTLP %s URL: %s. Using previous URL. Error: %s',
+        this.signalType,
+        url,
+        error.message
+      )
+    }
   }
 
   shutdown () {}

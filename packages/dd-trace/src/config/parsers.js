@@ -199,6 +199,17 @@ const transformers = {
       return new URL(value)
     } catch {}
   },
+  /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {string | undefined}
+   */
+  validateHttpUrl (value, optionName, source) {
+    const url = transformers.toURL(value)
+    if (url?.protocol === 'http:' || url?.protocol === 'https:') return value
+    warnInvalidValue(value, optionName, source, 'Invalid HTTP URL')
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
     for (let index = 0; index < value.length; index++) {
