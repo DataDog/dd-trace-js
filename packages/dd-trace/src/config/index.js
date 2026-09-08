@@ -688,10 +688,13 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
 
+    const isOtlpTracesEnabled = this.OTEL_TRACES_EXPORTER === 'otlp' &&
+      !this.isCiVisibility && this.experimental.exporter !== 'electron'
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
-        if (configName === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && this.OTEL_TRACES_EXPORTER !== 'otlp') continue
+        if (configName === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && !isOtlpTracesEnabled) continue
         const entry = configurationsTable[configName]
         const value = entry.transformer
           ? entry.transformer(this[alias], configName, 'calculated')
