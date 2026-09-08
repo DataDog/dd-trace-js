@@ -115,7 +115,7 @@ function extractInputMessages (request, history, systemInstructions) {
 
 function extractOutputMessages (result) {
   if (!result) return [{ content: '' }]
-  const response = getResponse(result)
+  const { response } = result
 
   if (!response) return [{ content: '' }]
 
@@ -168,7 +168,6 @@ function extractMessageFromPart (part, role) {
     }]
   }
   if (functionResponse) {
-    message.content = text
     message.role = 'user'
     message.toolResults = [{
       name: functionResponse.name ?? '',
@@ -185,7 +184,7 @@ function extractMessageFromPart (part, role) {
 
 function extractMetrics (result) {
   if (!result) return {}
-  const response = getResponse(result)
+  const { response } = result
 
   if (!response) return {}
 
@@ -199,11 +198,6 @@ function extractMetrics (result) {
   }
 
   return metrics
-}
-
-function getResponse (result) {
-  const response = result.response ?? result
-  return Array.isArray(response) ? response.at(-1) : response
 }
 
 function isPart (part) {

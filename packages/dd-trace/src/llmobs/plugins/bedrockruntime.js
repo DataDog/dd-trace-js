@@ -123,7 +123,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     if (textAndResponseReason.finishReason) {
       this._tagger.tagMetadata(span, { stop_reason: textAndResponseReason.finishReason })
     }
-    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
+    this.#tagCommon({
+      span,
+      requestParams,
+      inputMessages: requestParams.prompt,
+      outputMessages: textAndResponseReason.messages,
+      usage: textAndResponseReason.usage,
+      tokensFromHeaders,
+    })
   }
 
   #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream }) {
@@ -140,10 +147,26 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
         schema: tool.input_schema ?? {},
       })))
     }
-    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
+
+    // Only the Anthropic Messages API request shape yields an array prompt / block-array output content.
+    const inputMessages = Array.isArray(requestParams.prompt)
+      ? formatAnthropicInputMessages(requestParams)
+      : requestParams.prompt
+    const outputMessages = textAndResponseReason.content === undefined
+      ? textAndResponseReason.messages
+      : formatAnthropicMessages('assistant', textAndResponseReason.content)
+
+    this.#tagCommon({
+      span,
+      requestParams,
+      inputMessages,
+      outputMessages,
+      usage: textAndResponseReason.usage,
+      tokensFromHeaders,
+    })
   }
 
-  #tagCommon ({ span, requestParams, textAndResponseReason, tokensFromHeaders }) {
+  #tagCommon ({ span, requestParams, inputMessages, outputMessages, usage, tokensFromHeaders }) {
     const metadata = {}
     if (requestParams.temperature !== undefined && requestParams.temperature !== null) {
       metadata.temperature = Number.parseFloat(requestParams.temperature)
@@ -153,16 +176,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     }
     this._tagger.tagMetadata(span, metadata)
 
-    const inputMessages = formatInputMessages(requestParams)
-    let outputMessages = textAndResponseReason.messages
-    if (textAndResponseReason.content !== undefined) {
-      outputMessages = formatAnthropicMessages('assistant', textAndResponseReason.content)
-    }
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
-    this._tagger.tagMetrics(span, extractTokens({
-      tokensFromHeaders,
-      usage: textAndResponseReason.usage,
-    }))
+    this._tagger.tagMetrics(span, extractTokens({ tokensFromHeaders, usage }))
   }
 }
 
@@ -187,14 +202,7 @@ function parseHeaderCount (value) {
   return Number.isNaN(count) ? undefined : count
 }
 
-function formatInputMessages (requestParams) {
-  const isAnthropicMessages = Array.isArray(requestParams.prompt) &&
-    (requestParams.system !== undefined || requestParams.tools !== undefined ||
-      requestParams.prompt.some(message => Array.isArray(message?.content)))
-  if (!isAnthropicMessages) {
-    return requestParams.prompt
-  }
-
+function formatAnthropicInputMessages (requestParams) {
   const messages = []
   if (requestParams.system !== undefined) {
     appendMessage(messages, { role: 'system', content: requestParams.system })
