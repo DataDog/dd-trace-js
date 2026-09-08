@@ -609,11 +609,19 @@ describe('Config', () => {
     })
 
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-    assert.deepStrictEqual(tracesProtocolEntry.error, {
+    const expectedError = {
       code: null,
       message: "Invalid value: 'http/protobuf' for OTEL_EXPORTER_OTLP_TRACES_PROTOCOL " +
         '(source: calculated), picked default',
+    }
+    assert.deepStrictEqual(tracesProtocolEntry.error, expectedError)
+
+    config.setRemoteConfig({})
+    const recalculatedEntry = updateConfig.secondCall.args[0].find(({ name, origin }) => {
+      return name === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && origin === 'calculated'
     })
+    assert.deepStrictEqual(recalculatedEntry.error, expectedError)
+    sinon.assert.calledOnce(log.warn)
   })
 
   for (const { name, options } of [
@@ -645,17 +653,21 @@ describe('Config', () => {
     assert.strictEqual(getConfig({ site: 'DATADOGHQ.EU' }).site, 'datadoghq.eu')
   })
 
-  it('should reject unsupported OTLP HTTP protocols', () => {
+  it('should keep standard gRPC protocols inert when OTLP exporters are inactive', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.OTEL_LOGS_EXPORTER = 'none'
+    process.env.OTEL_METRICS_EXPORTER = 'none'
     process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
     process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
     process.env.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL = 'grpc'
 
     const config = getConfig()
 
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'http/protobuf')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'http/protobuf')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/protobuf')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
+    sinon.assert.notCalled(log.warn)
   })
 
   describe('sensitive configurations excluded from telemetry', () => {

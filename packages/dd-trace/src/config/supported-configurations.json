@@ -4263,7 +4263,7 @@
         "implementation": "D",
         "type": "string",
         "default": "http/protobuf",
-        "allowed": "http/json|http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
@@ -4304,7 +4304,7 @@
         "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
-        "allowed": "http/json|http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
@@ -4336,7 +4336,7 @@
         "implementation": "A",
         "type": "string",
         "default": "http/protobuf",
-        "allowed": "http/json|http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
         "transform": "toLowerCase"
       }
     ],

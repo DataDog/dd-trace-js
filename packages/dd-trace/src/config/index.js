@@ -696,10 +696,17 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
         if (configName === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && !isOtlpTracesEnabled) continue
         const entry = configurationsTable[configName]
+        const rawValue = this[alias]
         const value = entry.transformer
-          ? entry.transformer(this[alias], configName, 'calculated')
-          : this[alias]
-        setAndTrack(this, configName, value, this[alias])
+          ? entry.transformer(rawValue, configName, 'calculated')
+          : rawValue
+        if (value === undefined) {
+          // Revalidation suppresses duplicate warnings, so carry the error into the replacement telemetry entry.
+          const telemetryKey = configName + 'calculated'
+          const telemetryError = configWithOrigin.get(telemetryKey)?.error
+          if (telemetryError) parseErrors.set(telemetryKey, telemetryError)
+        }
+        setAndTrack(this, configName, value, rawValue)
       }
     }
 
