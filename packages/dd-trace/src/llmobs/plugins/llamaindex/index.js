@@ -109,7 +109,7 @@ class BaseLlamaIndexLLMObsPlugin extends LLMObsPlugin {
 
     if (isProviderWorkflow(this, liType, modelProvider)) kind = 'workflow'
 
-    if (span) {
+    if (span && liType === 'llm') {
       streamDataMap.set(span, {
         input: ctx.arguments?.[0],
         chunks: [],
@@ -128,6 +128,9 @@ class BaseLlamaIndexLLMObsPlugin extends LLMObsPlugin {
   }
 
   asyncEnd (ctx) {
+    // streaming llm spans are tagged by NextStreamLLMObsPlugin once the iterator completes
+    const plugin = /** @type {Function & {liType?: string}} */ (this.constructor)
+    if (plugin.liType === 'llm' && isIterator(ctx.result)) return
     super.asyncEnd(ctx)
   }
 
