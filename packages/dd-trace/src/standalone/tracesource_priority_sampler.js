@@ -56,7 +56,7 @@ class TraceSourcePrioritySampler extends PrioritySampler {
    * @param {import('../opentracing/span')} span
    * @returns {import('../priority_sampler').SamplingPriority}
    */
-  _decideFromAuto (span) {
+  decideFromAuto (span) {
     const context = this._getContext(span)
     const priority = this._getPriorityFromAuto(span, true)
     context._sampling.priority = priority

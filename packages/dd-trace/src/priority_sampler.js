@@ -133,7 +133,7 @@ class PrioritySampler {
       context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
       this._recordDecision(context, tag)
     } else if (auto) {
-      this._decideFromAuto(root)
+      this.decideFromAuto(root)
     } else {
       return
     }
@@ -259,7 +259,7 @@ class PrioritySampler {
    * @param {DatadogSpan} span
    * @returns {SamplingPriority}
    */
-  _decideFromAuto (span) {
+  decideFromAuto (span) {
     const context = this._getContext(span)
     const rule = this.#findRule(span)
     const priority = rule

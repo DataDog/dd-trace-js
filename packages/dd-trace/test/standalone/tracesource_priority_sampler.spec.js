@@ -95,7 +95,7 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
 
       context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
 
-      assert.strictEqual(prioritySampler._decideFromAuto(span), USER_KEEP)
+      assert.strictEqual(prioritySampler.decideFromAuto(span), USER_KEEP)
       assert.strictEqual(context._sampling.priority, USER_KEEP)
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_DEFAULT)
       assert.strictEqual(context._sampling.isProbabilityDecision, false)
