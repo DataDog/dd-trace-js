@@ -2,7 +2,7 @@
 
 const log = require('../../../../../log')
 
-const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
+const AUTHORITY = String.raw`^(?:[^:]+:)?[\t\r\n]*/[\t\r\n]*/([^@]+)@`
 // The key class excludes `?` and `#` so the greedy quantifier is bounded per fragment.
 // Query keys cannot legitimately contain those characters (they delimit query/fragment
 // boundaries), so excluding them preserves match semantics for valid URLs while keeping

@@ -206,6 +206,31 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
+  for (const [description, lineTerminator] of [
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['CR', '\r'],
+    ['line separator', '\u2028'],
+    ['paragraph separator', '\u2029'],
+  ]) {
+    it(`expands a JavaScript Cucumber profile after ${description}`, () => {
+      withRepositoryFixture({
+        framework: 'cucumber',
+        script: 'cucumber-js --profile default',
+      }, fixture => {
+        fs.writeFileSync(
+          path.join(fixture.root, 'cucumber.js'),
+          `'use strict';${lineTerminator}module.exports = { default: '--strict' }\n`
+        )
+
+        const framework = scaffoldFramework(fixture, 'cucumber')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.deepStrictEqual(framework.validation.runnerArgs, ['--strict'])
+      })
+    })
+  }
+
   for (const [description, requireValue] of [
     ['nested object', "{ path: 'features/steps.js' }"],
     ['nested object in an array', "[{ path: 'features/steps.js' }]"],
