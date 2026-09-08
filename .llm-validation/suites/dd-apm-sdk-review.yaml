@@ -77,7 +77,22 @@ cases:
   - id: js-perf-pipeline-full-review
     files:
       - .agents/skills/dd-apm-sdk-review/SKILL.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/security.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/design.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
       - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
+      - .agents/dd-apm-sdk-review-overrides/repo-context.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
     input: |
       Run dd-apm-sdk-review on the following change. There is no git repository to
       inspect — this diff is the entire change set; do not attempt any git commands, go
@@ -103,8 +118,9 @@ cases:
       - Raises a performance finding on the ungated `channel.publish` call and/or the
         unbounded `sessions` Map keyed by `x-request-id`, classified under the report's
         P0/P1/P2 sections, not the performance lens's internal SEV vocabulary.
-      - States an explicit verdict line (BLOCK / APPROVE_WITH_COMMENTS / APPROVE) and a
-        final READY TO PUSH / DO NOT PUSH statement.
+      - States an explicit verdict line (BLOCK / APPROVE_WITH_COMMENTS / APPROVE) and the
+        matching gate line: `DO NOT PUSH` on BLOCK, `WAITING ON HUMAN` on
+        APPROVE_WITH_COMMENTS, or `READY TO PUSH` on APPROVE.
     bad_signals:
       - Attempts to run git commands despite the change set being pasted inline.
       - Skips straight to a verdict with no per-lens findings or "Rule files used" section.
@@ -115,8 +131,21 @@ cases:
     files:
       - .agents/skills/dd-apm-sdk-review/SKILL.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/security.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/design.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
       - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
       - .agents/dd-apm-sdk-review-overrides/repo-context.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
+      - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
     input: |
       Run the complete dd-apm-sdk-review skill on this small change. There is no git
       repository to inspect — this pasted diff is the entire change set. Run every
@@ -146,7 +175,8 @@ cases:
       - Flags the inverted return value — `shouldRecord(true)` now returns false and
         `shouldRecord(false)` returns true, contradicting the comment and prior behavior.
       - Classifies the finding using P0/P1/P2, states an explicit verdict, and ends with
-        READY TO PUSH or DO NOT PUSH consistently with that verdict.
+        the matching gate line (`DO NOT PUSH` / `WAITING ON HUMAN` / `READY TO PUSH`)
+        consistently with that verdict.
     bad_signals:
       - Attempts to run git commands despite the complete change being pasted inline.
       - Reviews only the obvious logic defect without producing the complete consolidated

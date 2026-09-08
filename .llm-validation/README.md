@@ -66,7 +66,8 @@ docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
 
 `--level` picks **which cases** run. `--runs` only changes how many times **those** cases
 repeat. `--case`, `--runs`, `--max-cases`, `--concurrency` override the `config.yaml`
-preset. Artifacts land in this directory (`results.json`, `report.md`, `details.json`).
+preset. Artifacts land in the working directory you run from (typically the repo
+root: `results.json`, `report.md`, `details.json`).
 
 `ANTHROPIC_BASE_URL` defaults to the staging gateway inside the image. Override if needed:
 

@@ -47,6 +47,5 @@ policy:
   blocking_fail_floor: 0.45
   blocking_fail_ci_upper: 0.55
 
-# The structural reference-integrity check (verify-skill-references.js) was removed:
-# it hand-duplicated a file list already kept in SKILL.md's roster table and
-# repo-context.md's references, so it is not reinstated.
+# Do not add a structural reference-integrity checker: the file list already
+# lives in SKILL.md's roster table.

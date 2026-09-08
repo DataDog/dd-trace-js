@@ -162,7 +162,10 @@ __queuestorage__/AzuriteConfig
 # Generated at prepare time by scripts/generate-electron-package.js
 /package.electron.json
 
-# LLM Validation local/CI artifacts
+# LLM Validation local/CI artifacts (cwd of the run, usually repo root)
+/results.json
+/report.md
+/details.json
 .llm-validation/results.json
 .llm-validation/report.md
 .llm-validation/details.json

@@ -7,8 +7,8 @@ Used by the orchestrator (`SKILL.md`, Step 3) to shape the final report. Languag
 | verdict | condition | gate effect |
 |---|---|---|
 | `BLOCK` | ≥1 P0 finding | `DO NOT PUSH` |
-| `APPROVE_WITH_COMMENTS` | P1 and/or P2 only | push allowed **after the human sees the findings**; fixes preferred, and only the human may dismiss them |
-| `APPROVE` | nothing to raise | push allowed |
+| `APPROVE_WITH_COMMENTS` | P1 and/or P2 only | `WAITING ON HUMAN` — show the findings and ask whether to fix or dismiss; do not say `READY TO PUSH` or `DO NOT PUSH` until the human answers. Fixes preferred; only the human may dismiss. |
+| `APPROVE` | nothing to raise | `READY TO PUSH` |
 
 A reviewer that could not do its job reports `NOT VERIFIED (<reason>)` for its area. `NOT VERIFIED` never blocks.
 
@@ -61,4 +61,4 @@ Target: <branch>...<base>   Files: <n>   Mode: parallel | sequential | DEGRADED 
 
 The section below the `---` is bookkeeping for debugging the review itself — keep it after the findings, never before them.
 
-Then state plainly: `READY TO PUSH` or `DO NOT PUSH`.
+Then state the gate line that matches the verdict table: `DO NOT PUSH` (`BLOCK`), `WAITING ON HUMAN` (`APPROVE_WITH_COMMENTS`), or `READY TO PUSH` (`APPROVE`).
