@@ -31,19 +31,19 @@ describe('check-agents-md-size', () => {
     })
   }
 
-  it('accepts an AGENTS.md file with 200 lines', () => {
-    const result = runChecker(200)
+  it('accepts an AGENTS.md file with 300 lines', () => {
+    const result = runChecker(300)
 
     assert.strictEqual(result.status, 0)
     assert.strictEqual(result.stderr, '')
   })
 
-  it('rejects an AGENTS.md file with more than 200 lines', () => {
-    const result = runChecker(201)
+  it('rejects an AGENTS.md file with more than 300 lines', () => {
+    const result = runChecker(301)
 
     assert.strictEqual(result.status, 1)
-    assert.match(result.stderr, /AGENTS\.md has 201 lines/)
-    assert.match(result.stderr, /Keep AGENTS\.md at 200 lines or fewer/)
+    assert.match(result.stderr, /AGENTS\.md has 301 lines/)
+    assert.match(result.stderr, /Keep AGENTS\.md at 300 lines or fewer/)
     assert.match(result.stderr, /added content can become a skill of its own/)
   })
 })
