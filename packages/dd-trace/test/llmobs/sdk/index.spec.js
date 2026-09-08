@@ -112,6 +112,7 @@ describe('sdk', () => {
       const fallback = await disabled.prompts.get('prompt-id', { fallback: 'Hello' })
       assert.strictEqual(fallback.source, 'fallback')
       await assert.rejects(disabled.prompts.get('prompt-id'), error => {
+        assert.ok(error instanceof Error && 'status' in error)
         assert.strictEqual(error.status, 0)
         assert.strictEqual(error.message, 'LLM Observability is not enabled')
         return true

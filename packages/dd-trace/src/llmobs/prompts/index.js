@@ -21,69 +21,67 @@ class Prompts {
   /**
    * Retrieve a managed prompt.
    * @param {string} id
-   * @param {import('../../../../../index').llmobs.GetPromptOptions} options
+   * @param {import('../../../../../index').llmobs.GetPromptOptions} [options]
    * @returns {Promise<ManagedPrompt>}
    */
   get (id, options) { return this.#manager.get(id, options) }
 
   /**
    * Create a prompt.
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptCreateOptions} options
+   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse>}
    */
-  create (payload) { return this.#manager.create(payload) }
+  create (options) { return this.#manager.create(options) }
 
   /**
    * Create a prompt version.
    * @param {string} id
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptVersionCreateOptions} options
+   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse>}
    */
-  createVersion (id, payload) { return this.#manager.createVersion(id, payload) }
+  createVersion (id, options) { return this.#manager.createVersion(id, options) }
 
   /**
    * Update a prompt.
    * @param {string} id
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptUpdateOptions} options
+   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse>}
    */
-  update (id, payload) { return this.#manager.update(id, payload) }
+  update (id, options) { return this.#manager.update(id, options) }
 
   /**
    * Update a prompt version.
    * @param {string} id
    * @param {string | number} version
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptVersionUpdateOptions} options
+   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse>}
    */
-  updateVersion (id, version, payload) { return this.#manager.updateVersion(id, version, payload) }
+  updateVersion (id, version, options) { return this.#manager.updateVersion(id, version, options) }
 
   /**
    * Delete a prompt.
    * @param {string} id
-   * @returns {Promise<void>}
+   * @returns {Promise<import('../../../../../index').llmobs.DeletedPromptResponse>}
    */
   delete (id) { return this.#manager.delete(id) }
 
   /**
    * List prompts.
-   * @param {Record<string, unknown>} params
-   * @returns {Promise<Record<string, unknown> | unknown[]>}
+   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse[]>}
    */
-  list (params = {}) { return this.#manager.list(params) }
+  list () { return this.#manager.list() }
 
   /**
    * List prompt versions.
    * @param {string} id
-   * @param {Record<string, unknown>} params
-   * @returns {Promise<Record<string, unknown> | unknown[]>}
+   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse[]>}
    */
-  listVersions (id, params = {}) { return this.#manager.listVersions(id, params) }
+  listVersions (id) { return this.#manager.listVersions(id) }
 
   /**
    * Refresh a managed prompt.
    * @param {string} id
-   * @param {{version?: string | number, label?: string}} options
+   * @param {{version?: string | number, label?: string}} [options]
    * @returns {Promise<ManagedPrompt>}
    */
   refresh (id, options) { return this.#manager.refresh(id, options) }
@@ -110,11 +108,11 @@ function createPrompts (config) {
     appKey: config.DD_APP_KEY,
     site: config.site,
     overrideOrigin,
-    timeout: llmobs.promptsTimeout ?? 5000,
+    timeout: (llmobs.promptsTimeout ?? 5) * 1000,
   })
   return new Prompts(new PromptManager({
     client,
-    cacheTtl: llmobs.DD_LLMOBS_PROMPTS_CACHE_TTL ?? llmobs.promptsCacheTtl ?? 60,
+    cacheTtl: llmobs.promptsCacheTtl ?? 60,
     fileCacheEnabled: llmobs.promptsFileCacheEnabled ?? false,
     fileCacheDir: llmobs.promptsFileCacheDir ?? path.join(os.tmpdir(), 'dd-trace-js-llmobs-prompts'),
     env: config.env,

@@ -4153,30 +4153,79 @@ declare namespace tracer {
       readonly detail?: string
     }
 
-    /** Payload used to create or update a prompt. */
-    interface PromptCreatePayload {
-      name?: string
+    /** Options used to create a prompt. */
+    interface PromptCreateOptions {
+      id: string
+      template: string | PromptMessage[]
+      title?: string
       description?: string
-      template?: string | PromptMessage[]
-      chat_template?: PromptMessage[]
+      userVersion?: string
       labels?: string[]
-      [key: string]: JSONType | undefined
+      envIds?: string[]
     }
 
-    interface PromptVersionCreatePayload extends PromptCreatePayload {}
-    interface PromptUpdatePayload extends PromptCreatePayload {}
-    interface PromptVersionUpdatePayload extends PromptCreatePayload {}
-    interface PromptSummary {
-      id: string
-      name?: string
+    /** Options used to create a prompt version. */
+    interface PromptVersionCreateOptions {
+      template: string | PromptMessage[]
       description?: string
+      userVersion?: string
       labels?: string[]
-      [key: string]: JSONType | undefined
+      envIds?: string[]
     }
-    interface PromptVersionSummary extends PromptSummary {
-      version: string
+
+    /** Options used to update prompt metadata. */
+    interface PromptUpdateOptions {
+      title?: string
+      description?: string
     }
-    type PromptPayload = PromptCreatePayload
+
+    /** Options used to update a prompt version. */
+    interface PromptVersionUpdateOptions {
+      labels?: string[]
+      description?: string
+      envIds?: string[]
+    }
+
+    /** Prompt response returned by the Prompt Management API. */
+    interface PromptResponse {
+      id?: string
+      prompt_id?: string
+      title?: string
+      description?: string
+      created_at?: string
+      source?: string
+      num_versions?: number
+      in_registry?: boolean
+      created_from?: string
+      author?: string
+      ml_app?: string
+      ml_apps?: string[]
+      last_version_created_at?: string
+      extracted_from?: string
+    }
+
+    /** Prompt version response returned by the Prompt Management API. */
+    interface PromptVersionResponse {
+      id?: string
+      prompt_uuid?: string
+      prompt_id?: string
+      template?: string | PromptMessage[]
+      version?: number
+      user_version?: string
+      labels?: string[]
+      created_at?: string
+      version_created_at?: string
+      author?: string
+      description?: string
+      ml_app?: string
+    }
+
+    /** Deleted prompt response returned by the Prompt Management API. */
+    interface DeletedPromptResponse {
+      id?: string
+      prompt_id?: string
+      deleted_at?: string
+    }
 
     /** A managed prompt returned by Prompt Management. */
     interface ManagedPrompt {
@@ -4195,15 +4244,15 @@ declare namespace tracer {
     /** Prompt Management client facade. */
     interface Prompts {
       get (id: string, options?: GetPromptOptions): Promise<ManagedPrompt>
-      create (payload: PromptCreatePayload): Promise<PromptSummary>
-      createVersion (id: string, payload: PromptVersionCreatePayload): Promise<PromptVersionSummary>
-      update (id: string, payload: PromptUpdatePayload): Promise<PromptSummary>
+      create (options: PromptCreateOptions): Promise<PromptResponse>
+      createVersion (id: string, options: PromptVersionCreateOptions): Promise<PromptVersionResponse>
+      update (id: string, options: PromptUpdateOptions): Promise<PromptResponse>
       updateVersion (
-        id: string, version: string | number, payload: PromptVersionUpdatePayload
-      ): Promise<PromptVersionSummary>
-      delete (id: string): Promise<void>
-      list (params?: Record<string, JSONType>): Promise<PromptSummary[]>
-      listVersions (id: string, params?: Record<string, JSONType>): Promise<PromptVersionSummary[]>
+        id: string, version: string | number, options: PromptVersionUpdateOptions
+      ): Promise<PromptVersionResponse>
+      delete (id: string): Promise<DeletedPromptResponse>
+      list (): Promise<PromptResponse[]>
+      listVersions (id: string): Promise<PromptVersionResponse[]>
       refresh (id: string, options?: Pick<GetPromptOptions, 'version' | 'label'>): Promise<ManagedPrompt>
       clearCache (): void
     }
@@ -4747,7 +4796,7 @@ declare namespace tracer {
       promptsFileCacheDir?: string,
 
       /**
-       * Prompt API request timeout in milliseconds.
+       * Prompt API request timeout in seconds.
        * @env DD_LLMOBS_PROMPTS_TIMEOUT
        */
       promptsTimeout?: number,

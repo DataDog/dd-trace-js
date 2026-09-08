@@ -118,11 +118,14 @@ class ManagedPrompt {
       return new ManagedPrompt({ id, version: 'fallback', template: value, source: 'fallback' })
     }
     const template = extractTemplate(value ?? {})
+    if (template === undefined) {
+      throw new TypeError('Fallback must contain a template or chat_template')
+    }
     return new ManagedPrompt({
       id,
       version: value?.version ?? 'fallback',
       label: value?.label,
-      template: template ?? '',
+      template,
       source: 'fallback',
     })
   }

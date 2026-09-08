@@ -45,8 +45,19 @@ class PromptManager {
       fallback,
       cacheTtl,
     } = options
+    const hasAttributes = attributes && Reflect.ownKeys(attributes).length > 0
+    if (version !== undefined && (label !== undefined || targetingKey !== undefined || hasAttributes)) {
+      log.warn('Prompt get version takes precedence over label, targetingKey, and attributes')
+    } else if (label !== undefined && (targetingKey !== undefined || hasAttributes)) {
+      log.warn('Prompt get label takes precedence over targetingKey and attributes')
+    }
     const useResolve = version === undefined && label === undefined && Boolean(env)
-    const key = cacheKey({ id, version, label, env: useResolve ? env : undefined, targetingKey, attributes })
+    const selector = version === undefined
+      ? label === undefined
+        ? { env: useResolve ? env : undefined, targetingKey, attributes }
+        : { label }
+      : { version }
+    const key = cacheKey({ id, ...selector })
     const cacheEnabled = (cacheTtl ?? this.#cacheTtl) > 0
     const task = async () => {
       if (cacheEnabled) {
@@ -65,7 +76,11 @@ class PromptManager {
       try {
         const response = useResolve
           ? await this.#client.resolvePrompt({ id, env, targetingKey, attributes })
-          : await this.#client.getPrompt({ id, version, label })
+          : await this.#client.getPrompt({
+            id,
+            version,
+            label: version === undefined ? label : undefined,
+          })
         const prompt = ManagedPrompt.fromResponse(response, { label })
         if (cacheEnabled) {
           this.#hotCache.set(key, prompt)
@@ -108,7 +123,7 @@ class PromptManager {
         : await this.#client.getPrompt({ id, version, label })
       const prompt = ManagedPrompt.fromResponse(response, { label })
       this.#hotCache.set(key, prompt)
-      this.#warmCache.set(key, prompt)
+      if (!useResolve) this.#warmCache.set(key, prompt)
       return prompt
     } catch (error) {
       if (error?.status === 404) this.evictPrompt(id)
@@ -127,79 +142,107 @@ class PromptManager {
 
   /**
    * Create a prompt.
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptCreateOptions} [options]
+   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse>}
    */
-  create (payload) {
-    return this.#client.createPrompt(payload)
+  create (options) {
+    const { id, template, title, description, userVersion, labels, envIds } = options ?? {}
+    if (typeof id !== 'string' || id.length === 0 || template === undefined) {
+      throw new TypeError('id and template are required')
+    }
+    return this.#write(id, this.#client.createPrompt(withoutUndefined({
+      prompt_id: id,
+      template,
+      title,
+      description,
+      user_version: userVersion,
+      labels,
+      env_ids: envIds,
+    })))
   }
 
   /**
    * Create a prompt version.
    * @param {string} id
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptVersionCreateOptions} [options]
+   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse>}
    */
-  createVersion (id, payload) {
-    return this.#client.createPromptVersion(id, payload)
+  createVersion (id, options) {
+    const { template, description, userVersion, labels, envIds } = options ?? {}
+    if (template === undefined) throw new TypeError('template is required')
+    return this.#write(id, this.#client.createPromptVersion(id, withoutUndefined({
+      template,
+      description,
+      user_version: userVersion,
+      labels,
+      env_ids: envIds,
+    })))
   }
 
   /**
    * Update a prompt.
    * @param {string} id
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptUpdateOptions} options
+   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse>}
    */
-  update (id, payload) {
-    this.#validatePayload(payload)
-    return this.#client.updatePrompt(id, payload)
+  update (id, { title, description } = {}) {
+    if (title === undefined && description === undefined) {
+      throw new TypeError('At least one of title or description must be provided')
+    }
+    return this.#write(id, this.#client.updatePrompt(id, withoutUndefined({ title, description })))
   }
 
   /**
    * Update a prompt version.
    * @param {string} id
    * @param {string | number} version
-   * @param {Record<string, unknown>} payload
-   * @returns {Promise<Record<string, unknown>>}
+   * @param {import('../../../../../index').llmobs.PromptVersionUpdateOptions} options
+   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse>}
    */
-  updateVersion (id, version, payload) {
-    this.#validatePayload(payload)
-    return this.#client.updatePromptVersion(id, version, payload)
+  updateVersion (id, version, { labels, description, envIds } = {}) {
+    if (labels === undefined && description === undefined && envIds === undefined) {
+      throw new TypeError('At least one of labels, description, or envIds must be provided')
+    }
+    return this.#write(id, this.#client.updatePromptVersion(id, version, withoutUndefined({
+      labels,
+      description,
+      env_ids: envIds,
+    })))
   }
 
   /**
    * Delete a prompt and evict its caches.
    * @param {string} id
-   * @returns {Promise<void>}
+   * @returns {Promise<import('../../../../../index').llmobs.DeletedPromptResponse>}
    */
   async delete (id) {
-    await this.#client.deletePrompt(id)
+    const response = await this.#client.deletePrompt(id)
     this.evictPrompt(id)
+    return response
   }
 
   /**
    * List prompts.
-   * @param {Record<string, unknown>} params
-   * @returns {Promise<Record<string, unknown> | unknown[]>}
+   * @returns {Promise<import('../../../../../index').llmobs.PromptResponse[]>}
    */
-  list (params = {}) {
-    return this.#client.listPrompts(params)
+  list () {
+    return this.#client.listPrompts()
   }
 
   /**
    * List prompt versions.
    * @param {string} id
-   * @param {Record<string, unknown>} params
-   * @returns {Promise<Record<string, unknown> | unknown[]>}
+   * @returns {Promise<import('../../../../../index').llmobs.PromptVersionResponse[]>}
    */
-  listVersions (id, params = {}) {
-    return this.#client.listPromptVersions(id, params)
+  listVersions (id) {
+    return this.#client.listPromptVersions(id)
   }
 
-  #validatePayload (payload) {
-    if (!payload || Object.getOwnPropertyNames(payload).length === 0) {
-      throw new TypeError('At least one field must be provided')
-    }
+  #write (id, request) {
+    return Promise.resolve(request).then(response => {
+      this.evictPrompt(id)
+      return response
+    })
   }
 
   #cachePrompt (prompt) {
@@ -222,3 +265,7 @@ class PromptManager {
 }
 
 module.exports = { PromptManager }
+
+function withoutUndefined (value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined))
+}

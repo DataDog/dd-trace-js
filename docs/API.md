@@ -47,7 +47,7 @@ Configure prompt management with:
 * `DD_LLMOBS_PROMPTS_CACHE_TTL` (default `60` seconds)
 * `DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED` (default `false`)
 * `DD_LLMOBS_PROMPTS_CACHE_DIR` (default is a temporary directory)
-* `DD_LLMOBS_PROMPTS_TIMEOUT` (default `5000` milliseconds)
+* `DD_LLMOBS_PROMPTS_TIMEOUT` (default `5` seconds)
 
 ```javascript
 const prompt = await tracer.llmobs.prompts.get('welcome', {
@@ -71,8 +71,8 @@ Prompt Management CRUD methods require an application key:
 await tracer.llmobs.prompts.create({ id: 'welcome', template: 'Hello {name}!' })
 await tracer.llmobs.prompts.createVersion('welcome', { template: 'Hi {name}!' })
 await tracer.llmobs.prompts.update('welcome', { description: 'Greeting' })
-await tracer.llmobs.prompts.updateVersion('welcome', '2', { template: 'Hi {name}!' })
-await tracer.llmobs.prompts.list({ limit: 20 })
+await tracer.llmobs.prompts.updateVersion('welcome', '2', { description: 'Greeting v2' })
+await tracer.llmobs.prompts.list()
 await tracer.llmobs.prompts.listVersions('welcome')
 await tracer.llmobs.prompts.delete('welcome')
 ```

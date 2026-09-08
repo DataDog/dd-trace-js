@@ -1389,7 +1389,7 @@
         "configurationNames": [
           "llmobs.promptsTimeout"
         ],
-        "default": "5000"
+        "default": "5"
       }
     ],
     "DD_LLMOBS_ML_APP": [

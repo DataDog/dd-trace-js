@@ -45,7 +45,8 @@ function safeSubstitute (template, variables = {}) {
 
   value = value.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {
     const name = doubleName ?? singleName
-    return Object.hasOwn(variables, name) ? String(variables[name]) : match
+    if (Object.hasOwn(variables, name)) return String(variables[name])
+    return doubleName === undefined ? match : `__DD_MISSING_DOUBLE_${name}__`
   })
 
   return value
@@ -53,6 +54,7 @@ function safeSubstitute (template, variables = {}) {
     .replaceAll('}}', '}')
     .replaceAll(escapedOpen, '{{')
     .replaceAll(escapedClose, '}}')
+    .replaceAll(/__DD_MISSING_DOUBLE_([A-Za-z_][A-Za-z0-9_]*)__/g, '{{$1}}')
 }
 
 /**
@@ -86,6 +88,7 @@ function extractErrorDetail (text) {
       return String(detail).trim().slice(0, 500)
     }
     if (parsed?.message !== undefined) return String(parsed.message).trim().slice(0, 500)
+    if (parsed?.detail !== undefined) return String(parsed.detail).trim().slice(0, 500)
   } catch {}
   return raw.trim().slice(0, 500)
 }

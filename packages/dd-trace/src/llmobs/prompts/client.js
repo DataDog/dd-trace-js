@@ -185,24 +185,22 @@ class PromptsClient {
 
   /**
    * List prompts.
-   * @param {Record<string, unknown>} params
-   * @returns {Promise<Record<string, unknown> | unknown[]>}
+   * @returns {Promise<Record<string, unknown>[]>}
    */
-  listPrompts (params = {}) {
-    return /** @type {Promise<Record<string, unknown> | unknown[]>} */ (
-      this.request('GET', this.basePath, { query: params })
+  listPrompts () {
+    return /** @type {Promise<Record<string, unknown>[]>} */ (
+      /** @type {unknown} */ (this.request('GET', this.basePath))
     )
   }
 
   /**
    * List prompt versions.
    * @param {string} id
-   * @param {Record<string, unknown>} params
-   * @returns {Promise<Record<string, unknown> | unknown[]>}
+   * @returns {Promise<Record<string, unknown>[]>}
    */
-  listPromptVersions (id, params = {}) {
-    return /** @type {Promise<Record<string, unknown> | unknown[]>} */ (
-      this.request('GET', `${this.basePath}/${escapeId(id)}/versions`, { query: params })
+  listPromptVersions (id) {
+    return /** @type {Promise<Record<string, unknown>[]>} */ (
+      /** @type {unknown} */ (this.request('GET', `${this.basePath}/${escapeId(id)}/versions`))
     )
   }
 }

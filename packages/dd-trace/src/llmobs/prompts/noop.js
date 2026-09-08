@@ -36,13 +36,13 @@ class NoopPrompts {
     return Promise.reject(this.#error())
   }
 
-  create (payload) { return Promise.reject(this.#error()) }
-  createVersion (id, payload) { return Promise.reject(this.#error()) }
-  update (id, payload) { return Promise.reject(this.#error()) }
-  updateVersion (id, version, payload) { return Promise.reject(this.#error()) }
+  create (options) { return Promise.reject(this.#error()) }
+  createVersion (id, options) { return Promise.reject(this.#error()) }
+  update (id, options) { return Promise.reject(this.#error()) }
+  updateVersion (id, version, options) { return Promise.reject(this.#error()) }
   delete (id) { return Promise.reject(this.#error()) }
-  list (params) { return Promise.reject(this.#error()) }
-  listVersions (id, params) { return Promise.reject(this.#error()) }
+  list () { return Promise.reject(this.#error()) }
+  listVersions (id) { return Promise.reject(this.#error()) }
   refresh (id, options) { return Promise.reject(this.#error()) }
   clearCache () {}
 }
