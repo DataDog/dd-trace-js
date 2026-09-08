@@ -569,7 +569,6 @@ provider.register();
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
 const otelMeterProvider = metrics.getMeterProvider() as ReturnType<typeof metrics.getMeterProvider> &
   opentelemetry.MeterProvider
-const otelForceFlush: (callback?: (error: Error | null) => void) => void = otelMeterProvider.forceFlush
 const otelShutdown: (callback?: (error: Error | null) => void) => void = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
