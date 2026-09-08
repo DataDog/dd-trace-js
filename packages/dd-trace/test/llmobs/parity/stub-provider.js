@@ -32,6 +32,9 @@ function createStubProvider (fixture) {
     }
 
     const body = typeof response.body === 'string' ? response.body : JSON.stringify(response.body)
+    if (response.stream && !body.includes('\n\n')) {
+      process.stderr.write(`stub-provider stream response missing event separators: ${key}\n`)
+    }
     const headers = {
       'content-type': response.stream ? 'text/event-stream' : 'application/json',
       ...response.headers,
