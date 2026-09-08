@@ -12,7 +12,9 @@ require('../../setup/core')
 
 const agent = require('../../plugins/agent')
 const id = require('../../../src/id')
+const { TOP_LEVEL_KEY } = require('../../../src/constants')
 const AgentlessWriter = require('../../../src/exporters/agentless/writer')
+const { SpanStatsProcessor } = require('../../../src/span_stats')
 
 const ZSTD_MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
 const zstdSupported = NODE_MAJOR >= 24 ||
@@ -26,6 +28,20 @@ describe('AgentlessWriter data pipeline', () => {
   let intakeUrl
   let resolveRequest
   let request
+
+  /**
+   * @param {number} count
+   * @returns {Promise<object[]>}
+   */
+  function receiveRequests (count) {
+    const requests = []
+    return new Promise(resolve => {
+      resolveRequest = received => {
+        requests.push(received)
+        if (requests.length === count) resolve(requests)
+      }
+    })
+  }
 
   before(done => {
     process.env.DD_API_KEY = 'test-api-key'
@@ -55,7 +71,7 @@ describe('AgentlessWriter data pipeline', () => {
   })
 
   it('encodes v0.4 and exports agentless JSON through the pipeline', async () => {
-    request = new Promise(resolve => { resolveRequest = resolve })
+    request = receiveRequests(1)
     const writer = new AgentlessWriter({
       url: intakeUrl,
       metadata: {
@@ -80,7 +96,7 @@ describe('AgentlessWriter data pipeline', () => {
     }])
 
     await new Promise(resolve => writer.flush(resolve))
-    const received = await request
+    const [received] = await request
 
     assert.strictEqual(received.path, '/api/v2/spans')
     assert.strictEqual(received.headers['dd-api-key'], 'test-api-key')
@@ -103,6 +119,79 @@ describe('AgentlessWriter data pipeline', () => {
     }
   })
 
+  it('exports traces and client stats through one data pipeline', async () => {
+    request = receiveRequests(2)
+    const statsEndpoint = new URL('/api/v0.2/stats', intakeUrl).href
+    const writer = new AgentlessWriter({
+      url: intakeUrl,
+      statsEndpoint,
+      metadata: {
+        env: 'test-env',
+        hostname: 'test-host',
+        runtimeID: 'test-runtime-id',
+      },
+    })
+    const statsProcessor = new SpanStatsProcessor({
+      stats: {
+        DD_TRACE_STATS_COMPUTATION_ENABLED: true,
+        interval: 10,
+      },
+      url: intakeUrl,
+      env: 'test-env',
+      tags: { 'runtime-id': 'test-runtime-id' },
+      version: '1.0.0',
+    }, undefined, writer.sendStats.bind(writer))
+
+    try {
+      writer.append([{
+        duration: 1,
+        error: 0,
+        meta: {},
+        metrics: {},
+        name: 'operation',
+        parent_id: id('0'),
+        resource: 'resource',
+        service: 'service',
+        span_id: id('2'),
+        start: 1,
+        trace_id: id('1'),
+      }])
+      statsProcessor.onSpanFinished({
+        duration: 1,
+        error: 0,
+        meta: {},
+        metrics: { [TOP_LEVEL_KEY]: 1 },
+        name: 'operation',
+        resource: 'resource',
+        service: 'service',
+        start: 1,
+        type: 'web',
+      })
+
+      await Promise.all([
+        new Promise(resolve => writer.flush(resolve)),
+        new Promise(resolve => statsProcessor.forceFlush(resolve)),
+      ])
+      const received = await request
+      const traceRequest = received.find(({ path }) => path === '/api/v2/spans')
+      const statsRequest = received.find(({ path }) => path === '/api/v0.2/stats')
+
+      assert.ok(traceRequest)
+      assert.ok(statsRequest)
+      assert.strictEqual(statsRequest.headers['dd-api-key'], 'test-api-key')
+      assert.strictEqual(statsRequest.headers['content-type'], 'application/msgpack')
+      assert.strictEqual(statsRequest.headers['content-encoding'], 'zstd')
+      assert.deepStrictEqual(statsRequest.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
+
+      if (zstdDecompressSync) {
+        const payload = JSON.parse(zstdDecompressSync(traceRequest.payload).toString())
+        assert.strictEqual(Object.hasOwn(payload.traces[0].spans[0].meta, '_dd.compute_stats'), false)
+      }
+    } finally {
+      clearInterval(statsProcessor.timer)
+    }
+  })
+
   it('does not trace the pipeline intake request', async () => {
     await agent.load('http', { server: false })
     const writer = new AgentlessWriter({ url: intakeUrl })
@@ -110,7 +199,7 @@ describe('AgentlessWriter data pipeline', () => {
       assert.fail('the pipeline intake request must not create an HTTP client trace')
     }, { timeoutMs: 100 })
 
-    request = new Promise(resolve => { resolveRequest = resolve })
+    request = receiveRequests(1)
     writer.append([{
       duration: 1,
       error: 0,

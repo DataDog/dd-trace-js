@@ -24,6 +24,7 @@ describe('SpanProcessor', () => {
   let spanFormat
   let config
   let SpanSampler
+  let SpanStatsProcessor
   let sample
 
   before(() => {
@@ -73,12 +74,45 @@ describe('SpanProcessor', () => {
     SpanSampler = sinon.stub().returns({
       sample,
     })
+    SpanStatsProcessor = sinon.stub()
 
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './span_stats': { SpanStatsProcessor },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
+  })
+
+  it('should route local span stats through an exporter-provided sender', () => {
+    const payload = Buffer.from('stats')
+    const done = sinon.stub()
+    exporter.sendStats = sinon.stub()
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    processor = new SpanProcessor(exporter, prioritySampler, config)
+    const sendStats = SpanStatsProcessor.lastCall.args[2]
+    sendStats(payload, done)
+
+    sinon.assert.calledOnceWithExactly(exporter.sendStats, payload, done)
+  })
+
+  it('should keep OTLP span stats on the OTLP exporter', () => {
+    const otlpStatsExporter = {}
+    exporter.sendStats = sinon.stub()
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    processor = new SpanProcessor(exporter, prioritySampler, config, otlpStatsExporter)
+
+    sinon.assert.calledWithExactly(SpanStatsProcessor, config, otlpStatsExporter, undefined)
+  })
+
+  it('should keep local span stats on the agent exporter', () => {
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    processor = new SpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.calledWithExactly(SpanStatsProcessor, config, undefined, undefined)
   })
 
   it('should generate sampling priority', () => {

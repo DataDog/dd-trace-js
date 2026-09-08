@@ -6,7 +6,7 @@ const os = require('node:os')
 const log = require('../../log')
 const { containerId } = require('../common/docker')
 const Writer = require('./writer')
-const { computeIntakeUrl } = require('./intake')
+const { computeIntakeUrl, computeStatsIntakeUrl } = require('./intake')
 
 /**
  * Agentless exporter for APM trace intake.
@@ -22,19 +22,28 @@ class AgentlessExporter {
    * @param {string} [config.site] - The Datadog site. Defaults to 'datadoghq.com'.
    * @param {number} [config.flushInterval] - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
+   * @param {{ DD_TRACE_STATS_COMPUTATION_ENABLED: boolean }} [config.stats] - Client stats configuration
+   * @param {boolean} [config.OTEL_TRACES_SPAN_METRICS_ENABLED] - Whether OTLP owns span stats export
    * @param {object} config.tags - Tags including runtime-id
    */
   constructor (config) {
     this.#config = config
     const site = config.site ?? 'datadoghq.com'
+    let statsEndpoint
 
     try {
       // Agentless traffic carries the Datadog API key, so the intake is always an https endpoint
       // derived from the site; never config.url (the agent's cleartext http) or the key leaks.
       this._url = new URL(computeIntakeUrl(site))
-    } catch (err) {
-      log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, err.message)
-      this._url = null
+      if (
+        config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+        !config.OTEL_TRACES_SPAN_METRICS_ENABLED
+      ) {
+        statsEndpoint = computeStatsIntakeUrl(site)
+      }
+    } catch (error) {
+      log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, error.message)
+      this._url = undefined
     }
 
     const metadata = {
@@ -49,6 +58,7 @@ class AgentlessExporter {
     this._writer = new Writer({
       url: this._url,
       site,
+      statsEndpoint,
       metadata,
     })
 
@@ -108,6 +118,14 @@ class AgentlessExporter {
       }, flushInterval)
       this.#timer.unref?.()
     }
+  }
+
+  /**
+   * @param {Buffer} payload - Client-computed span stats payload.
+   * @param {() => void} done - Callback invoked after delivery completes or fails.
+   */
+  sendStats (payload, done) {
+    this._writer.sendStats(payload, done)
   }
 
   /**

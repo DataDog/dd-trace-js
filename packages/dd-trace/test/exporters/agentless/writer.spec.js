@@ -33,6 +33,7 @@ describe('AgentlessWriter', () => {
     }
     exporter = {
       close: sinon.stub(),
+      sendStats: sinon.stub().callsArg(1),
       sendV04: sinon.stub().callsArg(1),
     }
     createAgentlessExporter = sinon.stub().returns(exporter)
@@ -76,6 +77,7 @@ describe('AgentlessWriter', () => {
   it('sends the v0.4 payload through the data pipeline', async () => {
     writer = new AgentlessWriter({
       url: new URL('https://intake.example/custom-path'),
+      statsEndpoint: 'https://trace.agent.example/api/v0.2/stats',
       metadata: {
         env: 'test-env',
         hostname: 'test-host',
@@ -89,6 +91,7 @@ describe('AgentlessWriter', () => {
     sinon.assert.calledOnceWithExactly(exporter.sendV04, Buffer.from('v0.4 payload'), sinon.match.func, log)
     sinon.assert.calledOnceWithExactly(createAgentlessExporter, {
       endpoint: 'https://intake.example/api/v2/spans',
+      statsEndpoint: 'https://trace.agent.example/api/v0.2/stats',
       apiKey: 'test-api-key',
       hostname: 'test-host',
       env: 'test-env',
@@ -103,6 +106,50 @@ describe('AgentlessWriter', () => {
       agent: proxyAgent,
     })
     sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, new URL('https://intake.example/custom-path'))
+  })
+
+  it('sends client stats through the same data pipeline', async () => {
+    writer = new AgentlessWriter({
+      url: new URL('https://intake.example'),
+      statsEndpoint: 'https://trace.agent.example/api/v0.2/stats',
+    })
+    const payload = Buffer.from('stats payload')
+
+    await Promise.all([
+      new Promise(resolve => writer.flush(resolve)),
+      new Promise(resolve => writer.sendStats(payload, resolve)),
+    ])
+
+    sinon.assert.calledOnce(createAgentlessExporter)
+    sinon.assert.calledOnceWithExactly(exporter.sendV04, Buffer.from('v0.4 payload'), sinon.match.func, log)
+    sinon.assert.calledOnceWithExactly(exporter.sendStats, payload, sinon.match.func, log)
+  })
+
+  it('suppresses instrumentation of the client stats intake request', async () => {
+    /**
+     * @param {Buffer} data
+     * @param {() => void} done
+     */
+    exporter.sendStats.callsFake((data, done) => {
+      assert.strictEqual(storage('legacy').getHandle()?.noop, true)
+      done()
+    })
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.sendStats(Buffer.from('stats'), resolve))
+  })
+
+  it('contains synchronous client stats send failures', async () => {
+    exporter.sendStats.throws(new Error('send failed'))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    await new Promise(resolve => writer.sendStats(Buffer.from('stats'), resolve))
+
+    sinon.assert.calledWithExactly(
+      log.error,
+      'Failed to send span stats to the agentless intake: %s',
+      'send failed'
+    )
   })
 
   it('suppresses instrumentation of the data-pipeline intake request', async () => {
@@ -183,11 +230,15 @@ describe('AgentlessWriter', () => {
   it('does not give the API key to a non-loopback HTTP receiver', async () => {
     writer = new AgentlessWriter({ url: new URL('http://intake.example') })
 
-    await new Promise(resolve => writer.flush(resolve))
+    await Promise.all([
+      new Promise(resolve => writer.flush(resolve)),
+      new Promise(resolve => writer.sendStats(Buffer.from('stats'), resolve)),
+    ])
 
     sinon.assert.notCalled(createAgentlessExporter)
     sinon.assert.notCalled(getHttpsProxyAgent)
     sinon.assert.notCalled(exporter.sendV04)
+    sinon.assert.notCalled(exporter.sendStats)
     sinon.assert.calledWithExactly(
       log.warn,
       'DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.'
@@ -262,22 +313,30 @@ describe('AgentlessWriter', () => {
     })
   }
 
-  it('drops traces without constructing a pipeline exporter when the API key is unavailable', async () => {
+  it('drops traces and stats without constructing a pipeline exporter when the API key is unavailable', async () => {
     apiKey = undefined
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 
-    await new Promise(resolve => writer.flush(resolve))
+    await Promise.all([
+      new Promise(resolve => writer.flush(resolve)),
+      new Promise(resolve => writer.sendStats(Buffer.from('stats'), resolve)),
+    ])
 
     sinon.assert.notCalled(createAgentlessExporter)
     sinon.assert.notCalled(exporter.sendV04)
+    sinon.assert.notCalled(exporter.sendStats)
   })
 
-  it('drops traces without constructing a pipeline exporter when the intake URL is unavailable', async () => {
+  it('drops traces and stats without constructing a pipeline exporter when the intake URL is unavailable', async () => {
     writer = new AgentlessWriter({ site: 'invalid site' })
 
-    await new Promise(resolve => writer.flush(resolve))
+    await Promise.all([
+      new Promise(resolve => writer.flush(resolve)),
+      new Promise(resolve => writer.sendStats(Buffer.from('stats'), resolve)),
+    ])
 
     sinon.assert.notCalled(createAgentlessExporter)
     sinon.assert.notCalled(exporter.sendV04)
+    sinon.assert.notCalled(exporter.sendStats)
   })
 })

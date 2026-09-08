@@ -28,17 +28,20 @@ class AgentlessWriter extends BaseWriter {
   #exporterEnv
   #exporterRuntimeId
   #metadata
+  #statsEndpoint
   #urlMissing = false
 
   /**
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
+   * @param {string} [options.statsEndpoint] - The client stats intake endpoint.
    * @param {object} [options.metadata] - Metadata to pass to the data pipeline
    */
-  constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
-    super({ url })
+  constructor ({ url, site = 'datadoghq.com', statsEndpoint, metadata = {} }) {
+    super({ url, beforeFirstFlush: undefined, deliveryTracker: undefined })
     this.#metadata = metadata
+    this.#statsEndpoint = statsEndpoint
     this._encoder = new AgentEncoder(this)
 
     if (!url) {
@@ -77,12 +80,31 @@ class AgentlessWriter extends BaseWriter {
    * @param {() => void} done - Callback invoked after delivery completes or fails.
    */
   _sendPayload (data, count, done) {
+    this.#send(data, count, done)
+  }
+
+  /**
+   * @param {Buffer} data - Client-computed span stats payload.
+   * @param {() => void} done - Callback invoked after delivery completes or fails.
+   */
+  sendStats (data, done) {
+    this.#send(data, undefined, done)
+  }
+
+  /**
+   * @param {Buffer} data - MessagePack payload.
+   * @param {number|undefined} count - Number of traces, or undefined for a stats payload.
+   * @param {() => void} done - Callback invoked after delivery completes or fails.
+   */
+  #send (data, count, done) {
+    const isStats = count === undefined
     if (!this._url) {
       if (!this.#urlMissing) {
         this.#urlMissing = true
         log.error('No valid URL configured for agentless trace intake. Traces will not be sent.')
       }
-      log.debug('Dropping %d trace(s) due to missing URL', count)
+      if (isStats) log.debug('Dropping span stats due to missing URL')
+      else log.debug('Dropping %d trace(s) due to missing URL', count)
       done()
       return
     }
@@ -93,7 +115,8 @@ class AgentlessWriter extends BaseWriter {
         this.#apiKeyMissing = true
         log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
       }
-      log.debug('Dropping %d trace(s) due to missing DD_API_KEY', count)
+      if (isStats) log.debug('Dropping span stats due to missing DD_API_KEY')
+      else log.debug('Dropping %d trace(s) due to missing DD_API_KEY', count)
       done()
       return
     }
@@ -105,14 +128,16 @@ class AgentlessWriter extends BaseWriter {
       legacyStorage.run({ noop: true }, () => {
         const exporter = this.#applyConfiguration(DD_API_KEY)
         if (exporter) {
-          exporter.sendV04(data, done, log)
+          if (isStats) exporter.sendStats(data, done, log)
+          else exporter.sendV04(data, done, log)
         } else {
           done()
         }
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
+      if (isStats) log.error('Failed to send span stats to the agentless intake: %s', message)
+      else log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
       done()
     }
   }
@@ -157,6 +182,7 @@ class AgentlessWriter extends BaseWriter {
     const agent = this._url.protocol === 'https:' ? getHttpsProxyAgent(this._url) : undefined
     this.#exporter = createAgentlessExporter({
       endpoint: this.#endpoint(),
+      statsEndpoint: this.#statsEndpoint,
       apiKey,
       hostname: this.#metadata.hostname,
       env,

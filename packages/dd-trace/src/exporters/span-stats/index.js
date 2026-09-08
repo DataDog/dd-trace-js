@@ -7,11 +7,17 @@ const { Writer } = require('./writer')
 class SpanStatsExporter {
   #serverlessDeliveryTracker
 
+  /**
+   * @param {object} config
+   * @param {string|URL} config.url
+   * @param {(payload: Buffer, done: () => void) => void} [config.sendStats]
+   */
   constructor (config) {
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._url = config.url
     this._writer = new Writer({
       url: this._url,
+      sendStats: config.sendStats,
       deliveryTracker: this.#serverlessDeliveryTracker,
     })
   }

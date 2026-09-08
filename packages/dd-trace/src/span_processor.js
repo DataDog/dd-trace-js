@@ -12,16 +12,29 @@ const { APM_TRACING_ENABLED_KEY } = require('./constants')
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
+/**
+ * @typedef {import('./config/config-base') & {
+ *   sampler: ConstructorParameters<typeof SpanSampler>[0]
+ * }} SpanProcessorConfig
+ */
+
 class SpanProcessor {
+  /**
+   * @param {{ export: Function, sendStats?: (payload: Buffer, done: () => void) => void }} exporter
+   * @param {import('./priority_sampler')} prioritySampler
+   * @param {SpanProcessorConfig} config
+   * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpStatsExporter]
+   */
   constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
 
-    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+      const sendStats = otlpStatsExporter ? undefined : exporter.sendStats?.bind(exporter)
+      this._stats = new SpanStatsProcessor(config, otlpStatsExporter, sendStats)
     }
 
     this._spanSampler = new SpanSampler(config.sampler)

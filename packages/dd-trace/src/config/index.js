@@ -668,8 +668,6 @@ class Config extends ConfigBase {
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
-      // Disable client-side stats computation
-      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
       // Disable rate limiting - server-side sampling will be used
