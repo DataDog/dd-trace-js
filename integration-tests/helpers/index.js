@@ -1411,7 +1411,6 @@ module.exports = {
   ANY_STRING,
   ANY_VALUE,
   FakeAgent,
-  ProcessTimeoutError,
   hookFile,
   assertObjectContains,
   assertUUID,
