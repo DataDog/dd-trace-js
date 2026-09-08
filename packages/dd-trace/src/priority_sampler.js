@@ -382,6 +382,7 @@ class PrioritySampler {
     }
 
     if (!this._isSampledByRateLimit(context)) {
+      // The limiter makes only rejected traces non-probabilistic; allowed traces retain the rule probability.
       if (recordDecision) this._recordDecisionMetadata(context)
       return USER_REJECT
     }

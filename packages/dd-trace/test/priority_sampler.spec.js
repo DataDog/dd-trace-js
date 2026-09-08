@@ -402,6 +402,22 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.mechanism, 3)
     })
 
+    it('should preserve probability metadata when the rate limiter allows a trace', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [{ service: 'test', sampleRate: 1 }],
+        rateLimit: 1,
+      })
+      sinon.stub(prioritySampler._limiter, 'isAllowed').returns(true)
+      sinon.stub(prioritySampler._limiter, 'effectiveRate').returns(0.5)
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.isProbabilityDecision, undefined)
+      assert.strictEqual(context._trace['_dd.rule_psr'], 1)
+      assert.strictEqual(context._trace['_dd.limit_psr'], 0.5)
+    })
+
     it('should add metrics for agent sample rate', () => {
       prioritySampler.sample(span)
 
