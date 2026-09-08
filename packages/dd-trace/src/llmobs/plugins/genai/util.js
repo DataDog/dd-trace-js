@@ -65,9 +65,10 @@ function hasThoughtParts (parts) {
  * Determine the role from a candidate and its parts
  * @param {object} candidate
  * @param {Array<{thought?: boolean}>} parts
+ * @param {string} defaultRole
  * @returns {string}
  */
-function determineRole (candidate, parts = []) {
+function determineRole (candidate, parts = [], defaultRole = ROLES.USER) {
   // Check parts for thought indicators
   if (hasThoughtParts(parts)) {
     return ROLES.REASONING
@@ -78,7 +79,7 @@ function determineRole (candidate, parts = []) {
                   candidate.content?.role ||
                   candidate[0]?.content?.role
 
-  return normalizeRole(rawRole)
+  return rawRole ? normalizeRole(rawRole) : defaultRole
 }
 
 /**
@@ -105,19 +106,57 @@ function extractMetrics (response) {
 
   if (!tokenUsage) return metrics
 
-  if (tokenUsage.promptTokenCount) {
+  if (tokenUsage.promptTokenCount != null) {
     metrics.inputTokens = tokenUsage.promptTokenCount
   }
 
-  if (tokenUsage.candidatesTokenCount) {
-    metrics.outputTokens = tokenUsage.candidatesTokenCount
+  if (tokenUsage.candidatesTokenCount != null || tokenUsage.thoughtsTokenCount != null) {
+    metrics.outputTokens = (tokenUsage.candidatesTokenCount ?? 0) + (tokenUsage.thoughtsTokenCount ?? 0)
+  }
+
+  if (tokenUsage.cachedContentTokenCount != null) {
+    metrics.cacheReadTokens = tokenUsage.cachedContentTokenCount
   }
 
   const totalTokens = tokenUsage.totalTokenCount ||
-                    (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
-  if (totalTokens) {
+    (tokenUsage.promptTokenCount != null || tokenUsage.candidatesTokenCount != null ||
+      tokenUsage.thoughtsTokenCount != null
+      ? (tokenUsage.promptTokenCount ?? 0) + (tokenUsage.candidatesTokenCount ?? 0) +
+        (tokenUsage.thoughtsTokenCount ?? 0)
+      : undefined)
+  if (totalTokens != null) {
     metrics.totalTokens = totalTokens
   }
+
+  if (tokenUsage.thoughtsTokenCount != null) {
+    metrics.reasoningOutputTokens = tokenUsage.thoughtsTokenCount
+  }
+
+  return metrics
+}
+
+/**
+ * Extract embedding metrics from a Google GenAI response.
+ * @param {object} response
+ * @returns {object}
+ */
+function extractEmbeddingMetrics (response) {
+  if (!response) return {}
+
+  const metrics = {}
+  const billableCharacterCount = response.metadata?.billableCharacterCount
+  if (billableCharacterCount != null) {
+    metrics.billable_character_count = billableCharacterCount
+  }
+
+  let inputTokens = 0
+  if (response.embeddings) {
+    for (const embedding of response.embeddings) {
+      const tokenCount = embedding.statistics?.tokenCount
+      if (tokenCount > 0) inputTokens += tokenCount
+    }
+  }
+  if (inputTokens > 0) metrics.inputTokens = inputTokens
 
   return metrics
 }
@@ -150,6 +189,28 @@ function extractMetadata (config) {
   const metadata = {}
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
     metadata[metadataKey] = config[configKey] ?? null
+  }
+
+  return metadata
+}
+
+/**
+ * Extract embedding metadata from config.
+ * @param {object} config
+ * @returns {object}
+ */
+function extractEmbeddingMetadata (config) {
+  const fieldMap = {
+    task_type: 'taskType',
+    title: 'title',
+    output_dimensionality: 'outputDimensionality',
+    mime_type: 'mimeType',
+    auto_truncate: 'autoTruncate',
+  }
+
+  const metadata = {}
+  for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
+    metadata[metadataKey] = config?.[configKey] ?? null
   }
 
   return metadata
@@ -259,6 +320,9 @@ function aggregateStreamingChunks (chunks) {
     if (chunk.usageMetadata) {
       response.usageMetadata = chunk.usageMetadata
     }
+    if (chunk.modelVersion !== undefined) {
+      response.modelVersion = chunk.modelVersion
+    }
   }
 
   return response
@@ -267,11 +331,12 @@ function aggregateStreamingChunks (chunks) {
 /**
  * Format a content object into a message
  * @param {object} content
+ * @param {string} defaultRole
  * @returns {object}
  */
-function formatContentObject (content) {
+function formatContentObject (content, defaultRole = ROLES.USER) {
   const parts = content.parts || []
-  const role = determineRole(content, parts)
+  const role = determineRole(content, parts, defaultRole)
 
   // Check if this is a thought/reasoning part
   if (hasThoughtParts(parts)) {
@@ -313,9 +378,10 @@ function formatContentObject (content) {
 /**
  * Format input messages from contents
  * @param {[string|{text: string}|{parts: Array<string|{text: string}>}]} [contents]
+ * @param {string} defaultRole
  * @returns {Array}
  */
-function formatInputMessages (contents) {
+function formatInputMessages (contents, defaultRole = ROLES.USER) {
   if (!contents) return []
 
   const contentArray = Array.isArray(contents) ? contents : [contents]
@@ -323,14 +389,14 @@ function formatInputMessages (contents) {
 
   for (const content of contentArray) {
     if (typeof content === 'string') {
-      messages.push({ role: ROLES.USER, content })
+      messages.push({ role: defaultRole, content })
     } else if (content.text) {
-      messages.push({ role: ROLES.USER, content: content.text })
+      messages.push({ role: defaultRole, content: content.text })
     } else if (content.parts) {
-      const message = formatContentObject(content)
+      const message = formatContentObject(content, defaultRole)
       if (message) messages.push(message)
     } else {
-      messages.push({ role: ROLES.USER, content: JSON.stringify(content) })
+      messages.push({ role: defaultRole, content: JSON.stringify(content) })
     }
   }
 
@@ -542,10 +608,12 @@ module.exports = {
   getOperation,
   extractMetrics,
   extractMetadata,
+  extractEmbeddingMetadata,
   extractToolDefinitions,
   aggregateStreamingChunks,
   formatInputMessages,
   formatEmbeddingInput,
   formatOutputMessages,
   formatEmbeddingOutput,
+  extractEmbeddingMetrics,
 }

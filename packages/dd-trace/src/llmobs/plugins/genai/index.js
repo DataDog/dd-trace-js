@@ -5,6 +5,8 @@ const {
   getOperation,
   extractMetrics,
   extractMetadata,
+  extractEmbeddingMetadata,
+  extractEmbeddingMetrics,
   extractToolDefinitions,
   aggregateStreamingChunks,
   formatInputMessages,
@@ -43,7 +45,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     return {
       modelProvider: 'google',
-      modelName: inputs.model,
+      modelName: inputs.model?.split('/').at(-1),
       kind: operation,
       name: 'google_genai.request',
     }
@@ -60,6 +62,10 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     const operation = getOperation(methodName)
 
+    if (typeof response?.modelVersion === 'string' && response.modelVersion.length > 0) {
+      this._tagger.tagModelName(span, response.modelVersion)
+    }
+
     if (operation === 'llm') {
       this.#tagGenerateContent(span, inputs, response, error, ctx.isStreaming)
     } else if (operation === 'embedding') {
@@ -67,7 +73,9 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     if (!error && response) {
-      const metrics = extractMetrics(response)
+      const metrics = operation === 'embedding'
+        ? extractEmbeddingMetrics(response)
+        : extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
     }
   }
@@ -75,7 +83,10 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   #tagGenerateContent (span, inputs, response, error, isStreaming = false) {
     const { config = {} } = inputs
 
-    const inputMessages = formatInputMessages(inputs.contents)
+    const inputMessages = [
+      ...formatInputMessages(config.systemInstruction, 'system'),
+      ...formatInputMessages(inputs.contents),
+    ]
 
     const metadata = extractMetadata(config)
     this._tagger.tagMetadata(span, metadata)
@@ -84,7 +95,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
 
     if (error) {
-      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '', role: 'assistant' }])
       return
     }
 
@@ -94,6 +105,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
   #tagEmbedding (span, inputs, response, error) {
     const embeddingInput = formatEmbeddingInput(inputs.contents)
+    this._tagger.tagMetadata(span, extractEmbeddingMetadata(inputs.config))
 
     if (error) {
       this._tagger.tagEmbeddingIO(span, embeddingInput)
