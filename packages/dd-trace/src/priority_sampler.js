@@ -329,18 +329,22 @@ class PrioritySampler {
 
   /**
    * Computes priority when at least one manual keep/drop tag is present.
+   * Value checks cover the common case; own-property checks preserve undefined-valued manual tags.
    *
    * @param {Record<string, unknown>} tags
    * @param {DatadogSpanContext} context
    * @returns {SamplingPriority|undefined}
    */
   #getPriorityFromManualTags (tags, context) {
-    if (Object.hasOwn(tags, MANUAL_KEEP)) {
-      const priority = this._getPriorityFromTag(MANUAL_KEEP, tags[MANUAL_KEEP], context)
+    const manualKeep = tags[MANUAL_KEEP]
+    if (manualKeep !== undefined || Object.hasOwn(tags, MANUAL_KEEP)) {
+      const priority = this._getPriorityFromTag(MANUAL_KEEP, manualKeep, context)
       if (priority !== undefined) return priority
     }
-    if (Object.hasOwn(tags, MANUAL_DROP)) {
-      const priority = this._getPriorityFromTag(MANUAL_DROP, tags[MANUAL_DROP], context)
+
+    const manualDrop = tags[MANUAL_DROP]
+    if (manualDrop !== undefined || Object.hasOwn(tags, MANUAL_DROP)) {
+      const priority = this._getPriorityFromTag(MANUAL_DROP, manualDrop, context)
       if (priority !== undefined) return priority
     }
     const priority = tags[SAMPLING_PRIORITY]
