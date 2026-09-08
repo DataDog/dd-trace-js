@@ -5,6 +5,7 @@ const http = require('node:http')
 const { URL } = require('node:url')
 const zlib = require('node:zlib')
 
+const { createAgentlessExporter } = require('@datadog/libdatadog')
 const { after, before, describe, it } = require('mocha')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../../version')
@@ -119,9 +120,21 @@ describe('AgentlessWriter data pipeline', () => {
     }
   })
 
-  it('exports traces and client stats through one data pipeline', async () => {
-    request = receiveRequests(2)
+  it('exports traces and client stats through one data pipeline', async function () {
     const statsEndpoint = new URL('/api/v0.2/stats', intakeUrl).href
+    const exporter = createAgentlessExporter({
+      endpoint: new URL('/api/v2/spans', intakeUrl).href,
+      statsEndpoint,
+      apiKey: 'test-api-key',
+      tracerVersion: 'test',
+      languageVersion: process.version,
+      languageInterpreter: 'v8',
+    })
+    const statsSupported = typeof exporter.sendStats === 'function'
+    exporter.close()
+    if (!statsSupported) this.skip()
+
+    request = receiveRequests(2)
     const writer = new AgentlessWriter({
       url: intakeUrl,
       statsEndpoint,
