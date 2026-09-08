@@ -112,6 +112,7 @@ describe('PrioritySampler', () => {
   describe('isSampled', () => {
     it('should sample by default', () => {
       assert.strictEqual(prioritySampler.isSampled(span), true)
+      assert.strictEqual(context._trace['_dd.agent_psr'], undefined)
     })
 
     it('should not overwrite a committed manual decision while evaluating', () => {
@@ -125,6 +126,13 @@ describe('PrioritySampler', () => {
 
     it('should accept a span context', () => {
       assert.strictEqual(prioritySampler.isSampled(context), true)
+    })
+
+    it('should not record a rule decision while evaluating', () => {
+      prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
+
+      assert.strictEqual(prioritySampler.isSampled(span), true)
+      assert.strictEqual(context._trace['_dd.rule_psr'], undefined)
     })
   })
 
