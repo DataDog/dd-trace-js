@@ -54,7 +54,7 @@ describe('graphql', () => {
       assert.ok(!('_dd.appsec.json' in payload[1][0].meta))
     })
 
-    await axios({
+    const requestPromise = axios({
       url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
@@ -69,7 +69,7 @@ describe('graphql', () => {
       },
     })
 
-    return agentPromise
+    await Promise.all([agentPromise, requestPromise])
   })
 
   it('should report an attack', async () => {
@@ -123,7 +123,7 @@ describe('graphql', () => {
       assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
-    await axios({
+    const requestPromise = axios({
       url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
@@ -138,7 +138,7 @@ describe('graphql', () => {
       },
     })
 
-    return agentPromise
+    await Promise.all([agentPromise, requestPromise])
   })
 
   it('should block an attack', async () => {
@@ -153,7 +153,7 @@ describe('graphql', () => {
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
     })
 
-    await assert.rejects(
+    const requestPromise = assert.rejects(
       axios({
         url: `${proc.url}/graphql`,
         method: 'post',
@@ -174,7 +174,7 @@ describe('graphql', () => {
       }
     )
 
-    return agentPromise
+    await Promise.all([agentPromise, requestPromise])
   })
 
   it('should block an attack in a batched request', async () => {
@@ -189,7 +189,7 @@ describe('graphql', () => {
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
     })
 
-    await assert.rejects(
+    const requestPromise = assert.rejects(
       axios({
         url: `${proc.url}/graphql`,
         method: 'post',
@@ -215,6 +215,6 @@ describe('graphql', () => {
       }
     )
 
-    return agentPromise
+    await Promise.all([agentPromise, requestPromise])
   })
 })
