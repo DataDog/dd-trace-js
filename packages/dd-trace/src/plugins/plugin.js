@@ -48,24 +48,23 @@ class Subscription {
 }
 
 class StoreBinding {
-  constructor (event, transform, targetStorage = legacyStorage) {
+  constructor (event, transform) {
     this._channel = dc.channel(event)
-    this._storage = targetStorage
     this._transform = data => {
-      const handle = this._storage.getHandle()
+      const handle = legacyStorage.getHandle()
 
       return !handle?.noop || (data && Object.hasOwn(data, 'currentStore'))
         ? transform(data)
-        : this._storage.getStore()
+        : legacyStorage.getStore()
     }
   }
 
   enable () {
-    this._channel.bindStore(this._storage, this._transform)
+    this._channel.bindStore(legacyStorage, this._transform)
   }
 
   disable () {
-    this._channel.unbindStore(this._storage)
+    this._channel.unbindStore(legacyStorage)
   }
 }
 
@@ -133,11 +132,10 @@ module.exports = class Plugin {
    *
    * @param {string} channelName Diagnostic channel name.
    * @param {(data: unknown) => object} transform Transform to compute the bound store.
-   * @param {object} [targetStorage] Storage to bind to the channel.
    * @returns {void}
    */
-  addBind (channelName, transform, targetStorage = legacyStorage) {
-    this._bindings.push(new StoreBinding(channelName, transform, targetStorage))
+  addBind (channelName, transform) {
+    this._bindings.push(new StoreBinding(channelName, transform))
   }
 
   /**
