@@ -22,12 +22,6 @@ jobs:
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
     steps:
-      - name: Checkout base revision
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
       - name: Auto-rename GitHub revert title to Conventional Commit
         id: rename
         if: startsWith(github.event.pull_request.title, 'Revert "')
@@ -46,7 +40,7 @@ jobs:
             })
             core.setOutput('renamed', 'true')
 
-      - name: Validate PR title and release-note context
+      - name: Validate PR title
         if: >-
           steps.rename.outputs.renamed != 'true' &&
           (github.event.action != 'edited' || github.event.changes.title != null)
@@ -63,19 +57,28 @@ jobs:
             core.info(`PR title OK: ${title}`)
 
             const type = match[3]
-            if (!/^(?:feat|fix|perf|docs)$/.test(type)) return
+            const scope = match[5]
+            if (!/^(?:feat|fix)$/.test(type) || !scope) return
 
-            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
-              ...context.repo,
-              pull_number: pullRequest.number,
-              per_page: 100,
-            })
-            const files = []
-            const { appendChangedPaths, isInternalOnly } = require('./scripts/release/changelog')
-            appendChangedPaths(files, changedFiles)
-            if (isInternalOnly(files)) {
-              core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
-                'Use test, bench, ci, or chore.')
+            const nonProductionScopes = new Map([
+              ['bench', 'bench'],
+              ['benchmark', 'bench'],
+              ['benchmarks', 'bench'],
+              ['build', 'build'],
+              ['chore', 'chore'],
+              ['ci', 'ci'],
+              ['docs', 'docs'],
+              ['documentation', 'docs'],
+              ['style', 'style'],
+              ['test', 'test'],
+              ['tests', 'test'],
+              ['testing', 'test'],
+            ])
+            const invalidScope = scope.split(',').map(scope => scope.trim().toLowerCase())
+              .find(scope => nonProductionScopes.has(scope))
+            if (invalidScope) {
+              core.setFailed(`PR title type "${type}" is not valid for non-production scope "${invalidScope}". ` +
+                `Use "${nonProductionScopes.get(invalidScope)}" instead.`)
             }
 
       - name: Sync labels with PR title
