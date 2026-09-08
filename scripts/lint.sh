@@ -36,4 +36,5 @@ if [ "$status" -ne 0 ]; then
   exit "$status"
 fi
 
+# ESLint uses all available CPUs through --concurrency=auto, so run it after the auxiliary checks.
 eslint . --concurrency=auto --max-warnings 0
