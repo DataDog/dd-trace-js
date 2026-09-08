@@ -37,10 +37,10 @@ runs:
       shell: bash
       run: sleep 10
     # A failed finalize can reserve the artifact name without making it available to `overwrite`.
-    # Use a new name; download-artifacts prefers it if the original later becomes visible.
+    # Use a name per run attempt; download-artifacts selects the newest artifact.
     - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_coverage == 'true' && steps.upload.outcome == 'failure'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: coverage-${{ inputs.flags }}__${{ github.job }}-${{ strategy.job-index }}-retry
+        name: coverage-${{ inputs.flags }}__${{ github.job }}-${{ strategy.job-index }}-retry-${{ github.run_attempt }}
         path: ${{ inputs.report-dir }}/**/lcov.info
         retention-days: 1

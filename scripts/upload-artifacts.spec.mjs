@@ -20,7 +20,7 @@ for (const [name, path] of actions) {
       assert.strictEqual(uploads[0]['continue-on-error'], true)
       assert.strictEqual(uploads[1].if.includes("steps.upload.outcome == 'failure'"), true)
       assert.strictEqual(uploads[1]['continue-on-error'], undefined)
-      assert.strictEqual(uploads[1].with.name, `${uploads[0].with.name}-retry`)
+      assert.strictEqual(uploads[1].with.name, `${uploads[0].with.name}-retry-\${{ github.run_attempt }}`)
       assert.strictEqual(uploads[1].with.overwrite, undefined)
     })
   })
