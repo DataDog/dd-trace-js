@@ -428,9 +428,7 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression ' +
-      'VariableDeclarator[id.name="__apm$wrapped"] > ' +
-      ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement',
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression',
     channelName: 'testFrameworkFnWrapper',
     transform: 'awaitContextCallback',
     transformOptions: {
@@ -456,8 +454,9 @@ module.exports = [
       filePath: 'build/index.js',
     },
     astQuery: 'FunctionDeclaration[id.name="executeAsync"] ' +
-      'VariableDeclarator[id.name="__apm$wrapped"] > ' +
-      ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement > TryStatement > BlockStatement',
+      'TryStatement:has(CatchClause IfStatement[test.operator=">"]' +
+      '[test.left.object.name="retries"][test.left.property.name="limit"]' +
+      '[test.right.object.name="retries"][test.right.property.name="attempts"]) > BlockStatement',
     channelName: 'executeAsync',
     transform: 'awaitContextCallback',
     transformOptions: {

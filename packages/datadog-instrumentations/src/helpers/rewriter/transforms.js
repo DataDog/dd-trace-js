@@ -30,8 +30,8 @@ module.exports = {
 }
 
 /**
- * Awaits an optional context callback at the start of a matched block or before continuing through a matched
- * conditional branch.
+ * Awaits an optional context callback at the start of a matched function or block, or before continuing through a
+ * matched conditional branch.
  *
  * A matched conditional branch is checked again after the callback settles so its original body does not run
  * against state that changed while awaiting.
@@ -43,24 +43,62 @@ module.exports = {
  *     callbackThis?: boolean
  *   }
  * }} state
- * @param {import('estree').BlockStatement|import('estree').IfStatement} node
+ * @param {
+ *   import('estree').ArrowFunctionExpression|
+ *   import('estree').BlockStatement|
+ *   import('estree').FunctionDeclaration|
+ *   import('estree').FunctionExpression|
+ *   import('estree').IfStatement
+ * } node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
  * @returns {void}
  */
 function awaitContextCallback (state, node, _parent, ancestry) {
+  let insertionTarget
+  let callbackAncestry = ancestry
+
   if (node.type === 'BlockStatement') {
-    const generatedCallback = createAwaitedContextCallback(state, node, ancestry, 'awaitContextCallback')
+    insertionTarget = node
+  } else if (functionTypes.has(node.type)) {
+    let callbackFunction = node
+    callbackAncestry = [node, ...ancestry]
+
+    if (!node.async) {
+      // Built-in function transforms run before later custom transforms. Keep knowledge of their generated wrapper
+      // here so instrumentation queries can continue to target the original function.
+      const [wrappedFunction] = query(node,
+        'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement > ' +
+        'VariableDeclaration > VariableDeclarator[id.name="__apm$wrapped"] > ' +
+        ':matches(ArrowFunctionExpression, FunctionDeclaration, FunctionExpression)[async=true]')
+      if (wrappedFunction) {
+        callbackFunction = wrappedFunction
+        callbackAncestry.unshift(wrappedFunction)
+      }
+    }
+
+    assert(callbackFunction.async && callbackFunction.body?.type === 'BlockStatement',
+      'awaitContextCallback: expected an async function with a block body')
+    insertionTarget = callbackFunction.body
+  }
+
+  if (insertionTarget) {
+    const generatedCallback = createAwaitedContextCallback(
+      state,
+      insertionTarget,
+      callbackAncestry,
+      'awaitContextCallback'
+    )
     if (!generatedCallback) return
 
     let insertionIndex = 0
-    while (typeof node.body[insertionIndex]?.directive === 'string') insertionIndex++
-    node.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
+    while (typeof insertionTarget.body[insertionIndex]?.directive === 'string') insertionIndex++
+    insertionTarget.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
     return
   }
 
   assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
-    'awaitContextCallback: expected a block or an if statement with a block body')
+    'awaitContextCallback: expected a function, a block, or an if statement with a block body')
 
   const originalStatements = node.consequent.body
   const generatedCallback = createAwaitedContextCallback(

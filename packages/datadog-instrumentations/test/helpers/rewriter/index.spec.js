@@ -437,9 +437,21 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="runFromStart"] ' +
-            'VariableDeclarator[id.name="__apm$wrapped"] > ' +
-            ':matches(FunctionDeclaration, FunctionExpression)[async=true] > BlockStatement',
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
+          channelName: 'trace_await_context_callback_at_function_start',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        // Matching the same function twice verifies that the transform checks its resolved insertion target.
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
           channelName: 'trace_await_context_callback_at_function_start',
           transform: 'awaitContextCallback',
           transformOptions: {
@@ -1031,9 +1043,12 @@ describe('check-require-cache', () => {
     const { runFromStart } = compileFile('trace-await-context-callback')
     const steps = []
 
-    const [rewrittenFunction] = query(parse(content), 'FunctionDeclaration[id.name="runFromStart"] ' +
-      'VariableDeclarator[id.name="__apm$wrapped"] > FunctionExpression[async=true]')
+    const rewrittenFunction = query(parse(content),
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true]')
+      .find(node => node.body.body[0]?.directive === 'use strict')
+    assert(rewrittenFunction)
     assert.equal(rewrittenFunction.body.body[0].directive, 'use strict')
+    assert.equal(query(rewrittenFunction, 'VariableDeclarator[id.name="__apm$beforeStart"]').length, 1)
 
     subs = {
       start (ctx) {
