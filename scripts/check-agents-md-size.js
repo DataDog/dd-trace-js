@@ -5,7 +5,7 @@
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 
-const MAX_LINES = 200
+const MAX_LINES = 300
 const agentsPath = join(process.cwd(), 'AGENTS.md')
 const content = readFileSync(agentsPath, 'utf8')
 const lines = content === '' ? [] : content.split(/\r\n|\r|\n/)
