@@ -713,10 +713,12 @@ class TextMapPropagator {
     const selectedPriority = selectedSpanContext._sampling.priority
     if (selectedPriority === undefined) {
       selectedSpanContext._sampling.priority = w3cSpanContext._sampling.priority
-    } else if ((selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)) {
-      // The W3C threshold describes its sampled bit, not the conflicting decision selected from another style.
+    } else if (
+      selectedSpanContext._sampling.isProbabilityDecision === false ||
+      (selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)
+    ) {
+      // Copied sampling metadata must not describe a conflicting or non-probabilistic selected decision.
       selectedSpanContext._sampling.isProbabilityDecision = false
-      // The copied decision maker likewise belongs to the conflicting W3C decision.
       w3cSpanContext._tracestate.forVendor('dd', state => {
         if (state.get('t.dm') !== undefined) state.delete('t.dm')
       })

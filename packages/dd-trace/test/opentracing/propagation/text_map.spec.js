@@ -1621,7 +1621,7 @@ describe('TextMapPropagator', () => {
         textMap = {
           ...b3Headers,
           traceparent: `00-${traceId}-${spanId}-01`,
-          tracestate: 'ot=rv:ffffffffffffff;th:8;vendor:value',
+          tracestate: 'dd=t.dm:-3,ot=rv:ffffffffffffff;th:8;vendor:value',
         }
         config.tracePropagationStyle.extract = [style, 'tracecontext']
         config.tracePropagationStyle.inject = ['tracecontext']
@@ -1633,6 +1633,7 @@ describe('TextMapPropagator', () => {
         assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
         assert.match(carrier.traceparent, /-01$/)
         assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;vendor:value(?:,|$)/)
+        assert.doesNotMatch(carrier.tracestate, /t\.dm:/)
       })
     }
 
