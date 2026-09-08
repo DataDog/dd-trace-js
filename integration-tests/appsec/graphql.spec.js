@@ -73,7 +73,7 @@ describe('graphql', () => {
       },
       operationName: 'getSingleImage',
     })
-    const [response] = await Promise.all([agentPromise, requestPromise])
+    const [, response] = await Promise.all([agentPromise, requestPromise])
     assert.strictEqual(response.status, 200)
   })
 
@@ -135,7 +135,7 @@ describe('graphql', () => {
       },
       operationName: 'getImagesByCategory',
     })
-    const [response] = await Promise.all([agentPromise, requestPromise])
+    const [, response] = await Promise.all([agentPromise, requestPromise])
     assert.strictEqual(response.status, 200)
   })
 
@@ -158,7 +158,7 @@ describe('graphql', () => {
       },
       operationName: 'getImagesByCategory',
     })
-    const [response] = await Promise.all([agentPromise, requestPromise])
+    const [, response] = await Promise.all([agentPromise, requestPromise])
     assert.strictEqual(response.status, 403)
   })
 
@@ -186,7 +186,7 @@ describe('graphql', () => {
         operationName: 'getImagesByCategory',
       },
     ])
-    const [response] = await Promise.all([agentPromise, requestPromise])
+    const [, response] = await Promise.all([agentPromise, requestPromise])
     assert.strictEqual(response.status, 403)
   })
 })
