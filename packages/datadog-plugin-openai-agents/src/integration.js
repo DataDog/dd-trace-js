@@ -3,6 +3,7 @@
 const { storage } = require('../../datadog-core')
 const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
 const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
+const { PARENT_ID_KEY } = require('../../dd-trace/src/llmobs/constants/tags')
 const log = require('../../dd-trace/src/log')
 const { getOpenAIModelProvider } = require('../../dd-trace/src/llmobs/plugins/openai/utils')
 const {
@@ -22,6 +23,7 @@ const MAX_ANCESTOR_WALK = 32
 const MAX_MANIFEST_DEPTH = 20
 const MAX_MANIFEST_NODES = 10_000
 const MODEL_BASE_URL_STORE_KEY = Symbol('openai-agents.model-base-url')
+const MODEL_CALL_STORE_KEY = Symbol('openai-agents.model-call')
 const legacyStorage = storage('legacy')
 
 const KIND_TO_SPAN_KIND = {
@@ -78,6 +80,15 @@ class OpenAIAgentsIntegration {
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
   #oaiToDdSpan = new Map()
   /**
+   * @type {Map<string, {
+   *   agentsCoreSpanId: string,
+   *   agentDdSpan: object,
+   *   providerSpans: object[],
+   *   responseDdSpan?: object
+  * }>}
+  */
+  #modelCallHolders = new Map()
+  /**
    * agents-core spans we deliberately don't trace (`task` / `turn`). Ended
    * nodes stay walkable only while an observed child callback is still active.
    * @type {Map<string, UntracedSpanInfo>}
@@ -119,6 +130,44 @@ class OpenAIAgentsIntegration {
    */
   getDDSpan (spanId) {
     return this.#oaiToDdSpan.get(this.#nearestTracedAncestorId(spanId))
+  }
+
+  getOrCreateModelCallHolder (agentsCoreSpanId, agentDdSpan) {
+    let holder = this.#modelCallHolders.get(agentsCoreSpanId)
+    if (!holder) {
+      holder = { agentsCoreSpanId, agentDdSpan, providerSpans: [] }
+      this.#modelCallHolders.set(agentsCoreSpanId, holder)
+    }
+    return holder
+  }
+
+  getModelCallHolderForProviderSpan (span) {
+    const parentId = span?.context()._parentId?.toString(10)
+    if (!parentId) return
+
+    for (const holder of this.#modelCallHolders.values()) {
+      if (holder.agentDdSpan.context().toSpanId().toString() === parentId) return holder
+    }
+  }
+
+  trackProviderSpan (holder, span) {
+    if (!span) return
+    for (const ownedSpan of this.#oaiToDdSpan.values()) {
+      if (ownedSpan === span) return
+    }
+    if (span.context()._parentId?.toString(10) !== holder.agentDdSpan.context().toSpanId().toString()) return
+    holder.providerSpans.push(span)
+    this.reparentProviderSpans(holder)
+  }
+
+  reparentProviderSpans (holder) {
+    const responseSpan = holder.responseDdSpan
+    if (!responseSpan || !this.#isLLMObsEnabled()) return
+    const parentId = responseSpan.context().toSpanId()
+    for (const providerSpan of holder.providerSpans) {
+      if (providerSpan === responseSpan || !LLMObsTagger.tagMap.has(providerSpan)) continue
+      this.#tagger._setTag(providerSpan, PARENT_ID_KEY, parentId)
+    }
   }
 
   /**
@@ -207,6 +256,7 @@ class OpenAIAgentsIntegration {
       ddSpan.finish()
     }
     this.#oaiToDdSpan.clear()
+    this.#modelCallHolders.clear()
     this.#untracedSpans.clear()
     this.#traceInfo.clear()
   }
@@ -223,7 +273,6 @@ class OpenAIAgentsIntegration {
       childOf: parentSpan,
       tags: this.#getSpanTags('internal'),
     })
-
     const llmobsParentStore = this.#isLLMObsEnabled() ? llmobsStorage.getStore() : undefined
     this.#oaiToDdSpan.set(traceId, ddSpan)
     this.#traceInfo.set(traceId, {
@@ -317,10 +366,21 @@ class OpenAIAgentsIntegration {
       childOf: parentSpan,
       tags: this.#getSpanTags(KIND_TO_SPAN_KIND[llmobsKind] ?? 'internal'),
     })
-
     this.#oaiToDdSpan.set(spanId, ddSpan)
     this.#retainUntracedParent(oaiSpan.parentId)
     this.#spanStarted(oaiSpan.traceId)
+
+    if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
+      const holder = this.#modelCallHolders.get(oaiSpan.parentId)
+      if (holder) {
+        holder.responseDdSpan = ddSpan
+        this.reparentProviderSpans(holder)
+        const store = llmobsStorage.getStore()
+        if (store?.[MODEL_CALL_STORE_KEY] === holder) {
+          llmobsStorage.enterWith({ ...store, span: ddSpan })
+        }
+      }
+    }
 
     if (this.#isLLMObsEnabled()) {
       const llmobsOptions = {
@@ -384,6 +444,11 @@ class OpenAIAgentsIntegration {
         }
       }
 
+      if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
+        const holder = this.#modelCallHolders.get(oaiSpan.parentId)
+        if (holder) this.reparentProviderSpans(holder)
+      }
+
       // agents-core's withTrace skips Trace.end() when its callback throws, so
       // an errored top-level span is our last chance to finalize the workflow.
       if (oaiSpan.error && this.#isTopLevelSpan(oaiSpan)) {
@@ -394,6 +459,9 @@ class OpenAIAgentsIntegration {
         ddSpan.finish()
       } finally {
         this.#oaiToDdSpan.delete(spanId)
+        if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
+          this.#modelCallHolders.delete(oaiSpan.parentId)
+        }
         this.#releaseUntracedParent(oaiSpan.parentId)
         this.#spanEnded(oaiSpan.traceId)
       }
@@ -879,4 +947,4 @@ function wireValue (value, depth = 0, ancestors = [], budget) {
   return hasValue ? result : undefined
 }
 
-module.exports = { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration }
+module.exports = { MODEL_BASE_URL_STORE_KEY, MODEL_CALL_STORE_KEY, OpenAIAgentsIntegration }

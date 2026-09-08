@@ -1,9 +1,11 @@
 'use strict'
 
+const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
-const { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration } = require('./integration')
+const log = require('../../dd-trace/src/log')
+const { MODEL_BASE_URL_STORE_KEY, MODEL_CALL_STORE_KEY, OpenAIAgentsIntegration } = require('./integration')
 const { DDOpenAIAgentsProcessor } = require('./processor')
 
 const legacyStorage = storage('legacy')
@@ -31,6 +33,24 @@ class OpenaiAgentsPlugin extends Plugin {
       tracer: this.tracer,
       config: tracerConfig,
     })
+    this.#bindLLMObsStorage('apm:openai-agents:model:start', ({ agentsCoreSpanId } = {}) => {
+      const store = llmobsStorage.getStore()
+      if (!this.#integration.enabled || !this.#isLLMObsEnabled() || !agentsCoreSpanId) return store
+
+      const agentDdSpan = this.#integration.getDDSpan(agentsCoreSpanId)
+      const holder = this.#integration.getOrCreateModelCallHolder(agentsCoreSpanId, agentDdSpan)
+      return {
+        ...store,
+        span: agentDdSpan,
+        [MODEL_CALL_STORE_KEY]: holder,
+      }
+    })
+    this.#bindLLMObsStorage('apm:openai-agents:tool:start', ({ agentsCoreSpan } = {}) => {
+      const store = llmobsStorage.getStore()
+      if (!this.#integration.enabled || !this.#isLLMObsEnabled() || !agentsCoreSpan) return store
+      const ddSpan = this.#integration.getOrStartToolSpan(agentsCoreSpan)
+      return ddSpan ? { ...store, span: ddSpan } : store
+    })
 
     // Register a new processor each time @openai/agents fires the channel.
     // Each module version calls setTraceProcessors() on load (which replaces
@@ -55,31 +75,32 @@ class OpenaiAgentsPlugin extends Plugin {
       if (!this.#integration.enabled || !agentsCoreSpanId) return store
       const ddSpan = this.#integration.getDDSpan(agentsCoreSpanId)
       if (!ddSpan) return store
-      return { ...store, [MODEL_BASE_URL_STORE_KEY]: baseURL, span: ddSpan }
+      const holder = this.#integration.getOrCreateModelCallHolder(agentsCoreSpanId, ddSpan)
+      return { ...store, [MODEL_BASE_URL_STORE_KEY]: baseURL, [MODEL_CALL_STORE_KEY]: holder, span: ddSpan }
     })
-    this.addBind('apm:openai-agents:model:start', ({ agentsCoreSpanId }) => {
-      const store = llmobsStorage.getStore()
-      if (!this.#integration.enabled || !this.#isLLMObsEnabled() || !agentsCoreSpanId) return store
-      const ddSpan = this.#integration.getDDSpan(agentsCoreSpanId)
-      return ddSpan ? { ...store, span: ddSpan } : store
-    }, llmobsStorage)
-
     this.addBind('apm:openai-agents:tool:start', ({ agentsCoreSpan }) => {
       const store = legacyStorage.getStore()
       if (!this.#integration.enabled || !agentsCoreSpan) return store
       const ddSpan = this.#integration.getOrStartToolSpan(agentsCoreSpan)
       return ddSpan ? { ...store, span: ddSpan } : store
     })
-    this.addBind('apm:openai-agents:tool:start', ({ agentsCoreSpan }) => {
-      const store = llmobsStorage.getStore()
-      if (!this.#integration.enabled || !this.#isLLMObsEnabled() || !agentsCoreSpan) return store
-      const ddSpan = this.#integration.getOrStartToolSpan(agentsCoreSpan)
-      return ddSpan ? { ...store, span: ddSpan } : store
-    }, llmobsStorage)
-
     this.addSub('apm:openai-agents:agent:prepare', ({ agent, agentsCoreSpan }) => {
       this.#integration.tagAgentManifest(agentsCoreSpan, agent)
     })
+    this.addSub('dd-trace:span:start', ({ span } = {}) => {
+      if (!this.#integration.enabled || !this.#isLLMObsEnabled()) return
+      const holder = legacyStorage.getStore()?.[MODEL_CALL_STORE_KEY] ||
+        this.#integration.getModelCallHolderForProviderSpan(span)
+      if (holder) this.#integration.trackProviderSpan(holder, span)
+    })
+  }
+
+  #bindLLMObsStorage (event, transform) {
+    try {
+      dc.channel(event).bindStore(llmobsStorage, transform)
+    } catch (error) {
+      log.debug('[openai-agents] Failed to bind LLMObs storage: %s', error)
+    }
   }
 
   #isLLMObsEnabled () {
