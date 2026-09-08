@@ -7,12 +7,16 @@ const { once } = require('events')
 const { sandboxCwd, useSandbox } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
-const packageManagers = ['yarn', 'npm', 'pnpm']
+const packageManagers = new Map([
+  ['yarn', 'yarn'],
+  ['npm', 'npm'],
+  ['pnpm', 'pnpm@11'],
+])
 
 describe('test optimization startup', () => {
   let cwd, receiver, childProcess, processOutput
 
-  useSandbox(packageManagers, true)
+  useSandbox([...packageManagers.values()], true)
 
   before(() => {
     cwd = sandboxCwd()
@@ -28,7 +32,7 @@ describe('test optimization startup', () => {
     await receiver.stop()
   })
 
-  packageManagers.forEach(packageManager => {
+  for (const packageManager of packageManagers.keys()) {
     it(`skips initialization for ${packageManager}`, async () => {
       childProcess = exec(`node ./node_modules/.bin/${packageManager} -v`,
         {
@@ -48,15 +52,16 @@ describe('test optimization startup', () => {
         processOutput += chunk.toString()
       })
 
-      await Promise.all([
+      const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
         once(childProcess.stderr, 'end'),
       ])
 
+      assert.strictEqual(exitCode, 0, processOutput)
       assert.match(processOutput, /dd-trace is not initialized in a package manager/)
     })
-  })
+  }
 
   it('does not skip initialization for non package managers', async () => {
     childProcess = exec('node -e "console.log(\'hello!\')"',
