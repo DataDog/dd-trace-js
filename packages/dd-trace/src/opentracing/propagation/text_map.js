@@ -703,6 +703,29 @@ class TextMapPropagator {
   }
 
   /**
+   * Merges W3C sampling state into the context selected by propagation-style precedence.
+   *
+   * @param {DatadogSpanContext} w3cSpanContext
+   * @param {DatadogSpanContext} selectedSpanContext
+   * @returns {void}
+   */
+  #mergeTraceContextState (w3cSpanContext, selectedSpanContext) {
+    const selectedPriority = selectedSpanContext._sampling.priority
+    if (selectedPriority === undefined) {
+      selectedSpanContext._sampling.priority = w3cSpanContext._sampling.priority
+    } else if ((selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)) {
+      // The W3C threshold describes its sampled bit, not the conflicting decision selected from another style.
+      selectedSpanContext._sampling.isProbabilityDecision = false
+      // The copied decision maker likewise belongs to the conflicting W3C decision.
+      w3cSpanContext._tracestate.forVendor('dd', state => {
+        if (state.get('t.dm') !== undefined) state.delete('t.dm')
+      })
+    }
+
+    selectedSpanContext._tracestate = w3cSpanContext._tracestate
+  }
+
+  /**
    * @param {DatadogSpanContext | undefined} w3cSpanContext
    * @param {DatadogSpanContext} firstSpanContext
    * @param {Record<string, unknown>} carrier
@@ -715,19 +738,7 @@ class TextMapPropagator {
       return firstSpanContext
     }
 
-    const selectedPriority = firstSpanContext._sampling.priority
-    if (selectedPriority === undefined) {
-      firstSpanContext._sampling.priority = w3cSpanContext._sampling.priority
-    } else if ((selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)) {
-      // The W3C threshold describes its sampled bit, not the conflicting decision selected from another style.
-      firstSpanContext._sampling.isProbabilityDecision = false
-      // The copied decision maker likewise belongs to the conflicting W3C decision.
-      w3cSpanContext._tracestate.forVendor('dd', state => {
-        if (state.get('t.dm') !== undefined) state.delete('t.dm')
-      })
-    }
-
-    firstSpanContext._tracestate = w3cSpanContext._tracestate
+    this.#mergeTraceContextState(w3cSpanContext, firstSpanContext)
     if (firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) return firstSpanContext
 
     if (tags.DD_PARENT_ID in w3cSpanContext._trace.tags) {
@@ -906,7 +917,7 @@ class TextMapPropagator {
   #addTraceContextState (datadogContext, traceContext) {
     if (traceContext && datadogContext._traceId.equals(traceContext._traceId)) {
       datadogContext._traceparent = traceContext._traceparent
-      datadogContext._tracestate = traceContext._tracestate
+      this.#mergeTraceContextState(traceContext, datadogContext)
     }
   }
 

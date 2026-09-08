@@ -1500,13 +1500,32 @@ describe('TextMapPropagator', () => {
 
     it('should always extract tracestate from tracecontext when trace IDs match', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
-      textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+      textMap.tracestate = 'other=bleh,ot=rv:ffffffffffffff;th:8'
       config.tracePropagationStyle.extract = ['datadog']
+      config.tracePropagationStyle.inject = ['tracecontext']
 
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
 
+      assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
       assert.strictEqual(spanContext._tracestate.get('other'), 'bleh')
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
+    })
+
+    it('should clear conflicting W3C sampling state during implicit tracecontext merging', () => {
+      textMap['x-datadog-sampling-priority'] = '0'
+      textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
+      textMap.tracestate = 'other=bleh,dd=t.dm:-3,ot=rv:ffffffffffffff;th:8'
+      config.tracePropagationStyle.extract = ['datadog']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff(?:,|$)/)
+      assert.doesNotMatch(carrier.tracestate, /t\.dm:/)
     })
 
     it('should propagate tracecontext tracestate when matching B3 headers take precedence', () => {
