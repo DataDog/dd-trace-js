@@ -1,0 +1,10 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 200,
+      "stream": true,
+      "body": "data: {\"id\":\"chatcmpl-parity-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Streamed parity.\"},\"finish_reason\":null}]}\\n\\ndata: {\"id\":\"chatcmpl-parity-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":3,\"total_tokens\":12}}\\n\\ndata: [DONE]\\n\\n"
+    }
+  ]
+}
