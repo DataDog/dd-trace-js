@@ -7,6 +7,7 @@ const sinon = require('sinon')
 
 require('../../dd-trace/test/setup/core')
 
+const { storage } = require('../../datadog-core')
 const { AUTO_KEEP, USER_KEEP } = require('../../../ext/priority')
 const { SAMPLING_MECHANISM_AGENT, SAMPLING_MECHANISM_RULE } = require('../../dd-trace/src/constants')
 const AzureDurableFunctionsPlugin = require('../src')
@@ -317,15 +318,24 @@ describe('azure-durable-functions plugin', () => {
     sinon.assert.calledOnce(span.finish)
   })
 
-  it('does not create an error span for an initial orchestration failure', () => {
-    plugin.orchestrationFailure({
-      arguments: [
-        { functionName: 'PizzaOrderOrchestration' },
-        [{ EventType: 12, Timestamp: '2026-09-04T12:34:56.789Z' }],
-      ],
-      error: new Error('initial failure'),
+  it('tags the active span for an initial orchestration failure', () => {
+    const error = new Error('initial failure')
+    const activeSpan = {
+      context: sinon.stub().returns({ getTag: sinon.stub() }),
+      setTag: sinon.stub(),
+    }
+
+    storage('legacy').run({ span: activeSpan }, () => {
+      plugin.orchestrationFailure({
+        arguments: [
+          { functionName: 'PizzaOrderOrchestration' },
+          [{ EventType: 12, Timestamp: '2026-09-04T12:34:56.789Z' }],
+        ],
+        error,
+      })
     })
 
+    sinon.assert.calledOnceWithExactly(activeSpan.setTag, 'error', error)
     sinon.assert.notCalled(startSpan)
   })
 })

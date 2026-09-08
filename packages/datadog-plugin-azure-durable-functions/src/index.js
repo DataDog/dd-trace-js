@@ -92,9 +92,10 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
   }
 
   /**
-   * Creates a failure-only span after a resumed orchestration throws. The executor
-   * publishes synchronously before Durable Functions converts the error into its
-   * existing rejected promise, so this does not add a promise to replay activations.
+   * Tags the active initial orchestration span or creates a failure-only span after
+   * a resumed orchestration throws. The executor publishes synchronously before
+   * Durable Functions serializes the error, so this does not add a promise to
+   * orchestration activations.
    *
    * @param {{ arguments?: unknown[], error?: unknown }} executorCtx
    * @returns {void}
@@ -122,7 +123,10 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       if (hasPreviousActivation && startTime !== undefined) break
     }
 
-    if (!hasPreviousActivation) return
+    if (!hasPreviousActivation) {
+      this.addError(executorCtx.error)
+      return
+    }
 
     const traceContext = invocationContext?.traceContext
     const ctx = {
