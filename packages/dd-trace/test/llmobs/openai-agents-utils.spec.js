@@ -447,11 +447,25 @@ describe('openai-agents utils', () => {
       assert.strictEqual(metrics.reasoningOutputTokens, 3)
     })
 
+    it('includes cached input tokens from camelCase nested details', () => {
+      const metrics = extractMetrics({
+        usage: { inputTokensDetails: { cachedTokens: 6 } },
+      })
+      assert.strictEqual(metrics.cacheReadTokens, 6)
+    })
+
     it('includes reasoning tokens from snake_case nested details', () => {
       const metrics = extractMetrics({
         usage: { output_tokens_details: { reasoning_tokens: 4 } },
       })
       assert.strictEqual(metrics.reasoningOutputTokens, 4)
+    })
+
+    it('includes cached input tokens from snake_case nested details', () => {
+      const metrics = extractMetrics({
+        usage: { input_tokens_details: { cached_tokens: 7 } },
+      })
+      assert.strictEqual(metrics.cacheReadTokens, 7)
     })
 
     it('includes reasoning tokens from Chat Completions details', () => {
@@ -461,11 +475,15 @@ describe('openai-agents utils', () => {
       assert.strictEqual(metrics.reasoningOutputTokens, 5)
     })
 
-    it('omits a zero reasoning token count', () => {
+    it('preserves zero cached and reasoning token counts', () => {
       const metrics = extractMetrics({
-        usage: { inputTokens: 1, outputTokens: 1, outputTokensDetails: { reasoningTokens: 0 } },
+        usage: {
+          inputTokensDetails: { cachedTokens: 0 },
+          outputTokensDetails: { reasoningTokens: 0 },
+        },
       })
-      assert.ok(!('reasoningOutputTokens' in metrics))
+      assert.strictEqual(metrics.cacheReadTokens, 0)
+      assert.strictEqual(metrics.reasoningOutputTokens, 0)
     })
 
     it('derives totalTokens from input+output when total is missing', () => {

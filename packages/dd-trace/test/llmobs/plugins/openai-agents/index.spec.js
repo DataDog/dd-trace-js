@@ -14,7 +14,7 @@ const {
 
 const AGENT_INSTRUCTIONS = 'You are a test agent'
 
-function createResponse (output, model = 'gpt-4-0613') {
+function createResponse (output, model = 'gpt-4-0613', tools = []) {
   return {
     id: 'resp_test',
     object: 'response',
@@ -34,7 +34,7 @@ function createResponse (output, model = 'gpt-4-0613') {
     temperature: 1,
     text: { format: { type: 'text' } },
     tool_choice: 'auto',
-    tools: [],
+    tools,
     top_p: 1,
     truncation: 'disabled',
     metadata: {},
@@ -183,8 +183,34 @@ describe('integrations', () => {
               name: 'add',
               arguments: '{"a":1,"b":2}',
               status: 'completed',
-            }], 'gpt-4o-mini'),
-            createResponse([createMessageOutput('3')], 'gpt-4o-mini'),
+            }], 'gpt-4o-mini', [{
+              type: 'function',
+              name: 'add',
+              description: 'Adds two numbers.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
+                },
+                required: ['a', 'b'],
+                additionalProperties: false,
+              },
+            }]),
+            createResponse([createMessageOutput('3')], 'gpt-4o-mini', [{
+              type: 'function',
+              name: 'add',
+              description: 'Adds two numbers.',
+              parameters: {
+                type: 'object',
+                properties: {
+                  a: { type: 'number' },
+                  b: { type: 'number' },
+                },
+                required: ['a', 'b'],
+                additionalProperties: false,
+              },
+            }]),
           ]),
         })
         const streamClient = new OpenAI({
@@ -354,6 +380,8 @@ describe('integrations', () => {
             metrics: {
               input_tokens: MOCK_NOT_NULLISH,
               output_tokens: MOCK_NOT_NULLISH,
+              cache_read_input_tokens: MOCK_NOT_NULLISH,
+              reasoning_output_tokens: MOCK_NOT_NULLISH,
               total_tokens: MOCK_NOT_NULLISH,
             },
             metadata: COMMON_RESPONSE_METADATA,
@@ -520,6 +548,19 @@ describe('integrations', () => {
           const { llmobsSpans } = await getEvents(7)
           const llmEvents = llmobsSpans.filter(s => s.name === 'tool_agent (LLM)')
           assert.equal(llmEvents.length, 2)
+          assert.deepStrictEqual(llmEvents[0].meta.tool_definitions, [{
+            name: 'add',
+            description: 'Adds two numbers.',
+            schema: {
+              type: 'object',
+              properties: {
+                a: { type: 'number' },
+                b: { type: 'number' },
+              },
+              required: ['a', 'b'],
+              additionalProperties: false,
+            },
+          }])
           const messages = llmEvents[1].meta.input.messages
           assert.ok(messages.some(message => message.tool_calls?.[0]?.tool_id === 'call_tool' ||
             message.toolCalls?.[0]?.toolId === 'call_tool'))

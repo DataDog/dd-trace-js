@@ -39,7 +39,6 @@ function setupTools () {
       required: ['a', 'b'],
       additionalProperties: false,
     },
-    strict: false,
     execute: async ({ a, b }) => a + b,
   })
 
@@ -55,7 +54,6 @@ function setupTools () {
       required: ['a', 'b'],
       additionalProperties: false,
     },
-    strict: false,
     execute: async () => {
       throw new Error('This is a test error')
     },
@@ -70,7 +68,6 @@ function setupTools () {
       required: ['query'],
       additionalProperties: false,
     },
-    strict: false,
     execute: async () =>
       'united beat liverpool 2-1 yesterday. also a lot of other stuff happened. like super important stuff. ' +
       'blah blah blah.',
