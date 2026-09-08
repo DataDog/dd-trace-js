@@ -139,11 +139,12 @@ validates the request against the embedded `apm-tracing.json`, so:
 
 | Target org's rc-api | Send | Request body |
 | --- | --- | --- |
-| includes #14029 | object map | `payloads/jsonapi-profiling-enable.json` |
+| includes #14029 (**all prod, as of 2026-09-08**) | object map | `payloads/jsonapi-profiling-enable.json` |
 | predates #14029 | `[{key, value}]` array | `payloads/jsonapi-profiling-enable-legacy-array.json` |
 
-Sending the object form to a pre-#14029 backend is rejected at schema validation. When in doubt,
-the legacy array form is accepted by both, because #14029 kept a read-path decoder for it.
+Sending the object form to a pre-#14029 backend is rejected at schema validation. The legacy
+array form is accepted by both, because #14029 kept a read-path decoder for it, so it remains
+the safe choice against a backend of unknown version.
 
 ### 1. Credentials
 
@@ -262,10 +263,29 @@ stops the profiler. Expect `>>> PROFILER STOPPED` in the app log.
 The running build is only exposed as the `version` tag on `service:rc-api` (format
 `v<build-id>-<short-sha>`), so check that in the org where the target environment reports.
 
-Status as of 2026-09-04: merge commit `c520e14` (merged 15:39Z) is an ancestor of the
-`rc-staging` branch but is **not** in any prod datacenter — prod was mid-rollout of a 10:27Z
-commit, 211 commits behind it. Since the combined tracer accepts both wire shapes, the demo
-works either way; only the object-map form specifically requires #14029.
+Status as of 2026-09-08: **#14029 is live in every prod datacenter**, for both `rc-api` and
+`rc-schema-validation`. Use the object-map payload against prod.
+
+Verified by ancestry, not by inference. Spans for these services carry the full deploy SHA in
+`@git.commit.sha`, so the short SHA in the `version` tag does not have to be trusted:
+
+| Service | Live builds (env:prod) | Datacenters |
+| --- | --- | --- |
+| `rc-api` | `fee0ef2`, `a02b549`, `c0029c4` | us1, us3, us5, eu1, uk1, ap1, ap2 |
+| `rc-schema-validation` | `bc1410d`, `a02b549`, `05d7022` | us1, us3, us5, eu1, uk1, ap1, ap2 |
+
+Each was compared against the merge commit with
+`gh api repos/ddoghq/dd-go/compare/<deployed>...c520e146…`; all returned `behind` with
+`ahead_by: 0`, meaning the deployed build contains it. Reversing the comparison returned
+`ahead` with `behind_by: 0`, so the result is not an artifact of base/head ordering. The oldest
+live build on either service dates from 2026-09-07, three days after the 2026-09-04 merge.
+
+`rc-schema-validation` matters independently: it `go:embed`s `apm-tracing.json`, so the schema
+change only takes effect when that service redeploys. Its oldest live build already postdates
+the merge, so the object-map schema is live everywhere rather than only on the newest canary.
+
+No staging deployment of either service was found (zero spans for `env:(staging|stg|sandbox)`),
+so prod is the environment to use.
 
 ## Files
 
