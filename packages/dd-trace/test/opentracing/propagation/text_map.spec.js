@@ -25,6 +25,13 @@ const B3_SINGLE_STYLE = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
+/**
+ * @typedef {object} TraceTagInjection
+ * @property {SpanContext} spanContext
+ * @property {Array<string | undefined>} [traceTagReplacements]
+ * @property {number} [optionalTraceTagCount]
+ */
+
 describe('TextMapPropagator', () => {
   let TextMapPropagator
   let propagator
@@ -617,21 +624,144 @@ describe('TextMapPropagator', () => {
       })
     })
 
-    it('should publish spanContext and carrier', () => {
+    it('should serialize injection-local trace tags without mutating the span context', () => {
       const carrier = {}
       const spanContext = createContext({
         traceId: id('0000000000000123'),
         spanId: id('0000000000000456'),
       })
 
-      const onSpanInject = sinon.stub()
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        assert.strictEqual(injection.spanContext, spanContext)
+        injection.traceTagReplacements = ['_dd.p.test', 'value']
+      }
       injectCh.subscribe(onSpanInject)
 
       propagator.inject(spanContext, carrier)
 
       try {
-        sinon.assert.calledOnce(onSpanInject)
-        assert.deepStrictEqual(onSpanInject.firstCall.args[0], { spanContext, carrier })
+        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.test=value')
+        assert.strictEqual(spanContext._trace.tags['_dd.p.test'], undefined)
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
+    it('should match replacement keys only at key positions', () => {
+      config.tracePropagationStyle.inject = ['datadog', 'tracecontext']
+      const carrier = {}
+      const spanContext = createContext({
+        isRemote: false,
+        trace: { tags: { '_dd.p.test': 'original' } },
+      })
+
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = ['_dd.p.other', '_dd.p.test']
+      }
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.test=original,_dd.p.other=_dd.p.test')
+        assert.ok(carrier.tracestate.includes('t.test:original'))
+        assert.ok(carrier.tracestate.includes('t.other:_dd.p.test'))
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
+    it('should serialize injection-local trace tags to tracestate', () => {
+      config.tracePropagationStyle.inject = ['tracecontext']
+      const carrier = {}
+      const spanContext = createContext({ isRemote: false })
+
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = ['_dd.p.test', 'value']
+      }
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-datadog-tags'], undefined)
+        assert.ok(carrier.tracestate.includes('t.test:value'))
+        assert.strictEqual(spanContext._trace.tags['_dd.p.test'], undefined)
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
+    it('should remove injection-local trace tags from each configured format', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        isRemote: false,
+        trace: { tags: { '_dd.p.remove': 'value' } },
+        tracestate: TraceState.fromString('dd=t.remove:value'),
+      })
+
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = [
+          '_dd.p.remove', undefined,
+          'not.propagated', 'value',
+        ]
+      }
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-datadog-tags'], undefined)
+        assert.ok(!carrier.tracestate.includes('t.remove:'))
+        assert.ok(!carrier.tracestate.includes('not.propagated'))
+        assert.strictEqual(spanContext._tracestate.toString(), 'dd=t.remove:value')
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
+    it('should reject an invalid injection-local trace tag', () => {
+      const carrier = {}
+
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = ['_dd.p.test', 'hélicoptère']
+      }
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        propagator.inject(createContext(), carrier)
+
+        assert.strictEqual(carrier['x-datadog-tags'], undefined)
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    })
+
+    it('should include only optional trace tags that fit the length limit', () => {
+      config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = 40
+      const carrier = {}
+
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = [
+          '_dd.p.required', 'replacement',
+          '_dd.p.first', '1',
+          '_dd.p.second', '2',
+        ]
+        injection.optionalTraceTagCount = 2
+      }
+      injectCh.subscribe(onSpanInject)
+
+      try {
+        const spanContext = createContext({ trace: { tags: { '_dd.p.required': 'original' } } })
+        propagator.inject(spanContext, carrier)
+
+        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.required=replacement,_dd.p.first=1')
       } finally {
         injectCh.unsubscribe(onSpanInject)
       }
@@ -716,6 +846,37 @@ describe('TextMapPropagator', () => {
   })
 
   describe('extract', () => {
+    it('should return null instead of throwing when the carrier is undefined', () => {
+      setBaggageItem('stale', 'leftover')
+
+      assert.strictEqual(propagator.extract(undefined), null)
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
+    it('should return null instead of throwing when the carrier is null', () => {
+      setBaggageItem('stale', 'leftover')
+
+      assert.strictEqual(propagator.extract(null), null)
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
+    it('should clear pre-existing baggage when the carrier is a primitive', () => {
+      setBaggageItem('stale', 'leftover')
+      const outboundCarrier = {}
+
+      assert.strictEqual(propagator.extract('payload'), null)
+      propagator.inject(undefined, outboundCarrier)
+
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+      assert.strictEqual(outboundCarrier.baggage, undefined)
+    })
+
+    it('should return null when the carrier is not an object', () => {
+      const carrier = Object.assign(() => {}, textMap)
+
+      assert.strictEqual(propagator.extract(carrier), null)
+    })
+
     it('should extract a span context from the carrier', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1196,6 +1357,10 @@ describe('TextMapPropagator', () => {
 
     it('should return null for an aws-sqsd header that parses to null', () => {
       assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': 'null' }), null)
+    })
+
+    it('should return null for an aws-sqsd header that parses to a non-object', () => {
+      assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': '"carrier"' }), null)
     })
 
     it('should return null when the carrier carries a trace id but no parent id', () => {
@@ -2320,6 +2485,7 @@ describe('TextMapPropagator', () => {
 
       afterEach(() => {
         delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+        removeAllBaggageItems()
       })
 
       it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
@@ -2355,6 +2521,7 @@ describe('TextMapPropagator', () => {
       })
 
       it('should not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        setBaggageItem('existing', 'value')
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
         config = getConfigFresh({
           tracePropagationStyle: {
@@ -2370,7 +2537,17 @@ describe('TextMapPropagator', () => {
         propagator = new TextMapPropagator(config)
         propagator.extract(textMap)
 
-        assert.deepStrictEqual(getAllBaggageItems(), {})
+        assert.deepStrictEqual(getAllBaggageItems(), { existing: 'value' })
+      })
+
+      it('should preserve existing baggage for an invalid carrier when extraction behavior is ignore', () => {
+        setBaggageItem('existing', 'value')
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = getConfigFresh()
+        propagator = new TextMapPropagator(config)
+
+        assert.strictEqual(propagator.extract('payload'), null)
+        assert.deepStrictEqual(getAllBaggageItems(), { existing: 'value' })
       })
 
       it('returns null without throwing when ignore mode has no matching extractors', () => {

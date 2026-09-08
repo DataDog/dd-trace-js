@@ -8,7 +8,6 @@ const { channel } = require('dc-polyfill')
 
 const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')
-const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
@@ -25,6 +24,7 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
+const { createSiteUrl } = require('../exporters/common/url')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -44,6 +44,12 @@ const {
 } = require('./defaults')
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
+
+const rfdc = createRfdc({
+  proto: false,
+  circles: false,
+  constructorHandlers: [[RegExp, transformers.toCamelCase]],
+})
 
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.CUCUMBER_WORKER,
@@ -407,11 +413,6 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
-    // Disable log injection when OTEL logs are enabled
-    // OTEL logs and DD log injection are mutually exclusive
-    if (this.DD_LOGS_OTEL_ENABLED) {
-      setAndTrack(this, 'logInjection', false)
-    }
     if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
@@ -492,6 +493,9 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('runtimeMetrics.enabled') && this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
@@ -639,11 +643,30 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
-    // Experimental agentless APM span intake
-    // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    if (this.DD_AGENTLESS_ENABLED) {
+      if (!trackedConfigOrigins.has('DD_AGENTLESS_LOG_SUBMISSION_ENABLED') && !this.DD_LOGS_OTEL_ENABLED) {
+        setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      }
+      setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
+      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
+      if (this.DD_API_KEY === undefined) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      }
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'dsmEnabled', false)
+      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
+      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
+      if (profilingExporters.length === 0) {
+        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      }
+    }
+
+    if (this.DD_AGENTLESS_LOG_SUBMISSION_ENABLED && this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -659,6 +682,12 @@ class Config extends ConfigBase {
       }
     }
 
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'logInjection', false)
+    }
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
@@ -668,16 +697,33 @@ class Config extends ConfigBase {
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
     // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
-    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
-    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host. In agentless mode
+    // there is no agent to relay through, so OTLP goes straight to the per-site intake instead.
+    const otlpAgentlessOrigin = agentlessTracingEnabled && !this.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? createSiteUrl(this.site, 'otlp')?.origin
+      : undefined
+    const defaultOtlpBase = otlpAgentlessOrigin ??
+      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+
+    const assignOtlpHeaderApiKey = (configName) => {
+      if (otlpAgentlessOrigin) {
+        this[configName] ??= { ...this.OTEL_EXPORTER_OTLP_HEADERS }
+        this[configName]['dd-api-key'] = this.DD_API_KEY
+        setAndTrack(this, configName, this[configName])
+      }
+    }
+
     if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_LOGS_HEADERS')
     }
     if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_METRICS_HEADERS')
     }
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true

@@ -10,6 +10,7 @@ const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
 // Product-specific discovery: newest advertised version, skip v3 (citestcycle), gzip if >= v4.
 // Shared `evp_proxy` discovery is an explicit path allowlist and does not cover this contract.
+const AGENT_INFO_TIMEOUT_MS = 5000
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
 
@@ -47,7 +48,13 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
     } = config
 
     const initializationController = new AbortController()
-    const initializationOptions = { signal: initializationController.signal }
+    const initializationOptions = {
+      deadline: Date.now() + AGENT_INFO_TIMEOUT_MS,
+      signal: initializationController.signal,
+      // Test runners await agent discovery before starting. A detached retry can let Node exit
+      // while that promise is still pending because promises alone do not keep the event loop alive.
+      keepProcessAlive: true,
+    }
     this._initializationRequest = {
       controller: initializationController,
       options: initializationOptions,

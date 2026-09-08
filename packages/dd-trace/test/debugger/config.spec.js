@@ -24,6 +24,8 @@ describe('getDebuggerConfig', function () {
     })
     const config = getDebuggerConfig(tracerConfig)
     assert.deepStrictEqual(Object.keys(config), [
+      'agentless',
+      'apiKey',
       'commitSHA',
       'debug',
       'dynamicInstrumentation',
@@ -40,6 +42,7 @@ describe('getDebuggerConfig', function () {
       'inputPath',
     ])
     assertObjectContains(config, {
+      agentless: false,
       commitSHA: COMMIT_SHA,
       debug: tracerConfig.debug,
       dynamicInstrumentation: tracerConfig.dynamicInstrumentation,

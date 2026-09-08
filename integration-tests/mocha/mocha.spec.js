@@ -123,6 +123,8 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaDependencyVersion = MOCHA_VERSION === 'latest' ? getLatestMochaSpecifier() : MOCHA_VERSION
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
+// Global setup/teardown fixtures were introduced in Mocha 8.2.0.
+const globalFixturesIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.2.0') ? it : it.skip
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 // Mocha 8.0 through 8.2 use workerpool 6.0.x, which cannot start process workers on supported Node versions.
 const parallelIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.3.0') ? it : it.skip
@@ -235,6 +237,105 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     childProcess.kill()
     testOutput = ''
     await receiver.stop()
+  })
+
+  context('async global setup', () => {
+    for (const entrypoint of ['cli', 'programmatic']) {
+      for (const order of ['configuration-first', 'setup-first']) {
+        for (const settingsError of [false, true]) {
+          globalFixturesIt(`runs ${entrypoint}, ${order}, settingsError=${settingsError}`, async () => {
+            receiver.setSettings({ itr_enabled: false })
+            if (settingsError) receiver.setSettingsResponseCode(404)
+
+            const setup = './ci-visibility/mocha-global-setup.js'
+            const suite = 'ci-visibility/mocha-global-setup-test.js'
+            const command = entrypoint === 'cli'
+              ? `node node_modules/mocha/bin/mocha --no-config --no-package --require ${setup} ./${suite}`
+              : `node ${setup}`
+            childProcess = exec(command, {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_INJECT_FORCE: 'true',
+                DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+                MOCHA_SETUP_ORDER: order,
+                MOCHA_SETUP_ERROR: 'false',
+                MOCHA_DISABLE_PLUGIN: 'false',
+              },
+            })
+            childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+            childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                for (const type of ['test', 'test_suite_end', 'test_module_end', 'test_session_end']) {
+                  const matching = events.filter(event => event.type === type)
+                  assert.strictEqual(matching.length, 1, `expected one ${type}`)
+                  assert.strictEqual(matching[0].content.meta[TEST_STATUS], 'pass')
+                  if (settingsError) {
+                    assert.strictEqual(matching[0].content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+                  }
+                }
+                const test = events.find(event => event.type === 'test').content
+                assertObjectContains(test.meta, {
+                  [TEST_NAME]: 'global setup runs after setup',
+                  [TEST_SUITE]: suite,
+                  [TEST_FRAMEWORK]: 'mocha',
+                })
+              }
+            )
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0, testOutput)
+            assert.match(testOutput, /GLOBAL SETUP FINISHED/)
+            assert.match(testOutput, /1 passing/)
+            assert.match(testOutput, /GLOBAL TEARDOWN FINISHED/)
+          })
+
+          globalFixturesIt(`runs after disabling the plugin: ${entrypoint}, ${order}, settingsError=${settingsError}`,
+            async () => {
+              receiver.setSettings({ itr_enabled: false })
+              if (settingsError) receiver.setSettingsResponseCode(404)
+              const events = []
+              let settingsRequests = 0
+              receiver.on('message', ({ url, payload }) => {
+                if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+                if (url.endsWith('/libraries/tests/services/setting')) settingsRequests++
+              })
+
+              const setup = './ci-visibility/mocha-global-setup.js'
+              const suite = './ci-visibility/mocha-global-setup-test.js'
+              const command = entrypoint === 'cli'
+                ? `node node_modules/mocha/bin/mocha --no-config --no-package --require ${setup} ${suite}`
+                : `node ${setup}`
+              childProcess = exec(command, {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  DD_INJECT_FORCE: 'true',
+                  DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+                  MOCHA_SETUP_ORDER: order,
+                  MOCHA_SETUP_ERROR: 'false',
+                  MOCHA_DISABLE_PLUGIN: 'true',
+                },
+              })
+              childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+              childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+
+              const [exitCode] = await once(childProcess, 'close')
+              assert.strictEqual(exitCode, 0, testOutput)
+              assert.strictEqual(settingsRequests, 1)
+              assert.match(testOutput, /GLOBAL SETUP FINISHED/)
+              assert.match(testOutput, /1 passing/)
+              assert.match(testOutput, /GLOBAL TEARDOWN FINISHED/)
+              assert.deepStrictEqual(events, [], 'disabled plugin must not report test events')
+            })
+        }
+      }
+    }
   })
 
   const reporterEvents = [
@@ -6605,7 +6706,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.match(stdout, /Attempt to fix passed/)
               } else {
                 assert.match(stdout, /Attempt to fix failed/)
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)

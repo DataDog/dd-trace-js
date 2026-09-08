@@ -7,9 +7,13 @@ const { performance } = require('node:perf_hooks')
 const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { channel } = require('../../src/helpers/instrument')
 const {
   dispatchesAcquireSynchronously,
+  getPoolAcquireCapture,
   isPoolQueryAcquire,
+  setPoolAcquireCaptureWaitTime,
+  setPromisePoolConnectionConfig,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolClusterGetConnection,
@@ -17,6 +21,9 @@ const {
   wrapPoolClusterQueryMethod,
   wrapPoolGetConnection,
   wrapPoolQueryMethod,
+  wrapPoolRelease,
+  wrapPromisePoolAcquire,
+  wrapPromisePoolQueryMethod,
 } = require('../../src/helpers/pool-acquire')
 
 const inactiveChannel = { hasSubscribers: false }
@@ -65,9 +72,367 @@ describe('helpers/pool-acquire', () => {
         method => wrapPoolClusterGetConnection(method, inactiveChannels),
         method => wrapPoolGetConnection(method, inactiveChannels),
         method => wrapPoolGetConnection(method, inactiveChannels, true),
+        method => wrapPoolRelease(method),
+        method => wrapPromisePoolAcquire(method, () => 'mysql2', () => ({}), () => false),
+        method => wrapPromisePoolQueryMethod(method, receiver => receiver, () => 'mysql2'),
       ]
 
       for (const wrap of wrappers) assertInactiveFastPath(wrap)
+    })
+  })
+
+  describe('promise pool ownership', () => {
+    it('forwards unsupported drivers and external connections without creating ownership', async () => {
+      const startCh = channel('apm:mysql2:pool:acquire:start')
+      const finishCh = channel('apm:mysql2:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const expectedReturn = {}
+        const unsupportedAcquire = wrapPromisePoolAcquire(
+          () => expectedReturn,
+          () => undefined,
+          () => ({}),
+          () => false
+        )
+        assert.strictEqual(unsupportedAcquire.call({}), expectedReturn)
+
+        const owner = {}
+        const acquire = wrapPromisePoolAcquire(
+          () => Promise.resolve({}),
+          () => 'mysql2',
+          () => ({}),
+          () => false
+        )
+        const query = wrapPromisePoolQueryMethod(
+          () => acquire.call(owner),
+          () => undefined,
+          () => 'mysql2'
+        )
+
+        await query()
+
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('moves an internal wait to the query and creates a driver span only for a direct acquire', async () => {
+      const startCh = channel('apm:mysql2:pool:acquire:start')
+      const finishCh = channel('apm:mysql2:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const owner = {}
+        const connection = { config: { database: 'selected' } }
+        const acquire = wrapPromisePoolAcquire(
+          () => Promise.resolve(connection),
+          () => 'mysql2',
+          () => ({ database: 'db' }),
+          () => false
+        )
+        const query = wrapPromisePoolQueryMethod(
+          () => acquire.call(owner),
+          () => owner,
+          () => 'mysql2'
+        )
+
+        await query()
+        assert.strictEqual(contexts.length, 0)
+        assert.strictEqual(typeof takePoolWaitTime(connection), 'number')
+        assert.strictEqual(takePoolWaitTime(connection), undefined)
+
+        await acquire.call(owner)
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+        assert.strictEqual(contexts[0][1], contexts[1][1])
+        assert.strictEqual(contexts[1][1].conf.database, 'db')
+        assert.strictEqual(contexts[1][1].connectionConfig, connection.config)
+        assert.strictEqual(typeof contexts[1][1].poolWaitTime, 'number')
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('moves a mariadb wait to its connection and resolves replica metadata', async () => {
+      const startCh = channel('apm:mariadb:pool:acquire:start')
+      const finishCh = channel('apm:mariadb:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const owner = {}
+        const connection = {}
+        const connectionConfig = { database: 'selected' }
+        setPromisePoolConnectionConfig(connection, connectionConfig)
+        const acquire = wrapPromisePoolAcquire(
+          () => Promise.resolve(connection),
+          () => 'mariadb',
+          () => ({ database: 'db' }),
+          () => false
+        )
+        const release = wrapPoolRelease(noop)
+        const query = wrapPromisePoolQueryMethod(async () => {
+          const first = await acquire.call(owner)
+          assert.strictEqual(typeof takePoolWaitTime(first), 'number')
+          release.call(owner, first)
+
+          const second = await acquire.call(owner)
+          release.call(owner, second)
+          assert.strictEqual(takePoolWaitTime(second), undefined)
+        }, () => owner, () => 'mariadb')
+
+        await query()
+        assert.strictEqual(contexts.length, 0)
+
+        await acquire.call(owner)
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+        assert.strictEqual(contexts[0][1], contexts[1][1])
+        assert.strictEqual(contexts[1][1].conf.database, 'db')
+        assert.strictEqual(contexts[1][1].connectionConfig, connectionConfig)
+        assert.strictEqual(typeof contexts[1][1].poolWaitTime, 'number')
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('keeps the physical wait but publishes a nested native acquisition once', async () => {
+      const now = sinon.stub(performance, 'now')
+      now.onCall(0).returns(100)
+      now.onCall(1).returns(200)
+      now.onCall(2).returns(225)
+
+      const startCh = channel('apm:mysql:pool:acquire:start')
+      const finishCh = channel('apm:mysql:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const connection = {}
+        const pool = { config: { connectionConfig: {} }, _freeConnections: [] }
+        const getConnection = wrapPoolGetConnection(callback => callback(undefined, connection), {
+          connectionStartCh: { hasSubscribers: true, publish: noop },
+          connectionFinishCh: { runStores },
+          acquireStartCh: startCh,
+          acquireFinishCh: finishCh,
+          reentersQueuedCallbacks: true,
+        })
+        const acquire = wrapPromisePoolAcquire(
+          () => new Promise((resolve, reject) => {
+            getConnection.call(pool, (error, connection) => error ? reject(error) : resolve(connection))
+          }),
+          () => 'mysql',
+          () => ({}),
+          () => false
+        )
+
+        await acquire.call({})
+
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+        assert.strictEqual(contexts[1][1].poolWaitTime, 25)
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('re-arms retries without suppressing another acquire in the same async context', async () => {
+      const startCh = channel('apm:pg:pool:acquire:start')
+      const finishCh = channel('apm:pg:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const owner = {}
+        const connections = [{}, {}, {}]
+        let index = 0
+        const acquire = wrapPromisePoolAcquire(
+          () => Promise.resolve(connections[index++]),
+          () => 'pg',
+          () => ({}),
+          () => true
+        )
+        const release = wrapPoolRelease(noop)
+        const query = wrapPromisePoolQueryMethod(async () => {
+          const first = await acquire.call(owner)
+          takePoolWaitTime(first)
+          release.call(owner, first)
+
+          const retry = await acquire.call(owner)
+          takePoolWaitTime(retry)
+
+          await acquire.call(owner)
+        }, () => owner, () => 'pg')
+
+        await query()
+
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('re-arms a synchronous internal acquire failure', () => {
+      const startCh = channel('apm:pg:pool:acquire:start')
+      const finishCh = channel('apm:pg:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const owner = {}
+        const failure = new Error('acquire failed')
+        const acquire = wrapPromisePoolAcquire(
+          () => { throw failure },
+          () => 'pg',
+          () => ({}),
+          () => true
+        )
+        const query = wrapPromisePoolQueryMethod(() => {
+          assert.throws(() => acquire.call(owner), failure)
+          assert.throws(() => acquire.call(owner), failure)
+        }, () => owner, () => 'pg')
+
+        query()
+
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish', 'start', 'finish'])
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('re-arms an asynchronous internal acquire failure', async () => {
+      const now = sinon.stub(performance, 'now')
+      now.onCall(0).returns(100)
+      now.onCall(1).returns(125)
+      now.onCall(2).returns(200)
+      now.onCall(3).returns(225)
+
+      const startCh = channel('apm:pg:pool:acquire:start')
+      const finishCh = channel('apm:pg:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const owner = {}
+        const failure = new Error('acquire failed')
+        const acquire = wrapPromisePoolAcquire(
+          () => Promise.reject(failure),
+          () => 'pg',
+          () => ({}),
+          () => false
+        )
+        const query = wrapPromisePoolQueryMethod(async () => {
+          await assert.rejects(acquire.call(owner), failure)
+          await assert.rejects(acquire.call(owner), failure)
+        }, () => owner, () => 'pg')
+
+        await query()
+
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish', 'start', 'finish'])
+        assert.strictEqual(contexts[0][1], contexts[1][1])
+        assert.strictEqual(contexts[2][1], contexts[3][1])
+        assert.strictEqual(contexts[1][1].error, failure)
+        assert.strictEqual(contexts[3][1].error, failure)
+        assert.strictEqual(contexts[1][1].startTime, performance.timeOrigin + 100)
+        assert.strictEqual(contexts[3][1].startTime, performance.timeOrigin + 200)
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('uses a driver-provided wait capture without retaining it', async () => {
+      const startCh = channel('apm:pg:pool:acquire:start')
+      const finishCh = channel('apm:pg:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const connection = { connectionParameters: { database: 'postgres' } }
+        const acquire = wrapPromisePoolAcquire(() => {
+          const capture = getPoolAcquireCapture()
+          assert.notStrictEqual(capture, undefined)
+          setPoolAcquireCaptureWaitTime(capture, 25)
+          return Promise.resolve(connection)
+        }, () => 'pg', () => ({ database: 'postgres' }), () => false)
+
+        await acquire.call({})
+
+        assert.strictEqual(getPoolAcquireCapture(), undefined)
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+        assert.strictEqual(contexts[0][1], contexts[1][1])
+        assert.deepStrictEqual(contexts[1][1].poolOptions, { database: 'postgres' })
+        assert.strictEqual(contexts[1][1].params, connection.connectionParameters)
+        assert.strictEqual(contexts[1][1].poolWaitTime, 25)
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
+    })
+
+    it('reports a synchronous nested native pool failure once', () => {
+      const startCh = channel('apm:mysql:pool:acquire:start')
+      const finishCh = channel('apm:mysql:pool:acquire:finish')
+      const contexts = []
+      const onStart = ctx => contexts.push(['start', ctx])
+      const onFinish = ctx => contexts.push(['finish', ctx])
+      startCh.subscribe(onStart)
+      finishCh.subscribe(onFinish)
+
+      try {
+        const failure = new Error('acquire failed')
+        const pool = { config: { connectionConfig: {} }, _freeConnections: [] }
+        const getConnection = wrapPoolGetConnection(() => { throw failure }, {
+          connectionStartCh: { hasSubscribers: true, publish: noop },
+          connectionFinishCh: { runStores },
+          acquireStartCh: startCh,
+          acquireFinishCh: finishCh,
+        })
+        const acquire = wrapPromisePoolAcquire(
+          () => getConnection.call(pool, noop),
+          () => 'mysql',
+          () => ({}),
+          () => false
+        )
+
+        assert.throws(() => acquire.call({}), failure)
+
+        assert.deepStrictEqual(contexts.map(([phase]) => phase), ['start', 'finish'])
+      } finally {
+        startCh.unsubscribe(onStart)
+        finishCh.unsubscribe(onFinish)
+      }
     })
   })
 

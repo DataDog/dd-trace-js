@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
+const https = require('node:https')
 const zlib = require('node:zlib')
 const stream = require('node:stream')
 
@@ -43,6 +44,7 @@ describe('request', function () {
   let request
   let log
   let docker
+  let getHttpsProxyAgent
   let maxAttempts
   let retryStubs
   let runInNoopContext
@@ -57,6 +59,7 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       },
     }
+    getHttpsProxyAgent = sinon.stub().callsFake((url, agent) => agent)
     // The retry policy is exercised in retry.spec.js. Here we keep the integration
     // deterministic: zero backoff, no startup-phase mutation, attempt count
     // overridable per test.
@@ -72,6 +75,7 @@ describe('request', function () {
         storage: () => ({ run: runInNoopContext }),
       },
       './docker': docker,
+      './proxy': { getHttpsProxyAgent },
       '../../log': log,
       './retry': {
         ...require('../../../src/exporters/common/retry'),
@@ -133,6 +137,42 @@ describe('request', function () {
     })
   })
 
+  it('selects an HTTPS proxy agent for authenticated requests', (done) => {
+    const url = new URL('https://test:443/path')
+    const options = {
+      url,
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }
+    nock('https://test:443').post('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (error) => {
+      sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent))
+      done(error)
+    })
+  })
+
+  it('reports proxy selection errors without starting a request', () => {
+    const error = new Error('invalid proxy URL')
+    const requestSpy = sinon.spy(https, 'request')
+    const callback = sinon.spy()
+    getHttpsProxyAgent.throws(error)
+
+    request(Buffer.from(''), {
+      url: new URL('https://test:443/path'),
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }, callback)
+
+    requestSpy.restore()
+    sinon.assert.calledOnceWithExactly(callback, error)
+    sinon.assert.notCalled(requestSpy)
+  })
+
   it('selects a new default agent when callers reuse options with another protocol', (done) => {
     const options = {
       url: new URL('http://test:123'),
@@ -150,6 +190,7 @@ describe('request', function () {
 
       request(Buffer.from(''), options, (httpsError) => {
         assert.strictEqual(options.agent, undefined)
+        sinon.assert.notCalled(getHttpsProxyAgent)
         done(httpsError)
       })
     })
@@ -312,6 +353,69 @@ describe('request', function () {
     const error = await new Promise(execute)
     assert.strictEqual(error.code, 'ETIMEDOUT')
     assert.strictEqual(callbacks, 1)
+  })
+
+  it('lets callers defer a timeout abort until a ready response is processed', async () => {
+    const response = new EventEmitter()
+    response.headers = {}
+    response.statusCode = 200
+    response.setTimeout = sinon.spy()
+
+    let respond
+    const requestMessage = new EventEmitter()
+    requestMessage.abort = sinon.spy()
+    requestMessage.setTimeout = (timeout, callback) => {
+      assert.strictEqual(timeout, 2000)
+      requestMessage.once('timeout', callback)
+    }
+    requestMessage.write = sinon.spy()
+    requestMessage.end = sinon.spy()
+
+    /**
+     * @param {object} options
+     * @param {(response: EventEmitter) => void} onResponse
+     */
+    const createRequest = (options, onResponse) => {
+      assert.strictEqual(options.method, 'GET')
+      assert.strictEqual(options.deferTimeoutAbort, true)
+      respond = onResponse
+      return requestMessage
+    }
+    const deferredTimeoutRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: createRequest },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+
+    const completed = new Promise(resolve => {
+      deferredTimeoutRequest(
+        Buffer.alloc(64 * 1024 * 1024),
+        { method: 'GET', retry: false, deferTimeoutAbort: true },
+        (...args) => resolve(args)
+      )
+    })
+
+    requestMessage.emit('timeout')
+    assert.strictEqual(deferredTimeoutRequest.writable, false)
+    respond(response)
+    response.emit('data', Buffer.from('OK'))
+    response.emit('end')
+
+    const [error, result, statusCode] = await completed
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.strictEqual(error, null)
+    assert.strictEqual(result, 'OK')
+    assert.strictEqual(statusCode, 200)
+    assert.strictEqual(deferredTimeoutRequest.writable, true)
+    sinon.assert.notCalled(requestMessage.abort)
   })
 
   it('should handle an http error', done => {

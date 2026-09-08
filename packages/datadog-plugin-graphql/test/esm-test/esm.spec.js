@@ -38,6 +38,19 @@ describe('Plugin (ESM)', () => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
+
+          let resolveSpan
+          for (const trace of payload) {
+            for (const span of trace) {
+              if (span.meta?.['graphql.field.path'] === 'items.*.value') {
+                resolveSpan = span
+                break
+              }
+            }
+          }
+          assert.ok(resolveSpan)
+          assert.strictEqual(resolveSpan.error, 1)
+          assert.strictEqual(resolveSpan.meta['error.message'], 'ESM resolver failed')
         })
 
         proc = await spawnPluginIntegrationTestProc(
@@ -51,6 +64,9 @@ describe('Plugin (ESM)', () => {
         const query = `
           query MyQuery {
             hello(name: "world")
+            items {
+              value
+            }
           }
         `
 
@@ -146,7 +162,7 @@ describe('Plugin (ESM)', () => {
     let agent
     let proc
 
-    withVersions('graphql', 'graphql-jit', '0.8.5 || 0.8.7 || 0.8.8', (version, moduleName, resolvedVersion) => {
+    withVersions('graphql', 'graphql-jit', '0.8.5 || >=0.8.7 <0.9.0', (version, moduleName, resolvedVersion) => {
       useSandbox([`'graphql-jit@${resolvedVersion}'`, "'graphql@17.0.2'"], false, [
         './packages/datadog-plugin-graphql/test/esm-test/*'])
 
@@ -167,7 +183,9 @@ describe('Plugin (ESM)', () => {
           assert.ok(jitTrace, 'expected the JIT execution trace')
           assert.strictEqual(checkSpansForServiceName([jitTrace], 'graphql.execute'), true)
           assert.strictEqual(checkSpansForServiceName([jitTrace], 'graphql.resolve'), true)
-          assert.strictEqual(jitTrace.some(span => span.resource === 'name:String'), true)
+          const nameSpan = jitTrace.find(span => span.resource === 'name:String')
+          assert.ok(nameSpan)
+          assert.strictEqual(nameSpan.meta['graphql.source'], 'name')
         })
 
         proc = await spawnPluginIntegrationTestProc(

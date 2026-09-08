@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { mkdtempSync, writeFileSync } = require('node:fs')
+const { mkdtempSync, truncateSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
@@ -11,15 +11,20 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
+const { getAgent, getMediaAgent } = require('../../../src/ci-visibility/exporters/agents')
+
 describe('ci-visibility/requests/upload-test-screenshot', () => {
   const traceId = '1234567890123456789'
   let tmpDir
   let requestStub
+  let videoRequestStub
   let uploadTestScreenshot
+  let uploadTestSuiteVideo
+  let uploadTestVideo
 
   // Runs an upload for a file with the given basename and returns the request stub's call args
-  // ({ path, headers, query }). The file is written with real non-empty bytes so readFileSync
-  // succeeds. `extra` merges into the upload options (e.g. isEvpProxy / evpProxyPrefix).
+  // ({ path, headers, query }). The file is written with real non-empty bytes so it can be read.
+  // `extra` merges into the upload options (e.g. isEvpProxy / evpProxyPrefix).
   function uploadForFile (basename, extra = {}) {
     const filePath = join(tmpDir, basename)
     writeFileSync(filePath, 'not-empty')
@@ -38,9 +43,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    const { path, headers, deadline, retryUntilDeadline, signal } = requestStub.getCall(0).args[1]
+    const [payload, { path, headers, agent, deadline, retryUntilDeadline, signal }] = requestStub.getCall(0).args
     const query = new URL(path, 'http://localhost:8126').searchParams
-    return { path, headers, query, deadline, retryUntilDeadline, signal }
+    return { payload, path, headers, agent, query, deadline, retryUntilDeadline, signal }
   }
 
   before(() => {
@@ -49,14 +54,18 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
 
   beforeEach(() => {
     requestStub = sinon.stub().callsFake((_payload, _options, cb) => cb(null, 'ok', 200))
-    const { uploadTestScreenshot: upload } = proxyquire(
+    videoRequestStub = sinon.stub().callsFake((_filePath, _options, cb) => cb(null, 'ok', 200))
+    const uploadRequests = proxyquire(
       '../../../src/ci-visibility/requests/upload-test-screenshot',
       {
         '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
         '../exporters/request': requestStub,
+        './video-request': videoRequestStub,
       }
     )
-    uploadTestScreenshot = upload
+    uploadTestScreenshot = uploadRequests.uploadTestScreenshot
+    uploadTestSuiteVideo = uploadRequests.uploadTestSuiteVideo
+    uploadTestVideo = uploadRequests.uploadTestVideo
   })
 
   describe('agentless', () => {
@@ -80,7 +89,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
-    it('forwards the deadline and AbortSignal to the media request', () => {
+    it('forwards finalization controls without retrying screenshots until the deadline', () => {
       const abortController = new AbortController()
       const deadline = Date.now() + 10_000
 
@@ -89,6 +98,39 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(requestOptions.deadline, deadline)
       assert.strictEqual(requestOptions.retryUntilDeadline, false)
       assert.strictEqual(requestOptions.signal, abortController.signal)
+    })
+
+    it('uses the dedicated Test Optimization request agent', () => {
+      const { agent } = uploadForFile('screenshot.png')
+
+      assert.strictEqual(agent, getAgent(new URL('http://localhost:8126')))
+    })
+
+    it('keeps screenshots on the buffered request path', () => {
+      const { payload, headers } = uploadForFile('screenshot.png')
+
+      assert.ok(Buffer.isBuffer(payload))
+      assert.strictEqual(payload.toString(), 'not-empty')
+      assert.strictEqual(headers['Content-Length'], 9)
+      sinon.assert.notCalled(videoRequestStub)
+    })
+
+    it('uploads an in-memory PNG without reading a file', () => {
+      const content = Buffer.from('in-memory-screenshot')
+
+      uploadTestScreenshot({
+        content,
+        traceId,
+        idempotencyKey: `${traceId}:webdriverio-failure-0.png`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+      }, () => {})
+
+      sinon.assert.calledOnce(requestStub)
+      const [payload, requestOptions] = requestStub.firstCall.args
+      assert.strictEqual(payload, content)
+      assert.strictEqual(requestOptions.headers['Content-Length'], content.length)
+      assert.strictEqual(requestOptions.headers['Content-Type'], 'image/png')
     })
 
     it('reports an error when the request helper drops the upload', () => {
@@ -157,5 +199,106 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
     })
+
+    it('streams videos through the evp_proxy without sending the API key', () => {
+      const filePath = join(tmpDir, 'video.webm')
+      writeFileSync(filePath, 'not-empty')
+
+      uploadTestVideo({
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:video.webm`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+        isEvpProxy: true,
+        evpProxyPrefix,
+      }, () => {})
+
+      const [bodyFactory, { path, headers, transport }] = requestStub.firstCall.args
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      body.destroy()
+      assert.match(path, new RegExp(`^${evpProxyPrefix}/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], 'api')
+      assert.strictEqual(headers['DD-API-KEY'], undefined)
+      assert.strictEqual(transport, videoRequestStub)
+    })
+  })
+
+  describe('videos', () => {
+    it('uploads Playwright videos to the test-run endpoint', () => {
+      const filePath = join(tmpDir, 'video.webm')
+      writeFileSync(filePath, 'not-empty')
+
+      uploadTestVideo({
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:video.webm`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+      }, () => {})
+
+      const [bodyFactory, { path, headers, agent, retryUntilDeadline, transport }] = requestStub.firstCall.args
+      assert.strictEqual(typeof bodyFactory, 'function')
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      body.destroy()
+      assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.strictEqual(headers['Content-Type'], 'video/webm')
+      assert.strictEqual(headers['Content-Length'], 9)
+      assert.strictEqual(retryUntilDeadline, false)
+      assert.strictEqual(transport, videoRequestStub)
+      assert.strictEqual(agent, getMediaAgent(new URL('http://localhost:8126')))
+      assert.notStrictEqual(agent, getAgent(new URL('http://localhost:8126')))
+    })
+
+    it('uploads Cypress videos to the test-suite endpoint', () => {
+      const testSessionId = '123'
+      const testSuiteId = '456'
+      const filePath = join(tmpDir, 'video.mp4')
+      writeFileSync(filePath, 'not-empty')
+
+      uploadTestSuiteVideo({
+        filePath,
+        testSessionId,
+        testSuiteId,
+        idempotencyKey: `${testSessionId}:${testSuiteId}:video.mp4`,
+        capturedAtMs: 1_700_000_000_000,
+        url: new URL('http://localhost:8126'),
+      }, () => {})
+
+      const [bodyFactory, { path, headers, transport }] = requestStub.firstCall.args
+      const body = bodyFactory()
+      assert.strictEqual(body.constructor.name, 'ReadStream')
+      body.destroy()
+      assert.match(path, /^\/api\/v2\/ci\/test-suites\/123\/456\/media\?/)
+      assert.strictEqual(headers['Content-Type'], 'video/mp4')
+      assert.strictEqual(transport, videoRequestStub)
+    })
+
+    for (const [size, shouldUpload] of [
+      [200 * 1024 * 1024, true],
+      [200 * 1024 * 1024 + 1, false],
+    ]) {
+      it(`${shouldUpload ? 'accepts' : 'rejects'} a ${size}-byte video`, () => {
+        const filePath = join(tmpDir, `video-${size}.webm`)
+        writeFileSync(filePath, 'x')
+        truncateSync(filePath, size)
+        let callbackError
+
+        uploadTestVideo({
+          filePath,
+          traceId,
+          idempotencyKey: `${traceId}:video-${size}.webm`,
+          capturedAtMs: 1_700_000_000_000,
+          url: new URL('http://localhost:8126'),
+        }, error => { callbackError = error })
+
+        assert.strictEqual(requestStub.called, shouldUpload)
+        sinon.assert.notCalled(videoRequestStub)
+        if (shouldUpload) assert.strictEqual(callbackError, null)
+        else assert.match(callbackError.message, /is 209715201 bytes and exceeds the 209715200-byte upload limit/)
+      })
+    }
   })
 })
