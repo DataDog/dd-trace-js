@@ -153,9 +153,7 @@ never weaken or delete assertions to make them pass.
 ## Pull Requests and CI
 
 - Commit format: `type(scope): description`.
-- Types: `feat`, `fix`, `perf`, `refactor`, `test`, `bench`, `docs`, `chore`, `ci`.
-- Reserve `feat`, `fix`, and `perf` for shipped production code; use the area type for tests, benchmarks, CI, or tools.
-- Use `.github/pull_request_template.md` and the appropriate `semver-patch`, `semver-minor`, or `semver-major` label.
+- Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
 
 ## Specialized Workflows
