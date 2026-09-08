@@ -549,6 +549,8 @@ Important fields:
 - `internalPropertyName`: use this instead of `configurationNames` when the runtime property path should differ from the public option name.
 - `transform`: extra conversion after parsing. This applies to both env vars and programmatic options.
 - `allowed`: whitelist of accepted values.
+- `required`: includes a configuration in the global requirement set. Every product using the shared validator
+  requires every configuration in this set.
 - `aliases`: old or alternate env var names.
 - `deprecated`: emits a deprecation warning when used.
 - `description`: developer-facing note in the JSON.
@@ -738,9 +740,10 @@ Use this checklist:
 3. Add `configurationNames` if the setting should be exposed via `tracer.init({...})`. Add the documentation to `index.d.ts`.
 4. Use `internalPropertyName` if the runtime property path should differ.
 5. Add `transform` or `allowed` only if the raw parsed value is not enough.
-6. Add `aliases` or `deprecated` only for compatibility.
-7. Regenerate types if needed.
-8. Add tests for env vars, programmatic options, and edge cases.
+6. Add `required` only when every product using the shared validator cannot initialize without the value.
+7. Add `aliases` or `deprecated` only for compatibility.
+8. Regenerate types if needed.
+9. Add tests for env vars, programmatic options, and edge cases.
 
 ## Mental Model
 

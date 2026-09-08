@@ -1,5 +1,6 @@
 'use strict'
 
+const { hasRequiredConfigurations } = require('../../config/helper')
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
 const { Dataset } = require('./dataset')
@@ -212,7 +213,7 @@ function createExperiments (config, llmobs) {
   if (!config.llmobs?.DD_LLMOBS_ENABLED) {
     return new NoopExperiments('LLM Observability is not enabled')
   }
-  if (!(config.DD_API_KEY) || !config.DD_APP_KEY) {
+  if (!hasRequiredConfigurations(config)) {
     log.warn('LLMObs experiments: missing api and/or app keys, set DD_API_KEY and DD_APP_KEY')
     return new NoopExperiments('DD_API_KEY and DD_APP_KEY are required for experiments')
   }

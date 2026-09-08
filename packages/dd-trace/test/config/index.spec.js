@@ -185,6 +185,32 @@ describe('Config', () => {
       })
     }
 
+    it('validates every schema requirement against Config property paths', () => {
+      const loadSupportedConfigurations = proxyquire.noPreserveCache()
+      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
+      fresh.supportedConfigurations.DD_AI_GUARD_ENDPOINT[0].required = true
+      const loadHelper = proxyquire.noPreserveCache()
+      const helper = loadHelper('../../src/config/helper', {
+        './supported-configurations.json': fresh,
+      })
+      const config = getConfig()
+
+      assert.strictEqual(helper.hasRequiredConfigurations(config), false)
+
+      config.DD_API_KEY = 'api-key'
+      config.DD_APP_KEY = 'app-key'
+
+      assert.strictEqual(helper.hasRequiredConfigurations({
+        DD_API_KEY: 'api-key',
+        DD_APP_KEY: 'app-key',
+      }), false)
+      assert.strictEqual(helper.hasRequiredConfigurations(config), false)
+
+      config.experimental.aiguard.endpoint = 'https://example.com'
+
+      assert.strictEqual(helper.hasRequiredConfigurations(config), true)
+    })
+
     itV6Filter('drops the deprecated DD_PROFILING_EXPERIMENTAL_* aliases without rewriting them', () => {
       const helper = loadFreshHelper()
       const envs = helper.getEnvironmentVariables({
@@ -2526,6 +2552,29 @@ describe('Config', () => {
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
     assert.strictEqual(config.spanAttributeSchema, 'v0')
+  })
+
+  it('should reject an empty required configuration', () => {
+    process.env.DD_API_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_API_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should redact an invalid sensitive required configuration', () => {
+    process.env.DD_API_KEY = 'api-key\n'
+
+    const config = getConfig()
+    const message = log.warn.firstCall.args[0]
+
+    assert.doesNotMatch(message, /api-key/)
+    assert.strictEqual(message, "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default")
+    assert.strictEqual(config.DD_API_KEY, undefined)
   })
 
   it('should accept valid port boundaries', () => {
