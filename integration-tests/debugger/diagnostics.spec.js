@@ -99,6 +99,7 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
 
   const emittingProbeIds = []
   const pendingProbeIds = new Set(expectedProbeIds)
+  let captureError
   let resolveExpected
   const expectedProbesReceived = new Promise(resolve => {
     resolveExpected = resolve
@@ -107,14 +108,30 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
 
   /** @param {{ payload: Array<{ debugger: { diagnostics: { probeId: string, status: string } } }> }} event */
   function handleDiagnostics ({ payload }) {
-    for (const event of payload) {
-      const { diagnostics } = event.debugger
-      if (diagnostics.status !== 'EMITTING') continue
+    try {
+      for (const event of payload) {
+        const { diagnostics } = event.debugger
+        if (diagnostics.status !== 'EMITTING') continue
 
-      emittingProbeIds.push(diagnostics.probeId)
-      pendingProbeIds.delete(diagnostics.probeId)
+        assertObjectContains(event, {
+          ddsource: 'dd_debugger',
+          service: 'node',
+          debugger: {
+            diagnostics: {
+              probeId: diagnostics.probeId,
+              probeVersion: 0,
+              status: 'EMITTING',
+            },
+          },
+        })
+        emittingProbeIds.push(diagnostics.probeId)
+        pendingProbeIds.delete(diagnostics.probeId)
+      }
+      if (pendingProbeIds.size === 0) resolveExpected()
+    } catch (error) {
+      captureError = error
+      resolveExpected()
     }
-    if (pendingProbeIds.size === 0) resolveExpected()
   }
 
   t.agent.on('debugger-diagnostics', handleDiagnostics)
@@ -125,6 +142,7 @@ async function captureEmittingProbesUntilExit (t, configs, expectedProbeIds) {
     ])
     if (expectedProbeIds.length === 0) await delay(2000)
     await stopProc(t.proc)
+    if (captureError) throw captureError
     return { emittingProbeIds, response }
   } finally {
     t.agent.removeListener('debugger-diagnostics', handleDiagnostics)
