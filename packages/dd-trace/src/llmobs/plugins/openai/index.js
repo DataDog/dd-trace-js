@@ -432,8 +432,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           outputMessages.push({
             role: 'reasoning',
             content: safeJsonStringify({
-              summary: item.summary ?? '',
-              encrypted_content: item.encrypted_content ?? '',
+              summary: item.summary ?? [],
+              encrypted_content: item.encrypted_content ?? null,
               id: item.id ?? '',
             }),
           })
