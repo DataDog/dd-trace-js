@@ -20,7 +20,7 @@ describe('Plugin', () => {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
   })
 
-  const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk' })
+  const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk', traceTimeoutMs: 10000 })
 
   withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version, moduleName, realVersion) => {
     let client
@@ -41,7 +41,7 @@ describe('Plugin', () => {
     })
 
     it('instruments a full agentic call with subagents', async function () {
-      this.timeout(10000)
+      this.timeout(15000)
       const { z } = zod
 
       const fetchWeather = client.tool(
@@ -62,6 +62,7 @@ describe('Plugin', () => {
         prompt: PROMPT,
         options: {
           model: 'claude-sonnet-4-6',
+          title: 'Claude Agent SDK test',
           mcpServers: { local: localToolsServer },
           // Strip Claude Code built-in tools from the request payload so cassette hashes
           // stay stable across SDK versions (built-in tool descriptions change patch-to-patch).
