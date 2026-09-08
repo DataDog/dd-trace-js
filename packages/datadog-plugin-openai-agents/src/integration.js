@@ -154,7 +154,6 @@ class OpenAIAgentsIntegration {
     for (const holder of this.#modelCallHolders.values()) {
       if (holder.agentDdSpan.context().toSpanId().toString() === parentId) return holder
     }
-    return undefined
   }
 
   /**

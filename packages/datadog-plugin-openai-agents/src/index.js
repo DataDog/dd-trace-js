@@ -86,7 +86,6 @@ class OpenaiAgentsPlugin extends Plugin {
       } else {
         mod.getGlobalTraceProvider().registerProcessor(processor)
       }
-      return undefined
     }
     this.addSub('apm:openai-agents:agents-core:loaded', onAgentsCoreLoaded)
 
@@ -118,7 +117,6 @@ class OpenaiAgentsPlugin extends Plugin {
     const onAgentPrepare = (message) => {
       const { agent, agentsCoreSpan } = /** @type {{ agent?: object, agentsCoreSpan?: object }} */ (message)
       this.#integration.tagAgentManifest(agentsCoreSpan, agent)
-      return undefined
     }
     this.addSub('apm:openai-agents:agent:prepare', onAgentPrepare)
     /** @type {(message: unknown, name: string) => unknown} */
@@ -129,7 +127,6 @@ class OpenaiAgentsPlugin extends Plugin {
       const holder = /** @type {ModelCallHolder | undefined} */ (store?.[MODEL_CALL_STORE_KEY]) ||
         this.#integration.getModelCallHolderForProviderSpan(span)
       if (holder) this.#integration.trackProviderSpan(holder, span)
-      return undefined
     }
     this.addSub('dd-trace:span:start', onSpanStart)
   }

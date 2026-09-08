@@ -166,7 +166,6 @@ describe('Plugin', () => {
         metadata: {
           cwd: require('node:fs').realpathSync('/tmp'),
           permissionMode: 'default',
-          max_turns: MOCK_NUMBER,
           stop_reason: MOCK_STRING,
           _dd: {
             agent_manifest: MOCK_OBJECT,
