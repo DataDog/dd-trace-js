@@ -238,9 +238,9 @@ class DatadogSpan {
       Object.assign(tags, keyValueMap)
       samplingTags = keyValueMap
       mayChangeSamplingPriority =
-        MANUAL_KEEP in keyValueMap ||
-        MANUAL_DROP in keyValueMap ||
-        SAMPLING_PRIORITY in keyValueMap
+        Object.hasOwn(keyValueMap, MANUAL_KEEP) ||
+        Object.hasOwn(keyValueMap, MANUAL_DROP) ||
+        Object.hasOwn(keyValueMap, SAMPLING_PRIORITY)
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
@@ -248,9 +248,9 @@ class DatadogSpan {
         tagger.add(samplingTags, keyValueMap)
         Object.assign(tags, samplingTags)
         mayChangeSamplingPriority =
-          MANUAL_KEEP in samplingTags ||
-          MANUAL_DROP in samplingTags ||
-          SAMPLING_PRIORITY in samplingTags
+          Object.hasOwn(samplingTags, MANUAL_KEEP) ||
+          Object.hasOwn(samplingTags, MANUAL_DROP) ||
+          Object.hasOwn(samplingTags, SAMPLING_PRIORITY)
       } else {
         return this
       }

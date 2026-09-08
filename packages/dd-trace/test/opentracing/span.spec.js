@@ -688,6 +688,17 @@ describe('Span', () => {
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, tags)
     })
 
+    it('should ignore inherited sampling tags', () => {
+      const tags = Object.create({ [MANUAL_DROP]: true })
+      tags.foo = 'bar'
+
+      span.addTags(tags)
+
+      assert.strictEqual(span.context().getTag('foo'), 'bar')
+      assert.strictEqual(span.context().getTag(MANUAL_DROP), undefined)
+      sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
+    })
+
     it('should be published via dd-trace:span:tags:update channel', () => {
       const onTagsUpdate = sinon.stub()
       tagsUpdateCh.subscribe(onTagsUpdate)
