@@ -16,7 +16,7 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
-const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../../ext/priority')
 const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
 
 // v5 spells single-header B3 propagation as `'b3 single header'`; v6+ reuses `'b3'` for it.
@@ -1582,6 +1582,30 @@ describe('TextMapPropagator', () => {
       assert.match(carrier.traceparent, /-01$/)
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
     })
+
+    for (const [decision, priority, flag, randomValue] of [
+      ['keep', USER_KEEP, '01', 'ffffffffffffff'],
+      ['drop', USER_REJECT, '00', '00000000000000'],
+    ]) {
+      it(`should preserve W3C probability state for an agreeing Datadog rule ${decision}`, () => {
+        textMap = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          'x-datadog-sampling-priority': `${priority}`,
+          traceparent: `00-0000000000000000000000000000007b-00000000000001c8-${flag}`,
+          tracestate: `dd=t.dm:-3,ot=rv:${randomValue};th:8`,
+        }
+        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+        config.tracePropagationStyle.inject = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        const carrier = propagator.inject(spanContext, {})
+
+        assert.strictEqual(spanContext._sampling.priority, priority)
+        assert.match(carrier.tracestate, new RegExp(`(?:^|,)dd=s:${priority};t\\.dm:-3(?:,|$)`))
+        assert.match(carrier.tracestate, new RegExp(`(?:^|,)ot=rv:${randomValue};th:8(?:,|$)`))
+      })
+    }
 
     for (const [style, b3Headers] of [
       [B3_SINGLE_STYLE, { b3: '1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-d' }],
