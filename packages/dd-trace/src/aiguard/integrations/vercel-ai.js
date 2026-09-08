@@ -49,11 +49,19 @@ function onModelIntercept (ctx) {
   if (!inputMessages.length) return
 
   // Called exactly once per model call by the instrumentation, so no memoization needed.
-  ctx.beforeResult = () => evaluate(ctx, aiguard, [inputMessages], opts)
+  ctx.beforeResult = () => {
+    if (!isEnabled) return
+    return evaluate(ctx, aiguard, [inputMessages], opts)
+  }
 
   ctx.onResult = ctx.method === 'doStream'
-    ? result => interceptStreamedResult(ctx, result, inputMessages)
+    ? result => {
+      if (!isEnabled) return result
+      return interceptStreamedResult(ctx, result, inputMessages)
+    }
     : result => {
+      if (!isEnabled) return result
+
       const outputMessages = decode(
         () => buildOutputMessages(inputMessages, result?.content ?? []),
         null,

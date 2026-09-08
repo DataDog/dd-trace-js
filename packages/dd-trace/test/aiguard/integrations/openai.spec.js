@@ -40,6 +40,30 @@ describe('AIGuard OpenAI integration', () => {
     return ctx
   }
 
+  for (const [name, interceptChannel, args, body] of [
+    [
+      'chat.completions',
+      chatCompletionsInterceptChannel,
+      [{ messages: [{ role: 'user', content: 'Hello' }] }],
+      { choices: [{ message: { role: 'assistant', content: 'Hi' } }] },
+    ],
+    [
+      'responses',
+      responsesInterceptChannel,
+      [{ input: 'Hello' }],
+      { output: [{ type: 'message', role: 'assistant', content: 'Hi' }] },
+    ],
+  ]) {
+    it(`skips ${name} callbacks after the integration is disabled`, () => {
+      const ctx = intercept(interceptChannel, { arguments: args })
+      openai.disable()
+
+      assert.strictEqual(ctx.beforeResult(), undefined)
+      assert.strictEqual(ctx.onResult(body), body)
+      sinon.assert.notCalled(evaluate)
+    })
+  }
+
   describe('chat.completions', () => {
     const args = [{ messages: [{ role: 'user', content: 'Hello' }] }]
 

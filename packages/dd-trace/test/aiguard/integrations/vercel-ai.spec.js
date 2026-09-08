@@ -70,6 +70,18 @@ describe('AIGuard Vercel AI integration', () => {
     sinon.assert.calledOnceWithExactly(evaluate, [{ role: 'user', content: 'Hello' }], EVAL_OPTS)
   })
 
+  for (const method of ['doGenerate', 'doStream']) {
+    it(`skips ${method} callbacks after the integration is disabled`, () => {
+      const ctx = modelCall(method)
+      const result = { content: [{ type: 'text', text: 'Hi' }] }
+      vercelAi.disable()
+
+      assert.strictEqual(ctx.beforeResult(), undefined)
+      assert.strictEqual(ctx.onResult(result), result)
+      sinon.assert.notCalled(evaluate)
+    })
+  }
+
   it('delivers the result when the output conversion throws', async () => {
     const ctx = modelCall('doGenerate')
     const result = { content: 'not an array' }

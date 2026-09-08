@@ -70,12 +70,18 @@ function onMessagesIntercept (ctx) {
 
   // `parse` and `asResponse` are both wrapped, and either may run more than once per call.
   let inputEvaluation
-  ctx.beforeResult = () => (inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts))
+  ctx.beforeResult = () => {
+    if (!isEnabled) return
+    inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts)
+    return inputEvaluation
+  }
 
   // One model call has one output however many readers observe it: `parse`, `json()`, `text()`
   // and every `clone()` of the raw response share this callback.
   let outputEvaluation
   ctx.onResult = body => {
+    if (!isEnabled) return body
+
     const outputMessages = decode(
       () => getMessagesOutputMessages(body),
       null,

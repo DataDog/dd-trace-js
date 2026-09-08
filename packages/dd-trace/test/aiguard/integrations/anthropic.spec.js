@@ -60,6 +60,16 @@ describe('AIGuard Anthropic integration', () => {
     anthropicIntegration.disable()
   })
 
+  it('skips callbacks after the integration is disabled', () => {
+    const ctx = intercept({ arguments: messagesArgs })
+    const body = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }
+    anthropicIntegration.disable()
+
+    assert.strictEqual(ctx.beforeResult(), undefined)
+    assert.strictEqual(ctx.onResult(body), body)
+    sinon.assert.notCalled(evaluate)
+  })
+
   describe('request preparation', () => {
     it('replaces the options in place with a snapshot immune to later caller mutation', () => {
       const messages = [{ role: 'user', content: 'Hello' }]

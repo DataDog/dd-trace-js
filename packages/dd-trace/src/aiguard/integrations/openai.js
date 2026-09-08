@@ -54,11 +54,17 @@ function onChatCompletions (ctx) {
 
   // `parse` and `asResponse` are both wrapped, and either may run more than once per call.
   let inputEvaluation
-  ctx.beforeResult = () => (inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts))
+  ctx.beforeResult = () => {
+    if (!isEnabled) return
+    inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts)
+    return inputEvaluation
+  }
 
   // One model call has one output however many readers observe it.
   let outputEvaluation
   ctx.onResult = body => {
+    if (!isEnabled) return body
+
     const conversations = decode(
       () => getChatCompletionsOutputMessages(body).map(message => [...inputMessages, message]),
       null,
@@ -77,10 +83,16 @@ function onResponses (ctx) {
   if (!inputMessages?.length) return
 
   let inputEvaluation
-  ctx.beforeResult = () => (inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts))
+  ctx.beforeResult = () => {
+    if (!isEnabled) return
+    inputEvaluation ??= evaluate(ctx, aiguard, [inputMessages], opts)
+    return inputEvaluation
+  }
 
   let outputEvaluation
   ctx.onResult = body => {
+    if (!isEnabled) return body
+
     const outputMessages = decode(
       () => getResponsesOutputMessages(body),
       null,
