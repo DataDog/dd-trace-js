@@ -10,7 +10,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const packageManagers = new Map([
   ['yarn', 'yarn'],
   ['npm', 'npm'],
-  ['pnpm', 'pnpm@11'],
+  ['pnpm', 'pnpm@10.34.5'],
 ])
 
 describe('test optimization startup', () => {
