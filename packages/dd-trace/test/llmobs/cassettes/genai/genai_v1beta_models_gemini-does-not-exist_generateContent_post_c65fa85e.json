@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.18.0.1:9127/v1beta/models/gemini-does-not-exist:generateContent",
+    "headers": {
+      "Connection": "keep-alive",
+      "User-Agent": "google-genai-sdk/2.21.0 gl-node/v22.12.0",
+      "x-goog-api-client": "google-genai-sdk/2.21.0 gl-node/v22.12.0",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "287"
+    },
+    "body": "{\"contents\":[{\"parts\":[{\"text\":\"This model should fail.\"}],\"role\":\"user\"}],\"systemInstruction\":{\"parts\":[{\"text\":\"You are an agent. Your internal name is \\\"test-agent\\\".\\n\\nThe description about you is \\\"Google ADK test agent\\\"\\n\\nAnswer briefly.\"}],\"role\":\"user\"},\"generationConfig\":{}}"
+  },
+  "response": {
+    "status": {
+      "code": 404,
+      "message": "Not Found"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "39",
+      "Date": "Tue, 08 Sep 2026 16:39:13 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5"
+    },
+    "body": "{\"error\":{\"message\":\"Model not found\"}}"
+  }
+}

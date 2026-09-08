@@ -16,6 +16,7 @@ const plugins = {
   get '@playwright/test' () { return require('../../../datadog-plugin-playwright/src') },
   get '@elastic/elasticsearch' () { return require('../../../datadog-plugin-elasticsearch/src') },
   get '@elastic/transport' () { return require('../../../datadog-plugin-elasticsearch/src') },
+  get '@google/adk' () { return require('../../../datadog-plugin-google-adk/src') },
   get '@google-cloud/pubsub' () { return require('../../../datadog-plugin-google-cloud-pubsub/src') },
   get '@google-cloud/vertexai' () { return require('../../../datadog-plugin-google-cloud-vertexai/src') },
   get '@google/genai' () { return require('../../../datadog-plugin-google-genai/src') },

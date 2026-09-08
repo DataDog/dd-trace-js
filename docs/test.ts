@@ -337,6 +337,8 @@ tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
 tracer.use('google-cloud-vertexai', { llmobs: false });
+tracer.use('google-adk');
+tracer.use('google-adk', { llmobs: false });
 tracer.use('google-genai');
 tracer.use('google-genai', { llmobs: false });
 tracer.use('graphql');

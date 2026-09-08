@@ -201,6 +201,12 @@ module.exports = {
       versions: ['>=4.0.0'],
     },
   ],
+  'google-adk': [
+    {
+      name: '@google/adk',
+      versions: ['>=2.0.0'],
+    },
+  ],
   mquery: [
     {
       name: 'express',

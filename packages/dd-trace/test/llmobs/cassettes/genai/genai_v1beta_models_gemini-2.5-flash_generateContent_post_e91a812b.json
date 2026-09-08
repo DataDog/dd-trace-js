@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.18.0.1:9127/v1beta/models/gemini-2.5-flash:generateContent",
+    "headers": {
+      "Connection": "keep-alive",
+      "User-Agent": "google-genai-sdk/2.21.0 gl-node/v22.12.0",
+      "x-goog-api-client": "google-genai-sdk/2.21.0 gl-node/v22.12.0",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "445"
+    },
+    "body": "{\"contents\":[{\"parts\":[{\"text\":\"Use lookup with key x.\"}],\"role\":\"user\"}],\"systemInstruction\":{\"parts\":[{\"text\":\"You are an agent. Your internal name is \\\"test-agent\\\".\\n\\nThe description about you is \\\"Google ADK test agent\\\"\\n\\nAnswer briefly.\"}],\"role\":\"user\"},\"tools\":[{\"functionDeclarations\":[{\"name\":\"lookup\",\"description\":\"Looks up a value.\",\"parameters\":{\"type\":\"OBJECT\",\"properties\":{\"key\":{\"type\":\"STRING\"}}}}]}],\"generationConfig\":{}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "275",
+      "Date": "Tue, 08 Sep 2026 16:39:12 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5"
+    },
+    "body": "{\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"functionCall\":{\"id\":\"call-1\",\"name\":\"lookup\",\"args\":{\"key\":\"x\"}}}]},\"finishReason\":\"STOP\",\"index\":0}],\"usageMetadata\":{\"promptTokenCount\":10,\"candidatesTokenCount\":5,\"totalTokenCount\":15},\"modelVersion\":\"gemini-2.5-flash\"}"
+  }
+}
