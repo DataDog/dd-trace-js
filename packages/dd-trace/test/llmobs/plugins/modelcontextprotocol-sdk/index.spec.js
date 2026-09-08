@@ -8,6 +8,7 @@ const { withVersions } = require('../../../setup/mocha')
 
 const {
   assertLlmObsSpanEvent,
+  MOCK_STRING,
   useLlmObs,
 } = require('../../util')
 
@@ -16,7 +17,7 @@ const {
  *
  * @param {string} version
  * @param {(server: object) => void} registerTools
- * @returns {Promise<{ client: object, server: object }>}
+ * @returns {Promise<{ client: object, server: object, clientTransport: object }>}
  */
 async function connectClientAndServer (version, registerTools) {
   const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
@@ -41,7 +42,7 @@ async function connectClientAndServer (version, registerTools) {
   const client = new Client({ name: 'test-client', version: '1.0.0' })
   await client.connect(clientTransport)
 
-  return { client, server }
+  return { client, server, clientTransport }
 }
 
 function getClientEvent (llmobsSpans, name) {
@@ -55,13 +56,14 @@ function getClientApmSpan (apmSpans, resource) {
 describe('integrations', () => {
   let client
   let server
+  let clientTransport
 
   describe('modelcontextprotocol-sdk', () => {
     const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
-        ;({ client, server } = await connectClientAndServer(version, (mcpServer) => {
+        ;({ client, server, clientTransport } = await connectClientAndServer(version, (mcpServer) => {
           mcpServer.registerTool(
             'test-tool',
             { description: 'A test tool', inputSchema: {} },
@@ -218,16 +220,33 @@ describe('integrations', () => {
             `Got: ${inspect(result.content?.[0]?.text)}`
           )
 
-          const { llmobsSpans } = await getEvents()
+          const { apmSpans, llmobsSpans } = await getEvents()
 
           const event = getClientEvent(llmobsSpans, 'MCP Client Tool Call: error-tool')
-          assert.equal(event.name, 'MCP Client Tool Call: error-tool')
-          assert.equal(event.status, 'error')
-          assert.equal(event.meta.input.value, JSON.stringify({}))
-          assert.equal(event.meta.output.value, JSON.stringify({
-            content: [{ type: 'text', text: 'Intentional test error', annotations: {}, meta: {} }],
-            isError: true,
-          }))
+          const eventWithoutError = {
+            ...event,
+            meta: { ...event.meta },
+            tags: [...event.tags],
+          }
+          eventWithoutError.meta['error.stack'] = undefined
+          assertLlmObsSpanEvent(eventWithoutError, {
+            span: getClientApmSpan(apmSpans, 'client_tool_call'),
+            spanKind: 'tool',
+            name: 'MCP Client Tool Call: error-tool',
+            inputValue: JSON.stringify({}),
+            outputValue: JSON.stringify({
+              content: [{ type: 'text', text: 'Intentional test error', annotations: {}, meta: {} }],
+              isError: true,
+            }),
+            error: { type: 'Error', message: 'Intentional test error' },
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_tool_kind: 'client',
+              mcp_server_name: 'test-server',
+              mcp_server_version: '1.0.0',
+            },
+          })
           assert.equal(event.meta['error.type'], 'Error')
           assert.equal(event.meta['error.message'], 'Intentional test error')
         })
@@ -247,10 +266,51 @@ describe('integrations', () => {
             spanKind: 'task',
             name: 'MCP Client List Tools',
             inputValue: JSON.stringify({ cursor: null }),
-            outputValue: JSON.stringify(result),
+            outputValue: MOCK_STRING,
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
+
+          const serverEvent = getClientEvent(llmobsSpans, 'mcp.tools/list')
+          assert.equal(serverEvent.name, 'mcp.tools/list')
+          assert.equal(serverEvent.parent_id, getClientEvent(llmobsSpans, 'MCP Client List Tools').span_id)
         })
+      })
+
+      it('parents a server tool event from injected cross-process context', async () => {
+        let workflowSpanId
+        const requestId = Date.now()
+        let traceContext
+        const tracer = global._ddtrace
+
+        await tracer.llmobs.trace({ kind: 'workflow', name: 'external workflow' }, workflow => {
+          workflowSpanId = workflow.context().toSpanId()
+          traceContext = {}
+          tracer.inject(tracer.scope().active(), 'text_map', traceContext)
+        })
+        await clientTransport.send({
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: {
+            name: 'test-tool',
+            arguments: {},
+            _meta: { _dd_trace_context: traceContext },
+          },
+        })
+
+        const { llmobsSpans } = await getEvents(1)
+        const serverEvent = getClientEvent(llmobsSpans, 'test-tool')
+        assert.equal(serverEvent.parent_id, workflowSpanId)
+        assert.equal(serverEvent.meta['span.kind'], 'tool')
+        assert.equal(serverEvent.meta.input.value, JSON.stringify({
+          jsonrpc: '2.0',
+          id: requestId,
+          method: 'tools/call',
+          params: { name: 'test-tool', arguments: {} },
+        }))
+        assert.equal(serverEvent.meta.output.value, JSON.stringify({
+          content: [{ type: 'text', text: 'Result from test-tool' }],
+        }))
       })
     })
   })
