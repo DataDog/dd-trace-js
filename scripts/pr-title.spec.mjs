@@ -63,16 +63,19 @@ describe('PR title workflow', () => {
       async ([scope, expectedType]) => {
         const failures = await validate(`${type}(${scope}): change`)
         assert.deepStrictEqual(failures, [
-          `PR title type "${type}" is not valid for non-production scope "${scope}". ` +
-          `Use "${expectedType}" instead.`,
+          `PR title type "${type}" is not valid when every scope is non-production ` +
+          `("${scope}"). Use "${expectedType}" instead.`,
         ])
       }
     )))
   })
 
-  it('rejects a non-production scope in a scope list', async () => {
-    const failures = await validate('fix(http, tests): change')
-    assert.strictEqual(failures.length, 1)
+  it('rejects a scope list when every scope is non-production', async () => {
+    const failures = await validate('fix(docs, tests): change')
+    assert.deepStrictEqual(failures, [
+      'PR title type "fix" is not valid when every scope is non-production ' +
+      '("docs, tests"). Use "docs" or "test" instead.',
+    ])
   })
 
   it('allows production and product scopes', async () => {
@@ -80,6 +83,7 @@ describe('PR title workflow', () => {
       'feat(http): change',
       'fix(ci-visibility): change',
       'fix(test-optimization): change',
+      'fix(http, tests): change',
       'perf(http): change',
       'perf(agent): change',
       'feat(coverage): change',

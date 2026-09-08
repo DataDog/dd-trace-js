@@ -9,6 +9,8 @@ PR title guidance:
 - Reserve feat, fix, and perf for shipped production code.
 - A scope is optional, but omitting it does not change how the type is selected. For example,
   use test: cover retries, not fix: cover retries.
+- A production type is valid for multiple scopes when at least one scope represents shipped code,
+  such as fix(http, tests): handle retries.
 - For non-production changes, use the area as the type:
   - Tests: test(scope): description
   - Benchmarks: bench(scope): description

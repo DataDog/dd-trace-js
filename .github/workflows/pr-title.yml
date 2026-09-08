@@ -87,12 +87,13 @@ jobs:
               ['testing', 'test'],
               ['workflows', 'ci'],
             ])
-            const invalidScope = scope.split(',').map(scope => scope.trim().toLowerCase())
-              .find(scope => nonProductionScopes.has(scope))
-            if (invalidScope) {
-              core.setFailed(`PR title type "${type}" is not valid for non-production scope "${invalidScope}". ` +
-                `Use "${nonProductionScopes.get(invalidScope)}" instead.`)
-            }
+            const scopes = scope.split(',').map(scope => scope.trim().toLowerCase())
+            const suggestedTypes = scopes.map(scope => nonProductionScopes.get(scope))
+            if (suggestedTypes.includes(undefined)) return
+
+            const suggestions = [...new Set(suggestedTypes)].map(type => `"${type}"`).join(' or ')
+            core.setFailed(`PR title type "${type}" is not valid when every scope is non-production ` +
+              `("${scopes.join(', ')}"). Use ${suggestions} instead.`)
 
       - name: Sync labels with PR title
         if: >-
