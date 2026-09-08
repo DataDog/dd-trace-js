@@ -9,7 +9,8 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('../src/constants')
+const id = require('../src/id')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 
 describe('SpanProcessor', () => {
@@ -95,6 +96,35 @@ describe('SpanProcessor', () => {
     sendStats(payload, done)
 
     sinon.assert.calledOnceWithExactly(exporter.sendStats, payload, done)
+  })
+
+  it('should compute top-level spans before recording stats when required by the exporter', () => {
+    exporter.requiresClientComputedTopLevel = true
+    processor = new SpanProcessor(exporter, prioritySampler, config)
+    processor._stats = { onSpanFinished: sinon.stub() }
+
+    const formattedSpans = [
+      { span_id: id('1'), parent_id: id('0'), service: 'web', metrics: {} },
+      { span_id: id('2'), parent_id: id('1'), service: 'web', metrics: {} },
+      { span_id: id('3'), parent_id: id('2'), service: 'database', metrics: {} },
+      { span_id: id('4'), parent_id: id('5'), service: 'worker', metrics: {} },
+    ]
+    for (const [index, formattedSpan] of formattedSpans.entries()) {
+      spanFormat.onCall(index).returns(formattedSpan)
+    }
+
+    const finishedSpans = formattedSpans.map(() => ({ ...finishedSpan }))
+    trace.started = finishedSpans
+    trace.finished = finishedSpans
+
+    processor.process(finishedSpans[0])
+
+    assert.strictEqual(formattedSpans[0].metrics[TOP_LEVEL_KEY], 1)
+    assert.ok(!Object.hasOwn(formattedSpans[1].metrics, TOP_LEVEL_KEY))
+    assert.strictEqual(formattedSpans[2].metrics[TOP_LEVEL_KEY], 1)
+    assert.strictEqual(formattedSpans[3].metrics[TOP_LEVEL_KEY], 1)
+    sinon.assert.callCount(processor._stats.onSpanFinished, 4)
+    assert.strictEqual(processor._stats.onSpanFinished.getCall(2).args[0].metrics[TOP_LEVEL_KEY], 1)
   })
 
   it('should keep OTLP span stats on the OTLP exporter', () => {

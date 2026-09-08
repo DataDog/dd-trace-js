@@ -4,7 +4,7 @@ const { URL } = require('node:url')
 const os = require('node:os')
 
 const log = require('../../log')
-const { containerId } = require('../common/docker')
+const { containerId, entityId } = require('../common/docker')
 const Writer = require('./writer')
 const { computeIntakeUrl, computeStatsIntakeUrl } = require('./intake')
 
@@ -16,6 +16,9 @@ const { computeIntakeUrl, computeStatsIntakeUrl } = require('./intake')
 class AgentlessExporter {
   #timer
   #config
+
+  /** @type {true} */
+  requiresClientComputedTopLevel = true
 
   /**
    * @param {object} config - Configuration object
@@ -54,6 +57,7 @@ class AgentlessExporter {
       get runtimeID () { return config.tags['runtime-id'] },
     }
     if (containerId) metadata.containerId = containerId
+    if (entityId) metadata.entityId = entityId
 
     this._writer = new Writer({
       url: this._url,

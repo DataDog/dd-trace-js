@@ -173,7 +173,8 @@ describe('AgentlessExporter', () => {
         tags: { 'runtime-id': 'test-uuid' },
       })
 
-      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerID'), false)
+      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerId'), false)
+      assert.strictEqual(writerOptions.metadata.entityId, 'in-1234')
     })
 
     it('should reflect a runtime id updated on config after construction', () => {

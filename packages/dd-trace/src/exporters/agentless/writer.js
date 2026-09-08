@@ -190,6 +190,8 @@ class AgentlessWriter extends BaseWriter {
       version: config.version,
       runtimeId: runtimeID,
       containerId: this.#metadata.containerId,
+      entityId: this.#metadata.entityId,
+      clientComputedTopLevel: true,
       tracerVersion,
       languageVersion: process.version,
       languageInterpreter: process.versions.bun ? 'JavaScriptCore' : 'v8',

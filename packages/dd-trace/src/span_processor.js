@@ -7,10 +7,24 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
+
+/** @param {Array<ReturnType<typeof spanFormat>>} spans */
+function computeTopLevel (spans) {
+  const services = new Map()
+  for (const span of spans) {
+    services.set(span.span_id.toBigInt(), span.service)
+  }
+  for (const span of spans) {
+    const parentId = span.parent_id.toBigInt()
+    if (!services.has(parentId) || services.get(parentId) !== span.service) {
+      span.metrics[TOP_LEVEL_KEY] = 1
+    }
+  }
+}
 
 /**
  * @typedef {import('./config/config-base') & {
@@ -19,8 +33,14 @@ const finishedSpans = new WeakSet()
  */
 
 class SpanProcessor {
+  #computeTopLevel
+
   /**
-   * @param {{ export: Function, sendStats?: (payload: Buffer, done: () => void) => void }} exporter
+   * @param {{
+   *   export: Function,
+   *   requiresClientComputedTopLevel?: boolean,
+   *   sendStats?: (payload: Buffer, done: () => void) => void
+   * }} exporter
    * @param {import('./priority_sampler')} prioritySampler
    * @param {SpanProcessorConfig} config
    * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpStatsExporter]
@@ -30,6 +50,7 @@ class SpanProcessor {
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this.#computeTopLevel = exporter.requiresClientComputedTopLevel === true
 
     if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
@@ -94,13 +115,20 @@ class SpanProcessor {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }
           isFirstSpanInChunk = false
+          formatted.push(formattedSpan)
+        }
+      }
+
+      if (this.#computeTopLevel) computeTopLevel(formatted)
+
+      if (this._stats || this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        for (const formattedSpan of formatted) {
           // Span stats read Datadog HTTP tag names from the formatted span, so
           // record them before the OTel rename — an export-only transform.
           this._stats?.onSpanFinished(formattedSpan)
           if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
             applyHttpOtelSemantics(formattedSpan)
           }
-          formatted.push(formattedSpan)
         }
       }
 

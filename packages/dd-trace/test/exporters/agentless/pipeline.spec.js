@@ -79,6 +79,7 @@ describe('AgentlessWriter data pipeline', () => {
         env: 'test-env',
         hostname: 'test-host',
         runtimeID: 'test-runtime-id',
+        entityId: 'in-1234',
       },
     })
 
@@ -86,7 +87,7 @@ describe('AgentlessWriter data pipeline', () => {
       duration: 1,
       error: 0,
       meta: {},
-      metrics: {},
+      metrics: { [TOP_LEVEL_KEY]: 1 },
       name: 'operation',
       parent_id: id('0'),
       resource: 'resource',
@@ -103,6 +104,8 @@ describe('AgentlessWriter data pipeline', () => {
     assert.strictEqual(received.headers['dd-api-key'], 'test-api-key')
     assert.strictEqual(received.headers['content-type'], 'application/json')
     assert.strictEqual(received.headers['content-encoding'], 'zstd')
+    assert.strictEqual(received.headers['datadog-client-computed-top-level'], 'true')
+    assert.strictEqual(received.headers['datadog-entity-id'], 'in-1234')
     assert.deepStrictEqual(received.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
 
     if (zstdDecompressSync) {
@@ -142,6 +145,7 @@ describe('AgentlessWriter data pipeline', () => {
         env: 'test-env',
         hostname: 'test-host',
         runtimeID: 'test-runtime-id',
+        entityId: 'in-1234',
       },
     })
     const statsProcessor = new SpanStatsProcessor({
@@ -160,7 +164,7 @@ describe('AgentlessWriter data pipeline', () => {
         duration: 1,
         error: 0,
         meta: {},
-        metrics: {},
+        metrics: { [TOP_LEVEL_KEY]: 1 },
         name: 'operation',
         parent_id: id('0'),
         resource: 'resource',
@@ -191,9 +195,15 @@ describe('AgentlessWriter data pipeline', () => {
 
       assert.ok(traceRequest)
       assert.ok(statsRequest)
+      assert.strictEqual(traceRequest.headers['datadog-client-computed-stats'], 'true')
+      assert.strictEqual(traceRequest.headers['datadog-client-computed-top-level'], 'true')
+      assert.strictEqual(traceRequest.headers['datadog-entity-id'], 'in-1234')
       assert.strictEqual(statsRequest.headers['dd-api-key'], 'test-api-key')
       assert.strictEqual(statsRequest.headers['content-type'], 'application/msgpack')
       assert.strictEqual(statsRequest.headers['content-encoding'], 'zstd')
+      assert.strictEqual(statsRequest.headers['datadog-client-computed-stats'], 'true')
+      assert.strictEqual(statsRequest.headers['datadog-client-computed-top-level'], 'true')
+      assert.strictEqual(statsRequest.headers['datadog-entity-id'], 'in-1234')
       assert.deepStrictEqual(statsRequest.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
 
       if (zstdDecompressSync) {

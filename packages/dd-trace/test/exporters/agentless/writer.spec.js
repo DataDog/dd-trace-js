@@ -83,6 +83,7 @@ describe('AgentlessWriter', () => {
         hostname: 'test-host',
         runtimeID: 'runtime-id',
         containerId: 'container-id',
+        entityId: 'in-1234',
       },
     })
 
@@ -99,6 +100,8 @@ describe('AgentlessWriter', () => {
       version: 'test-version',
       runtimeId: 'runtime-id',
       containerId: 'container-id',
+      entityId: 'in-1234',
+      clientComputedTopLevel: true,
       tracerVersion: 'tracer-version',
       languageVersion: process.version,
       languageInterpreter: 'v8',
