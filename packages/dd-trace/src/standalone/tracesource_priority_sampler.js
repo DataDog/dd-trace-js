@@ -39,8 +39,10 @@ class TraceSourcePrioritySampler extends PrioritySampler {
   _getPriorityFromAuto (span, recordDecision = false) {
     const context = this._getContext(span)
 
-    context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
-    if (recordDecision) this._recordDecisionMetadata(context)
+    if (recordDecision) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+      this._recordDecisionMetadata(context)
+    }
 
     if (hasTraceSourcePropagationTag(context._trace.tags)) {
       return USER_KEEP
