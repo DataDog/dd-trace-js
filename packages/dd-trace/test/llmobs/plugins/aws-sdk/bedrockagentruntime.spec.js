@@ -13,6 +13,7 @@ const AGENT_ALIAS_ID = 'NWGOFQESWP'
 const SESSION_ID = 'test_session'
 const MODEL_NAME = 'claude-3-5-sonnet-20240620-v1:0'
 const MODEL_PROVIDER = 'anthropic'
+const PY_ERROR_MODULE = 'ddtrace.llmobs._integrations.bedrock_agents'
 const AGENT_INPUT =
   "I like beach vacations but also nature and outdoor adventures. I'd like the trip to be 7 days, " +
   'and include lounging on the beach, something like an all-inclusive resort is nice too (but I prefer ' +
@@ -155,7 +156,7 @@ describe('Plugin', () => {
         const step = llmobsSpans.find(event => event.name === 'failureTrace Step')
         const failure = llmobsSpans.find(event => event.name === 'failureEvent')
         assert.equal(root.status, 'error')
-        assert.ok(root.tags.includes('error_type:BedrockFailureException'))
+        assert.ok(root.tags.includes(`error_type:${PY_ERROR_MODULE}.BedrockFailureException`))
         assert.equal(step.meta['span.kind'], 'workflow')
         assert.equal(failure.status, 'error')
         assert.equal(failure.meta['error.type'], version === '3.0.0' ? 'INTERNAL_SERVER_ERROR' : '500')
@@ -171,7 +172,7 @@ describe('Plugin', () => {
         const root = llmobsSpans.find(event => event.name === `Bedrock Agent ${AGENT_ID}`)
         const guardrail = llmobsSpans.find(event => event.name === 'guardrail')
         assert.equal(root.status, 'error')
-        assert.ok(root.tags.includes('error_type:BedrockGuardrailTriggeredException'))
+        assert.ok(root.tags.includes(`error_type:${PY_ERROR_MODULE}.BedrockGuardrailTriggeredException`))
         assert.equal(guardrail.status, 'error')
         assert.equal(guardrail.tags.includes('error_type:GuardrailTriggered'), true)
         assert.deepEqual(guardrail.meta.output.value, JSON.stringify({

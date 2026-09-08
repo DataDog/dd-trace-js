@@ -218,7 +218,7 @@ function translateOne (trace, state, pending, rootSpan, tagger, tracer) {
     span.setTag('error.type', value.failureType || String(value.failureCode || ''))
     span.setTag('error.message', value.failureReason || '')
     rootSpan.setTag('error', Object.assign(new Error(value.failureReason || ''), {
-      name: 'BedrockFailureException',
+      name: 'ddtrace.llmobs._integrations.bedrock_agents.BedrockFailureException',
     }))
     state.children.push(span)
     span.finish(timing.start + timing.duration)
@@ -238,7 +238,7 @@ function translateOne (trace, state, pending, rootSpan, tagger, tracer) {
       span.setTag('error.type', 'GuardrailTriggered')
       span.setTag('error.message', 'Guardrail intervened')
       rootSpan.setTag('error', Object.assign(new Error('Guardrail intervened'), {
-        name: 'BedrockGuardrailTriggeredException',
+        name: 'ddtrace.llmobs._integrations.bedrock_agents.BedrockGuardrailTriggeredException',
       }))
     }
     span.finish(timing.start + timing.duration)
