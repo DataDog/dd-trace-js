@@ -10,6 +10,7 @@
       "env": { "VARIANT": "small", "OPERATIONS": "8500000" }
     },
     "large": {
+      "iterations": 13,
       "env": { "VARIANT": "large", "OPERATIONS": "5500000" }
     },
     "mixed": {

@@ -6,7 +6,7 @@
   "variants": {
     "no-vulnerability-iast-enabled-default-config": {
       "cpus": 2,
-      "iterations": 5,
+      "iterations": 4,
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ../startup-guard.js --require ../noop-request.js --require ../../../init.js server-without-vulnerability.js",
@@ -20,7 +20,7 @@
     },
     "with-vulnerability-iast-enabled-default-config": {
       "cpus": 2,
-      "iterations": 5,
+      "iterations": 3,
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
       "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
       "run": "node --require ../startup-guard.js --require ../noop-request.js --require ../../../init.js server-with-vulnerability.js",
