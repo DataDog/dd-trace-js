@@ -106,15 +106,16 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
     if (ctx.resultChunk?.stop_reason) metadata.stop_reason = ctx.resultChunk.stop_reason
 
     const initChunk = ctx.initChunk
+    const model = initChunk?.model ?? options?.model
     if (initChunk) {
       const manifest = { framework: 'Claude Agent SDK' }
-      if (initChunk.model) manifest.model = initChunk.model
+      if (model) manifest.model = model
       if (Array.isArray(initChunk.tools)) manifest.tools = initChunk.tools.map(name => ({ name }))
       if (initChunk.mcp_servers) manifest.dependencies = { mcp_servers: initChunk.mcp_servers }
       if (options?.maxTurns) manifest.max_iterations = options.maxTurns
       metadata._dd = { agent_manifest: manifest }
-      if (initChunk.model) this._tagger._setTag(span, MODEL_NAME, initChunk.model)
     }
+    if (model) this._tagger._setTag(span, MODEL_NAME, model)
 
     const usage = ctx.resultChunk?.usage
     if (usage) {
