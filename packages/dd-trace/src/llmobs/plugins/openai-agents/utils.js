@@ -232,10 +232,12 @@ function extractGenerationOutputMessages (result) {
  * allocating an Object.keys array.
  *
  * @param {{ usage?: { inputTokens?: number, outputTokens?: number, totalTokens?: number,
+ *   inputTokensDetails?: { cachedTokens?: number }, input_tokens_details?: { cached_tokens?: number },
  *   outputTokensDetails?: { reasoningTokens?: number },
+ *   output_tokens_details?: { reasoning_tokens?: number },
  *   completion_tokens_details?: { reasoning_tokens?: number } } }} result
  * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number,
- *   reasoningOutputTokens?: number } | undefined}
+ *   cacheReadTokens?: number, reasoningOutputTokens?: number } | undefined}
  */
 function extractMetrics (result) {
   const usage = result?.usage
@@ -244,19 +246,20 @@ function extractMetrics (result) {
   const inputTokens = usage.inputTokens ?? usage.input_tokens ?? usage.prompt_tokens
   const outputTokens = usage.outputTokens ?? usage.output_tokens ?? usage.completion_tokens
   const totalTokens = usage.totalTokens ?? usage.total_tokens
+  const cacheReadTokens = usage.inputTokensDetails?.cachedTokens ??
+    usage.input_tokens_details?.cached_tokens
   const reasoningTokens = usage.outputTokensDetails?.reasoningTokens ??
     usage.output_tokens_details?.reasoning_tokens ??
     usage.completion_tokens_details?.reasoning_tokens
 
   if (inputTokens === undefined && outputTokens === undefined &&
-      totalTokens === undefined && !reasoningTokens) return
+      totalTokens === undefined && cacheReadTokens === undefined && reasoningTokens === undefined) return
 
   const metrics = {}
   if (inputTokens !== undefined) metrics.inputTokens = inputTokens
   if (outputTokens !== undefined) metrics.outputTokens = outputTokens
-  // Tagger maps `reasoningOutputTokens` → `reasoning_output_tokens` in the
-  // LLMObs span event. Skip when zero — emitting a zero just adds noise.
-  if (reasoningTokens) metrics.reasoningOutputTokens = reasoningTokens
+  if (cacheReadTokens !== undefined) metrics.cacheReadTokens = cacheReadTokens
+  if (reasoningTokens !== undefined) metrics.reasoningOutputTokens = reasoningTokens
 
   if (totalTokens !== undefined) {
     metrics.totalTokens = totalTokens

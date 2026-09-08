@@ -34,6 +34,14 @@ const KIND_TO_SPAN_KIND = {
 }
 
 /**
+ * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
+ * @typedef {{
+ *   agentsCoreSpanId: string,
+ *   agentDdSpan: DatadogSpan,
+ *   providerSpans: DatadogSpan[],
+ *   responseDdSpan?: DatadogSpan
+ * }} ModelCallHolder
+ *
  * @typedef {{
  *   spanId: string,
  *   traceId: string,
@@ -79,14 +87,7 @@ class OpenAIAgentsIntegration {
   #tagger
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
   #oaiToDdSpan = new Map()
-  /**
-   * @type {Map<string, {
-   *   agentsCoreSpanId: string,
-   *   agentDdSpan: object,
-   *   providerSpans: object[],
-   *   responseDdSpan?: object
-  * }>}
-  */
+  /** @type {Map<string, ModelCallHolder>} */
   #modelCallHolders = new Map()
   /**
    * agents-core spans we deliberately don't trace (`task` / `turn`). Ended
@@ -132,6 +133,11 @@ class OpenAIAgentsIntegration {
     return this.#oaiToDdSpan.get(this.#nearestTracedAncestorId(spanId))
   }
 
+  /**
+   * @param {string} agentsCoreSpanId
+   * @param {DatadogSpan} agentDdSpan
+   * @returns {ModelCallHolder}
+   */
   getOrCreateModelCallHolder (agentsCoreSpanId, agentDdSpan) {
     let holder = this.#modelCallHolders.get(agentsCoreSpanId)
     if (!holder) {
@@ -148,8 +154,13 @@ class OpenAIAgentsIntegration {
     for (const holder of this.#modelCallHolders.values()) {
       if (holder.agentDdSpan.context().toSpanId().toString() === parentId) return holder
     }
+    return undefined
   }
 
+  /**
+   * @param {ModelCallHolder} holder
+   * @param {DatadogSpan | undefined} span
+   */
   trackProviderSpan (holder, span) {
     if (!span) return
     for (const ownedSpan of this.#oaiToDdSpan.values()) {
@@ -375,7 +386,7 @@ class OpenAIAgentsIntegration {
       if (holder) {
         holder.responseDdSpan = ddSpan
         this.reparentProviderSpans(holder)
-        const store = llmobsStorage.getStore()
+        const store = /** @type {Record<string | symbol, unknown> | undefined} */ (llmobsStorage.getStore())
         if (store?.[MODEL_CALL_STORE_KEY] === holder) {
           llmobsStorage.enterWith({ ...store, span: ddSpan })
         }
@@ -492,6 +503,7 @@ class OpenAIAgentsIntegration {
     // when their source is absent.
     const inputMessages = extractInputMessages(input, response?.instructions)
     this.#tagger.tagLLMIO(ddSpan, inputMessages, extractOutputMessages(response))
+    this.#tagToolDefinitions(ddSpan, oaiSpan.spanData)
 
     // Cache messages for the workflow span's trace-level input (Python
     // parity: last message of the first response under the top-level agent).
@@ -529,6 +541,7 @@ class OpenAIAgentsIntegration {
 
     const inputMessages = extractInputMessages(spanData?.input)
     this.#tagger.tagLLMIO(ddSpan, inputMessages, extractGenerationOutputMessages(spanData?.output))
+    this.#tagToolDefinitions(ddSpan, spanData)
 
     const info = this.#traceInfo.get(oaiSpan.traceId)
     if (info && info.inputOaiSpan === oaiSpan) {
@@ -540,6 +553,23 @@ class OpenAIAgentsIntegration {
     })
     if (metrics) this.#tagger.tagMetrics(ddSpan, metrics)
     if (spanData?.model_config) this.#tagger.tagMetadata(ddSpan, spanData.model_config)
+  }
+
+  /**
+   * @param {import('../../dd-trace/src/opentracing/span')} ddSpan
+   * @param {object | undefined} spanData
+   */
+  #tagToolDefinitions (ddSpan, spanData) {
+    const tools = spanData?.tools ?? spanData?._response?.tools
+    if (!Array.isArray(tools)) return
+    const definitions = tools
+      .filter(tool => tool?.type === 'function')
+      .map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        schema: tool.parameters,
+      }))
+    if (definitions.length > 0) this.#tagger.tagToolDefinitions(ddSpan, definitions)
   }
 
   /**
@@ -830,7 +860,7 @@ function buildAgentManifest (agent) {
   const manifest = { framework: 'OpenAI' }
   setDefined(manifest, 'name', agent.name)
   setDefined(manifest, 'instructions', typeof agent.instructions === 'string' ? agent.instructions : undefined)
-  setDefined(manifest, 'handoff_description', agent.handoffDescription)
+  setDefined(manifest, 'handoff_description', agent.handoffDescription ?? null)
 
   const model = typeof agent.model === 'string' ? agent.model : agent.model?.model
   setDefined(manifest, 'model', model)
@@ -863,7 +893,7 @@ function buildToolManifest (tool) {
     const schema = tool.parameters ?? tool.params_json_schema
     const result = { name }
     setDefined(result, 'description', tool.description)
-    setDefined(result, 'strict_json_schema', tool.strict ?? tool.strict_json_schema)
+    setDefined(result, 'strict_json_schema', tool.strict ?? tool.strictJsonSchema ?? tool.strict_json_schema)
     if (schema?.properties && typeof schema.properties === 'object') {
       const parameters = {}
       for (const [propertyName, property] of Object.entries(schema.properties)) {
@@ -902,7 +932,7 @@ function buildToolManifest (tool) {
 function buildHandoffManifest (handoff) {
   if (!handoff || typeof handoff !== 'object') return
   const result = {}
-  setDefined(result, 'handoff_description', handoff.handoffDescription ?? handoff.toolDescription)
+  setDefined(result, 'handoff_description', handoff.handoffDescription ?? handoff.toolDescription ?? null)
   setDefined(result, 'agent_name', handoff.name ?? handoff.agentName)
   setDefined(result, 'tool_name', handoff.toolName)
   return result.handoff_description !== undefined ||
