@@ -490,7 +490,16 @@ function useLlmObs ({
 
       await new Promise(resolve => setImmediate(resolve))
 
-      return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+      return {
+        apmSpans,
+        llmobsSpans: llmobsSpans.sort((a, b) => {
+          const startDifference = a.start_ns - b.start_ns
+          if (startDifference) return startDifference
+          if (a.parent_id === b.span_id) return -1
+          if (b.parent_id === a.span_id) return 1
+          return a.duration - b.duration
+        }),
+      }
 
       function waitForApmTraces () {
         return apmTracesPromise.then(spans => {
