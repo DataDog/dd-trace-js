@@ -585,66 +585,13 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
-      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: 'http/json',
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
-
-    const warnCall = log.warn.getCalls().find(
-      (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
-    )
-    assert.strictEqual(warnCall, undefined)
   })
-
-  it('should reject an unsupported generic protocol when OTLP trace export is enabled', () => {
-    process.env.OTEL_TRACES_EXPORTER = 'otlp'
-    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
-
-    const config = getConfig()
-    const tracesProtocolEntry = updateConfig.firstCall.args[0].find(({ name, origin }) => {
-      return name === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && origin === 'calculated'
-    })
-
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-    const expectedError = {
-      code: null,
-      message: "Invalid value: 'http/protobuf' for OTEL_EXPORTER_OTLP_TRACES_PROTOCOL " +
-        '(source: calculated), picked default',
-    }
-    assert.deepStrictEqual(tracesProtocolEntry.error, expectedError)
-
-    config.setRemoteConfig({})
-    const recalculatedEntry = updateConfig.secondCall.args[0].find(({ name, origin }) => {
-      return name === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && origin === 'calculated'
-    })
-    assert.deepStrictEqual(recalculatedEntry.error, expectedError)
-    sinon.assert.calledOnce(log.warn)
-  })
-
-  for (const { name, options } of [
-    { name: 'Test Optimization', options: { isCiVisibility: true, experimental: { exporter: 'datadog' } } },
-    { name: 'Electron', options: { experimental: { exporter: 'electron' } } },
-  ]) {
-    it(`should not validate the generic protocol when ${name} bypasses OTLP traces`, () => {
-      process.env.OTEL_TRACES_EXPORTER = 'otlp'
-      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
-
-      const config = getConfig(options)
-      const tracesProtocolEntry = updateConfig.firstCall.args[0].find(({ name, origin }) => {
-        return name === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && origin === 'calculated'
-      })
-      const warning = log.warn.getCalls().find(
-        (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
-      )
-
-      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
-      assert.strictEqual(tracesProtocolEntry, undefined)
-      assert.strictEqual(warning, undefined)
-    })
-  }
 
   it('should normalize site from environment and programmatic configuration', () => {
     process.env.DD_SITE = 'US3.DATADOGHQ.COM'
@@ -664,7 +611,6 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
     sinon.assert.notCalled(log.warn)
