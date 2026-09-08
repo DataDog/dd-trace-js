@@ -3,6 +3,7 @@
 const fs = require('node:fs')
 
 const log = require('../../log')
+const { PromptOptimization } = require('../prompt-optimization')
 const { ExperimentsClient } = require('./client')
 const { readCsvRecords } = require('./csv')
 const { Dataset, DatasetRecord } = require('./dataset')
@@ -214,6 +215,27 @@ class Experiments {
       ? { ...options, projectName: resolvedProjectName }
       : options
     return new Experiment(client, experimentOptions, this.#llmobs)
+  }
+
+  /**
+   * Build a prompt optimization that iteratively improves `options.config.prompt`
+   * by running experiments over `options.dataset`. Call `run()` to execute it.
+   *
+   * @param {object} options
+   * @returns {PromptOptimization}
+   */
+  optimizePrompt (options) {
+    const datasetProjectName = options?.dataset?.projectName?.()
+    if (options?.projectName !== undefined &&
+        datasetProjectName !== undefined &&
+        options.projectName !== datasetProjectName) {
+      throw new Error(
+        `Prompt optimization project '${options.projectName}' does not match dataset project '${datasetProjectName}'`
+      )
+    }
+    const projectName = options?.projectName ?? datasetProjectName ?? this.#projectName
+    const client = this.#clientForOperation(projectName)
+    return new PromptOptimization(options, { experiments: this, client, projectName })
   }
 
   /**

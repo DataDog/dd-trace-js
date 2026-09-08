@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../log')
+const { NoopPromptOptimization } = require('../prompt-optimization/noop')
 const { ExternalExperiment } = require('./experiment')
 
 const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
@@ -259,6 +260,11 @@ class NoopExperiments {
   experiment (options = {}) {
     this.#warn()
     return new NoopExperiment(options.name)
+  }
+
+  optimizePrompt (options = {}) {
+    this.#warn()
+    return new NoopPromptOptimization(options)
   }
 
   /**

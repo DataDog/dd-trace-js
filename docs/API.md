@@ -112,6 +112,50 @@ await tracer.llmobs.experiments.experiment({
 | `LLMJudge` + `Boolean/Score/CategoricalStructuredOutput` | same | divergent: `modelCall(request)` single-object callback instead of Python's `LLMClient` protocol / provider SDK clients |
 | `EvaluatorRunner`, `EvaluatorRunnerSampler` | — | not implemented (internal periodic service for `_DD_LLMOBS_EVALUATORS`, not part of the public experiments flow) |
 
+<h3 id="llmobs-prompt-optimization">Prompt optimization</h3>
+
+`experiments.optimizePrompt(options)` iteratively improves `options.config.prompt`. It runs a baseline experiment, asks the user-supplied `optimizationTask` for a better prompt (given the current prompt, the summary evaluator metrics and labeled examples), re-runs the experiment with the candidate and keeps the highest score. Every LLM call happens inside your own `task` and `optimizationTask` callbacks; no provider SDK is required.
+
+```javascript
+const optimization = tracer.llmobs.experiments.optimizePrompt({
+  name: 'support-prompt',
+  dataset,
+  task: async (input, config) => callModel(config.modelName, config.prompt, input.question),
+  optimizationTask: async ({ messages, model }) => (await openai.chat.completions.create({ model, messages })).choices[0].message.content,
+  evaluators: { correct: (input, output, expectedOutput) => output === expectedOutput },
+  summaryEvaluators: { accuracy: (inputs, outputs, expectedOutputs) => outputs.filter((o, i) => o === expectedOutputs[i]).length / outputs.length },
+  computeScore: (summary) => summary.accuracy.value,
+  labelize: (row) => (row.evaluations.correct ? 'Correct' : 'Incorrect'),
+  config: { prompt: 'Answer the question.', modelName: 'gpt-4o-mini', evaluationOutputFormat: { answer: 'string' } },
+  maxIterations: 3,
+  stoppingCondition: (summary) => summary.accuracy.value >= 0.95,
+  datasetSplit: true, // 60/20/20 train/valid/test, or [0.8, 0.2] with `testDataset`
+})
+const result = await optimization.run({ concurrency: 4 })
+result.bestPrompt // string
+result.bestScore // number | null
+result.testScore // only with datasetSplit
+result.summary()
+```
+
+- `optimizationTask({ systemPrompt, userPrompt, config, messages, model })` must return the improved prompt text (or a promise). Throwing or returning an empty string keeps the current prompt for that iteration.
+- With `datasetSplit`, the train split provides examples to the optimization LLM, the valid split ranks candidates, and the best prompt is scored once on the test split (`result.testScore`, `result.testExperimentUrl`, `result.testResults`). Sub-datasets share the source dataset's remote id; the split is shuffled with a fixed seed so it is reproducible.
+- Experiments are named `<name>_baseline`, `<name>_iteration_<n>` (suffixed `_train` / `_valid` / `_test` when splitting) and tagged with `project_name` plus `options.tags`.
+
+| Python | Node | Status |
+| --- | --- | --- |
+| `LLMObs._prompt_optimization(...)` (hangs off experiments/`LLMObs`, private) | `experiments.optimizePrompt(options)` (public) | matched placement; Node exposes it publicly on the experiments facade |
+| `name`, `dataset`, `task`, `evaluators`, `summary_evaluators`, `compute_score`, `labelize`, `config`, `project_name`, `tags`, `max_iterations`, `stopping_condition`, `dataset_split`, `test_dataset` | same options, camelCase | matched |
+| `optimization_task(system_prompt, user_prompt, config)` | `optimizationTask({ systemPrompt, userPrompt, config, messages, model })` | divergent: single request object (same convention as `LLMJudge.modelCall`), adds ready-to-send `messages` |
+| `test_dataset` (name pulled from Datadog) | `testDataset` accepts a name or a `Dataset` | matched (superset) |
+| `config.prompt`, `config.model_name`, `config.evaluation_output_format`, `config.runs` | `config.prompt`, `config.modelName`, `config.evaluationOutputFormat`, `config.runs` | matched |
+| `jobs` / `raise_errors=True` on `PromptOptimization.run()` | `run({ concurrency })`; experiments always run with `throwOnErrors: true` | matched |
+| Task/evaluator parameter-name validation (`input_data`, `config`, ...) | callable checks only | divergent: JavaScript parameter names are not reliable (minification, destructuring) |
+| `random.Random(42)` shuffle | seeded Fisher-Yates (mulberry32, seed 42) | divergent: deterministic, but the record order differs from Python's PRNG |
+| `OptimizationResult.best_prompt` / `best_score` / `best_experiment_url` / `total_iterations` / `test_score` / `test_experiment_url` / `test_results` / `get_history()` / `get_score_history()` / `get_prompt_history()` / `summary()` | same, camelCase | matched |
+| `OptimizationIteration.run()` / `load_system_prompt()` / `build_user_prompt()` / `format_example()` | internal `OptimizationIteration` | matched (internal) |
+| Raises when LLMObs is disabled | `NoopExperiments.optimizePrompt().run()` resolves with the initial prompt and no iterations | divergent: follows the Node experiments no-op convention |
+
 <h2 id="llmobs-prompts">LLM Observability Prompt Management</h2>
 
 Prompt Management is exposed as `tracer.llmobs.prompts`. It retrieves versioned prompts from the Datadog

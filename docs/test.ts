@@ -858,6 +858,42 @@ async function llmobsExperimentsTypes () {
     idColumn: 'id',
     deduplicate: false
   }).then(dataset => dataset.records().length)
+
+  // experiments: prompt optimization
+  const optimization = llmobs.experiments.optimizePrompt({
+    name: 'opt',
+    dataset: llmobs.experiments.createDataset('ds'),
+    task: (input, config) => `${config?.prompt}:${JSON.stringify(input)}`,
+    optimizationTask: async ({ systemPrompt, userPrompt, messages, model, config }) => {
+      systemPrompt.length + userPrompt.length + messages.length
+      model ?? config.modelName
+      return 'improved prompt'
+    },
+    evaluators: { correct: (input, output, expectedOutput) => output === expectedOutput },
+    summaryEvaluators: { accuracy: (inputs, outputs) => outputs.length },
+    computeScore: (summary) => summary.accuracy.value,
+    labelize: (row) => (row.evaluations.correct ? 'Correct' : 'Incorrect'),
+    stoppingCondition: (summary) => summary.accuracy.value >= 1,
+    config: { prompt: 'Answer.', modelName: 'gpt-4o', evaluationOutputFormat: { answer: 'string' }, runs: 1 },
+    maxIterations: 2,
+    projectName: 'my-project',
+    tags: { team: 'llm' },
+    datasetSplit: [0.8, 0.2],
+    testDataset: 'holdout'
+  })
+  optimization.name
+  optimization.run({ concurrency: 2 }).then(result => {
+    const best: string = result.bestPrompt
+    const score: number | null = result.bestScore
+    result.bestIteration + result.totalIterations
+    result.bestExperimentUrl?.length
+    result.testScore ?? result.testExperimentUrl ?? result.testResults?.rows.length
+    result.getHistory()[0].results.experimentId
+    result.getHistory()[0].trainExperimentUrl
+    result.getScoreHistory().length + result.getPromptHistory().length
+    result.iterations[0].summaryEvaluations.accuracy.error
+    return best + score + result.summary()
+  })
 }
 
 // flush

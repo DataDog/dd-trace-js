@@ -4417,6 +4417,107 @@ declare namespace tracer {
       run (options?: ExperimentRunOptions): Promise<ExperimentResult>
     }
 
+    /** Configuration passed to every prompt optimization experiment. */
+    interface PromptOptimizationConfig {
+      /** Initial prompt; replaced by the candidate prompt on each iteration. */
+      prompt: string
+      /** Model the task runs against; forwarded to the optimization LLM as context. */
+      modelName?: string
+      /** Output structure the optimized prompt must enforce. */
+      evaluationOutputFormat?: JSONType
+      /** Number of runs per experiment. */
+      runs?: number
+      [key: string]: JSONType | undefined
+    }
+
+    /** Argument passed to `PromptOptimizationOptions.optimizationTask`. */
+    interface OptimizationTaskRequest {
+      systemPrompt: string
+      userPrompt: string
+      config: PromptOptimizationConfig
+      /** `systemPrompt` and `userPrompt` as chat messages, ready for a chat completion call. */
+      messages: Array<{ role: 'system' | 'user', content: string }>
+      /** `config.modelName` when set. */
+      model: string | null
+    }
+
+    type OptimizationTask = (request: OptimizationTaskRequest) => string | Promise<string>
+
+    type SummaryEvaluations = Record<string, { value: any, error: string | null }>
+
+    interface PromptOptimizationOptions {
+      name: string
+      dataset: Dataset
+      /** Task under optimization; receives the current prompt as `config.prompt`. */
+      task: ExperimentTask
+      /** Calls the LLM that rewrites the prompt and returns the improved prompt text. */
+      optimizationTask: OptimizationTask
+      evaluators: Record<string, ExperimentRowEvaluator> | ExperimentRowEvaluator[]
+      summaryEvaluators: Record<string, ExperimentSummaryEvaluatorLike> | ExperimentSummaryEvaluatorLike[]
+      /** Reduces summary evaluations to the scalar being maximized. */
+      computeScore: (summaryEvaluations: SummaryEvaluations) => number | null | undefined
+      config: PromptOptimizationConfig
+      /** Maps a result row to a label used to pick representative examples. */
+      labelize?: (row: ExperimentResultRow) => string | null | undefined
+      /** Stops after the iteration whose summary evaluations satisfy it. */
+      stoppingCondition?: (summaryEvaluations: SummaryEvaluations) => boolean
+      /** Number of optimization iterations after the baseline. Default 5. */
+      maxIterations?: number
+      /** Defaults to the dataset project, then the configured project. */
+      projectName?: string
+      tags?: Record<string, string>
+      /**
+       * `true` splits 60/20/20 (or 80/20 with `testDataset`); an array gives explicit
+       * `[train, valid, test]` or `[train, valid]` ratios.
+       */
+      datasetSplit?: boolean | number[]
+      /** Held-out dataset (or name to pull) scored once with the best prompt. */
+      testDataset?: string | Dataset
+    }
+
+    interface PromptOptimizationRunOptions {
+      /** Forwarded to each experiment run. */
+      concurrency?: number
+    }
+
+    interface OptimizationIterationData {
+      /** 0 for the baseline, then 1..maxIterations. */
+      iteration: number
+      prompt: string
+      /** Scored experiment (the validation experiment when splitting). */
+      results: ExperimentResult
+      score: number | null
+      experimentUrl: string | null
+      summaryEvaluations: SummaryEvaluations
+      /** Only set when dataset splitting is enabled. */
+      trainExperimentUrl?: string | null
+    }
+
+    interface OptimizationResult {
+      readonly name: string
+      readonly initialPrompt: string
+      readonly iterations: OptimizationIterationData[]
+      readonly bestIteration: number
+      readonly bestPrompt: string
+      readonly bestScore: number | null
+      readonly bestExperimentUrl: string | null
+      /** Iterations run, including the baseline. */
+      readonly totalIterations: number
+      /** Only set when dataset splitting is enabled. */
+      readonly testScore: number | null
+      readonly testExperimentUrl: string | null
+      readonly testResults: ExperimentResult | null
+      getHistory (): OptimizationIterationData[]
+      getScoreHistory (): Array<number | null>
+      getPromptHistory (): string[]
+      summary (): string
+    }
+
+    interface PromptOptimization {
+      readonly name: string
+      run (options?: PromptOptimizationRunOptions): Promise<OptimizationResult>
+    }
+
     interface Experiments {
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
@@ -4435,6 +4536,8 @@ declare namespace tracer {
       listExperiments (options?: ListExperimentsOptions): Promise<ExperimentSummary[]>
       /** Create a dataset from a CSV file and bulk-upload its rows. */
       createDatasetFromCsv (options: CreateDatasetFromCsvOptions): Promise<Dataset>
+      /** Build a prompt optimization that iteratively improves `config.prompt` via experiments. */
+      optimizePrompt (options: PromptOptimizationOptions): PromptOptimization
     }
 
     /** A prompt template message. */
