@@ -14,8 +14,9 @@ const {
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
-// The fixture bounds connect and query at 5s each; reserve another 5s for close, flush, and exit.
-const processTimeoutMs = 15_000
+// Connect and query can take 15s and 10s respectively; reserve another 5s for close, flush, and exit.
+const processTimeoutMs = 30_000
+const messageTimeoutMs = processTimeoutMs + 10_000
 
 describe('esm', () => {
   let agent
@@ -47,7 +48,7 @@ describe('esm', () => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
-        })
+        }, messageTimeoutMs)
 
         const completed = spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
@@ -64,7 +65,7 @@ describe('esm', () => {
           completed,
           messageReceived,
         ])
-      }).timeout(20000)
+      }).timeout(messageTimeoutMs + 5_000)
     }
   })
 })
