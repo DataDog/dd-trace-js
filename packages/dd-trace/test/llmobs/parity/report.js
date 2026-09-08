@@ -28,7 +28,10 @@ function writeReport (results = diffAll()) {
     lines.push(`### ${result.integration}/${result.scenario}`, '')
     for (const item of result.divergences) {
       const reason = item.reason ? ` (${item.reason})` : ''
-      lines.push(`- \`${item.path}\`${reason}: py=${JSON.stringify(item.py)} js=${JSON.stringify(item.js)}`)
+      const detail = item.path.endsWith('.tags')
+        ? `only_in_py=${JSON.stringify(item.py)} only_in_js=${JSON.stringify(item.js)}`
+        : `py=${JSON.stringify(item.py)} js=${JSON.stringify(item.js)}`
+      lines.push(`- \`${item.path}\`${reason}: ${detail}`)
     }
     for (const key of result.missing_in_js) lines.push(`- missing in js: \`${key}\``)
     for (const key of result.missing_in_py) lines.push(`- missing in py: \`${key}\``)
