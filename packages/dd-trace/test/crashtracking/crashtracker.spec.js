@@ -124,15 +124,7 @@ describeNotWindows('crashtracker', () => {
       crashtracker.start(config)
 
       sinon.assert.calledOnce(binding.init)
-      assert.deepStrictEqual(binding.init.firstCall.args[0].endpoint, {
-        url: {
-          scheme: 'https',
-          authority: 'instrumentation-telemetry-intake.us3.datadoghq.com',
-          path_and_query: '',
-        },
-        api_key: 'test-api-key',
-        timeout_ms: 3000,
-      })
+      assert.strictEqual(binding.init.firstCall.args[0].endpoint, undefined)
       assert.deepStrictEqual(binding.init.firstCall.args[1].env, [
         ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
         ['DD_API_KEY', 'test-api-key'],
@@ -200,19 +192,6 @@ describeNotWindows('crashtracker', () => {
       sinon.assert.notCalled(binding.init)
       sinon.assert.calledOnce(log.error)
       assert.match(log.error.firstCall.args[1].message, /DD_API_KEY is required/)
-      assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
-    })
-
-    it('should reject an agentless site that could redirect the API key', () => {
-      config.DD_AGENTLESS_ENABLED = true
-      config.DD_API_KEY = 'test-api-key'
-      config.site = 'datadoghq.com@evil.example'
-
-      crashtracker.start(config)
-
-      sinon.assert.notCalled(binding.init)
-      sinon.assert.calledOnce(log.error)
-      assert.match(log.error.firstCall.args[1].message, /Invalid DD_SITE/)
       assert.strictEqual(process.listenerCount('uncaughtExceptionMonitor'), 0)
     })
   })

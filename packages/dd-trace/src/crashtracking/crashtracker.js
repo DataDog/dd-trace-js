@@ -115,16 +115,16 @@ class Crashtracker {
     const endpoint = config.DD_AGENTLESS_ENABLED
       ? undefined
       : {
-        // TODO: Use the string directly when deserialization is fixed.
-        url: {
-          scheme: config.url.protocol.slice(0, -1),
-          authority: config.url.protocol === 'unix:'
-            ? Buffer.from(config.url.pathname).toString('hex')
-            : config.url.host,
-          path_and_query: '',
-        },
-        timeout_ms: 3000,
-      }
+          // TODO: Use the string directly when deserialization is fixed.
+          url: {
+            scheme: config.url.protocol.slice(0, -1),
+            authority: config.url.protocol === 'unix:'
+              ? Buffer.from(config.url.pathname).toString('hex')
+              : config.url.host,
+            path_and_query: '',
+          },
+          timeout_ms: 3000,
+        }
 
     // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
