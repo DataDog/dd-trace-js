@@ -28,42 +28,92 @@ const maxActiveBufferSize = 1024 * 1024 * 64
 let activeBufferSize = 0
 
 /**
- * @param {Buffer|string|Readable|Array<Buffer|string>} data
- * @param {object} options
- * @param {(error: Error|null, result?: string|null, statusCode?: number,
- *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
+ * @typedef {import('node:http').RequestOptions & {
+ *   url?: string|URL|object,
+ *   retry?: boolean,
+ *   deferTimeoutAbort?: boolean,
+ *   keepProcessAlive?: boolean
+ * }} RequestOptions
  */
-function request (data, options, callback) {
-  if (!options.headers) {
-    options.headers = {}
-  }
+
+/**
+ * @param {RequestOptions} options
+ * @param {number} contentLength
+ * @returns {RequestOptions}
+ */
+function prepareRequestOptions (options, contentLength) {
+  const connectionOptions = { ...options }
 
   if (options.url) {
     const url = parseUrl(options.url)
     if (url.protocol === 'unix:') {
-      options.socketPath = url.pathname
+      if (options.protocol !== undefined) delete connectionOptions.protocol
+      if (options.hostname !== undefined) delete connectionOptions.hostname
+      if (options.host !== undefined) delete connectionOptions.host
+      if (options.port !== undefined) delete connectionOptions.port
+      connectionOptions.socketPath = url.pathname
     } else {
-      if (!options.path) options.path = url.path
-      options.protocol = url.protocol
-      options.hostname = url.hostname // for IPv6 this should be '::1' and not '[::1]'
-      options.port = url.port
+      if (options.socketPath !== undefined) delete connectionOptions.socketPath
+      if (options.host !== undefined) delete connectionOptions.host
+      connectionOptions.protocol = url.protocol
+      connectionOptions.hostname = url.hostname
+      connectionOptions.port = url.port
+      if (!options.path) connectionOptions.path = url.path
+    }
+  }
+  if (connectionOptions.protocol !== undefined &&
+      connectionOptions.protocol !== 'http:' &&
+      connectionOptions.protocol !== 'https:') {
+    throw Object.assign(
+      new TypeError(`Unsupported request protocol: ${connectionOptions.protocol}`),
+      { code: 'ERR_INVALID_PROTOCOL' }
+    )
+  }
+
+  const sourceHeaders = options.headers ?? {}
+  const headers = { ...sourceHeaders }
+  const isSecure = connectionOptions.protocol === 'https:'
+  const canSendKey = canSendApiKey(connectionOptions.protocol, connectionOptions.hostname)
+  let hasApiKey = sourceHeaders['dd-api-key'] !== undefined || sourceHeaders['DD-API-KEY'] !== undefined
+  if (!hasApiKey && (isSecure || !canSendKey)) {
+    for (const name of Object.keys(sourceHeaders)) {
+      if (sourceHeaders[name] !== undefined && name.toLowerCase() === 'dd-api-key') {
+        hasApiKey = true
+        break
+      }
     }
   }
 
-  // Never put the Datadog API key on a cleartext connection to a non-loopback host; that would
-  // expose it on the wire. Loopback (local agent, dev proxy, tests) is exempt. Strip the key
-  // rather than drop the request: the agent proxies telemetry with its own key, while an https
-  // intake URL is required to authenticate agentless traffic.
-  const hasApiKey = options.headers['dd-api-key'] !== undefined || options.headers['DD-API-KEY'] !== undefined
-  if (hasApiKey && !canSendApiKey(options.protocol, options.hostname)) {
+  // Local agents proxy with their own key. Strip unsafe keys instead of dropping the request.
+  if (hasApiKey && !canSendKey) {
     log.error(
       'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
-      options.hostname
+      connectionOptions.hostname
     )
-    delete options.headers['dd-api-key']
-    delete options.headers['DD-API-KEY']
+    for (const name of Object.keys(headers)) {
+      if (name.toLowerCase() === 'dd-api-key') delete headers[name]
+    }
   }
 
+  headers['Content-Length'] = contentLength
+  docker.inject(headers)
+  connectionOptions.headers = headers
+
+  const directAgent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
+  connectionOptions.agent = hasApiKey && isSecure
+    ? getHttpsProxyAgent(connectionOptions, directAgent)
+    : directAgent
+
+  return connectionOptions
+}
+
+/**
+ * @param {Buffer|string|Readable|Array<Buffer|string>} data
+ * @param {RequestOptions} options
+ * @param {(error: Error|null, result?: string|null, statusCode?: number,
+ *   headers?: import('node:http').IncomingHttpHeaders, dropped?: boolean) => void} callback
+ */
+function request (data, options, callback) {
   if (data instanceof Readable) {
     const chunks = []
 
@@ -83,29 +133,20 @@ function request (data, options, callback) {
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
-  const isSecure = options.protocol === 'https:'
-  const client = isSecure ? https : http
   let dataArray = data
 
   if (!Array.isArray(data)) {
     dataArray = [data]
   }
   const contentLength = byteLength(dataArray)
-  options.headers['Content-Length'] = contentLength
-
-  docker.inject(options.headers)
-
-  let agent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
-  if (hasApiKey && isSecure) {
-    try {
-      agent = getHttpsProxyAgent(options, agent)
-    } catch (error) {
-      callback(error)
-      return
-    }
+  let connectionOptions
+  try {
+    connectionOptions = prepareRequestOptions(options, contentLength)
+  } catch (error) {
+    callback(error)
+    return
   }
-
-  const connectionOptions = { ...options, agent }
+  const client = connectionOptions.protocol === 'https:' ? https : http
 
   /**
    * @param {import('node:http').IncomingMessage} res
@@ -114,7 +155,7 @@ function request (data, options, callback) {
    * @param {(error: Error) => void} handleError
    */
   const onResponse = (res, complete, handleError) => {
-    markEndpointReached(options)
+    markEndpointReached(connectionOptions)
 
     const chunks = []
 
@@ -156,8 +197,8 @@ function request (data, options, callback) {
         let errorMessage = ''
         try {
           const fullUrl = new URL(
-            options.path,
-            options.url || options.hostname || `http://localhost:${options.port}`
+            connectionOptions.path,
+            connectionOptions.url || connectionOptions.hostname || `http://localhost:${connectionOptions.port}`
           ).href
           errorMessage = `Error from ${fullUrl}: ${res.statusCode} ${http.STATUS_CODES[res.statusCode]}.`
         } catch {
@@ -221,15 +262,15 @@ function request (data, options, callback) {
         if (settled) return
         clearImmediate(timeoutImmediate)
 
-        if (options.retry !== false &&
-            attemptIndex < getMaxAttempts(options) &&
+        if (connectionOptions.retry !== false &&
+            attemptIndex < getMaxAttempts(connectionOptions) &&
             isRetriableNetworkError(error)) {
           settled = true
           finalize()
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
-          setTimeout(attempt, getRetryDelay(options, attemptIndex), attemptIndex + 1).unref?.()
+          setTimeout(attempt, getRetryDelay(connectionOptions, attemptIndex), attemptIndex + 1).unref?.()
         } else {
           complete(error)
         }
@@ -238,7 +279,7 @@ function request (data, options, callback) {
       const req = client.request(connectionOptions, (res) => onResponse(res, complete, handleError))
 
       req.once('close', finalize)
-      if (!options.deferTimeoutAbort) req.once('timeout', finalize)
+      if (!connectionOptions.deferTimeoutAbort) req.once('timeout', finalize)
       req.once('error', handleError)
 
       const abortRequest = () => {
@@ -255,7 +296,7 @@ function request (data, options, callback) {
       }
 
       req.setTimeout(timeout, () => {
-        if (!options.deferTimeoutAbort) {
+        if (!connectionOptions.deferTimeoutAbort) {
           abortRequest()
           return
         }
@@ -264,7 +305,7 @@ function request (data, options, callback) {
           abortRequest()
           finalize()
         })
-        if (!options.keepProcessAlive) timeoutImmediate.unref?.()
+        if (!connectionOptions.keepProcessAlive) timeoutImmediate.unref?.()
       })
 
       for (const buffer of dataArray) req.write(buffer)
