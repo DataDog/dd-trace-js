@@ -206,12 +206,16 @@ describe('test optimization validation manifest scaffold', () => {
     })
   })
 
-  for (const [description, lineTerminator] of [
+  for (const [description, lineBoundary] of [
     ['LF', '\n'],
     ['CRLF', '\r\n'],
     ['CR', '\r'],
     ['line separator', '\u2028'],
     ['paragraph separator', '\u2029'],
+    ['vertical tab before LF', '\v\n'],
+    ['form feed before LF', '\f\n'],
+    ['non-breaking space before LF', '\u00a0\n'],
+    ['byte order mark before LF', '\ufeff\n'],
   ]) {
     it(`expands a JavaScript Cucumber profile after ${description}`, () => {
       withRepositoryFixture({
@@ -220,7 +224,7 @@ describe('test optimization validation manifest scaffold', () => {
       }, fixture => {
         fs.writeFileSync(
           path.join(fixture.root, 'cucumber.js'),
-          `'use strict';${lineTerminator}module.exports = { default: '--strict' }\n`
+          `'use strict';${lineBoundary}module.exports = { default: '--strict' }\n`
         )
 
         const framework = scaffoldFramework(fixture, 'cucumber')

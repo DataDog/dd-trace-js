@@ -283,7 +283,7 @@ function readProfileDefinitions (filename) {
 function getJavascriptProfileDefinitions (source) {
   const syntax = maskJavascriptCommentsAndStrings(source)
   const exports = [...syntax.matchAll(
-    /(?:^|\S[ \t]*[\n\r\u2028\u2029])\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/g
+    /(?:^|\S[\t\v\f\p{Zs}\uFEFF]*[\n\r\u2028\u2029])\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/gu
   )]
   if (exports.length === 0) return new Map()
   if (exports.length !== 1) throw new Error('configuration must export one literal profile object')
