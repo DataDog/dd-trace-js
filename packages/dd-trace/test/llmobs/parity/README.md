@@ -48,10 +48,11 @@ list lengths to isolate each capture; this works with test-agent versions that
 reject the session token header on the requests endpoint.
 
 Normalization drops `trace_id`, `span_id`, `parent_id`, `start_ns`, `duration`,
-and environment-specific tag values (`language`, `version`, `runtime_id`,
-`hostname`, `service`, `env`, `ddtrace.version`, and `source`). IDs are replaced
-with start-order ordinals and tags are sorted. The complete list is exported as
-`IGNORED_FIELDS` from `normalize.js`.
+and `_dd` trace/span identity fields. IDs are replaced with start-order
+ordinals. Dotted keys in `meta` are canonicalized to nested objects so
+`meta["span.kind"]` and `meta.span.kind` compare equally. Tags whose keys are
+environment-derived are dropped, then compared as sets; `agent_service` remains
+visible. The complete list is exported as `IGNORED_FIELDS` from `normalize.js`.
 
 Diffs pair spans by normalized tree position and `meta.span.kind`. Accepted
 field paths may be recorded in `allowlist.json`; use object entries with
@@ -60,3 +61,13 @@ field paths may be recorded in `allowlist.json`; use object entries with
 This harness verifies what each SDK emits when given identical provider
 responses. Because the provider is a stub and request bodies are matched only
 by method/path, it does **not** verify request-side behavior.
+
+## Known real divergences found on first run
+
+- Anthropic and OpenAI tool calls: Python emits `meta.tool_definitions`;
+  JavaScript does not.
+- OpenAI streaming: Python emits `meta.metadata.stream_options`; JavaScript
+  does not.
+- OpenAI chat, streaming, and tool calls, plus embeddings: JavaScript emits
+  `metrics.reasoning_output_tokens: 0`; Python does not.
+- Every Python span carries the `agent_service:parity` tag; JavaScript does not.
