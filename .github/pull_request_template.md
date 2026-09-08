@@ -22,7 +22,7 @@ PR title guidance:
   use test(http): cover retries, not fix(test): cover retries.
 - Apply the same rule to repository tooling. Examples include docs(agents), chore(codeowners),
   chore(eslint), chore(scripts), ci(release), ci(workflows), and test(integration-tests).
-- Product scopes such as test-optimization and ci-visibility may still describe shipped production changes.
+- Product scopes such as ci, test-optimization, and ci-visibility may still describe shipped production changes.
 - Add the appropriate semver-patch, semver-minor, or semver-major label.
 -->
 

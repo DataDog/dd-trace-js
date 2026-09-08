@@ -43,7 +43,9 @@ jobs:
       - name: Validate PR title
         if: >-
           steps.rename.outputs.renamed != 'true' &&
-          (github.event.action != 'edited' || github.event.changes.title != null)
+          (github.event.action == 'opened' ||
+          github.event.action == 'reopened' ||
+          (github.event.action == 'edited' && github.event.changes.title != null))
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -72,7 +74,6 @@ jobs:
               ['benchmarks', 'bench'],
               ['build', 'build'],
               ['chore', 'chore'],
-              ['ci', 'ci'],
               ['codeowners', 'chore'],
               ['dependabot', 'ci'],
               ['deps-dev', 'chore'],

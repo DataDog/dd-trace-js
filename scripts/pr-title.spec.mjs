@@ -41,7 +41,6 @@ describe('PR title workflow', () => {
       ['benchmarks', 'bench'],
       ['build', 'build'],
       ['chore', 'chore'],
-      ['ci', 'ci'],
       ['codeowners', 'chore'],
       ['dependabot', 'ci'],
       ['deps-dev', 'chore'],
@@ -99,6 +98,7 @@ describe('PR title workflow', () => {
       'fix(ci-visibility): change',
       'fix(test-optimization): change',
       'fix(http, tests): change',
+      'feat(ci): change',
       'perf(http): change',
       'perf(agent): change',
       'feat(coverage): change',
@@ -149,11 +149,14 @@ describe('PR title workflow', () => {
     assert.deepStrictEqual([...request.labels], ['fix', 'http', 'tests', 'semver-patch'])
   })
 
-  it('syncs labels only for events that can require reconciliation', () => {
-    assert.strictEqual(labelSync.if.replaceAll(/\s+/g, ' '),
-      "steps.rename.outputs.renamed != 'true' && " +
+  it('runs title-dependent steps only for events that can require reconciliation', () => {
+    const expectedCondition = "steps.rename.outputs.renamed != 'true' && " +
       "(github.event.action == 'opened' || " +
       "github.event.action == 'reopened' || " +
-      "(github.event.action == 'edited' && github.event.changes.title != null))")
+      "(github.event.action == 'edited' && github.event.changes.title != null))"
+
+    for (const step of [validation, labelSync]) {
+      assert.strictEqual(step.if.replaceAll(/\s+/g, ' '), expectedCondition)
+    }
   })
 })
