@@ -594,6 +594,29 @@ describe('Config', () => {
     })
   })
 
+  it('should reject malformed and unsupported OTLP HTTP endpoints', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'ftp://collector:4318'
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'not a URL'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'file:///tmp/logs'
+    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = 'grpc://collector:4317'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_ENDPOINT, undefined)
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+  })
+
+  it('should use a valid generic OTLP endpoint when a signal endpoint is invalid', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://collector:4318/base/'
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'ftp://collector:4318/v1/traces'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://collector:4318/base/v1/traces')
+  })
+
   it('should normalize site from environment and programmatic configuration', () => {
     process.env.DD_SITE = 'US3.DATADOGHQ.COM'
 
