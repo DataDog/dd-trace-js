@@ -206,6 +206,12 @@ curl -sS -X POST \
 
 Keep the returned `data.id` as `CONFIG_ID`.
 
+`lib_config` must carry `service_name` and `env`. An empty `lib_config: {}` is rejected with a
+bare `{"errors":[{"title":"Bad Request"}]}` and no field detail — rc-api's own create fixtures
+under `remote-config/apps/rc-api/products/apmtracing/testdata/service/TestCreateConfig_*` all
+populate it. Note the JSON:API response echoes `sdk_config.config` back as an object map, which
+is itself a live confirmation that #14029 is deployed; a pre-#14029 backend returns an array.
+
 ### 5. Expected behavior, and the evidence to capture
 
 Within one poll interval (5s above, plus backend propagation), the app logs:
@@ -254,7 +260,8 @@ stops the profiler. Expect `>>> PROFILER STOPPED` in the app log.
 | No `config:update` at all | Agent RC disabled, or `DD_REMOTE_CONFIGURATION_ENABLED=false` in the app |
 | `config:update` fires but value unchanged | `service_target` does not match `DD_SERVICE`/`DD_ENV`. Run with `DD_TRACE_DEBUG=1` and look for `Ignoring config for service:` / `for env:` |
 | Value applied but profiler never starts | `DD_PROFILING_ENABLED` missing from `sdkConfigAllowlist` (see commit `0a3a81af0`) |
-| 400 at publish | Wrong `sdk_config.config` shape for that backend, or a key the server rejects. Run `preflight.sh` |
+| 400 at publish | Empty `lib_config: {}` — rc-api rejects it. Populate `service_name` and `env` (see below). Also: wrong `sdk_config.config` shape for that backend, or a key the server rejects. `preflight.sh` catches the key/shape cases but **not** this one, since it validates the RC file rather than the JSON:API request |
+| Revert takes minutes, not seconds | Expected against a real backend. Deleting the config returned 204 and `by_target` 404 immediately, but the tracer reverted ~5 min later: RC backend propagation plus Agent cache. The FakeAgent harness reverts in ~2s because it stops serving instantly |
 | 403 at publish | App key lacks APM remote-config write, or no granular write access to the service |
 
 ### Verifying the backend has #14029
