@@ -9,13 +9,13 @@ const { ObservableInstrument } = require('./instruments')
 const { nowUnixNano } = require('./time')
 
 /**
- * @param {(error?: Error) => void} [done]
- * @param {Error} [error]
+ * @param {(error: Error | null) => void} [done]
+ * @param {Error | null} [error]
  */
 function callDone (done, error) {
   if (!done) return
   try {
-    done(error)
+    done(error ?? null)
   } catch (callbackError) {
     log.error('Error completing OTLP metrics lifecycle callback:', callbackError)
   }
@@ -214,7 +214,7 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @param {(error?: Error) => void} [done] Called after the metric export completes
+   * @param {(error: Error | null) => void} [done] Called after the metric export completes
    * @returns {void}
    */
   forceFlush (done) {
@@ -229,7 +229,7 @@ class PeriodicMetricReader {
 
   /**
    * Shuts down the reader and stops periodic collection.
-   * @param {(error?: Error) => void} [done] Called after the final export and exporter shutdown complete
+   * @param {(error: Error | null) => void} [done] Called after the final export and exporter shutdown complete
    * @returns {void}
    */
   shutdown (done) {
@@ -272,7 +272,7 @@ class PeriodicMetricReader {
 
   /**
    * @param {boolean} flushExporter Whether to flush the exporter after export
-   * @param {(error?: Error) => void} [done] Called when the queued export completes
+   * @param {(error: Error | null) => void} [done] Called when the queued export completes
    * @returns {void}
    */
   #enqueueExport (flushExporter, done) {

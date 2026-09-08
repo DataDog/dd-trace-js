@@ -539,7 +539,7 @@ cpuGauge.addCallback((result) => {
 
 Short-lived processes can use the callback-based `meterProvider.forceFlush(callback)` extension to wait for export.
 Call `meterProvider.shutdown(callback)` after the final measurement to export once more and stop collection. The optional
-callbacks receive an error when the operation fails. These methods aren't part of the OpenTelemetry Metrics API.
+callbacks receive `null` on success or an error on failure. These methods aren't part of the OpenTelemetry Metrics API.
 In TypeScript, intersect the provider type with `import('dd-trace').opentelemetry.MeterProvider` to use them.
 
 #### Supported Configuration

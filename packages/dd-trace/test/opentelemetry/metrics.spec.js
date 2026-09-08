@@ -684,13 +684,21 @@ describe('OpenTelemetry Meter Provider', () => {
 
       assert.strictEqual(provider.forceFlush(forceFlushDone), undefined)
       sinon.assert.notCalled(forceFlushDone)
-      callbacks.forceFlush()
-      sinon.assert.calledOnce(forceFlushDone)
+      callbacks.forceFlush(null)
+      sinon.assert.calledOnceWithExactly(forceFlushDone, null)
 
       assert.strictEqual(provider.shutdown(shutdownDone), undefined)
       sinon.assert.notCalled(shutdownDone)
-      callbacks.shutdown()
-      sinon.assert.calledOnce(shutdownDone)
+      callbacks.shutdown(null)
+      sinon.assert.calledOnceWithExactly(shutdownDone, null)
+
+      const emptyProvider = new MeterProvider()
+      const emptyForceFlushDone = sinon.spy()
+      const emptyShutdownDone = sinon.spy()
+      emptyProvider.forceFlush(emptyForceFlushDone)
+      emptyProvider.shutdown(emptyShutdownDone)
+      sinon.assert.calledOnceWithExactly(emptyForceFlushDone, null)
+      sinon.assert.calledOnceWithExactly(emptyShutdownDone, null)
     })
 
     it('serializes forceFlush exports', async () => {
@@ -714,13 +722,13 @@ describe('OpenTelemetry Meter Provider', () => {
       exports[0]({ code: 0 })
       sinon.assert.notCalled(firstDone)
       completeNext(flushes)
-      sinon.assert.calledOnce(firstDone)
+      sinon.assert.calledOnceWithExactly(firstDone, null)
       await Promise.resolve()
       assert.strictEqual(exports.length, 2)
       exports[1]({ code: 0 })
       sinon.assert.notCalled(done)
       completeNext(flushes)
-      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnceWithExactly(done, null)
       reader.shutdown()
       completeNext(flushes)
     })
@@ -769,7 +777,7 @@ describe('OpenTelemetry Meter Provider', () => {
       sinon.assert.notCalled(shutdownFlushDone)
       exports[0]({ code: 0 })
       completeNext(flushes)
-      sinon.assert.calledOnce(forceFlushDone)
+      sinon.assert.calledOnceWithExactly(forceFlushDone, null)
       await Promise.resolve()
 
       assert.strictEqual(exports.length, 2)
@@ -777,8 +785,8 @@ describe('OpenTelemetry Meter Provider', () => {
       exports[1]({ code: 0 })
       completeNext(flushes)
       sinon.assert.calledOnce(exporter.shutdown)
-      sinon.assert.calledOnce(shutdownFlushDone)
-      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnceWithExactly(shutdownFlushDone, null)
+      sinon.assert.calledOnceWithExactly(done, null)
     })
 
     it('isolates lifecycle callback errors', async () => {
