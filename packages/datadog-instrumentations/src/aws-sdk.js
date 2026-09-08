@@ -23,6 +23,7 @@ const KNOWN_CHANNEL_SUFFIXES = new Set([
   'states',
   'stepfunctions',
   'bedrockruntime',
+  'bedrockagentruntime',
 ])
 
 // Older SDK clients report EventBridge under its CloudWatch Events name or its `events` endpoint
@@ -242,7 +243,7 @@ function wrapSmithySend (send) {
 }
 
 function handleCompletion (result, ctx, channels) {
-  const streamable = result?.body ?? result?.stream
+  const streamable = result?.body ?? result?.stream ?? result?.completion
   const iterator = streamable?.[Symbol.asyncIterator]
   if (!iterator) {
     channels.complete.publish(ctx)
