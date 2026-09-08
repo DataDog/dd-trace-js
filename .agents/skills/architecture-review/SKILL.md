@@ -21,8 +21,8 @@ abstraction that adds complexity without improving the baseline.
 2. Describe the smallest viable proposal and at most one meaningful alternative.
 3. Identify affected public APIs, package boundaries, consumers, and per-call production paths.
 4. Score the baseline and proposal from 1–10 on each dimension below using `baseline → proposal`.
-5. Require the proposal to score at least 8/10 on five dimensions. Treat regressions in public-surface discipline or
-    hot-path fitness as blockers even if the aggregate score passes.
+5. Use the scores to expose trade-offs, not as a pass/fail threshold. Reject a proposal only when the evidence shows a
+    worse contract, boundary, or production cost than a viable design.
 6. Ask the user before implementation when two viable designs have meaningful trade-offs.
 7. Record the selected design's contracts and cover boundaries with observable tests.
 
@@ -72,7 +72,10 @@ benchmark evidence.
 
 ## Review Output
 
-Summarize the review in a compact table:
+The score and table are planning aids. Their absence from a diff, commit, or PR description is not a review finding.
+Keep them in the design response unless the user asks to record them.
+
+When a design comparison benefits from exact scores, summarize it in a compact table:
 
 | Dimension | Baseline | Proposal | Evidence |
 | --- | ---: | ---: | --- |
