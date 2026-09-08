@@ -49,10 +49,6 @@ const NONMATCH_CASES = [
 
 describe('util', () => {
   describe('truncateString', () => {
-    it('returns the original value within the limit', () => {
-      assert.strictEqual(truncateString('value', 5, '...'), 'value')
-    })
-
     it('includes the suffix in the limit', () => {
       assert.strictEqual(truncateString('abcdef', 5, '...'), 'ab...')
     })

@@ -68,13 +68,14 @@ function tagsFromObject (object, opts) {
 
     if (['number', 'boolean'].includes(typeof object) || Buffer.isBuffer(object)) {
       tagCount += 1
-      result[prefix] = truncateString(object.toString(), 5000)
+      const value = object.toString()
+      result[prefix] = value.length > 5000 ? truncateString(value, 5000) : value
       return
     }
 
     if (typeof object === 'string') {
       tagCount += 1
-      result[prefix] = truncateString(object, 5000)
+      result[prefix] = object.length > 5000 ? truncateString(object, 5000) : object
     }
 
     if (typeof object === 'object') {

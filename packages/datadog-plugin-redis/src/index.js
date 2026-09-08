@@ -98,7 +98,7 @@ function formatCommand (command, args, argsStartIndex = 0) {
 
 function formatArg (arg) {
   if (typeof arg === 'string') {
-    return truncateString(arg, MAX_ARG_LENGTH, '...')
+    return arg.length > MAX_ARG_LENGTH ? truncateString(arg, MAX_ARG_LENGTH, '...') : arg
   }
   // Number stringification is bounded (~23 chars max), so it never hits MAX_ARG_LENGTH.
   if (typeof arg === 'number') return String(arg)

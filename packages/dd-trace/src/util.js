@@ -145,7 +145,7 @@ function formatKnuthRate (rate) {
 }
 
 /**
- * Truncates a string without retaining its original backing store.
+ * Truncates an oversized string without retaining its original backing store.
  *
  * @param {string} value
  * @param {number} maxLength
@@ -153,10 +153,8 @@ function formatKnuthRate (rate) {
  * @returns {string}
  */
 function truncateString (value, maxLength, suffix = '') {
-  if (value.length <= maxLength) return value
-
-  const prefix = value.slice(0, maxLength - suffix.length)
-  return Buffer.from(prefix, 'utf16le').toString('utf16le') + suffix
+  // V8 flattens this bounded concatenation before creating the slice.
+  return (' ' + value.slice(0, maxLength - suffix.length)).slice(1) + suffix
 }
 
 module.exports = {
