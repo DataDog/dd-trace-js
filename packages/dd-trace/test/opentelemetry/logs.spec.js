@@ -836,7 +836,7 @@ describe('OpenTelemetry Logs', () => {
 
       const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
-      assert.match(logMock.getMessage(), /OTLP gRPC protocol is not supported/)
+      assert.match(logMock.getMessage(), /Invalid value: 'grpc' for OTEL_EXPORTER_OTLP_LOGS_PROTOCOL/)
 
       logMock.restore()
     })
