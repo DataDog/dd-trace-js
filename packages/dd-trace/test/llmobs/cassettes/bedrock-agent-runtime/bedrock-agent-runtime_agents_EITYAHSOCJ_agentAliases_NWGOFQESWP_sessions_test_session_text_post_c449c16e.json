@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://host.docker.internal:19126/agents/EITYAHSOCJ/agentAliases/NWGOFQESWP/sessions/test_session/text",
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "255",
+      "User-Agent": "aws-sdk-js/3.1126.0 ua/2.1 os/linux#5.15.200 lang/js md/nodejs#22.12.0 api/bedrock-agent-runtime#3.1126.0 m/N,E,g",
+      "Connection": "keep-alive"
+    },
+    "body": "{\"enableTrace\":false,\"inputText\":\"I like beach vacations but also nature and outdoor adventures. I'd like the trip to be 7 days, and include lounging on the beach, something like an all-inclusive resort is nice too (but I prefer luxury 4/5 star resorts)\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.amazon.eventstream",
+      "x-amzn-bedrock-agent-content-type": "application/json",
+      "x-amzn-bedrock-agent-session-id": "test_session",
+      "x-amzn-requestid": "bedrock-agent-stub",
+      "Date": "Tue, 08 Sep 2026 16:54:11 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "base64:AAAGawAAAEu8l+IwCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6IlFtRnpaV1FnYjI0Z2VXOTFjaUJ3Y21WbVpYSmxibU5sY3lCbWIzSWdZU0JpWldGamFDQjJZV05oZEdsdmJpQjNhWFJvSUc1aGRIVnlaU0JoYm1RZ2IzVjBaRzl2Y2lCaFpIWmxiblIxY21WekxDQkpJSEpsWTI5dGJXVnVaQ0JoSURjdFpHRjVJSFJ5YVhBZ2RHOGdUV0Z1ZFdWc0lFRnVkRzl1YVc4c0lFTnZjM1JoSUZKcFkyRXVJRlJvYVhNZ1pHVnpkR2x1WVhScGIyNGdiMlptWlhKeklHSmxZWFYwYVdaMWJDQmlaV0ZqYUdWekxDQnNkWE5vSUc1aGRIVnlaU3dnWVc1a0lIQnNaVzUwZVNCdlppQnZkWFJrYjI5eUlHRmpkR2wyYVhScFpYTXVDZ3BVYUdVZ1ltVnpkQ0IwYVcxbElIUnZJSFpwYzJsMElFMWhiblZsYkNCQmJuUnZibWx2SUdseklHUjFjbWx1WnlCMGFHVWdaSEo1SUhObFlYTnZiaXdnWm5KdmJTQkVaV05sYldKbGNpQjBieUJCY0hKcGJDNGdWR2hwY3lCd1pYSnBiMlFnYjJabVpYSnpJR2xrWldGc0lIZGxZWFJvWlhJZ1ptOXlJR0psWVdOb0lHRmpkR2wyYVhScFpYTWdZVzVrSUc5MWRHUnZiM0lnWVdSMlpXNTBkWEpsY3k0Z1ZHaGxJR0YyWlhKaFoyVWdZMjl6ZENCbWIzSWdZU0EzTFdSaGVTQjBjbWx3SUdseklHRnliM1Z1WkNBa01TdzFNREFnZEc4Z0pESXNNREF3SUhCbGNpQndaWEp6YjI0c0lIZG9hV05vSUdOaGJpQjJZWEo1SUdSbGNHVnVaR2x1WnlCdmJpQjViM1Z5SUdOb2IybGpaU0J2WmlCaFkyTnZiVzF2WkdGMGFXOXVJR0Z1WkNCaFkzUnBkbWwwYVdWekxnb0tUV0Z1ZFdWc0lFRnVkRzl1YVc4Z2FYTWdhMjV2ZDI0Z1ptOXlJR2wwY3lCemRIVnVibWx1WnlCaVpXRmphR1Z6SUdGdVpDQnVZWFJwYjI1aGJDQndZWEpyTENCM2FHVnlaU0I1YjNVZ1kyRnVJR1Z1YW05NUlHSnZkR2dnY21Wc1lYaGhkR2x2YmlCaGJtUWdZV1IyWlc1MGRYSmxMaUJVYUdWeVpTQmhjbVVnYzJWMlpYSmhiQ0JzZFhoMWNua2djbVZ6YjNKMGN5QnBiaUIwYUdVZ1lYSmxZU0IwYUdGMElHOW1abVZ5SUdGc2JDMXBibU5zZFhOcGRtVWdjR0ZqYTJGblpYTXNJR05oZEdWeWFXNW5JSFJ2SUhsdmRYSWdjSEpsWm1WeVpXNWpaU0JtYjNJZ05DODFJSE4wWVhJZ1lXTmpiMjF0YjJSaGRHbHZibk11Q2dwVGIyMWxJR0ZqZEdsMmFYUnBaWE1nZVc5MUlHMXBaMmgwSUdWdWFtOTVJR2x1WTJ4MVpHVTZDakV1SUV4dmRXNW5hVzVuSUc5dUlFMWhiblZsYkNCQmJuUnZibWx2SUVKbFlXTm9Dakl1SUVWNGNHeHZjbWx1WnlCTllXNTFaV3dnUVc1MGIyNXBieUJPWVhScGIyNWhiQ0JRWVhKckNqTXVJRnBwY0Mxc2FXNXBibWNnZEdoeWIzVm5hQ0IwYUdVZ2NtRnBibVp2Y21WemRBbzBMaUJVWVd0cGJtY2dZU0J6ZFc1elpYUWdZMkYwWVcxaGNtRnVJR055ZFdselpRbzFMaUJGYm1wdmVXbHVaeUJ6Y0dFZ2RISmxZWFJ0Wlc1MGN5QmhkQ0I1YjNWeUlISmxjMjl5ZEFvS1VtVnRaVzFpWlhJZ2RHOGdZbTl2YXlCNWIzVnlJR0ZqWTI5dGJXOWtZWFJwYjI1eklHRnVaQ0JoWTNScGRtbDBhV1Z6SUdsdUlHRmtkbUZ1WTJVc0lHVnpjR1ZqYVdGc2JIa2dhV1lnZVc5MUozSmxJSFJ5WVhabGJHbHVaeUJrZFhKcGJtY2dkR2hsSUhCbFlXc2djMlZoYzI5dUxnPT0ife6tOws="
+  }
+}
