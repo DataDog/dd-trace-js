@@ -592,6 +592,28 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
+
+    const warnCall = log.warn.getCalls().find(
+      (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
+    )
+    assert.strictEqual(warnCall, undefined)
+  })
+
+  it('should reject an unsupported generic protocol when OTLP trace export is enabled', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/protobuf'
+
+    const config = getConfig()
+    const tracesProtocolEntry = updateConfig.firstCall.args[0].find(({ name, origin }) => {
+      return name === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && origin === 'calculated'
+    })
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
+    assert.deepStrictEqual(tracesProtocolEntry.error, {
+      code: null,
+      message: "Invalid value: 'http/protobuf' for OTEL_EXPORTER_OTLP_TRACES_PROTOCOL " +
+        '(source: calculated), picked default',
+    })
   })
 
   it('should normalize site from environment and programmatic configuration', () => {
@@ -2013,6 +2035,7 @@ describe('Config', () => {
       value: 'yes',
       origin: 'code',
       error: {
+        code: null,
         message: "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
       },
     }])
@@ -5769,7 +5792,7 @@ rules:
           name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
           value: 'offline',
           origin: 'env_var',
-          error: { message: warning },
+          error: { code: null, message: warning },
         },
         { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
       ])

@@ -691,6 +691,7 @@ class Config extends ConfigBase {
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
+        if (configName === 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL' && this.OTEL_TRACES_EXPORTER !== 'otlp') continue
         const entry = configurationsTable[configName]
         const value = entry.transformer
           ? entry.transformer(this[alias], configName, 'calculated')
