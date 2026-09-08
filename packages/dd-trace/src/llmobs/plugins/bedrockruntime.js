@@ -140,8 +140,9 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
-    if (requestParams.tools?.length > 0) {
-      this._tagger.tagToolDefinitions(span, requestParams.tools.map(tool => ({
+    const { tools } = requestParams
+    if (Array.isArray(tools) && tools.length > 0) {
+      this._tagger.tagToolDefinitions(span, tools.map(tool => ({
         name: tool.name,
         description: tool.description ?? '',
         schema: tool.input_schema ?? {},

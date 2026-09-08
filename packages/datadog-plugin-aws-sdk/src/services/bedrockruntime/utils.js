@@ -121,7 +121,22 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   })
 }
 
+/**
+ * @typedef {object} GenerationOptions
+ * @property {string | unknown[]} [message]
+ * @property {string} [finishReason]
+ * @property {string} [choiceId]
+ * @property {string} [role]
+ * @property {number} [inputTokens]
+ * @property {number} [outputTokens]
+ * @property {number} [cacheReadTokens]
+ * @property {number} [cacheWriteTokens]
+ * @property {Array<Record<string, unknown>>} [messages]
+ * @property {Array<Record<string, unknown>>} [content] Anthropic Messages API output content blocks
+ */
+
 class Generation {
+  /** @param {GenerationOptions} [options] */
   constructor ({
     message = '',
     finishReason = '',
@@ -150,7 +165,24 @@ class Generation {
   }
 }
 
+/**
+ * @typedef {object} RequestParamsOptions
+ * @property {string | Array<Record<string, unknown>>} [prompt]
+ * @property {number | string} [temperature]
+ * @property {number | string} [topP]
+ * @property {number | string} [topK]
+ * @property {number | string} [maxTokens]
+ * @property {string[]} [stopSequences]
+ * @property {string} [inputType]
+ * @property {string} [truncate]
+ * @property {string | boolean} [stream]
+ * @property {number} [n]
+ * @property {string | Array<Record<string, unknown>>} [system]
+ * @property {Array<Record<string, unknown>>} [tools]
+ */
+
 class RequestParams {
+  /** @param {RequestParamsOptions} [options] */
   constructor ({
     prompt = '',
     temperature,
