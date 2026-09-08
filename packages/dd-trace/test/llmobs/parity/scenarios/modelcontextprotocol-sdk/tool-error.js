@@ -7,6 +7,7 @@ const { finish, loadTracer } = require('../common')
 async function main () {
   const tracer = loadTracer('modelcontextprotocol-sdk')
   const sdkFixture = require('../../../../../../../versions/@modelcontextprotocol/sdk@1.27.1')
+  const { z } = sdkFixture.get('zod')
   const { Client } = sdkFixture.get('@modelcontextprotocol/sdk/client')
   const { InMemoryTransport } = sdkFixture.get('@modelcontextprotocol/sdk/inMemory.js')
   const sdkDir = path.resolve(path.dirname(sdkFixture.getPath('@modelcontextprotocol/sdk/client')), '..', '..', '..')
@@ -16,7 +17,7 @@ async function main () {
     'failing_tool',
     {
       description: 'This tool always raises an exception.',
-      inputSchema: { param: { type: 'string' } },
+      inputSchema: { param: z.string() },
     },
     async () => {
       throw new Error('Tool execution failed')

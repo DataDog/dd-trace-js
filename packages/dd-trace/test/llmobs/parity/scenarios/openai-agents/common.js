@@ -28,50 +28,52 @@ let research
 
 function setupTools () {
   add = agents.tool({
-  name: 'add',
-  description: 'Add two numbers together',
-  parameters: {
-    type: 'object',
-    properties: {
-      a: { type: 'integer' },
-      b: { type: 'integer' },
+    name: 'add',
+    description: 'Add two numbers together',
+    parameters: {
+      type: 'object',
+      properties: {
+        a: { type: 'integer' },
+        b: { type: 'integer' },
+      },
+      required: ['a', 'b'],
+      additionalProperties: false,
     },
-    required: ['a', 'b'],
-    additionalProperties: false,
-  },
-  strict: false,
-  execute: async ({ a, b }) => a + b,
+    strict: false,
+    execute: async ({ a, b }) => a + b,
   })
 
   addWithError = agents.tool({
-  name: 'add',
-  description: 'Add two numbers together',
-  parameters: {
-    type: 'object',
-    properties: {
-      a: { type: 'integer' },
-      b: { type: 'integer' },
+    name: 'add',
+    description: 'Add two numbers together',
+    parameters: {
+      type: 'object',
+      properties: {
+        a: { type: 'integer' },
+        b: { type: 'integer' },
+      },
+      required: ['a', 'b'],
+      additionalProperties: false,
     },
-    required: ['a', 'b'],
-    additionalProperties: false,
-  },
-  strict: false,
-  execute: async () => {
-    throw new Error('This is a test error')
-  },
+    strict: false,
+    execute: async () => {
+      throw new Error('This is a test error')
+    },
   })
 
   research = agents.tool({
-  name: 'research',
-  description: 'Research the internet on a topic.',
-  parameters: {
-    type: 'object',
-    properties: { query: { type: 'string' } },
-    required: ['query'],
-    additionalProperties: false,
-  },
-  strict: false,
-  execute: async () => 'united beat liverpool 2-1 yesterday. also a lot of other stuff happened. like super important stuff. blah blah blah.',
+    name: 'research',
+    description: 'Research the internet on a topic.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+      additionalProperties: false,
+    },
+    strict: false,
+    execute: async () =>
+      'united beat liverpool 2-1 yesterday. also a lot of other stuff happened. like super important stuff. ' +
+      'blah blah blah.',
   })
 }
 
@@ -98,7 +100,9 @@ function additionAgentWithToolErrors () {
   setupTools()
   return new agents.Agent({
     name: 'Addition Agent',
-    instructions: 'You are a helpful assistant specialized in addition calculations. Do not retry the tool call if it errors and instead return immediately',
+    instructions:
+      'You are a helpful assistant specialized in addition calculations. Do not retry the tool call if it errors ' +
+      'and instead return immediately',
     tools: [addWithError],
     model: 'gpt-4o',
   })
@@ -113,7 +117,9 @@ function researchWorkflow () {
   })
   return new agents.Agent({
     name: 'Researcher',
-    instructions: 'You are a helpful assistant that can research a topic using your research tool. Always research the topic before summarizing.',
+    instructions:
+      'You are a helpful assistant that can research a topic using your research tool. Always research the topic ' +
+      'before summarizing.',
     tools: [research],
     handoffs: [agents.handoff(summarizer, { toolNameOverride: 'transfer_to_summarizer' })],
     model: 'gpt-4o',

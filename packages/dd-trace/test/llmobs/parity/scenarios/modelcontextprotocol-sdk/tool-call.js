@@ -7,6 +7,7 @@ const { finish, loadTracer } = require('../common')
 async function main () {
   const tracer = loadTracer('modelcontextprotocol-sdk')
   const sdkFixture = require('../../../../../../../versions/@modelcontextprotocol/sdk@1.27.1')
+  const { z } = sdkFixture.get('zod')
   const { Client } = sdkFixture.get('@modelcontextprotocol/sdk/client')
   const { InMemoryTransport } = sdkFixture.get('@modelcontextprotocol/sdk/inMemory.js')
   const sdkDir = path.resolve(path.dirname(sdkFixture.getPath('@modelcontextprotocol/sdk/client')), '..', '..', '..')
@@ -17,9 +18,9 @@ async function main () {
     {
       description: 'Perform arithmetic operations.',
       inputSchema: {
-        operation: { type: 'string' },
-        a: { type: 'number' },
-        b: { type: 'number' },
+        operation: z.string(),
+        a: z.number(),
+        b: z.number(),
       },
     },
     async ({ operation, a, b }) => ({
