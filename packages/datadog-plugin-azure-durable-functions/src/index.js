@@ -65,11 +65,13 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     // The host clears the W3C sampled flag in traceparent while datadog tracestate
     // still says keep, so extraction would drop this chunk. Re-apply only the propagated
     // `s` priority when it indicates keep, preserving the extracted sampling mechanism.
-    const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
-    if (span._prioritySampler && childOf && sampledFlagCleared(ctx.traceparent) && propagatedPriority >= AUTO_KEEP) {
-      const spanContext = span.context()
-      if (spanContext._parentId === childOf._spanId) {
-        spanContext._sampling.priority = propagatedPriority
+    if (span._prioritySampler && childOf && sampledFlagCleared(ctx.traceparent)) {
+      const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
+      if (propagatedPriority >= AUTO_KEEP) {
+        const spanContext = span.context()
+        if (spanContext._parentId === childOf._spanId) {
+          spanContext._sampling.priority = propagatedPriority
+        }
       }
     }
 
