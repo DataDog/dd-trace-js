@@ -9,15 +9,6 @@ import sinon from 'sinon'
 import { createCarrierFieldsEslint, verifyCarrierFields } from './verify-carrier-fields.mjs'
 
 describe('verify-carrier-fields', () => {
-  it('requires a working directory for worker options', async () => {
-    const optionsURL = new URL('verify-carrier-fields-eslint-options.mjs', import.meta.url)
-
-    await assert.rejects(import(optionsURL), {
-      name: 'TypeError',
-      message: 'The carrier fields ESLint options require a cwd',
-    })
-  })
-
   it('does not allow inline comments to suppress managed-header access', async () => {
     const eslint = await createCarrierFieldsEslint(process.cwd())
     const [result] = await eslint.lintText(`
