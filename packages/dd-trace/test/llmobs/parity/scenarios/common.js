@@ -28,6 +28,10 @@ function loadVersionedModule (name) {
     parent = path.join(versions, scope)
     prefix = `${packageName}@`
   }
+  const bare = prefix.slice(0, -1)
+  if (fs.existsSync(path.join(parent, bare, 'node_modules'))) {
+    return require(path.join(parent, bare)).get()
+  }
   const candidates = fs.readdirSync(parent).filter(entry => entry.startsWith(prefix)).sort()
   if (candidates.length === 0) throw new Error(`missing version fixture for ${name}; run PLUGINS=${name} yarn services`)
   return require(path.join(parent, candidates[candidates.length - 1])).get()
