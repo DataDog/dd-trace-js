@@ -69,7 +69,6 @@ jobs:
               ['chore', 'chore'],
               ['ci', 'ci'],
               ['codeowners', 'chore'],
-              ['coverage', 'test'],
               ['dependabot', 'ci'],
               ['deps-dev', 'chore'],
               ['docs', 'docs'],

@@ -40,7 +40,6 @@ describe('PR title workflow', () => {
       ['chore', 'chore'],
       ['ci', 'ci'],
       ['codeowners', 'chore'],
-      ['coverage', 'test'],
       ['dependabot', 'ci'],
       ['deps-dev', 'chore'],
       ['docs', 'docs'],
@@ -83,7 +82,9 @@ describe('PR title workflow', () => {
       'fix(test-optimization): change',
       'perf(http): change',
       'perf(agent): change',
+      'feat(coverage): change',
       'fix(integration): change',
+      'fix: change',
       'docs(test): change',
       'test(http): change',
     ]
