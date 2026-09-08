@@ -3,6 +3,7 @@
 const log = require('../log')
 const Sampler = require('../sampler')
 const { formatKnuthRate } = require('../util')
+const { SPAN_TYPE } = require('../../../../ext/tags')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -928,6 +929,8 @@ class LLMObsTagger {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
     }
+
+    span.setTag(SPAN_TYPE, 'llm')
 
     registry.set(span, {})
   }

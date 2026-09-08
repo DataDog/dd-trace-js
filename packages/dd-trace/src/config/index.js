@@ -493,6 +493,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
+    if (this.llmobs.agentlessEnabled) {
+      setAndTrack(this, 'DD_AGENTLESS_ENABLED', true) // maybe?
+    }
+
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
     if (agentlessTracingEnabled && !this.isCiVisibility) {
