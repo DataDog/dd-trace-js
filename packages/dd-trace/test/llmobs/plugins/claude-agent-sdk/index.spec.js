@@ -155,7 +155,6 @@ describe('Plugin', () => {
         name: 'claude_agent_sdk.query',
         inputValue: PROMPT,
         outputValue: MOCK_STRING,
-        modelName: 'claude-sonnet-4-6',
         metrics: {
           input_tokens: MOCK_NUMBER,
           output_tokens: MOCK_NUMBER,

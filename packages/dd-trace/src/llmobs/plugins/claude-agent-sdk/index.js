@@ -2,7 +2,7 @@
 
 const LLMObsPlugin = require('../base')
 const { storage: llmobsStorage } = require('../../storage')
-const { MODEL_NAME, NAME, SESSION_ID } = require('../../constants/tags')
+const { NAME, SESSION_ID } = require('../../constants/tags')
 const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/src/util')
 
 const subagentToolIds = new Set()
@@ -115,7 +115,6 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
       if (options?.maxTurns) manifest.max_iterations = options.maxTurns
       metadata._dd = { agent_manifest: manifest }
     }
-    if (model) this._tagger._setTag(span, MODEL_NAME, model)
 
     const usage = ctx.resultChunk?.usage
     if (usage) {
