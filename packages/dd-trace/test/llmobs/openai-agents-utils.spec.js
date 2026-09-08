@@ -208,6 +208,45 @@ describe('openai-agents utils', () => {
       )
     })
 
+    it('extracts agents-core function calls and results', () => {
+      assert.deepStrictEqual(
+        extractInputMessages([
+          {
+            type: 'function_call',
+            callId: 'c1',
+            name: 'lookup',
+            arguments: '{"q":"sf"}',
+          },
+          {
+            type: 'function_call_result',
+            callId: 'c1',
+            output: { type: 'text', text: '{"temperature":72}' },
+            status: 'completed',
+          },
+        ]),
+        [
+          {
+            role: 'assistant',
+            toolCalls: [{
+              toolId: 'c1',
+              name: 'lookup',
+              arguments: { q: 'sf' },
+              type: 'function_call',
+            }],
+          },
+          {
+            role: 'user',
+            toolResults: [{
+              toolId: 'c1',
+              result: '{"temperature":72}',
+              name: '',
+              type: 'function_call_output',
+            }],
+          },
+        ]
+      )
+    })
+
     it('defaults function_call_output name to empty string when missing', () => {
       const input = [{ type: 'function_call_output', call_id: 'c1', output: '72F' }]
       const out = extractInputMessages(input)

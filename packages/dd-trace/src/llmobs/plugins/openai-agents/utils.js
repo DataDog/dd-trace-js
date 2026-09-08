@@ -129,20 +129,21 @@ function extractInputMessages (input, instructions) {
         messages.push({
           role: 'assistant',
           toolCalls: [{
-            toolId: item.call_id,
+            toolId: item.callId ?? item.call_id,
             name: item.name,
             arguments: args,
             type: item.type,
           }],
         })
-      } else if (item.type === 'function_call_output') {
+      } else if (item.type === 'function_call_output' || item.type === 'function_call_result') {
+        const output = item.output
         messages.push({
           role: 'user',
           toolResults: [{
-            toolId: item.call_id,
-            result: item.output,
+            toolId: item.callId ?? item.call_id,
+            result: typeof output === 'string' ? output : output?.text ?? JSON.stringify(output),
             name: item.name || '',
-            type: item.type,
+            type: 'function_call_output',
           }],
         })
       }
@@ -189,7 +190,7 @@ function extractOutputMessages (result) {
         messages.push({
           role: 'assistant',
           toolCalls: [{
-            toolId: item.call_id,
+            toolId: item.callId ?? item.call_id,
             name: item.name,
             arguments: args,
             type: item.type,

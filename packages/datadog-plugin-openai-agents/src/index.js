@@ -2,6 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
+const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
 const { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration } = require('./integration')
 const { DDOpenAIAgentsProcessor } = require('./processor')
 
@@ -56,6 +57,12 @@ class OpenaiAgentsPlugin extends Plugin {
       if (!ddSpan) return store
       return { ...store, [MODEL_BASE_URL_STORE_KEY]: baseURL, span: ddSpan }
     })
+    this.addBind('apm:openai-agents:model:start', ({ agentsCoreSpanId }) => {
+      const store = llmobsStorage.getStore()
+      if (!this.#integration.enabled || !this.#isLLMObsEnabled() || !agentsCoreSpanId) return store
+      const ddSpan = this.#integration.getDDSpan(agentsCoreSpanId)
+      return ddSpan ? { ...store, span: ddSpan } : store
+    }, llmobsStorage)
 
     this.addBind('apm:openai-agents:tool:start', ({ agentsCoreSpan }) => {
       const store = legacyStorage.getStore()
@@ -63,6 +70,20 @@ class OpenaiAgentsPlugin extends Plugin {
       const ddSpan = this.#integration.getOrStartToolSpan(agentsCoreSpan)
       return ddSpan ? { ...store, span: ddSpan } : store
     })
+    this.addBind('apm:openai-agents:tool:start', ({ agentsCoreSpan }) => {
+      const store = llmobsStorage.getStore()
+      if (!this.#integration.enabled || !this.#isLLMObsEnabled() || !agentsCoreSpan) return store
+      const ddSpan = this.#integration.getOrStartToolSpan(agentsCoreSpan)
+      return ddSpan ? { ...store, span: ddSpan } : store
+    }, llmobsStorage)
+
+    this.addSub('apm:openai-agents:agent:prepare', ({ agent, agentsCoreSpan }) => {
+      this.#integration.tagAgentManifest(agentsCoreSpan, agent)
+    })
+  }
+
+  #isLLMObsEnabled () {
+    return !!this._tracerConfig.llmobs?.DD_LLMOBS_ENABLED
   }
 
   configure (config) {
