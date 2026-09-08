@@ -23,6 +23,16 @@ function spanKind (span) {
 
 function compare (left, right, pathValue, output, entries) {
   if (Object.is(left, right)) return
+  if (pathValue.endsWith('.tags')) {
+    const py = new Set(left ?? [])
+    const js = new Set(right ?? [])
+    const onlyInPy = [...py].filter(tag => !js.has(tag)).sort()
+    const onlyInJs = [...js].filter(tag => !py.has(tag)).sort()
+    if ((onlyInPy.length || onlyInJs.length) && !allowed(pathValue, entries)) {
+      output.push({ path: pathValue, py: onlyInPy, js: onlyInJs })
+    }
+    return
+  }
   if (left && right && typeof left === 'object' && typeof right === 'object') {
     if (Array.isArray(left) !== Array.isArray(right)) {
       if (!allowed(pathValue, entries)) output.push({ path: pathValue, py: left, js: right })
