@@ -32,21 +32,35 @@ const validate = async (title) => {
 describe('PR title workflow', () => {
   it('rejects production types for non-production scopes', async () => {
     const expectedTypeByScope = new Map([
+      ['agents', 'docs'],
       ['bench', 'bench'],
       ['benchmark', 'bench'],
       ['benchmarks', 'bench'],
       ['build', 'build'],
       ['chore', 'chore'],
       ['ci', 'ci'],
+      ['codeowners', 'chore'],
+      ['coverage', 'test'],
+      ['dependabot', 'ci'],
+      ['deps-dev', 'chore'],
       ['docs', 'docs'],
       ['documentation', 'docs'],
+      ['eslint', 'chore'],
+      ['github', 'ci'],
+      ['gitlab', 'ci'],
+      ['integration-test', 'test'],
+      ['integration-tests', 'test'],
+      ['lint', 'chore'],
+      ['release', 'ci'],
+      ['scripts', 'chore'],
       ['style', 'style'],
       ['test', 'test'],
       ['tests', 'test'],
       ['testing', 'test'],
+      ['workflows', 'ci'],
     ])
 
-    await Promise.all(['feat', 'fix'].flatMap(type => [...expectedTypeByScope].map(
+    await Promise.all(['feat', 'fix', 'perf'].flatMap(type => [...expectedTypeByScope].map(
       async ([scope, expectedType]) => {
         const failures = await validate(`${type}(${scope}): change`)
         assert.deepStrictEqual(failures, [
@@ -67,7 +81,9 @@ describe('PR title workflow', () => {
       'feat(http): change',
       'fix(ci-visibility): change',
       'fix(test-optimization): change',
-      'perf(test): change',
+      'perf(http): change',
+      'perf(agent): change',
+      'fix(integration): change',
       'docs(test): change',
       'test(http): change',
     ]
@@ -79,7 +95,7 @@ describe('PR title workflow', () => {
   })
 
   it('does not call the GitHub API during validation', () => {
-    assert.doesNotMatch(validation.with.script, /\bgithub\b/)
+    assert.doesNotMatch(validation.with.script, /\bgithub\./)
   })
 
   it('syncs labels only for events that can require reconciliation', () => {

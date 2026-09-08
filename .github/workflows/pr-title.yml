@@ -58,21 +58,35 @@ jobs:
 
             const type = match[3]
             const scope = match[5]
-            if (!/^(?:feat|fix)$/.test(type) || !scope) return
+            if (!/^(?:feat|fix|perf)$/.test(type) || !scope) return
 
             const nonProductionScopes = new Map([
+              ['agents', 'docs'],
               ['bench', 'bench'],
               ['benchmark', 'bench'],
               ['benchmarks', 'bench'],
               ['build', 'build'],
               ['chore', 'chore'],
               ['ci', 'ci'],
+              ['codeowners', 'chore'],
+              ['coverage', 'test'],
+              ['dependabot', 'ci'],
+              ['deps-dev', 'chore'],
               ['docs', 'docs'],
               ['documentation', 'docs'],
+              ['eslint', 'chore'],
+              ['github', 'ci'],
+              ['gitlab', 'ci'],
+              ['integration-test', 'test'],
+              ['integration-tests', 'test'],
+              ['lint', 'chore'],
+              ['release', 'ci'],
+              ['scripts', 'chore'],
               ['style', 'style'],
               ['test', 'test'],
               ['tests', 'test'],
               ['testing', 'test'],
+              ['workflows', 'ci'],
             ])
             const invalidScope = scope.split(',').map(scope => scope.trim().toLowerCase())
               .find(scope => nonProductionScopes.has(scope))

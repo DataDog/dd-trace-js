@@ -16,6 +16,8 @@ PR title guidance:
   - Maintenance: chore(scope): description
 - For example, use docs(api): update setup guide, not fix(docs): update setup guide;
   use test(http): cover retries, not fix(test): cover retries.
+- Apply the same rule to repository tooling. Examples include docs(agents), chore(codeowners),
+  chore(eslint), chore(scripts), ci(release), ci(workflows), and test(integration-tests).
 - Product scopes such as test-optimization and ci-visibility may still describe shipped production changes.
 - Add the appropriate semver-patch, semver-minor, or semver-major label.
 -->
@@ -28,4 +30,3 @@ PR title guidance:
 
 ### Additional Notes
 <!-- Anything else we should know when reviewing? -->
-
