@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-
 import 'dd-trace/init.js'
 import tracer from 'dd-trace'
+
+import assert from 'node:assert/strict'
 
 const { createClient } = await import('@supabase/supabase-js')
 

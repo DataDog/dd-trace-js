@@ -15,6 +15,7 @@ class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
     const url = stripQueryAndFragment(`${ctx.self?.url}/${functionName}`)
 
     this.startSpan('supabase.http.invoke', {
+      service: { name: this.tracer._service },
       type: 'http',
       resource: `${method} ${extractPathFromUrl(url)}`,
       meta: {

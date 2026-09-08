@@ -52,6 +52,7 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
     const url = ctx.arguments?.[2]
 
     this.startSpan('supabase.storage.request', {
+      service: { name: this.tracer._service },
       type: 'storage',
       resource: `${method} ${getStorageRoute(url)}`,
       meta: {

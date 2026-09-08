@@ -12,6 +12,7 @@ class SupabaseRealtimeChannelSendPlugin extends ProducerPlugin {
     const destination = ctx.self?.subTopic
 
     this.startSpan({
+      service: { name: this.tracer._service },
       type: 'messaging',
       resource: destination,
       meta: {

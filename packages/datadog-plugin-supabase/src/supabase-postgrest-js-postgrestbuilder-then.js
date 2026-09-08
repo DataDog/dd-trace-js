@@ -38,6 +38,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     const resource = `${operation} ${path.slice(path.lastIndexOf('/') + 1)}`
 
     this.startSpan('supabase.database.query', {
+      service: { name: this.tracer._service },
       type: 'sql',
       resource,
       meta: {

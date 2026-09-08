@@ -14,6 +14,7 @@ class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
     const url = stripQueryAndFragment(`${ctx.self?.url}/user`)
 
     this.startSpan('supabase.http.getuser', {
+      service: { name: this.tracer._service },
       type: 'http',
       resource: `${method} ${extractPathFromUrl(url)}`,
       meta: {

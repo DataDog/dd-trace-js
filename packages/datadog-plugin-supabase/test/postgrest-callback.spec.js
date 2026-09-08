@@ -6,6 +6,7 @@ const SupabasePostgrestBuilderThenPlugin = require('../src/supabase-postgrest-js
 
 function createPlugin () {
   const plugin = Object.create(SupabasePostgrestBuilderThenPlugin.prototype)
+  plugin._tracer = { _service: 'test' }
   plugin.startSpan = (name, options, ctx) => {
     ctx.parentStore = {}
     ctx.currentStore = {}

@@ -22,7 +22,7 @@ function recordServerlessEvidence (observation) {
 function assertReturnBehavior ({ operationName, scenario, returned, thrown, shouldReject }) {
   if (shouldReject) {
     assert.ok(thrown, 'instrumentation must preserve SDK rejection behavior')
-    return true
+    return
   }
 
   assert.ifError(thrown)
@@ -33,7 +33,7 @@ function assertReturnBehavior ({ operationName, scenario, returned, thrown, shou
     } else {
       assert.match(returned, /^(?:error|timed out)$/, 'instrumentation must preserve the Realtime error result')
     }
-    return true
+    return
   }
 
   assert.ok(returned && typeof returned === 'object', 'instrumentation must preserve the SDK result object')
@@ -45,8 +45,6 @@ function assertReturnBehavior ({ operationName, scenario, returned, thrown, shou
   } else {
     assert.ok(returned.error, 'instrumentation must preserve the SDK error result')
   }
-
-  return true
 }
 
 async function runServerlessContract ({
@@ -111,7 +109,7 @@ async function runServerlessContract ({
   const ownershipVerified = serverlessClassification === 'serverless-child'
     ? operationSpan.parent_id.toString() === rootSpan.span_id.toString()
     : !operationSpan.parent_id || operationSpan.parent_id.toString() === '0'
-  const returnBehaviorPreserved = assertReturnBehavior({
+  assertReturnBehavior({
     operationName,
     scenario,
     returned,
@@ -120,7 +118,6 @@ async function runServerlessContract ({
   })
 
   assert.strictEqual(ownershipVerified, true, 'span ownership must match the serverless route')
-  assert.strictEqual(returnBehaviorPreserved, true, 'instrumentation must preserve return behavior')
   if (expectedThrown) {
     assert.strictEqual(thrown, expectedThrown, 'instrumentation must preserve the caller-visible error')
   }
@@ -142,7 +139,7 @@ async function runServerlessContract ({
     error_behavior_verified: scenario !== 'error' || operationSpan.error === 1,
     exactly_once_finish: operationSpans.length === 1,
     no_duplicate_spans: operationSpans.length === 1,
-    return_behavior_preserved: returnBehaviorPreserved,
+    return_behavior_preserved: true,
     fake_agent_delivery: true,
   })
 
