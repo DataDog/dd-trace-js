@@ -190,12 +190,6 @@ If this change set is only agent-instruction files (`.agents/`, `AGENTS.md`, `CL
 that prose for broken paths and contradictions. Do not apply the product lenses to the instruction
 text.
 
-TEMPORARY debug (remove before merging this experiment): every review comment must start with
-`[dd-apm-sdk-review debug]` and name the exact rule file that justifies it (example:
-`.agents/skills/dd-apm-sdk-review/reviewers/correctness.md` or
-`.agents/dd-apm-sdk-review-overrides/reviewers/conventions.md`). If no lens applies, cite
-`AGENTS.md` and say why.
-
 ### Commit Messages
 
 - Commit format: `type(scope): description`.
