@@ -40,12 +40,32 @@ jobs:
             })
             core.setOutput('renamed', 'true')
 
-      - name: Validate PR title
+      - name: Checkout base revision
         if: >-
           steps.rename.outputs.renamed != 'true' &&
-          (github.event.action == 'opened' ||
-          github.event.action == 'reopened' ||
-          (github.event.action == 'edited' && github.event.changes.title != null))
+          (github.event.action != 'edited' || github.event.changes.title != null)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Fetch the PR head as Git objects only. The privileged pull_request_target
+      # job must never check out or execute code from this ref.
+      - name: Fetch pull request head
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action != 'edited' || github.event.changes.title != null)
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          git fetch --no-tags origin
+          "+refs/pull/${PR_NUMBER}/head:refs/remotes/pull-request/head"
+
+      - name: Validate PR title and release-note context
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action != 'edited' || github.event.changes.title != null)
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -59,46 +79,24 @@ jobs:
             core.info(`PR title OK: ${title}`)
 
             const type = match[3]
-            const scope = match[5]
-            const scopes = scope?.split(',').map(scope => scope.trim().toLowerCase())
-            if (scopes?.includes('')) {
-              core.setFailed('PR title scope list contains an empty scope.')
-              return
+            if (!/^(?:feat|fix|perf|docs)$/.test(type)) return
+
+            const { execFileSync } = require('node:child_process')
+            const { isInternalOnly } = require('./scripts/release/changelog')
+            // Treat renames as delete/add pairs so both paths affect classification.
+            const output = execFileSync('git', [
+              'diff',
+              '--name-only',
+              '--no-renames',
+              '-z',
+              `${pullRequest.base.sha}...refs/remotes/pull-request/head`,
+            ], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
+            const files = output.split('\0').filter(Boolean)
+
+            if (isInternalOnly(files)) {
+              core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
+                'Use test, bench, ci, or chore.')
             }
-            if (!/^(?:feat|fix|perf)$/.test(type) || !scopes) return
-
-            const nonProductionScopes = new Map([
-              ['agents', 'docs'],
-              ['bench', 'bench'],
-              ['benchmark', 'bench'],
-              ['benchmarks', 'bench'],
-              ['build', 'build'],
-              ['chore', 'chore'],
-              ['codeowners', 'chore'],
-              ['dependabot', 'ci'],
-              ['deps-dev', 'chore'],
-              ['docs', 'docs'],
-              ['documentation', 'docs'],
-              ['eslint', 'chore'],
-              ['github', 'ci'],
-              ['gitlab', 'ci'],
-              ['integration-test', 'test'],
-              ['integration-tests', 'test'],
-              ['lint', 'chore'],
-              ['release', 'ci'],
-              ['scripts', 'chore'],
-              ['style', 'style'],
-              ['test', 'test'],
-              ['tests', 'test'],
-              ['testing', 'test'],
-              ['workflows', 'ci'],
-            ])
-            const suggestedTypes = scopes.map(scope => nonProductionScopes.get(scope))
-            if (suggestedTypes.includes(undefined)) return
-
-            const suggestions = [...new Set(suggestedTypes)].map(type => `"${type}"`).join(' or ')
-            core.setFailed(`PR title type "${type}" is not valid when every scope is non-production ` +
-              `("${scopes.join(', ')}"). Use ${suggestions} instead.`)
 
       - name: Sync labels with PR title
         if: >-

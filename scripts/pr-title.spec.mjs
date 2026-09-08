@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import { createRequire } from 'node:module'
 import vm from 'node:vm'
 
 import { describe, it } from 'mocha'
@@ -10,111 +11,105 @@ const job = workflow.jobs['conventional-commit']
 const steps = new Map()
 for (const step of job.steps) steps.set(step.name, step)
 
-const validation = steps.get('Validate PR title')
+const checkout = steps.get('Checkout base revision')
+const fetchHead = steps.get('Fetch pull request head')
+const validation = steps.get('Validate PR title and release-note context')
 const labelSync = steps.get('Sync labels with PR title')
 const validateTitle = vm.runInNewContext(
-  `(async function validateTitle (context, core, process) {\n${validation.with.script}\n})`
+  `(async function validateTitle (context, core, process, require) {\n${validation.with.script}\n})`
 )
 const syncLabels = vm.runInNewContext(
   `(async function syncLabels (context, github, process) {\n${labelSync.with.script}\n})`
 )
-const validate = async (title) => {
+const require = createRequire(import.meta.url)
+const { isInternalOnly } = require('./release/changelog')
+const validate = async (title, files = []) => {
   const failures = []
-  const context = { payload: { pull_request: { title } } }
+  const commands = []
+  const context = {
+    payload: {
+      pull_request: {
+        title,
+        base: { sha: 'base-sha' },
+      },
+    },
+  }
   const core = {
     info: Function.prototype,
     setFailed: message => failures.push(message),
   }
   const process = { env: { PR_TITLE_PATTERN: job.env.PR_TITLE_PATTERN } }
+  const loadModule = (id) => {
+    if (id === 'node:child_process') {
+      return {
+        execFileSync: (command, args, options) => {
+          commands.push({ command, args: [...args], options: { ...options } })
+          return `${files.join('\0')}${files.length ? '\0' : ''}`
+        },
+      }
+    }
+    if (id === './scripts/release/changelog') return { isInternalOnly }
+    assert.fail(`Unexpected module: ${id}`)
+  }
 
-  await validateTitle(context, core, process)
+  await validateTitle(context, core, process, loadModule)
 
-  return failures
+  return { commands, failures }
 }
 
 describe('PR title workflow', () => {
-  it('rejects production types for non-production scopes', async () => {
-    const expectedTypeByScope = new Map([
-      ['agents', 'docs'],
-      ['bench', 'bench'],
-      ['benchmark', 'bench'],
-      ['benchmarks', 'bench'],
-      ['build', 'build'],
-      ['chore', 'chore'],
-      ['codeowners', 'chore'],
-      ['dependabot', 'ci'],
-      ['deps-dev', 'chore'],
-      ['docs', 'docs'],
-      ['documentation', 'docs'],
-      ['eslint', 'chore'],
-      ['github', 'ci'],
-      ['gitlab', 'ci'],
-      ['integration-test', 'test'],
-      ['integration-tests', 'test'],
-      ['lint', 'chore'],
-      ['release', 'ci'],
-      ['scripts', 'chore'],
-      ['style', 'style'],
-      ['test', 'test'],
-      ['tests', 'test'],
-      ['testing', 'test'],
-      ['workflows', 'ci'],
-    ])
-
-    await Promise.all(['feat', 'fix', 'perf'].flatMap(type => [...expectedTypeByScope].map(
-      async ([scope, expectedType]) => {
-        const failures = await validate(`${type}(${scope}): change`)
-        assert.deepStrictEqual(failures, [
-          `PR title type "${type}" is not valid when every scope is non-production ` +
-          `("${scope}"). Use "${expectedType}" instead.`,
-        ])
-      }
-    )))
-  })
-
-  it('rejects a scope list when every scope is non-production', async () => {
-    const failures = await validate('fix(docs, tests): change')
-    assert.deepStrictEqual(failures, [
-      'PR title type "fix" is not valid when every scope is non-production ' +
-      '("docs, tests"). Use "docs" or "test" instead.',
-    ])
-  })
-
-  it('rejects empty entries in a scope list', async () => {
-    const titles = [
-      'fix(docs,): change',
-      'fix(docs, ): change',
-    ]
-
-    await Promise.all(titles.map(async (title) => {
-      const failures = await validate(title)
-      assert.deepStrictEqual(failures, ['PR title scope list contains an empty scope.'], title)
+  it('rejects public release-note types for internal-only changes', async () => {
+    await Promise.all(['feat', 'fix', 'perf', 'docs'].map(async (type) => {
+      const { failures } = await validate(`${type}(http): change`, [
+        'scripts/pr-title.spec.mjs',
+        'packages/dd-trace/test/index.spec.js',
+      ])
+      assert.deepStrictEqual(failures, [
+        `PR title type "${type}" is public, but every changed file is internal. ` +
+        'Use test, bench, ci, or chore.',
+      ])
     }))
   })
 
-  it('allows production and product scopes', async () => {
+  it('allows public release-note types when any changed file is public', async () => {
     const titles = [
       'feat(http): change',
-      'fix(ci-visibility): change',
-      'fix(test-optimization): change',
-      'fix(http, tests): change',
-      'feat(ci): change',
+      'fix(http): change',
       'perf(http): change',
-      'perf(agent): change',
-      'feat(coverage): change',
-      'fix(integration): change',
-      'fix: change',
       'docs(test): change',
-      'test(http): change',
     ]
 
     await Promise.all(titles.map(async (title) => {
-      const failures = await validate(title)
+      const { failures } = await validate(title, [
+        'scripts/pr-title.spec.mjs',
+        'packages/dd-trace/src/index.js',
+      ])
       assert.deepStrictEqual(failures, [], title)
     }))
   })
 
-  it('does not call the GitHub API during validation', () => {
+  it('skips file inspection for internal title types', async () => {
+    await Promise.all(['test', 'bench', 'ci', 'chore'].map(async (type) => {
+      const { commands, failures } = await validate(`${type}(http): change`)
+      assert.deepStrictEqual(failures, [])
+      assert.deepStrictEqual(commands, [])
+    }))
+  })
+
+  it('derives changed paths from the fetched PR ref without a GitHub API call', async () => {
+    const { commands } = await validate('fix(http): change', ['packages/dd-trace/src/index.js'])
+
+    assert.deepStrictEqual(commands, [{
+      command: 'git',
+      args: [
+        'diff',
+        '--name-only',
+        '--no-renames',
+        '-z',
+        'base-sha...refs/remotes/pull-request/head',
+      ],
+      options: { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 },
+    }])
     assert.doesNotMatch(validation.with.script, /\bgithub\./)
   })
 
@@ -149,14 +144,25 @@ describe('PR title workflow', () => {
     assert.deepStrictEqual([...request.labels], ['fix', 'http', 'tests', 'semver-patch'])
   })
 
-  it('runs title-dependent steps only for events that can require reconciliation', () => {
-    const expectedCondition = "steps.rename.outputs.renamed != 'true' && " +
+  it('inspects files whenever the title or changed files can differ', () => {
+    const inspectionCondition = "steps.rename.outputs.renamed != 'true' && " +
+      "(github.event.action != 'edited' || github.event.changes.title != null)"
+    const titleCondition = "steps.rename.outputs.renamed != 'true' && " +
       "(github.event.action == 'opened' || " +
       "github.event.action == 'reopened' || " +
       "(github.event.action == 'edited' && github.event.changes.title != null))"
 
-    for (const step of [validation, labelSync]) {
-      assert.strictEqual(step.if.replaceAll(/\s+/g, ' '), expectedCondition)
+    for (const step of [checkout, fetchHead, validation]) {
+      assert.strictEqual(step.if.replaceAll(/\s+/g, ' '), inspectionCondition)
     }
+    assert.strictEqual(labelSync.if.replaceAll(/\s+/g, ' '), titleCondition)
+  })
+
+  it('checks out only the trusted base and fetches the PR head without checking it out', () => {
+    assert.strictEqual(checkout.with.ref, '$' + '{{ github.sha }}')
+    assert.strictEqual(checkout.with['fetch-depth'], 0)
+    assert.strictEqual(checkout.with['persist-credentials'], false)
+    assert.match(fetchHead.run, /refs\/pull\/\$\{PR_NUMBER\}\/head/)
+    assert.match(fetchHead.run, /refs\/remotes\/pull-request\/head/)
   })
 })
