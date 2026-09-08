@@ -1612,13 +1612,13 @@ describe('TextMapPropagator', () => {
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:00000000000000;vendor:value(?:,|$)/)
     })
 
-    it('should clear the W3C threshold when a selected Datadog drop conflicts with tracecontext', () => {
+    it('should clear the W3C sampling state when a selected Datadog drop conflicts with tracecontext', () => {
       textMap = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        'x-datadog-sampling-priority': '0',
+        'x-datadog-sampling-priority': '-1',
         traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
-        tracestate: 'ot=rv:ffffffffffffff;th:8;vendor:value',
+        tracestate: 'other=bleh,dd=t.dm:-3,ot=rv:ffffffffffffff;th:8;vendor:value',
       }
       config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
       config.tracePropagationStyle.inject = ['tracecontext']
@@ -1629,6 +1629,8 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
       assert.match(carrier.traceparent, /-00$/)
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;vendor:value(?:,|$)/)
+      assert.match(carrier.tracestate, /(?:^|,)dd=s:-1(?:,|$)/)
+      assert.doesNotMatch(carrier.tracestate, /t\.dm:/)
     })
 
     it('should read tracecontext once while resolving multiple propagation styles', () => {
