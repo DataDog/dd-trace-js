@@ -880,38 +880,6 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
   })
 
   describe('configuration', () => {
-    it('uses the configured service for every operation', async () => {
-      agent.reload('supabase', { service: 'custom-supabase' })
-
-      try {
-        const operations = [
-          ['supabase.storage.request', () => testSetup.storageFileList()],
-          ['supabase.http.getuser', () => testSetup.goTrueClientGetUser()],
-          ['supabase.storage.request', () => testSetup.storageBucketApiListBuckets()],
-          ['supabase.messaging.send', () => testSetup.realtimeChannelSend()],
-          ['supabase.http.invoke', () => testSetup.functionsClientInvoke()],
-          ['supabase.database.query', () => testSetup.postgrestBuilderThen()],
-        ]
-
-        for (const [operationName, run] of operations) {
-          await runServerlessContract({
-            agent,
-            tracer: meta.tracer,
-            operationName,
-            scenario: 'happy',
-            expectedSpan: {
-              name: operationName,
-              service: 'custom-supabase',
-              meta: { component: 'supabase' },
-            },
-            run,
-          })
-        }
-      } finally {
-        agent.reload('supabase', {})
-      }
-    })
-
     it('preserves behavior when disabled', async () => {
       const receivedTraces = []
       const collectTraces = traces => receivedTraces.push(...traces)

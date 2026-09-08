@@ -2,7 +2,6 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const normalizeError = require('./error')
-const getService = require('./service')
 
 class SupabaseRealtimeChannelSendPlugin extends ProducerPlugin {
   static id = 'supabase'
@@ -13,7 +12,6 @@ class SupabaseRealtimeChannelSendPlugin extends ProducerPlugin {
     const destination = ctx.self?.subTopic
 
     this.startSpan({
-      service: getService(this.config.service, this.tracer._service),
       type: 'messaging',
       resource: destination,
       meta: {

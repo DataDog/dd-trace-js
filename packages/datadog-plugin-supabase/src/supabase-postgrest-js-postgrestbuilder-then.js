@@ -5,7 +5,6 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const normalizeError = require('./error')
-const getService = require('./service')
 
 const spanFinished = Symbol('spanFinished')
 
@@ -15,6 +14,15 @@ const operationByMethod = {
   HEAD: 'SELECT',
   PATCH: 'UPDATE',
   POST: 'INSERT',
+}
+
+function finishSafely (plugin, ctx, hasError = false) {
+  try {
+    if (hasError) plugin.error(ctx)
+    plugin.finish(ctx)
+  } catch {
+    plugin.configure(false)
+  }
 }
 
 class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
@@ -30,7 +38,6 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     const resource = `${operation} ${path.slice(path.lastIndexOf('/') + 1)}`
 
     this.startSpan('supabase.database.query', {
-      service: getService(this.config.service, this.tracer._service),
       type: 'sql',
       resource,
       meta: {
@@ -50,7 +57,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
       const plugin = this
       ctx.arguments[0] = function (result) {
         ctx.result = result
-        plugin.finish(ctx)
+        finishSafely(plugin, ctx)
         return storage('legacy').run(ctx.parentStore, () => onFulfilled.apply(this, arguments))
       }
     }
@@ -60,8 +67,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
       const plugin = this
       ctx.arguments[1] = function (error) {
         ctx.error = error
-        plugin.error(ctx)
-        plugin.finish(ctx)
+        finishSafely(plugin, ctx, true)
         return storage('legacy').run(ctx.parentStore, () => onRejected.apply(this, arguments))
       }
     }

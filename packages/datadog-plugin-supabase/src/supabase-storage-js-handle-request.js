@@ -3,7 +3,6 @@
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
-const getService = require('./service')
 
 const storageRoutes = [
   'object/upload/sign',
@@ -53,7 +52,6 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
     const url = ctx.arguments?.[2]
 
     this.startSpan('supabase.storage.request', {
-      service: getService(this.config.service, this.tracer._service),
       type: 'storage',
       resource: `${method} ${getStorageRoute(url)}`,
       meta: {

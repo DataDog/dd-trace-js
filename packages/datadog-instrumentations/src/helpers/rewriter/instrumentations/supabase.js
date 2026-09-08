@@ -1,6 +1,6 @@
 'use strict'
 
-const versionRange = '>=2.112.2 <3'
+const versionRange = '>=2.112.2'
 
 module.exports = [
   {

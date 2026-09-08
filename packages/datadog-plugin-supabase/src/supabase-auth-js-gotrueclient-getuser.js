@@ -4,7 +4,6 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const normalizeError = require('./error')
-const getService = require('./service')
 
 class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
   static id = 'supabase'
@@ -15,7 +14,6 @@ class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
     const url = stripQueryAndFragment(`${ctx.self?.url}/user`)
 
     this.startSpan('supabase.http.getuser', {
-      service: getService(this.config.service, this.tracer._service),
       type: 'http',
       resource: `${method} ${extractPathFromUrl(url)}`,
       meta: {
