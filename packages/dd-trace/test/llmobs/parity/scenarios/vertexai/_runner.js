@@ -24,7 +24,11 @@ async function run (scenario) {
     return originalFetch(target, options)
   }
   try {
-    const client = new vertex.VertexAI({ project: 'parity-project', location: 'us-central1', apiEndpoint: provider.host })
+    const client = new vertex.VertexAI({
+      project: 'parity-project',
+      location: 'us-central1',
+      apiEndpoint: provider.host,
+    })
     const model = client.getGenerativeModel({
       model: 'gemini-1.5-flash',
       systemInstruction: 'You are a parity bot.',

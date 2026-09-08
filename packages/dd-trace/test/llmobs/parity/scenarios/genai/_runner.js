@@ -34,8 +34,14 @@ async function run (scenario) {
         contents: scenario === 'generate-content-tools'
           ? [
               { role: 'user', parts: [{ text: 'Use the tool.' }] },
-              { role: 'model', parts: [{ functionCall: { id: 'call-1', name: 'lookup', args: { value: 'parity' } } }] },
-              { role: 'user', parts: [{ functionResponse: { id: 'call-1', name: 'lookup', response: { value: 'ok' } } }] },
+              {
+                role: 'model',
+                parts: [{ functionCall: { id: 'call-1', name: 'lookup', args: { value: 'parity' } } }],
+              },
+              {
+                role: 'user',
+                parts: [{ functionResponse: { id: 'call-1', name: 'lookup', response: { value: 'ok' } } }],
+              },
             ]
           : 'Hello, world!',
         config: scenario === 'generate-content-reasoning'

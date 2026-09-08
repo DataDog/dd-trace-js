@@ -27,7 +27,10 @@ const models = {
 function invokeBody (scenario) {
   if (scenario.startsWith('invoke-anthropic')) {
     return {
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'summarize the plot to the lord of the rings in a dozen words' }] }],
+      messages: [{
+        role: 'user',
+        content: [{ type: 'text', text: 'summarize the plot to the lord of the rings in a dozen words' }],
+      }],
       anthropic_version: 'bedrock-2023-05-31',
       max_tokens: 50,
       temperature: 0,
@@ -67,17 +70,27 @@ function invokeBody (scenario) {
       num_generations: 2,
     }
   }
-    return { prompt: 'Explain distributed tracing in one sentence.', max_tokens: 64, temperature: 0.5 }
+  return { prompt: 'Explain distributed tracing in one sentence.', max_tokens: 64, temperature: 0.5 }
 }
 
 function converseBody (scenario) {
-  if (scenario === 'converse-error') return {
-    messages: [{ role: 'user', content: [{ text: 'Explain the concept of distributed tracing in a simple way' }] }],
-    inferenceConfig: { temperature: 0.7, topP: 0.9, maxTokens: 50, stopSequences: [] },
+  if (scenario === 'converse-error') {
+    return {
+      messages: [{
+        role: 'user',
+        content: [{ text: 'Explain the concept of distributed tracing in a simple way' }],
+      }],
+      inferenceConfig: { temperature: 0.7, topP: 0.9, maxTokens: 50, stopSequences: [] },
+    }
   }
-  if (scenario === 'converse-inference-profile') return {
-    messages: [{ role: 'user', content: [{ text: 'Explain distributed tracing in one sentence.' }] }],
-    inferenceConfig: { maxTokens: 100, temperature: 0 },
+  if (scenario === 'converse-inference-profile') {
+    return {
+      messages: [{
+        role: 'user',
+        content: [{ text: 'Explain distributed tracing in one sentence.' }],
+      }],
+      inferenceConfig: { maxTokens: 100, temperature: 0 },
+    }
   }
   const body = {
     messages: [{ role: 'user', content: [{ text: 'Explain the concept of distributed tracing in a simple way' }] }],
@@ -87,7 +100,8 @@ function converseBody (scenario) {
       tools: [{
         toolSpec: {
           name: 'fetch_concept',
-          description: 'Fetch an expert explanation for a concept, especially relevant for technical concepts like distributed tracing',
+          description: 'Fetch an expert explanation for a concept, especially relevant for technical concepts ' +
+            'like distributed tracing',
           inputSchema: {
             json: {
               type: 'object',
@@ -101,7 +115,10 @@ function converseBody (scenario) {
   }
   if (scenario === 'converse-tool-use') {
     body.messages = [
-      { role: 'assistant', content: [{ toolUse: { toolUseId: 'tool-1', name: 'get_weather', input: { city: 'Paris' } } }] },
+      {
+        role: 'assistant',
+        content: [{ toolUse: { toolUseId: 'tool-1', name: 'get_weather', input: { city: 'Paris' } } }],
+      },
       {
         role: 'user',
         content: [
@@ -123,8 +140,12 @@ function converseBody (scenario) {
   }
   if (scenario.includes('prompt-caching')) {
     delete body.toolConfig
-    body.messages = [{ role: 'user', content: [{ text: scenario === 'converse-prompt-caching' ? 'What is a service' : 'What is a ml app' }] }]
+    body.messages = [{
+      role: 'user',
+      content: [{ text: scenario === 'converse-prompt-caching' ? 'What is a service' : 'What is a ml app' }],
+    }]
     body.inferenceConfig = { temperature: 0.7, topP: 0.9, maxTokens: 1000, stopSequences: [] }
+    // eslint-disable-next-line @stylistic/max-len, @stylistic/quotes
     body.system = [{ text: "Software architecture guidelines: bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye bye " }, { cachePoint: { type: 'default' } }]
     return body
   }
@@ -134,7 +155,9 @@ function converseBody (scenario) {
 async function run (scenario) {
   const tracer = loadTracer('aws-sdk')
   const sdk = require(sdkPackage).get()
-  const { NodeHttpHandler } = require(path.join(ROOT, 'versions/@aws-sdk/client-bedrock-runtime')).get('@smithy/node-http-handler')
+  const { NodeHttpHandler } = require(
+    path.join(ROOT, 'versions/@aws-sdk/client-bedrock-runtime'),
+  ).get('@smithy/node-http-handler')
   const {
     BedrockRuntimeClient,
     InvokeModelCommand,
