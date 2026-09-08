@@ -118,9 +118,7 @@ cases:
       - Raises a performance finding on the ungated `channel.publish` call and/or the
         unbounded `sessions` Map keyed by `x-request-id`, classified under the report's
         P0/P1/P2 sections, not the performance lens's internal SEV vocabulary.
-      - States an explicit verdict line (BLOCK / APPROVE_WITH_COMMENTS / APPROVE) and the
-        matching gate line: `DO NOT PUSH` on BLOCK, `WAITING ON HUMAN` on
-        APPROVE_WITH_COMMENTS, or `READY TO PUSH` on APPROVE.
+      - "States an explicit verdict line (BLOCK / APPROVE_WITH_COMMENTS / APPROVE) and the matching gate line: `DO NOT PUSH` on BLOCK, `WAITING ON HUMAN` on APPROVE_WITH_COMMENTS, or `READY TO PUSH` on APPROVE."
     bad_signals:
       - Attempts to run git commands despite the change set being pasted inline.
       - Skips straight to a verdict with no per-lens findings or "Rule files used" section.
@@ -312,6 +310,7 @@ cases:
       - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
+      - AGENTS.md
     input: |
       Apply this repo's codebase-conventions criteria (reviewers/conventions.md, its
       .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md override, and _common.md) to the
