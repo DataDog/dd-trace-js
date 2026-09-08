@@ -368,6 +368,11 @@ class TextMapPropagator {
    * @returns {DatadogSpanContext | null}
    */
   extract (carrier) {
+    if (!carrier || typeof carrier !== 'object') {
+      if (this.#config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT !== 'ignore') removeAllBaggageItems()
+      return null
+    }
+
     const spanContext = this.#extractSpanContext(carrier)
     if (spanContext === undefined) return null
 
@@ -844,7 +849,6 @@ class TextMapPropagator {
    * @returns {DatadogSpanContext | undefined}
    */
   #extractDatadogContext (carrier) {
-    if (!carrier) return
     const traceId = readDatadogTraceId(carrier)
     if (!traceId) return
     const spanContext = extractGenericContext(traceId, readDatadogParentId(carrier), 10)
@@ -879,6 +883,8 @@ class TextMapPropagator {
     } catch {
       return
     }
+    if (!parsed || typeof parsed !== 'object') return
+
     const spanContext = this.#extractDatadogContext(parsed)
     if (!spanContext) return
 
@@ -1002,7 +1008,7 @@ class TextMapPropagator {
    */
   #extractBaggageItems (carrier, spanContext, extractBaggage) {
     removeAllBaggageItems()
-    if (!carrier || !extractBaggage) return
+    if (!extractBaggage) return
     const header = readBaggage(carrier)
     if (!header) return
 
