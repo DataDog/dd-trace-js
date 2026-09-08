@@ -51,11 +51,12 @@ class MeterProvider {
   }
 
   /**
-   * @param {Function} [done] Called after the metric export completes
+   * @param {(error: Error | null) => void} [done] Called after shutdown completes
+   * @returns {void}
    */
-  forceFlush (done) {
-    if (this.reader) this.reader.forceFlush(done)
-    else done?.()
+  shutdown (done) {
+    if (this.reader) this.reader.shutdown(done)
+    else done?.(null)
   }
 }
 
