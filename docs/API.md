@@ -37,6 +37,50 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+<h2 id="llmobs-prompts">LLM Observability Prompt Management</h2>
+
+Prompt Management is exposed as `tracer.llmobs.prompts`. It retrieves versioned prompts from the Datadog
+registry, renders them locally, and can create, update, list, and delete prompts.
+
+Configure prompt management with:
+
+* `DD_LLMOBS_PROMPTS_CACHE_TTL` (default `60` seconds)
+* `DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED` (default `false`)
+* `DD_LLMOBS_PROMPTS_CACHE_DIR` (default is a temporary directory)
+* `DD_LLMOBS_PROMPTS_TIMEOUT` (default `5000` milliseconds)
+
+```javascript
+const prompt = await tracer.llmobs.prompts.get('welcome', {
+  env: 'production',
+  fallback: 'Hello {name}!'
+})
+
+const rendered = prompt.render({ name: 'Ada' })
+const chat = prompt.renderChat({ name: 'Ada' })
+tracer.llmobs.annotate({ prompt: prompt.toAnnotation({ name: 'Ada' }) })
+```
+
+`get` accepts `version`, `label`, `env`, `targetingKey`, `attributes`, and an optional `fallback`. Fallbacks may
+be text, chat messages, a template object, or a function. Rendering and annotation are synchronous. `refresh` bypasses
+the caches, while successful registry reads are cached in memory and optionally on disk. A failed registry read uses
+the disk cache or fallback when available.
+
+Prompt Management CRUD methods require an application key:
+
+```javascript
+await tracer.llmobs.prompts.create({ id: 'welcome', template: 'Hello {name}!' })
+await tracer.llmobs.prompts.createVersion('welcome', { template: 'Hi {name}!' })
+await tracer.llmobs.prompts.update('welcome', { description: 'Greeting' })
+await tracer.llmobs.prompts.updateVersion('welcome', '2', { template: 'Hi {name}!' })
+await tracer.llmobs.prompts.list({ limit: 20 })
+await tracer.llmobs.prompts.listVersions('welcome')
+await tracer.llmobs.prompts.delete('welcome')
+```
+
+Prompt API failures are `PromptAPIError` instances. Branch on `err.status` (`401` for a missing API key,
+`403` for a missing application key, `404` for a missing prompt, and `0` for transport failures). OpenFeature
+feature-flag routing is not implemented in the Node.js SDK.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.

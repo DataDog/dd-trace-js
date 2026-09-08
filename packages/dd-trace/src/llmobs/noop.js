@@ -16,6 +16,13 @@ class NoopLLMObs {
     return new NoopExperiments('LLM Observability is not enabled')
   }
 
+  get prompts () {
+    this._prompts ??= new (require('./prompts/noop').NoopPrompts)({
+      reason: 'LLM Observability is not enabled',
+    })
+    return this._prompts
+  }
+
   enable (options) {}
 
   disable () {}

@@ -789,6 +789,26 @@ llmobs.annotate(span, {
 // flush
 llmobs.flush()
 
+const managedPrompt = await tracer.llmobs.prompts.get('welcome', {
+  env: 'production',
+  fallback: 'Hello {name}!'
+})
+const renderedPrompt: string | import('..').llmobs.PromptMessage[] = managedPrompt.render({ name: 'Ada' })
+const renderedChatPrompt = managedPrompt.renderChat({ name: 'Ada' })
+const annotationPrompt = managedPrompt.toAnnotation({ name: 'Ada' })
+tracer.llmobs.annotate({ prompt: annotationPrompt })
+await tracer.llmobs.prompts.create({ id: 'welcome', template: 'Hello {name}!' })
+await tracer.llmobs.prompts.createVersion('welcome', { template: 'Hi {name}!' })
+await tracer.llmobs.prompts.update('welcome', { description: 'Greeting' })
+await tracer.llmobs.prompts.updateVersion('welcome', '2', { template: 'Hi {name}!' })
+await tracer.llmobs.prompts.list()
+await tracer.llmobs.prompts.listVersions('welcome')
+await tracer.llmobs.prompts.refresh('welcome')
+await tracer.llmobs.prompts.delete('welcome')
+tracer.llmobs.prompts.clearCache()
+void renderedPrompt
+void renderedChatPrompt
+
 
 // AI Guard typings tests
 
