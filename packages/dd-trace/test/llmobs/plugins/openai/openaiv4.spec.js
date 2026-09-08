@@ -1031,7 +1031,6 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
-            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
@@ -1138,7 +1137,6 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
-            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
@@ -1189,7 +1187,6 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: true,
-            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
@@ -1437,7 +1434,6 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
-            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })

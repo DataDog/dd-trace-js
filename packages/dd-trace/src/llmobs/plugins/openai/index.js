@@ -510,7 +510,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const outputMetadata = {}
     for (const key of ['temperature', 'max_output_tokens', 'top_p', 'tool_choice', 'truncation', 'text', 'user']) {
-      if (response?.[key] !== undefined) outputMetadata[key] = response[key]
+      if (response?.[key] != null) outputMetadata[key] = response[key]
     }
     this._tagger.tagMetadata(span, outputMetadata)
   }
