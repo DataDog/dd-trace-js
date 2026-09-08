@@ -25,24 +25,19 @@ async function startServer (handler, options = {}) {
   }
 }
 
+// Node 18's `server.close()` waits for idle keep-alive sockets held by the global fetch pool.
+async function stopServer (server) {
+  server.closeAllConnections()
+  await new Promise(resolve => server.close(resolve))
+}
+
 describe('PromptsClient', () => {
   it('sends prompt requests with Datadog headers and normalizes IDs', async () => {
     const requests = []
-    const server = http.createServer((request, response) => {
+    const { server, client } = await startServer((request, response) => {
       requests.push({ method: request.method, url: request.url, headers: request.headers })
       response.setHeader('content-type', 'application/json')
       response.end(JSON.stringify({ ID: 'uuid', prompt_id: 'id', version: '1', template: 'Hi' }))
-    })
-    await new Promise(resolve => {
-      server.once('listening', resolve)
-      server.listen({ port: 0, host: '127.0.0.1' })
-    })
-    const address = server.address()
-    const port = typeof address === 'object' && address ? address.port : 0
-    const client = new PromptsClient({
-      apiKey: 'api',
-      appKey: 'app',
-      overrideOrigin: `http://127.0.0.1:${port}`,
     })
     const result = await client.getPrompt({ id: 'hello world', label: 'prod' })
     assert.strictEqual(result.id, 'uuid')
@@ -50,7 +45,7 @@ describe('PromptsClient', () => {
     assert.match(requests[0].url, /hello%20world/)
     assert.strictEqual(requests[0].headers['dd-api-key'], 'api')
     assert.strictEqual(requests[0].headers['dd-application-key'], 'app')
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('maps missing keys to PromptAPIError', async () => {
@@ -74,7 +69,7 @@ describe('PromptsClient', () => {
     assert.deepEqual(body, {
       data: { type: 'prompt_resolve_requests', attributes: { env: 'prod' } },
     })
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('sends targeting key and context when resolving', async () => {
@@ -93,7 +88,7 @@ describe('PromptsClient', () => {
       targeting_key: 'user',
       context: { tier: 'gold' },
     })
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('uses all CRUD paths and snake_case payloads', async () => {
@@ -120,7 +115,7 @@ describe('PromptsClient', () => {
       ['DELETE', '/api/unstable/llm-obs/v1/prompts/id'],
     ])
     assert.deepEqual(requests[0].body, { prompt_id: 'id', template: 'hi', user_version: 'v1' })
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('lists prompts and versions without query parameters', async () => {
@@ -136,7 +131,7 @@ describe('PromptsClient', () => {
       '/api/unstable/llm-obs/v1/prompts',
       '/api/unstable/llm-obs/v1/prompts/id/versions',
     ])
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('gates resolve and writes on app key', async () => {
@@ -146,13 +141,13 @@ describe('PromptsClient', () => {
     await assert.rejects(client.createPrompt({ prompt_id: 'id', template: 'x' }),
       error => error instanceof Error && 'status' in error && error.status === 403)
     await assert.doesNotReject(client.listPrompts())
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('normalizes empty success bodies', async () => {
     const { server, client } = await startServer((request, response) => response.end())
     assert.deepEqual(await client.deletePrompt('id'), {})
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('reports API status and detail for HTTP failures', async () => {
@@ -169,7 +164,7 @@ describe('PromptsClient', () => {
         assert.strictEqual(error.detail, `status ${status}`)
         return true
       })
-      await new Promise(resolve => server.close(resolve))
+      await stopServer(server)
     }
   })
 
@@ -185,14 +180,14 @@ describe('PromptsClient', () => {
       response.end(JSON.stringify([{ ID: 'uuid', prompt_id: 'id' }]))
     })
     assert.deepEqual(await client.listPrompts(), [{ ID: 'uuid', prompt_id: 'id', id: 'uuid' }])
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('reports malformed JSON success bodies', async () => {
     const { server, client } = await startServer((request, response) => response.end('not json'))
     await assert.rejects(client.getPrompt({ id: 'id' }),
       error => error instanceof Error && 'status' in error && error.status === 200)
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('encodes IDs and query labels', async () => {
@@ -204,13 +199,13 @@ describe('PromptsClient', () => {
     })
     await client.getPrompt({ id: 'hello world/1', label: 'production' })
     assert.strictEqual(url, '/api/unstable/llm-obs/v1/prompts/hello%20world%2F1?label=production')
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 
   it('uses configured request timeouts', async () => {
     const { server, client } = await startServer(() => {}, { timeout: 1 })
     await assert.rejects(client.getPrompt({ id: 'id' }),
       error => error instanceof Error && 'status' in error && error.status === 0)
-    await new Promise(resolve => server.close(resolve))
+    await stopServer(server)
   })
 })

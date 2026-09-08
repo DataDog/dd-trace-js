@@ -242,6 +242,7 @@ describe('PromptManager', () => {
     })
     const manager = new PromptManager({ client })
     assert.strictEqual((await manager.get('id')).render(), 'hello')
+    server.closeAllConnections()
     await new Promise(resolve => server.close(resolve))
   })
 
