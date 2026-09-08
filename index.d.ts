@@ -4536,7 +4536,10 @@ declare namespace tracer {
       listExperiments (options?: ListExperimentsOptions): Promise<ExperimentSummary[]>
       /** Create a dataset from a CSV file and bulk-upload its rows. */
       createDatasetFromCsv (options: CreateDatasetFromCsvOptions): Promise<Dataset>
-      /** Build a prompt optimization that iteratively improves `config.prompt` via experiments. */
+      /**
+       * Build a prompt optimization that iteratively improves `config.prompt` via experiments.
+       * @experimental The API may change in a future minor release.
+       */
       optimizePrompt (options: PromptOptimizationOptions): PromptOptimization
     }
 

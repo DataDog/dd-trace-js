@@ -114,6 +114,8 @@ await tracer.llmobs.experiments.experiment({
 
 <h3 id="llmobs-prompt-optimization">Prompt optimization</h3>
 
+**Experimental:** `optimizePrompt` is public but its API may change in a future minor release.
+
 `experiments.optimizePrompt(options)` iteratively improves `options.config.prompt`. It runs a baseline experiment, asks the user-supplied `optimizationTask` for a better prompt (given the current prompt, the summary evaluator metrics and labeled examples), re-runs the experiment with the candidate and keeps the highest score. Every LLM call happens inside your own `task` and `optimizationTask` callbacks; no provider SDK is required.
 
 ```javascript
@@ -144,7 +146,7 @@ result.summary()
 
 | Python | Node | Status |
 | --- | --- | --- |
-| `LLMObs._prompt_optimization(...)` (hangs off experiments/`LLMObs`, private) | `experiments.optimizePrompt(options)` (public) | matched placement; Node exposes it publicly on the experiments facade |
+| `LLMObs._prompt_optimization(...)` (hangs off experiments/`LLMObs`, private) | `experiments.optimizePrompt(options)` (public, experimental) | matched placement; Node exposes it publicly on the experiments facade |
 | `name`, `dataset`, `task`, `evaluators`, `summary_evaluators`, `compute_score`, `labelize`, `config`, `project_name`, `tags`, `max_iterations`, `stopping_condition`, `dataset_split`, `test_dataset` | same options, camelCase | matched |
 | `optimization_task(system_prompt, user_prompt, config)` | `optimizationTask({ systemPrompt, userPrompt, config, messages, model })` | divergent: single request object (same convention as `LLMJudge.modelCall`), adds ready-to-send `messages` |
 | `test_dataset` (name pulled from Datadog) | `testDataset` accepts a name or a `Dataset` | matched (superset) |

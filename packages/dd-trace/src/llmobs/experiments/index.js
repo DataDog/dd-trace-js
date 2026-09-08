@@ -221,6 +221,8 @@ class Experiments {
    * Build a prompt optimization that iteratively improves `options.config.prompt`
    * by running experiments over `options.dataset`. Call `run()` to execute it.
    *
+   * Experimental: the API may change in a future minor release.
+   *
    * @param {object} options
    * @returns {PromptOptimization}
    */
