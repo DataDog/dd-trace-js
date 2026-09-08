@@ -48,7 +48,9 @@ describe('Plugin', () => {
 
       before(() => {
         const requireVersion = version === '3.0.0' ? '3.461.0' : '3'
-        const fixture = require(`../../../../../../versions/${moduleName}@${requireVersion}`)
+        const clientModuleName =
+          moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-bedrock-agent-runtime' : moduleName
+        const fixture = require(`../../../../../../versions/${clientModuleName}@${requireVersion}`)
         AWS = fixture.get('@aws-sdk/client-bedrock-agent-runtime')
         const NodeHttpHandler =
           fixture.get('@smithy/node-http-handler')
