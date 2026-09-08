@@ -302,6 +302,8 @@ tracer.use('anthropic');
 tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
 tracer.use('claude-agent-sdk', { llmobs: false });
+tracer.use('mistralai');
+tracer.use('mistralai', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', { llmobs: false });

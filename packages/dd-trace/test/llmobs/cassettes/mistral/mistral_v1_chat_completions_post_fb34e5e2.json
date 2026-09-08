@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:9127/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Cookie": "",
+      "User-Agent": "mistral-client-typescript/2.0.0",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "808"
+    },
+    "body": "{\"model\":\"mistral-large-latest\",\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":100,\"stream\":false,\"random_seed\":42,\"messages\":[{\"role\":\"user\",\"content\":\"What's the weather in NYC?\"},{\"role\":\"assistant\",\"content\":\"\",\"tool_calls\":[{\"id\":\"Caf7Pyrd8\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"location\\\": \\\"New York City\\\"}\"},\"index\":0}],\"prefix\":false},{\"role\":\"tool\",\"content\":\"{\\\"location\\\":\\\"New York, NY\\\",\\\"temperature\\\":72,\\\"unit\\\":\\\"fahrenheit\\\",\\\"forecast\\\":\\\"Sunny\\\"}\",\"tool_call_id\":\"Caf7Pyrd8\",\"name\":\"get_weather\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get the current weather for a location.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"}},\"required\":[\"location\"]}}}],\"presence_penalty\":0,\"frequency_penalty\":0}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Date": "Tue, 08 Sep 2026 16:27:02 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "{\"id\":\"1bf33145cb254e06818af2c12b3b2fbd\",\"created\":1784567097,\"model\":\"mistral-large-latest\",\"usage\":{\"prompt_tokens\":118,\"total_tokens\":150,\"completion_tokens\":32,\"prompt_tokens_details\":{\"cached_tokens\":0}},\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"tool_calls\":null,\"content\":\"The current weather in **New York City** is **sunny** with a temperature of **72\u00b0F**. Enjoy your day! \ud83d\ude0a\"}}]}"
+  }
+}

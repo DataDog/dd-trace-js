@@ -3360,6 +3360,13 @@
         ]
       }
     ],
+    "DD_TRACE_MISTRALAI_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_MOCHA_EACH_ENABLED": [
       {
         "implementation": "A",

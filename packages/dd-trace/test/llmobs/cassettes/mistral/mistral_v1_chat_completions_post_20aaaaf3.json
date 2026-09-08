@@ -1,0 +1,32 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:9127/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Cookie": "",
+      "User-Agent": "mistral-client-typescript/2.0.0",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "168"
+    },
+    "body": "{\"model\":\"magistral-medium-latest\",\"temperature\":0.7,\"top_p\":0.9,\"max_tokens\":500,\"stream\":false,\"random_seed\":42,\"messages\":[{\"role\":\"user\",\"content\":\"What is 2+2?\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json",
+      "Date": "Tue, 08 Sep 2026 16:27:07 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "{\"id\":\"0a6e16070048404cbabdb8fc772f5d17\",\"created\":1784566716,\"model\":\"magistral-medium-latest\",\"usage\":{\"prompt_tokens\":10,\"total_tokens\":73,\"completion_tokens\":63,\"prompt_tokens_details\":{\"cached_tokens\":5}},\"object\":\"chat.completion\",\"choices\":[{\"index\":0,\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"tool_calls\":null,\"content\":[{\"type\":\"thinking\",\"thinking\":[{\"type\":\"text\",\"text\":\"Okay, the user has asked \\\"What is 2+2?\\\" This is a simple arithmetic question. I know that 2+2 equals 4. So, the answer should be straightforward.\"}],\"closed\":true},{\"type\":\"text\",\"text\":\"What is 2+2?\\n\\\\[ 2 + 2 = 4 \\\\]\\n\\n${answer}\"}]}}]}"
+  }
+}

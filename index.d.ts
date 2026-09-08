@@ -280,6 +280,7 @@ interface Plugins {
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
+  "mistralai": tracer.plugins.mistralai;
   "mocha": tracer.plugins.mocha;
   "modelcontextprotocol-sdk": tracer.plugins.modelcontextprotocol_sdk;
   "moleculer": tracer.plugins.moleculer;
@@ -2964,6 +2965,12 @@ declare namespace tracer {
        */
       server?: boolean | Moleculer;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [@mistralai/mistralai](https://www.npmjs.com/package/@mistralai/mistralai) module.
+     */
+    interface mistralai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
