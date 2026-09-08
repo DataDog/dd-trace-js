@@ -62,7 +62,7 @@ describe('util', () => {
       const utilPath = JSON.stringify(require.resolve('../src/util'))
       const script = `
         const { truncateString } = require(${utilPath})
-        const count = 400
+        const count = 200
         const values = new Array(count)
         for (let i = 0; i < count; i++) {
           // Parsing creates independent flat strings instead of ropes that can share storage.
@@ -73,10 +73,10 @@ describe('util', () => {
         for (const value of values) retainedLength += value.length
         process.stdout.write(String(retainedLength))
       `
-      const result = spawnSync(process.execPath, ['--max-old-space-size=32', '-e', script], { encoding: 'utf8' })
+      const result = spawnSync(process.execPath, ['--max-old-space-size=16', '-e', script], { encoding: 'utf8' })
 
       assert.strictEqual(result.status, 0, result.stderr)
-      assert.strictEqual(result.stdout, '40000')
+      assert.strictEqual(result.stdout, '20000')
     })
   })
 
