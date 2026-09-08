@@ -1,0 +1,32 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/chat/completions" },
+      "status": 200,
+      "body": {
+        "id": "chatcmpl-parity-tool",
+        "object": "chat.completion",
+        "created": 1700000000,
+        "model": "gpt-4o-mini",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_parity",
+                  "type": "function",
+                  "function": { "name": "get_weather", "arguments": "{\"city\":\"Paris\"}" }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": { "prompt_tokens": 20, "completion_tokens": 8, "total_tokens": 28 }
+      }
+    }
+  ]
+}
