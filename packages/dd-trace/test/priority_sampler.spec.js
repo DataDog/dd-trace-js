@@ -18,9 +18,10 @@ const {
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY,
   SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
   SAMPLING_KNUTH_RATE,
 } = require('../src/constants')
-const { ASM } = require('../src/standalone/product')
+const { AI_GUARD, ASM } = require('../src/standalone/product')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -601,6 +602,16 @@ describe('PrioritySampler', () => {
 
       assert.strictEqual(context._sampling.priority, AUTO_KEEP)
     })
+
+    it('should not let a manual tag override an AppSec force-keep', () => {
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
+
+      prioritySampler.setPriorityFromTag(span, MANUAL_DROP, true)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-5')
+    })
   })
 
   describe('setPriorityFromTags', () => {
@@ -614,6 +625,16 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.priority, USER_REJECT)
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
       assert.strictEqual(context._sampling.isProbabilityDecision, false)
+    })
+
+    it('should not let manual tags override an AI Guard force-keep', () => {
+      prioritySampler.setPriority(span, USER_KEEP, AI_GUARD)
+
+      prioritySampler.setPriorityFromTags(span, { [MANUAL_DROP]: true })
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_AI_GUARD)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-13')
     })
   })
 

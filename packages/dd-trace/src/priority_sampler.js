@@ -26,8 +26,10 @@ const {
   SAMPLING_MECHANISM_AGENT,
   SAMPLING_MECHANISM_RULE,
   SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_APPSEC,
   SAMPLING_MECHANISM_REMOTE_USER,
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
+  SAMPLING_MECHANISM_AI_GUARD,
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
@@ -38,6 +40,18 @@ const {
 const DEFAULT_KEY = 'service:,env:'
 
 const defaultSampler = new Sampler(AUTO_KEEP)
+
+/**
+ * Returns whether a product has already force-kept the trace.
+ *
+ * @param {import('./opentracing/span_context')} context
+ * @returns {boolean}
+ */
+function isProductForceKeep (context) {
+  const { priority, mechanism } = context._sampling
+  return priority === USER_KEEP &&
+    (mechanism === SAMPLING_MECHANISM_APPSEC || mechanism === SAMPLING_MECHANISM_AI_GUARD)
+}
 
 /**
  * PrioritySampler is responsible for determining whether a span should be sampled
@@ -139,6 +153,8 @@ class PrioritySampler {
     if (!span) return
 
     const context = this._getContext(span)
+    if (isProductForceKeep(context)) return
+
     const priority = this._getPriorityFromTag(key, value, context)
     if (this.validate(priority)) this.setPriority(span, priority)
   }
@@ -154,6 +170,8 @@ class PrioritySampler {
     if (!span) return
 
     const context = this._getContext(span)
+    if (isProductForceKeep(context)) return
+
     const priority = this._getPriorityFromTags(tags, context)
     if (this.validate(priority)) this.setPriority(span, priority)
   }
