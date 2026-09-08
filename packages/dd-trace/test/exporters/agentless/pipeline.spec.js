@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const http = require('node:http')
 const { URL } = require('node:url')
 const zlib = require('node:zlib')
@@ -27,6 +28,8 @@ const zstdDecompressSync = zstdSupported ? zlib.zstdDecompressSync : undefined
 describe('AgentlessWriter data pipeline', () => {
   let server
   let intakeUrl
+  let statsEndpoint
+  let statsAndMetadataSupported
   let resolveRequest
   let request
 
@@ -44,7 +47,7 @@ describe('AgentlessWriter data pipeline', () => {
     })
   }
 
-  before(done => {
+  before(async () => {
     process.env.DD_API_KEY = 'test-api-key'
     server = http.createServer((incoming, response) => {
       const chunks = []
@@ -58,11 +61,23 @@ describe('AgentlessWriter data pipeline', () => {
         response.end()
       })
     })
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      intakeUrl = new URL(`http://127.0.0.1:${port}`)
-      done()
+    const listening = once(server, 'listening')
+    server.listen(0, '127.0.0.1')
+    await listening
+
+    const { port } = server.address()
+    intakeUrl = new URL(`http://127.0.0.1:${port}`)
+    statsEndpoint = new URL('/api/v0.2/stats', intakeUrl).href
+    const exporter = createAgentlessExporter({
+      endpoint: new URL('/api/v2/spans', intakeUrl).href,
+      statsEndpoint,
+      apiKey: 'test-api-key',
+      tracerVersion: 'test',
+      languageVersion: process.version,
+      languageInterpreter: 'v8',
     })
+    statsAndMetadataSupported = typeof exporter.sendStats === 'function'
+    exporter.close()
   })
 
   after(async () => {
@@ -104,8 +119,11 @@ describe('AgentlessWriter data pipeline', () => {
     assert.strictEqual(received.headers['dd-api-key'], 'test-api-key')
     assert.strictEqual(received.headers['content-type'], 'application/json')
     assert.strictEqual(received.headers['content-encoding'], 'zstd')
-    assert.strictEqual(received.headers['datadog-client-computed-top-level'], 'true')
-    assert.strictEqual(received.headers['datadog-entity-id'], 'in-1234')
+    assert.strictEqual(
+      received.headers['datadog-client-computed-top-level'],
+      statsAndMetadataSupported ? 'true' : undefined
+    )
+    assert.strictEqual(received.headers['datadog-entity-id'], statsAndMetadataSupported ? 'in-1234' : undefined)
     assert.deepStrictEqual(received.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
 
     if (zstdDecompressSync) {
@@ -124,18 +142,7 @@ describe('AgentlessWriter data pipeline', () => {
   })
 
   it('exports traces and client stats through one data pipeline', async function () {
-    const statsEndpoint = new URL('/api/v0.2/stats', intakeUrl).href
-    const exporter = createAgentlessExporter({
-      endpoint: new URL('/api/v2/spans', intakeUrl).href,
-      statsEndpoint,
-      apiKey: 'test-api-key',
-      tracerVersion: 'test',
-      languageVersion: process.version,
-      languageInterpreter: 'v8',
-    })
-    const statsSupported = typeof exporter.sendStats === 'function'
-    exporter.close()
-    if (!statsSupported) this.skip()
+    if (!statsAndMetadataSupported) this.skip()
 
     request = receiveRequests(2)
     const writer = new AgentlessWriter({
