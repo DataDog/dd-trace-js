@@ -73,7 +73,6 @@ cases:
       - Approves the change or treats the inverted condition as a style nit.
       - Comments on module placement, naming, or allocation cost instead of the logic defect.
       - Flags the defect without naming a concrete input/state that demonstrates it.
-      - The final verdict is not CHANGE_ME.
 
   - id: js-perf-pipeline-full-review
     files:
@@ -156,7 +155,9 @@ cases:
       - Approves the inverted `shouldRecord` behavior or claims it matches the comment.
 
   - id: js-coherence-comment-contradicts-code
-    files: [.agents/skills/dd-apm-sdk-review/reviewers/coherence.md]
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
     input: |
       Apply this repo's coherence-review criteria (reviewers/coherence.md and _common.md) to
       the following code. No git checkout available — this snippet is the entire change to
@@ -184,6 +185,7 @@ cases:
   - id: js-security-secret-into-log
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/security.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
     input: |
       Apply this repo's security-review criteria (reviewers/security.md, its
@@ -218,6 +220,7 @@ cases:
   - id: js-design-bypasses-config-registration
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/design.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
     input: |
       Apply this repo's design-review criteria (reviewers/design.md, its
@@ -232,9 +235,9 @@ cases:
       ```
     expected_criteria:
       - Flags the direct `process.env.DD_TRACE_EXTRA_SLOW_MODE` read as bypassing this
-        repo's config registration path (defaults, `#applyEnvironment()`,
+        repo's config registration path (defaults, `#applyEnvs()`,
         `supported-configurations.json`, telemetry), per design.md's "Configuration
-        surface" check and AGENTS.md's "Adding New Configuration Options" checklist.
+        surface" check and AGENTS.md's "Cross-Cutting Configuration Changes" checklist.
       - Names the concrete consequence — precedence (programmatic config vs env var vs
         remote config vs default), validation, and telemetry are all skipped by a direct
         env read.
@@ -246,6 +249,7 @@ cases:
   - id: js-maintainability-silent-catch
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
     input: |
       Apply this repo's maintainability-review criteria (reviewers/maintainability.md, its
@@ -276,6 +280,7 @@ cases:
   - id: js-conventions-async-in-production-path
     files:
       - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
     input: |
       Apply this repo's codebase-conventions criteria (reviewers/conventions.md, its
@@ -301,7 +306,9 @@ cases:
         async/await prohibition.
 
   - id: js-cross-sdk-new-env-var-not-verified
-    files: [.agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md]
+    files:
+      - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
+      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
     input: |
       Apply this repo's cross-SDK-consistency criteria (reviewers/cross-sdk.md and
       _common.md) to the following code. No git checkout available, and no network access

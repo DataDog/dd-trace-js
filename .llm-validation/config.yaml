@@ -18,6 +18,7 @@ instruction_files:
   - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
+  - .agents/dd-apm-sdk-review-overrides/repo-context.md
 
 default_level: gate
 presets:
