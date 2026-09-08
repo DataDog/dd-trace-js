@@ -691,7 +691,11 @@ class Config extends ConfigBase {
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
-        setAndTrack(this, configName, this[alias])
+        const entry = configurationsTable[configName]
+        const value = entry.transformer
+          ? entry.transformer(this[alias], configName, 'calculated')
+          : this[alias]
+        setAndTrack(this, configName, value, this[alias])
       }
     }
 

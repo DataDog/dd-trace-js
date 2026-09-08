@@ -890,8 +890,8 @@ describe('OpenTelemetry Meter Provider', () => {
       const warnSpy = sinon.spy(log, 'warn')
       const { meterProvider } = setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc' })
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
-      const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
+      const expectedMsg = "Invalid value: 'grpc' for OTEL_EXPORTER_OTLP_METRICS_PROTOCOL " +
+        '(source: env_var), picked default'
       const warnCalls = warnSpy.getCalls()
       assert(
         warnCalls.some(call => format(...call.args) === expectedMsg),
