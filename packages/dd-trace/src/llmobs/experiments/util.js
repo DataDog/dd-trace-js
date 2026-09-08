@@ -84,6 +84,45 @@ function functionName (fn, fallback) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {value is { name?: unknown, evaluate: (context: unknown) => unknown }}
+ */
+function isObjectEvaluator (value) {
+  return value !== null && typeof value === 'object' && typeof value.evaluate === 'function'
+}
+
+/**
+ * Evaluators are either plain functions (positional arguments) or objects with
+ * an `evaluate(context)` method (dd-trace-py `BaseEvaluator` style). Both are
+ * normalized to a function whose last argument is the evaluator context.
+ * @param {unknown} evaluator
+ * @param {string} kind
+ * @param {string} label
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function toEvaluatorFunction (evaluator, kind, label) {
+  if (typeof evaluator === 'function') return evaluator
+  if (isObjectEvaluator(evaluator)) {
+    return (...args) => evaluator.evaluate(args.at(-1))
+  }
+  const suffix = label === undefined ? '' : ` '${label}'`
+  throw new TypeError(`${kind} evaluator${suffix} must be a function or an object with an evaluate method`)
+}
+
+/**
+ * @param {unknown} evaluator
+ * @param {string} fallback
+ * @returns {string}
+ */
+function evaluatorName (evaluator, fallback) {
+  if (isObjectEvaluator(evaluator) && typeof evaluator.name === 'string' && evaluator.name.length > 0) {
+    return evaluator.name
+  }
+  if (typeof evaluator === 'function') return functionName(evaluator, fallback)
+  return fallback
+}
+
+/**
  * @param {unknown} evaluators
  * @param {string} kind
  * @returns {Array<[string, (...args: unknown[]) => unknown]>}
@@ -96,15 +135,15 @@ function normalizeEvaluators (evaluators, kind) {
     const indexesByName = new Map()
     for (let i = 0; i < evaluators.length; i++) {
       const evaluator = evaluators[i]
-      if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator must be a function`)
-      const name = functionName(evaluator, `${kind}_evaluator_${i}`)
+      const fn = toEvaluatorFunction(evaluator, kind)
+      const name = evaluatorName(evaluator, `${kind}_evaluator_${i}`)
       validateEvaluatorName(name)
       if (indexesByName.has(name)) {
         log.warn('Duplicate %s evaluator name %s; previous evaluator will be overwritten', kind, name)
-        normalized[indexesByName.get(name)] = [name, evaluator]
+        normalized[indexesByName.get(name)] = [name, fn]
       } else {
         indexesByName.set(name, normalized.length)
-        normalized.push([name, evaluator])
+        normalized.push([name, fn])
       }
     }
     return normalized
@@ -116,8 +155,7 @@ function normalizeEvaluators (evaluators, kind) {
 
   for (const [name, evaluator] of Object.entries(evaluators)) {
     validateEvaluatorName(name)
-    if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator '${name}' must be a function`)
-    normalized.push([name, evaluator])
+    normalized.push([name, toEvaluatorFunction(evaluator, kind, name)])
   }
   return normalized
 }

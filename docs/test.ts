@@ -785,6 +785,80 @@ llmobs.annotate(span, {
 })
 
 
+// experiments: evaluators and control plane (type-checked only; never executed)
+async function llmobsExperimentsTypes () {
+  // experiments: built-in evaluators
+  const {
+    LengthEvaluator,
+    JSONEvaluator,
+    StringCheckEvaluator,
+    RegexMatchEvaluator,
+    SemanticSimilarityEvaluator,
+    LLMJudge,
+    BooleanStructuredOutput,
+    ScoreStructuredOutput,
+    CategoricalStructuredOutput,
+    EvaluatorResult
+  } = llmobs.evaluators
+
+  const judge = new LLMJudge({
+    userPrompt: 'Is {{output_data}} a good answer to {{input_data}}?',
+    provider: 'openai',
+    model: 'gpt-4o',
+    structuredOutput: new BooleanStructuredOutput({ description: 'correct', reasoning: true }),
+    modelCall: async (request) => {
+      request.messages[0].content
+      request.jsonSchema
+      return JSON.stringify({ boolean_eval: true, reasoning: 'ok' })
+    }
+  })
+
+  const experimentWithEvaluators = llmobs.experiments.experiment({
+    name: 'exp',
+    dataset: llmobs.experiments.createDataset('ds'),
+    task: (input) => input,
+    evaluators: [
+      new LengthEvaluator({ minLength: 1, maxLength: 100, countType: 'words' }),
+      new JSONEvaluator({ requiredKeys: ['answer'] }),
+      new StringCheckEvaluator({ operation: 'icontains', stripWhitespace: true }),
+      new RegexMatchEvaluator({ pattern: /^yes/i, matchMode: 'fullmatch' }),
+      new SemanticSimilarityEvaluator({ embeddingFn: async (text) => [text.length], threshold: 0.9 }),
+      judge,
+      (input, output, expectedOutput, context) => new EvaluatorResult(output === expectedOutput, {
+        reasoning: `span ${context.spanId}`,
+        assessment: 'pass',
+        tags: { source: 'callback' }
+      })
+    ],
+    summaryEvaluators: {
+      passRate: (inputs, outputs, expectedOutputs, evaluatorResults) => evaluatorResults.LengthEvaluator.length
+    }
+  })
+  experimentWithEvaluators.run().then(result => result.rows[0].evaluationDetails?.LengthEvaluator?.assessment)
+
+  new ScoreStructuredOutput({ minScore: 0, maxScore: 10, minThreshold: 7 }).toJsonSchema()
+  new CategoricalStructuredOutput({ categories: ['good', 'bad'], passValues: ['good'] }).label
+
+  // experiments: control plane
+  llmobs.experiments.publishEvaluator(judge, { agentService: 'my-agent', variableMapping: { question: 'input_data' } })
+    .then(({ uiUrl }) => uiUrl)
+  llmobs.experiments.pullExperiment('experiment-id').then(pulled => {
+    pulled.projectName
+    pulled.result.rows[0].evaluations
+  })
+  llmobs.experiments.listExperiments({ experimentName: 'exp', metadataFilter: { tags: ['git.commit.sha:abc'] }, maxResults: 10 })
+    .then(summaries => summaries[0].tags.project_name)
+  llmobs.experiments.createDatasetFromCsv({
+    csvPath: './data.csv',
+    datasetName: 'csv-dataset',
+    inputDataColumns: ['question'],
+    expectedOutputColumns: ['answer'],
+    metadataColumns: ['source'],
+    csvDelimiter: ';',
+    idColumn: 'id',
+    deduplicate: false
+  }).then(dataset => dataset.records().length)
+}
 
 // flush
 llmobs.flush()
