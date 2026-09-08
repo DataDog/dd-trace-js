@@ -113,7 +113,6 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
@@ -161,7 +160,6 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -196,7 +194,7 @@ describe('integrations', () => {
           ],
           outputValue: '[1 embedding(s) returned]',
           metrics: {
-            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER,
           },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
@@ -252,11 +250,20 @@ describe('integrations', () => {
               },
             ],
           }],
+          toolDefinitions: [{
+            name: 'get_weather',
+            description: 'Get the weather in a given city',
+            schema: {
+              type: 'object',
+              properties: {
+                city: { type: 'string', description: 'The city to get the weather for' },
+              },
+            },
+          }],
           metadata: { tool_choice: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -300,7 +307,6 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -336,7 +342,6 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -376,7 +381,6 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -409,7 +413,6 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -462,7 +465,6 @@ describe('integrations', () => {
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER,
-              reasoning_output_tokens: 0,
             },
             modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
             modelProvider: 'openai',
@@ -524,7 +526,6 @@ describe('integrations', () => {
             ],
             metrics: {
               cache_read_input_tokens: 0,
-              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER,
@@ -601,6 +602,16 @@ describe('integrations', () => {
                 },
               ],
             }],
+            toolDefinitions: [{
+              name: 'get_weather',
+              description: 'Get the weather in a given city',
+              schema: {
+                type: 'object',
+                properties: {
+                  city: { type: 'string', description: 'The city to get the weather for' },
+                },
+              },
+            }],
             metadata: {
               tool_choice: 'auto',
               stream: true,
@@ -609,7 +620,6 @@ describe('integrations', () => {
             tags: { ml_app: 'test', integration: 'openai' },
             metrics: {
               cache_read_input_tokens: 0,
-              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER,
@@ -822,7 +832,6 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: 1221,
             output_tokens: 100,
             total_tokens: 1321,
@@ -871,7 +880,6 @@ describe('integrations', () => {
             output_tokens: 100,
             total_tokens: 1320,
             cache_read_input_tokens: 1152,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-4o-2024-08-06',
           modelProvider: 'openai',
@@ -915,7 +923,6 @@ describe('integrations', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -927,6 +934,7 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
+            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
@@ -961,7 +969,6 @@ describe('integrations', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -973,6 +980,7 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
+            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
@@ -1011,7 +1019,6 @@ describe('integrations', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-4o-mini-2024-07-18',
           modelProvider: 'openai',
@@ -1023,6 +1030,7 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: true,
+            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
@@ -1270,6 +1278,7 @@ describe('integrations', () => {
             truncation: 'disabled',
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
+            user: null,
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })

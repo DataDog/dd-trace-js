@@ -186,6 +186,52 @@ function getOpenAIModelProvider (baseUrl = '') {
   return UNKNOWN_MODEL_PROVIDER
 }
 
+function getOpenAIToolDefinitions (tools) {
+  if (!Array.isArray(tools)) return []
+
+  const definitions = []
+  for (const tool of tools) {
+    if (!tool || typeof tool !== 'object' || Array.isArray(tool)) continue
+
+    let name
+    let description
+    let schema
+    if (tool.function) {
+      name = tool.function.name
+      description = tool.function.description ?? ''
+      schema = tool.function.parameters ?? {}
+    } else if (tool.custom) {
+      name = tool.custom.name
+      description = tool.custom.description ?? ''
+      schema = tool.custom.format ?? {}
+    } else {
+      name = tool.name
+      description = tool.description ?? ''
+      schema = tool.parameters ?? tool.format ?? tool.input_schema ?? {}
+    }
+
+    if (typeof name !== 'string' || name.length === 0) continue
+    if (tool.defer_loading) {
+      description = ''
+      schema = {}
+    }
+    definitions.push({ name, description, schema })
+  }
+
+  return definitions
+}
+
+function getResponseImageReference (contentItem) {
+  const imageUrl = contentItem?.image_url
+  const reference = imageUrl?.url ?? imageUrl ?? contentItem?.file_id
+  if (typeof reference !== 'string' || reference.startsWith('data:')) return IMAGE_FALLBACK
+  return reference
+}
+
+function getResponseFileReference (contentItem) {
+  return contentItem?.file_id ?? contentItem?.file_url ?? contentItem?.filename ?? FILE_FALLBACK
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -193,4 +239,7 @@ module.exports = {
   extractContentParts,
   hasMultimodalInputs,
   getOpenAIModelProvider,
+  getOpenAIToolDefinitions,
+  getResponseImageReference,
+  getResponseFileReference,
 }

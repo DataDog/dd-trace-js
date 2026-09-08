@@ -7,22 +7,24 @@ const {
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
 const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
-const { AUDIO_MIME_TYPES } = require('./constants')
+const {
+  AUDIO_MIME_TYPES,
+  COMMON_METADATA_KEYS,
+  OPENAI_METADATA_RESPONSE_KEYS,
+  OPENAI_METADATA_CHAT_KEYS,
+  OPENAI_METADATA_COMPLETION_KEYS,
+  IMAGE_FALLBACK,
+} = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
-  extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
   getOpenAIModelProvider,
+  getOpenAIToolDefinitions,
+  getResponseImageReference,
+  getResponseFileReference,
 } = require('./utils')
-
-const allowedParamKeys = new Set([
-  'max_output_tokens',
-  'temperature',
-  'stream',
-  'reasoning',
-])
 
 function isIterable (obj) {
   if (obj == null) {
@@ -31,19 +33,64 @@ function isIterable (obj) {
   return typeof obj[Symbol.iterator] === 'function'
 }
 
-// Flattens multimodal chat input messages (array `content`) into readable text plus structured
-// `audioParts`, leaving plain-string messages untouched. Model-agnostic: keys off message
-// structure, so it works for any audio-capable chat model (gpt-audio*, gpt-4o-audio-preview, ...).
-function flattenChatInputMessages (messages) {
-  if (!Array.isArray(messages)) return messages
+function normalizeChatInputMessages (messages) {
+  if (!Array.isArray(messages)) return []
 
   return messages.map(message => {
-    if (!Array.isArray(message?.content)) return message
+    if (!message || typeof message !== 'object') {
+      return { role: '', content: '' }
+    }
 
-    const { content, audioParts } = extractContentParts(message.content)
-    const flattenedMessage = { ...message, content }
-    if (audioParts.length) flattenedMessage.audioParts = audioParts
-    return flattenedMessage
+    let content = message.content
+    let audioParts
+    if (Array.isArray(content)) {
+      ({ content, audioParts } = extractContentParts(content))
+    } else if (content == null) {
+      content = ''
+    }
+
+    const normalizedMessage = {
+      role: message.role ?? '',
+      content,
+    }
+    if (audioParts?.length) normalizedMessage.audioParts = audioParts
+
+    const toolCalls = []
+    if (Array.isArray(message.tool_calls)) {
+      for (const toolCall of message.tool_calls) {
+        if (!toolCall || typeof toolCall !== 'object') continue
+        const fn = toolCall.function
+        const custom = toolCall.custom
+        const rawArguments = fn?.arguments ?? custom?.input
+        toolCalls.push({
+          name: fn?.name ?? custom?.name ?? '',
+          arguments: typeof rawArguments === 'string' ? safeJsonParse(rawArguments, {}) : (rawArguments ?? {}),
+          toolId: toolCall.id ?? '',
+          type: toolCall.type ?? 'function',
+        })
+      }
+    }
+
+    if (message.function_call && typeof message.function_call === 'object') {
+      const { name, arguments: rawArguments } = message.function_call
+      toolCalls.push({
+        name: name ?? '',
+        arguments: typeof rawArguments === 'string' ? safeJsonParse(rawArguments, {}) : (rawArguments ?? {}),
+      })
+    }
+
+    if (message.role === 'tool') {
+      normalizedMessage.content = ''
+      normalizedMessage.toolResults = [{
+        name: message.name ?? '',
+        result: content ? String(content) : '',
+        toolId: message.tool_call_id ?? '',
+        type: message.type ?? 'tool_result',
+      }]
+    }
+
+    if (toolCalls.length) normalizedMessage.toolCalls = toolCalls
+    return normalizedMessage
   })
 }
 
@@ -79,7 +126,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
     if (!methodName) return // we will not trace all openai methods for llmobs
 
-    const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
+    const inputs = ctx.args[0] ?? {}
     const response = ctx.result?.data // no result if error
     const error = !!span.context().getTag('error')
 
@@ -99,7 +146,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       const metrics = this._extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
 
-      const responseModel = response.model
+      const responseModel = response?.model
       if (responseModel) {
         // override the model name with the response model (more accurate)
         this._tagger.tagModelName(span, responseModel)
@@ -116,7 +163,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
   _extractMetrics (response) {
     const metrics = {}
-    const tokenUsage = response.usage
+    const tokenUsage = response?.usage
 
     if (tokenUsage) {
       // Responses API uses input_tokens, Chat/Completions use prompt_tokens
@@ -130,24 +177,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       const totalTokens = tokenUsage.total_tokens || (inputTokens + outputTokens)
       if (totalTokens !== undefined) metrics.totalTokens = totalTokens
 
-      // Cache tokens - Responses API uses input_tokens_details, Chat/Completions use prompt_tokens_details
-      // For Responses API, always include cache tokens (even if 0)
-      // For Chat API, only include if > 0
-      if (tokenUsage.input_tokens_details) {
-        // Responses API - always include
-        const cacheReadTokens = tokenUsage.input_tokens_details.cached_tokens
-        if (cacheReadTokens !== undefined) metrics.cacheReadTokens = cacheReadTokens
-      } else if (tokenUsage.prompt_tokens_details) {
-        // Chat/Completions API - only include if > 0
-        const cacheReadTokens = tokenUsage.prompt_tokens_details.cached_tokens
-        if (cacheReadTokens != null) {
-          metrics.cacheReadTokens = cacheReadTokens
-        }
-      }
-      // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
-      const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
-      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
-      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
+      const details = tokenUsage.prompt_tokens_details ?? tokenUsage.input_tokens_details
+      if (details?.cached_tokens != null) metrics.cacheReadTokens = details.cached_tokens
+      if (details?.cache_write_tokens != null) metrics.cacheWriteTokens = details.cache_write_tokens
+
+      const reasoning = (tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details)?.reasoning_tokens
+      if (reasoning != null && reasoning !== 0) metrics.reasoningOutputTokens = reasoning
     }
 
     return metrics
@@ -189,25 +224,28 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const completionInput = prompt.map(p => ({ content: p }))
 
-    const completionOutput = error ? [{ content: '' }] : response.choices.map(choice => ({ content: choice.text }))
+    const completionOutput = error
+      ? [{ content: '' }]
+      : (Array.isArray(response?.choices) ? response.choices : []).map(choice => ({ content: choice?.text ?? '' }))
 
     this._tagger.tagLLMIO(span, completionInput, completionOutput)
-    this._tagger.tagMetadata(span, parameters)
+    this._tagger.tagMetadata(
+      span,
+      getAllowedMetadata(parameters, COMMON_METADATA_KEYS, OPENAI_METADATA_COMPLETION_KEYS)
+    )
   }
 
   _tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
-    const metadata = {}
-    for (const key of Object.keys(parameters)) {
-      if (key !== 'tools' && key !== 'functions') {
-        metadata[key] = parameters[key]
-      }
-    }
+    this._tagger.tagMetadata(span, getAllowedMetadata(parameters, COMMON_METADATA_KEYS, OPENAI_METADATA_CHAT_KEYS))
 
-    this._tagger.tagMetadata(span, metadata)
-
-    const inputMessages = flattenChatInputMessages(messages)
+    const inputMessages = normalizeChatInputMessages(messages)
+    const defs = [
+      ...getOpenAIToolDefinitions(inputs.tools),
+      ...getOpenAIToolDefinitions(inputs.functions),
+    ]
+    if (defs.length) this._tagger.tagToolDefinitions(span, defs)
 
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
@@ -215,7 +253,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     const outputMessages = []
-    const { choices } = response
+    const { choices } = response ?? {}
     if (!isIterable(choices)) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
@@ -225,7 +263,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const outputAudioFormat = inputs.audio?.format
 
     for (const choice of choices) {
-      const message = choice.message || choice.delta
+      const message = choice?.message || choice?.delta || {}
       let content = message.content || ''
       const role = message.role
 
@@ -239,25 +277,33 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         if (!content) content = audio.transcript || ''
       }
 
+      if (typeof message.reasoning_content === 'string' && message.reasoning_content) {
+        outputMessages.push({ role: 'reasoning', content: String(message.reasoning_content) })
+      }
+
       const outputMessage = { content, role }
       if (audioParts) outputMessage.audioParts = audioParts
 
       if (message.function_call) {
         outputMessage.toolCalls = [{
-          name: message.function_call.name,
-          arguments: safeJsonParse(message.function_call.arguments),
+          name: message.function_call.name ?? '',
+          arguments: safeJsonParse(message.function_call.arguments, {}),
         }]
-      } else if (message.tool_calls) {
+      } else if (Array.isArray(message.tool_calls)) {
         const toolCallsInfo = []
         for (const toolCall of message.tool_calls) {
+          if (!toolCall || typeof toolCall !== 'object') continue
+          const fn = toolCall.function
+          const custom = toolCall.custom
+          const rawArguments = fn?.arguments ?? custom?.input
           toolCallsInfo.push({
-            arguments: safeJsonParse(toolCall.function.arguments),
-            name: toolCall.function.name,
-            toolId: toolCall.id,
-            type: toolCall.type,
+            arguments: typeof rawArguments === 'string' ? safeJsonParse(rawArguments, {}) : (rawArguments ?? {}),
+            name: fn?.name ?? custom?.name ?? '',
+            toolId: toolCall.id ?? '',
+            type: toolCall.type ?? 'function',
           })
         }
-        outputMessage.toolCalls = toolCallsInfo
+        if (toolCallsInfo.length) outputMessage.toolCalls = toolCallsInfo
       }
 
       outputMessages.push(outputMessage)
@@ -267,160 +313,179 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   #tagResponse (span, inputs, response, error) {
-    // Tag metadata - use allowlist approach for request parameters
-
     const { model, ...parameters } = inputs
     let input = inputs.input
-
-    // Create input messages
     const inputMessages = []
 
-    // Add system message if instructions exist
     if (inputs.instructions) {
       inputMessages.push({ role: 'system', content: inputs.instructions })
     }
 
-    // For reusable prompts, use response.instructions if no explicit input is provided
     if (!input && inputs.prompt && response?.instructions) {
       input = response.instructions
     }
 
-    // Handle input - can be string or array of mixed messages
     if (Array.isArray(input)) {
       for (const item of input) {
-        if (item.type === 'message') {
-          // Handle instruction messages (from response.instructions for reusable prompts)
-          const role = item.role
-          if (!role) continue
-
+        if (!item || typeof item !== 'object') continue
+        const { role, content: itemContent } = item
+        if (role != null && itemContent != null) {
           let content = ''
           if (Array.isArray(item.content)) {
-            const textParts = item.content
-              .map(extractTextFromContentItem)
-              .filter(Boolean)
-            content = textParts.join('')
-          } else if (typeof item.content === 'string') {
-            content = item.content
+            for (const contentPart of item.content) {
+              if (!contentPart || typeof contentPart !== 'object') continue
+              content += String(contentPart.text ?? '')
+              content += String(contentPart.refusal ?? '')
+              if (contentPart.type === 'input_image') {
+                content += getResponseImageReference(contentPart)
+              } else if (contentPart.type === 'input_file') {
+                content += getResponseFileReference(contentPart)
+              }
+            }
+          } else {
+            content = itemContent
           }
-
           if (content) {
-            inputMessages.push({ role, content })
+            inputMessages.push({ role, content: String(content) })
           }
-        } else if (item.type === 'function_call') {
+        } else if (item.type === 'function_call' || item.type === 'custom_tool_call') {
+          const rawArguments = item.arguments ?? item.input ?? '{}'
           inputMessages.push({
             role: 'assistant',
             toolCalls: [{
-              toolId: item.call_id,
-              name: item.name,
-              arguments: safeJsonParse(item.arguments, {}),
-              type: item.type,
+              toolId: String(item.call_id ?? ''),
+              name: String(item.name ?? ''),
+              arguments: safeJsonParse(String(rawArguments), {}),
+              type: String(item.type),
             }],
           })
         } else if (item.type === 'function_call_output') {
-          // Function output: convert to user message with tool_results
+          let output = item.output
+          if (Array.isArray(output)) {
+            output = output.reduce((result, part) => {
+              if (part?.type !== 'input_text') return result
+              return result + String(part.text ?? '')
+            }, '')
+          } else if (typeof output !== 'string') {
+            output = safeJsonStringify(output)
+          }
           inputMessages.push({
             role: 'user',
             toolResults: [{
-              toolId: item.call_id,
-              result: item.output,
-              name: item.name || '',
+              toolId: String(item.call_id ?? ''),
+              result: output ? String(output) : '',
+              name: String(item.name ?? ''),
               type: item.type,
             }],
           })
-        } else if (item.role && item.content) {
-          // Regular message
-          inputMessages.push({ role: item.role, content: item.content })
+        } else if (item.type === 'computer_call_output') {
+          inputMessages.push({ role: 'user', content: getResponseImageReference(item.output) })
         }
       }
-    } else {
-      // Simple string input
+    } else if (input != null) {
       inputMessages.push({ role: 'user', content: input })
     }
 
-    const inputMetadata = {}
-    for (const key of Object.keys(parameters)) {
-      if (allowedParamKeys.has(key)) {
-        inputMetadata[key] = parameters[key]
-      }
-    }
-
-    this._tagger.tagMetadata(span, inputMetadata)
+    this._tagger.tagMetadata(span, getAllowedMetadata(parameters, COMMON_METADATA_KEYS, OPENAI_METADATA_RESPONSE_KEYS))
+    const toolDefinitions = getOpenAIToolDefinitions(inputs.tools)
+    if (toolDefinitions.length) this._tagger.tagToolDefinitions(span, toolDefinitions)
 
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
-    // Create output messages
     const outputMessages = []
+    const outputToolDefinitions = []
 
-    // Handle output - can be string (streaming) or array of message objects (non-streaming)
-    if (typeof response.output === 'string') {
-      // Simple text output (streaming)
+    if (typeof response?.output === 'string') {
       outputMessages.push({ role: 'assistant', content: response.output })
-    } else if (Array.isArray(response.output)) {
-      // Array output - process all items to extract reasoning, messages, and tool calls
-      // Non-streaming: array of items (messages, function_calls, or reasoning)
+    } else if (Array.isArray(response?.output)) {
       for (const item of response.output) {
-        // Handle reasoning type (reasoning responses)
-        if (item.type === 'reasoning') {
+        if (!item || typeof item !== 'object') {
+          outputMessages.push({ role: 'assistant', content: safeJsonStringify(item).slice(0, 4096) })
+        } else if (item.type === 'message') {
+          let content = ''
+          if (Array.isArray(item.content)) {
+            for (const contentPart of item.content) {
+              if (!contentPart || typeof contentPart !== 'object') continue
+              content += String(contentPart.text ?? '')
+              content += String(contentPart.refusal ?? '')
+            }
+          } else if (typeof item.content === 'string') {
+            content = item.content
+          }
+          const outputMsg = { role: item.role ?? 'assistant', content }
+          if (Array.isArray(item.tool_calls)) {
+            outputMsg.toolCalls = item.tool_calls.map(toolCall => ({
+              toolId: toolCall?.id ?? '',
+              name: toolCall?.function?.name ?? toolCall?.custom?.name ?? toolCall?.name ?? '',
+              arguments: safeJsonParse(
+                String(toolCall?.function?.arguments ?? toolCall?.custom?.input ?? toolCall?.arguments ?? '{}'),
+                {}
+              ),
+              type: toolCall?.type ?? 'function',
+            }))
+          }
+          outputMessages.push(outputMsg)
+        } else if (item.type === 'reasoning') {
           outputMessages.push({
             role: 'reasoning',
-            content: JSON.stringify({
-              summary: item.summary ?? [],
-              encrypted_content: item.encrypted_content ?? null,
+            content: safeJsonStringify({
+              summary: item.summary ?? '',
+              encrypted_content: item.encrypted_content ?? '',
               id: item.id ?? '',
             }),
           })
-        } else if (item.type === 'function_call') {
-          // Handle function_call type (responses API tool calls)
+        } else if (item.type === 'function_call' || item.type === 'custom_tool_call') {
+          const rawArguments = item.input || item.arguments || '{}'
           outputMessages.push({
             role: 'assistant',
             toolCalls: [{
-              toolId: item.call_id,
-              name: item.name,
-              arguments: safeJsonParse(item.arguments, {}),
-              type: item.type,
+              toolId: String(item.call_id ?? ''),
+              name: String(item.name ?? ''),
+              arguments: safeJsonParse(String(rawArguments), {}),
+              type: String(item.type ?? 'function'),
             }],
           })
+        } else if (item.type === 'mcp_call') {
+          const callId = String(item.id ?? '')
+          const name = String(item.name ?? '')
+          outputMessages.push({
+            role: 'assistant',
+            toolCalls: [{
+              toolId: callId,
+              name,
+              arguments: safeJsonParse(String(item.arguments ?? '{}'), {}),
+              type: 'mcp_call',
+            }],
+            toolResults: [{
+              name,
+              result: String(item.output ?? ''),
+              toolId: callId,
+              type: 'mcp_tool_result',
+            }],
+          })
+        } else if (item.type === 'mcp_list_tools') {
+          outputToolDefinitions.push(...getOpenAIToolDefinitions(item.tools))
+        } else if (item.type === 'image_generation_call') {
+          outputMessages.push({ role: 'assistant', content: IMAGE_FALLBACK })
+        } else if (item.type === 'computer_call_output') {
+          outputMessages.push({ role: 'user', content: getResponseImageReference(item.output) })
         } else {
-          // Handle regular message objects
-          const outputMsg = { role: item.role || 'assistant', content: '' }
-
-          // Extract content from message
-          if (Array.isArray(item.content)) {
-            // Content is array of content parts
-            // For responses API, text content has type 'output_text', not 'text'
-            const textParts = item.content
-              .filter(c => c.type === 'output_text')
-              .map(c => c.text)
-            outputMsg.content = textParts.join('')
-          } else if (typeof item.content === 'string') {
-            outputMsg.content = item.content
-          }
-
-          // Extract tool calls if present in message.tool_calls
-          if (Array.isArray(item.tool_calls)) {
-            outputMsg.toolCalls = item.tool_calls.map(tc => ({
-              toolId: tc.id,
-              name: tc.function?.name || tc.name,
-              arguments: safeJsonParse(tc.function?.arguments || tc.arguments, {}),
-              type: tc.type || 'function_call',
-            }))
-          }
-
-          outputMessages.push(outputMsg)
+          outputMessages.push({ role: 'assistant', content: safeJsonStringify(item).slice(0, 4096) })
         }
       }
-    } else if (response.output_text) {
-      // Fallback: use output_text if available (for simple non-streaming responses without reasoning/tools)
+    } else if (response?.output_text) {
       outputMessages.push({ role: 'assistant', content: response.output_text })
     } else {
-      // No output
       outputMessages.push({ role: 'assistant', content: '' })
     }
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+    if (outputToolDefinitions.length) {
+      this._tagger.tagToolDefinitions(span, [...toolDefinitions, ...outputToolDefinitions])
+    }
 
     // Handle prompt tracking for reusable prompts
     if (inputs.prompt && response?.prompt) {
@@ -443,15 +508,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     const outputMetadata = {}
-
-    // Add fields from response object (convert numbers to floats)
-    if (response.temperature !== undefined) outputMetadata.temperature = Number(response.temperature)
-    if (response.top_p !== undefined) outputMetadata.top_p = Number(response.top_p)
-    if (response.tool_choice !== undefined) outputMetadata.tool_choice = response.tool_choice
-    if (response.truncation !== undefined) outputMetadata.truncation = response.truncation
-    if (response.text !== undefined) outputMetadata.text = response.text
-
-    this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
+    for (const key of ['temperature', 'max_output_tokens', 'top_p', 'tool_choice', 'truncation', 'text', 'user']) {
+      if (response?.[key] !== undefined) outputMetadata[key] = response[key]
+    }
+    this._tagger.tagMetadata(span, outputMetadata)
   }
 }
 
@@ -498,6 +558,21 @@ function getOperation (resource) {
     default:
       // should never happen
       return 'unknown'
+  }
+}
+
+function getAllowedMetadata (parameters, ...keySets) {
+  const allowedKeys = new Set(keySets.flatMap(keySet => [...keySet]))
+  return Object.fromEntries(
+    Object.entries(parameters).filter(([key, value]) => allowedKeys.has(key) && value !== undefined)
+  )
+}
+
+function safeJsonStringify (value) {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return ''
   }
 }
 
