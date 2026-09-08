@@ -228,6 +228,7 @@ services:
       - ENABLED_CHECKS=trace_stall,meta_tracer_version_header,trace_count_header,trace_peer_service
       - PORT=9126
       - VCR_CASSETTES_DIRECTORY=/vcr-cassettes
+      - VCR_CI_MODE=${VCR_CI_MODE:-false}
       - VCR_PROVIDER_MAP=claude-agent-sdk=https://api.anthropic.com,datadog-experiments=${DD_LLMOBS_EXPERIMENTS_VCR_UPSTREAM:-https://api.datadoghq.com}
       - VCR_JSON_BODY_NORMALIZERS=metadata.user_id,output_config.effort,timestamp_ms,start_ns
       - >-
