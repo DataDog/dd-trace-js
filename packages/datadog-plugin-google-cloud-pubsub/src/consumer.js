@@ -2,9 +2,8 @@
 
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
-const SpanContext = require('../../dd-trace/src/opentracing/span_context')
-const id = require('../../dd-trace/src/id')
 const { storage } = require('../../datadog-core')
+const reconstructPubSubRequestContext = require('./pubsub-request-context')
 
 /**
  * PULL SUBSCRIPTION: Service explicitly pulls messages from Pub/Sub and processes them.
@@ -75,27 +74,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     })
   }
 
-  #reconstructPubSubRequestContext (attrs) {
-    const traceIdLower = attrs['_dd.pubsub_request.trace_id']
-    const spanId = attrs['_dd.pubsub_request.span_id']
-    const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
-
-    if (!traceIdLower || !spanId) return null
-
-    const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
-    const traceId = id(traceId128, 16)
-    const parentId = id(spanId, 16)
-
-    const tags = {}
-    if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
-
-    return new SpanContext({
-      traceId,
-      spanId: parentId,
-      tags,
-    })
-  }
-
   start (ctx) {
     if (!this.config.dsmEnabled) return
     const { message } = ctx
@@ -128,7 +106,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
 
     const isFirstMessage = batchIndex === 0
     if (isFirstMessage && batchRequestSpanId) {
-      const pubsubRequestContext = this.#reconstructPubSubRequestContext(message.attributes)
+      const pubsubRequestContext = reconstructPubSubRequestContext(message.attributes)
       if (pubsubRequestContext) {
         childOf = pubsubRequestContext
       }
