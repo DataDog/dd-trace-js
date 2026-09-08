@@ -128,7 +128,9 @@ describe('test optimization validation manifest scaffold', () => {
       script: 'cucumber-js --require features/cucumber.js --profile ci',
     }, fixture => {
       fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
-        'module.exports = {',
+        'module',
+        '  . exports',
+        '  = {',
         "  ci: 'features/**/*.feature -r features/steps.js -i features/steps.mjs',",
         "  description: \"old config: { ci: '-r legacy/stale.js' }\",",
         "  // old config: { ci: '-r legacy/stale.js' },",
