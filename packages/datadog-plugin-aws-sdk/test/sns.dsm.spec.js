@@ -11,7 +11,7 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Sns', function () {
   setup()
@@ -132,60 +132,37 @@ describe('Sns', function () {
         agent.reload('aws-sdk', { sns: { dsmEnabled: true, batchPropagationEnabled: true } }, { dsmEnabled: true })
       })
 
-      it('injects DSM pathway hash to SNS publish span', done => {
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
+      it('injects DSM pathway hash to SNS publish span', async () => {
+        await callViaCallback(sns, 'subscribe', subParams)
 
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
+        const tracePromise = agent.assertFirstTraceSpan({
+          meta: {
+            'pathway.hash': expectedProducerHash,
+          },
+        }, { spanResourceMatch: /^publish / })
 
-              let publishSpanMeta = {}
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                if (span.resource.startsWith('publish')) {
-                  publishSpanMeta = span.meta
-                }
-
-                assertObjectContains(publishSpanMeta, {
-                  'pathway.hash': expectedProducerHash,
-                })
-              }).then(done, done)
-            })
-        })
+        await Promise.all([
+          tracePromise,
+          callViaCallback(sns, 'publish', { TopicArn, Message: 'message DSM' }),
+        ])
       })
 
-      it('injects DSM pathway hash to SQS receive span from SNS topic', done => {
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
+      it('injects DSM pathway hash to SQS receive span from SNS topic', async () => {
+        await callViaCallback(sns, 'subscribe', subParams)
+        await callViaCallback(sns, 'publish', { TopicArn, Message: 'message DSM' })
 
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
-            })
-
-          sqs.receiveMessage(
-            receiveParams,
-            (err, res) => {
-              if (err) return done(err)
-
-              let consumeSpanMeta = {}
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                if (span.name === 'aws.response') {
-                  consumeSpanMeta = span.meta
-                }
-
-                assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash,
-                })
-              }).then(done, done)
-            })
+        const tracePromise = agent.assertSomeTraces(traces => {
+          const span = traces.flat().find(span => span.name === 'aws.response')
+          assert.ok(span)
+          assertObjectContains(span.meta, {
+            'pathway.hash': expectedConsumerHash,
+          })
         })
+
+        await Promise.all([
+          tracePromise,
+          callViaCallback(sqs, 'receiveMessage', receiveParams),
+        ])
       })
 
       it('outputs DSM stats to the agent when publishing a message', done => {
