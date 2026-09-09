@@ -71,10 +71,10 @@ function publishDurableOrchestrationFailure (state, node, _parent, ancestry) {
     'publishDurableOrchestrationFailure: expected a block failure branch'
   )
 
-  const program = ancestry[ancestry.length - 1]
+  const program = ancestry.at(-1)
   state.transforms.tracingChannelDeclaration(state, program)
 
-  const channelVariable = `tr_ch_apm$${state.channelName.replace(/[^\w]/g, '_')}`
+  const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
   const publishStatements = parse(`
     if (${channelVariable}.end.hasSubscribers) {
       ${channelVariable}.end.publish({
