@@ -1,9 +1,6 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-const { DD_TELEMETRY_REQUEST_METRICS, getVersionsTags } = require('./common')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { appsecMetrics, DD_TELEMETRY_REQUEST_METRICS, getVersionsTags } = require('./common')
 
 const BLOCKING_STATUS = {
   FAILURE: 'failure',
@@ -77,21 +74,6 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
   appsecMetrics.count('rasp.rule.match', tags).inc(1)
 }
 
-function incrementRaspDurationMetrics (requestMetrics) {
-  const { raspDuration, raspDurationExt, wafVersion, rulesVersion } = requestMetrics
-  if (!raspDuration && !raspDurationExt) return
-
-  const versionsTags = getVersionsTags(wafVersion, rulesVersion)
-
-  if (raspDuration) {
-    appsecMetrics.distribution('rasp.duration', versionsTags).track(raspDuration)
-  }
-
-  if (raspDurationExt) {
-    appsecMetrics.distribution('rasp.duration_ext', versionsTags).track(raspDurationExt)
-  }
-}
-
 function trackRaspRuleSkipped (raspRule, reason) {
   const tags = { reason, rule_type: raspRule.type }
 
@@ -115,5 +97,4 @@ module.exports = {
   trackRaspMetrics,
   trackRaspRuleMatch,
   trackRaspRuleSkipped,
-  incrementRaspDurationMetrics,
 }

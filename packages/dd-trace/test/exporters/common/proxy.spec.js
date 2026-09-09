@@ -171,6 +171,25 @@ describe('HTTPS proxy agent selection', () => {
     }
   })
 
+  it('preserves the global HTTPS agent pool settings by default', () => {
+    process.env.HTTPS_PROXY = 'http://proxy.example:8202'
+    const originalGlobalAgent = https.globalAgent
+    const globalAgent = new https.Agent({ keepAlive: true, maxSockets: 4 })
+    let agent
+
+    try {
+      https.globalAgent = globalAgent
+      agent = getHttpsProxyAgent('https://intake.example/path')
+
+      assert.strictEqual(agent.keepAlive, true)
+      assert.strictEqual(agent.maxSockets, 4)
+    } finally {
+      https.globalAgent = originalGlobalAgent
+      globalAgent.destroy()
+      agent?.destroy()
+    }
+  })
+
   it('rejects an invalid proxy URL', () => {
     process.env.HTTPS_PROXY = '://invalid'
 
