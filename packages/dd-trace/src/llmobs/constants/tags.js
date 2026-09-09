@@ -82,6 +82,7 @@ module.exports = {
   GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY: 'gen_ai.usage.total_tokens',
   GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_read_input_tokens',
   GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_write_input_tokens',
+  GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.reasoning_output_tokens',
 
   ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
   ROUTING_SITE: '_dd.llmobs.routing.site',
