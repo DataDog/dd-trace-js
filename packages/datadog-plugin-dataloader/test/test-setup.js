@@ -1,8 +1,15 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
+
+const legacyStorage = storage('legacy')
+
 class DataloaderTestSetup {
   setup (DataLoader) {
-    this.loader = new DataLoader(keys => Promise.resolve(keys.map(key => ({ key, value: `value-${key}` }))), {
+    this.loader = new DataLoader(keys => {
+      this.batchStore = legacyStorage.getStore()
+      return Promise.resolve(keys.map(key => ({ key, value: `value-${key}` })))
+    }, {
       name: 'users',
     })
     this.rejectingLoader = new DataLoader(async () => {
@@ -13,6 +20,7 @@ class DataloaderTestSetup {
   teardown () {
     this.loader = undefined
     this.rejectingLoader = undefined
+    this.batchStore = undefined
   }
 
   // --- Operations ---

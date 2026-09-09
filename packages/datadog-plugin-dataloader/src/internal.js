@@ -1,8 +1,10 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const activeLoadMany = new WeakMap()
+const legacyStorage = storage('legacy')
 
 class DataloaderLoadPlugin extends TracingPlugin {
   static id = 'dataloader'
@@ -16,7 +18,7 @@ class DataloaderLoadPlugin extends TracingPlugin {
   bindStart (ctx) {
     if (this.operation === 'load' && ctx.self && activeLoadMany.has(ctx.self)) {
       ctx.suppressed = true
-      return ctx.currentStore
+      return legacyStorage.getStore()
     }
 
     const spanName = this.operation === 'load' ? 'dataloader.load' : 'dataloader.loadMany'

@@ -96,6 +96,9 @@ describe('Plugin', () => {
 
             // Execute operation via test setup
             await testSetup.dataLoaderLoadMany()
+            /** @type {{ span?: { context: () => { _name?: string } } } | undefined} */
+            const batchStore = testSetup.batchStore
+            assert.strictEqual(batchStore?.span?.context()._name, 'dataloader.loadMany')
 
             return traceAssertion
           })
