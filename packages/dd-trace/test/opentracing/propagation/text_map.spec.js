@@ -17,7 +17,7 @@ const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../../ext/priority')
-const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+const { SAMPLING_MECHANISM_MANUAL, SAMPLING_MECHANISM_APPSEC } = require('../../../src/constants')
 
 // v5 spells single-header B3 propagation as `'b3 single header'`; v6+ reuses `'b3'` for it.
 const B3_SINGLE_STYLE = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
@@ -1565,12 +1565,12 @@ describe('TextMapPropagator', () => {
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:00000000000000;th:8(?:,|$)/)
     })
 
-    it('should inherit a tracecontext keep when matching Datadog headers omit a sampling decision', () => {
+    it('should inherit tracecontext sampling metadata when matching Datadog headers omit a decision', () => {
       textMap = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
         traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
-        tracestate: 'ot=rv:ffffffffffffff;th:8',
+        tracestate: 'dd=s:2;t.dm:-5,ot=rv:ffffffffffffff',
       }
       config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
       config.tracePropagationStyle.inject = ['tracecontext']
@@ -1578,9 +1578,12 @@ describe('TextMapPropagator', () => {
       const spanContext = propagator.extract(textMap)
       const carrier = propagator.inject(spanContext, {})
 
-      assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      assert.strictEqual(spanContext._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
+      assert.strictEqual(spanContext._trace.tags['_dd.p.dm'], '-5')
       assert.match(carrier.traceparent, /-01$/)
-      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
+      assert.match(carrier.tracestate, /(?:^|,)dd=s:2;t\.dm:-5(?:,|$)/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff(?:,|$)/)
     })
 
     for (const [decision, priority, flag, randomValue] of [

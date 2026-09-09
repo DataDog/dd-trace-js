@@ -713,6 +713,8 @@ class TextMapPropagator {
     const selectedPriority = selectedSpanContext._sampling.priority
     if (selectedPriority === undefined) {
       selectedSpanContext._sampling.priority = w3cSpanContext._sampling.priority
+      selectedSpanContext._sampling.mechanism = w3cSpanContext._sampling.mechanism
+      selectedSpanContext._trace.tags['_dd.p.dm'] = w3cSpanContext._trace.tags['_dd.p.dm']
     } else if (
       selectedSpanContext._sampling.isProbabilityDecision === false ||
       (selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)
