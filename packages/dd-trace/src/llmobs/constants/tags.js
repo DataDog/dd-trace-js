@@ -69,8 +69,6 @@ module.exports = {
   INSTRUMENTATION_METHOD_ANNOTATED: 'annotated',
   INSTRUMENTATION_METHOD_UNKNOWN: 'unknown',
 
-  // Searchable APM-side mirror of the scalar LLMObs fields. The APM trace UI otherwise merges
-  // these from the LLMObs track client-side, which renders but does not index them.
   GEN_AI_OPERATION_NAME: 'gen_ai.operation.name',
   GEN_AI_REQUEST_MODEL: 'gen_ai.request.model',
   GEN_AI_PROVIDER_NAME: 'gen_ai.provider.name',
