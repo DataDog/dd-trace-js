@@ -4,7 +4,7 @@ const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
 const { isLoopbackHost } = require('../../exporters/common/url')
 const telemetry = require('../telemetry')
-const { HotCache, WarmCache, cacheKey } = require('./cache')
+const { HotCache, WarmCache, cacheKey, promptIdFromKey } = require('./cache')
 const ManagedPrompt = require('./prompt')
 
 const PROMPTS_PATH = '/api/unstable/llm-obs/v1/prompts'
@@ -433,8 +433,12 @@ class PromptManager {
    * @param {string} promptId
    */
   #evictPrompt (promptId) {
-    this.cacheGeneration++
-    this.pendingFetches.clear()
+    for (const key of this.fetchTokens.keys()) {
+      if (promptIdFromKey(key) === promptId) this.fetchTokens.delete(key)
+    }
+    for (const key of this.pendingFetches.keys()) {
+      if (promptIdFromKey(key) === promptId) this.pendingFetches.delete(key)
+    }
     this.hotCache.evictPrompt(promptId)
     this.warmCache.evictPrompt(promptId)
   }

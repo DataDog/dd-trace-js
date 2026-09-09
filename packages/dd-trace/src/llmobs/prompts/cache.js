@@ -259,4 +259,4 @@ class WarmCache {
   }
 }
 
-module.exports = { HotCache, WarmCache, cacheKey }
+module.exports = { HotCache, WarmCache, cacheKey, promptIdFromKey }

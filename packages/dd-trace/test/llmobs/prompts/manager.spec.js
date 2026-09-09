@@ -380,6 +380,24 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.warmCache.get(key), undefined)
   })
 
+  it('keeps unrelated prompt fetches pending and cacheable after a mutation', async () => {
+    let resolvePrompt
+    fetchStub.onFirstCall().returns(new Promise(resolve => { resolvePrompt = resolve }))
+    fetchStub.onSecondCall().resolves(response(200, {}))
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    const first = manager.getPrompt('other')
+    await manager.updatePrompt('greeting', { title: 'Updated' })
+    const second = manager.getPrompt('other')
+    sinon.assert.calledTwice(fetchStub)
+
+    resolvePrompt(response(200, promptResponse({ prompt_id: 'other' })))
+    assert.strictEqual((await first).id, 'other')
+    assert.strictEqual((await second).id, 'other')
+    assert.strictEqual((await manager.getPrompt('other')).source, 'cache')
+    sinon.assert.calledTwice(fetchStub)
+  })
+
   it('aborts an obsolete background refresh when a manual refresh replaces it', async () => {
     const now = sinon.stub(performance, 'now').returns(100)
     const warning = sinon.stub(log, 'warn')
