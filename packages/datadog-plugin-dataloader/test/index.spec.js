@@ -85,17 +85,14 @@ describe('Plugin', () => {
 
         describe('DataLoader.loadMany() - dataloader.loadMany', () => {
           it('should generate span with correct tags (happy path)', async () => {
-            const traceAssertion = agent.assertFirstTraceSpan(
-              {
-                name: 'dataloader.loadMany',
-                resource: loadManyResource,
-                meta: {
-                  'span.kind': 'internal',
-                  component: 'dataloader',
-                },
-                metrics: {},
-              }
-            )
+            const traceAssertion = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+              assert.strictEqual(spans.length, 1)
+              assert.strictEqual(spans[0].name, 'dataloader.loadMany')
+              assert.strictEqual(spans[0].resource, loadManyResource)
+              assert.strictEqual(spans[0].meta['span.kind'], 'internal')
+              assert.strictEqual(spans[0].meta.component, 'dataloader')
+            })
 
             // Execute operation via test setup
             await testSetup.dataLoaderLoadMany()

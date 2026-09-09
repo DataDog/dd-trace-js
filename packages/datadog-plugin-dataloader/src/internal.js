@@ -2,41 +2,35 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
+const activeLoadMany = new WeakMap()
+
 class DataloaderLoadPlugin extends TracingPlugin {
   static id = 'dataloader'
   static operation = 'load'
   static prefix = 'tracing:orchestrion:dataloader:DataLoader_load'
-  static spanName = 'dataloader.load'
 
   /**
-   * @param {{ currentStore?: object, self?: { name?: string } }} ctx
+   * @param {{ currentStore?: object, self?: { name?: string }, suppressed?: boolean }} ctx
    * @returns {object | undefined}
    */
   bindStart (ctx) {
-    const meta = this.getTags(ctx)
+    if (this.operation === 'load' && ctx.self && activeLoadMany.has(ctx.self)) {
+      ctx.suppressed = true
+      return ctx.currentStore
+    }
 
-    this.startSpan(this.constructor.spanName, {
+    const spanName = this.operation === 'load' ? 'dataloader.load' : 'dataloader.loadMany'
+    this.startSpan(spanName, {
       service: this.config.service,
       resource: ctx.self?.name,
-      meta,
+      kind: 'internal',
     }, ctx)
 
     return ctx.currentStore
   }
 
   /**
-   * @param {{ self?: { name?: string } }} ctx
-   * @returns {{ component: string, 'span.kind': string }}
-   */
-  getTags (ctx) {
-    return {
-      component: 'dataloader',
-      'span.kind': 'internal',
-    }
-  }
-
-  /**
-   * @param {{ result?: unknown, error?: unknown, currentStore?: object }} ctx
+   * @param {{ result?: unknown, error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
    * @returns {void}
    */
   asyncEnd (ctx) {
@@ -44,7 +38,7 @@ class DataloaderLoadPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ result?: unknown, error?: unknown, currentStore?: object }} ctx
+   * @param {{ result?: unknown, error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
    * @returns {void}
    */
   end (ctx) {
@@ -52,21 +46,51 @@ class DataloaderLoadPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ result?: unknown, error?: unknown, currentStore?: object }} ctx
+   * @param {{ result?: unknown, error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
    * @returns {void}
    */
   finish (ctx) {
+    if (ctx.suppressed) return
+
     // The operation can emit an early end event before its promise settles.
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 
     super.finish(ctx)
+  }
+
+  /**
+   * @param {{ error?: unknown, currentStore?: object, suppressed?: boolean }} ctx
+   * @returns {void}
+   */
+  error (ctx) {
+    if (ctx.suppressed) return
+
+    super.error(ctx)
   }
 }
 
 class DataloaderLoadManyPlugin extends DataloaderLoadPlugin {
   static operation = 'loadMany'
   static prefix = 'tracing:orchestrion:dataloader:DataLoader_loadMany'
-  static spanName = 'dataloader.loadMany'
+
+  bindStart (ctx) {
+    if (ctx.self) activeLoadMany.set(ctx.self, (activeLoadMany.get(ctx.self) || 0) + 1)
+
+    return super.bindStart(ctx)
+  }
+
+  end (ctx) {
+    try {
+      super.end(ctx)
+    } finally {
+      const count = ctx.self && activeLoadMany.get(ctx.self)
+      if (count === 1) {
+        activeLoadMany.delete(ctx.self)
+      } else if (count) {
+        activeLoadMany.set(ctx.self, count - 1)
+      }
+    }
+  }
 }
 
 module.exports = {
