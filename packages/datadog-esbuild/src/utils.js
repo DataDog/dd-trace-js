@@ -70,6 +70,17 @@ function isBareSpecifier (specifier) {
 }
 
 /**
+ * @param {string} modulePath
+ * @param {string} format
+ * @returns {string}
+ */
+function getModuleFormat (modulePath, format) {
+  if (modulePath.endsWith('.mts')) return 'module-typescript'
+  if (modulePath.endsWith('.cts')) return 'commonjs-typescript'
+  return format
+}
+
+/**
  * Resolves a module with the import conditions used by ESM instrumentation.
  *
  * @param {string} specifier
@@ -86,10 +97,8 @@ async function resolveModule (specifier, context, resolver) {
   if (resolved.endsWith('.json') || resolved.endsWith('.node')) {
     throw new Error(`Unsupported ESM analysis target: ${resolved}`)
   }
-  return {
-    format: isESMFile(resolved) ? 'module' : 'commonjs',
-    url,
-  }
+  const format = isESMFile(resolved) ? 'module' : 'commonjs'
+  return { format: getModuleFormat(resolved, format), url }
 }
 
 /**
@@ -102,18 +111,19 @@ async function resolveModule (specifier, context, resolver) {
  * @param {boolean} [moduleData.excludeDefault]
  * @param {Map<string, string>} [moduleData.moduleSources]
  * @param {EsmResolver} [moduleData.resolver]
+ * @param {(source: string, options: { loader: 'ts' }) => { code: string }} [moduleData.transform]
  * @param {Set<string>} [activeModules]
  * @returns {Promise<Map>}
  */
 async function processModule (
-  { path, internal = false, context, excludeDefault = false, moduleSources = new Map(), resolver },
+  { path, internal = false, context, excludeDefault = false, moduleSources = new Map(), resolver, transform },
   activeModules
 ) {
   const ownsResolver = resolver === undefined
   resolver ??= createEsmResolver()
   try {
     return await processModuleWithResolver(
-      { path, internal, context, excludeDefault, moduleSources },
+      { path, internal, context, excludeDefault, moduleSources, transform },
       activeModules,
       resolver
     )
@@ -129,12 +139,13 @@ async function processModule (
  * @param {object} moduleData.context
  * @param {boolean} moduleData.excludeDefault
  * @param {Map<string, string>} moduleData.moduleSources
+ * @param {(source: string, options: { loader: 'ts' }) => { code: string }} [moduleData.transform]
  * @param {Set<string>} [activeModules]
  * @param {EsmResolver} resolver
  * @returns {Promise<Map>}
  */
 async function processModuleWithResolver (
-  { path, internal, context, excludeDefault, moduleSources },
+  { path, internal, context, excludeDefault, moduleSources, transform },
   activeModules,
   resolver
 ) {
@@ -143,17 +154,26 @@ async function processModuleWithResolver (
     // we can not read and parse of internal modules
     moduleExports = { exportNames: await getExportsImporting(path) }
   } else {
+    context = { ...context, format: getModuleFormat(path, context.format) }
     srcUrl = pathToFileURL(path)
-    const loadSource = (url, { format }) => {
+    const readSource = (url) => {
       const modulePath = fileURLToPath(url)
       let source = moduleSources.get(modulePath)
       if (source === undefined) {
         source = fs.readFileSync(modulePath, 'utf8')
         moduleSources.set(modulePath, source)
       }
-      return { source, format }
+      return source
     }
-    loadSource(srcUrl, context)
+    const loadSource = (url, { format }) => {
+      let source = readSource(url)
+      if (transform && (format === 'module-typescript' || format === 'commonjs-typescript')) {
+        source = transform(source, { loader: 'ts' }).code
+        format = format === 'module-typescript' ? 'module' : 'commonjs'
+      }
+      return { format, source }
+    }
+    readSource(srcUrl)
     moduleExports = await getExports(srcUrl, context, loadSource, resolver)
   }
 
@@ -236,6 +256,7 @@ async function processModuleWithResolver (
         context: { ...context, format: result.format },
         excludeDefault: true,
         moduleSources,
+        transform,
       }, activeModules, resolver)
       activeModules.delete(result.url.href)
 

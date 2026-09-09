@@ -5,6 +5,7 @@ const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
+const transformTypeScript = require('./helpers/transform-typescript')
 
 /**
  * @param {object} [initialOptions]
@@ -13,6 +14,7 @@ function captureOnLoad (initialOptions = {}) {
   let onEnd
   let onLoad
   ddPlugin.setup({
+    esbuild: { transformSync: transformTypeScript },
     initialOptions,
     /** @param {Function} callback */
     onEnd (callback) {
@@ -134,6 +136,24 @@ describe('datadog-esbuild plugin', () => {
 
       assert.match(result.contents, /set\["fromA"\]/)
       assert.match(result.contents, /set\["fromB"\]/)
+    })
+
+    it('generates setters for TypeScript module exports', async () => {
+      const onLoad = captureOnLoad()
+      const modulePath = path.join(__dirname, 'resources/typescript-export.mts')
+
+      const result = await onLoad({
+        path: `${modulePath}._dd_esbuild_intercepted`,
+        pluginData: {
+          internal: false,
+          isESM: true,
+          pkg: 'fixture',
+          pkgOfInterest: true,
+          raw: 'fixture',
+        },
+      })
+
+      assert.match(result.contents, /set\["Client"\]/)
     })
   })
 })

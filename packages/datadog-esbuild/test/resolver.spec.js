@@ -63,6 +63,51 @@ describe('ESM resolver', () => {
     }
   })
 
+  it('preserves NODE_OPTIONS resolution hooks in the child', async () => {
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    const hookURL = pathToFileURL(require.resolve('./resources/resolution-hook.mjs'))
+    hookURL.searchParams.set('target', parentURL.href)
+    process.env.NODE_OPTIONS = `--loader=${hookURL.href}`
+    const resolver = createEsmResolver()
+
+    try {
+      assert.equal(await resolver.resolve('resolver-hook', parentURL), parentURL.href)
+    } finally {
+      await resolver.close()
+      if (originalNodeOptions === undefined) delete process.env.NODE_OPTIONS
+      else process.env.NODE_OPTIONS = originalNodeOptions
+    }
+  })
+
+  it('preserves mixed NODE_OPTIONS while disabling Datadog in the child', async () => {
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    const hookURL = pathToFileURL(require.resolve('./resources/resolution-hook.mjs')).href
+    const initPath = require.resolve('../../../init.js')
+    const nodeOptions = `--loader=${hookURL} --require=${JSON.stringify(initPath)}`
+    process.env.NODE_OPTIONS = nodeOptions
+    const child = createChild()
+    const resolver = createStubbedResolver(child)
+    const resolved = resolver.resolve('first', parentURL)
+    let env
+
+    try {
+      env = spawn.firstCall.args[2].env
+      child.stdout.write(`${JSON.stringify({ id: 0, url: 'file:///first.mjs' })}\n`)
+      assert.equal(await resolved, 'file:///first.mjs')
+    } finally {
+      const closed = resolver.close()
+      child.emit('close', 0, null)
+      await closed
+      if (originalNodeOptions === undefined) delete process.env.NODE_OPTIONS
+      else process.env.NODE_OPTIONS = originalNodeOptions
+    }
+
+    assert.equal(env.NODE_OPTIONS, nodeOptions)
+    assert.equal(env.DD_CIVISIBILITY_ENABLED, 'false')
+    assert.equal(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
+    assert.equal(env.DD_TRACE_ENABLED, 'false')
+  })
+
   it('rejects require-only and invalid encoded ESM requests without affecting siblings', async () => {
     const resolver = createEsmResolver()
     try {
@@ -213,6 +258,27 @@ describe('ESM resolver', () => {
     await results
     assert.equal(emitted, undefined)
     sinon.assert.calledOnce(child.kill)
+  })
+
+  it('does not emit an unhandled rejection before close observes a failure', async () => {
+    const child = createChild()
+    const resolver = createStubbedResolver(child)
+    const pending = resolver.resolve('first', parentURL)
+    let unhandled
+    const onUnhandledRejection = error => { unhandled = error }
+    process.once('unhandledRejection', onUnhandledRejection)
+
+    try {
+      child.stdout.write('not JSON\n')
+      await assert.rejects(pending, /malformed JSON/)
+      child.emit('close', 1, null)
+      await new Promise(resolve => setImmediate(resolve))
+      await assert.rejects(resolver.close(), /malformed JSON/)
+    } finally {
+      process.removeListener('unhandledRejection', onUnhandledRejection)
+    }
+
+    assert.equal(unhandled, undefined)
   })
 
   it('ignores a late write failure after the response completed', async () => {

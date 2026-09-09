@@ -332,6 +332,7 @@ ${build.initialOptions.banner.js}`
             excludeDefault: false,
             moduleSources: new Map(),
             resolver,
+            transform: build.esbuild.transformSync,
           })
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')

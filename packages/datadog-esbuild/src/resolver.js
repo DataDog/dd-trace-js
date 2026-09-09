@@ -88,6 +88,8 @@ class EsmResolver {
       this.#resolveClosed = resolve
       this.#rejectClosed = reject
     })
+    // Mark lifecycle failures handled immediately. close() still returns the original promise.
+    this.#closedPromise.catch(() => {})
   }
 
   /**
@@ -132,7 +134,9 @@ class EsmResolver {
   #start () {
     if (this.#child) return
     const env = getEnvironmentVariables()
-    delete env.NODE_OPTIONS
+    env.DD_CIVISIBILITY_ENABLED = 'false'
+    env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
+    env.DD_TRACE_ENABLED = 'false'
     this.#child = childProcess.spawn(process.execPath, [
       '--no-warnings',
       '--experimental-import-meta-resolve',

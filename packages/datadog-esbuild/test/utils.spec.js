@@ -5,7 +5,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const sinon = require('sinon')
+
 const { processModule } = require('../src/utils.js')
+const transformTypeScript = require('./helpers/transform-typescript')
 
 describe('esbuild utils', () => {
   describe('processModule', () => {
@@ -105,6 +107,16 @@ describe('esbuild utils', () => {
       })
 
       assert.deepStrictEqual([...setters.keys()].sort(), ['fromA', 'fromB'])
+    })
+
+    it('should set TypeScript star exports', async () => {
+      const setters = await processModule({
+        path: path.join(__dirname, 'resources', 'export-typescript-star.mjs'),
+        context: { format: 'module' },
+        transform: transformTypeScript,
+      })
+
+      assert.deepStrictEqual([...setters.keys()].sort(), ['Client', 'value'])
     })
 
     it('should set the native module exports', async () => {
