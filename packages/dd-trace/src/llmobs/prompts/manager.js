@@ -162,7 +162,7 @@ class PromptManager {
     this.pendingFetches = new Map()
     this.hotCache = new HotCache({
       ttlMs: this.ttlMs,
-      fetchMethod: (key, stale, { context, signal }) => this.#backgroundFetch(key, context, signal),
+      fetchMethod: (key, stale, { context, signal }) => this.#backgroundFetch(context, signal),
     })
     this.warmCache = new WarmCache({
       cacheDir: config.DD_LLMOBS_PROMPTS_CACHE_DIR,
@@ -187,7 +187,6 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt | undefined>}
    */
   async #fetchFromProvider (request) {
-    let prompt
     try {
       const context = { ...request.attributes }
       if (request.targetingKey !== undefined) context.targetingKey = request.targetingKey
@@ -197,11 +196,10 @@ class PromptManager {
         context,
         log
       )
-      prompt = promptFromData(details.value, 'ff')
+      return promptFromData(details.value, 'ff')
     } catch (error) {
       log.debug('Feature Flag prompt evaluation failed for %s: %s', request.promptId, error.message)
     }
-    return prompt
   }
 
   /**
@@ -311,12 +309,11 @@ class PromptManager {
 
   /**
    * Refresh one stale hot-cache entry.
-   * @param {string} key
    * @param {PromptRequest} request
    * @param {AbortSignal} signal
    * @returns {Promise<ManagedPrompt | undefined>}
    */
-  async #backgroundFetch (key, request, signal) {
+  async #backgroundFetch (request, signal) {
     const result = await this.#fetchAndCache(request, { hot: false, signal })
     if (!result.cacheable) return
     if (result.prompt) return withSource(result.prompt, SOURCE_CACHE)
@@ -474,17 +471,12 @@ class PromptManager {
       }
       if (requireAppKey) headers['DD-APPLICATION-KEY'] = this.config.DD_APP_KEY
 
-      let response
-      try {
-        response = await fetch(`${this.origin}${path}`, {
-          method,
-          headers,
-          body: body === undefined ? undefined : JSON.stringify(body),
-          signal: AbortSignal.timeout(this.timeoutMs),
-        })
-      } catch (error) {
-        throw new PromptAPIError(0, error.message)
-      }
+      const response = await fetch(`${this.origin}${path}`, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(this.timeoutMs),
+      })
 
       const responseBody = await response.text()
       if (!response.ok) throw new PromptAPIError(response.status, detailFromBody(responseBody))

@@ -5,19 +5,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-/**
- * @typedef {object} PromptLRUCache
- * @property {(key: string, options?: object) => ManagedPrompt | undefined} get
- * @property {(key: string, prompt: ManagedPrompt, options?: object) => void} set
- * @property {(key: string, options: object) => Promise<ManagedPrompt | undefined>} fetch
- * @property {(key: string) => void} delete
- * @property {() => void} clear
- * @property {() => Array<[string, object]>} dump
- */
-
-const { LRUCache } = /** @type {{LRUCache: new (options: object) => PromptLRUCache}} */ (
-  require('../../../../../vendor/dist/lru-cache')
-)
+const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
 
 const log = require('../../log')
 const ManagedPrompt = require('./prompt')
@@ -68,7 +56,7 @@ class HotCache {
   get (key) {
     if (!this.enabled) return
     const status = {}
-    const prompt = this.cache.get(key, { allowStale: true, noDeleteOnStaleGet: true, status })
+    const prompt = this.cache.get(key, { status })
     if (!prompt) return
     return { prompt, stale: status.get === 'stale' }
   }
@@ -91,7 +79,6 @@ class HotCache {
   refresh (key, context) {
     if (!this.enabled) return
     void this.cache.fetch(key, {
-      allowStale: true,
       allowStaleOnFetchRejection: true,
       context,
       forceRefresh: true,
@@ -200,17 +187,15 @@ class WarmCache {
    */
   get (key) {
     if (!this.enabled) return
-    let result
     try {
       const data = JSON.parse(fs.readFileSync(this.#path(key), 'utf8'))
       if (!Number.isFinite(data.timestamp)) throw new TypeError('Invalid prompt cache timestamp')
       const prompt = this.#deserialize(data.prompt)
       const ageMs = Math.max(0, Date.now() - data.timestamp)
-      result = { prompt, stale: ageMs > this.ttlMs, ageMs }
+      return { prompt, stale: ageMs > this.ttlMs, ageMs }
     } catch (error) {
       log.debug('Failed to read prompt from cache: %s', error.message)
     }
-    return result
   }
 
   /**
@@ -221,7 +206,7 @@ class WarmCache {
   set (key, prompt) {
     if (!this.enabled) return
     const file = this.#path(key)
-    const temporary = `${file}.tmp.${process.pid}.${randomUUID()}`
+    const temporary = `${file}.tmp.${randomUUID()}`
     try {
       this.#ensureDir(path.dirname(file))
       if (!this.enabled) return
