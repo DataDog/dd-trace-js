@@ -69,6 +69,20 @@ module.exports = {
   INSTRUMENTATION_METHOD_ANNOTATED: 'annotated',
   INSTRUMENTATION_METHOD_UNKNOWN: 'unknown',
 
+  // Searchable APM-side mirror of the scalar LLMObs fields. The APM trace UI otherwise merges
+  // these from the LLMObs track client-side, which renders but does not index them.
+  GEN_AI_OPERATION_NAME: 'gen_ai.operation.name',
+  GEN_AI_REQUEST_MODEL: 'gen_ai.request.model',
+  GEN_AI_PROVIDER_NAME: 'gen_ai.provider.name',
+  GEN_AI_APPLICATION_NAME: 'gen_ai.application.name',
+  GEN_AI_CONVERSATION_ID: 'gen_ai.conversation.id',
+
+  GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.input_tokens',
+  GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.output_tokens',
+  GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY: 'gen_ai.usage.total_tokens',
+  GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_read_input_tokens',
+  GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_write_input_tokens',
+
   ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
   ROUTING_SITE: '_dd.llmobs.routing.site',
 }
