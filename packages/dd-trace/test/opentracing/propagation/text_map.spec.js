@@ -21,7 +21,6 @@ const {
   SAMPLING_MECHANISM_MANUAL,
   SAMPLING_MECHANISM_APPSEC,
   SAMPLING_MECHANISM_AI_GUARD,
-  SAMPLING_MECHANISM_RULE,
 } = require('../../../src/constants')
 
 // v5 spells single-header B3 propagation as `'b3 single header'`; v6+ reuses `'b3'` for it.
@@ -1561,25 +1560,6 @@ describe('TextMapPropagator', () => {
 
       assert.strictEqual(spanContext._tracestate.get('ot'), 'rv:123456789abcde;th:8')
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:123456789abcde;th:8(?:,|$)/)
-    })
-
-    it('should inherit W3C decision metadata when an agreeing B3 context has a priority', () => {
-      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
-      const spanId = '5555eeee6666ffff'
-      textMap = {
-        b3: `${traceId}-${spanId}-1`,
-        traceparent: `00-${traceId}-${spanId}-01`,
-        tracestate: 'dd=s:2;t.dm:-3,ot=rv:ffffffffffffff;th:8',
-      }
-      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
-      config.tracePropagationStyle.inject = ['datadog']
-
-      const spanContext = propagator.extract(textMap)
-      const carrier = propagator.inject(spanContext, {})
-
-      assert.strictEqual(spanContext._sampling.mechanism, SAMPLING_MECHANISM_RULE)
-      assert.strictEqual(spanContext._trace.tags['_dd.p.dm'], '-3')
-      assert.match(carrier['x-datadog-tags'], /(?:^|,)_dd\.p\.dm=-3(?:,|$)/)
     })
 
     it('should merge implicit tracecontext state into a matching B3 context', () => {

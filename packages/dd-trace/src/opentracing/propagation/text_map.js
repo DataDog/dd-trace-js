@@ -724,9 +724,6 @@ class TextMapPropagator {
       w3cSpanContext._tracestate.forVendor('dd', state => {
         if (state.get('t.dm') !== undefined) state.delete('t.dm')
       })
-    } else if (w3cSpanContext._sampling.mechanism !== undefined) {
-      selectedSpanContext._sampling.mechanism = w3cSpanContext._sampling.mechanism
-      selectedSpanContext._trace.tags['_dd.p.dm'] = w3cSpanContext._trace.tags['_dd.p.dm']
     }
 
     selectedSpanContext._tracestate = w3cSpanContext._tracestate
