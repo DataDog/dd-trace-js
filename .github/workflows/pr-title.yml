@@ -22,12 +22,6 @@ jobs:
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
     steps:
-      - name: Checkout base revision
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-
       - name: Auto-rename GitHub revert title to Conventional Commit
         id: rename
         if: startsWith(github.event.pull_request.title, 'Revert "')
@@ -46,10 +40,26 @@ jobs:
             })
             core.setOutput('renamed', 'true')
 
+      - name: Checkout base revision
+        if: steps.rename.outputs.renamed != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Fetch the PR head as Git objects only. The privileged pull_request_target
+      # job must never check out or execute code from this ref.
+      - name: Fetch pull request head
+        if: steps.rename.outputs.renamed != 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: >-
+          git fetch --no-tags origin
+          "+refs/pull/${PR_NUMBER}/head:refs/remotes/pull-request/head"
+
       - name: Validate PR title and release-note context
-        if: >-
-          steps.rename.outputs.renamed != 'true' &&
-          (github.event.action != 'edited' || github.event.changes.title != null)
+        if: steps.rename.outputs.renamed != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -65,14 +75,18 @@ jobs:
             const type = match[3]
             if (!/^(?:feat|fix|perf|docs)$/.test(type)) return
 
-            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
-              ...context.repo,
-              pull_number: pullRequest.number,
-              per_page: 100,
-            })
-            const files = []
-            const { appendChangedPaths, isInternalOnly } = require('./scripts/release/changelog')
-            appendChangedPaths(files, changedFiles)
+            const { execFileSync } = require('node:child_process')
+            const { isInternalOnly } = require('./scripts/release/changelog')
+            // Treat renames as delete/add pairs so both paths affect classification.
+            const output = execFileSync('git', [
+              'diff',
+              '--name-only',
+              '--no-renames',
+              '-z',
+              `${pullRequest.base.sha}...refs/remotes/pull-request/head`,
+            ], { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
+            const files = output.split('\0').filter(Boolean)
+
             if (isInternalOnly(files)) {
               core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
                 'Use test, bench, ci, or chore.')
@@ -122,7 +136,12 @@ jobs:
               const labels = new Set()
               if (!parsed.type) return labels
               if (repoLabels.has(parsed.type)) labels.add(parsed.type)
-              if (parsed.scope && repoLabels.has(parsed.scope)) labels.add(parsed.scope)
+              if (parsed.scope) {
+                for (const scope of parsed.scope.split(',')) {
+                  const name = scope.trim()
+                  if (name && repoLabels.has(name)) labels.add(name)
+                }
+              }
               const semver = semverFor(parsed)
               if (semver) labels.add(semver)
               return labels
