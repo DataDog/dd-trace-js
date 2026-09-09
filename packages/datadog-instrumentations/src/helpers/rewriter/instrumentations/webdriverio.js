@@ -453,8 +453,7 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'FunctionDeclaration[id.name="executeAsync"] ' +
-      'TryStatement:has(CatchClause IfStatement[test.operator=">"]' +
+    astQuery: 'TryStatement:has(CatchClause IfStatement[test.operator=">"]' +
       '[test.left.object.name="retries"][test.left.property.name="limit"]' +
       '[test.right.object.name="retries"][test.right.property.name="attempts"]) > BlockStatement',
     channelName: 'executeAsync',
