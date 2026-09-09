@@ -718,7 +718,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
-    const shouldFlipStatus = isEfd || isAtf
+    const shouldResetStatus = isEfd || isAtf
     const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -738,13 +738,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         if (shouldTrackStatuses && statuses) {
           statuses.push(lastExecutionStatus)
         }
-        if (shouldFlipStatus) {
-          // If we don't "reset" the result.state to "pass", once a repetition fails,
-          // vitest will always consider the test as failed, so we can't read the actual status
-          // This means that we change vitest's behavior:
-          // if the last attempt passes, vitest would consider the test as failed
-          // but after this change, it will consider the test as passed
-          task.result.state = 'pass'
+        if (shouldResetStatus) {
+          // Reset to Vitest's neutral state so a previous failure does not affect the next repetition.
+          // A terminal pass state can leak into reporters before the next repetition determines its status.
+          task.result.state = 'run'
         }
       }
     } else if (numRepetition === task.repeats) {
@@ -759,8 +756,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
       }
-      if (shouldFlipStatus) {
-        task.result.state = 'pass'
+      if (shouldResetStatus) {
+        task.result.state = 'run'
       }
     }
 
