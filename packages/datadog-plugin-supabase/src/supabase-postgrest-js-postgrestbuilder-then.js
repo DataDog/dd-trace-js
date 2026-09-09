@@ -29,6 +29,12 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/postgrest-js:PostgrestBuilder_then'
 
+  /**
+   * Starts a database span and wraps the PostgREST consumer callbacks.
+   *
+   * @param {object} ctx Orchestrion context for PostgrestBuilder.then().
+   * @returns {object|undefined} Span store.
+   */
   bindStart (ctx) {
     const method = ctx.self?.method
     const requestUrl = ctx.self?.url
@@ -76,16 +82,34 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
+  /**
+   * Finishes an asynchronously consumed PostgREST query.
+   *
+   * @param {object} ctx Completed Orchestrion context.
+   * @returns {void}
+   */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
+  /**
+   * Records a PostgREST rejection unless its span already finished.
+   *
+   * @param {object} ctx Rejected Orchestrion context.
+   * @returns {void}
+   */
   error (ctx) {
     if (ctx[spanFinished]) return
     super.error(ctx)
   }
 
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
+  /**
+   * Records the PostgREST result and finishes its database span once.
+   *
+   * @param {object} ctx Completed Orchestrion context.
+   * @returns {void}
+   */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (ctx[spanFinished]) return

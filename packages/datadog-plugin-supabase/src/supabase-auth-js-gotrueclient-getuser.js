@@ -9,6 +9,12 @@ class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/auth-js:GoTrueClient_getUser'
 
+  /**
+   * Starts an HTTP client span for an authenticated-user request.
+   *
+   * @param {object} ctx Orchestrion context for GoTrueClient.getUser().
+   * @returns {object|undefined} Span store.
+   */
   bindStart (ctx) {
     const method = 'GET'
     const url = stripQueryAndFragment(`${ctx.self?.url}/user`)
@@ -28,11 +34,23 @@ class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
+  /**
+   * Finishes an asynchronous authenticated-user request.
+   *
+   * @param {object} ctx Completed Orchestrion context.
+   * @returns {void}
+   */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
+  /**
+   * Records the Auth result and finishes its HTTP client span.
+   *
+   * @param {object} ctx Completed Orchestrion context.
+   * @returns {void}
+   */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return

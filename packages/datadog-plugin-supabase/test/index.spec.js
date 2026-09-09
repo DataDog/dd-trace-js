@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { appendFileSync, writeFileSync } = require('node:fs')
+const sinon = require('sinon')
 
 const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
@@ -614,6 +615,40 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
         },
         shouldReject: true,
       })
+    })
+
+    it('preserves the fulfillment callback when tracing finalization throws', async () => {
+      const plugin = meta.tracer._pluginManager._pluginsByName.supabase.SupabasePostgrestBuilderThenPlugin
+      const finishStub = sinon.stub(plugin, 'finish').callThrough()
+      const configureStub = sinon.stub(plugin, 'configure')
+      finishStub.onFirstCall().throws(new Error('tracing failure'))
+
+      try {
+        const result = await testSetup.postgrestBuilderThenWithCallback(result => result.data)
+
+        assert.deepStrictEqual(result, [])
+        sinon.assert.calledWithExactly(configureStub, false)
+      } finally {
+        configureStub.restore()
+        finishStub.restore()
+      }
+    })
+
+    it('preserves the rejection callback when tracing error handling throws', async () => {
+      const plugin = meta.tracer._pluginManager._pluginsByName.supabase.SupabasePostgrestBuilderThenPlugin
+      const errorStub = sinon.stub(plugin, 'error').callThrough()
+      const configureStub = sinon.stub(plugin, 'configure')
+      errorStub.onFirstCall().throws(new Error('tracing failure'))
+
+      try {
+        const result = await testSetup.postgrestBuilderThenWithRejectionCallback(error => error.message)
+
+        assert.strictEqual(result, 'Supabase request failed')
+        sinon.assert.calledWithExactly(configureStub, false)
+      } finally {
+        configureStub.restore()
+        errorStub.restore()
+      }
     })
 
     it('should satisfy the serverless ownership contract (error path)', async () => {

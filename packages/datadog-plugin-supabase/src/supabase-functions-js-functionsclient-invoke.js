@@ -9,6 +9,12 @@ class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/functions-js:FunctionsClient_invoke'
 
+  /**
+   * Starts an HTTP client span for an Edge Function invocation.
+   *
+   * @param {object} ctx Orchestrion context for FunctionsClient.invoke().
+   * @returns {object|undefined} Span store.
+   */
   bindStart (ctx) {
     const functionName = ctx.arguments?.[0]
     const method = String(ctx.arguments?.[1]?.method || 'POST').toUpperCase()
@@ -30,11 +36,23 @@ class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
+  /**
+   * Finishes an asynchronous Edge Function invocation.
+   *
+   * @param {object} ctx Completed Orchestrion context.
+   * @returns {void}
+   */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
+  /**
+   * Records the Functions result and finishes its HTTP client span.
+   *
+   * @param {object} ctx Completed Orchestrion context.
+   * @returns {void}
+   */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
