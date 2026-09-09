@@ -2,26 +2,10 @@
 
 const VARIABLE_PATTERN = /\{\{?\s*(\w+)\s*\}\}?/g
 
-function copyTemplate (template) {
-  if (!Array.isArray(template)) return template
-  return Object.freeze(template.map(message => Object.freeze({ role: message.role, content: message.content })))
-}
-
 function render (template, variables) {
   return template.replaceAll(VARIABLE_PATTERN, (match, name) => {
     return Object.hasOwn(variables, name) ? String(variables[name]) : match
   })
-}
-
-function stringifyVariables (variables) {
-  if (!variables) return
-  const result = {}
-  let hasVariables = false
-  for (const [name, value] of Object.entries(variables)) {
-    result[name] = String(value)
-    hasVariables = true
-  }
-  return hasVariables ? result : undefined
 }
 
 class ManagedPrompt {
@@ -38,7 +22,9 @@ class ManagedPrompt {
     this.id = id
     this.version = version
     this.source = source
-    this.template = copyTemplate(template)
+    this.template = Array.isArray(template)
+      ? Object.freeze(template.map(message => Object.freeze({ role: message.role, content: message.content })))
+      : template
     this.promptUuid = promptUuid
     this.promptVersionUuid = promptVersionUuid
     Object.freeze(this)
@@ -65,8 +51,10 @@ class ManagedPrompt {
       version: this.version,
       template: typeof this.template === 'string' ? this.template : this.template.map(message => ({ ...message })),
     }
-    const normalizedVariables = stringifyVariables(variables)
-    if (normalizedVariables) annotation.variables = normalizedVariables
+    const entries = Object.entries(variables ?? {})
+    if (entries.length) {
+      annotation.variables = Object.fromEntries(entries.map(([name, value]) => [name, String(value)]))
+    }
     if (this.promptUuid) annotation.promptUuid = this.promptUuid
     if (this.promptVersionUuid) annotation.promptVersionUuid = this.promptVersionUuid
     return annotation
