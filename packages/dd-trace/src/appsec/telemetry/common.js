@@ -1,6 +1,9 @@
 'use strict'
 
+const telemetryMetrics = require('../../telemetry/metrics')
+
 const DD_TELEMETRY_REQUEST_METRICS = Symbol('_dd.appsec.telemetry.request.metrics')
+const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const tags = {
   BLOCK_FAILURE: 'block_failure',
@@ -22,6 +25,7 @@ function getVersionsTags (wafVersion, rulesVersion) {
 }
 
 module.exports = {
+  appsecMetrics,
   tags,
   getVersionsTags,
   DD_TELEMETRY_REQUEST_METRICS,
