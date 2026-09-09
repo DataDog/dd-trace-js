@@ -1,9 +1,10 @@
 'use strict'
 
-const VARIABLE_PATTERN = /\{\{?\s*(\w+)\s*\}\}?/g
+const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
 
 function render (template, variables) {
-  return template.replaceAll(VARIABLE_PATTERN, (match, name) => {
+  return template.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {
+    const name = doubleName ?? singleName
     return Object.hasOwn(variables, name) ? String(variables[name]) : match
   })
 }

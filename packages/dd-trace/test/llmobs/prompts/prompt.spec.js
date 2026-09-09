@@ -29,6 +29,20 @@ describe('ManagedPrompt', () => {
     assert.ok(Object.isFrozen(prompt))
   })
 
+  it('renders only balanced single- and double-brace placeholders', () => {
+    const prompt = new ManagedPrompt({
+      id: 'balanced',
+      version: '1',
+      source: 'registry',
+      template: '{{double}} {single} | {{double} | {single}} | {{{double}}} | JSON: {"age": {age}}',
+    })
+
+    assert.strictEqual(
+      prompt.format({ double: 'two', single: 'one', age: 42 }),
+      'two one | {{double} | {single}} | {{{double}}} | JSON: {"age": {age}}'
+    )
+  })
+
   it('copies, freezes, and renders chat templates without mutation', () => {
     const template = [
       { role: 'system', content: 'You are {{ persona }}.' },
