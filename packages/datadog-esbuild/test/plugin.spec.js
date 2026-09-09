@@ -10,9 +10,14 @@ const ddPlugin = require('../index')
  * @param {object} [initialOptions]
  */
 function captureOnLoad (initialOptions = {}) {
+  let onEnd
   let onLoad
   ddPlugin.setup({
     initialOptions,
+    /** @param {Function} callback */
+    onEnd (callback) {
+      onEnd = callback
+    },
     onResolve () {},
     /**
      * @param {object} options
@@ -22,7 +27,14 @@ function captureOnLoad (initialOptions = {}) {
       onLoad = callback
     },
   })
-  return onLoad
+  /** @param {object} args */
+  return async function runOnLoad (args) {
+    try {
+      return await onLoad(args)
+    } finally {
+      await onEnd()
+    }
+  }
 }
 
 /**
@@ -45,6 +57,7 @@ function captureOnResolve () {
   let onResolve
   ddPlugin.setup({
     initialOptions: {},
+    onEnd () {},
     /**
      * @param {object} options
      * @param {Function} callback
@@ -102,6 +115,25 @@ describe('datadog-esbuild plugin', () => {
       })
 
       assert.strictEqual(result.resolveDir, path.dirname(modulePath))
+    })
+
+    it('generates setters for cyclic star exports', async () => {
+      const onLoad = captureOnLoad()
+      const modulePath = path.join(__dirname, 'resources/export-cycle-a.mjs')
+
+      const result = await onLoad({
+        path: `${modulePath}._dd_esbuild_intercepted`,
+        pluginData: {
+          internal: false,
+          isESM: true,
+          pkg: 'fixture',
+          pkgOfInterest: true,
+          raw: 'fixture',
+        },
+      })
+
+      assert.match(result.contents, /set\["fromA"\]/)
+      assert.match(result.contents, /set\["fromB"\]/)
     })
   })
 })

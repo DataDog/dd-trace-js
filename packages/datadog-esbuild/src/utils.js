@@ -1,13 +1,13 @@
 'use strict'
 
 // The content of this file is copied from the `import-in-the-middle` package with minor modifications (https://www.npmjs.com/package/import-in-the-middle)
-const { pathToFileURL, fileURLToPath } = require('node:url')
 const fs = require('node:fs')
 const path = require('node:path')
-const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 
-const LOAD_OPERATION = 0
-const RESOLVE_OPERATION = 1
+const { createEsmResolver, driveGetExportsGenerator } = require('./resolver')
+
+/** @typedef {ReturnType<typeof createEsmResolver>} EsmResolver */
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
 let getExportsModulePromise
@@ -19,16 +19,27 @@ const loadGetExportsModule = () => {
   return getExportsModulePromise
 }
 
-const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
-  ? async (srcUrl, context, getSource) => {
-    const mod = await loadGetExportsModule()
-    const exportNames = mod.getExports(srcUrl, context, getSource)
-    if (exportNames?.next) {
-      return driveGetExportsGenerator(exportNames, getSource)
-    }
-    return exportNames
-  }
-  : getExportsImporting
+/**
+ * @param {URL} srcUrl
+ * @param {object} context
+ * @param {(url: URL, context: object) => { source: string, format: string }} getSource
+ * @param {EsmResolver} resolver
+ * @returns {Promise<{
+ *   exportNames: Iterable<string>,
+ *   starReexports?: Array<{ specifier: string, parentURL: string }>
+ * }>}
+ */
+const getExports = async (srcUrl, context, getSource, resolver) => {
+  const mod = await loadGetExportsModule()
+  const exportsGenerator = mod.getExports(srcUrl, context, getSource)
+  /**
+   * @param {string} specifier
+   * @param {{ parentURL: URL }} operationContext
+   * @returns {Promise<{ format: string, url: URL }>}
+   */
+  const resolve = (specifier, operationContext) => resolveModule(specifier, operationContext, resolver)
+  return driveGetExportsGenerator(exportsGenerator, getSource, resolve)
+}
 
 function isStarExportLine (line) {
   return /^\* from /.test(line)
@@ -58,82 +69,27 @@ function isBareSpecifier (specifier) {
   }
 }
 
-function resolve (specifier, context) {
-  // This comes from an import, that is why import makes preference
-  const conditions = ['import']
-
-  if (specifier.startsWith('file://')) {
-    specifier = fileURLToPath(specifier)
-  }
-
-  const resolved = require.resolve(specifier, {
-    paths: [fileURLToPath(context.parentURL)],
-    // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
-    conditions,
-  })
-
-  return {
-    url: pathToFileURL(resolved),
-    format: isESMFile(resolved) ? 'module' : 'commonjs',
-  }
-}
-
-function getSource (url, { format }) {
-  return {
-    source: fs.readFileSync(fileURLToPath(url), 'utf8'),
-    format,
-  }
-}
-
 /**
- * @typedef {[typeof LOAD_OPERATION, URL, object] | [typeof RESOLVE_OPERATION, string, object]} GetExportsOperation
- */
-
-/**
- * @typedef {{ done: false, value: GetExportsOperation } | { done: true, value: Set<string> }} GetExportsResult
- */
-
-/**
- * @typedef {{
- *   next: (value?: unknown) => GetExportsResult,
- *   throw: (error?: unknown) => GetExportsResult,
- * }} GetExportsGenerator
- */
-
-/**
- * Drives the generator returned by import-in-the-middle >=3.1.0 export discovery.
+ * Resolves a module with the import conditions used by ESM instrumentation.
  *
- * @param {GetExportsGenerator} exportsGenerator Generator returned by getExports
- * @param {(url: URL, context: object) => { source: string, format: string }} getSource
- * Function that loads module source
- * @returns {Set<string>}
+ * @param {string} specifier
+ * @param {{ parentURL: URL }} context
+ * @param {EsmResolver} resolver
+ * @returns {Promise<{ format: string, url: URL }>}
  */
-function driveGetExportsGenerator (exportsGenerator, getSource) {
-  let next = exportsGenerator.next()
-  while (next.done === false) {
-    let result
-    let error
-    let threw = false
+async function resolveModule (specifier, context, resolver) {
+  const url = new URL(await resolver.resolve(specifier, context.parentURL))
+  if (url.protocol === 'node:') return { format: 'builtin', url }
+  if (url.protocol !== 'file:') throw new Error(`Unsupported ESM resolution URL: ${url.href}`)
 
-    try {
-      const operation = next.value
-      const operationType = operation[0]
-
-      if (operationType === LOAD_OPERATION) {
-        result = getSource(operation[1], operation[2])
-      } else if (operationType === RESOLVE_OPERATION) {
-        result = resolve(operation[1], operation[2])
-      } else {
-        throw new Error(`Unsupported import-in-the-middle getExports operation: ${operationType}`)
-      }
-    } catch (err) {
-      threw = true
-      error = err
-    }
-
-    next = threw ? exportsGenerator.throw(error) : exportsGenerator.next(result)
+  const resolved = fileURLToPath(url)
+  if (resolved.endsWith('.json') || resolved.endsWith('.node')) {
+    throw new Error(`Unsupported ESM analysis target: ${resolved}`)
   }
-  return next.value
+  return {
+    format: isESMFile(resolved) ? 'module' : 'commonjs',
+    url,
+  }
 }
 
 /**
@@ -144,16 +100,61 @@ function driveGetExportsGenerator (exportsGenerator, getSource) {
  * @param {boolean} [moduleData.internal]
  * @param {object} moduleData.context
  * @param {boolean} [moduleData.excludeDefault]
+ * @param {Map<string, string>} [moduleData.moduleSources]
+ * @param {EsmResolver} [moduleData.resolver]
+ * @param {Set<string>} [activeModules]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal = false, context, excludeDefault = false }) {
-  let exportNames, srcUrl
+async function processModule (
+  { path, internal = false, context, excludeDefault = false, moduleSources = new Map(), resolver },
+  activeModules
+) {
+  const ownsResolver = resolver === undefined
+  resolver ??= createEsmResolver()
+  try {
+    return await processModuleWithResolver(
+      { path, internal, context, excludeDefault, moduleSources },
+      activeModules,
+      resolver
+    )
+  } finally {
+    if (ownsResolver) await resolver.close()
+  }
+}
+
+/**
+ * @param {object} moduleData
+ * @param {string} moduleData.path
+ * @param {boolean} moduleData.internal
+ * @param {object} moduleData.context
+ * @param {boolean} moduleData.excludeDefault
+ * @param {Map<string, string>} moduleData.moduleSources
+ * @param {Set<string>} [activeModules]
+ * @param {EsmResolver} resolver
+ * @returns {Promise<Map>}
+ */
+async function processModuleWithResolver (
+  { path, internal, context, excludeDefault, moduleSources },
+  activeModules,
+  resolver
+) {
+  let moduleExports, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
-    exportNames = await getExportsImporting(path)
+    moduleExports = { exportNames: await getExportsImporting(path) }
   } else {
     srcUrl = pathToFileURL(path)
-    exportNames = await getExports(srcUrl, context, getSource)
+    const loadSource = (url, { format }) => {
+      const modulePath = fileURLToPath(url)
+      let source = moduleSources.get(modulePath)
+      if (source === undefined) {
+        source = fs.readFileSync(modulePath, 'utf8')
+        moduleSources.set(modulePath, source)
+      }
+      return { source, format }
+    }
+    loadSource(srcUrl, context)
+    moduleExports = await getExports(srcUrl, context, loadSource, resolver)
   }
 
   const starExports = new Set()
@@ -186,43 +187,26 @@ async function processModule ({ path, internal = false, context, excludeDefault 
     }
   }
 
-  for (const n of exportNames) {
+  let starReexports = moduleExports.starReexports
+  for (const n of moduleExports.exportNames) {
     if (n === 'default' && excludeDefault) continue
 
     if (isStarExportLine(n)) {
-      // export * from 'wherever'
-      const [, modFile] = n.split('* from ')
+      starReexports ??= []
+      starReexports.push({ parentURL: srcUrl.href, specifier: n.slice('* from '.length) })
+      continue
+    }
 
-      // Relative paths need to be resolved relative to the parent module
-      const newSpecifier = isBareSpecifier(modFile) ? modFile : new URL(modFile, srcUrl).href
-      // We need to call `parentResolve` to resolve bare specifiers to a full
-      // URL. We also need to call `parentResolve` for all sub-modules to get
-      // the `format`. We can't rely on the parents `format` to know if this
-      // sub-module is ESM or CJS!
+    const variableName = `$dd${Buffer.from(n).toString('hex')}`
+    const objectKey = JSON.stringify(n)
+    const reExportedName = n === 'default' ? n : objectKey
 
-      const result = resolve(newSpecifier, { parentURL: srcUrl })
-
-      // eslint-disable-next-line no-await-in-loop
-      const subSetters = await processModule({
-        path: fileURLToPath(result.url),
-        context: { ...context, format: result.format },
-        excludeDefault: true,
-      })
-
-      for (const [name, setter] of subSetters.entries()) {
-        addSetter(name, setter, true)
-      }
-    } else {
-      const variableName = `$${n.replaceAll(/[^a-zA-Z0-9_$]/g, '_')}`
-      const objectKey = JSON.stringify(n)
-      const reExportedName = n === 'default' ? n : objectKey
-
-      addSetter(n, `
+    addSetter(n, `
       let ${variableName}
       try {
         ${variableName} = _[${objectKey}] = namespace[${objectKey}]
-      } catch (err) {
-        if (!(err instanceof ReferenceError)) throw err
+      } catch (error) {
+        if (!(error instanceof ReferenceError)) throw error
       }
       export { ${variableName} as ${reExportedName} }
       set[${objectKey}] = (v) => {
@@ -231,6 +215,33 @@ async function processModule ({ path, internal = false, context, excludeDefault 
       }
       get[${objectKey}] = () => ${variableName}
       `)
+  }
+
+  if (starReexports) {
+    for (const { parentURL, specifier } of starReexports) {
+      const baseUrl = new URL(parentURL)
+      const resolvedSpecifier = isBareSpecifier(specifier) ? specifier : new URL(specifier, baseUrl).href
+      // The runtime's import conditions and the declaring module's URL own star-export resolution.
+      // eslint-disable-next-line no-await-in-loop
+      const result = await resolveModule(resolvedSpecifier, { parentURL: baseUrl }, resolver)
+
+      activeModules ??= new Set([srcUrl.href])
+      if (activeModules.has(result.url.href)) continue
+      activeModules.add(result.url.href)
+
+      // eslint-disable-next-line no-await-in-loop
+      const subSetters = await processModuleWithResolver({
+        path: result.format === 'builtin' ? result.url.href : fileURLToPath(result.url),
+        internal: result.format === 'builtin',
+        context: { ...context, format: result.format },
+        excludeDefault: true,
+        moduleSources,
+      }, activeModules, resolver)
+      activeModules.delete(result.url.href)
+
+      for (const [name, setter] of subSetters.entries()) {
+        addSetter(name, setter, true)
+      }
     }
   }
 
@@ -246,8 +257,8 @@ async function processModule ({ path, internal = false, context, excludeDefault 
  * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
-  if (fullPathToModule.endsWith('.mjs')) return true
-  if (fullPathToModule.endsWith('.cjs')) return false
+  if (fullPathToModule.endsWith('.mjs') || fullPathToModule.endsWith('.mts')) return true
+  if (fullPathToModule.endsWith('.cjs') || fullPathToModule.endsWith('.cts')) return false
 
   const pathParts = fullPathToModule.split(path.sep)
   do {
@@ -271,6 +282,6 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 }
 
 module.exports = {
-  processModule,
   isESMFile,
+  processModule,
 }
