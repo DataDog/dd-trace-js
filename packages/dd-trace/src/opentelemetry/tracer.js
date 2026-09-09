@@ -4,7 +4,6 @@ const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const { AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
-const { DD_PARENT_ID } = require('../../../../ext/tags')
 const tracer = require('../../')
 
 const { DECISION_MAKER_KEY } = require('../constants')
@@ -77,7 +76,6 @@ class Tracer {
     let origin = null
     let samplingPriority = traceFlag
     let samplingMechanism
-    let traceTags
     const traceStateValue = typeof ts?.serialize === 'function' ? ts.serialize() : ts?.traceparent
     const traceState = TraceState.fromString(traceStateValue)
 
@@ -91,34 +89,12 @@ class Tracer {
       })
 
       if (ddTraceStateData) {
-        let tracestateSamplingPriority
-        for (const [key, value] of ddTraceStateData) {
-          switch (key) {
-            case 'p': {
-              traceTags ??= {}
-              traceTags[DD_PARENT_ID] = value
-              break
-            }
-            case 's': {
-              const priority = Number.parseInt(value, 10)
-              if (Number.isInteger(priority)) tracestateSamplingPriority = priority
-              break
-            }
-            case 'o':
-              origin = value.replaceAll('~', '=')
-              break
-            case 't.dm': {
-              const mechanism = Math.abs(Number.parseInt(value, 10))
-              if (Number.isInteger(mechanism)) samplingMechanism = mechanism
-              break
-            }
-            default: {
-              if (!key.startsWith('t.') || key === 't.tid') break
-              traceTags ??= {}
-              traceTags[`_dd.p.${key.slice(2)}`] = value.replaceAll('~', '=')
-            }
-          }
-        }
+        const priority = Number.parseInt(ddTraceStateData.get('s'), 10)
+        const tracestateSamplingPriority = Number.isInteger(priority) ? priority : undefined
+        origin = ddTraceStateData.get('o')?.replaceAll('~', '=') ?? null
+
+        const mechanism = Math.abs(Number.parseInt(ddTraceStateData.get('t.dm'), 10))
+        if (Number.isInteger(mechanism)) samplingMechanism = mechanism
 
         samplingPriority = getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
       } else {
@@ -132,7 +108,6 @@ class Tracer {
 
     spanContext._ddContext._sampling = { priority: samplingPriority }
     spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
-    if (traceTags) Object.assign(spanContext._ddContext._trace.tags, traceTags)
     if (samplingMechanism !== undefined) {
       spanContext._ddContext._sampling.mechanism = samplingMechanism
       spanContext._ddContext._trace.tags[DECISION_MAKER_KEY] = `-${samplingMechanism}`

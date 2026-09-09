@@ -9,7 +9,7 @@ const api = require('@opentelemetry/api')
 
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../ext/priority')
-const { DD_PARENT_ID, MANUAL_DROP } = require('../../../../ext/tags')
+const { MANUAL_DROP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
@@ -282,7 +282,7 @@ describe('OTel Tracer', () => {
       assert.strictEqual(spanContext.traceFlags, 1)
     })
 
-    it('maps Datadog tracestate fields without adding them as span tags', () => {
+    it('keeps unrelated Datadog tracestate fields out of span and trace tags', () => {
       const spanContext = convert(
         1,
         'dd=s:2;p:76543210fedcba98;o:synthetics;t.dm:-4;t.foo:bar~baz;t.tid:0123456789abcdef'
@@ -290,10 +290,12 @@ describe('OTel Tracer', () => {
 
       assert.deepStrictEqual(spanContext._ddContext.getTags(), {})
       assert.deepStrictEqual(spanContext._ddContext._trace.tags, {
-        [DD_PARENT_ID]: '76543210fedcba98',
         [DECISION_MAKER_KEY]: '-4',
-        '_dd.p.foo': 'bar=baz',
       })
+      assert.strictEqual(
+        spanContext._ddContext._tracestate.get('dd'),
+        's:2;p:76543210fedcba98;o:synthetics;t.dm:-4;t.foo:bar~baz;t.tid:0123456789abcdef'
+      )
     })
 
     for (const [name, mechanism, setManualDrop] of [
