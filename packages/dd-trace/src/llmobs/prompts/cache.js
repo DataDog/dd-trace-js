@@ -229,7 +229,6 @@ class WarmCache {
         encoding: 'utf8',
         mode: 0o600,
       })
-      fs.chmodSync(temporary, 0o600)
       fs.renameSync(temporary, file)
     } catch (error) {
       try { fs.rmSync(temporary, { force: true }) } catch {}
@@ -275,4 +274,4 @@ class WarmCache {
   }
 }
 
-module.exports = { HotCache, WarmCache, cacheKey, promptIdFromKey }
+module.exports = { HotCache, WarmCache, cacheKey }

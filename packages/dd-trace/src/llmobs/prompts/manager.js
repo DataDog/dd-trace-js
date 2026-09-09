@@ -156,7 +156,7 @@ class PromptManager {
     if (protocol !== 'https:' && !(protocol === 'http:' && isLoopbackHost(hostname))) {
       throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', 'PromptAuthError')
     }
-    this.origin = origin
+    this.origin = origin.replace(/\/$/, '')
     this.cacheGeneration = 0
     this.fetchTokens = new Map()
     this.pendingFetches = new Map()
@@ -166,7 +166,7 @@ class PromptManager {
     })
     this.warmCache = new WarmCache({
       cacheDir: config.DD_LLMOBS_PROMPTS_CACHE_DIR,
-      enabled: config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED && this.ttlMs > 0,
+      enabled: config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED,
       ttlMs: this.ttlMs,
     })
   }
@@ -179,14 +179,6 @@ class PromptManager {
       throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', 'PromptAuthError')
     }
     return this.config.DD_API_KEY
-  }
-
-  /**
-   * Build a Prompt Management URL.
-   * @param {string} path
-   */
-  #url (path) {
-    return `${this.origin.replace(/\/$/, '')}${path}`
   }
 
   /**
@@ -252,7 +244,7 @@ class PromptManager {
     }
 
     try {
-      const response = await fetch(this.#url(path), {
+      const response = await fetch(`${this.origin}${path}`, {
         method,
         headers,
         body,
@@ -288,10 +280,10 @@ class PromptManager {
   /**
    * Fetch and cache one selector.
    * @param {PromptRequest} request
-   * @param {{evictOnNotFound?: boolean, hot?: boolean, signal?: AbortSignal}} [options]
+   * @param {{hot?: boolean, signal?: AbortSignal}} [options]
    * @returns {Promise<PromptFetchResult>}
    */
-  async #fetchAndCache (request, { evictOnNotFound = false, hot = true, signal } = {}) {
+  async #fetchAndCache (request, { hot = true, signal } = {}) {
     const generation = this.cacheGeneration
     const token = Symbol(request.key)
     this.fetchTokens.set(request.key, token)
@@ -300,7 +292,7 @@ class PromptManager {
     if (latest) this.fetchTokens.delete(request.key)
     const cacheable = generation === this.cacheGeneration && latest
     if (result.prompt) {
-      if (this.ttlMs > 0 && cacheable) {
+      if (cacheable) {
         const cached = withSource(result.prompt, SOURCE_CACHE)
         if (hot) this.hotCache.set(request.key, cached)
         if (!request.resolve) this.warmCache.set(request.key, cached)
@@ -310,7 +302,7 @@ class PromptManager {
 
     if (signal?.aborted) return { ...result, cacheable }
     telemetry.recordPromptFetchError(result.notFound ? 'NotFound' : 'FetchError')
-    if (result.notFound && evictOnNotFound && cacheable) {
+    if (result.notFound && cacheable) {
       this.hotCache.delete(request.key)
       this.warmCache.delete(request.key)
     }
@@ -325,7 +317,7 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt | undefined>}
    */
   async #backgroundFetch (key, request, signal) {
-    const result = await this.#fetchAndCache(request, { evictOnNotFound: true, hot: false, signal })
+    const result = await this.#fetchAndCache(request, { hot: false, signal })
     if (!result.cacheable) return
     if (result.prompt) return withSource(result.prompt, SOURCE_CACHE)
     if (result.notFound) return
@@ -340,22 +332,20 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt>}
    */
   async #getHttpPrompt (request, fallback) {
-    if (this.ttlMs > 0) {
-      const hot = this.hotCache.get(request.key)
-      if (hot) {
-        if (hot.stale) this.hotCache.refresh(request.key, request)
-        telemetry.recordPromptSource('hot_cache')
-        return hot.prompt
-      }
+    const hot = this.hotCache.get(request.key)
+    if (hot) {
+      if (hot.stale) this.hotCache.refresh(request.key, request)
+      telemetry.recordPromptSource('hot_cache')
+      return hot.prompt
+    }
 
-      if (!request.resolve) {
-        const warm = this.warmCache.get(request.key)
-        if (warm) {
-          this.hotCache.set(request.key, warm.prompt, warm.ageMs)
-          if (warm.stale) this.hotCache.refresh(request.key, request)
-          telemetry.recordPromptSource('warm_cache')
-          return warm.prompt
-        }
+    if (!request.resolve) {
+      const warm = this.warmCache.get(request.key)
+      if (warm) {
+        this.hotCache.set(request.key, warm.prompt, warm.ageMs)
+        if (warm.stale) this.hotCache.refresh(request.key, request)
+        telemetry.recordPromptSource('warm_cache')
+        return warm.prompt
       }
     }
 
@@ -426,7 +416,7 @@ class PromptManager {
     this.#requireApiKey()
     const request = promptRequest(promptId, { env: this.config.env })
     this.pendingFetches.delete(request.key)
-    const result = await this.#fetchAndCache(request, { evictOnNotFound: true })
+    const result = await this.#fetchAndCache(request)
     return result.prompt
   }
 
@@ -486,7 +476,7 @@ class PromptManager {
 
       let response
       try {
-        response = await fetch(this.#url(path), {
+        response = await fetch(`${this.origin}${path}`, {
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
