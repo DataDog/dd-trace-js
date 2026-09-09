@@ -17,9 +17,12 @@ presets:
   gate: # Curated per-PR gate: highest-signal, instruction-specific content cases.
     cases:
       - dd-trace-js-package-manager-001
-      - dd-trace-js-plugin-tests-002
+      - dd-trace-js-real-path-tests-007
       - dd-trace-js-hung-ci-009
       - dd-trace-js-new-configuration-010
+      - dd-trace-js-production-async-012
+      - dd-trace-js-public-config-surfaces-013
+      - dd-trace-js-production-promises-014
     runs: 3 # 6 pairwise comparisons per selected case.
   minimum: # Cheapest AGENTS.md content check.
     cases:
