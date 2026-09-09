@@ -64,23 +64,28 @@ function toString (map, pairSeparator, fieldSeparator) {
  * @returns {string}
  */
 function limitTraceState (value) {
+  let result = ''
   let byteLength = 0
-  let end = 0
   let members = 0
   let start = 0
 
   while (start < value.length && members < MAX_LIST_MEMBERS) {
     let next = value.indexOf(',', start)
     if (next === -1) next = value.length
-    const memberLength = Buffer.byteLength(value.slice(start, next)) + (members === 0 ? 0 : 1)
-    if (byteLength + memberLength > MAX_TRACESTATE_BYTES) break
-    byteLength += memberLength
-    end = next
-    members++
+    const member = value.slice(start, next)
+    const memberLength = Buffer.byteLength(member)
+    if (memberLength <= MAX_TRACESTATE_BYTES) {
+      const separatorLength = members === 0 ? 0 : 1
+      if (byteLength + separatorLength + memberLength > MAX_TRACESTATE_BYTES) break
+      if (separatorLength) result += ','
+      result += member
+      byteLength += separatorLength + memberLength
+      members++
+    }
     start = next + 1
   }
 
-  return value.slice(0, end)
+  return result
 }
 
 class TraceStateData {

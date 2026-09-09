@@ -121,6 +121,12 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), '')
   })
 
+  it('should preserve valid members after a first member beyond the 512-byte cap', () => {
+    const ts = TraceState.fromString(`dd=${'x'.repeat(510)},ot=rv:f0948a54d43b8e;th:8,vendor=value`)
+
+    assert.strictEqual(ts.toString(), 'ot=rv:f0948a54d43b8e;th:8,vendor=value')
+  })
+
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
     const ts = TraceState.fromString('a=hello world,b=bye\tworld,c=ok')
     assert.strictEqual(ts.toString(), 'a=hello world,c=ok')
