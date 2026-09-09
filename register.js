@@ -39,7 +39,8 @@ if (!isSyncLoaderRegistered) {
 require('./packages/datadog-instrumentations/src/helpers/rewriter/loader.js')
 
 function shouldRegisterSyncLoaderHooks () {
-  if (!isSyncLoaderHookVersionSupported() || !require('./packages/dd-trace/src/supports-register-hooks')()) {
+  const supportsRegisterHooks = require('./packages/dd-trace/src/supports-register-hooks')
+  if (!isSyncLoaderHookVersionSupported() || !supportsRegisterHooks()) {
     return false
   }
 

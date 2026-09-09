@@ -13,15 +13,17 @@ registerRequireHook()
  * @returns {void}
  */
 function registerRequireHook () {
+  const supportsRegisterHooks = require('../../../../dd-trace/src/supports-register-hooks')
   if (
     globalThis[fullSyncLoaderSymbol] ||
     !isMainThread ||
     typeof Module.registerHooks !== 'function' ||
-    !require('../../../../dd-trace/src/supports-register-hooks')()
+    !supportsRegisterHooks()
   ) return
 
   try {
-    if (!require('import-in-the-middle/supports-sync-hooks.mjs').supportsSyncHooks()) return
+    const { supportsSyncHooks } = require('import-in-the-middle/supports-sync-hooks.mjs')
+    if (!supportsSyncHooks()) return
 
     const { getFormat, hasRequireCondition, rewriteSyncResult } = require('./hooks.js')
 
