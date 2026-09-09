@@ -888,7 +888,14 @@ class TextMapPropagator {
     }
 
     const traceTags = this.#extractTags(carrier)
-    if (traceTags) spanContext._trace.tags = traceTags
+    if (traceTags) {
+      spanContext._trace.tags = traceTags
+      const decisionMaker = traceTags['_dd.p.dm']
+      if (decisionMaker !== undefined) {
+        const mechanism = Math.abs(Number.parseInt(decisionMaker, 10))
+        if (Number.isInteger(mechanism)) spanContext._sampling.mechanism = mechanism
+      }
+    }
 
     return spanContext
   }

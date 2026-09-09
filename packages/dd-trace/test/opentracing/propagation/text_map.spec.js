@@ -20,6 +20,7 @@ const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../
 const {
   SAMPLING_MECHANISM_MANUAL,
   SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
   SAMPLING_MECHANISM_RULE,
 } = require('../../../src/constants')
 
@@ -1238,6 +1239,18 @@ describe('TextMapPropagator', () => {
         '_dd.p.baz': 'qux',
       })
     })
+
+    for (const mechanism of [SAMPLING_MECHANISM_APPSEC, SAMPLING_MECHANISM_AI_GUARD]) {
+      it(`should extract product sampling mechanism ${mechanism} from Datadog trace tags`, () => {
+        textMap['x-datadog-sampling-priority'] = `${USER_KEEP}`
+        textMap['x-datadog-tags'] = `_dd.p.dm=-${mechanism}`
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+        assert.strictEqual(spanContext._sampling.mechanism, mechanism)
+      })
+    }
 
     it('should preserve separators and empty trace tag values', () => {
       textMap['x-datadog-tags'] = '_dd.p.empty,_dd.p.also_empty,_dd.p.foo=bar=baz'
