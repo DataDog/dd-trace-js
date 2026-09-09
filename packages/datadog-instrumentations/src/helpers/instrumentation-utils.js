@@ -33,10 +33,12 @@ function filename (name, file) {
  */
 function matchesInstrumentation (name, version, moduleName, instrumentation) {
   const { file, filePattern, versions } = instrumentation
-  if (!matchVersion(version, versions)) return false
-  if (isRelativeRequire(name)) return true
-  if (moduleName === filename(name, file)) return true
-  return Boolean(filePattern) && new RegExp(filename(name, filePattern)).test(moduleName)
+  let matchesFile = moduleName === filename(name, file)
+  if (!matchesFile && isRelativeRequire(name)) matchesFile = true
+  if (!matchesFile && filePattern) {
+    matchesFile = new RegExp(filename(name, filePattern)).test(moduleName)
+  }
+  return matchesFile && matchVersion(version, versions)
 }
 
 /**
