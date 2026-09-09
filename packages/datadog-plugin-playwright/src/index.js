@@ -13,6 +13,12 @@ const {
   getScreenshotUploadResult,
   getScreenshotUploadTag,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
+const {
+  VIDEO_UPLOAD_RESULT_ERROR,
+  VIDEO_UPLOAD_RESULT_UPLOADED,
+  getVideoUploadResult,
+  getVideoUploadTag,
+} = require('../../dd-trace/src/ci-visibility/test-video')
 
 const {
   finishAllTraceSpans,
@@ -62,6 +68,8 @@ const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetr
 const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
+const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
+const noop = () => {}
 
 /**
  * Returns whether an attachment is an automatic Playwright failure screenshot.
@@ -76,10 +84,23 @@ function isPlaywrightFailureScreenshot (attachment) {
     PLAYWRIGHT_FAILURE_SCREENSHOT_RE.test(basename(attachment.path))
 }
 
+/**
+ * Returns whether an attachment is a Playwright test video.
+ *
+ * @param {object} attachment - Playwright test attachment
+ * @returns {boolean}
+ */
+function isPlaywrightFailureVideo (attachment) {
+  return attachment?.name === 'video' &&
+    PLAYWRIGHT_VIDEO_CONTENT_TYPES.has(attachment.contentType) &&
+    typeof attachment.path === 'string'
+}
+
 class PlaywrightPlugin extends CiPlugin {
   static id = 'playwright'
 
   #isFinalizingAfterError = false
+  #finishPendingTestFinishes
   #pendingTestFinishCallbacks = new Map()
 
   constructor (...args) {
@@ -89,7 +110,6 @@ class PlaywrightPlugin extends CiPlugin {
     this.numFailedTests = 0
     this.numFailedSuites = 0
     this.pendingTestFinishes = 0
-    this.finishSession = undefined
 
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
@@ -101,26 +121,57 @@ class PlaywrightPlugin extends CiPlugin {
       onDone(isModified)
     })
 
-    this.addSub('ci:playwright:session:start', ({ isFailureScreenshotEnabled }) => {
+    this.addSub('ci:playwright:session:start', ({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    }) => {
       this.#isFinalizingAfterError = false
-      if (!getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) return
+      const testOptimizationConfig = getConfig().testOptimization
 
-      if (!isFailureScreenshotEnabled) {
+      if (testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED && !isFailureScreenshotEnabled) {
         log.warn(
           '%s %s',
           'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot capture is disabled.',
           'Set Playwright use.screenshot to "only-on-failure", "on-first-failure", or "on".'
         )
       }
+      if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && !isFailureVideoUploadSupported) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.',
+          'Upgrade Playwright to enable failure video uploads.'
+        )
+      } else if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && !isFailureVideoEnabled) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video capture is disabled.',
+          'Set Playwright use.video to "retain-on-failure" or "on".'
+        )
+      }
     })
 
-    this.addSub('ci:playwright:session:configuration', ({ isFailureScreenshotEnabled }) => {
-      if (!getConfig().testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED || !isFailureScreenshotEnabled) return
+    this.addSub('ci:playwright:session:configuration', ({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    }) => {
+      const testOptimizationConfig = getConfig().testOptimization
 
-      if (!this.tracer._exporter?.canUploadTestScreenshots?.()) {
+      if (testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED && isFailureScreenshotEnabled &&
+        !this.tracer._exporter?.canUploadTestScreenshots?.()) {
         log.warn(
           '%s %s',
           'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Playwright screenshot upload is not supported',
+          'by the active Test Optimization transport.'
+        )
+      }
+      if (testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED && isFailureVideoEnabled &&
+        isFailureVideoUploadSupported &&
+        !this.tracer._exporter?.canUploadTestVideos?.()) {
+        log.warn(
+          '%s %s',
+          'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload is not supported',
           'by the active Test Optimization transport.'
         )
       }
@@ -140,13 +191,16 @@ class PlaywrightPlugin extends CiPlugin {
           testSuiteSpan.setTag(TEST_STATUS, 'fail')
           testSuiteSpan.setTag('error', error)
         }
-        for (const [finishTest, abortController] of this.#pendingTestFinishCallbacks) {
-          finishTest(SCREENSHOT_UPLOAD_RESULT_ERROR)
-          abortController.abort()
+        for (const [finishTest, pendingTestFinish] of this.#pendingTestFinishCallbacks) {
+          finishTest(
+            pendingTestFinish.hasScreenshot ? SCREENSHOT_UPLOAD_RESULT_ERROR : undefined,
+            pendingTestFinish.hasVideo ? VIDEO_UPLOAD_RESULT_ERROR : undefined
+          )
+          pendingTestFinish.abortController.abort()
         }
       }
 
-      const finishSession = () => {
+      const finishSession = (flushDone) => {
         this.testModuleSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_STATUS, status)
 
@@ -173,7 +227,6 @@ class PlaywrightPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
-        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
@@ -184,16 +237,16 @@ class PlaywrightPlugin extends CiPlugin {
           autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
         appClosingTelemetry()
-        this.tracer._exporter.flush(onDone)
+        this.tracer._exporter.flush(flushDone)
         this.numFailedTests = 0
         this.numFailedSuites = 0
-        this.finishSession = undefined
       }
 
       if (this.pendingTestFinishes > 0) {
-        this.finishSession = finishSession
+        this.#finishPendingTestFinishes = () => this.tracer._exporter.flush(onDone)
+        finishSession(noop)
       } else {
-        finishSession()
+        finishSession(onDone)
       }
     })
 
@@ -255,7 +308,6 @@ class PlaywrightPlugin extends CiPlugin {
         this.numFailedSuites++
       }
 
-      this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })
@@ -267,7 +319,7 @@ class PlaywrightPlugin extends CiPlugin {
       }
     })
 
-    this.addSub('ci:playwright:worker:report', ({ serializedTraces, screenshots }) => {
+    this.addSub('ci:playwright:worker:report', ({ serializedTraces, screenshots, videos }) => {
       const traces = JSON.parse(serializedTraces)
       const formattedTraces = []
       let formattedTestSpan
@@ -326,33 +378,70 @@ class PlaywrightPlugin extends CiPlugin {
         }
       }
 
-      if (!formattedTestSpan || !screenshots || this.#isFinalizingAfterError) {
+      if (!formattedTestSpan || (!screenshots && !videos) || this.#isFinalizingAfterError) {
         exportTraces()
         return
       }
 
       this.pendingTestFinishes++
       const abortController = new AbortController()
-      const finishTest = (screenshotUploadResult) => {
+      const finishTest = (screenshotUploadResult, videoUploadResult) => {
         if (!this.#pendingTestFinishCallbacks.delete(finishTest)) return
 
         const screenshotUploadTag = getScreenshotUploadTag(screenshotUploadResult)
         if (screenshotUploadTag) {
           formattedTestSpan.meta[screenshotUploadTag] = 'true'
         }
+        const videoUploadTag = getVideoUploadTag(videoUploadResult)
+        if (videoUploadTag) {
+          formattedTestSpan.meta[videoUploadTag] = 'true'
+        }
         exportTraces()
         this.pendingTestFinishes--
-        if (this.pendingTestFinishes === 0 && this.finishSession) {
-          this.finishSession()
+        if (this.pendingTestFinishes === 0 && this.#finishPendingTestFinishes) {
+          const finishPendingTestFinishes = this.#finishPendingTestFinishes
+          this.#finishPendingTestFinishes = undefined
+          finishPendingTestFinishes()
         }
       }
-      this.#pendingTestFinishCallbacks.set(finishTest, abortController)
-      const uploadStarted = this.uploadTestScreenshots({
+      const pendingTestFinish = {
+        abortController,
+        hasScreenshot: false,
+        hasVideo: false,
+      }
+      this.#pendingTestFinishCallbacks.set(finishTest, pendingTestFinish)
+      let pendingMedia = 0
+      let screenshotUploadResult
+      let videoUploadResult
+      const finishMedia = () => {
+        pendingMedia--
+        if (pendingMedia === 0) finishTest(screenshotUploadResult, videoUploadResult)
+      }
+      const screenshotUploadStarted = this.uploadTestScreenshots({
         screenshots,
         traceId: formattedTestSpan.trace_id.toString(10),
         signal: abortController.signal,
-      }, finishTest)
-      if (uploadStarted) return
+      }, (uploadResult) => {
+        screenshotUploadResult = uploadResult
+        finishMedia()
+      })
+      if (screenshotUploadStarted) {
+        pendingMedia++
+        pendingTestFinish.hasScreenshot = true
+      }
+      const videoUploadStarted = this.uploadTestVideos({
+        videos,
+        traceId: formattedTestSpan.trace_id.toString(10),
+        signal: abortController.signal,
+      }, (uploadResult) => {
+        videoUploadResult = uploadResult
+        finishMedia()
+      })
+      if (videoUploadStarted) {
+        pendingMedia++
+        pendingTestFinish.hasVideo = true
+      }
+      if (pendingMedia > 0) return
 
       finishTest()
     })
@@ -523,7 +612,15 @@ class PlaywrightPlugin extends CiPlugin {
 
       finishAllTraceSpans(span)
       if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
-        this.tracer._exporter.flush(onDone)
+        try {
+          this.tracer._exporter.flush(onDone)
+        } catch (error) {
+          // A synchronous flush failure must still release the worker, otherwise it hangs.
+          // Log rather than rethrow: an exception from this diagnostics-channel subscriber
+          // would surface as an uncaught error in the worker and crash the user's test run.
+          onDone?.()
+          log.error('Error flushing traces at Playwright worker shutdown', error)
+        }
       }
     })
 
@@ -534,6 +631,7 @@ class PlaywrightPlugin extends CiPlugin {
       testSourceLine,
       browserName,
       isNew,
+      isAttemptToFix,
       isDisabled,
       isModified,
       isQuarantined,
@@ -558,6 +656,9 @@ class PlaywrightPlugin extends CiPlugin {
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
+      }
+      if (isAttemptToFix) {
+        span.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
       }
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
@@ -618,7 +719,58 @@ class PlaywrightPlugin extends CiPlugin {
         }
         pendingUploads--
         if (pendingUploads === 0) {
-          onDone(getScreenshotUploadResult(uploadResults))
+          const uploadResult = getScreenshotUploadResult(uploadResults)
+          queueMicrotask(() => onDone(uploadResult))
+        }
+      })
+    }
+    return true
+  }
+
+  /**
+   * Uploads failure videos for a Playwright test attempt.
+   *
+   * @param {object} options - Upload options
+   * @param {Array<object>} options.videos - Playwright test attachments
+   * @param {string} options.traceId - Test trace id used as the video key
+   * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
+   * @param {(result: string|undefined) => void} onDone - Completion callback
+   * @returns {boolean} Whether at least one upload was started
+   */
+  uploadTestVideos ({ videos, traceId, signal }, onDone) {
+    const exporter = this.tracer?._exporter
+    if (!Array.isArray(videos) || !videos.length ||
+      !exporter?.canUploadTestVideos?.() || !exporter.uploadTestVideo) {
+      return false
+    }
+
+    const videoPaths = new Set()
+    for (const video of videos) {
+      if (isPlaywrightFailureVideo(video)) videoPaths.add(video.path)
+    }
+    if (!videoPaths.size) return false
+
+    const uploadResults = new Array(videoPaths.size)
+    let pendingUploads = videoPaths.size
+    let index = 0
+    for (const filePath of videoPaths) {
+      const resultIndex = index++
+      exporter.uploadTestVideo({
+        filePath,
+        traceId,
+        idempotencyKey: `${traceId}:${basename(filePath)}`,
+        capturedAtMs: Date.now(),
+        signal,
+      }, (error, uploaded = true) => {
+        if (uploaded) {
+          uploadResults[resultIndex] = error
+            ? VIDEO_UPLOAD_RESULT_ERROR
+            : VIDEO_UPLOAD_RESULT_UPLOADED
+        }
+        pendingUploads--
+        if (pendingUploads === 0) {
+          const uploadResult = getVideoUploadResult(uploadResults)
+          queueMicrotask(() => onDone(uploadResult))
         }
       })
     }

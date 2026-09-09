@@ -1,10 +1,10 @@
 'use strict'
 
 const getConfig = require('../../config')
-const request = require('../requests/request')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
-
 const {
   incrementCountMetric,
   distributionMetric,
@@ -14,8 +14,8 @@ const {
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
-
 const { getNumFromKnownTests } = require('../../plugins/util/test')
+const request = require('../requests/request')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 const { validateKnownTestsResponse } = require('../test-optimization-http-cache-schema')
 
@@ -162,8 +162,8 @@ function fetchFromApi ({
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/ci/libraries/tests`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/ci/libraries/tests')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     const { DD_API_KEY } = getConfig()
     if (!DD_API_KEY) {

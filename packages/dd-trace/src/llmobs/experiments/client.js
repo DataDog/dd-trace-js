@@ -108,6 +108,10 @@ class ExperimentsClient {
     return this.#site
   }
 
+  get projectName () {
+    return this.#projectName
+  }
+
   // Dashboard URL base for the configured site, e.g. https://app.datadoghq.com
   get appBase () {
     return `https://${appHost(this.#site)}`

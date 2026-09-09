@@ -408,6 +408,7 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {string} options.plugin
  * @param {object} [options.pluginConfig] - config passed to `tracer.use(plugin, ...)`
  * @param {object} options.tracerConfigOptions
+ * @param {number} [options.traceTimeoutMs] - maximum time to wait for APM traces
  * @returns {{
  *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
  *   assertNoLlmObsSpans: (windowMs?: number) => Promise<void>,
@@ -418,6 +419,7 @@ function useLlmObs ({
   plugin,
   pluginConfig = {},
   tracerConfigOptions = {},
+  traceTimeoutMs = 5000,
 } = {}) {
   /** @type {ReturnType<typeof agent.assertSomeTraces>} */
   let apmTracesPromise
@@ -430,7 +432,7 @@ function useLlmObs ({
       return apmTraces
         .flatMap(trace => trace)
         .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    }, { timeoutMs: 5000 })
+    }, { timeoutMs: traceTimeoutMs })
   }
 
   useEnv({
@@ -498,11 +500,16 @@ function useLlmObs ({
       }
     },
 
-    getEvaluationMetrics: function () {
-      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
-      return evaluationMetricsRequests
-        .flatMap(request => request.data.attributes.metrics)
-        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
+    getEvaluationMetrics: async function () {
+      const evaluationMetrics = []
+
+      while (evaluationMetrics.length === 0 && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+        evaluationMetrics.push(...evaluationMetricsRequests.flatMap(request => request.data.attributes.metrics))
+      }
+
+      return evaluationMetrics.sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     },
   }
 }

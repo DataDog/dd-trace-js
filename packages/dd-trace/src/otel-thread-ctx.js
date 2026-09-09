@@ -105,6 +105,10 @@ const THREAD_ID = String(threadId)
 //             time onEnter activates the span, and cleared on span finish, which
 //             is how a pendingEndpoints waiter recognizes a record it must no
 //             longer append to.
+//   webTags:  the web-server tag bag the record's endpoint comes from, or is
+//             waiting on; undefined while the span has no web-server ancestry.
+//             Distinguishes a stale announcement from a live one when a nearer
+//             web-server span takes over.
 const CachedSym = Symbol('OtelThreadCtx.cached')
 
 let started = false
@@ -137,6 +141,7 @@ function getOrBuildContext (span) {
     span[CachedSym] = cached
   }
   cached.context = new ThreadContext(traceId, spanId, attrs)
+  cached.webTags = webTags
   if (endpoint === undefined) awaitEndpoint(webTags, cached)
   return cached.context
 }
@@ -227,21 +232,34 @@ function onEndpointResolved (span) {
   if (endpoint === undefined) return
   pendingEndpoints.delete(webTags)
   for (const cached of waiting) {
-    if (cached.context !== undefined) appendEndpoint(cached.context, endpoint)
+    // A record whose span has since been attributed to a nearer web-server span
+    // enlisted again under that bag, and this one is no longer its endpoint.
+    if (cached.context !== undefined && cached.webTags === webTags) appendEndpoint(cached.context, endpoint)
   }
 }
 
-// A span whose record was built before it looked like a web-server span at all
-// has just been recognized as one, so it has no endpoint and never enlisted for
-// this request. Its ancestry can't have changed, only its own tags, so this is
-// only ever about the announced span's own record.
+// webTagsCache has changed which request it attributes this span to: the span
+// itself or an ancestor was recognized as a web-server span, giving a record
+// built without any web-server ancestry its first endpoint, or a nearer
+// web-server span superseded the one this record is showing. Give the record
+// the new request's endpoint if it has settled, or wait for its announcement.
 function onWebTagsResolved (span) {
   if (!started) return
   const cached = span[CachedSym]
   if (cached === undefined || cached.context === undefined) return
   const webTags = webTagsCache.getCachedWebTags(span)
+  if (webTags === cached.webTags) return
+  // Recorded so that an announcement for the bag this record was previously
+  // waiting on no longer applies to it.
+  cached.webTags = webTags
   const endpoint = finalEndpoint(webTags)
   if (endpoint === undefined) {
+    // A record that already shows the outer request's endpoint goes on showing
+    // it until the nearer one settles: the record buffer is append-only, so
+    // there is no way to take the attribute back, and rebuilding the
+    // ThreadContext would strand every async-context frame holding this one.
+    // The work is still nested in the outer request, which makes that the least
+    // wrong of the values available.
     awaitEndpoint(webTags, cached)
   } else {
     appendEndpoint(cached.context, endpoint)

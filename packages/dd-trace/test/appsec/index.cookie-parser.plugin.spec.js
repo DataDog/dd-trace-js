@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { once } = require('node:events')
 const path = require('node:path')
 
 const axios = require('axios')
@@ -16,11 +17,8 @@ withVersions('cookie-parser', 'cookie-parser', version => {
   describe('Suspicious request blocking - cookie-parser', () => {
     let port, server, requestCookie
 
-    before(() => {
-      return agent.load(['express', 'cookie-parser', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['express', 'cookie-parser', 'http'], { client: false })
       const express = require('../../../../versions/express').get()
       const cookieParser = require(`../../../../versions/cookie-parser@${version}`).get()
 
@@ -31,10 +29,9 @@ withVersions('cookie-parser', 'cookie-parser', version => {
         res.end('DONE')
       })
 
-      server = app.listen(port, () => {
-        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        done()
-      })
+      server = app.listen(port)
+      await once(server, 'listening')
+      port = (/** @type {import('net').AddressInfo} */ (server.address())).port
     })
 
     beforeEach(async () => {

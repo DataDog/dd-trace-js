@@ -4,8 +4,7 @@ const { URL } = require('node:url')
 const os = require('node:os')
 
 const log = require('../../log')
-const { entityId } = require('../common/docker')
-const tracerVersion = require('../../../../../package.json').version
+const { containerId } = require('../common/docker')
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
 
@@ -23,7 +22,7 @@ class AgentlessExporter {
    * @param {string} [config.site] - The Datadog site. Defaults to 'datadoghq.com'.
    * @param {number} [config.flushInterval] - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
-   * @param {object} [config.tags] - Tags including runtime-id
+   * @param {object} config.tags - Tags including runtime-id
    */
   constructor (config) {
     this.#config = config
@@ -40,13 +39,12 @@ class AgentlessExporter {
 
     const metadata = {
       hostname: os.hostname(),
-      env: config.env,
-      languageName: 'nodejs',
-      languageVersion: process.version,
-      tracerVersion,
-      runtimeID: config.tags?.['runtime-id'],
-      ...(entityId ? { containerID: entityId } : {}),
+      // Read live off `config` (instead of copying the value) so a later change
+      // (e.g. a MicroVM clone resume) is picked up by the next data-pipeline export.
+      get env () { return config.env },
+      get runtimeID () { return config.tags['runtime-id'] },
     }
+    if (containerId) metadata.containerId = containerId
 
     this._writer = new Writer({
       url: this._url,

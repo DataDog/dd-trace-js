@@ -1,5 +1,8 @@
 'use strict'
 
+const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
+
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
@@ -54,10 +57,48 @@ class BatchLogRecordProcessor {
 
   /**
    * Forces an immediate flush of all pending log records.
-   * @returns {undefined} Promise that resolves when flush is complete
+   * @param {Function} [done] Called after all pending log exports complete
    */
-  forceFlush () {
-    this.#export()
+  forceFlush (done) {
+    this.#clearTimer()
+
+    const deliveryTracker = createServerlessDeliveryTracker()
+    if (!deliveryTracker) {
+      // Normal processes preserve the existing fire-and-forget batch flush.
+      this.#export()
+      done?.()
+      return
+    }
+
+    // Flush only records present at this boundary. New records belong to the
+    // later request that produced them and must not extend this lifecycle flush.
+    const logRecords = this.#logRecords
+    this.#logRecords = []
+
+    // Join exports already active at this boundary before draining this snapshot.
+    if (typeof this.exporter.flush === 'function') {
+      deliveryTracker.track(complete => this.exporter.flush(complete))
+    }
+
+    deliveryTracker.track(complete => {
+      const flushNext = () => {
+        if (logRecords.length === 0) {
+          complete()
+          return
+        }
+
+        // Drain the boundary snapshot one batch at a time.
+        const batch = logRecords.splice(0, this.#maxExportBatchSize)
+        try {
+          this.exporter.export(batch, flushNext)
+        } catch (error) {
+          log.error('Error exporting OTLP logs:', error)
+          complete()
+        }
+      }
+      flushNext()
+    })
+    deliveryTracker.waitForIdle(done)
   }
 
   /**
@@ -79,6 +120,7 @@ class BatchLogRecordProcessor {
    * @private
    */
   #export () {
+    if (this.#logRecords.length === 0) return
     const logRecords = this.#logRecords.slice(0, this.#maxExportBatchSize)
     this.#logRecords = this.#logRecords.slice(this.#maxExportBatchSize)
 

@@ -80,7 +80,10 @@ describe('test optimization validation generated files', () => {
   })
 
   it('refuses generated file paths that escape through a symbolic-link directory', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link behavior exercised here.
+      this.skip()
+    }
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-outside-'))
@@ -101,7 +104,10 @@ describe('test optimization validation generated files', () => {
   })
 
   it('does not delete outside files after the project root is replaced by a symbolic link', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link replacement behavior exercised here.
+      this.skip()
+    }
 
     const base = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-root-swap-'))
     const root = path.join(base, 'project')
@@ -128,7 +134,10 @@ describe('test optimization validation generated files', () => {
   })
 
   it('does not delete redirected files after a generated directory is replaced by a symbolic link', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link replacement behavior exercised here.
+      this.skip()
+    }
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-directory-swap-'))
     const generatedDirectory = path.join(root, 'generated')

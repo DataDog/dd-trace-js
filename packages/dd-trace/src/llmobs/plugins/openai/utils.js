@@ -134,15 +134,17 @@ function hasMultimodalInputs (variables) {
  * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
  */
 function extractContentParts (parts) {
-  const extracted = []
+  let content = ''
+  let hasContent = false
   const audioParts = []
 
   for (const part of parts) {
     const partType = part?.type ?? ''
+    let extracted
     if (partType === 'text') {
-      extracted.push(part.text ?? '')
+      extracted = part.text ?? ''
     } else if (partType === 'image_url') {
-      extracted.push(IMAGE_FALLBACK)
+      extracted = IMAGE_FALLBACK
     } else if (partType === 'input_audio') {
       const inputAudio = part.input_audio ?? {}
       const data = inputAudio.data
@@ -151,14 +153,19 @@ function extractContentParts (parts) {
         // is needed. Only fall back to "[audio]" when there's no audio to capture.
         audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format, AUDIO_MIME_TYPES)))
       } else {
-        extracted.push(AUDIO_FALLBACK)
+        extracted = AUDIO_FALLBACK
       }
     } else {
-      extracted.push(`[${partType}]`)
+      extracted = `[${partType}]`
     }
+
+    if (extracted === undefined) continue
+    if (hasContent) content += '\n'
+    content += extracted
+    hasContent = true
   }
 
-  return { content: extracted.join('\n'), audioParts }
+  return { content, audioParts }
 }
 
 /**

@@ -11,16 +11,17 @@ const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   EMPTY_EFD_RETRY_POLICY,
   getEfdRetryCountForDuration,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { FINAL_FLUSH_FALLBACK_DELAY, FINAL_FLUSH_TIMEOUT } =
+  require('../../dd-trace/src/ci-visibility/final-flush')
 const {
   getCoveredFilesFromCoverage,
-  getExecutableFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
@@ -39,7 +40,7 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
-  getTestCoverageLinesPercentage,
+  getTestCoverageLinesData,
   applySkippedCoverageToCoverage,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -63,6 +64,7 @@ const { addHook, channel } = require('./helpers/instrument')
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
 const codeCoverageReportCh = channel('ci:jest:coverage-report')
+const bundlerLoadCh = channel('dd-trace:bundler:load')
 
 const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
@@ -96,10 +98,10 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 
-// Maximum time we'll wait for the tracer to flush
-// The exporter has a 10-second bounded final-flush deadline. Leave enough time
-// for its completion callback before Jest's --forceExit fallback takes over.
-const FLUSH_TIMEOUT = 12_000
+// Maximum time we'll wait for the tracer to flush.
+// Let the exporter enforce its hard deadline and invoke its completion callback
+// before Jest's --forceExit fallback takes over.
+const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
@@ -174,9 +176,13 @@ const newTests = new Set()
 const testSuiteJestObjects = new Map()
 const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
+const wrappedJestEsmLoaders = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
+const jestEsmLoggingModulePathsByRuntime = new WeakMap()
+const jestLoggingPackagesByRuntime = new WeakMap()
+const instrumentedJestLoggingModules = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
@@ -341,16 +347,17 @@ function getTestStats (testStatuses) {
 function formatIgnoredFailuresSummary (ignoredFailures) {
   if (!ignoredFailures?.efdFailureCount) return ''
 
-  const items = ignoredFailures.efdNames.map(text => ({ text, suffix: 'Early Flake Detection' }))
-
-  if (items.length === 0) return ''
-
-  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = items.length - shown.length
+  const shown = ignoredFailures.efdNames.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = ignoredFailures.efdNames.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const formattedItems = shown
-    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
-    .join('\n') + moreSuffix
+  let formattedItems = ''
+  let isFirstItem = true
+  for (const text of shown) {
+    if (!isFirstItem) formattedItems += '\n'
+    formattedItems += `  • ${text} (Early Flake Detection)`
+    isFirstItem = false
+  }
+  formattedItems += moreSuffix
 
   return `${ignoredFailures.efdFailureCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
@@ -763,7 +770,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return test.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(eachTest).apply(this, eachArgs)
+          const boundTest = bind(eachTest)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -876,7 +884,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             }
             return concurrentTest.call(this, testName, testFn, ...callArgs)
           }
-          const eachBind = bind(concurrentEachTest, false, needsEachError).apply(this, eachArgs)
+          const boundTest = bind(concurrentEachTest, false, needsEachError)
+          const eachBind = boundTest.apply(this, eachArgs)
           return eachBind.apply(this, testArgs)
         }
       }
@@ -925,10 +934,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       let jestEach
       try {
-        jestEach = createRequire(path.join(this.rootDir, 'package.json'))('jest-each')
+        const requireFromPath = createRequire(path.join(this.rootDir, 'package.json'))
+        jestEach = requireFromPath('jest-each')
       } catch {
         try {
-          jestEach = createRequire(path.join(process.cwd(), 'package.json'))('jest-each')
+          const requireFromPath = createRequire(path.join(process.cwd(), 'package.json'))
+          jestEach = requireFromPath('jest-each')
         } catch {
           jestEach = undefined
         }
@@ -2667,16 +2678,15 @@ function getTestSessionCoveragePayload (results, fallbackRootDir) {
     if (isSuitesSkipped) {
       applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
     }
-    payload.testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+    const coverageLinesData = getTestCoverageLinesData(
       coverageMap,
       undefined,
-      coverageRootDir
+      coverageRootDir,
+      isTiaCoverageBackfillEnabled()
     )
-    if (isTiaCoverageBackfillEnabled()) {
-      payload.testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
-        filename: getTestSuitePath(filename, coverageRootDir),
-        bitmap,
-      }))
+    payload.testCodeCoverageLinesTotal = coverageLinesData.percentage
+    if (coverageLinesData.executableFiles) {
+      payload.testSessionCoverageFiles = coverageLinesData.executableFiles
     }
   } catch {
     // ignore errors
@@ -3067,9 +3077,7 @@ function getCliWrapper (isNewJestVersion) {
         result = await runCLI.apply(this, arguments)
       } catch (error) {
         try {
-          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error, {
-            isTestSessionFinalizationError: true,
-          }))
+          await waitForTestSessionFinish(getTestSessionFinishPayload('fail', error))
         } catch (finalizationError) {
           log.error('Jest test session finalization error: %s', finalizationError)
         }
@@ -3728,6 +3736,14 @@ if (DD_MAJOR < 6) {
   }, jestConfigSyncWrapper)
 }
 
+const JEST_LOGGING_LIBRARIES = new Set([
+  'bunyan',
+  'pino',
+  'winston',
+])
+const disabledJestInstrumentations = new Set(
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
+)
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
   'selenium-webdriver/chrome',
@@ -3736,7 +3752,6 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver/firefox',
   'selenium-webdriver/ie',
   'selenium-webdriver/chromium',
-  'winston',
 ])
 
 function recordMockedFile (suiteFilePath, moduleName) {
@@ -3786,8 +3801,6 @@ function wrapJestObject (jestObject, suiteFilePath) {
   wrappedJestObjects.add(jestObject)
 
   shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
-    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-    LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
     recordMockedFile(suiteFilePath, moduleName)
     return mock.apply(this, arguments)
   })
@@ -3870,6 +3883,220 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
   return require(moduleName)
 }
 
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {void}
+ */
+function recordJestEsmLoggingModulePath (runtime, from, moduleName) {
+  if (
+    typeof from !== 'string' ||
+    !JEST_LOGGING_LIBRARIES.has(moduleName) ||
+    disabledJestInstrumentations.has(moduleName)
+  ) return
+
+  let pathsByParent = jestEsmLoggingModulePathsByRuntime.get(runtime)
+  if (!pathsByParent) {
+    pathsByParent = new Map()
+    jestEsmLoggingModulePathsByRuntime.set(runtime, pathsByParent)
+  }
+
+  let modulePaths = pathsByParent.get(from)
+  if (!modulePaths) {
+    modulePaths = new Map()
+    pathsByParent.set(from, modulePaths)
+  }
+  if (modulePaths.has(moduleName)) return
+
+  try {
+    modulePaths.set(moduleName, createRequire(from).resolve(moduleName))
+  } catch {
+    modulePaths.set(moduleName, undefined)
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} modulePath
+ * @returns {string | undefined}
+ */
+function getJestEsmLoggingModuleName (runtime, from, modulePath) {
+  const modulePaths = jestEsmLoggingModulePathsByRuntime.get(runtime)?.get(from)
+  if (!modulePaths) return
+
+  for (const [moduleName, resolvedPath] of modulePaths) {
+    if (resolvedPath === modulePath) return moduleName
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @returns {void}
+ */
+function wrapJestEsmLoader (runtime) {
+  const esmLoader = runtime?.esmLoader
+  if (!esmLoader || wrappedJestEsmLoaders.has(esmLoader)) return
+
+  wrappedJestEsmLoaders.add(esmLoader)
+  if (typeof esmLoader.resolveModule === 'function') {
+    shimmer.wrap(esmLoader, 'resolveModule', resolveModule => function (moduleName, from) {
+      recordJestEsmLoggingModulePath(runtime, from, moduleName)
+      return resolveModule.apply(this, arguments)
+    })
+  }
+  if (typeof esmLoader.resolveSpecifierForSyncGraph === 'function') {
+    shimmer.wrap(
+      esmLoader,
+      'resolveSpecifierForSyncGraph',
+      resolveSpecifier => function (from, moduleName) {
+        recordJestEsmLoggingModulePath(runtime, from, moduleName)
+        return resolveSpecifier.apply(this, arguments)
+      }
+    )
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {string | undefined}
+ */
+function getJestBypassModulePath (runtime, from, moduleName) {
+  if (typeof from !== 'string' || typeof moduleName !== 'string') return
+
+  if (!LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+    // Keep the native fallback for logging packages that cannot be instrumented in Jest's realm, such as a
+    // package-name-preserving symlink whose target is a user wrapper rather than the package itself.
+    if (path.isAbsolute(moduleName) && getJestEsmLoggingModuleName(runtime, from, moduleName)) return moduleName
+    if (!JEST_LOGGING_LIBRARIES.has(moduleName) || disabledJestInstrumentations.has(moduleName)) return
+  }
+
+  try {
+    let jestModulePath
+    if (typeof runtime._resolveCjsModule === 'function') {
+      jestModulePath = runtime._resolveCjsModule(from, moduleName)
+    } else if (typeof runtime.cjsLoader?.resolution?.resolveCjs === 'function') {
+      jestModulePath = runtime.cjsLoader.resolution.resolveCjs(from, moduleName)
+    } else {
+      // Jest 24-27 uses this name for its synchronous CommonJS resolver.
+      jestModulePath = runtime._resolveModule(from, moduleName)
+    }
+    if (jestModulePath === createRequire(from).resolve(moduleName)) return jestModulePath
+  } catch {
+    // Let Jest produce its own resolution error or load a resolver-only module.
+  }
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {string}
+ */
+function resolveJestModulePath (runtime, from, moduleName) {
+  if (path.isAbsolute(moduleName)) return moduleName
+
+  if (typeof runtime._resolveCjsModule === 'function') {
+    return runtime._resolveCjsModule(from, moduleName)
+  } else if (typeof runtime.cjsLoader?.resolution?.resolveCjs === 'function') {
+    return runtime.cjsLoader.resolution.resolveCjs(from, moduleName)
+  }
+  return runtime._resolveModule(from, moduleName)
+}
+
+/**
+ * @param {object} runtime
+ * @param {string} from
+ * @param {string} moduleName
+ * @returns {{ name: string, path: string, version: string } | undefined}
+ */
+function getJestLoggingPackage (runtime, from, moduleName) {
+  if (typeof from !== 'string' || typeof moduleName !== 'string') return
+
+  const directModuleName = JEST_LOGGING_LIBRARIES.has(moduleName) && !disabledJestInstrumentations.has(moduleName)
+    ? moduleName
+    : getJestEsmLoggingModuleName(runtime, from, moduleName)
+  const packages = jestLoggingPackagesByRuntime.get(runtime)
+  let containingPackage
+  if (!directModuleName) {
+    if (!packages) return
+
+    const normalizedFrom = from.replaceAll(path.sep, '/')
+    for (const [packageRoot, loggingPackage] of packages) {
+      if (normalizedFrom.startsWith(`${packageRoot}/`)) {
+        containingPackage = { packageRoot, ...loggingPackage }
+        break
+      }
+    }
+    if (!containingPackage) return
+  }
+
+  try {
+    const modulePath = resolveJestModulePath(runtime, from, moduleName)
+    const normalizedModulePath = modulePath.replaceAll(path.sep, '/')
+
+    if (directModuleName) {
+      if (modulePath !== createRequire(from).resolve(directModuleName)) return
+
+      const nodeModulesPath = `/node_modules/${directModuleName}/`
+      const packagePathIndex = normalizedModulePath.lastIndexOf(nodeModulesPath)
+      if (packagePathIndex === -1) return
+
+      const packageRoot = normalizedModulePath.slice(0, packagePathIndex + nodeModulesPath.length - 1)
+      const { version } = JSON.parse(readFileSync(`${packageRoot}/package.json`, 'utf8'))
+      if (typeof version !== 'string') return
+
+      let runtimePackages = packages
+      if (!runtimePackages) {
+        runtimePackages = new Map()
+        jestLoggingPackagesByRuntime.set(runtime, runtimePackages)
+      }
+      runtimePackages.set(packageRoot, { name: directModuleName, version })
+      return { name: directModuleName, path: directModuleName, version }
+    }
+
+    const { packageRoot, name, version } = containingPackage
+    if (!normalizedModulePath.startsWith(`${packageRoot}/`)) return
+
+    const modulePathWithinPackage = normalizedModulePath.slice(packageRoot.length + 1)
+    return { name, path: `${name}/${modulePathWithinPackage}`, version }
+  } catch {
+    // Let Jest load unresolved, resolver-only, or virtual modules without instrumentation.
+  }
+}
+
+/**
+ * @param {unknown} moduleExports
+ * @param {{ name: string, path: string, version: string } | undefined} loggingPackage
+ * @returns {unknown}
+ */
+function instrumentJestLoggingModule (moduleExports, loggingPackage) {
+  if (!loggingPackage || (typeof moduleExports !== 'object' && typeof moduleExports !== 'function')) {
+    return moduleExports
+  }
+  if (moduleExports === null) return moduleExports
+
+  const instrumentedModule = instrumentedJestLoggingModules.get(moduleExports)
+  if (instrumentedModule) return instrumentedModule
+
+  const payload = {
+    module: moduleExports,
+    package: loggingPackage.name,
+    path: loggingPackage.path,
+    version: loggingPackage.version,
+  }
+  // Apply the regular instrumentation after Jest has evaluated the module so its built-ins stay in Jest's realm.
+  bundlerLoadCh.publish(payload)
+  instrumentedJestLoggingModules.set(moduleExports, payload.module)
+  if (payload.module && (typeof payload.module === 'object' || typeof payload.module === 'function')) {
+    instrumentedJestLoggingModules.set(payload.module, payload.module)
+  }
+  return payload.module
+}
+
 function formatDefaultStackTrace (error, structuredStackTrace) {
   const errorString = Error.prototype.toString.call(error)
   if (structuredStackTrace.length === 0) return errorString
@@ -3893,10 +4120,31 @@ addHook({
     })
   }
 
+  // Jest 28 through 30.3 keeps ESM dependency resolution on Runtime itself.
+  if (typeof Runtime.prototype.resolveModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'resolveModule', resolveModule => function (moduleName, from) {
+      recordJestEsmLoggingModulePath(this, from, moduleName)
+      return resolveModule.apply(this, arguments)
+    })
+  }
+
+  if (typeof Runtime.prototype.unstable_importModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'unstable_importModule', importModule => function () {
+      wrapJestEsmLoader(this)
+      return importModule.apply(this, arguments)
+    })
+  }
+
   shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
     try {
-      const returnedValue = requireModule.apply(this, arguments)
+      const loggingPackage = getJestLoggingPackage(this, from, moduleName)
+      // Jest calls requireModule only after deciding that the module should not be mocked.
+      const bypassModulePath = loggingPackage ? undefined : getJestBypassModulePath(this, from, moduleName)
+      let returnedValue = bypassModulePath
+        ? requireOutsideJestRequireEngine(this, bypassModulePath)
+        : requireModule.apply(this, arguments)
+      returnedValue = instrumentJestLoggingModule(returnedValue, loggingPackage)
       if (moduleName === '@jest/globals') {
         wrapConcurrentJestGlobalsForRuntime(this, returnedValue)
       }
@@ -3925,11 +4173,6 @@ addHook({
       return formatDefaultStackTrace(error, filteredStackTrace)
     }
     try {
-      // TODO: do this for every library that we instrument
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        // To bypass jest's own require engine
-        return requireOutsideJestRequireEngine(this, moduleName)
-      }
       let returnedValue
       try {
         returnedValue = requireModuleOrMock.apply(this, arguments)

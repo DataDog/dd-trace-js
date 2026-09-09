@@ -9,7 +9,11 @@ const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
 const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/test-worker', {
-  '../../../config': () => proxyquire.noPreserveCache()('../../../../src/config', {})(),
+  '../../../config': () => {
+    const loadConfig = proxyquire.noPreserveCache()
+    const createConfig = loadConfig('../../../../src/config', {})
+    return createConfig()
+  },
 })
 
 const {

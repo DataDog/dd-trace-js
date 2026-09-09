@@ -19,7 +19,7 @@ jobs:
     outputs:
       release-lines: ${{ steps.check.outputs.release-lines }}
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
@@ -36,6 +36,127 @@ jobs:
           done
           echo "release-lines=[$(IFS=,; echo "${lines[*]}")]" >> "$GITHUB_OUTPUT"
 
+  release-warning:
+    needs: check-branches
+    if: >
+      github.event_name == 'schedule' &&
+      needs.check-branches.outputs.release-lines != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal
+      - id: release-age
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          RELEASE_LINES: ${{ needs.check-branches.outputs.release-lines }}
+        run: |
+          releases=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" | jq -s 'add')
+          today=$(date -u +%F)
+          today_epoch=$(date -u -d "$today" +%s)
+          warning_lines=()
+          minimum_calendar_age=
+          maximum_business_age=
+
+          while IFS= read -r line; do
+            published_at=$(jq -r --arg prefix "v${line}." '
+              map(select(.draft == false and (.tag_name | startswith($prefix)))) |
+              max_by(.published_at).published_at // empty
+            ' <<< "$releases")
+
+            if [ -z "$published_at" ]; then
+              echo "No published release found for v${line}.x" >&2
+              exit 1
+            fi
+
+            release_date=${published_at%%T*}
+            release_epoch=$(date -u -d "$release_date" +%s)
+            calendar_age=$(((today_epoch - release_epoch) / 86400))
+            cursor=$release_date
+            business_age=0
+
+            while [ "$cursor" != "$today" ]; do
+              cursor=$(date -u -d "$cursor + 1 day" +%F)
+              day_of_week=$(date -u -d "$cursor" +%u)
+              if ((day_of_week <= 5)); then
+                business_age=$((business_age + 1))
+              fi
+            done
+
+            if ((business_age != 5 && business_age < 8)); then
+              continue
+            fi
+
+            warning_lines+=("v${line}")
+
+            if [ -z "$minimum_calendar_age" ] || ((calendar_age < minimum_calendar_age)); then
+              minimum_calendar_age=$calendar_age
+            fi
+
+            if [ -z "$maximum_business_age" ] || ((business_age > maximum_business_age)); then
+              maximum_business_age=$business_age
+            fi
+
+          done < <(jq -r '.[]' <<< "$RELEASE_LINES")
+
+          if ((${#warning_lines[@]} == 0)); then
+            echo "warn=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ((${#warning_lines[@]} == 1)); then
+            release_subject="Release line ${warning_lines[0]}"
+            release_verb=has
+            release_noun=release
+          else
+            last_index=$((${#warning_lines[@]} - 1))
+            release_lines=${warning_lines[0]}
+            for ((index = 1; index < last_index; index++)); do
+              release_lines+=", ${warning_lines[index]}"
+            done
+            release_subject="Release lines ${release_lines} and ${warning_lines[last_index]}"
+            release_verb=have
+            release_noun=releases
+          fi
+
+          if ((maximum_business_age >= 8)); then
+            icon=:rotating_light:
+          else
+            icon=:warning:
+          fi
+
+          {
+            echo "warn=true"
+            echo "days=$minimum_calendar_age"
+            echo "icon=$icon"
+            echo "release-noun=$release_noun"
+            echo "release-subject=$release_subject"
+            echo "release-verb=$release_verb"
+          } >> "$GITHUB_OUTPUT"
+      - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
+        if: steps.release-age.outputs.warn == 'true'
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: >-
+                    ${{ steps.release-age.outputs.icon }}
+                    *${{ steps.release-age.outputs.release-subject }}*
+                    ${{ steps.release-age.outputs.release-verb }} gone at least
+                    ${{ steps.release-age.outputs.days }} days without a release.
+                    Consider cutting the next
+                    ${{ steps.release-age.outputs.release-noun }} soon.
+
   create-proposal:
     needs: check-branches
     if: needs.check-branches.outputs.release-lines != '[]'
@@ -47,7 +168,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js

@@ -123,6 +123,7 @@ build
 prebuilds
 prebuilds.*
 docs/test.js
+docs/superpowers/
 dist
 acmeair-nodejs
 !packages/*/test/**/dist

@@ -34,7 +34,8 @@ function noopLookup (hostname, callback) {
 }
 
 const lookup = createCallbackInstrumentor('apm:dns:lookup', { captureResult: true })
-const wrappedLookup = lookup(buildArgsContext)(noopLookup)
+const wrapLookup = lookup(buildArgsContext)
+const wrappedLookup = wrapLookup(noopLookup)
 
 const startCh = channel('apm:dns:lookup:start')
 const finishCh = channel('apm:dns:lookup:finish')
@@ -67,7 +68,8 @@ const onLookup = (_, address) => { lastResult = address }
 // edit drops a binding instead of silently measuring a no-op pass-through again.
 let storeInLookup
 let storeInCallback
-const verifyLookup = lookup(buildArgsContext)((hostname, callback) => {
+const createVerifyLookup = lookup(buildArgsContext)
+const verifyLookup = createVerifyLookup((hostname, callback) => {
   storeInLookup = legacyStorage.getStore()
   return callback(null, '127.0.0.1', 4)
 })

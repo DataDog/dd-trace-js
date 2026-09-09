@@ -1,9 +1,6 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-const { DD_TELEMETRY_REQUEST_METRICS, getVersionsTags } = require('./common')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { appsecMetrics, DD_TELEMETRY_REQUEST_METRICS, getVersionsTags } = require('./common')
 
 const BLOCKING_STATUS = {
   FAILURE: 'failure',

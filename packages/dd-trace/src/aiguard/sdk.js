@@ -12,6 +12,7 @@ class AIGuard extends NoopAIGuard {
   #tracer
   #client
   #reporter
+  #redactionEnabled
   #meta
 
   /**
@@ -29,6 +30,7 @@ class AIGuard extends NoopAIGuard {
     this.#tracer = tracer
     this.#client = new AIGuardClient(config)
     this.#reporter = new EvaluationReporter(config)
+    this.#redactionEnabled = config.experimental.aiguard.redactionEnabled
     this.#meta = { service: config.service, env: config.env }
     this.#initialized = true
   }
@@ -45,13 +47,16 @@ class AIGuard extends NoopAIGuard {
       const report = this.#reporter.start(span, messages, { source, integration })
       let evaluation
       try {
-        evaluation = await this.#client.evaluate(messages, this.#meta)
+        evaluation = await this.#client.evaluate(report.messages, this.#meta)
       } catch (error) {
         this.#reporter.fail(report, error.telemetryType ?? TAGS.ERROR_TYPE_CLIENT)
         throw error
       }
 
-      const outcome = createEvaluationOutcome(evaluation, block)
+      const outcome = createEvaluationOutcome(report.messages, evaluation, {
+        block,
+        redactionEnabled: this.#redactionEnabled,
+      })
       this.#reporter.finish(report, outcome)
 
       if (outcome.shouldBlock) {

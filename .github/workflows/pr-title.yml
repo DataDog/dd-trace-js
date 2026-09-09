@@ -25,7 +25,7 @@ jobs:
       - name: Checkout base revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Auto-rename GitHub revert title to Conventional Commit
@@ -63,6 +63,8 @@ jobs:
             core.info(`PR title OK: ${title}`)
 
             const type = match[3]
+            if (!/^(?:feat|fix|perf|docs)$/.test(type)) return
+
             const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
               ...context.repo,
               pull_number: pullRequest.number,
@@ -71,13 +73,17 @@ jobs:
             const files = []
             const { appendChangedPaths, isInternalOnly } = require('./scripts/release/changelog')
             appendChangedPaths(files, changedFiles)
-            if (/^(?:feat|fix|perf|docs)$/.test(type) && isInternalOnly(files)) {
+            if (isInternalOnly(files)) {
               core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
                 'Use test, bench, ci, or chore.')
             }
 
       - name: Sync labels with PR title
-        if: steps.rename.outputs.renamed != 'true'
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action == 'opened' ||
+          github.event.action == 'reopened' ||
+          (github.event.action == 'edited' && github.event.changes.title != null))
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |

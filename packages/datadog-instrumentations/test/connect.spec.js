@@ -53,7 +53,8 @@ describe('connect instrumentation (unit)', () => {
         handle () {},
       }
     }
-    const app = connectHook(fakeConnect)()
+    const createApp = connectHook(fakeConnect)
+    const app = createApp()
     app.use(middleware)
     return app.stack[0].handle
   }

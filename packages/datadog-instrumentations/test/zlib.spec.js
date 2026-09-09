@@ -45,7 +45,8 @@ const compressionPairs = [
 
     for (const [encode, decode, encodeSync] of compressionPairs) {
       it(`publishes start and finish for ${encode}`, async () => {
-        await promisify(zlib[encode])(Buffer.from('hello world'))
+        const promisifiedMethod = promisify(zlib[encode])
+        await promisifiedMethod(Buffer.from('hello world'))
         sinon.assert.calledOnceWithMatch(start, { operation: encode })
         sinon.assert.calledOnceWithMatch(finish, { operation: encode })
         sinon.assert.notCalled(error)
@@ -53,7 +54,8 @@ const compressionPairs = [
 
       it(`publishes start and finish for ${decode}`, async () => {
         const compressed = zlib[encodeSync](Buffer.from('hello world'))
-        const decompressed = await promisify(zlib[decode])(compressed)
+        const promisifiedMethod = promisify(zlib[decode])
+        const decompressed = await promisifiedMethod(compressed)
         assert.equal(decompressed.toString(), 'hello world')
         sinon.assert.calledOnceWithMatch(start, { operation: decode })
         sinon.assert.calledOnceWithMatch(finish, { operation: decode })
@@ -63,7 +65,8 @@ const compressionPairs = [
 
     it('publishes start and finish for unzip', async () => {
       const compressed = zlib.gzipSync(Buffer.from('hello world'))
-      const decompressed = await promisify(zlib.unzip)(compressed)
+      const unzipAsync = promisify(zlib.unzip)
+      const decompressed = await unzipAsync(compressed)
       assert.equal(decompressed.toString(), 'hello world')
       sinon.assert.calledOnceWithMatch(start, { operation: 'unzip' })
       sinon.assert.calledOnceWithMatch(finish, { operation: 'unzip' })
@@ -71,7 +74,8 @@ const compressionPairs = [
     })
 
     it('publishes error when decompression fails', async () => {
-      await assert.rejects(promisify(zlib.gunzip)(Buffer.from('not gzipped')))
+      const gunzipAsync = promisify(zlib.gunzip)
+      await assert.rejects(gunzipAsync(Buffer.from('not gzipped')))
       sinon.assert.calledOnce(start)
       sinon.assert.calledOnce(error)
       sinon.assert.calledOnce(finish)
@@ -84,13 +88,15 @@ const compressionPairs = [
 
     it('publishes for zstdCompress and zstdDecompress', async function () {
       if (typeof zlib.zstdCompress !== 'function') return this.skip()
-      const compressed = await promisify(zlib.zstdCompress)(Buffer.from('hello'))
+      const zstdCompressAsync = promisify(zlib.zstdCompress)
+      const compressed = await zstdCompressAsync(Buffer.from('hello'))
       sinon.assert.calledWithMatch(start, { operation: 'zstdCompress' })
 
       start.resetHistory()
       finish.resetHistory()
 
-      const decompressed = await promisify(zlib.zstdDecompress)(compressed)
+      const zstdDecompressAsync = promisify(zlib.zstdDecompress)
+      const decompressed = await zstdDecompressAsync(compressed)
       assert.equal(decompressed.toString(), 'hello')
       sinon.assert.calledWithMatch(start, { operation: 'zstdDecompress' })
       sinon.assert.calledOnce(finish)

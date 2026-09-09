@@ -2,8 +2,9 @@
 
 const { channel } = require('dc-polyfill')
 
-const { readDatadogTags, writeDatadogTags } = require('../carrier')
+const { registerTelemetryFlusher } = require('../flush')
 const log = require('../log')
+const { createServerlessDeliveryTracker } = require('../serverless')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
 const {
@@ -23,7 +24,7 @@ const {
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { agentNameWireSafe, appendOptionalPropagatedTag, resolveAgentAttribution, stripTagsetEntry } = require('./util')
+const { agentNameWireSafe, resolveAgentAttribution } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -57,8 +58,17 @@ let spanWriter
 /** @type {LLMObsEvalMetricsWriter | null} */
 let evalWriter
 
+let unregisterTelemetryFlusher
+
 /** @type {import('../config/config-base')} */
 let globalTracerConfig
+
+/**
+ * @typedef {object} TraceTagInjection
+ * @property {import('../opentracing/span_context')} spanContext
+ * @property {Array<string | undefined>} [traceTagReplacements]
+ * @property {number} [optionalTraceTagCount]
+ */
 
 /**
  * @param {@type import('../config/config-base')} config
@@ -66,23 +76,36 @@ let globalTracerConfig
 function enable (config) {
   globalTracerConfig = config
 
+  const retiredSpanWriter = spanWriter
+  const retiredEvalWriter = evalWriter
+  const isReinitializing = Boolean(retiredSpanWriter || retiredEvalWriter)
+  unregisterTelemetryFlusher?.()
+  retireWriters(retiredSpanWriter, retiredEvalWriter)
+
   const startTime = performance.now()
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
+  const currentEvalWriter = evalWriter
+  const currentSpanWriter = spanWriter
+  unregisterTelemetryFlusher = registerTelemetryFlusher(done => {
+    flushWriters(done, currentSpanWriter, currentEvalWriter)
+  })
 
-  evalMetricAppendCh.subscribe(handleEvalMetricAppend)
-  flushCh.subscribe(handleFlush)
-  registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+  if (!isReinitializing) {
+    evalMetricAppendCh.subscribe(handleEvalMetricAppend)
+    flushCh.subscribe(handleFlush)
+    registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+  }
 
   // span processing
   spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
-  spanFinishCh.subscribe(handleSpanProcess)
+  if (!isReinitializing) spanFinishCh.subscribe(handleSpanProcess)
 
   // distributed tracing for llmobs
-  injectCh.subscribe(handleLLMObsInjection)
+  if (!isReinitializing) injectCh.subscribe(handleLLMObsInjection)
 
   setAgentStrategy(config, useAgentless => {
     if (useAgentless && !(config.DD_API_KEY && config.site)) {
@@ -94,8 +117,10 @@ function enable (config) {
       }
     }
 
-    evalWriter?.setAgentless(useAgentless)
-    spanWriter?.setAgentless(useAgentless)
+    // A disable can happen while transport selection is still pending. Keep
+    // configuring these writers so their queued lifecycle flushes can drain.
+    currentEvalWriter.setAgentless(useAgentless)
+    currentSpanWriter.setAgentless(useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
     log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
@@ -109,19 +134,43 @@ function disable () {
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
-  spanWriter?.destroy()
-  evalWriter?.destroy()
+  const retiredSpanWriter = spanWriter
+  const retiredEvalWriter = evalWriter
   spanProcessor?.setWriter(null)
+  unregisterTelemetryFlusher?.()
+  unregisterTelemetryFlusher = undefined
 
   spanWriter = null
   evalWriter = null
 
+  retireWriters(retiredSpanWriter, retiredEvalWriter)
+
   log.debug('[LLMObs] Disabled LLM Observability')
+}
+
+/**
+ * Keeps retired writers reachable until their destroy-triggered deliveries complete.
+ * @param {LLMObsSpanWriter | null} retiredSpanWriter
+ * @param {LLMObsEvalMetricsWriter | null} retiredEvalWriter
+ * @returns {void}
+ */
+function retireWriters (retiredSpanWriter, retiredEvalWriter) {
+  const retiredWriters = [retiredSpanWriter, retiredEvalWriter].filter(Boolean)
+  if (retiredWriters.length === 0) return
+  let remainingWriters = retiredWriters.length
+  const unregisterRetiredFlusher = registerTelemetryFlusher(done => {
+    flushWriters(done, retiredSpanWriter, retiredEvalWriter)
+  })
+  function onWriterDestroyed () {
+    if (--remainingWriters === 0) unregisterRetiredFlusher?.()
+  }
+  for (const writer of retiredWriters) writer.destroy(onWriterDestroyed)
 }
 
 // since LLMObs traces can extend between services and be the same trace,
 // we need to propagate the parent id, mlApp, session id, and sampling rate/decision.
-function handleLLMObsInjection ({ carrier }) {
+/** @param {TraceTagInjection} injection */
+function handleLLMObsInjection (injection) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
   if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
@@ -159,48 +208,62 @@ function handleLLMObsInjection ({ carrier }) {
     mlObsSpanTags, parent
   )
 
-  // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
-  // tags, so it may be undefined here — coalesce before appending.
-  const existing = readDatadogTags(carrier)
-  let tags = existing || ''
-  if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
-  if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
-  if (sessionId) tags += `${tags ? ',' : ''}${PROPAGATED_SESSION_ID_KEY}=${sessionId}`
-  if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
-  if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
-  if (propagatedTraceId != null) tags += `${tags ? ',' : ''}${PROPAGATED_TRACE_ID_KEY}=${propagatedTraceId}`
-  // When a local agent attribution is resolved, strip any stale upstream pagent entries that
-  // `_injectTags` may have already written into the carrier (it propagates all `_dd.p.*` from
-  // `_trace.tags`). This ensures the downstream sees a consistent id-only or id+name pair
-  // rather than a mix from different hops. The id is always digit-safe; an unsafe name is wiped.
+  const traceTagReplacements = []
+  if (parentId) traceTagReplacements.push(PROPAGATED_PARENT_ID_KEY, parentId)
+  if (mlApp) traceTagReplacements.push(PROPAGATED_ML_APP_KEY, mlApp)
+  if (sessionId) traceTagReplacements.push(PROPAGATED_SESSION_ID_KEY, sessionId)
+  if (sampleRate != null) traceTagReplacements.push(PROPAGATED_SAMPLE_RATE_KEY, sampleRate.toString())
+  if (samplingDecision != null) {
+    traceTagReplacements.push(PROPAGATED_SAMPLING_DECISION_KEY, samplingDecision.toString())
+  }
+  if (propagatedTraceId != null) traceTagReplacements.push(PROPAGATED_TRACE_ID_KEY, propagatedTraceId)
+
+  let optionalTraceTagCount = 0
   if (parentAgentSpanId) {
-    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_ID_KEY)
-    tags = stripTagsetEntry(tags, PROPAGATED_PARENT_AGENT_NAME_KEY)
+    traceTagReplacements.push(PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId)
+    optionalTraceTagCount++
+    if (parentAgentName && agentNameWireSafe(parentAgentName)) {
+      traceTagReplacements.push(PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName)
+    } else {
+      traceTagReplacements.push(PROPAGATED_PARENT_AGENT_NAME_KEY, undefined)
+    }
+    optionalTraceTagCount++
   }
-  const maxLength = globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
-  const tagsWithId = appendOptionalPropagatedTag(
-    tags, PROPAGATED_PARENT_AGENT_ID_KEY, parentAgentSpanId, null, maxLength
-  )
-  // Only append the name when the id fit: a name without an id is unresolvable by the backend.
-  if (tagsWithId === tags) {
-    tags = tagsWithId
-  } else {
-    tags = appendOptionalPropagatedTag(
-      tagsWithId, PROPAGATED_PARENT_AGENT_NAME_KEY, parentAgentName, agentNameWireSafe, maxLength
-    )
+
+  injection.traceTagReplacements = traceTagReplacements
+  injection.optionalTraceTagCount = optionalTraceTagCount
+}
+
+/**
+ * Flushes the specified LLMObs writers and joins deliveries active at the boundary.
+ * @param {Function} [done]
+ * @param {LLMObsSpanWriter | null} [currentSpanWriter]
+ * @param {LLMObsEvalMetricsWriter | null} [currentEvalWriter]
+ * @returns {boolean} `true` when a writer throws synchronously.
+ */
+function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter = evalWriter) {
+  let failed = false
+  const deliveryTracker = createServerlessDeliveryTracker()
+  const flush = writer => {
+    try {
+      if (deliveryTracker && writer) deliveryTracker.track(complete => writer.flush(complete))
+      // Non-serverless flushes retain the existing writer behavior.
+      else writer?.flush()
+    } catch (error) {
+      failed = true
+      log.warn('Failed to flush LLMObs writer:', error.message)
+    }
   }
-  if (tags !== existing) writeDatadogTags(carrier, tags)
+
+  flush(currentSpanWriter)
+  flush(currentEvalWriter)
+  deliveryTracker?.waitForIdle(done)
+  if (!deliveryTracker) done?.()
+  return failed
 }
 
 function handleFlush () {
-  let err = ''
-  try {
-    spanWriter.flush()
-    evalWriter.flush()
-  } catch (e) {
-    err = 'writer_flush_error'
-    log.warn('Failed to flush LLMObs spans and evaluation metrics:', e.message)
-  }
+  const err = flushWriters() ? 'writer_flush_error' : ''
   telemetry.recordUserFlush(err)
 }
 

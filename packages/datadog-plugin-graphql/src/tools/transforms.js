@@ -8,11 +8,53 @@ const printer = ddGlobal.graphql_printer
 const utilities = ddGlobal.graphql_utilities
 
 function dropUnusedDefinitions (ast, operationName) {
-  const separated = utilities.separateOperations(ast)[operationName]
-  if (!separated) {
+  const operation = utilities.getOperationAST(ast, operationName)
+  if (!operation) {
     return ast
   }
-  return separated
+
+  const fragments = new Map()
+  for (const definition of ast.definitions) {
+    if (definition.kind === 'FragmentDefinition') {
+      fragments.set(definition.name.value, definition)
+    }
+  }
+
+  const dependencies = new Set()
+  collectFragmentDependencies(operation.selectionSet, fragments, dependencies)
+
+  const definitions = []
+  for (const definition of ast.definitions) {
+    if (definition === operation ||
+        (definition.kind === 'FragmentDefinition' && dependencies.has(definition.name.value))) {
+      definitions.push(definition)
+    }
+  }
+
+  return { kind: ast.kind, definitions }
+}
+
+/**
+ * @param {import('graphql').SelectionSetNode} selectionSet
+ * @param {Map<string, import('graphql').FragmentDefinitionNode>} fragments
+ * @param {Set<string>} dependencies
+ */
+function collectFragmentDependencies (selectionSet, fragments, dependencies) {
+  visitor.visit(selectionSet, {
+    /**
+     * @param {import('graphql').FragmentSpreadNode} node
+     */
+    FragmentSpread (node) {
+      const name = node.name.value
+      if (dependencies.has(name)) return
+
+      dependencies.add(name)
+      const fragment = fragments.get(name)
+      if (fragment) {
+        collectFragmentDependencies(fragment.selectionSet, fragments, dependencies)
+      }
+    },
+  })
 }
 
 // One walk replaces Apollo's `hideLiterals` + `removeAliases` + `sortAST` +

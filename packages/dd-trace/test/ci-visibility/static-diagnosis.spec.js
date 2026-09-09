@@ -102,7 +102,10 @@ describe('test optimization validation static diagnosis', () => {
   })
 
   it('ignores a root package.json symbolic link that escapes the repository', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the symbolic-link behavior exercised here.
+      this.skip()
+    }
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-outside-'))
@@ -139,7 +142,10 @@ describe('test optimization validation static diagnosis', () => {
   })
 
   it('does not execute git from a repository-controlled PATH directory', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not use the PATH lookup behavior exercised here.
+      this.skip()
+    }
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     const bin = path.join(root, 'node_modules', '.bin')

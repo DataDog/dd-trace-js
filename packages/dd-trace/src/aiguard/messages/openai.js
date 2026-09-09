@@ -322,7 +322,14 @@ function openAIResponseContentToMessageContent (content) {
 
   if (!parts.length) return
   if (hasImages) return parts
-  return parts.map(part => part.text).join('\n')
+  let textContent = ''
+  let isFirstPart = true
+  for (const part of parts) {
+    if (!isFirstPart) textContent += '\n'
+    textContent += part.text
+    isFirstPart = false
+  }
+  return textContent
 }
 
 /**

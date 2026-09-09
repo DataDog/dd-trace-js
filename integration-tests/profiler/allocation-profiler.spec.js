@@ -72,73 +72,76 @@ describe('allocation profiler', () => {
     await agent.stop()
   })
 
-  it('sends heap profiles with the expected sample types on Node.js 26+', async function () {
-    if (!isAtLeast26) {
-      this.skip()
-      return
-    }
+  {
+    const allocationProfileTest = isAtLeast26 ? it : it.skip
 
-    const cases = [
-      {
-        allocationProfilingEnabled: false,
-        sampleTypes: ['inuse_objects', 'inuse_space'],
-      },
-      {
-        allocationProfilingEnabled: true,
-        sampleTypes: ['inuse_objects', 'alloc_objects', 'inuse_space', 'alloc_space'],
-      },
-    ]
-
-    for (const { allocationProfilingEnabled, sampleTypes } of cases) {
-      proc = fork(profilerTestFile, {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled ? '1' : '0',
-          DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
-          DD_PROFILING_EXPORTERS: 'agent',
-          DD_PROFILING_PROFILERS: 'space',
-          DD_PROFILING_SOURCE_MAP: '0',
-          DD_PROFILING_UPLOAD_PERIOD: '1',
-          TEST_DURATION_MS: '5000',
+    // Allocation profiling is only available on Node.js 26 and newer.
+    allocationProfileTest('sends heap profiles with the expected sample types on Node.js 26+', async function () {
+      const cases = [
+        {
+          allocationProfilingEnabled: false,
+          sampleTypes: ['inuse_objects', 'inuse_space'],
         },
-      })
+        {
+          allocationProfilingEnabled: true,
+          sampleTypes: ['inuse_objects', 'alloc_objects', 'inuse_space', 'alloc_space'],
+        },
+      ]
 
-      const [
-        { event, spaceProfile },
-      ] = await Promise.all([
-        expectProfileUpload(agent),
-        processExitPromise(proc, TIMEOUT),
-      ])
+      for (const { allocationProfilingEnabled, sampleTypes } of cases) {
+        proc = fork(profilerTestFile, {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+            DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled ? '1' : '0',
+            DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
+            DD_PROFILING_EXPORTERS: 'agent',
+            DD_PROFILING_PROFILERS: 'space',
+            DD_PROFILING_SOURCE_MAP: '0',
+            DD_PROFILING_UPLOAD_PERIOD: '1',
+            TEST_DURATION_MS: '5000',
+          },
+        })
 
-      assert.deepStrictEqual(event.attachments, ['space.pprof'])
-      assert.strictEqual(event.info.profiler.settings.allocationProfilingEnabled, allocationProfilingEnabled)
-      assert.deepStrictEqual(getSampleTypeNames(spaceProfile), sampleTypes)
+        const [
+          { event, spaceProfile },
+        ] = await Promise.all([
+          expectProfileUpload(agent),
+          processExitPromise(proc, TIMEOUT),
+        ])
 
-      await stopProc(proc)
-      proc = undefined
-    }
-  })
+        assert.deepStrictEqual(event.attachments, ['space.pprof'])
+        assert.strictEqual(event.info.profiler.settings.allocationProfilingEnabled, allocationProfilingEnabled)
+        assert.deepStrictEqual(getSampleTypeNames(spaceProfile), sampleTypes)
 
-  it('does not crash when allocation profiling is requested on unsupported Node.js versions', async function () {
-    if (isAtLeast26) {
-      this.skip()
-      return
-    }
-
-    proc = fork(profilerTestFile, {
-      cwd,
-      env: {
-        DD_PROFILING_ALLOCATION_ENABLED: '1',
-        DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
-        DD_PROFILING_EXPORTERS: 'file',
-        DD_PROFILING_PROFILERS: 'space',
-        DD_PROFILING_SOURCE_MAP: '0',
-        DD_PROFILING_UPLOAD_PERIOD: '1',
-        TEST_DURATION_MS: '5000',
-      },
+        await stopProc(proc)
+        proc = undefined
+      }
     })
+  }
 
-    await processExitPromise(proc, TIMEOUT)
-  })
+  {
+    const unsupportedAllocationProfileTest = isAtLeast26 ? it.skip : it
+
+    // Node.js 26 supports allocation profiling, so the unsupported-runtime case does not apply.
+    unsupportedAllocationProfileTest(
+      'does not crash when allocation profiling is requested on unsupported Node.js versions',
+      async function () {
+        proc = fork(profilerTestFile, {
+          cwd,
+          env: {
+            DD_PROFILING_ALLOCATION_ENABLED: '1',
+            DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
+            DD_PROFILING_EXPORTERS: 'file',
+            DD_PROFILING_PROFILERS: 'space',
+            DD_PROFILING_SOURCE_MAP: '0',
+            DD_PROFILING_UPLOAD_PERIOD: '1',
+            TEST_DURATION_MS: '5000',
+          },
+        })
+
+        await processExitPromise(proc, TIMEOUT)
+      }
+    )
+  }
 })

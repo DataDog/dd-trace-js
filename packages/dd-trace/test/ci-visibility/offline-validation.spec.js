@@ -248,7 +248,10 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('rejects symbolic-link and hard-linked payload files', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the link semantics exercised here.
+      this.skip()
+    }
     const { outputRoot, testsDirectory, processId } = createPayloadRoot(repositoryRoot)
     const source = path.join(repositoryRoot, 'source.json')
     fs.writeFileSync(source, JSON.stringify(createTestCyclePayload()))
@@ -323,7 +326,10 @@ describe('test optimization offline validation artifacts', () => {
   })
 
   it('rejects malformed and hard-linked completion records', function () {
-    if (process.platform === 'win32') this.skip()
+    if (process.platform === 'win32') {
+      // Windows does not expose the hard-link semantics exercised here.
+      this.skip()
+    }
     const { outputRoot, processId } = createPayloadRoot(repositoryRoot)
     const completionPath = path.join(outputRoot, 'completions', `completion-${processId}.json`)
 

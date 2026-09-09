@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict')
 
 const guard = require('../startup-guard')
-const clearTimeoutGuard = require('../timeout-guard')('appsec-iast server')
+const createTimeoutGuard = require('../timeout-guard')
+const clearTimeoutGuard = createTimeoutGuard('appsec-iast server')
 const tracer = require('../../..')
 
 const express = require('../../../versions/express').get()

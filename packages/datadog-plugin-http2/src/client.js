@@ -4,12 +4,12 @@ const URL = require('url').URL
 
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
@@ -165,21 +165,8 @@ function hasAmazonSignature (headers, path) {
   return false
 }
 
-function is400ErrorCode (code) {
-  return code < 400 || code >= 500
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (config.hasOwnProperty('validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return is400ErrorCode
-}
-
 function normalizeConfig (config) {
-  const validateStatus = getStatusValidator(config)
+  const validateStatus = getClientStatusValidator(config)
   const filter = getFilter(config)
   const headers = getHeaders(config)
 

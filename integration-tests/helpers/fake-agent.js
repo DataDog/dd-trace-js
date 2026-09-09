@@ -6,7 +6,8 @@ const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
-const upload = require('multer')()
+const createMulter = require('multer')
+const upload = createMulter()
 
 const noop = () => {}
 

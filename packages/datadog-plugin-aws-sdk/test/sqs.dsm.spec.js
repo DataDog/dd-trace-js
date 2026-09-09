@@ -12,7 +12,7 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaCallback, callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const getQueueParams = (queueName) => {
   return {
@@ -127,55 +127,43 @@ describe('Plugin', () => {
           agent.reload('aws-sdk', { kinesis: { dsmEnabled: true } }, { dsmEnabled: true })
         })
 
-        it('Should set pathway hash tag on a span when producing', (done) => {
-          sqs.sendMessage({
-            MessageBody: 'test DSM',
-            QueueUrl: QueueUrlDsm,
-          }, (err) => {
-            if (err) return done(err)
+        it('Should set pathway hash tag on a span when producing', async () => {
+          const tracePromise = agent.assertFirstTraceSpan({
+            meta: {
+              'pathway.hash': expectedProducerHash,
+            },
+          }, { spanResourceMatch: /^sendMessage / })
 
-            let produceSpanMeta = {}
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              if (span.resource.startsWith('sendMessage')) {
-                produceSpanMeta = span.meta
-              }
-
-              assertObjectContains(produceSpanMeta, {
-                'pathway.hash': expectedProducerHash,
-              })
-            }).then(done, done)
-          })
+          await Promise.all([
+            tracePromise,
+            callViaCallback(sqs, 'sendMessage', {
+              MessageBody: 'test DSM',
+              QueueUrl: QueueUrlDsm,
+            }),
+          ])
         })
 
-        it('Should set pathway hash tag on a span when consuming', (done) => {
-          sqs.sendMessage({
+        it('Should set pathway hash tag on a span when consuming', async () => {
+          await callViaCallback(sqs, 'sendMessage', {
             MessageBody: 'test DSM',
             QueueUrl: QueueUrlDsm,
-          }, (err) => {
-            if (err) return done(err)
+          })
 
-            sqs.receiveMessage({
-              QueueUrl: QueueUrlDsm,
-              MessageAttributeNames: ['.*'],
-            }, (err) => {
-              if (err) return done(err)
-
-              let consumeSpanMeta = {}
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                if (span.name === 'aws.response') {
-                  consumeSpanMeta = span.meta
-                }
-
-                assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash,
-                })
-              }).then(done, done)
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = traces.flat().find(span => span.name === 'aws.response')
+            assert.ok(span)
+            assertObjectContains(span.meta, {
+              'pathway.hash': expectedConsumerHash,
             })
           })
+
+          await Promise.all([
+            tracePromise,
+            callViaCallback(sqs, 'receiveMessage', {
+              QueueUrl: QueueUrlDsm,
+              MessageAttributeNames: ['.*'],
+            }),
+          ])
         })
 
         if (promisesSupported) {

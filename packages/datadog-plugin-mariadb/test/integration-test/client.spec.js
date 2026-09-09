@@ -29,7 +29,7 @@ describe('esm', () => {
   let agent
   let proc
 
-  const range = '>=3.0.0 <3.5.3'
+  const range = semver.gte(process.version, '20.0.0') ? '>=3.0.0' : '>=3.0.0 <3.5.3'
   withVersions('mariadb', 'mariadb', range, (version, _, resolvedVersion) => {
     useSandbox([`'mariadb@${version}'`], false, [
       './packages/datadog-plugin-mariadb/test/integration-test/*'])
@@ -56,7 +56,7 @@ describe('esm', () => {
 
     for (const variant of importVariants) {
       it(`is instrumented ${variant}`, async () => {
-        const resources = new Set()
+        const resources = []
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
@@ -64,12 +64,12 @@ describe('esm', () => {
           for (const trace of payload) {
             for (const span of trace) {
               if (span.name === 'mariadb.query' && expectedResourceSet.has(span.resource)) {
-                resources.add(span.resource)
+                resources.push(span.resource)
               }
             }
           }
 
-          assert.deepStrictEqual([...resources].sort(), expectedResources)
+          assert.deepStrictEqual(resources.sort(), expectedResources)
         })
 
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)

@@ -1,6 +1,8 @@
 'use strict'
 
 const getConfig = require('../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
 const { EARLY_FLAKE_DETECTION_RETRY_BUCKETS, createEfdRetryPolicy } = require('../efd-retry-policy')
@@ -12,7 +14,6 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_ERRORS,
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
-const { writeSettingsToCache } = require('../test-optimization-cache')
 const { MAX_RETRIES, validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
@@ -238,8 +239,8 @@ function getLibraryConfiguration ({
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'api'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/libraries/tests/services/setting')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
   } else {
     if (!config.DD_API_KEY) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
@@ -283,8 +284,6 @@ function getLibraryConfiguration ({
         const settings = parseLibraryConfigurationResponse(res, config)
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
-
-        writeSettingsToCache(settings)
 
         done(null, settings)
       } catch (err) {

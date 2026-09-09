@@ -98,7 +98,8 @@ describe('Plugin Manager', () => {
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
     // model a plugin whose default-enabled flag is `false` (e.g. an opt-in plugin).
     registeredDefaults = {}
-    PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
+    const loadPluginManager = proxyquire.noPreserveCache()
+    PluginManager = loadPluginManager('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config/helper': {

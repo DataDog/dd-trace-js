@@ -1,5 +1,7 @@
 'use strict'
 
+const { randomUUID } = require('node:crypto')
+
 const log = require('../../log')
 
 // Matches the backend and dd-trace-py evaluator metric label contract.
@@ -40,6 +42,23 @@ function tagOperationsAreEmpty (operations) {
     !Object.hasOwn(operations, 'add') &&
     !Object.hasOwn(operations, 'remove')
   )
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} name
+ * @returns {number}
+ */
+function normalizePositiveInteger (value, name) {
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return value
+}
+
+/**
+ * @returns {string}
+ */
+function generateRunId () {
+  return randomUUID()
 }
 
 /**
@@ -297,11 +316,13 @@ module.exports = {
   buildSpanMetadata,
   buildTags,
   durationNs,
+  generateRunId,
   hasEntries,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  normalizePositiveInteger,
   recordTagsToObject,
   sleep,
   stringify,

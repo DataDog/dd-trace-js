@@ -1,6 +1,7 @@
 'use strict'
 
 const { VERSION } = require('../../../../../version')
+const { registerResourceAttributeRefresh } = require('../resource-attributes')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
@@ -59,13 +60,17 @@ function buildResourceAttributes (config) {
  * @returns {OtlpHttpTraceExporter} The OTLP HTTP/JSON exporter
  */
 function createOtlpTraceExporter (config) {
-  return new OtlpHttpTraceExporter(
+  const exporter = new OtlpHttpTraceExporter(
     config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
     buildResourceAttributes(config),
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   )
+
+  registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
+
+  return exporter
 }
 
 module.exports = {

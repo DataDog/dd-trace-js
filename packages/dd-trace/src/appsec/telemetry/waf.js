@@ -1,9 +1,6 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-const { tags, getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { appsecMetrics, tags, getVersionsTags, DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 
 const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tags')
 
@@ -33,6 +30,14 @@ function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, error
 
 function trackWafMetrics (store, metrics) {
   const versionsTags = getVersionsTags(metrics.wafVersion, metrics.rulesVersion)
+
+  const requestMetrics = store[DD_TELEMETRY_REQUEST_METRICS]
+  if (metrics.wafVersion) {
+    requestMetrics.wafVersion = metrics.wafVersion
+  }
+  if (metrics.rulesVersion) {
+    requestMetrics.rulesVersion = metrics.rulesVersion
+  }
 
   const metricTags = getOrCreateMetricTags(store, versionsTags)
 

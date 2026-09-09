@@ -124,7 +124,6 @@ class CucumberPlugin extends CiPlugin {
         this.testSessionSpan.setTag('error', error)
         this.testModuleSpan.setTag('error', error)
       }
-      this.tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
@@ -202,7 +201,6 @@ class CucumberPlugin extends CiPlugin {
     this.addSub('ci:cucumber:test-suite:finish', ({ status, testSuitePath }) => {
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
       testSuiteSpan.setTag(TEST_STATUS, status)
-      this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     })

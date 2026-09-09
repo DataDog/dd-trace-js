@@ -45,7 +45,7 @@ module.exports = {
   apollo: [
     {
       name: '@apollo/subgraph',
-      versions: ['>=2.3.0'],
+      versions: ['>=2.3.0 <2.15.0', '>=2.15.0'],
     },
     {
       name: 'graphql',
@@ -305,6 +305,19 @@ module.exports = {
       name: 'graphql',
       versions: ['^15.2.0'],
     },
+    {
+      name: 'graphql-jit',
+      versions: [
+        '>=0.8.0 <0.8.5',
+        '>=0.8.5 <0.8.7',
+      ],
+    },
+  ],
+  'graphql-jit': [
+    {
+      name: 'graphql',
+      dep: true,
+    },
   ],
   'apollo-server-core': [
     {
@@ -371,6 +384,15 @@ module.exports = {
   ],
   knex: [
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
+      name: 'mysql2',
+      dep: true,
+    },
+    {
       name: 'sqlite3',
       versions: ['^5.0.8'],
     },
@@ -384,6 +406,7 @@ module.exports = {
     },
     {
       name: 'pg',
+      dep: true,
       versions: [
         '8.7.3',
       ],
@@ -472,12 +495,18 @@ module.exports = {
       name: 'mariadb',
       versions: ['2.5.6', '3.0.0', '3.4.0', '3.4.5', '3.5.1', '3.5.2'],
     },
+    {
+      name: 'mariadb',
+      versions: ['3.5.3'],
+      node: '>=20',
+    },
   ],
   mercurius: [
     {
       // mercurius peers graphql; pin the only supported major (16) so the
       // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
       name: 'graphql',
+      dep: true,
       versions: ['^16.0.0'],
     },
     {
@@ -700,8 +729,24 @@ module.exports = {
       versions: ['>=4'],
     },
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
       name: 'mysql2',
       dep: true,
+      versions: ['3.9.3', '>=3.9.4'],
+    },
+    {
+      name: 'mariadb',
+      dep: true,
+      versions: ['2.5.6'],
+    },
+    {
+      name: 'pg',
+      dep: true,
+      versions: ['8.7.3'],
     },
     {
       name: 'sqlite3',

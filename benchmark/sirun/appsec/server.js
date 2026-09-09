@@ -3,7 +3,8 @@
 const assert = require('node:assert/strict')
 
 const guard = require('../startup-guard')
-const clearTimeoutGuard = require('../timeout-guard')('appsec server')
+const createTimeoutGuard = require('../timeout-guard')
+const clearTimeoutGuard = createTimeoutGuard('appsec server')
 const assertReplayValidated = require('./mock-native-appsec')
 
 require('../noop-request')

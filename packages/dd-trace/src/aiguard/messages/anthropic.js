@@ -208,7 +208,14 @@ function walkContentBlocks (blocks) {
 function partsToContent (parts, hasImages) {
   if (!parts.length) return
   if (hasImages) return parts
-  return parts.map(p => p.text).join('\n')
+  let content = ''
+  let isFirstPart = true
+  for (const part of parts) {
+    if (!isFirstPart) content += '\n'
+    content += part.text
+    isFirstPart = false
+  }
+  return content
 }
 
 /**
@@ -269,27 +276,39 @@ function convertServerToolResultContent (content) {
     return content.error_message ? `${content.error_code}: ${content.error_message}` : content.error_code
   }
 
-  const lines = []
+  let lines
   if (Array.isArray(content)) {
     for (const item of content) {
       if (!item || typeof item !== 'object') continue
       // text blocks (MCP / generic), then web-search title + url.
-      if (typeof item.text === 'string') lines.push(item.text)
-      if (typeof item.title === 'string') lines.push(item.title)
-      if (typeof item.url === 'string') lines.push(item.url)
+      if (typeof item.text === 'string') {
+        lines = lines === undefined ? item.text : `${lines}\n${item.text}`
+      }
+      if (typeof item.title === 'string') {
+        lines = lines === undefined ? item.title : `${lines}\n${item.title}`
+      }
+      if (typeof item.url === 'string') {
+        lines = lines === undefined ? item.url : `${lines}\n${item.url}`
+      }
     }
   } else {
-    if (typeof content.stdout === 'string' && content.stdout) lines.push(content.stdout)
-    if (typeof content.stderr === 'string' && content.stderr) lines.push(content.stderr)
-    if (typeof content.content === 'string' && content.content) lines.push(content.content)
+    if (typeof content.stdout === 'string' && content.stdout) lines = content.stdout
+    if (typeof content.stderr === 'string' && content.stderr) {
+      lines = lines === undefined ? content.stderr : `${lines}\n${content.stderr}`
+    }
+    if (typeof content.content === 'string' && content.content) {
+      lines = lines === undefined ? content.content : `${lines}\n${content.content}`
+    }
     if (Array.isArray(content.lines)) {
       for (const line of content.lines) {
-        if (typeof line === 'string') lines.push(line)
+        if (typeof line === 'string') {
+          lines = lines === undefined ? line : `${lines}\n${line}`
+        }
       }
     }
   }
 
-  return lines.join('\n') || '[tool result]'
+  return lines || '[tool result]'
 }
 
 /**

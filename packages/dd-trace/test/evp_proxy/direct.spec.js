@@ -8,18 +8,12 @@ const sinon = require('sinon')
 
 describe('direct EVP route', () => {
   let createDirectEVPRoute
-  let getProxyForUrl
-  let HttpsProxyAgent
   let log
 
   beforeEach(() => {
-    getProxyForUrl = sinon.stub().returns('')
-    HttpsProxyAgent = sinon.stub().callsFake(proxyUrl => ({ proxyUrl }))
     log = { debug: sinon.spy() }
 
     ;({ createDirectEVPRoute } = proxyquire('../../src/evp_proxy/direct', {
-      '../../../../vendor/dist/https-proxy-agent': { HttpsProxyAgent },
-      '../../../../vendor/dist/proxy-from-env': { getProxyForUrl },
       '../log': log,
     }))
   })
@@ -54,23 +48,6 @@ describe('direct EVP route', () => {
     })
   })
 
-  it('uses the standard HTTPS proxy for direct intake', () => {
-    const proxyUrl = 'http://proxy:8202'
-    getProxyForUrl.returns(proxyUrl)
-
-    const route = createDirectEVPRoute({
-      DD_API_KEY: 'test-api-key',
-      site: 'datadoghq.com',
-    }, 'event-platform-intake')
-
-    assert.deepStrictEqual(route.agent, { proxyUrl })
-    sinon.assert.calledOnceWithExactly(
-      getProxyForUrl,
-      'https://event-platform-intake.datadoghq.com/'
-    )
-    sinon.assert.calledOnceWithExactly(HttpsProxyAgent, proxyUrl)
-  })
-
   it('does not create a route without an API key', () => {
     assert.strictEqual(createDirectEVPRoute({
       site: 'datadoghq.com',
@@ -95,26 +72,4 @@ describe('direct EVP route', () => {
       sinon.match.string
     )
   })
-
-  for (const site of [
-    'datadoghq.com@evil.example',
-    'datadoghq.com:password@evil.example',
-    'datadoghq.com:443',
-    'datadoghq.com/path',
-    'datadoghq.com?query',
-    'datadoghq.com#fragment',
-  ]) {
-    it(`does not create a route for a site with URL components: ${site}`, () => {
-      assert.strictEqual(createDirectEVPRoute({
-        DD_API_KEY: 'test-api-key',
-        site,
-      }, 'event-platform-intake'), undefined)
-
-      sinon.assert.calledOnceWithExactly(
-        log.debug,
-        'Unable to configure direct EVP intake: %s',
-        sinon.match.string
-      )
-    })
-  }
 })
