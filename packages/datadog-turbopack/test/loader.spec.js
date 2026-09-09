@@ -30,7 +30,7 @@ const {
 
 const CHANNEL = 'dd-trace:bundler:load'
 const lintRuntimeSupported = semver.satisfies(process.version, eslintEngines.node)
-let generatedSourceLinter
+const generatedSourceLinters = new Map()
 
 describe('datadog-turbopack loader', () => {
   afterEach(() => {
@@ -845,6 +845,15 @@ describe('datadog-turbopack loader', () => {
     assert.equal(Object.hasOwn(publications[0], 'instrumentationIndexes'), false)
   })
 
+  it('lints generated dependencies from their runtime location', async () => {
+    const filePath = path.join(path.dirname(require.resolve('dc-polyfill')), '..', '..', 'generated-output.js')
+
+    await assertGeneratedSourceIsLintClean(
+      "'use strict'\nrequire('./node_modules/dc-polyfill/dc-polyfill.js')\n",
+      filePath
+    )
+  })
+
   it('matches relative runtimes by suffix and source hash', async () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, '@prisma/client', { main: 'index.js', version: '6.1.0' })
@@ -1600,20 +1609,25 @@ function throwValue (value) {
 async function assertGeneratedSourceIsLintClean (source, filePath) {
   if (!lintRuntimeSupported) return
 
-  if (!generatedSourceLinter) {
-    generatedSourceLinter = new ESLint({
-      cwd: path.resolve(__dirname, '../../..'),
-      overrideConfig: {
-        linterOptions: { reportUnusedDisableDirectives: false },
-        rules: {
-          'n/no-unpublished-import': 'off',
-          'n/no-unpublished-require': 'off',
+  const root = path.parse(filePath).root
+  let linter = generatedSourceLinters.get(root)
+  if (!linter) {
+    linter = new ESLint({
+      cwd: root,
+      overrideConfig: [
+        { ignores: ['!**/node_modules/', '!**/node_modules/**'] },
+        {
+          linterOptions: { reportUnusedDisableDirectives: false },
+          rules: {
+            'n/no-unpublished-import': 'off',
+            'n/no-unpublished-require': 'off',
+          },
         },
-      },
+      ],
       overrideConfigFile: path.join(__dirname, '../../../eslint.config.mjs'),
     })
+    generatedSourceLinters.set(root, linter)
   }
-  const lintPath = path.join(__dirname, '..', `generated-output${path.extname(filePath)}`)
-  const [result] = await generatedSourceLinter.lintText(source, { filePath: lintPath })
+  const [result] = await linter.lintText(source, { filePath })
   assert.deepEqual(result.messages, [])
 }
