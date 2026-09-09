@@ -4,7 +4,7 @@ module.exports = [
   {
     module: {
       name: 'dataloader',
-      versionRange: '>=2.0.0 <3.0.0',
+      versionRange: '>=2.0.0',
       filePath: 'index.js',
     },
     functionQuery: {
@@ -17,7 +17,7 @@ module.exports = [
   {
     module: {
       name: 'dataloader',
-      versionRange: '>=2.0.0 <3.0.0',
+      versionRange: '>=2.0.0',
       filePath: 'index.js',
     },
     functionQuery: {
