@@ -15,18 +15,10 @@ const SOURCE_PATH_PATTERN = /\.(?:cjs|cts|js|jsx|mjs|mts|ts|tsx)$/
  * Adds Datadog instrumentation to a Next.js configuration.
  *
  * @param {object|Promise<object>|Function} [nextConfig]
- * @param {{ projectDir?: string }} [options]
  * @returns {Function}
  */
-function withDatadogTurbopack (nextConfig = {}, options = {}) {
-  if (!isObject(options)) {
-    throw new TypeError('withDatadogTurbopack options must be an object')
-  }
-  if (options.projectDir !== undefined && typeof options.projectDir !== 'string') {
-    throw new TypeError('withDatadogTurbopack options.projectDir must be a string')
-  }
-
-  const projectDir = path.resolve(options.projectDir ?? process.cwd())
+function withDatadogTurbopack (nextConfig = {}) {
+  const projectDir = path.resolve(process.cwd())
   const nextInfo = getNextInfo(projectDir)
 
   return async function datadogNextConfig (...args) {
@@ -133,6 +125,18 @@ function addModernRules (turbopack, plan) {
         { rewriteEdges: true }
       ))
     }
+    if (plan.foreignPathPattern && plan.moduleSyntaxPattern) {
+      const conditions = [
+        'foreign',
+        { path: plan.foreignPathPattern },
+        { not: { path: plan.targetPathPattern } },
+        { content: plan.moduleSyntaxPattern },
+      ]
+      if (plan.foreignModuleSyntaxPattern) {
+        conditions.push({ not: { content: plan.foreignModuleSyntaxPattern } })
+      }
+      additions.push(createModernRule(plan, conditions, { rewriteEdges: true }))
+    }
     if (plan.relativePathPattern) {
       additions.push(createModernRule(
         plan,
@@ -188,6 +192,23 @@ function addLegacyRules (turbopack, plan) {
       rules,
       '#dd-trace/foreign-import',
       { content: plan.foreignModuleSyntaxPattern, path: SOURCE_PATH_PATTERN },
+      { node: { foreign: { loaders: [createLoader(plan, { rewriteEdges: true })] } } }
+    )
+  }
+
+  if (plan.foreignPathPattern && plan.moduleSyntaxPattern) {
+    const all = [
+      { path: plan.foreignPathPattern },
+      { not: { path: plan.targetPathPattern } },
+      { content: plan.moduleSyntaxPattern },
+      { path: SOURCE_PATH_PATTERN },
+    ]
+    if (plan.foreignModuleSyntaxPattern) all.push({ not: { content: plan.foreignModuleSyntaxPattern } })
+    addLegacyRule(
+      conditions,
+      rules,
+      '#dd-trace/foreign-relative-import',
+      { all },
       { node: { foreign: { loaders: [createLoader(plan, { rewriteEdges: true })] } } }
     )
   }

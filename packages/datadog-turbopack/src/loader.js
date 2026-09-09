@@ -4,26 +4,29 @@ const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const { builtinModules } = require('node:module')
 const path = require('node:path')
+const { fileURLToPath } = require('node:url')
 
-const { isESMFile } = require('../../datadog-esbuild/src/utils')
-const { rewriteWithSourceMap } = require('../../datadog-instrumentations/src/helpers/rewriter')
+const { createBundlerRewriter } = require('../../datadog-instrumentations/src/helpers/rewriter')
 const { parseSource } = require('./compiler')
 
 const BUILTIN_MODULES = new Set(builtinModules)
 const CHANNEL = 'dd-trace:bundler:load'
 const IMPORT_RESOLVE_OPTIONS = { conditionNames: ['...', 'node', 'import'] }
+// Instrumentation targets currently span at most six path depths. This bound leaves room for deeply nested
+// workspaces while preventing untrusted project layouts from retaining matchers for the process lifetime.
+const MAX_BUNDLER_REWRITERS = 64
 const MAX_CACHED_FILES = 2048
 const MAX_WARNINGS = 128
 const MODULE_SYNTAX_PATTERN = /\b(?:export|import|require)\b/
-const PLAN_VERSION = 6
+const PLAN_VERSION = 7
 const PROXY_FILENAME_PATTERN = /^[a-f\d]{64}\.mjs$/
 const REQUIRE_RESOLVE_OPTIONS = { conditionNames: ['...', 'node', 'require'] }
 
 /** @type {Map<string, { ctimeMs: number, hash: string, mtimeMs: number, size: number }>} */
 const fileHashes = new Map()
 let cachedManifestPath
-/** @type {BuildPlan|undefined} */
-let cachedPlan
+/** @type {BuildContext|undefined} */
+let cachedBuildContext
 /** @type {Set<string>} */
 const warnedErrors = new Set()
 
@@ -40,10 +43,22 @@ const warnedErrors = new Set()
 /**
  * @typedef {object} BuildPlan
  * @property {{ generator: string, parser: string, traverse: string }} compiler
+ * @property {Record<string, string>} components
  * @property {string} dcPolyfill
+ * @property {Array<{ path: string, sourceHash: string }>} graphDependencies
  * @property {Array<PlanTarget & { file: string }>} relativeTargets
  * @property {Record<string, PlanTarget>} targets
  * @property {number} version
+ */
+
+/**
+ * @typedef {object} BuildContext
+ * @property {BuildPlan} plan
+ * @property {Map<string, BundlerRewriter>} rewriters
+ *
+ * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
+ *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
+ *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
 /**
@@ -92,16 +107,27 @@ module.exports = function loader (source, inputSourceMap) {
  */
 async function load (source, inputSourceMap) {
   const options = this.getOptions()
-  const plan = getPlan(options.manifestPath)
+  const buildContext = getBuildContext(options.manifestPath)
+  const { plan } = buildContext
   const resourcePath = fs.realpathSync(this.resourcePath).replaceAll('\\', '/')
   const match = findTarget(resourcePath, plan, options.targetScope, this)
-  const esm = match?.esm ?? isESMFile(resourcePath)
-  const sourceType = esm ? 'module' : (match ? 'commonjs' : 'unambiguous')
+  const esm = match?.esm ?? false
+  const sourceType = match ? (esm ? 'module' : 'commonjs') : 'unambiguous'
 
   if (path.dirname(resourcePath) === path.dirname(options.manifestPath) &&
     PROXY_FILENAME_PATTERN.test(path.basename(resourcePath)) ||
     !options.rewriteEdges || !MODULE_SYNTAX_PATTERN.test(source)) {
-    return finishLoad(source, inputSourceMap, resourcePath, match, esm, plan.dcPolyfill)
+    return finishLoad(source, inputSourceMap, resourcePath, match, esm, buildContext)
+  }
+
+  const changedGraphPath = findChangedDependency(plan.graphDependencies)
+  if (changedGraphPath) {
+    warnOnce(
+      this,
+      `changed:${changedGraphPath}`,
+      `Skipped changed dependency ${changedGraphPath}`
+    )
+    return finishLoad(source, inputSourceMap, resourcePath, match, esm, buildContext)
   }
 
   const rewritten = await rewriteModuleEdges(
@@ -112,19 +138,19 @@ async function load (source, inputSourceMap) {
     this,
     sourceType
   )
-  return finishLoad(rewritten.code, rewritten.map, resourcePath, match, esm, plan.dcPolyfill)
+  return finishLoad(rewritten.code, rewritten.map, resourcePath, match, esm, buildContext)
 }
 
 /**
  * @param {string} manifestPath
- * @returns {BuildPlan}
+ * @returns {BuildContext}
  */
-function getPlan (manifestPath) {
+function getBuildContext (manifestPath) {
   if (typeof manifestPath !== 'string') {
     throw new TypeError('The Datadog Turbopack loader requires a build plan path')
   }
 
-  if (manifestPath === cachedManifestPath && cachedPlan) return cachedPlan
+  if (manifestPath === cachedManifestPath && cachedBuildContext) return cachedBuildContext
 
   const serialized = fs.readFileSync(manifestPath, 'utf8')
   const manifestHash = path.basename(manifestPath, '.json')
@@ -135,15 +161,20 @@ function getPlan (manifestPath) {
   const plan = /** @type {BuildPlan} */ (JSON.parse(serialized))
   if (plan?.version !== PLAN_VERSION || typeof plan.compiler?.generator !== 'string' ||
     typeof plan.compiler.parser !== 'string' || typeof plan.compiler.traverse !== 'string' ||
+    !plan.components || typeof plan.components !== 'object' || Array.isArray(plan.components) ||
     typeof plan.dcPolyfill !== 'string' ||
+    !Array.isArray(plan.graphDependencies) ||
     !Array.isArray(plan.relativeTargets) ||
     !plan.targets || typeof plan.targets !== 'object' || Array.isArray(plan.targets)) {
     throw new Error(`The Datadog Turbopack build plan at ${manifestPath} is not supported`)
   }
 
   cachedManifestPath = manifestPath
-  cachedPlan = plan
-  return plan
+  cachedBuildContext = {
+    plan,
+    rewriters: new Map(),
+  }
+  return cachedBuildContext
 }
 
 /**
@@ -190,7 +221,7 @@ async function rewriteModuleEdges (
   loaderContext,
   sourceType
 ) {
-  const { compiler, targets } = plan
+  const { compiler, components, targets } = plan
   const directory = path.dirname(resourcePath)
   const state = { edges: new Map() }
   let parsed
@@ -223,7 +254,9 @@ async function rewriteModuleEdges (
   let index = 0
   for (const edge of state.edges.values()) {
     const resolved = resolvedEdges[index++]
-    if (resolved) rewritten = rewriteResolvedEdge(edge, resolved, resourcePath, targets, loaderContext) || rewritten
+    if (resolved) {
+      rewritten = rewriteResolvedEdge(edge, resolved, resourcePath, components, targets, loaderContext) || rewritten
+    }
   }
   if (!rewritten) return { code: source, map: inputSourceMap }
 
@@ -337,14 +370,18 @@ const IMPORT_VISITORS = {
  * @param {ModuleEdge} edge
  * @param {string} resolved
  * @param {string} resourcePath
+ * @param {Record<string, string>} components
  * @param {Record<string, PlanTarget>} targets
  * @param {{ emitWarning?: (warning: Error) => void }} loaderContext
  * @returns {boolean}
  */
-function rewriteResolvedEdge (edge, resolved, resourcePath, targets, loaderContext) {
-  const resolvedPath = fs.realpathSync(resolved).replaceAll('\\', '/')
+function rewriteResolvedEdge (edge, resolved, resourcePath, components, targets, loaderContext) {
+  const plainPath = getPlainResolvedPath(resolved)
+  if (!plainPath) return false
+  const resolvedPath = fs.realpathSync(plainPath).replaceAll('\\', '/')
   const target = targets[resolvedPath]
   if (!target?.esm || !target.proxyPath) return false
+  if (components?.[resourcePath] !== undefined && components[resourcePath] === components[resolvedPath]) return false
   const changedPath = findChangedSource(resolvedPath, target)
   if (changedPath) {
     warnOnce(loaderContext, `changed:${changedPath}`, `Skipped changed dependency ${changedPath}`)
@@ -357,6 +394,26 @@ function rewriteResolvedEdge (edge, resolved, resourcePath, targets, loaderConte
 }
 
 /**
+ * @param {string} resolved
+ * @returns {string|void}
+ */
+function getPlainResolvedPath (resolved) {
+  if (typeof resolved !== 'string') return
+
+  if (resolved.startsWith('file:')) {
+    if (resolved.includes('?') || resolved.includes('#')) return
+    try {
+      return fileURLToPath(resolved)
+    } catch {
+      return
+    }
+  }
+
+  if (!path.isAbsolute(resolved) || resolved.includes('?') || resolved.includes('#') || resolved.includes('!')) return
+  return resolved
+}
+
+/**
  * @param {string} resourcePath
  * @param {PlanTarget} target
  * @returns {string|void}
@@ -366,6 +423,20 @@ function findChangedSource (resourcePath, target) {
   if (target.dependencies) {
     for (const dependency of target.dependencies) {
       if (getFileHash(dependency.path) !== dependency.sourceHash) return dependency.path
+    }
+  }
+}
+
+/**
+ * @param {Array<{ path: string, sourceHash: string }>} dependencies
+ * @returns {string|undefined}
+ */
+function findChangedDependency (dependencies) {
+  for (const dependency of dependencies) {
+    try {
+      if (getFileHash(dependency.path) !== dependency.sourceHash) return dependency.path
+    } catch {
+      return dependency.path
     }
   }
 }
@@ -395,23 +466,48 @@ function setModuleSpecifier (moduleSource, value) {
  * @param {string} resourcePath
  * @param {PlanTarget|void} match
  * @param {boolean} esm
- * @param {string} dcPolyfill
+ * @param {BuildContext} buildContext
  * @returns {{ code: string, map?: object }}
  */
-function finishLoad (source, sourceMap, resourcePath, match, esm, dcPolyfill) {
+function finishLoad (source, sourceMap, resourcePath, match, esm, buildContext) {
   if (!match) return { code: source, map: sourceMap }
 
-  const dcModule = relativeImport(path.dirname(resourcePath), dcPolyfill)
-  const rewritten = /** @type {{ code: string, map?: object }} */ (rewriteWithSourceMap(
-    source,
-    resourcePath,
-    esm ? 'module' : 'commonjs',
-    match.rewriteTarget,
-    sourceMap,
-    dcModule
-  ))
+  const dcModule = relativeImport(path.dirname(resourcePath), buildContext.plan.dcPolyfill)
+  let rewritten = { code: source, map: sourceMap }
+  if (match.rewriteTarget) {
+    const rewriter = getBundlerRewriter(buildContext.rewriters, dcModule)
+    rewritten = /** @type {{ code: string, map?: object }} */ (rewriter(
+      source,
+      resourcePath,
+      esm ? 'module' : 'commonjs',
+      match.rewriteTarget,
+      sourceMap
+    ))
+  }
   const code = esm ? rewritten.code : appendCommonJsPublications(rewritten.code, match, dcModule)
   return { code, map: rewritten.map }
+}
+
+/**
+ * @param {Map<string, BundlerRewriter>} rewriters
+ * @param {string} dcModule
+ * @returns {BundlerRewriter}
+ */
+function getBundlerRewriter (rewriters, dcModule) {
+  const cached = rewriters.get(dcModule)
+  if (cached) {
+    rewriters.delete(dcModule)
+    rewriters.set(dcModule, cached)
+    return cached
+  }
+
+  if (rewriters.size === MAX_BUNDLER_REWRITERS) {
+    rewriters.delete(/** @type {string} */ (rewriters.keys().next().value))
+  }
+
+  const rewriter = createBundlerRewriter(dcModule)
+  rewriters.set(dcModule, rewriter)
+  return rewriter
 }
 
 /**

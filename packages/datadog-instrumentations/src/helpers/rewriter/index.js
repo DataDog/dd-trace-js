@@ -14,10 +14,16 @@ const { getRewriteTarget } = require('./targets')
  * @property {(moduleName: string, version: string|undefined, filePath: string) => Transformer|undefined} getTransformer
  *
  * @typedef {object} Transformer
- * @property {(source: string, moduleType: 'cjs'|'esm') => { code: string, map?: string }} transform
+ * @property {(source: string, moduleType: 'cjs'|'esm', sourceMap?: string|object) =>
+ *   { code: string, map?: string|object }} transform
  *
  * @typedef {object} CodeTransformer
  * @property {(instrumentations: object, dcModule?: string) => InstrumentationMatcher} create
+ *
+ * @typedef {(moduleType: 'cjs'|'esm') => InstrumentationMatcher} MatcherProvider
+ * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
+ *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
+ *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
 /**
@@ -34,8 +40,6 @@ const disabled = new Set()
 let matcherCjs
 /** @type {InstrumentationMatcher|undefined} */
 let matcherEsm
-/** @type {Map<string, InstrumentationMatcher>} */
-const matcherBundlerByDcModule = new Map()
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
@@ -50,25 +54,13 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
-  if (!content) return content
-
-  target ||= getRewriteTarget(filename)
-  if (!target) return content
-
-  filename = filename.replace('file://', '')
-
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
-  const { moduleName, filePath } = target
-  const version = getVersion(filename, filePath)
-
-  if (disabled.has(moduleName)) return content
-
   try {
-    const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
-    if (!transformer) return content
+    if (!content) return content
 
-    const source = getSourceText(content)
-    const { code, map } = transformer.transform(source, moduleType)
+    target ||= getRewriteTarget(filename)
+    if (!target || disabled.has(target.moduleName)) return content
+
+    const { code, map } = rewriteWithSourceMap(content, filename, format, target, undefined, getRuntimeMatcher)
 
     if (!map) return code
 
@@ -81,71 +73,42 @@ function rewrite (content, filename, format, target) {
 }
 
 /**
- * @param {string|Buffer|ArrayBuffer|Uint8Array} content
- * @param {string} filename
- * @param {string} [format]
- * @param {{ moduleName: string, filePath: string }} [target]
- * @param {string|object} [sourceMap]
- * @param {string} [dcModule]
- * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
+ * Creates the rewriter for one build-plan-relative diagnostic channel module.
+ * Build output is independent of runtime integration enablement.
+ *
+ * @param {string} dcModule
+ * @returns {BundlerRewriter}
  */
-function rewriteWithSourceMap (content, filename, format, target, sourceMap, dcModule) {
-  if (!content) return { code: content, map: sourceMap }
+function createBundlerRewriter (dcModule) {
+  const matcher = createMatcher(dcModule)
+  const getMatcher = () => matcher
 
-  target ||= getRewriteTarget(filename)
-  if (!target) return { code: content, map: sourceMap }
-
-  filename = filename.replace('file://', '')
-
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
-  const { moduleName, filePath } = target
-  const version = getVersion(filename, filePath)
-
-  if (disabled.has(moduleName)) return { code: content, map: sourceMap }
-
-  const matcher = getMatcher(moduleType, dcModule)
-  const transformer = matcher.getTransformer(moduleName, version, filePath)
-
-  if (!transformer) return { code: content, map: sourceMap }
-
-  const source = getSourceText(content)
-  const { code, map } = transformer.transform(source, moduleType, sourceMap)
-  return { code, map }
+  return function rewriteBundled (content, filename, format, target, sourceMap) {
+    return rewriteWithSourceMap(content, filename, format, target, sourceMap, getMatcher)
+  }
 }
 
 /**
  * @param {'cjs'|'esm'} moduleType
- * @param {string} [dcModule]
  * @returns {InstrumentationMatcher}
  */
-function getMatcher (moduleType, dcModule) {
-  if (dcModule !== undefined) {
-    let matcher = matcherBundlerByDcModule.get(dcModule)
-    if (matcher === undefined) {
-      matcher = createMatcher(moduleType, dcModule)
-      matcherBundlerByDcModule.set(dcModule, matcher)
-    }
-
-    return matcher
-  }
-
+function getRuntimeMatcher (moduleType) {
   if (moduleType === 'esm') {
-    matcherEsm ??= createMatcher(moduleType)
+    matcherEsm ??= createMatcher(pathToFileURL(require.resolve('dc-polyfill')).href)
 
     return matcherEsm
   }
 
-  matcherCjs ??= createMatcher(moduleType)
+  matcherCjs ??= createMatcher(require.resolve('dc-polyfill').replaceAll('\\', '/'))
 
   return matcherCjs
 }
 
 /**
- * @param {'cjs'|'esm'} moduleType
- * @param {string} [dcModule]
+ * @param {string} dcModule
  * @returns {InstrumentationMatcher}
  */
-function createMatcher (moduleType, dcModule) {
+function createMatcher (dcModule) {
   const transformer = /** @type {CodeTransformer} */ (
     require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
   )
@@ -163,12 +126,6 @@ function createMatcher (moduleType, dcModule) {
     waitForAsyncEnd,
   } = require('./transforms')
 
-  if (dcModule === undefined) {
-    const resolvedDcPolyfill = require.resolve('dc-polyfill')
-    dcModule = moduleType === 'esm'
-      ? pathToFileURL(resolvedDcPolyfill).href
-      : resolvedDcPolyfill.replaceAll('\\', '/')
-  }
   const matcher = create(instrumentations, dcModule)
 
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
@@ -182,6 +139,33 @@ function createMatcher (moduleType, dcModule) {
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
   return matcher
+}
+
+/**
+ * @param {string|Buffer|ArrayBuffer|Uint8Array} content
+ * @param {string} filename
+ * @param {string} [format]
+ * @param {{ moduleName: string, filePath: string }} [target]
+ * @param {string|object} [sourceMap]
+ * @param {MatcherProvider} getMatcher
+ * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
+ */
+function rewriteWithSourceMap (content, filename, format, target, sourceMap, getMatcher) {
+  if (!content) return { code: content, map: sourceMap }
+
+  target ||= getRewriteTarget(filename)
+  if (!target) return { code: content, map: sourceMap }
+
+  filename = filename.replace('file://', '')
+
+  const moduleType = format === 'module' ? 'esm' : 'cjs'
+  const { moduleName, filePath } = target
+
+  const version = getVersion(filename, filePath)
+  const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
+  if (!transformer) return { code: content, map: sourceMap }
+
+  return transformer.transform(getSourceText(content), moduleType, sourceMap)
 }
 
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
@@ -220,4 +204,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { rewrite, rewriteWithSourceMap, disable }
+module.exports = { createBundlerRewriter, rewrite, disable }

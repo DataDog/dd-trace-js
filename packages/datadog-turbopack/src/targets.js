@@ -1,65 +1,41 @@
 'use strict'
 
-const { spawnSync } = require('node:child_process')
 const { createHash, randomUUID } = require('node:crypto')
 const fsSync = require('node:fs')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 
-const { getEnvironmentVariables } = require('../../dd-trace/src/config/helper')
+const { createEsmResolver } = require('../../datadog-esbuild/src/resolver')
+const { isESMFile, processModule } = require('../../datadog-esbuild/src/utils')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
 const {
   filename,
   matchVersion,
 } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
-const { isESMFile, processModule, resolveModule } = require('../../datadog-esbuild/src/utils')
 const { parseSource } = require('./compiler')
 
 const CACHE_DIRECTORY = path.join('node_modules', '.cache', 'dd-trace', 'turbopack')
 const CHANNEL = 'dd-trace:bundler:load'
+const MAX_CONCURRENT_PACKAGE_RESOLUTIONS = 32
 const MODULE_SYNTAX_PATTERN = /\b(?:export|import)\b/
 const MAX_WARNINGS = 128
-const PLAN_VERSION = 6
-const RESOLVER_MAX_BUFFER = 1024 * 1024
+const MODULE_SOURCE_PATH_PATTERN = /\.(?:[cm]?[jt]s|[jt]sx)$/
+const PLAN_VERSION = 7
+const RESOLUTION_MISS_CODES = new Set([
+  'ERR_INVALID_MODULE_SPECIFIER',
+  'ERR_INVALID_PACKAGE_TARGET',
+  'ERR_MODULE_NOT_FOUND',
+  'ERR_PACKAGE_IMPORT_NOT_DEFINED',
+  'ERR_PACKAGE_PATH_NOT_EXPORTED',
+  'ERR_UNSUPPORTED_DIR_IMPORT',
+  'MODULE_NOT_FOUND',
+])
 const SOURCE_MODULE_PATH_PATTERN = /\.(?:js|jsx|ts|tsx)$/
-const RESOLVER_SOURCE = `
-import { createRequire } from 'node:module'
-import { resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
-
-let input = ''
-process.stdin.setEncoding('utf8')
-for await (const chunk of process.stdin) input += chunk
-
-const results = []
-for (const { directory, name } of JSON.parse(input)) {
-  const parent = pathToFileURL(resolve(directory, 'package.json'))
-  const localRequire = createRequire(parent)
-  const entrypoints = new Set()
-
-  try {
-    const url = await import.meta.resolve(name, parent)
-    if (url.startsWith('file:')) entrypoints.add(fileURLToPath(url))
-  } catch {}
-
-  try {
-    entrypoints.add(localRequire.resolve(name))
-  } catch {}
-
-  if (entrypoints.size === 0) {
-    try {
-      entrypoints.add(localRequire.resolve('./'))
-    } catch {}
-  }
-
-  results.push([...entrypoints])
-}
-
-process.stdout.write(JSON.stringify(results))
-`
 const TRAILING_WHITESPACE = /[ \t]+$/gm
+
+/** @typedef {ReturnType<typeof createEsmResolver>} EsmResolver */
 
 /** @type {Set<string>} */
 const emittedWarnings = new Set()
@@ -81,6 +57,7 @@ const emittedWarnings = new Set()
  * @property {InstrumentationPayload[]} payloads
  * @property {string} path
  * @property {{ moduleName: string, filePath: string }} rewriteTarget
+ * @property {Set<string>} ruleRoots
  * @property {Set<string>} rulePaths
  * @property {string} sourceHash
  * @property {string[]} [setters]
@@ -109,6 +86,7 @@ const emittedWarnings = new Set()
  *   discoveryRoot: string
  * }} settings
  * @returns {Promise<{
+ *   foreignPathPattern?: RegExp,
  *   foreignModuleSyntaxPattern?: RegExp,
  *   moduleSyntaxPattern?: RegExp,
  *   path?: string,
@@ -123,52 +101,68 @@ async function createBuildPlan (projectDir, settings) {
   const dcPolyfill = normalizePath(require.resolve('dc-polyfill'))
   const discoveryRoot = path.resolve(projectDir, settings.discoveryRoot)
   const discoveryRoots = discoveryRoot === projectDir ? [projectDir] : [projectDir, discoveryRoot]
-  const targets = getTargets(discoveryRoots)
   const compiledTargets = []
   const esmSpecifiers = new Set()
   let includesEsmTarget = false
+  let moduleGraph
+  const resolver = createEsmResolver()
 
-  for (const target of targets) {
-    try {
-      const source = fsSync.readFileSync(target.path)
-      const sourceText = source.toString()
-      target.sourceHash = hash(source)
-      let parsed
-      if (target.esm) {
-        parsed = parseSource(sourceText, target.path, settings.compiler)
-      } else if (SOURCE_MODULE_PATH_PATTERN.test(target.path) && MODULE_SYNTAX_PATTERN.test(sourceText)) {
-        try {
+  try {
+    const targets = await getTargets(discoveryRoots, resolver)
+    for (const target of targets) {
+      try {
+        const source = fsSync.readFileSync(target.path)
+        const sourceText = source.toString()
+        target.sourceHash = hash(source)
+        let parsed
+        if (target.esm) {
           parsed = parseSource(sourceText, target.path, settings.compiler)
-          target.esm = parsed.ast.program.sourceType === 'module'
-        } catch {
-          // Keep the package-derived format when source syntax does not prove ESM.
+        } else if (SOURCE_MODULE_PATH_PATTERN.test(target.path) && MODULE_SYNTAX_PATTERN.test(sourceText)) {
+          try {
+            parsed = parseSource(sourceText, target.path, settings.compiler)
+            target.esm = parsed.ast.program.sourceType === 'module'
+          } catch {
+            // Keep the package-derived format when source syntax does not prove ESM.
+          }
         }
+        if (target.esm) {
+          // Export discovery is asynchronous in import-in-the-middle and belongs at build time.
+          const moduleSources = new Map([[fileURLToPath(pathToFileURL(target.path)), sourceText]])
+          // eslint-disable-next-line no-await-in-loop
+          const setters = await processModule({
+            path: target.path,
+            internal: false,
+            context: { format: 'module' },
+            excludeDefault: false,
+            moduleSources,
+            resolver,
+          })
+          // eslint-disable-next-line no-await-in-loop
+          target.liveExports = await findLiveExports(
+            target.path,
+            settings.compiler,
+            setters.keys(),
+            moduleSources,
+            parsed,
+            resolver
+          )
+          target.dependencies = createDependencies(moduleSources, target.path)
+          for (const name of target.liveExports) setters.delete(name)
+          target.setters = [...setters.values()].map(setter => setter.replaceAll(TRAILING_WHITESPACE, ''))
+          for (const payload of target.payloads) esmSpecifiers.add(payload.path)
+          includesEsmTarget = true
+        }
+        compiledTargets.push(target)
+      } catch (error) {
+        warnOnce(`target:${target.path}`, `Could not instrument ${target.path}: ${String(error?.message ?? error)}`)
       }
-      if (target.esm) {
-        // Export discovery is asynchronous in import-in-the-middle and belongs at build time.
-        const moduleSources = new Map([[fileURLToPath(pathToFileURL(target.path)), sourceText]])
-        // eslint-disable-next-line no-await-in-loop
-        const setters = await processModule({
-          path: target.path,
-          context: { format: 'module' },
-          moduleSources,
-        })
-        target.liveExports = findLiveExports(
-          target.path,
-          settings.compiler,
-          setters.keys(),
-          moduleSources,
-          parsed
-        )
-        target.dependencies = createDependencies(moduleSources, target.path)
-        for (const name of target.liveExports) setters.delete(name)
-        target.setters = [...setters.values()].map(setter => setter.replaceAll(TRAILING_WHITESPACE, ''))
-        for (const payload of target.payloads) esmSpecifiers.add(payload.path)
-        includesEsmTarget = true
-      }
-      compiledTargets.push(target)
+    }
+    moduleGraph = await createModuleGraph(compiledTargets, settings.compiler, resolver)
+  } finally {
+    try {
+      await resolver.close()
     } catch (error) {
-      warnOnce(`target:${target.path}`, `Could not instrument ${target.path}: ${String(error?.message ?? error)}`)
+      warnOnce('resolve', `Could not close the Turbopack instrumentation resolver: ${String(error?.message ?? error)}`)
     }
   }
 
@@ -199,7 +193,7 @@ async function createBuildPlan (projectDir, settings) {
       sourceHash: target.sourceHash,
     }
 
-    if (target.esm) {
+    if (target.esm && !moduleGraph.skippedTargets.has(target.path)) {
       const proxy = createEsmProxy(
         /** @type {Target & { setters: string[] }} */ (target),
         path.join(realArtifactDirectory, 'proxy.mjs'),
@@ -218,7 +212,9 @@ async function createBuildPlan (projectDir, settings) {
 
   const plan = JSON.stringify({
     compiler: settings.compiler,
+    components: moduleGraph.components,
     dcPolyfill,
+    graphDependencies: moduleGraph.dependencies,
     relativeTargets,
     targets: planTargets,
     version: PLAN_VERSION,
@@ -228,6 +224,7 @@ async function createBuildPlan (projectDir, settings) {
   await writeArtifact(planPath, plan)
 
   return {
+    foreignPathPattern: createForeignPathPattern(compiledTargets),
     foreignModuleSyntaxPattern: esmSpecifiers.size === 0
       ? undefined
       : new RegExp(`(['"\`])(?:${createAlternation(esmSpecifiers)})\\1`),
@@ -236,6 +233,189 @@ async function createBuildPlan (projectDir, settings) {
     relativePathPattern: createRelativePathPattern(relativeTargets),
     targetPathPattern: createTargetPathPattern(compiledTargets),
   }
+}
+
+/**
+ * Builds the static ESM graph that determines which loader edges must keep their
+ * native target. A graph that cannot be resolved completely is not safe to proxy.
+ *
+ * @param {Target[]} targets
+ * @param {{ parser: string, traverse: string }} compiler
+ * @param {EsmResolver} resolver
+ * @returns {Promise<{
+ *   components: Record<string, string>,
+ *   dependencies: Array<{ path: string, sourceHash: string }>,
+ *   skippedTargets: Set<string>
+ * }>}
+ */
+async function createModuleGraph (targets, compiler, resolver) {
+  const components = {}
+  const graph = new Map()
+  const nodes = new Map()
+  const roots = new Map()
+  const skippedTargets = new Set()
+
+  for (const target of targets) {
+    if (!target.esm) continue
+    const visited = new Set()
+    const pending = [target.path]
+    let failure
+    let graphFailed = false
+
+    while (pending.length > 0 && !graphFailed) {
+      const resourcePath = /** @type {string} */ (pending.pop())
+      if (visited.has(resourcePath)) continue
+      visited.add(resourcePath)
+
+      let node = nodes.get(resourcePath)
+      if (!node) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          node = await analyzeGraphNode(resourcePath, compiler, resolver)
+        } catch (error) {
+          node = { error, failed: true }
+        }
+        nodes.set(resourcePath, node)
+      }
+      if (node.failed) {
+        failure = node.error
+        graphFailed = true
+        break
+      }
+
+      graph.set(resourcePath, node.edges)
+      for (const dependency of node.edges) pending.push(dependency)
+    }
+
+    if (graphFailed) {
+      skippedTargets.add(target.path)
+      warnOnce(
+        `module-graph:${target.path}`,
+        `Skipped the ESM instrumentation proxy for ${target.path}: ${String(failure?.message ?? failure)}`
+      )
+    } else {
+      roots.set(target.path, visited)
+    }
+  }
+
+  const dependencies = new Map()
+  for (const [root, visited] of roots) {
+    const component = findRootComponent(root, visited, graph)
+    if (component) {
+      const id = hash([...component].sort().join('\0'))
+      for (const resourcePath of component) components[resourcePath] = id
+    }
+    for (const resourcePath of visited) {
+      const node = nodes.get(resourcePath)
+      dependencies.set(resourcePath, { path: resourcePath, sourceHash: node.sourceHash })
+    }
+  }
+
+  const sortedComponents = {}
+  for (const resourcePath of Object.keys(components).sort()) {
+    sortedComponents[resourcePath] = components[resourcePath]
+  }
+
+  return {
+    components: sortedComponents,
+    dependencies: [...dependencies.values()].sort(comparePaths),
+    skippedTargets,
+  }
+}
+
+/**
+ * @param {string} resourcePath
+ * @param {{ parser: string, traverse: string }} compiler
+ * @param {EsmResolver} resolver
+ * @returns {Promise<{ edges: string[], sourceHash: string }>}
+ */
+async function analyzeGraphNode (resourcePath, compiler, resolver) {
+  const source = fsSync.readFileSync(resourcePath, 'utf8')
+  const parsed = parseSource(source, resourcePath, compiler)
+  const specifiers = collectStaticSpecifiers(parsed)
+  const edges = []
+  const parentURL = pathToFileURL(resourcePath)
+
+  for (const specifier of specifiers) {
+    const request = specifier.startsWith('.') ? new URL(specifier, parentURL).href : specifier
+    // eslint-disable-next-line no-await-in-loop
+    const url = await resolver.resolve(request, parentURL)
+    if (!url.startsWith('file:') || url.includes('?') || url.includes('#')) continue
+    const dependencyPath = normalizePath(fileURLToPath(url))
+    if (MODULE_SOURCE_PATH_PATTERN.test(dependencyPath)) edges.push(dependencyPath)
+  }
+
+  return { edges: [...new Set(edges)].sort(), sourceHash: hash(source) }
+}
+
+/**
+ * @param {{ ast: object, traverse: Function }} parsed
+ * @returns {string[]}
+ */
+function collectStaticSpecifiers ({ ast, traverse }) {
+  const specifiers = []
+  traverse(ast, {
+    /** @param {{ node: object }} modulePath */
+    ExportAllDeclaration (modulePath) {
+      if (modulePath.node.exportKind !== 'type') specifiers.push(modulePath.node.source.value)
+    },
+    /** @param {{ node: object }} modulePath */
+    ExportNamedDeclaration (modulePath) {
+      const { node } = modulePath
+      if (node.exportKind !== 'type' && node.source && !isTypeOnlyModuleDeclaration(node)) {
+        specifiers.push(node.source.value)
+      }
+    },
+    /** @param {{ node: object }} modulePath */
+    ImportDeclaration (modulePath) {
+      const { node } = modulePath
+      if (!isTypeOnlyModuleDeclaration(node)) specifiers.push(node.source.value)
+    },
+  })
+  return [...new Set(specifiers)]
+}
+
+/**
+ * @param {object} declaration
+ * @returns {boolean}
+ */
+function isTypeOnlyModuleDeclaration (declaration) {
+  if (declaration.importKind === 'type' || declaration.importKind === 'typeof') return true
+  if (declaration.specifiers.length === 0) return false
+  const kind = declaration.type === 'ImportDeclaration' ? 'importKind' : 'exportKind'
+  for (const specifier of declaration.specifiers) {
+    if (specifier[kind] !== 'type' && specifier[kind] !== 'typeof') return false
+  }
+  return true
+}
+
+/**
+ * @param {string} root
+ * @param {Set<string>} visited
+ * @param {Map<string, string[]>} graph
+ * @returns {Set<string>|undefined}
+ */
+function findRootComponent (root, visited, graph) {
+  const reverse = new Map()
+  for (const resourcePath of visited) reverse.set(resourcePath, [])
+  for (const resourcePath of visited) {
+    const dependencies = /** @type {string[]} */ (graph.get(resourcePath))
+    for (const dependency of dependencies) {
+      if (visited.has(dependency)) reverse.get(dependency).push(resourcePath)
+    }
+  }
+
+  const component = new Set()
+  const pending = [root]
+  while (pending.length > 0) {
+    const resourcePath = /** @type {string} */ (pending.pop())
+    if (component.has(resourcePath)) continue
+    component.add(resourcePath)
+    const importers = /** @type {string[]} */ (reverse.get(resourcePath))
+    for (const importer of importers) pending.push(importer)
+  }
+
+  if (component.size > 1 || graph.get(root)?.includes(root)) return component
 }
 
 /**
@@ -280,9 +460,10 @@ function loadInstrumentations () {
 
 /**
  * @param {string[]} discoveryRoots
- * @returns {Target[]}
+ * @param {EsmResolver} resolver
+ * @returns {Promise<Target[]>}
  */
-function getTargets (discoveryRoots) {
+async function getTargets (discoveryRoots, resolver) {
   const targets = new Map()
   const packageNames = new Set()
 
@@ -304,12 +485,11 @@ function getTargets (discoveryRoots) {
     for (const packageRoot of packageRoots) requests.push({ directory: packageRoot, entries, name, packageRoot })
   }
 
-  let resolutions
-  try {
-    resolutions = resolvePackageEntrypoints(requests)
-  } catch (error) {
-    warnOnce('resolve', `Could not resolve Turbopack instrumentation targets: ${String(error?.message ?? error)}`)
-    resolutions = requests.map(() => [])
+  const result = await resolvePackageEntrypoints(requests, resolver)
+  const resolutions = result.resolutions
+  if (result.failure) {
+    const reason = String(result.failure?.message ?? result.failure)
+    warnOnce('resolve', `Could not resolve one or more Turbopack instrumentation targets: ${reason}`)
   }
 
   for (let index = 0; index < requests.length; index++) {
@@ -432,11 +612,15 @@ function addTargets (targets, packageRoot, name, entries, entrypoints) {
           path: targetPath,
           payloads: [],
           rewriteTarget: { filePath: relativePath, moduleName: name },
+          ruleRoots: new Set(),
           rulePaths: new Set(),
           sourceHash: '',
         }
         targets.set(targetPath, target)
       }
+      target.ruleRoots.add(normalizePath(packageRoot))
+      target.ruleRoots.add(name)
+      target.ruleRoots.add(path.basename(packageRoot))
       target.rulePaths.add(`${name}/${relativePath}`)
       target.rulePaths.add(`${path.basename(packageRoot)}/${relativePath}`)
 
@@ -579,32 +763,75 @@ function addPackageRoot (packageRoot, packageName, names, packageRoots, pending)
  * runtime's own export-map implementation without running application loaders.
  *
  * @param {Array<{ directory: string, name: string }>} requests
- * @returns {string[][]}
+ * @param {EsmResolver} resolver
+ * @returns {Promise<{ failure?: unknown, resolutions: string[][] }>}
  */
-function resolvePackageEntrypoints (requests) {
-  if (requests.length === 0) return []
+async function resolvePackageEntrypoints (requests, resolver) {
+  /** @type {string[][]} */
+  const results = new Array(requests.length)
+  let failure
+  let nextIndex = 0
 
-  const env = getEnvironmentVariables()
-  delete env.NODE_OPTIONS
-  const result = spawnSync(process.execPath, [
-    '--no-warnings',
-    '--experimental-import-meta-resolve',
-    '--input-type=module',
-    '--eval',
-    RESOLVER_SOURCE,
-  ], {
-    encoding: 'utf8',
-    env,
-    input: JSON.stringify(requests.map(({ directory, name }) => ({ directory, name }))),
-    maxBuffer: RESOLVER_MAX_BUFFER,
-  })
-
-  if (result.error) throw result.error
-  if (result.status !== 0) {
-    const stderr = result.stderr?.trim()
-    throw new Error(stderr || `Node.js resolver exited with status ${result.status}`)
+  async function resolveNext () {
+    while (true) {
+      const index = nextIndex++
+      if (index >= requests.length) return
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        results[index] = await resolvePackageEntryPoints(requests[index], resolver)
+      } catch (error) {
+        results[index] = []
+        failure ??= error
+      }
+    }
   }
-  return JSON.parse(/** @type {string} */ (result.stdout))
+
+  const workers = []
+  const workerCount = Math.min(requests.length, MAX_CONCURRENT_PACKAGE_RESOLUTIONS)
+  for (let index = 0; index < workerCount; index++) workers.push(resolveNext())
+  await Promise.all(workers)
+  return { failure, resolutions: results }
+}
+
+/**
+ * @param {{ directory: string, name: string }} request
+ * @param {EsmResolver} resolver
+ * @returns {Promise<string[]>}
+ */
+async function resolvePackageEntryPoints ({ directory, name }, resolver) {
+  const parentURL = pathToFileURL(path.resolve(directory, 'package.json'))
+  const results = await Promise.allSettled([
+    resolver.resolve(name, parentURL),
+    resolver.resolve(name, parentURL, 'require'),
+  ])
+  const entrypoints = new Set()
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      if (!isResolutionMiss(result.reason)) throw result.reason
+      continue
+    }
+    if (!result.value.startsWith('file:')) continue
+    entrypoints.add(fileURLToPath(result.value))
+  }
+  if (entrypoints.size > 0) return [...entrypoints]
+
+  try {
+    const resolved = await resolver.resolve('./', parentURL, 'require')
+    if (resolved.startsWith('file:')) entrypoints.add(fileURLToPath(resolved))
+  } catch (error) {
+    if (!isResolutionMiss(error)) throw error
+    // An unresolved optional instrumentation target is not installed.
+  }
+  return [...entrypoints]
+}
+
+/**
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isResolutionMiss (error) {
+  const code = /** @type {{ code?: unknown }} */ (error)?.code
+  return typeof code === 'string' && RESOLUTION_MISS_CODES.has(code)
 }
 
 /**
@@ -652,13 +879,16 @@ function findMatchingFiles (directory, pattern) {
  * @param {Iterable<string>} exportNames
  * @param {Map<string, string>} moduleSources
  * @param {{ ast: object, traverse: Function }} parsed
- * @returns {string[]}
+ * @param {EsmResolver} resolver
+ * @returns {Promise<string[]>}
  */
-function findLiveExports (resourcePath, compiler, exportNames, moduleSources, parsed) {
+async function findLiveExports (resourcePath, compiler, exportNames, moduleSources, parsed, resolver) {
   const analyses = new Map([[resourcePath, analyzeModule(parsed)]])
   const liveExports = new Set()
   for (const name of exportNames) {
-    if (resolveExport(resourcePath, name, compiler, moduleSources, analyses, new Set()).live) {
+    // eslint-disable-next-line no-await-in-loop
+    const binding = await resolveExport(resourcePath, name, compiler, moduleSources, analyses, new Set(), resolver)
+    if (binding.live) {
       liveExports.add(name)
     }
   }
@@ -678,9 +908,7 @@ function analyzeModule ({ ast, traverse }) {
         const { node } = statementPath
         if (statementPath.isExportAllDeclaration()) {
           if (node.exportKind === 'type') continue
-          const exported = getExportName(node.exported)
-          if (exported === undefined) analysis.starExports.push(node.source.value)
-          else analysis.bindings.set(exported, { live: false })
+          analysis.starExports.push(node.source.value)
           continue
         }
         if (statementPath.isExportDefaultDeclaration()) {
@@ -704,7 +932,6 @@ function analyzeModule ({ ast, traverse }) {
         for (const specifier of node.specifiers) {
           if (specifier.exportKind === 'type') continue
           const exported = getExportName(specifier.exported)
-          if (exported === undefined) continue
 
           if (node.source) {
             const name = getExportName(specifier.local)
@@ -725,22 +952,19 @@ function analyzeModule ({ ast, traverse }) {
 
 /**
  * @param {object} programPath
- * @param {string|undefined} name
+ * @param {string} name
  * @returns {ExportBinding}
  */
 function getLocalBinding (programPath, name) {
-  if (name === undefined) return { live: false }
   const binding = programPath.scope.getBinding(name)
   if (!binding || binding.kind !== 'module') return { live: binding?.constant === false }
 
   const { node, parentPath } = binding.path
-  const source = parentPath?.node?.source?.value
-  if (typeof source !== 'string') return { live: false }
+  const source = parentPath.node.source.value
   if (node.type === 'ImportDefaultSpecifier') return { name: 'default', source }
   if (node.type !== 'ImportSpecifier') return { live: false }
 
-  const imported = getExportName(node.imported)
-  return imported === undefined ? { live: false } : { name: imported, source }
+  return { name: getExportName(node.imported), source }
 }
 
 /**
@@ -750,9 +974,10 @@ function getLocalBinding (programPath, name) {
  * @param {Map<string, string>} moduleSources
  * @param {Map<string, ModuleAnalysis>} analyses
  * @param {Set<string>} pending
- * @returns {{ found: boolean, live: boolean }}
+ * @param {EsmResolver} resolver
+ * @returns {Promise<{ found: boolean, live: boolean }>}
  */
-function resolveExport (resourcePath, name, compiler, moduleSources, analyses, pending) {
+async function resolveExport (resourcePath, name, compiler, moduleSources, analyses, pending, resolver) {
   const key = `${resourcePath}\0${name}`
   if (pending.has(key)) return { found: false, live: false }
   pending.add(key)
@@ -767,9 +992,17 @@ function resolveExport (resourcePath, name, compiler, moduleSources, analyses, p
   if (binding) {
     let result = { found: true, live: binding.live === true }
     if (binding.source !== undefined && binding.name !== undefined) {
-      const dependencyPath = resolveExportPath(resourcePath, binding.source)
+      const dependencyPath = await resolveExportPath(resourcePath, binding.source, resolver)
       if (dependencyPath !== undefined) {
-        result = resolveExport(dependencyPath, binding.name, compiler, moduleSources, analyses, pending)
+        result = await resolveExport(
+          dependencyPath,
+          binding.name,
+          compiler,
+          moduleSources,
+          analyses,
+          pending,
+          resolver
+        )
       }
     }
     pending.delete(key)
@@ -778,9 +1011,11 @@ function resolveExport (resourcePath, name, compiler, moduleSources, analyses, p
 
   if (name !== 'default') {
     for (const specifier of analysis.starExports) {
-      const dependencyPath = resolveExportPath(resourcePath, specifier)
+      // eslint-disable-next-line no-await-in-loop
+      const dependencyPath = await resolveExportPath(resourcePath, specifier, resolver)
       if (dependencyPath === undefined) continue
-      const result = resolveExport(dependencyPath, name, compiler, moduleSources, analyses, pending)
+      // eslint-disable-next-line no-await-in-loop
+      const result = await resolveExport(dependencyPath, name, compiler, moduleSources, analyses, pending, resolver)
       if (result.found) {
         pending.delete(key)
         return result
@@ -820,13 +1055,15 @@ function getModuleAnalysis (resourcePath, compiler, moduleSources, analyses) {
 /**
  * @param {string} resourcePath
  * @param {string} specifier
- * @returns {string|undefined}
+ * @param {EsmResolver} resolver
+ * @returns {Promise<string|undefined>}
  */
-function resolveExportPath (resourcePath, specifier) {
+async function resolveExportPath (resourcePath, specifier, resolver) {
   try {
     const parentURL = pathToFileURL(resourcePath)
     const request = specifier.startsWith('.') ? new URL(specifier, parentURL).href : specifier
-    const { url } = resolveModule(request, { parentURL })
+    const url = await resolver.resolve(request, parentURL)
+    if (!url.startsWith('file:')) return
     return normalizePath(fileURLToPath(url))
   } catch {
     // An unresolved dependency is not proven mutable, so retain its patch setter.
@@ -908,6 +1145,20 @@ function createRelativePathPattern (relativeTargets) {
   const files = new Set()
   for (const target of relativeTargets) files.add(target.file)
   return new RegExp(`(?:^|/)(?:${createAlternation(files)})$`)
+}
+
+/**
+ * @param {Target[]} targets
+ * @returns {RegExp|undefined}
+ */
+function createForeignPathPattern (targets) {
+  const roots = new Set()
+  for (const target of targets) {
+    if (!target.esm) continue
+    for (const ruleRoot of target.ruleRoots) roots.add(ruleRoot)
+  }
+  if (roots.size === 0) return
+  return new RegExp(`(?:^|/)(?:${createAlternation(roots)})(?:/|$)`)
 }
 
 /**

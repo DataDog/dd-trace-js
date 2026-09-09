@@ -1,12 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
-const vm = require('node:vm')
 const { pathToFileURL } = require('node:url')
+const vm = require('node:vm')
 const { afterEach, describe, it } = require('mocha')
 
 const dc = require('dc-polyfill')
@@ -20,6 +21,7 @@ const {
   applyDatadogTurbopack,
   cleanup,
   createIoredisProject,
+  createLinkedAiProject,
   createPackage,
   createProject,
   findDatadogLoaders,
@@ -28,12 +30,23 @@ const {
 
 const CHANNEL = 'dd-trace:bundler:load'
 const lintRuntimeSupported = semver.satisfies(process.version, eslintEngines.node)
+let generatedSourceLinter
 
 describe('datadog-turbopack loader', () => {
   afterEach(() => {
     cleanup()
     sinon.restore()
   }).timeout(30000)
+
+  it('does not read package metadata for application modules', async () => {
+    const fixture = await createAiFixture()
+    const appPath = write(fixture.projectDir, 'app/route.js', '')
+    const readFileSync = sinon.spy(fs, 'readFileSync')
+
+    await runLoader(appPath, "module.exports = require('not-installed')\n", fixture.importOptions)
+
+    assert.equal(readFileSync.withArgs(path.join(fixture.projectDir, 'package.json')).callCount, 0)
+  })
 
   it('rewrites ESM imports and only unshadowed CommonJS requires', async () => {
     const fixture = await createAiFixture()
@@ -314,6 +327,73 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, new RegExp(path.basename(fixture.proxyPath)))
   })
 
+  it('preserves unsupported resolved request shapes before filesystem access', async () => {
+    const fixture = await createAiFixture()
+    const appPath = write(fixture.projectDir, 'app/queried.js', '')
+    const source = "import { generateText } from 'ai'\n"
+    const sourceMap = { mappings: 'AAAA', sources: ['queried.ts'], version: 3 }
+    const resolvedRequests = [
+      `${fixture.targetPath}?raw`,
+      `${fixture.targetPath}?url&x=1`,
+      `${fixture.targetPath}?`,
+      `${fixture.targetPath}#part`,
+      `${fixture.targetPath}?raw#part`,
+      `${fixture.targetPath}!loader`,
+      `loader!${fixture.targetPath}`,
+      `${pathToFileURL(fixture.targetPath).href}?raw`,
+      `${pathToFileURL(fixture.targetPath).href}?`,
+      `${pathToFileURL(fixture.targetPath).href}#part`,
+      `${pathToFileURL(fixture.targetPath).href}#`,
+      `${pathToFileURL(fixture.targetPath).href}%2Fchild`,
+      './relative.mjs',
+      '\0virtual',
+      'data:text/javascript,export default true',
+      'node:fs',
+      'virtual:module',
+      'https://example.com/module.mjs',
+      'file://[invalid',
+      42,
+    ]
+    if (process.platform !== 'win32') {
+      const questionPath = `${fixture.targetPath}?literal`
+      const fragmentPath = `${fixture.targetPath}#literal`
+      fs.symlinkSync(fixture.targetPath, questionPath)
+      fs.symlinkSync(fixture.targetPath, fragmentPath)
+      resolvedRequests.push(questionPath, fragmentPath)
+    }
+
+    for (const resolved of resolvedRequests) {
+      const getResolve = () => (_directory, _request, callback) => callback(undefined, resolved)
+      const result = await runLoaderResult(appPath, source, fixture.importOptions, { getResolve, sourceMap })
+      assert.equal(result.code, source, String(resolved))
+      assert.equal(result.map, sourceMap, String(resolved))
+    }
+  })
+
+  it('normalizes supported file URLs and encoded path characters without changing their identity', async () => {
+    const fixture = await createAiFixture()
+    const appPath = write(fixture.projectDir, 'app/urls.js', '')
+    const source = "import { generateText } from 'ai'\n"
+    const encodedPaths = [`${fixture.targetPath}%3F`, `${fixture.targetPath}%23`]
+    for (const encodedPath of encodedPaths) fs.symlinkSync(fixture.targetPath, encodedPath)
+    const resolvedRequests = [
+      pathToFileURL(fixture.targetPath).href,
+      ...encodedPaths,
+      ...encodedPaths.map(encodedPath => pathToFileURL(encodedPath).href),
+    ]
+    if (process.platform !== 'win32') {
+      const literalPaths = [`${fixture.targetPath}?literal`, `${fixture.targetPath}#literal`]
+      for (const literalPath of literalPaths) fs.symlinkSync(fixture.targetPath, literalPath)
+      resolvedRequests.push(...literalPaths.map(literalPath => pathToFileURL(literalPath).href))
+    }
+
+    for (const resolved of resolvedRequests) {
+      const getResolve = () => (_directory, _request, callback) => callback(undefined, resolved)
+      const result = await runLoader(appPath, source, fixture.importOptions, { getResolve })
+      assert.match(result, new RegExp(path.basename(fixture.proxyPath)), resolved)
+    }
+  })
+
   it('returns transformed ESM dependencies without a CommonJS publication tail', async () => {
     const fixture = await createAiFixture()
     const source = fs.readFileSync(fixture.targetPath, 'utf8')
@@ -397,7 +477,7 @@ describe('datadog-turbopack loader', () => {
     assert.doesNotMatch(await runLoader(resourcePath, source, options), /dd-trace:bundler:load/)
   })
 
-  it('rewrites a foreign integration edge through the direct-target rule', async () => {
+  it('rewrites a foreign relative barrel edge through its package-root rule', async () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'hono', {
       exports: './dist/index.js',
@@ -408,7 +488,12 @@ describe('datadog-turbopack loader', () => {
     const entryPath = write(packageDir, 'dist/index.js', source)
     const targetPath = write(packageDir, 'dist/hono.js', 'export class Hono {}\n')
     const config = await applyDatadogTurbopack({}, { projectDir })
-    const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+    const rule = config.turbopack.rules['*.js'].find(rule =>
+      rule.condition.all.includes('foreign') &&
+      rule.condition.all.some(condition => condition?.path?.test(entryPath)) &&
+      rule.condition.all.some(condition => condition?.content?.test(source)))
+    assert.ok(rule)
+    const options = rule.loaders[0].options
     const plan = JSON.parse(fs.readFileSync(options.manifestPath, 'utf8'))
     const proxyPath = plan.targets[fs.realpathSync(targetPath)].proxyPath
 
@@ -419,25 +504,31 @@ describe('datadog-turbopack loader', () => {
   })
 
   it('rewrites source instrumentation in linked workspace targets', async () => {
-    const workspaceDir = createProject()
-    const projectDir = path.join(workspaceDir, 'apps/web')
-    write(projectDir, 'package.json', '{}')
-    const packageDir = path.join(workspaceDir, 'packages/ai')
-    write(packageDir, 'package.json', JSON.stringify({
+    const source = "export function getTracer () { return 'original' }\n"
+    const fixture = await createLinkedAiProject({
       exports: './dist/index.mjs',
-      name: 'ai',
       type: 'module',
       version: '6.1.0',
-    }))
-    const source = "export function getTracer () { return 'original' }\n"
-    const targetPath = write(packageDir, 'dist/index.mjs', source)
-    fs.symlinkSync(packageDir, path.join(workspaceDir, 'node_modules/ai'), 'dir')
-    const config = await applyDatadogTurbopack({}, { projectDir })
-    const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+    }, { 'dist/index.mjs': source })
+    const options = findDatadogLoaders(fixture.config).find(item => item.options.targetScope === 'direct').options
 
-    const transformed = await runLoader(targetPath, source, options)
+    const transformed = await runLoader(fixture.files['dist/index.mjs'], source, options)
 
     assert.match(transformed, /tr_ch_apm_tracingChannel/)
+  })
+
+  it('emits the same CommonJS and ESM instrumentation when the build process disables it', () => {
+    const runner = path.join(__dirname, 'resources/run-loader-with-build-config.js')
+    const { disabled, enabled } = JSON.parse(execFileSync(
+      process.execPath,
+      [runner],
+      { encoding: 'utf8' }
+    ))
+
+    for (let index = 0; index < 2; index++) {
+      assert.match(enabled[index], /tr_ch_apm_tracingChannel/)
+      assert.equal(disabled[index], enabled[index])
+    }
   })
 
   it('rejects stale proxies after linked star-export dependencies change', async () => {
@@ -481,6 +572,42 @@ describe('datadog-turbopack loader', () => {
     assert.match(warnings[0].message, /state\.mjs/)
   })
 
+  it('rejects a cycle plan after a non-exported graph dependency changes', async () => {
+    const cycleSource = "import './index.mjs'\nexport const value = true\n"
+    const fixture = await createLinkedAiProject({
+      exports: './dist/index.mjs',
+      type: 'module',
+      version: '6.1.0',
+    }, {
+      'dist/cycle.mjs': cycleSource,
+      'dist/index.mjs': "import './cycle.mjs'\nexport function generateText () {}\n",
+    })
+    const options = findDatadogLoaders(fixture.config)
+      .find(item => item.options.rewriteEdges && !item.options.targetScope).options
+    const plan = JSON.parse(fs.readFileSync(options.manifestPath, 'utf8'))
+    const targetPath = fs.realpathSync(fixture.files['dist/index.mjs'])
+    const cyclePath = fs.realpathSync(fixture.files['dist/cycle.mjs'])
+    const source = "import { generateText } from 'ai'\n"
+    const resourcePath = write(fixture.projectDir, 'route.mjs', source)
+    const warnings = []
+    const initial = await runLoader(resourcePath, source, options)
+    fs.rmSync(cyclePath)
+
+    const changed = await runLoader(resourcePath, source, options, {
+      emitWarning: warning => warnings.push(warning),
+    })
+    fs.writeFileSync(cyclePath, cycleSource)
+    const restored = await runLoader(resourcePath, source, options)
+
+    assert.equal(plan.targets[targetPath].dependencies.length, 0)
+    assert.ok(plan.graphDependencies.some(dependency => dependency.path === cyclePath))
+    assert.match(initial, new RegExp(path.basename(plan.targets[targetPath].proxyPath)))
+    assert.equal(changed, source)
+    assert.match(restored, new RegExp(path.basename(plan.targets[targetPath].proxyPath)))
+    assert.equal(warnings.length, 1)
+    assert.match(warnings[0].message, /cycle\.mjs/)
+  })
+
   it('does not instrument a direct target through the relative-copy rule', async () => {
     const fixture = await createAiFixture()
     const source = fs.readFileSync(fixture.ioredisPath, 'utf8')
@@ -491,6 +618,14 @@ describe('datadog-turbopack loader', () => {
     })
 
     assert.equal(result, source)
+  })
+
+  it('leaves an unplanned direct module unchanged', async () => {
+    const fixture = await createAiFixture()
+    const resourcePath = write(fixture.projectDir, 'app/unplanned.js', 'module.exports = true\n')
+    const source = fs.readFileSync(resourcePath, 'utf8')
+
+    assert.equal(await runLoader(resourcePath, source, fixture.packageOptions), source)
   })
 
   it('rejects import parsing failures', async () => {
@@ -554,6 +689,12 @@ describe('datadog-turbopack loader', () => {
     sinon.assert.calledOnce(emitWarning)
   })
 
+  it('bounds unique loader warnings at 128', () => {
+    const runner = path.join(__dirname, 'resources/check-loader-warning-boundary.js')
+
+    execFileSync(process.execPath, [runner])
+  })
+
   it('rejects when the Turbopack resolver cannot be initialized', async () => {
     const fixture = await createAiFixture()
     const appPath = write(fixture.projectDir, 'app/resolver.js', '')
@@ -567,7 +708,7 @@ describe('datadog-turbopack loader', () => {
     )
   })
 
-  it('leaves unresolved optional module edges unchanged', async () => {
+  it('leaves failed and undefined optional module resolutions unchanged', async () => {
     const fixture = await createAiFixture()
     const appPath = write(fixture.projectDir, 'app/resolver-edge.js', '')
     const relativeTarget = path.relative(path.dirname(appPath), fixture.targetPath).replaceAll('\\', '/')
@@ -581,7 +722,8 @@ describe('datadog-turbopack loader', () => {
     const result = await runLoader(appPath, source, fixture.importOptions, {
       getResolve: () => (_directory, request, callback) => {
         requests.push(request)
-        callback(new Error('resolution failed'))
+        if (request === 'ai') callback(new Error('resolution failed'))
+        else callback(undefined, undefined)
       },
     })
 
@@ -665,6 +807,15 @@ describe('datadog-turbopack loader', () => {
     const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
     const transformed = await runLoader(resourcePath, fs.readFileSync(resourcePath, 'utf8'), options)
     await assertGeneratedSourceIsLintClean(transformed, resourcePath)
+    if (lintRuntimeSupported) {
+      await assert.rejects(
+        assertGeneratedSourceIsLintClean(
+          "'use strict'\nrequire('./missing-generated-dependency')\n",
+          resourcePath
+        ),
+        error => error.actual?.some(message => message.ruleId === 'n/no-missing-require')
+      )
+    }
     const publications = []
     const channel = {
       hasSubscribers: false,
@@ -745,6 +896,45 @@ describe('datadog-turbopack loader', () => {
     assert.equal(await runLoader(files[0], changedSource, options), changedSource)
   })
 
+  it('evicts build-plan rewriters at the cache boundary without changing output', async function () {
+    this.timeout(30000)
+    const { projectDir, resourcePath } = createIoredisProject()
+    const source = fs.readFileSync(resourcePath, 'utf8')
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const originalOptions = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+    const plan = JSON.parse(fs.readFileSync(originalOptions.manifestPath, 'utf8'))
+    const template = plan.targets[fs.realpathSync(resourcePath)]
+    const files = []
+
+    for (let index = 0; index <= 64; index++) {
+      const directory = path.join(projectDir, 'copies', ...new Array(index).fill('nested'), 'node_modules/ioredis')
+      write(directory, 'package.json', JSON.stringify({ name: 'ioredis', version: '5.0.0' }))
+      const file = write(directory, 'index.js', source)
+      files.push(file)
+      plan.targets[fs.realpathSync(file).replaceAll('\\', '/')] = template
+    }
+
+    const options = {
+      ...originalOptions,
+      manifestPath: writePlan(path.dirname(originalOptions.manifestPath), JSON.stringify(plan)),
+    }
+    const codeTransformer = require('../../../vendor/dist/@apm-js-collab/code-transformer')
+    const create = sinon.spy(codeTransformer, 'create')
+    const outputs = []
+
+    for (let index = 0; index < 64; index++) {
+      outputs[index] = await runLoader(files[index], source, options)
+    }
+    assert.equal(create.callCount, 64)
+
+    outputs[64] = await runLoader(files[64], source, options)
+    assert.equal(create.callCount, 65)
+    assert.equal(await runLoader(files[1], source, options), outputs[1])
+    assert.equal(create.callCount, 65)
+    assert.equal(await runLoader(files[0], source, options), outputs[0])
+    assert.equal(create.callCount, 66)
+  })
+
   it('does not use a plan after a dependency changes', async () => {
     const { packageDir, projectDir } = createIoredisProject()
     const before = 'module.exports = { first: true }\n'
@@ -818,7 +1008,7 @@ describe('datadog-turbopack loader', () => {
   it('replaces the cached build plan when its path changes', async () => {
     const fixtures = []
 
-    for (let index = 0; index < 2; index++) {
+    for (let index = 0; index < 3; index++) {
       const { projectDir, resourcePath } = createIoredisProject({ source: `module.exports = ${index}` })
       const config = await applyDatadogTurbopack({}, { projectDir })
       const options = findDatadogLoaders(config)[0].options
@@ -836,6 +1026,89 @@ describe('datadog-turbopack loader', () => {
       ),
       { message: /failed its integrity check/ }
     )
+  })
+
+  it('isolates relative diagnostic channel matchers across build plans', async () => {
+    const codeTransformer = require('../../../vendor/dist/@apm-js-collab/code-transformer')
+    const create = sinon.spy(codeTransformer, 'create')
+
+    for (let index = 0; index < 3; index++) {
+      const { projectDir, resourcePath } = createIoredisProject({ source: `module.exports = ${index}` })
+      const config = await applyDatadogTurbopack({}, { projectDir })
+      const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+
+      await runLoader(resourcePath, fs.readFileSync(resourcePath, 'utf8'), options)
+    }
+
+    assert.equal(create.callCount, 3)
+  })
+
+  it('keeps each in-flight loader call bound to its build context', async () => {
+    const fixtures = []
+
+    for (const name of ['first', 'second']) {
+      const source = "import './dependency.mjs'\nexport function getTracer () { return 'original' }\n"
+      const fixture = await createLinkedAiProject({
+        exports: './dist/index.mjs',
+        type: 'module',
+        version: '6.1.0',
+      }, {
+        'dist/dependency.mjs': 'export const dependency = true\n',
+        'dist/index.mjs': source,
+      })
+      const originalOptions = findDatadogLoaders(fixture.config)
+        .find(item => item.options.targetScope === 'direct').options
+      const plan = JSON.parse(fs.readFileSync(originalOptions.manifestPath, 'utf8'))
+      plan.dcPolyfill = path.join(fixture.projectDir, `${name}-dc-polyfill.js`)
+      fixtures.push({
+        options: {
+          ...originalOptions,
+          manifestPath: writePlan(path.dirname(originalOptions.manifestPath), JSON.stringify(plan)),
+        },
+        resourcePath: fixture.files['dist/index.mjs'],
+        source,
+      })
+    }
+
+    const [first, second] = fixtures
+    const firstResolver = createPlanResolver(first.options)
+    let delayed = false
+    let release
+    let markStarted
+    const started = new Promise(resolve => { markStarted = resolve })
+    const pending = runLoader(first.resourcePath, first.source, first.options, {
+      getResolve: resolveOptions => {
+        const resolve = firstResolver(resolveOptions)
+        return (directory, request, callback) => {
+          if (!delayed) {
+            delayed = true
+            release = () => resolve(directory, request, callback)
+            markStarted()
+            return
+          }
+          resolve(directory, request, callback)
+        }
+      },
+    })
+
+    await started
+    const secondOutput = await runLoader(second.resourcePath, second.source, second.options)
+    release()
+    const firstOutput = await pending
+
+    assert.match(firstOutput, /first-dc-polyfill\.js/)
+    assert.doesNotMatch(firstOutput, /second-dc-polyfill\.js/)
+    assert.match(secondOutput, /second-dc-polyfill\.js/)
+  })
+
+  it('releases replaced build-plan matchers after active loader calls complete', () => {
+    const runner = path.join(__dirname, 'resources/check-loader-context-cleanup.js')
+    const output = execFileSync(process.execPath, [
+      '--expose-gc',
+      runner,
+    ], { encoding: 'utf8' })
+
+    assert.equal(output, 'released')
   })
 
   it('uses a relative proxy specifier for a source beside its generated proxy', async () => {
@@ -856,14 +1129,17 @@ describe('datadog-turbopack loader', () => {
     const inactive = await import(`${pathToFileURL(fixture.proxyPath).href}?inactive`)
     assert.equal(inactive.default(), 'original-default')
     assert.equal(inactive.importedOnly(), 'original-named-only')
+    assert.equal(inactive.importedNamespace.starState, 'star-initial')
     assert.equal(inactive.importedState, 'star-initial')
     assert.equal(inactive.namedState, 'star-initial')
     assert.equal(inactive.importedText(), 'original-reexport')
     assert.equal(inactive.namedText(), 'original-reexport')
+    assert.equal(inactive['local-text'], 'local-text')
     assert.equal(inactive.reexportedText(), 'original-reexport')
     assert.equal(inactive.renamedOnly(), 'original-named-only')
     assert.equal(inactive.state, 'initial')
     assert.equal(inactive.stateNamespace.starState, 'star-initial')
+    assert.equal(inactive.stateDefault, 'state-default')
     assert.equal(inactive.starState, 'star-initial')
     inactive.setState('inactive')
     inactive.setDefaultText('inactive-default')
@@ -896,14 +1172,17 @@ describe('datadog-turbopack loader', () => {
       assert.equal(inactive.generateText(), 'original')
       assert.equal(active.generateText(), 'patched')
       assert.equal(active.importedOnly(), 'patched-imported-only')
+      assert.equal(active.importedNamespace.starState, 'star-inactive')
       assert.equal(active.importedState, 'star-inactive')
       assert.equal(active.importedText(), 'patched-imported')
       assert.equal(active.namedState, 'star-inactive')
       assert.equal(active.namedText(), 'patched-named')
+      assert.equal(active['local-text'], 'local-text')
       assert.equal(active.reexportedText(), 'patched-reexport')
       assert.equal(active.renamedOnly(), 'patched-renamed-only')
       assert.equal(active.state, 'inactive')
       assert.deepEqual(active.stateNamespace, { patched: true })
+      assert.equal(active.stateDefault, 'state-default')
       assert.equal(active.starState, 'star-inactive')
       active.setState('active')
       active.setDefaultText('active-default')
@@ -922,6 +1201,206 @@ describe('datadog-turbopack loader', () => {
     } finally {
       channel.unsubscribe(subscriber)
     }
+  })
+
+  it('preserves native ESM cycle evaluation through generated proxies', async () => {
+    const eventKey = 'dd-trace:turbopack-cycle-events'
+    const fixture = await createLinkedAiProject({
+      exports: './dist/index.mjs',
+      type: 'module',
+      version: '6.1.0',
+    }, {
+      'dist/a.mjs': [
+        `const events = globalThis[Symbol.for('${eventKey}')]`,
+        "events.push('a:start')",
+        "import { ExportedClass, constValue, hoisted, letValue, varValue } from './index.mjs'",
+        "import { marker } from './index.mjs'",
+        "import { fromB } from './b.mjs'",
+        'export const fromA = [hoisted(), varValue, fromB]',
+        'export function readA () {',
+        '  return [ExportedClass.value, constValue, hoisted(), letValue, marker(), varValue]',
+        '}',
+        "events.push('a:end')",
+        '',
+      ].join('\n'),
+      'dist/b.mjs': [
+        `const events = globalThis[Symbol.for('${eventKey}')]`,
+        "events.push('b:start')",
+        "import { hoisted } from './index.mjs'",
+        'await Promise.resolve()',
+        "events.push('b:await')",
+        'export const fromB = hoisted()',
+        "events.push('b:end')",
+        '',
+      ].join('\n'),
+      'dist/index.mjs': [
+        `const events = globalThis[Symbol.for('${eventKey}')]`,
+        "events.push('index:start')",
+        "import SelfDefault, { hoisted as selfHoisted } from './index.mjs'",
+        "import { fromA, readA } from './a.mjs'",
+        "export { default as reexportedDefault, namedValue } from './named.mjs'",
+        "export * from './star.mjs'",
+        "export default class DefaultExport { static value = 'default' }",
+        "export class ExportedClass { static value = 'class' }",
+        "export var varValue = 'var'",
+        "export let letValue = 'let'",
+        "export const constValue = 'const'",
+        "export function generateText () { return 'generate' }",
+        "export function getTracer () { return 'tracer' }",
+        "export function hoisted () { return 'hoisted' }",
+        "export function marker () { return 'original-marker' }",
+        'export function mutate (value) { letValue = value }',
+        'export function resolveLanguageModel (value) { return value }',
+        'export function selectTelemetryAttributes (value) { return value }',
+        'export function snapshot () {',
+        '  return {',
+        '    a: readA(),',
+        '    declarations: [ExportedClass.value, constValue, letValue, varValue],',
+        '    fromA,',
+        '    self: [SelfDefault.value, selfHoisted()],',
+        '  }',
+        '}',
+        'await Promise.resolve()',
+        "events.push('index:end')",
+        '',
+      ].join('\n'),
+      'dist/named.mjs': [
+        `const events = globalThis[Symbol.for('${eventKey}')]`,
+        "events.push('named:start')",
+        "import { hoisted } from './index.mjs'",
+        "export default function namedDefault () { return 'named-default' }",
+        'export const namedValue = hoisted()',
+        "events.push('named:end')",
+        '',
+      ].join('\n'),
+      'dist/star.mjs': [
+        `const events = globalThis[Symbol.for('${eventKey}')]`,
+        "events.push('star:start')",
+        "import { hoisted } from './index.mjs'",
+        'export const starValue = hoisted()',
+        "events.push('star:end')",
+        '',
+      ].join('\n'),
+    })
+    const importerA = write(fixture.projectDir, 'importer-a.mjs', [
+      "import DefaultExport, { marker, mutate, snapshot } from 'ai'",
+      'export { mutate }',
+      'export function readA () {',
+      '  return { defaultValue: DefaultExport.value, marker: marker(), snapshot: snapshot() }',
+      '}',
+      '',
+    ].join('\n'))
+    const importerB = write(fixture.projectDir, 'importer-b.mjs', [
+      "import * as namespace from 'ai'",
+      'export function readB () {',
+      '  return {',
+      '    live: namespace.letValue,',
+      '    marker: namespace.marker(),',
+      '    named: namespace.namedValue,',
+      '    reexported: namespace.reexportedDefault(),',
+      '    star: namespace.starValue,',
+      '  }',
+      '}',
+      '',
+    ].join('\n'))
+    const applicationPath = write(fixture.projectDir, 'application.mjs', [
+      "import { mutate, readA } from './importer-a.mjs'",
+      "import { readB } from './importer-b.mjs'",
+      'export async function read () {',
+      "  const dynamic = await import('ai')",
+      '  const before = { a: readA(), b: readB(), dynamic: dynamic.marker() }',
+      "  mutate('changed')",
+      '  return {',
+      '    after: { a: readA(), b: readB(), dynamic: dynamic.marker() },',
+      '    before,',
+      `    events: globalThis[Symbol.for('${eventKey}')],`,
+      '  }',
+      '}',
+      '',
+    ].join('\n'))
+    const loaders = findDatadogLoaders(fixture.config)
+    const importOptions = loaders.find(item => item.options.rewriteEdges && !item.options.targetScope).options
+    const plan = JSON.parse(fs.readFileSync(importOptions.manifestPath, 'utf8'))
+    const targetPath = fs.realpathSync(fixture.files['dist/index.mjs'])
+    const target = plan.targets[targetPath]
+    const expectedPublications = target.payloads.length
+    const runner = path.join(__dirname, 'resources/run-esm-cycle-proxy.mjs')
+    const run = mode => JSON.parse(execFileSync(process.execPath, [runner, applicationPath, mode], {
+      encoding: 'utf8',
+    }))
+    const native = run('native')
+    const sources = new Map([
+      ...Object.values(fixture.files).map(file => [file, fs.readFileSync(file, 'utf8')]),
+      [importerA, fs.readFileSync(importerA, 'utf8')],
+      [importerB, fs.readFileSync(importerB, 'utf8')],
+      [applicationPath, fs.readFileSync(applicationPath, 'utf8')],
+    ])
+    const outputs = new Map()
+
+    for (const [file, source] of sources) {
+      outputs.set(file, await runLoader(file, source, importOptions))
+    }
+    const component = plan.components[targetPath]
+    assert.ok(component)
+    for (const file of Object.values(fixture.files)) {
+      assert.equal(plan.components[fs.realpathSync(file)], component)
+      assert.doesNotMatch(outputs.get(file), new RegExp(path.basename(target.proxyPath)))
+    }
+    assert.match(outputs.get(importerA), new RegExp(path.basename(target.proxyPath)))
+    assert.match(outputs.get(importerB), new RegExp(path.basename(target.proxyPath)))
+    assert.match(outputs.get(applicationPath), new RegExp(path.basename(target.proxyPath)))
+    for (const [file, output] of outputs) fs.writeFileSync(file, output)
+
+    assert.deepEqual(native.value.before, {
+      a: {
+        defaultValue: 'default',
+        marker: 'original-marker',
+        snapshot: {
+          a: ['class', 'const', 'hoisted', 'let', 'original-marker', 'var'],
+          declarations: ['class', 'const', 'let', 'var'],
+          fromA: ['hoisted', null, 'hoisted'],
+          self: ['default', 'hoisted'],
+        },
+      },
+      b: {
+        live: 'let',
+        marker: 'original-marker',
+        named: 'hoisted',
+        reexported: 'named-default',
+        star: 'hoisted',
+      },
+      dynamic: 'original-marker',
+    })
+    assert.deepEqual(native.value.events, [
+      'b:start',
+      'named:start',
+      'named:end',
+      'star:start',
+      'star:end',
+      'b:await',
+      'b:end',
+      'a:start',
+      'a:end',
+      'index:start',
+      'index:end',
+    ])
+    assert.equal(native.value.after.a.snapshot.a[3], 'changed')
+    assert.equal(native.value.after.a.snapshot.declarations[2], 'changed')
+    assert.equal(native.value.after.b.live, 'changed')
+    assert.deepEqual(run('inactive'), native)
+    assert.deepEqual(run('disabled'), native)
+
+    const named = run('named')
+    assert.equal(named.publications, expectedPublications)
+    assert.equal(named.value.before.a.marker, 'patched-marker')
+    assert.equal(named.value.before.b.marker, 'patched-marker')
+    assert.equal(named.value.before.dynamic, 'patched-marker')
+    assert.deepEqual(named.value.before.a.snapshot, native.value.before.a.snapshot)
+
+    const patchedDefault = run('default')
+    assert.equal(patchedDefault.publications, expectedPublications)
+    assert.equal(patchedDefault.value.before.a.defaultValue, 'patched-default')
+    assert.deepEqual(patchedDefault.value.before.a.snapshot, native.value.before.a.snapshot)
   })
 })
 
@@ -951,9 +1430,11 @@ async function createAiFixture (ioredisSource = 'module.exports = {}') {
     version: '7.0.0',
   })
   write(packageDir, 'index.mjs', [
+    "import stateDefault, * as importedNamespace from './state.mjs'",
     "import { reexportedText as importedText, starState as importedState } from './state.mjs'",
     "import { namedOnly as importedOnly } from './named-only.mjs'",
-    'export { importedOnly, importedState, importedText }',
+    "const localText = 'local-text'",
+    "export { importedNamespace, importedOnly, importedState, importedText, localText as 'local-text', stateDefault }",
     "export { namedOnly as renamedOnly } from './named-only.mjs'",
     "export { reexportedText as namedText, starState as namedState } from './state.mjs'",
     "export * as stateNamespace from './state.mjs'",
@@ -968,6 +1449,7 @@ async function createAiFixture (ioredisSource = 'module.exports = {}') {
     '',
   ].join('\n'))
   write(packageDir, 'state.mjs', [
+    "export default 'state-default'",
     "export function reexportedText () { return 'original-reexport' }",
     "export let starState = 'star-initial'",
     'export function setStarState (value) { starState = value }',
@@ -1118,17 +1600,20 @@ function throwValue (value) {
 async function assertGeneratedSourceIsLintClean (source, filePath) {
   if (!lintRuntimeSupported) return
 
-  const eslint = new ESLint({
-    cwd: path.dirname(filePath),
-    overrideConfig: {
-      linterOptions: { reportUnusedDisableDirectives: false },
-      rules: {
-        'n/no-unpublished-import': 'off',
-        'n/no-unpublished-require': 'off',
+  if (!generatedSourceLinter) {
+    generatedSourceLinter = new ESLint({
+      cwd: path.resolve(__dirname, '../../..'),
+      overrideConfig: {
+        linterOptions: { reportUnusedDisableDirectives: false },
+        rules: {
+          'n/no-unpublished-import': 'off',
+          'n/no-unpublished-require': 'off',
+        },
       },
-    },
-    overrideConfigFile: path.join(__dirname, '../../../eslint.config.mjs'),
-  })
-  const [result] = await eslint.lintText(source, { filePath })
+      overrideConfigFile: path.join(__dirname, '../../../eslint.config.mjs'),
+    })
+  }
+  const lintPath = path.join(__dirname, '..', `generated-output${path.extname(filePath)}`)
+  const [result] = await generatedSourceLinter.lintText(source, { filePath: lintPath })
   assert.deepEqual(result.messages, [])
 }

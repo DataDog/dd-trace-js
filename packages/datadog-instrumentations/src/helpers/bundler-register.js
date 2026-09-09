@@ -95,19 +95,6 @@ dc.subscribe(CHANNEL, (message) => {
   const integration = payload.integration ?? name
   if (disabledInstrumentations.has(integration)) return
 
-  const isPrefixedWithNode = integration.startsWith('node:')
-
-  const isNodeModule = isPrefixedWithNode || !hooks[integration]
-
-  if (isNodeModule) {
-    const nodeName = isPrefixedWithNode ? integration.slice(5) : integration
-    // Used for node: prefixed modules to prevent double instrumentation.
-    if (instrumentedNodeModules.has(nodeName)) {
-      return
-    }
-    instrumentedNodeModules.add(nodeName)
-  }
-
   doHook(integration)
 
   const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]

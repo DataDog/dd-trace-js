@@ -1266,10 +1266,11 @@ describe('check-require-cache', () => {
       version: 3,
     }
 
-    const result = rewriter.rewriteWithSourceMap(source, filename, 'commonjs', {
+    const rewriteBundled = rewriter.createBundlerRewriter('../dc-polyfill.js')
+    const result = rewriteBundled(source, filename, 'commonjs', {
       moduleName: 'test-trace-sync',
       filePath: 'index.js',
-    }, sourceMap, '../dc-polyfill.js')
+    }, sourceMap)
     const map = JSON.parse(result.map)
 
     assert.match(result.code, /tr_ch_apm_tracingChannel/)
@@ -1279,22 +1280,19 @@ describe('check-require-cache', () => {
     assert.strictEqual(map.sources.includes('test-trace-sync/index.js'), true)
   })
 
-  it('should cache bundler matchers by diagnostic channel module', () => {
+  it('should keep bundled source rewriting independent of runtime disablement', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-trace-sync', 'index.js')
     const source = readFileSync(filename, 'utf8')
     const target = { moduleName: 'test-trace-sync', filePath: 'index.js' }
-    const codeTransformer = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-    const create = sinon.spy(codeTransformer, 'create')
+    rewriter.disable('test-trace-sync')
 
-    try {
-      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../dc-polyfill.js')
-      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../../dc-polyfill.js')
-      rewriter.rewriteWithSourceMap(source, filename, 'commonjs', target, undefined, '../dc-polyfill.js')
+    assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', target), source)
 
-      assert.strictEqual(create.callCount, 2)
-    } finally {
-      create.restore()
-    }
+    const rewriteBundled = rewriter.createBundlerRewriter('../dc-polyfill.js')
+    const { code } = rewriteBundled(source, filename, 'commonjs', target)
+
+    assert.match(code, /tr_ch_apm_tracingChannel/)
+    assert.match(code, /require\("\.\.\/dc-polyfill\.js"\)/)
   })
 
   it('should preserve regular sources that cannot be rewritten', () => {
@@ -1325,11 +1323,19 @@ describe('check-require-cache', () => {
 
   it('should preserve bundled sources that cannot be rewritten', () => {
     const sourceMap = { mappings: '', version: 3 }
+    const rewriteBundled = rewriter.createBundlerRewriter('../dc-polyfill.js')
     assert.deepStrictEqual(
-      rewriter.rewriteWithSourceMap('', '/project/empty.js', 'module', undefined, sourceMap),
+      rewriteBundled('', '/project/empty.js', 'module', undefined, sourceMap),
       { code: '', map: sourceMap }
     )
-    assert.deepStrictEqual(rewriter.rewriteWithSourceMap(
+    assert.deepStrictEqual(rewriteBundled(
+      'module.exports = true',
+      '/project/application.js',
+      'commonjs',
+      undefined,
+      sourceMap
+    ), { code: 'module.exports = true', map: sourceMap })
+    assert.deepStrictEqual(rewriteBundled(
       'module.exports = true',
       '/project/node_modules/missing/index.js',
       'commonjs',
@@ -1338,7 +1344,7 @@ describe('check-require-cache', () => {
     ), { code: 'module.exports = true', map: sourceMap })
 
     rewriter.disable('test-disabled')
-    assert.deepStrictEqual(rewriter.rewriteWithSourceMap(
+    assert.deepStrictEqual(rewriteBundled(
       'module.exports = true',
       '/project/node_modules/test-disabled/index.js',
       'commonjs',
@@ -1452,8 +1458,36 @@ describe('rewriter source-map trailer', () => {
 
 describe('rewriter initialization', () => {
   const repositoryRoot = resolve(__dirname, '../../../../..')
+  const rewriterPath = require.resolve('../../../src/helpers/rewriter')
   const transformerPath = join(repositoryRoot, 'vendor', 'dist', '@apm-js-collab', 'code-transformer')
   const loaderPath = resolve(__dirname, '../../../src/helpers/rewriter/loader')
+
+  it('creates lazy runtime matchers for CommonJS and ESM targets', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-runtime-matchers-'))
+    const targetDirectory = join(root, 'node_modules', 'ai', 'dist')
+    const cjsFilename = join(targetDirectory, 'index.js')
+    const esmFilename = join(targetDirectory, 'index.mjs')
+    const cjsSource = 'function getTracer () {}\nmodule.exports = { getTracer }\n'
+    const esmSource = 'export function getTracer () {}\n'
+
+    mkdirSync(targetDirectory, { recursive: true })
+    writeFileSync(join(targetDirectory, '..', 'package.json'), '{"version":"4.0.0"}')
+    writeFileSync(cjsFilename, cjsSource)
+    writeFileSync(esmFilename, esmSource)
+
+    delete require.cache[rewriterPath]
+    const runtimeRewriter = require(rewriterPath)
+
+    try {
+      const rewrittenCjs = runtimeRewriter.rewrite(cjsSource, cjsFilename, 'commonjs')
+      const rewrittenEsm = runtimeRewriter.rewrite(esmSource, esmFilename, 'module')
+
+      assert.match(rewrittenCjs, /require\(".+dc-polyfill/)
+      assert.match(rewrittenEsm, /from "file:\/\/.+dc-polyfill/)
+    } finally {
+      delete require.cache[rewriterPath]
+    }
+  })
 
   it('loads the code transformer on the first rewrite instead of at startup', () => {
     const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-defer-'))

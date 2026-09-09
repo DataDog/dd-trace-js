@@ -20,6 +20,7 @@ const {
   createPackage,
   createProject,
   findDatadogLoaders,
+  withProjectDirectory,
   write,
 } = require('./helpers')
 
@@ -33,20 +34,6 @@ describe('withDatadogTurbopack', () => {
     const namespace = await import(pathToFileURL(require.resolve('../../../next')).href)
 
     assert.strictEqual(namespace.withDatadogTurbopack, withDatadogTurbopack)
-  })
-
-  it('discovers integrations independently of build-process disablement', async () => {
-    const { projectDir } = createIoredisProject()
-    const previous = process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
-    process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'ioredis'
-
-    try {
-      const config = await applyDatadogTurbopack({}, { projectDir })
-      assert.ok(config.turbopack.rules['*.js'])
-    } finally {
-      if (previous === undefined) delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
-      else process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = previous
-    }
   })
 
   it('uses Next 16 rule conditions and preserves existing configuration', async () => {
@@ -72,7 +59,11 @@ describe('withDatadogTurbopack', () => {
     const rules = config.turbopack.rules['*.js']
     const targetRule = rules.find(rule => rule.loaders?.[0]?.options?.targetScope === 'direct')
     const importRule = rules.find(rule => rule.condition?.all?.some(condition => condition?.not === 'foreign'))
-    const foreignImportRule = rules.find(rule => rule.condition?.all?.includes('foreign'))
+    const foreignRules = rules.filter(rule => rule.condition?.all?.includes('foreign'))
+    const foreignImportRule = foreignRules.find(rule =>
+      !rule.condition.all.some(condition => condition?.path))
+    const foreignRelativeRule = foreignRules.find(rule =>
+      rule.condition.all.some(condition => condition?.path))
 
     assert.equal(config.marker, true)
     assert.equal(config.turbopack.resolveAlias.existing, './existing.js')
@@ -86,14 +77,18 @@ describe('withDatadogTurbopack', () => {
     assert.equal(importRule.loaders[0].options.rewriteEdges, true)
     assert.equal(importRule.loaders[0].options.targetScope, undefined)
     assert.equal(foreignImportRule.loaders[0].options.rewriteEdges, true)
+    assert.equal(foreignRelativeRule.loaders[0].options.rewriteEdges, true)
     assert.equal(targetRule.loaders[0].options.rewriteEdges, true)
     assert.equal(targetRule.loaders[0].options.targetScope, 'direct')
     const contentPattern = importRule.condition.all.find(condition => condition?.content).content
     const foreignContentPattern = foreignImportRule.condition.all.find(condition => condition?.content).content
+    const foreignPathPattern = foreignRelativeRule.condition.all.find(condition => condition?.path).path
     assert.equal(contentPattern.test("import /* webpackChunkName: 'ai' */ ('ai')"), true)
     assert.equal(contentPattern.test('const answer = 42'), false)
     assert.equal(foreignContentPattern.test("import('ai')"), true)
     assert.equal(foreignContentPattern.test("import('unrelated')"), false)
+    assert.equal(foreignPathPattern.test('/app/node_modules/ai/internal/barrel.mjs'), true)
+    assert.equal(foreignPathPattern.test('/app/node_modules/unrelated/internal/barrel.mjs'), false)
   })
 
   it('uses named conditions and nested built-ins for Next 15', async () => {
@@ -112,14 +107,19 @@ describe('withDatadogTurbopack', () => {
     assert.ok(config.turbopack.conditions[name].path instanceof RegExp)
     assert.equal(config.turbopack.conditions[name].path.test('/app/node_modules/ioredis/index.js'), true)
     assert.equal(config.turbopack.conditions[name].path.test('/app/node_modules/ioredis/package.json'), false)
-    assert.equal(Object.keys(config.turbopack.conditions).length, 4)
+    assert.equal(Object.keys(config.turbopack.conditions).length, 5)
     assert.ok(config.turbopack.conditions['#dd-trace/import'].content instanceof RegExp)
     assert.ok(config.turbopack.conditions['#dd-trace/foreign-import'].content instanceof RegExp)
+    assert.ok(Array.isArray(config.turbopack.conditions['#dd-trace/foreign-relative-import'].all))
     assert.ok(config.turbopack.conditions['#dd-trace/relative'].path instanceof RegExp)
     assert.equal(config.turbopack.rules['#dd-trace/import'].node.foreign, false)
     assert.equal(config.turbopack.rules['#dd-trace/import'].node.default.loaders.length, 1)
     assert.equal(config.turbopack.rules['#dd-trace/import'].node.default.loaders[0].options.rewriteEdges, true)
     assert.equal(config.turbopack.rules['#dd-trace/foreign-import'].node.foreign.loaders[0].options.rewriteEdges, true)
+    assert.equal(
+      config.turbopack.rules['#dd-trace/foreign-relative-import'].node.foreign.loaders[0].options.rewriteEdges,
+      true
+    )
     assert.equal(config.turbopack.rules['#dd-trace/relative'].node.foreign, false)
     assert.equal(config.turbopack.rules['#dd-trace/relative'].node.default.loaders[0].options.targetScope, 'relative')
     assert.equal(rule.condition, undefined)
@@ -128,6 +128,21 @@ describe('withDatadogTurbopack', () => {
 
     const repeated = await applyDatadogTurbopack(config, { projectDir })
     assert.equal(findDatadogLoaders(repeated).length, findDatadogLoaders(config).length)
+  })
+
+  it('uses the project directory when the Next 15 root finder has no result', async () => {
+    const { projectDir, resourcePath } = createIoredisProject({ nextVersion: '15.5.0' })
+    write(
+      projectDir,
+      'node_modules/next/dist/lib/find-root.js',
+      'exports.findRootDir = () => undefined\n'
+    )
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.ok(plan.targets[fs.realpathSync(resourcePath).replaceAll('\\', '/')])
   })
 
   it('leaves newer Next majors on the modern schema path', async () => {
@@ -142,16 +157,18 @@ describe('withDatadogTurbopack', () => {
   it('supports objects, promises, and config functions through one phase-aware contract', async () => {
     const projectDir = createProject()
     const promisedConfig = { promised: true }
-    const promised = withDatadogTurbopack(Promise.resolve(promisedConfig), { projectDir })
     const receiver = { calls: 0 }
     const defaultConfig = { defaultConfig: true }
-    const wrapped = withDatadogTurbopack(function (phase, context) {
-      this.calls++
-      assert.equal(phase, 'phase-production-build')
-      assert.strictEqual(/** @type {{ defaultConfig: object }} */ (context).defaultConfig, defaultConfig)
-      return { functional: true }
-    }, { projectDir })
-    const wrappedUndefined = withDatadogTurbopack(() => undefined, { projectDir })
+    const [promised, wrapped, wrappedUndefined] = withProjectDirectory(projectDir, () => [
+      withDatadogTurbopack(Promise.resolve(promisedConfig)),
+      withDatadogTurbopack(function (phase, context) {
+        this.calls++
+        assert.equal(phase, 'phase-production-build')
+        assert.strictEqual(/** @type {{ defaultConfig: object }} */ (context).defaultConfig, defaultConfig)
+        return { functional: true }
+      }),
+      withDatadogTurbopack(() => undefined),
+    ])
 
     assert.equal(typeof promised, 'function')
     const promiseResult = await promised('phase-production-build')
@@ -169,7 +186,7 @@ describe('withDatadogTurbopack', () => {
   it('does not plan during the production server phase', async () => {
     const { projectDir } = createIoredisProject()
     const input = { marker: true }
-    const wrapped = withDatadogTurbopack(input, { projectDir })
+    const wrapped = withProjectDirectory(projectDir, () => withDatadogTurbopack(input))
 
     const config = await wrapped('phase-production-server')
 
@@ -177,7 +194,7 @@ describe('withDatadogTurbopack', () => {
     assert.equal(fs.existsSync(path.join(projectDir, 'node_modules/.cache/dd-trace/turbopack')), false)
   })
 
-  it('uses the current directory when no project option is provided', async () => {
+  it('uses the current working directory as the application project', async () => {
     const projectDir = createProject()
     const previousDirectory = process.cwd()
 
@@ -187,6 +204,19 @@ describe('withDatadogTurbopack', () => {
     } finally {
       process.chdir(previousDirectory)
     }
+  })
+
+  it('loads the integration configuration from the application working directory', async () => {
+    const projectDir = createProject()
+    const configPath = require.resolve('../../../integration-tests/turbopack/next.config.js')
+    const wrapped = withProjectDirectory(projectDir, () => proxyquire(configPath, {
+      'dd-trace/next': { '@noCallThru': true, withDatadogTurbopack },
+    }))
+
+    assert.deepEqual(await wrapped('phase-production-server'), {
+      distDir: '.next-datadog',
+      turbopack: { root: path.resolve(__dirname, '../../../integration-tests') },
+    })
   })
 
   it('returns the original object when no supported package is installed', async () => {
@@ -240,11 +270,18 @@ describe('withDatadogTurbopack', () => {
   it('reports one warning for instrumentation discovery and target compilation failures', async () => {
     const { projectDir } = createIoredisProject()
     const aiDirectory = createPackage(projectDir, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
-    write(aiDirectory, 'index.mjs', 'export {')
+    write(aiDirectory, 'index.mjs', 'export function generateText () {}\n')
+    write(
+      projectDir,
+      'node_modules/next/dist/compiled/babel/parser.js',
+      'exports.parse = () => { throw {} }\n'
+    )
     const emitWarning = sinon.stub(process, 'emitWarning')
     const hookName = 'test-turbopack-load-failure'
+    const errorHookName = 'test-turbopack-error-load-failure'
     const skippedHookName = 'test-turbopack-nonfunction-hook'
     hooks[hookName] = () => throwValue(null)
+    hooks[errorHookName] = () => { throw new Error('hook failed') }
     hooks[skippedHookName] = {}
 
     try {
@@ -252,13 +289,18 @@ describe('withDatadogTurbopack', () => {
       await applyDatadogTurbopack({}, { projectDir })
     } finally {
       delete hooks[hookName]
+      delete hooks[errorHookName]
       delete hooks[skippedHookName]
     }
 
-    assert.equal(emitWarning.callCount, 2)
+    assert.equal(emitWarning.callCount, 3)
     sinon.assert.calledWithMatch(
       emitWarning,
       sinon.match(/Could not load the test-turbopack-load-failure instrumentation: null/)
+    )
+    sinon.assert.calledWithMatch(
+      emitWarning,
+      sinon.match(/Could not load the test-turbopack-error-load-failure instrumentation: hook failed/)
     )
     sinon.assert.calledWithMatch(emitWarning, sinon.match(new RegExp(`Could not instrument ${aiDirectory}`)))
   })
@@ -288,14 +330,17 @@ describe('withDatadogTurbopack', () => {
     })
     const target = write(packageDir, 'index.mjs', [
       'export function generateText () {}',
-      "export * from './cycle.mjs'",
+      "export * from './nested/cycle.mjs'",
+      "export * from './after.mjs'",
+      "export * from 'node:fs'",
       '',
     ].join('\n'))
-    const dependency = write(packageDir, 'cycle.mjs', [
+    const dependency = write(packageDir, 'nested/cycle.mjs', [
       'export function fromCycle () {}',
-      "export * from './index.mjs'",
+      "export * from '../index.mjs'",
       '',
     ].join('\n'))
+    const afterCycle = write(packageDir, 'after.mjs', "export let afterCycle = 'after'\n")
 
     const config = await applyDatadogTurbopack({}, { projectDir })
     const planPath = findDatadogLoaders(config)[0].options.manifestPath
@@ -303,25 +348,128 @@ describe('withDatadogTurbopack', () => {
     const entry = plan.targets[fs.realpathSync(target).replaceAll('\\', '/')]
     const namespace = await import(pathToFileURL(entry.proxyPath).href)
 
-    assert.equal(entry.dependencies.length, 1)
-    assert.equal(entry.dependencies[0].path, fs.realpathSync(dependency).replaceAll('\\', '/'))
+    assert.deepEqual(entry.dependencies.map(item => item.path), [afterCycle, dependency]
+      .map(item => fs.realpathSync(item).replaceAll('\\', '/')).sort())
+    assert.equal(plan.components[fs.realpathSync(target)], plan.components[fs.realpathSync(dependency)])
+    assert.equal(namespace.afterCycle, 'after')
     assert.equal(typeof namespace.generateText, 'function')
     assert.equal(typeof namespace.fromCycle, 'function')
+    assert.equal(typeof namespace.readFile, 'function')
   })
 
-  it('contains native resolver process failures through the public wrapper', async () => {
+  it('skips ESM proxies when their static module graph cannot be resolved', async () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'ai', {
+      main: 'index.mjs',
+      type: 'module',
+      version: '7.0.0',
+    })
+    const target = write(packageDir, 'index.mjs', [
+      "export { missing } from './missing.mjs'",
+      'export function generateText () {}',
+      '',
+    ].join('\n'))
+    const emitWarning = sinon.stub(process, 'emitWarning')
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+    const entry = plan.targets[fs.realpathSync(target)]
+
+    assert.equal(entry.proxyPath, undefined)
+    sinon.assert.calledOnceWithMatch(
+      emitWarning,
+      sinon.match(/Skipped the ESM instrumentation proxy.*missing\.mjs/)
+    )
+  })
+
+  it('ignores type-only edges while planning an ESM module graph', async () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'ai', {
+      main: 'index.ts',
+      type: 'module',
+      version: '7.0.0',
+    })
+    const target = write(packageDir, 'index.ts', [
+      "import './flow.js'",
+      "import './types.ts'",
+      "export type * from './types.ts'",
+      "export { type Missing } from './types.ts'",
+      'export function generateText () {}',
+      '',
+    ].join('\n'))
+    write(packageDir, 'flow.js', "import typeof Missing from './missing-flow.js'\n")
+    write(packageDir, 'types.ts', [
+      "import type Missing from './missing-type.ts'",
+      "export { type Missing } from './missing-reexport.ts'",
+      '',
+    ].join('\n'))
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.match(plan.targets[fs.realpathSync(target)].proxyPath, /\.mjs$/)
+  })
+
+  it('reports a non-Error module-graph failure before skipping its proxy', async () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'ai', {
+      main: 'index.mjs',
+      type: 'module',
+      version: '7.0.0',
+    })
+    const target = write(packageDir, 'index.mjs', [
+      "export { failureValue } from './failure.mjs'",
+      'export function generateText () {}',
+      '',
+    ].join('\n'))
+    write(packageDir, 'failure.mjs', "export const failureValue = 'GRAPH_FAILURE'\n")
+    const parserPath = require.resolve('@babel/parser')
+    write(projectDir, 'node_modules/next/dist/compiled/babel/parser.js', [
+      `const parser = require(${JSON.stringify(parserPath)})`,
+      'exports.parse = (source, options) => {',
+      "  if (source.includes('GRAPH_FAILURE')) throw null",
+      '  return parser.parse(source, options)',
+      '}',
+      '',
+    ].join('\n'))
+    const emitWarning = sinon.stub(process, 'emitWarning')
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.equal(plan.targets[fs.realpathSync(target)].proxyPath, undefined)
+    sinon.assert.calledOnceWithMatch(emitWarning, sinon.match(/proxy.*: null/))
+  })
+
+  it('contains resolver failures through the public wrapper', async () => {
     const { projectDir } = createIoredisProject()
     const emitWarning = sinon.stub(process, 'emitWarning')
 
-    for (const result of [
-      { error: new Error('spawn failed') },
-      { status: 1, stderr: 'resolver failed' },
-    ]) {
+    for (const failureType of ['spawn', 'fallback', 'non-error']) {
+      let resolutions = 0
       const targets = proxyquire('../src/targets', {
-        'node:child_process': { spawnSync: () => result },
+        '../../datadog-esbuild/src/resolver': {
+          createEsmResolver: () => ({
+            close: () => Promise.resolve(),
+            resolve: () => {
+              resolutions++
+              if (failureType === 'fallback' && resolutions < 3) {
+                const error = new Error('not found')
+                error.code = 'MODULE_NOT_FOUND'
+                return Promise.reject(error)
+              }
+              return Promise.reject(failureType === 'non-error'
+                ? 'non-Error resolver failure'
+                : new Error(failureType === 'spawn' ? 'spawn failed' : 'resolver failed'))
+            },
+          }),
+        },
       })
       const wrapper = proxyquire('../', { './src/targets': targets })
-      const wrapped = wrapper.withDatadogTurbopack({}, { projectDir })
+      const wrapped = withProjectDirectory(projectDir, () => wrapper.withDatadogTurbopack({}))
 
       assert.deepEqual(
         await wrapped('phase-production-build'),
@@ -329,20 +477,117 @@ describe('withDatadogTurbopack', () => {
       )
     }
 
-    assert.equal(emitWarning.callCount, 2)
+    assert.equal(emitWarning.callCount, 3)
     sinon.assert.calledWithMatch(emitWarning, sinon.match(/spawn failed/))
     sinon.assert.calledWithMatch(emitWarning, sinon.match(/resolver failed/))
+    sinon.assert.calledWithMatch(emitWarning, sinon.match(/non-Error resolver failure/))
   })
+
+  it('contains and reports resolver cleanup failures', async () => {
+    const { projectDir } = createIoredisProject()
+    const emitWarning = sinon.stub(process, 'emitWarning')
+    const resolutionMiss = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+    const cleanupFailures = [
+      { failure: Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }), message: 'write EPIPE' },
+      { failure: 'stream closed', message: 'stream closed' },
+    ]
+
+    for (const { failure } of cleanupFailures) {
+      const targets = proxyquire('../src/targets', {
+        '../../datadog-esbuild/src/resolver': {
+          createEsmResolver: () => ({
+            close: () => Promise.reject(failure),
+            resolve: () => Promise.reject(resolutionMiss),
+          }),
+        },
+      })
+      const wrapper = proxyquire('../', { './src/targets': targets })
+      const wrapped = withProjectDirectory(projectDir, () => wrapper.withDatadogTurbopack({ marker: true }))
+
+      assert.deepEqual(await wrapped('phase-production-build'), { marker: true })
+    }
+
+    assert.deepEqual(emitWarning.args, cleanupFailures.map(({ message }) => [
+      `Could not close the Turbopack instrumentation resolver: ${message}`,
+      { code: 'DD_TRACE_TURBOPACK' },
+    ]))
+  })
+
+  it('bounds package entry-point resolution without discarding successful targets', async () => {
+    const projectDir = createProject()
+    const names = []
+    const entrypoints = new Map()
+    const targetPaths = []
+    for (let index = 0; index < 513; index++) {
+      const name = `dd-test-package-${index}`
+      const packageDir = createPackage(projectDir, name, { main: 'index.js', version: '1.0.0' })
+      const targetPath = write(packageDir, 'index.js', 'module.exports = {}\n')
+      names.push(name)
+      entrypoints.set(name, pathToFileURL(targetPath).href)
+      targetPaths.push(fs.realpathSync(targetPath).replaceAll('\\', '/'))
+      instrumentations[name] = [{ hook () {}, versions: ['>=1.0.0 <2.0.0'] }]
+    }
+
+    let active = 0
+    let maxActive = 0
+    const resolver = {
+      close: () => Promise.resolve(),
+      resolve: name => {
+        if (!entrypoints.has(name)) {
+          return Promise.reject(Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' }))
+        }
+        if (active >= 1024) return Promise.reject(new Error('resolver pending-request overflow'))
+        active++
+        maxActive = Math.max(maxActive, active)
+        return new Promise(resolve => {
+          setImmediate(() => {
+            active--
+            resolve(entrypoints.get(name))
+          })
+        })
+      },
+    }
+    const targets = proxyquire('../src/targets', {
+      '../../datadog-esbuild/src/resolver': { createEsmResolver: () => resolver },
+    })
+    const wrapper = proxyquire('../', { './src/targets': targets })
+    const wrapped = withProjectDirectory(projectDir, () => wrapper.withDatadogTurbopack({}))
+
+    try {
+      const config = await wrapped('phase-production-build')
+      const planPath = findDatadogLoaders(config)[0].options.manifestPath
+      const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+      assert.equal(targetPaths.filter(targetPath => plan.targets[targetPath]).length, targetPaths.length)
+      assert.ok(maxActive <= 64, `observed ${maxActive} concurrent resolver requests`)
+    } finally {
+      for (const name of names) delete instrumentations[name]
+    }
+  }).timeout(30000)
 
   it('wraps cache-directory creation failures with their build path', async () => {
     const { projectDir } = createIoredisProject()
-    const error = Object.assign(new Error('permission denied'), { code: 'EACCES' })
-    sinon.stub(fsPromises, 'mkdir').rejects(error)
+    const { projectDir: nonErrorProject } = createIoredisProject()
+    const mkdir = fsPromises.mkdir.bind(fsPromises)
+    sinon.stub(fsPromises, 'mkdir').callsFake((directory, ...args) => {
+      if (directory.startsWith(projectDir)) {
+        return Promise.reject(Object.assign(new Error('permission denied'), { code: 'EACCES' }))
+      }
+      // eslint-disable-next-line prefer-promise-reject-errors -- Exercise a foreign non-Error failure.
+      if (directory.startsWith(nonErrorProject)) return Promise.reject('directory closed')
+      return mkdir(directory, ...args)
+    })
 
-    await assert.rejects(
-      applyDatadogTurbopack({}, { projectDir }),
-      { message: /Could not create the Datadog Turbopack cache .*permission denied/ }
-    )
+    await Promise.all([
+      assert.rejects(
+        applyDatadogTurbopack({}, { projectDir }),
+        { message: /Could not create the Datadog Turbopack cache .*permission denied/ }
+      ),
+      assert.rejects(
+        applyDatadogTurbopack({}, { projectDir: nonErrorProject }),
+        { message: /Could not create the Datadog Turbopack cache .*directory closed/ }
+      ),
+    ])
   })
 
   it('accepts an artifact completed by a concurrent build-plan writer', async () => {
@@ -381,15 +626,30 @@ describe('withDatadogTurbopack', () => {
 
   it('warns when a temporary artifact cannot be removed', async () => {
     const { projectDir } = createIoredisProject()
+    const { projectDir: nonErrorProject } = createIoredisProject()
     const emitWarning = sinon.stub(process, 'emitWarning')
-    sinon.stub(fsPromises, 'unlink').rejects(new Error('unlink denied'))
+    const unlink = fsPromises.unlink.bind(fsPromises)
+    sinon.stub(fsPromises, 'unlink').callsFake(file => {
+      if (file.startsWith(projectDir)) return Promise.reject(new Error('unlink denied'))
+      // eslint-disable-next-line prefer-promise-reject-errors -- Exercise a foreign non-Error failure.
+      if (file.startsWith(nonErrorProject)) return Promise.reject('cleanup closed')
+      return unlink(file)
+    })
 
-    const config = await applyDatadogTurbopack({}, { projectDir })
+    const [config, nonErrorConfig] = await Promise.all([
+      applyDatadogTurbopack({}, { projectDir }),
+      applyDatadogTurbopack({}, { projectDir: nonErrorProject }),
+    ])
 
     assert.ok(config.turbopack.rules['*.js'])
+    assert.ok(nonErrorConfig.turbopack.rules['*.js'])
     sinon.assert.calledWithMatch(
       emitWarning,
       sinon.match(/Could not remove temporary Turbopack artifact .*unlink denied/)
+    )
+    sinon.assert.calledWithMatch(
+      emitWarning,
+      sinon.match(/Could not remove temporary Turbopack artifact .*cleanup closed/)
     )
   })
 
@@ -495,12 +755,27 @@ describe('withDatadogTurbopack', () => {
       version: '5.0.0',
     })
     write(packageDir, 'dist/index.js', 'module.exports = {}')
+    const differentPackage = createPackage(projectRoot, 'ai', {
+      main: 'index.mjs',
+      type: 'module',
+      version: '7.0.0',
+    })
+    write(differentPackage, 'package.json', JSON.stringify({
+      main: 'index.mjs',
+      name: 'different-ai',
+      type: 'module',
+      version: '7.0.0',
+    }))
+    const differentTarget = write(differentPackage, 'index.mjs', 'export function generateText () {}\n')
     const projectDir = path.join(projectRoot, 'app')
     write(projectDir, 'package.json', '{}')
 
     const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
 
     assert.ok(config.turbopack.rules['*.js'])
+    assert.equal(plan.targets[fs.realpathSync(differentTarget).replaceAll('\\', '/')], undefined)
   })
 
   it('uses native import and require conditions without executing package or preload code', async () => {
@@ -670,6 +945,24 @@ describe('withDatadogTurbopack', () => {
     assert.ok(fallbackConfig.turbopack.rules['*.js'])
   })
 
+  it('keeps valid targets when a sibling package has invalid metadata', async () => {
+    const projectDir = createProject()
+    const invalidPackage = createPackage(projectDir, 'ioredis', { main: 'index.js', version: '5.0.0' })
+    write(invalidPackage, 'package.json', '{')
+    const validPackage = createPackage(projectDir, 'ai', {
+      main: 'index.mjs',
+      type: 'module',
+      version: '7.0.0',
+    })
+    const target = write(validPackage, 'index.mjs', 'export function generateText () {}\n')
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.ok(plan.targets[fs.realpathSync(target).replaceAll('\\', '/')])
+  })
+
   it('deduplicates relative hooks and rejects ambiguous package versions', async () => {
     const projectDir = createProject()
     const first = createPackage(projectDir, '@prisma/client', { main: 'index.js', version: '6.1.0' })
@@ -742,14 +1035,6 @@ describe('withDatadogTurbopack', () => {
     assert.throws(
       () => applyDatadogTurbopack({}, { projectDir: invalidVersionProject }),
       { message: /could not parse Next\.js version/ }
-    )
-    assert.throws(
-      () => applyDatadogTurbopack({}, /** @type {object} */ (null)),
-      { name: 'TypeError', message: /options must be an object/ }
-    )
-    assert.throws(
-      () => applyDatadogTurbopack({}, { projectDir: /** @type {string} */ (/** @type {unknown} */ (42)) }),
-      { name: 'TypeError', message: /options\.projectDir must be a string/ }
     )
     await assert.rejects(
       applyDatadogTurbopack(42, { projectDir }),

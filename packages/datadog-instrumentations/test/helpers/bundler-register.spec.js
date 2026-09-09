@@ -101,6 +101,7 @@ describe('bundler register', () => {
   })
 
   it('does not activate explicitly disabled bundled integrations', () => {
+    const apply = sinon.stub()
     const hook = sinon.stub()
     const integrationHook = sinon.stub()
     const { loadChannel, publish } = loadBundlerRegister({
@@ -112,6 +113,7 @@ describe('bundler register', () => {
     })
 
     publish({
+      apply,
       module: {},
       package: 'test-disabled-integration',
       path: 'test-disabled-integration',
@@ -119,6 +121,7 @@ describe('bundler register', () => {
     })
 
     sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.notCalled(apply)
     sinon.assert.notCalled(hook)
     sinon.assert.notCalled(integrationHook)
   })

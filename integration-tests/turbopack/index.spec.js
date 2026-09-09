@@ -18,7 +18,17 @@ const {
 
 for (const nextVersion of ['15.5.0', 'latest']) {
   describe(`Turbopack integration with Next.js ${nextVersion}`, () => {
-    useSandbox([`next@${nextVersion}`, 'react', 'react-dom', 'ai', 'express'], false, [__dirname])
+    useSandbox([
+      `next@${nextVersion}`,
+      '@types/node',
+      '@types/react@19.2.18',
+      '@types/react-dom@19.2.7',
+      'ai',
+      'express',
+      'react',
+      'react-dom',
+      'typescript@6.0.3',
+    ], false, [__dirname])
 
     let agent
     let applicationDirectory
@@ -40,6 +50,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
         'export function wrappedGenerateText (options) { return generateText(options) }',
         '',
       ].join('\n'))
+      execSync('npm exec -- tsc --project tsconfig.json', { cwd: applicationDirectory, stdio: 'inherit' })
       execSync('npm exec -- next build --turbopack', { cwd: applicationDirectory, stdio: 'inherit' })
     })
 
@@ -62,18 +73,22 @@ for (const nextVersion of ['15.5.0', 'latest']) {
         assert.strictEqual(checkSpansForServiceName(payload, 'generateText'), true)
       }, 10_000, 1, true)
 
-      const response = await axios.get(`${proc.url}/api/cjs`)
+      const [response] = await Promise.all([
+        axios.get(`${proc.url}/api/cjs`),
+        assertCjsTrace,
+      ])
       assert.deepStrictEqual(response.data, { dependency: 'express', text: 'ok' })
-      await assertCjsTrace
 
       const assertEsmTrace = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         assert.strictEqual(checkSpansForServiceName(payload, 'generateText'), true)
       }, 10_000, 1, true)
 
-      const esmResponse = await axios.get(`${proc.url}/api/esm`)
+      const [esmResponse] = await Promise.all([
+        axios.get(`${proc.url}/api/esm`),
+        assertEsmTrace,
+      ])
       assert.deepStrictEqual(esmResponse.data, { dependency: 'foreign-ai-wrapper', text: 'ok' })
-      await assertEsmTrace
     })
   })
 }

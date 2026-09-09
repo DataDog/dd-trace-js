@@ -15,8 +15,25 @@ const directories = []
  * @returns {Promise<object>}
  */
 function applyDatadogTurbopack (nextConfig, options) {
-  const wrapped = withDatadogTurbopack(nextConfig, options)
+  const wrapped = withProjectDirectory(options?.projectDir, () => withDatadogTurbopack(nextConfig))
   return wrapped('phase-production-build')
+}
+
+/**
+ * @template T
+ * @param {string|undefined} projectDir
+ * @param {() => T} callback
+ * @returns {T}
+ */
+function withProjectDirectory (projectDir, callback) {
+  if (projectDir === undefined) return callback()
+  const previousDirectory = process.cwd()
+  try {
+    process.chdir(projectDir)
+    return callback()
+  } finally {
+    process.chdir(previousDirectory)
+  }
 }
 
 /**
@@ -50,6 +67,26 @@ function createIoredisProject (options = {}) {
   const packageDir = createPackage(projectDir, 'ioredis', { main: 'index.js', version: '5.0.0' })
   const resourcePath = write(packageDir, 'index.js', options.source ?? 'module.exports = {}')
   return { packageDir, projectDir, resourcePath }
+}
+
+/**
+ * @param {{ exports: string|object, main?: string, type?: string, version: string }} manifest
+ * @param {Record<string, string>} sources
+ * @returns {Promise<{ config: object, files: Record<string, string>, projectDir: string }>}
+ */
+async function createLinkedAiProject (manifest, sources) {
+  const workspaceDir = createProject()
+  const projectDir = path.join(workspaceDir, 'apps/web')
+  write(projectDir, 'package.json', '{}')
+  const packageDir = path.join(workspaceDir, 'packages/ai')
+  write(packageDir, 'package.json', JSON.stringify({ ...manifest, name: 'ai' }))
+  const files = {}
+  for (const [file, source] of Object.entries(sources)) {
+    files[file] = write(packageDir, file, source)
+  }
+  fs.symlinkSync(packageDir, path.join(workspaceDir, 'node_modules/ai'), 'dir')
+  const config = await applyDatadogTurbopack({}, { projectDir })
+  return { config, files, projectDir }
 }
 
 /**
@@ -116,8 +153,10 @@ module.exports = {
   applyDatadogTurbopack,
   cleanup,
   createIoredisProject,
+  createLinkedAiProject,
   createPackage,
   createProject,
   findDatadogLoaders,
+  withProjectDirectory,
   write,
 }

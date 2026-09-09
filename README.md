@@ -93,7 +93,7 @@ Regardless of where you open the issue, someone at Datadog will try to help.
 
 If you would like to trace your bundled application then please read this page on [bundling and dd-trace](https://docs.datadoghq.com/tracing/trace_collection/automatic_instrumentation/dd_libraries/nodejs/#bundling). It includes information on how to use our ESBuild plugin and includes caveats for other bundlers.
 
-Next.js applications that use Turbopack can wrap their existing configuration:
+Next.js 15.5 or newer applications that use Turbopack can wrap their existing configuration:
 
 ```javascript
 const { withDatadogTurbopack } = require('dd-trace/next')

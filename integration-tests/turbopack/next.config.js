@@ -9,4 +9,4 @@ const root = path.dirname(__dirname)
 module.exports = withDatadogTurbopack({
   distDir: '.next-datadog',
   turbopack: { root },
-}, { projectDir: root })
+})
