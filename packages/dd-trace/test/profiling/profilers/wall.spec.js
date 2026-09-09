@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
+const { endpointNameFromTags } = require('../../../src/profiling/webspan-utils')
 
 // Test adapter: these specs predate the constructor reading canonical DD_PROFILING_*
 // names off the tracer config. Map the legacy flat option names to the (config, runtime)
@@ -65,6 +66,27 @@ describe('profilers/native/wall', () => {
     NativeWallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
       '@datadog/pprof': pprof,
     })
+  })
+
+  it('should prefer the resource name as the endpoint', () => {
+    const tags = {
+      'http.method': 'GET',
+      'http.route': '/foo/bar',
+      'resource.name': 'GET /resolved',
+    }
+
+    assert.strictEqual(endpointNameFromTags(tags), 'GET /resolved')
+  })
+
+  it('should build the endpoint from the method and route', () => {
+    assert.strictEqual(endpointNameFromTags({
+      'http.method': 'GET',
+      'http.route': '/foo/bar',
+    }), 'GET /foo/bar')
+  })
+
+  it('should use the route when the method is missing', () => {
+    assert.strictEqual(endpointNameFromTags({ 'http.route': '/foo/bar' }), '/foo/bar')
   })
 
   it('should start the internal time profiler', () => {

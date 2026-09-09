@@ -65,6 +65,7 @@ export interface GeneratedConfig {
   };
   dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_API_KEY: string | undefined;
@@ -585,6 +586,7 @@ export interface GeneratedConfig {
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
     DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+    DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -614,6 +616,7 @@ export interface GeneratedEnvVarConfig {
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENT_HOST: string;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_AI_GUARD_BLOCK: boolean;
@@ -837,6 +840,7 @@ export interface GeneratedEnvVarConfig {
   DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
   DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+  DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;

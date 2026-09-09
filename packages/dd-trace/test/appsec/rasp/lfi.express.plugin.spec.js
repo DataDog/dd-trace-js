@@ -40,7 +40,6 @@ describe('RASP - lfi', () => {
   withVersions('express', 'express', expressVersion => {
     if (semver.intersects(expressVersion, '<=4.10.5') && NODE_MAJOR >= 24) {
       // Express 4.10.5 and older cannot start on Node.js 24.
-      // eslint-disable-next-line mocha/no-pending-tests
       describe.skip(`refusing to run tests as express@${expressVersion} is incompatible with Node.js ${NODE_MAJOR}`)
       return
     }

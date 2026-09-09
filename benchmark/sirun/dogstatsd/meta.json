@@ -10,13 +10,16 @@
       "env": { "VARIANT": "no-tags", "OPERATIONS": "6000000" }
     },
     "with-tags": {
-      "env": { "VARIANT": "with-tags", "OPERATIONS": "8300000" }
+      "run": "node --predictable-gc-schedule index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule index.js\"",
+      "iterations": 30,
+      "env": { "VARIANT": "with-tags", "OPERATIONS": "3300000" }
     },
     "many-tags": {
       "env": { "VARIANT": "many-tags", "OPERATIONS": "3000000" }
     },
     "aggregated": {
-      "env": { "VARIANT": "aggregated", "OPERATIONS": "15000000" }
+      "env": { "VARIANT": "aggregated", "OPERATIONS": "24000000" }
     }
   }
 }

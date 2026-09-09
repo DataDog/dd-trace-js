@@ -144,6 +144,7 @@ describe('vitest main instrumentation', () => {
       },
     }
     const realInstrument = require('../src/helpers/instrument')
+    const realNoWorkerInit = require('../src/vitest-main-no-worker-init')
     const realVitestUtil = require('../src/vitest-util')
 
     proxyquire('../src/vitest-main', {
@@ -181,6 +182,7 @@ describe('vitest main instrumentation', () => {
         },
       },
       './vitest-main-no-worker-init': {
+        ...realNoWorkerInit,
         configure (_ctx, _frameworkVersion, _testSpecifications, _setupData, options) {
           reserveEarlyFlakeDetectionSuite = options.reserveEarlyFlakeDetectionSuite
           noWorkerInitStates.push(options.state)
@@ -263,6 +265,42 @@ describe('vitest main instrumentation', () => {
     assert.strictEqual(testSuiteFinishPayloads.length, 1)
     assert.strictEqual(testSuiteFinishPayloads[0].deferFlush, true)
 
+    const typecheckFiles = [
+      { filepath: '/repo/first-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+      { filepath: '/repo/second-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+    ]
+    class TypecheckPoolWorker {
+      constructor () {
+        this.project = {
+          typechecker: {
+            getResult () {
+              return { files: typecheckFiles }
+            },
+          },
+          vitest: ctx,
+        }
+      }
+
+      send () {}
+
+      on (event, callback) {
+        this[event] = callback
+      }
+    }
+    const VitestV5 = class Vitest {}
+    const vitestV5IndexHook = hooks.find(({ target }) =>
+      target.filePattern === 'dist/chunks/index.*' && target.versions[0] === '>=5.0.0'
+    ).hook
+    vitestV5IndexHook({ TypecheckPoolWorker, Vitest: VitestV5 }, '5.0.0')
+
+    const typecheckPoolWorker = new TypecheckPoolWorker()
+    typecheckPoolWorker.on('message', () => {})
+    for (const file of typecheckFiles) {
+      typecheckPoolWorker.send({ type: 'run', context: { files: [{ filepath: file.filepath }] } })
+      await typecheckPoolWorker.message({ type: 'testfileFinished' })
+    }
+    assert.strictEqual(testSuiteFinishPayloads.length, 3)
+
     const customPoolTypechecker = new Typechecker()
     customPoolTypechecker.ctx = {
       ...ctx,
@@ -298,6 +336,38 @@ describe('vitest main instrumentation', () => {
       { filepath: '/repo/no-worker.mjs', pool: 'threads' },
     ]])
     assert.strictEqual(noWorkerInitStates[noWorkerInitStates.length - 1].isEfdSuiteAdmissionEnabled, false)
+
+    class Vitest {
+      /** @param {object[]} testSpecifications test specifications */
+      async runFiles (testSpecifications) {
+        return testSpecifications
+      }
+    }
+    const cliApiHook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+    cliApiHook({ async startVitest () {}, Vitest }, '4.1.10')
+    await Vitest.prototype.runFiles.call(ctx, [[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/no-worker.mjs', pool: 'threads' },
+    ]])
+
+    class TinyPool {
+      /** @param {{ env: Record<string, string>, filename: string }} options worker pool options */
+      constructor (options) {
+        this.options = options
+      }
+    }
+    const tinyPoolHook = hooks.find(({ target }) => target.name === 'tinypool').hook
+    const DatadogTinyPool = tinyPoolHook(TinyPool)
+    const pool = new DatadogTinyPool({
+      env: {
+        NODE_OPTIONS: '--require dd-trace/ci/init --conditions "custom condition"',
+        VITEST: 'true',
+      },
+      filename: '/repo/node_modules/vitest/dist/worker.js',
+    })
+    assert.strictEqual(pool.options.env.NODE_OPTIONS, '--conditions "custom condition"')
+    assert.strictEqual(pool.options.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
+    assert.strictEqual(pool.options.env.DD_VITEST_WORKER, '1')
 
     assert.deepStrictEqual(
       libraryConfigurationRequests.map(request => request.isVitestNoWorkerInitActive),

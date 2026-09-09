@@ -185,7 +185,20 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
  *   stdout: import('node:stream').Readable,
  *   stderr: import('node:stream').Readable
  * }} SpawnedProcess
+ * @typedef {Promise<void> & {
+ *   proc: SpawnedProcess
+ * }} ExpectedExitPromise
  */
+
+class ProcessTimeoutError extends Error {
+  /**
+   * @param {number} timeoutMs
+   */
+  constructor (timeoutMs) {
+    super(`Process did not exit within ${timeoutMs} ms.`)
+    this.code = 'ERR_PROCESS_TIMEOUT'
+  }
+}
 
 /**
  * Spawns a Node.js script in a child process and returns a promise that resolves when the process is ready.
@@ -242,8 +255,8 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
 /**
  * Spawns a Node.js script in a child process that is expected to run and exit cleanly.
  *
- * This function expects the process to complete and exit with code 0, in which case the promise resolves
- * with `undefined`. Use this for short-lived processes like validation scripts or tests that run to completion.
+ * This function expects the process to complete and exit with code 0, in which case the returned promise resolves.
+ * Use this for short-lived processes like validation scripts or tests that run to completion.
  *
  * For long-running processes (like servers) that should not exit, use `spawnProc` instead.
  *
@@ -253,21 +266,68 @@ function spawnProc (filename, options = {}, stdioHandler, stderrHandler) {
  *   standard output of the child process. If not provided, the output will be logged to the console.
  * @param {(data: Buffer) => void} [stderrHandler] - A function that's called with one data argument to handle the
  *   standard error of the child process. If not provided, the error will be logged to the console.
- * @returns {Promise<void>} A promise that resolves when the process exits with code 0.
+ * @param {number} [timeoutMs] - Maximum time to wait for the process to exit.
+ * @returns {ExpectedExitPromise}
  */
-function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler) {
+function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHandler, timeoutMs) {
   const proc = spawnProcImpl(filename, options, stdioHandler, stderrHandler)
 
-  return new Promise((resolve, reject) => {
-    proc
-      .once('error', reject)
-      .once('exit', code => {
-        if (code !== 0) {
-          return reject(new Error(`Process exited with status code ${code}.`))
-        }
-        resolve()
-      })
-  })
+  const completed = /** @type {ExpectedExitPromise} */ (new Promise((resolve, reject) => {
+    let timeout
+    let timedOut = false
+
+    proc.once('error', onError)
+    proc.once('exit', onExit)
+
+    if (timeoutMs !== undefined) {
+      timeout = setTimeout(onTimeout, timeoutMs)
+    }
+
+    async function onTimeout () {
+      timedOut = true
+      const timeoutError = new ProcessTimeoutError(timeoutMs)
+
+      try {
+        await stopProc(proc)
+        cleanup()
+        reject(timeoutError)
+      } catch (error) {
+        cleanup()
+        reject(error)
+      }
+    }
+
+    /**
+     * @param {Error} error
+     */
+    function onError (error) {
+      if (timedOut) return
+      cleanup()
+      reject(error)
+    }
+
+    /**
+     * @param {number|null} code
+     */
+    function onExit (code) {
+      if (timedOut) return
+      cleanup()
+      if (code !== 0) {
+        reject(new Error(`Process exited with status code ${code}.`))
+        return
+      }
+      resolve()
+    }
+
+    function cleanup () {
+      clearTimeout(timeout)
+      proc.removeListener('error', onError)
+      proc.removeListener('exit', onExit)
+    }
+  }))
+
+  completed.proc = proc
+  return completed
 }
 
 /**
@@ -885,9 +945,11 @@ async function curlAndAssertMessage (agent, procOrUrl, fn, timeout, expectedMess
  * @returns {typeof process.env}
  */
 function getCiVisAgentlessConfig (port) {
-  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
+  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js.
+  // The outer workflow's GitHub metadata references commits that do not exist in the sandbox repository.
+  // GITHUB_RUN_ID is Cucumber's primary key for GitHub detection; without it, the missing event file is ignored.
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
-  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
+  const { GITHUB_ACTIONS, GITHUB_EVENT_PATH, GITHUB_RUN_ID, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_API_KEY: '1',
@@ -903,9 +965,11 @@ function getCiVisAgentlessConfig (port) {
  * @returns {typeof process.env}
  */
 function getCiVisEvpProxyConfig (port) {
-  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js
+  // We remove GITHUB_WORKSPACE so the repository root is not assigned to dd-trace-js.
+  // The outer workflow's GitHub metadata references commits that do not exist in the sandbox repository.
+  // GITHUB_RUN_ID is Cucumber's primary key for GitHub detection; without it, the missing event file is ignored.
   // We remove MOCHA_OPTIONS so the test runner doesn't run the tests twice
-  const { GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
+  const { GITHUB_ACTIONS, GITHUB_EVENT_PATH, GITHUB_RUN_ID, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
     DD_TRACE_AGENT_PORT: String(port),
@@ -1036,13 +1100,14 @@ function spawnPluginIntegrationTestProc (cwd, serverFile, agentPort, additionalE
  * @param {AdditionalEnvArgs} [additionalEnvArgs]
  * @param {string[]} [execArgv]
  * @param {(data: Buffer) => void} [stdioHandler]
+ * @param {number} [timeoutMs]
  */
 function spawnPluginIntegrationTestProcAndExpectExit (
-  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
+  cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler, timeoutMs
 ) {
   const { filename, options, stdioHandler: handler } =
     preparePluginIntegrationTestSpawnOptions(cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler)
-  return spawnProcAndExpectExit(filename, options, handler)
+  return spawnProcAndExpectExit(filename, options, handler, undefined, timeoutMs)
 }
 
 /**

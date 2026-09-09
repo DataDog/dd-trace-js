@@ -16,8 +16,7 @@ const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack
 const compiler = {
   parse: (sourceText, options) => {
     try {
-      // TODO: Figure out ESBuild `createRequire` issue and remove this hack.
-      const oxc = runtimeRequire(['oxc', 'parser'].join('-'))
+      const oxc = runtimeRequire('oxc-parser')
 
       compiler.parse = (sourceText, { range, isModule } = {}) => {
         const { program, errors } = oxc.parseSync('index.js', sourceText, {

@@ -2,6 +2,9 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const IS_AWS_LAMBDA_MICROVM = getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined
+const isVercelAtStartup = getEnvironmentVariable('VERCEL') === '1'
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -39,7 +42,7 @@ function isInServerlessEnvironment () {
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 
-  return inAWSLambda || isGCPFunction || isAzureFunction
+  return IS_AWS_LAMBDA_MICROVM || inAWSLambda || isGCPFunction || isAzureFunction
 }
 
 /**
@@ -59,7 +62,7 @@ function getServerlessPlatformTags (platform = getServerlessPlatform()) {
  * @returns {{ isVercel: boolean }}
  */
 function getServerlessPlatform () {
-  return { isVercel: getEnvironmentVariable('VERCEL') === '1' }
+  return { isVercel: supportsServerlessTelemetryRetention() }
 }
 
 /**
@@ -69,7 +72,7 @@ function getServerlessPlatform () {
  * @returns {boolean}
  */
 function supportsServerlessTelemetryRetention () {
-  return getServerlessPlatform().isVercel
+  return isVercelAtStartup
 }
 
 /**
@@ -101,5 +104,9 @@ module.exports = {
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
   initializeServerlessTelemetry,
+  IS_AWS_LAMBDA_MICROVM,
+  // true only for a Node that bundles its own OpenSSL, whose CSPRNG keeps the snapshot's DRBG
+  // state across a MicroVM clone resume
+  NODE_BUNDLES_OPENSSL: process.config.variables.node_shared_openssl === false,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

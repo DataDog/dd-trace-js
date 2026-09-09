@@ -1958,7 +1958,7 @@ describe('test optimization validation manifest scaffold', () => {
     }
   })
 
-  it('retains Cypress configuration for generated checks', () => {
+  it('retains Cypress configuration and source for generated checks', () => {
     const fixture = createRepositoryFixture({
       framework: 'cypress',
       script: 'cypress run --spec cypress/e2e/example.cy.js --browser chrome --config-file cypress.custom.js --e2e',
@@ -1971,6 +1971,8 @@ describe('test optimization validation manifest scaffold', () => {
       }).frameworks[0]
       const scenario = framework.generatedTestStrategy.scenarios[0]
       const command = getGeneratedCommand(framework, scenario)
+      const basicFile = framework.generatedTestStrategy.files[0]
+      const retryFile = framework.generatedTestStrategy.files[1]
 
       assert.deepStrictEqual(framework.validation.runnerArgs, [
         '--browser',
@@ -1989,6 +1991,16 @@ describe('test optimization validation manifest scaffold', () => {
         'cypress.custom.js',
         '--e2e',
       ])
+      assert.strictEqual(
+        basicFile.contentLines.join('\n'),
+        'describe(\'dd-test-optimization-validation\', () => {\n  it("basic-pass", () => {\n' +
+          '    expect(true).to.equal(true)\n  })\n})'
+      )
+      assert.strictEqual(
+        retryFile.contentLines.join('\n'),
+        'let attempt = 0\n\ndescribe(\'dd-test-optimization-validation\', () => {\n' +
+          '  it("atr-fail-once", () => {\n    expect(attempt++).to.equal(1)\n  })\n})'
+      )
     } finally {
       removeFixture(fixture.root)
     }

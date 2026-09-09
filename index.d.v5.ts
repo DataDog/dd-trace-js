@@ -358,6 +358,16 @@ declare namespace tracer {
     links?: { context: SpanContext, attributes?: Object }[]
   }
 
+  export interface Exception {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export type SpanEventAttributeValue =
+    string | number | boolean | Array<string> | Array<number> | Array<boolean>;
+  export type SpanEventAttributes = Record<string, SpanEventAttributeValue>;
+
   /**
    * Span represents a logical unit of work as part of a broader Trace.
    * Examples of span might include remote procedure calls or a in-process
@@ -367,6 +377,14 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Causally links another span to the current span
@@ -461,6 +479,13 @@ declare namespace tracer {
      * Maximum number of traces matching this rule to sample per second.
      */
     maxPerSecond?: number
+
+    /**
+     * When `true`, a trace chunk rejected by this rule is fully dropped:
+     * it is excluded from client-side stats and never sent to the Agent.
+     * @default false
+     */
+    discard?: boolean
   }
 
   /**
@@ -645,6 +670,7 @@ declare namespace tracer {
      * Sampling rules to apply to priority sampling. Each rule matches against a trace's
      * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
      * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * Specify `"discard": true` to fully drop it from stats as well.
      * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
@@ -3447,6 +3473,10 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider {
+      shutdown(callback?: (error: Error | null) => void): void;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */
@@ -4173,17 +4203,27 @@ declare namespace tracer {
       metadata?: Array<Record<string, any>>
     ) => any | Promise<any>
 
+    interface DatasetRecord {
+      id: string | null
+      input: JSONType
+      expectedOutput: JSONType
+      metadata: Record<string, JSONType>
+      tags: string[]
+    }
+
+    interface DatasetRecordNew {
+      id?: string
+      inputData: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: string[]
+    }
+
     interface CreateDatasetOptions {
       /** Override the configured project for this dataset. */
       projectName?: string
       description?: string
-      records?: Array<{
-        id?: string,
-        inputData: JSONType,
-        expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>,
-        tags?: string[]
-      }>
+      records?: DatasetRecordNew[]
     }
 
     interface ExperimentOptions {
@@ -4352,6 +4392,8 @@ declare namespace tracer {
         metadata?: Record<string, JSONType>,
         tags?: string[]
       ): Dataset
+      /** Add multiple records to the dataset. */
+      addRecords (records: DatasetRecordNew[]): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType
@@ -4376,13 +4418,7 @@ declare namespace tracer {
       projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
-      records (): Array<{
-        id: string | null,
-        input: JSONType,
-        expectedOutput: JSONType,
-        metadata: Record<string, JSONType>,
-        tags: string[]
-      }>
+      records (): DatasetRecord[]
       /** Return the tags used to filter this dataset. */
       filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */

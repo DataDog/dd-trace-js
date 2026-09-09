@@ -46,7 +46,8 @@ describe('metrics', () => {
         get: loadSketchConstructor,
       })
 
-      const localMetrics = proxyquire.noPreserveCache()('../../src/telemetry/metrics', {
+      const loadMetrics = proxyquire.noPreserveCache()
+      const localMetrics = loadMetrics('../../src/telemetry/metrics', {
         './send-data': {
           sendData,
         },

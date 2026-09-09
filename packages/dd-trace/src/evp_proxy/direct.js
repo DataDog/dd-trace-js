@@ -1,9 +1,6 @@
 'use strict'
 
-const { format } = require('node:url')
-
-const { HttpsProxyAgent } = require('../../../../vendor/dist/https-proxy-agent')
-const { getProxyForUrl } = require('../../../../vendor/dist/proxy-from-env')
+const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
 /**
@@ -11,7 +8,6 @@ const log = require('../log')
  * @property {URL} url - Direct intake URL
  * @property {string} basePath - Direct intake base path
  * @property {object} headers - Direct intake authentication headers
- * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
  */
 
 /**
@@ -28,25 +24,8 @@ function createDirectEVPRoute (config, intake) {
   if (!apiKey || !config.site) return
 
   try {
-    const hostname = `${intake}.${config.site}`.toLowerCase()
-    const url = new URL(format({
-      protocol: 'https:',
-      hostname,
-    }))
-    if (
-      url.hostname !== hostname ||
-      url.username ||
-      url.password ||
-      url.port ||
-      url.pathname !== '/' ||
-      url.search ||
-      url.hash
-    ) {
-      throw new Error('Invalid direct EVP intake URL')
-    }
-
-    const proxyUrl = getProxyForUrl(url.href)
-    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined
+    const url = createSiteUrl(config.site, intake)
+    if (url === undefined) throw new Error('Invalid direct EVP intake URL')
 
     return {
       url,
@@ -54,7 +33,6 @@ function createDirectEVPRoute (config, intake) {
       headers: {
         'DD-API-KEY': apiKey,
       },
-      ...(agent && { agent }),
     }
   } catch (error) {
     log.debug('Unable to configure direct EVP intake: %s', error.message)

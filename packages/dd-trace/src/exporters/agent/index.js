@@ -12,7 +12,7 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this._config = config
-    const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    const { lookup, protocolVersion, stats = {}, apmTracingEnabled, flushInterval } = config
     this._url = config.url
 
     const headers = {}
@@ -25,6 +25,7 @@ class AgentExporter {
       prioritySampler,
       lookup,
       protocolVersion,
+      flushInterval,
       headers,
       deliveryTracker: this.#serverlessDeliveryTracker,
     })

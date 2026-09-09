@@ -1,6 +1,7 @@
 'use strict'
 
-const mutex = require('../../../../../vendor/dist/mutexify/promise')()
+const createMutex = require('../../../../../vendor/dist/mutexify/promise')
+const mutex = createMutex()
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')

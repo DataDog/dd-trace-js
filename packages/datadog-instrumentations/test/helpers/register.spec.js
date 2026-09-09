@@ -169,4 +169,29 @@ describe('register', () => {
       moduleName: 'mariadb/lib/cmd/query.js',
     })
   })
+
+  it('should patch a package root namespace without also patching its default callback', () => {
+    const patch = sinon.stub()
+    hooksMock.mocha = { fn: sinon.stub() }
+    instrumentationsMock.mocha = [{
+      versions: ['>=12.0.0'],
+      patchDefault: false,
+      hook (moduleExports) {
+        patch(moduleExports.default ?? moduleExports)
+        return moduleExports
+      },
+    }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'mocha')
+    const hook = hookCall.args[2]
+    const Mocha = class Mocha {}
+    const namespace = { default: Mocha, Mocha }
+
+    assert.strictEqual(hook(Mocha, 'mocha', '/path/to/mocha', '12.0.0', true), Mocha)
+    sinon.assert.notCalled(patch)
+
+    assert.strictEqual(hook(namespace, 'mocha', '/path/to/mocha', '12.0.0', true), namespace)
+    sinon.assert.calledOnceWithExactly(patch, Mocha)
+  })
 })

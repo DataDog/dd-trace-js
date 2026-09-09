@@ -50,7 +50,8 @@ describe('release proposal', () => {
       throw new Error(`Unexpected command: ${command}`)
     }
 
-    proxyquire.noCallThru().noPreserveCache()('./proposal', {
+    const loadProposal = proxyquire.noCallThru().noPreserveCache()
+    loadProposal('./proposal', {
       '../../version': { DD_MAJOR: 7, DD_MINOR: 0, DD_PATCH: 0, VERSION: '7.0.0-beta.1' },
       './changelog': { createReleaseChangelog },
       './helpers/requirements': { checkAll: sinon.stub() },

@@ -17,6 +17,19 @@ const vercelRetentionHandlers = new WeakMap()
  */
 
 /**
+ * @typedef {{ complete: () => void, promise: Promise<void> }} VercelFlush
+ */
+
+/**
+ * @returns {VercelFlush}
+ */
+function createVercelFlush () {
+  let complete
+  const promise = new Promise(resolve => { complete = resolve })
+  return { complete, promise }
+}
+
+/**
  * @param {TelemetryFlusher} tracer
  * @param {() => void} done
  * @returns {void}
@@ -30,25 +43,6 @@ function flushVercelTelemetry (tracer, done) {
       done()
     }
   })
-}
-
-function registerVercelRequestFlush (tracer) {
-  const requestContext = getVercelRequestContext()
-  if (!requestContext) return
-
-  const { waitUntil } = requestContext
-  if (typeof waitUntil !== 'function') return
-
-  // Retain the invocation synchronously, then flush after the response completes.
-  let done
-  const pending = new Promise(resolve => { done = resolve })
-  try {
-    waitUntil(pending)
-    flushVercelTelemetry(tracer, done)
-  } catch (error) {
-    log.warn('Unable to retain Vercel telemetry:', error)
-    done()
-  }
 }
 
 function getVercelRequestContext () {
@@ -69,9 +63,48 @@ function registerVercelTelemetryRetention (tracer) {
   if (existing) return existing
 
   if (typeof tracer?.flushAll !== 'function') return
+  let flushInProgress = false
+  let queuedFlush
+
+  /**
+   * @param {VercelFlush} flush
+   */
+  const startFlush = flush => {
+    flushVercelTelemetry(tracer, () => {
+      flush.complete()
+      const nextFlush = queuedFlush
+      queuedFlush = undefined
+      if (nextFlush) {
+        startFlush(nextFlush)
+      } else {
+        flushInProgress = false
+      }
+    })
+  }
+  const flushRequest = () => {
+    const requestContext = getVercelRequestContext()
+    if (!requestContext) return
+
+    const { waitUntil } = requestContext
+    if (typeof waitUntil !== 'function') return
+
+    const shouldStart = !flushInProgress
+    const flush = queuedFlush ?? createVercelFlush()
+    if (shouldStart) {
+      flushInProgress = true
+    } else {
+      queuedFlush = flush
+    }
+
+    try {
+      waitUntil(flush.promise)
+    } catch (error) {
+      log.warn('Unable to retain Vercel telemetry:', error)
+    }
+    if (shouldStart) startFlush(flush)
+  }
   // The HTTP finish channel activates its response wrapper directly. HTTP/2 needs
   // a passive request-start subscriber before it can bind response emit events.
-  const flushRequest = () => registerVercelRequestFlush(tracer)
   const flushHttp2Response = ({ eventName }) => {
     if (eventName === 'close') flushRequest()
   }

@@ -1,5 +1,7 @@
 'use strict'
 
+const { AsyncResource } = require('node:async_hooks')
+
 const { createCoverageMap } = require('../../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../../version')
@@ -35,6 +37,7 @@ const {
   isMarkedAsUnskippable,
 } = require('../../../dd-trace/src/plugins/util/test')
 
+const { addMochaRunHooks } = require('./common')
 const {
   isNewTest,
   getTestProperties,
@@ -60,8 +63,6 @@ const {
   adjustRunnerFailuresForTestOptimization,
 } = require('./utils')
 
-require('./common')
-
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 /**
@@ -81,6 +82,8 @@ const runnerTestEndHandlers = new WeakMap()
 const runnerFailuresAdjusted = new WeakSet()
 const runnerFrameworkErrors = new WeakMap()
 const runnerStarted = new WeakSet()
+const readyRunners = new WeakSet()
+const pendingRunnerStarts = new WeakMap()
 const runnerRecoveryStates = new WeakMap()
 const runnersWithPendingCoverageReset = new WeakSet()
 const parallelRunners = new WeakSet()
@@ -536,7 +539,10 @@ function stopCurrentHook (runner, hook) {
     if (test) {
       if (hook.parent?._afterEach?.includes(hook) || hook.parent?._afterAll?.includes(hook)) {
         markTestTerminal(runner, test)
-        if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(runner)?.(test)
+        if (!test._ddTestFinishStarted) {
+          const onTestEnd = runnerTestEndHandlers.get(runner)
+          onTestEnd?.(test)
+        }
       } else {
         markTestPending(runner, test)
       }
@@ -763,14 +769,18 @@ function wrapRunnerEmit (Runner) {
             const test = hook.ctx?.currentTest
             if (test && hook.parent?._afterEach?.includes(hook)) {
               markTestTerminal(this, test)
-              if (!test._ddTestFinishStarted) runnerTestEndHandlers.get(this)?.(test)
+              if (!test._ddTestFinishStarted) {
+                const onTestEnd = runnerTestEndHandlers.get(this)
+                onTestEnd?.(test)
+              }
             }
           } else if (event === 'pending' || event === 'pass' || event === 'fail' || event === 'retry' ||
             event === 'test end') {
             const test = arguments[1]
             stopAfterEachHooks(this, test)
             if (event === 'test end' && !test._ddTestFinishStarted) {
-              runnerTestEndHandlers.get(this)?.(test)
+              const onTestEnd = runnerTestEndHandlers.get(this)
+              onTestEnd?.(test)
             }
           }
         }
@@ -1060,16 +1070,50 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   runStoresWithCompletion(libraryConfigurationCh, ctx, onReceivedConfiguration)
 }
 
+/**
+ * @param {import('mocha').Runner} runner
+ * @returns {void}
+ */
+function startMochaRunner (runner) {
+  if (readyRunners.has(runner)) {
+    runner.suite.run()
+  } else {
+    // Global setup can finish after configuration. Preserve the configuration
+    // context until Runner#run has installed its delayed-start listener.
+    pendingRunnerStarts.set(runner, AsyncResource.bind(() => runner.suite.run()))
+  }
+}
+
+/**
+ * @param {import('mocha').Runner['run']} run
+ * @param {import('mocha').Runner} runner
+ * @param {Parameters<import('mocha').Runner['run']>} args
+ * @returns {import('mocha').Runner}
+ */
+function runMochaRunner (run, runner, args) {
+  const result = run.apply(runner, args)
+  // Once delay mode is enabled, startup must complete even if the plugin is disabled during global setup.
+  readyRunners.add(runner)
+  const start = pendingRunnerStarts.get(runner)
+  if (start) {
+    pendingRunnerStarts.delete(runner)
+    start()
+  }
+  return result
+}
+
 // In this hook we delay the execution with options.delay to grab library configuration,
 // skippable and known tests.
 // It is called but skipped in parallel mode.
-addHook({
-  name: 'mocha',
-  versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/mocha.js',
-}, (Mocha, frameworkVersion) => {
+/**
+ * @param {Function} Mocha
+ * @param {string} frameworkVersion
+ * @returns {Function}
+ */
+function wrapMochaRun (Mocha, frameworkVersion) {
   warnDeprecatedMochaVersion(frameworkVersion)
 
+  // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -1110,23 +1154,25 @@ addHook({
         getCodeCoverageCh.publish({
           onDone: (receivedCodeCoverage) => {
             untestedCoverage = receivedCodeCoverage
-            global.run()
+            startMochaRunner(runner)
           },
         })
       } else {
-        global.run()
+        startMochaRunner(runner)
       }
     })
 
     return runner
   })
   return Mocha
-})
+}
+
+addMochaRunHooks([MINIMUM_MOCHA_VERSION], wrapMochaRun)
 
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/cli/run-helpers.js',
+  filePattern: String.raw`lib/cli/run-helpers\.(?:c?js)$`,
 }, (run) => {
   // `runMocha` is an async function
   shimmer.wrap(run, 'runMocha', runMocha => function (...args) {
@@ -1136,7 +1182,7 @@ addHook({
     const mocha = args[0]
 
     /**
-     * This attaches `run` to the global context, which we'll call after
+     * This enables the delayed root suite, which we'll release after
      * our configuration and skippable suites requests.
      * You need this both here and in Mocha#run hook: the programmatic API
      * does not call `runMocha`, so it needs to be in Mocha#run. When using
@@ -1157,7 +1203,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/runner.js',
+  filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (Runner, frameworkVersion) {
   if (patched.has(Runner)) return Runner
 
@@ -1168,7 +1214,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
-      return run.apply(this, args)
+      return runMochaRunner(run, this, args)
     }
 
     const { onRunDone, onFlushDone } = getRunCompletionCallbacks(args[0])
@@ -1501,7 +1547,7 @@ addHook({
       }
     })
 
-    return run.apply(this, args)
+    return runMochaRunner(run, this, args)
   })
 
   return Runner
@@ -1588,7 +1634,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/parallel-buffered-runner.js',
+  filePattern: String.raw`lib/nodejs/parallel-buffered-runner\.(?:c?js)$`,
 }, (ParallelBufferedRunner, frameworkVersion) => {
   shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files, options = {} }) {
     if (!testFinishCh.hasSubscribers) {
@@ -1667,7 +1713,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/nodejs/buffered-worker-pool.js',
+  filePattern: String.raw`lib/nodejs/buffered-worker-pool\.(?:c?js)$`,
 }, (BufferedWorkerPoolPackage, frameworkVersion) => {
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 

@@ -667,8 +667,7 @@ describe('Plugin', () => {
         })
       })
 
-      let tools
-      let maxStepsArg
+      const isLegacy = semifies(realVersion, '<5.0.0')
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -676,32 +675,17 @@ describe('Plugin', () => {
         },
         required: ['location'],
       })
-      if (semifies(realVersion, '>=5.0.0')) {
-        tools = {
-          weather: ai.tool({
-            description: 'Get the weather in a given location',
-            inputSchema: toolSchema,
-            execute: async ({ location }) => ({
-              location,
-              temperature: 72,
-            }),
-          }),
-        }
-
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
-      } else {
-        tools = [ai.tool({
-          id: 'weather',
+      const tools = {
+        weather: ai.tool({
           description: 'Get the weather in a given location',
-          parameters: toolSchema,
+          ...(isLegacy ? { parameters: toolSchema } : { inputSchema: toolSchema }),
           execute: async ({ location }) => ({
             location,
             temperature: 72,
           }),
-        })]
-
-        maxStepsArg = { maxSteps: 5 }
+        }),
       }
+      const maxStepsArg = isLegacy ? { maxSteps: 5 } : { stopWhen: ai.stepCountIs(5) }
 
       const result = await ai.generateText({
         model: openai('gpt-4o-mini'),

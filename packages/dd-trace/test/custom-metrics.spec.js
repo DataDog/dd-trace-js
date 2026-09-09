@@ -13,11 +13,12 @@ require('./setup/core')
 describe('Custom Metrics', () => {
   let httpServer
   let httpPort
-  let metricsData
+  let metricsPayloads
   let sockets
 
   beforeEach((done) => {
     sockets = []
+    metricsPayloads = []
     httpServer = http.createServer((req, res) => {
       let httpData = ''
       req.on('data', d => { httpData += d.toString() })
@@ -25,7 +26,7 @@ describe('Custom Metrics', () => {
         res.statusCode = 200
         res.end()
         if (req.url === '/dogstatsd/v2/proxy') {
-          metricsData = httpData
+          metricsPayloads.push(httpData)
         }
       })
     }).listen(0, () => {
@@ -56,7 +57,13 @@ describe('Custom Metrics', () => {
       // eslint-disable-next-line no-console
       if (stderr) console.error(stderr)
 
-      assert.strictEqual(metricsData.split('#')[0], 'page.views.data:1|c|')
+      assert.strictEqual(metricsPayloads.length, 2)
+
+      const [userMetrics, telemetryMetrics] = metricsPayloads
+
+      assert.strictEqual(userMetrics.split('#')[0], 'page.views.data:1|c|')
+      assert.match(telemetryMetrics, /datadog\.dogstatsd\.client\.metrics:1\|c\|/)
+      assert.match(telemetryMetrics, /datadog\.dogstatsd\.client\.metrics_by_type:1\|c\|.*metrics_type:count/)
 
       done()
     })

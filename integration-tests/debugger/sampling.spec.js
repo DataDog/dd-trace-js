@@ -12,7 +12,7 @@ describe('Dynamic Instrumentation', function () {
       const rcConfig = t.generateRemoteConfig({ sampling: { snapshotsPerSecond: 1 } })
 
       function triggerBreakpointContinuously () {
-        t.axios.get(t.breakpoint.url).catch(done)
+        t.request(t.breakpoint.url).catch(done)
         timer = setTimeout(triggerBreakpointContinuously, 10)
       }
 
@@ -55,13 +55,13 @@ describe('Dynamic Instrumentation', function () {
       const state = {
         [rcConfig1.config.id]: {
           triggerBreakpointContinuously () {
-            t.axios.get(t.breakpoints[0].url).catch(done)
+            t.request(t.breakpoints[0].url).catch(done)
             this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
           },
         },
         [rcConfig2.config.id]: {
           triggerBreakpointContinuously () {
-            t.axios.get(t.breakpoints[1].url).catch(done)
+            t.request(t.breakpoints[1].url).catch(done)
             this.timer = setTimeout(this.triggerBreakpointContinuously.bind(this), 10)
           },
         },

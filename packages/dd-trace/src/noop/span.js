@@ -26,6 +26,11 @@ class NoopSpan {
   addLink (link) { return this }
   addLinks (links) { return this }
   addSpanPointer (ptrKind, ptrDir, ptrHash) { return this }
+  /**
+   * @param {import('../../../../index').Exception} exception
+   * @param {import('../../../../index').SpanEventAttributes} [attributes]
+   */
+  recordException (exception, attributes) {}
   log () { return this }
   logEvent () {}
   finish (finishTime) {}

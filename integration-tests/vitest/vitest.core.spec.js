@@ -119,6 +119,8 @@ versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
+    // Native module loading was introduced in Vitest 4.1; Vitest 5 requires Node.js >=22.
+    const nativeModuleRunnerIt = version === 'latest' && NODE_MAJOR >= 22 ? it : it.skip
     const runtimeEfdSuiteAdmissionIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
     const typecheckIt = version === '1.6.0' ? it.skip : it
 
@@ -170,11 +172,12 @@ versions.forEach((version) => {
           const { testSession, testModule, testSuite, tests } = assertCompleteTestSessionTrace(events, testOutput)
 
           assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
-          for (const event of [testSession, testModule, testSuite]) {
+          for (const event of [testSession, testModule]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
           assert.deepStrictEqual(
             [...new Set(tests.map(test => test.meta[TEST_STATUS]))].sort(),
             ['pass', 'skip']
@@ -214,11 +217,12 @@ versions.forEach((version) => {
           const { testSession, testModule, testSuite } = assertCompleteTestSessionTrace(events, testOutput)
 
           assert.strictEqual(events.filter(event => event.type === 'test_suite_end').length, 1)
-          for (const event of [testSession, testModule, testSuite]) {
+          for (const event of [testSession, testModule]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.error, 1)
             assert.match(event.meta[ERROR_MESSAGE], /custom Vitest reporter failed/)
           }
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
         },
         { hardTimeout: 20_000 }
       )
@@ -2215,6 +2219,130 @@ versions.forEach((version) => {
             done()
           }).catch(done)
         })
+      })
+
+      nativeModuleRunnerIt('reports a deterministic failure with native module loading', async function () {
+        this.timeout(60_000)
+        testOutput = ''
+
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --reporter=json --outputFile=efd-results.json',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
+              VITEST_NATIVE_MODULE_RUNNER: 'true',
+            },
+          }
+        )
+        childProcess.stdout.on('data', data => { testOutput += data })
+        childProcess.stderr.on('data', data => { testOutput += data })
+
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const finalTest = tests.find(test => TEST_FINAL_STATUS in test.meta)
+
+            assert.ok(tests.length > 0, testOutput)
+            assert.ok(tests.some(test => test.meta[TEST_IS_RETRY] === 'true'), testOutput)
+            assert.ok(finalTest, testOutput)
+            assert.strictEqual(finalTest.meta[TEST_STATUS], 'fail', testOutput)
+            assert.strictEqual(finalTest.meta[TEST_FINAL_STATUS], 'fail', testOutput)
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail', testOutput)
+          }
+        )
+
+        const [[code, signal]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
+
+        assert.strictEqual(signal, null, testOutput)
+        assert.strictEqual(code, 1, testOutput)
+
+        const report = JSON.parse(fs.readFileSync(path.join(cwd, 'efd-results.json'), 'utf8'))
+        const assertionResults = report.testResults.flatMap(({ assertionResults }) => assertionResults)
+
+        assert.strictEqual(report.success, false)
+        assert.strictEqual(assertionResults.length, 1)
+        assert.strictEqual(assertionResults[0].status, 'failed')
+        assert.ok(assertionResults[0].failureMessages.length > 0)
+      })
+
+      nativeModuleRunnerIt('reports success when an EFD attempt passes with native module loading', async function () {
+        this.timeout(60_000)
+        testOutput = ''
+
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --reporter=json --outputFile=efd-results.json',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
+              VITEST_NATIVE_MODULE_RUNNER: 'true',
+              EFD_PASS_ATTEMPT: '2',
+            },
+          }
+        )
+        childProcess.stdout.on('data', data => { testOutput += data })
+        childProcess.stderr.on('data', data => { testOutput += data })
+
+        const [[code, signal]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url === '/api/v2/citestcycle',
+            payloads => {
+              const tests = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+
+              assert.ok(tests.some(test => test.meta[TEST_STATUS] === 'fail'), testOutput)
+              assert.ok(tests.some(test => test.meta[TEST_STATUS] === 'pass'), testOutput)
+            }
+          ),
+        ])
+
+        assert.strictEqual(signal, null, testOutput)
+        assert.strictEqual(code, 0, testOutput)
+
+        const report = JSON.parse(fs.readFileSync(path.join(cwd, 'efd-results.json'), 'utf8'))
+        const assertionResults = report.testResults.flatMap(({ assertionResults }) => assertionResults)
+
+        assert.strictEqual(report.success, true)
+        assert.strictEqual(assertionResults.length, 1)
+        assert.strictEqual(assertionResults[0].status, 'passed')
       })
 
       it('bails out of EFD if the percentage of new tests is too high', (done) => {

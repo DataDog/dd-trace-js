@@ -37,10 +37,10 @@ describe('Dynamic Instrumentation', function () {
             })
 
             // Perform HTTP request to try and trigger the probe
-            t.axios.get(t.breakpoint.url).catch((error) => {
-              // If the request hasn't fully completed by the time the tests ends and the target app is destroyed,
-              // Axios will complain with a "socket hang up" error. Hence this sanity check before calling
-              // `done(error)`. If we later add more tests below this one, this shouldn't be an issue.
+            t.request(t.breakpoint.url).catch((error) => {
+              // If the request hasn't fully completed by the time the test ends and the target app is destroyed,
+              // The request can fail if the target app stops before it completes. Only report failures while the
+              // test is still active.
               if (!finished) done(error)
             })
           }

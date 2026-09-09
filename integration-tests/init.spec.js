@@ -342,9 +342,9 @@ describe('init.js', () => {
        */
       function checkGlobalPreload (out) {
         assert.match(out,
-          /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) {\n/)
+          /^if \(getBuiltin\('module'\)\.createRequire\("file:.+\/initialize\.mjs"\)\('\.\/init\.js'\)\) \{\n/)
         assert.match(out,
-          /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n}\n$/)
+          /\n {2}process\.emitWarning\('dd-trace cannot instrument ES modules on Node\.js 20\.0\.0\. Upgrade to Node\.js 20\.1\.0 or newer\.'\)\n\}\n$/)
       }
 
       it('provides application-realm preload source', () =>

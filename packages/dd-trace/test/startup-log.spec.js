@@ -112,9 +112,9 @@ describe('startup logging', () => {
       debug: true,
       sample_rate: 1,
       sampling_rules: [
-        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 } },
+        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 }, discard: false },
         'rule2',
-        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } },
+        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 }, discard: false },
       ],
       tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',

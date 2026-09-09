@@ -1,6 +1,6 @@
 'use strict'
 
-const NoopExperiments = require('./experiments/noop')
+let NoopExperiments
 
 function promptUnavailable () {
   return Promise.reject(new Error('Prompt Management requires tracer.init()'))
@@ -16,6 +16,7 @@ class NoopLLMObs {
   }
 
   get experiments () {
+    NoopExperiments ??= require('./experiments/noop')
     return new NoopExperiments('LLM Observability is not enabled')
   }
 

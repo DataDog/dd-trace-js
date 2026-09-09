@@ -444,6 +444,33 @@ describe('aiguard/messages/anthropic', () => {
       }])
     })
 
+    it('normalizes every readable server-tool result field', () => {
+      const message = {
+        role: 'assistant',
+        content: [{
+          type: 'code_execution_tool_result',
+          tool_use_id: 'srv_fields',
+          content: {
+            stderr: 'warning',
+            content: 'details',
+          },
+        }, {
+          type: 'mcp_tool_result',
+          tool_use_id: 'srv_url',
+          content: [{ url: 'https://example.com/result' }],
+        }],
+      }
+      assert.deepStrictEqual(convertAnthropicMessage(message), [{
+        role: 'tool',
+        tool_call_id: 'srv_fields',
+        content: 'warning\ndetails',
+      }, {
+        role: 'tool',
+        tool_call_id: 'srv_url',
+        content: 'https://example.com/result',
+      }])
+    })
+
     it('extracts viewed file text from a text_editor_code_execution_tool_result', () => {
       const message = {
         role: 'assistant',

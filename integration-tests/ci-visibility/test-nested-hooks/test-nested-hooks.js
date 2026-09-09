@@ -19,12 +19,8 @@ describe('describe', function () {
   it('is not nested', function (done) {
     // eslint-disable-next-line no-console
     console.log('is not nested')
-    try {
-      assert.strictEqual(process.env.SHOULD_FAIL ? globalAttempts++ : 1, 1)
-      done()
-    } catch (error) {
-      done(error)
-    }
+    assert.strictEqual(process.env.SHOULD_FAIL ? globalAttempts++ : 1, 1)
+    done()
   })
 
   context('context', () => {

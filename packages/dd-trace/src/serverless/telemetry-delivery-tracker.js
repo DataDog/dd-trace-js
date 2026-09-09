@@ -18,11 +18,8 @@ class TelemetryDeliveryTracker {
     const delivery = { callbacks: done ? [done] : [] }
     this.#deliveries.add(delivery)
 
-    let completed = false
     const complete = () => {
-      if (completed) return
-      completed = true
-      this.#deliveries.delete(delivery)
+      if (!this.#deliveries.delete(delivery)) return
       for (const callback of delivery.callbacks) callback()
     }
 
@@ -41,14 +38,13 @@ class TelemetryDeliveryTracker {
   waitForIdle (done) {
     if (!done) return
 
-    const deliveries = [...this.#deliveries]
-    if (deliveries.length === 0) return done()
+    let pending = this.#deliveries.size
+    if (pending === 0) return done()
 
-    let pending = deliveries.length
     const complete = () => {
       if (--pending === 0) done()
     }
-    for (const delivery of deliveries) delivery.callbacks.push(complete)
+    for (const delivery of this.#deliveries) delivery.callbacks.push(complete)
   }
 }
 

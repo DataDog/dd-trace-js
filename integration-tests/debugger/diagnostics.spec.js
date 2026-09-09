@@ -111,7 +111,7 @@ describe('Dynamic Instrumentation', function () {
       t.agent.addRemoteConfig(t.rcConfig)
       const [response] = await Promise.all([breakpointTriggered, probeEvents])
       assert.strictEqual(response.status, 200)
-      assert.deepStrictEqual(response.data, { hello: 'bar' })
+      assert.deepStrictEqual(response.body, { hello: 'bar' })
     })
 
     it('should send expected diagnostics messages if probe is first received and then updated', async function () {
@@ -308,7 +308,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.request(t.breakpoint.url).catch(done)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -338,7 +338,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.request(t.breakpoint.url).catch(done)
                 setTimeout(done, 2000)
               }
             } else if (diagnostics.status === 'EMITTING') {
@@ -372,7 +372,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.request(t.breakpoint.url).catch(done)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -412,7 +412,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 2) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.request(t.breakpoint.url).catch(done)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)
@@ -459,7 +459,7 @@ describe('Dynamic Instrumentation', function () {
             const { diagnostics } = event.debugger
             if (diagnostics.status === 'INSTALLED') {
               if (++installed === 3) {
-                t.axios.get(t.breakpoint.url).catch(done)
+                t.request(t.breakpoint.url).catch(done)
               }
             } else if (diagnostics.status === 'EMITTING') {
               const expected = expectedPayloads.get(diagnostics.probeId)

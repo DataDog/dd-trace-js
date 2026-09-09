@@ -507,7 +507,8 @@ function inheritDatadogPropertiesFromRetriedTest (test) {
 }
 
 function runnableWrapper (RunnablePackage, libraryConfig) {
-  shimmer.wrap(RunnablePackage.prototype, 'run', run => function (...args) {
+  const Runnable = RunnablePackage.Runnable ?? RunnablePackage
+  shimmer.wrap(Runnable.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
