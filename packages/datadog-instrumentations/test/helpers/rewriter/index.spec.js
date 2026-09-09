@@ -67,6 +67,16 @@ describe('check-require-cache', () => {
     assert.doesNotMatch(source, /const __apm\$traced =/)
   }
 
+  /**
+   * @param {string} dcModule
+   */
+  function createBundlerRewriter (dcModule) {
+    const bundlerRewriter = proxyquire('../../../src/helpers/rewriter/bundler', {
+      './index': rewriter,
+    })
+    return bundlerRewriter.createBundlerRewriter(dcModule)
+  }
+
   beforeEach(() => {
     ch = undefined
     subs = undefined
@@ -1266,7 +1276,7 @@ describe('check-require-cache', () => {
       version: 3,
     }
 
-    const rewriteBundled = rewriter.createBundlerRewriter('../dc-polyfill.js')
+    const rewriteBundled = createBundlerRewriter('../dc-polyfill.js')
     const result = rewriteBundled(source, filename, 'commonjs', {
       moduleName: 'test-trace-sync',
       filePath: 'index.js',
@@ -1288,7 +1298,7 @@ describe('check-require-cache', () => {
 
     assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', target), source)
 
-    const rewriteBundled = rewriter.createBundlerRewriter('../dc-polyfill.js')
+    const rewriteBundled = createBundlerRewriter('../dc-polyfill.js')
     const { code } = rewriteBundled(source, filename, 'commonjs', target)
 
     assert.match(code, /tr_ch_apm_tracingChannel/)
@@ -1323,7 +1333,7 @@ describe('check-require-cache', () => {
 
   it('should preserve bundled sources that cannot be rewritten', () => {
     const sourceMap = { mappings: '', version: 3 }
-    const rewriteBundled = rewriter.createBundlerRewriter('../dc-polyfill.js')
+    const rewriteBundled = createBundlerRewriter('../dc-polyfill.js')
     assert.deepStrictEqual(
       rewriteBundled('', '/project/empty.js', 'module', undefined, sourceMap),
       { code: '', map: sourceMap }
@@ -1458,6 +1468,7 @@ describe('rewriter source-map trailer', () => {
 
 describe('rewriter initialization', () => {
   const repositoryRoot = resolve(__dirname, '../../../../..')
+  const bundlerRewriterPath = resolve(__dirname, '../../../src/helpers/rewriter/bundler.js')
   const rewriterPath = require.resolve('../../../src/helpers/rewriter')
   const transformerPath = join(repositoryRoot, 'vendor', 'dist', '@apm-js-collab', 'code-transformer')
   const loaderPath = resolve(__dirname, '../../../src/helpers/rewriter/loader')
@@ -1509,8 +1520,10 @@ describe('rewriter initialization', () => {
       const transformerPath = require.resolve(${JSON.stringify(transformerPath)})
 
       require(${JSON.stringify(loaderPath)})
+      const runtimeRewriter = require(${JSON.stringify(rewriterPath)})
 
       const loadedAfterHook = require.cache[transformerPath] !== undefined
+      const loadedBundlerRewriterAfterHook = require.cache[${JSON.stringify(bundlerRewriterPath)}] !== undefined
 
       require('untargeted')
 
@@ -1523,7 +1536,9 @@ describe('rewriter initialization', () => {
       require('ai').getTracer()
 
       console.log(JSON.stringify({
+        exportsBundlerRewriter: Object.hasOwn(runtimeRewriter, 'createBundlerRewriter'),
         loadedAfterHook,
+        loadedBundlerRewriterAfterHook,
         loadedAfterUntargetedModule,
         loadedAfterTargetModule: require.cache[transformerPath] !== undefined,
         starts,
@@ -1534,7 +1549,9 @@ describe('rewriter initialization', () => {
 
     assert.strictEqual(result.status, 0, result.stderr)
     assert.deepStrictEqual(JSON.parse(result.stdout), {
+      exportsBundlerRewriter: false,
       loadedAfterHook: false,
+      loadedBundlerRewriterAfterHook: false,
       loadedAfterUntargetedModule: false,
       loadedAfterTargetModule: true,
       starts: 1,

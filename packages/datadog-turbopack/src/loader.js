@@ -6,7 +6,7 @@ const { builtinModules } = require('node:module')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 
-const { createBundlerRewriter } = require('../../datadog-instrumentations/src/helpers/rewriter')
+const { createBundlerRewriter } = require('../../datadog-instrumentations/src/helpers/rewriter/bundler')
 const { parseSource } = require('./compiler')
 
 const BUILTIN_MODULES = new Set(builtinModules)

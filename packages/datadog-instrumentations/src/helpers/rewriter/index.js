@@ -19,11 +19,6 @@ const { getRewriteTarget } = require('./targets')
  *
  * @typedef {object} CodeTransformer
  * @property {(instrumentations: object, dcModule?: string) => InstrumentationMatcher} create
- *
- * @typedef {(moduleType: 'cjs'|'esm') => InstrumentationMatcher} MatcherProvider
- * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
- *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
- *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
 /**
@@ -60,7 +55,15 @@ function rewrite (content, filename, format, target) {
     target ||= getRewriteTarget(filename)
     if (!target || disabled.has(target.moduleName)) return content
 
-    const { code, map } = rewriteWithSourceMap(content, filename, format, target, undefined, getRuntimeMatcher)
+    filename = filename.replace('file://', '')
+
+    const moduleType = format === 'module' ? 'esm' : 'cjs'
+    const { moduleName, filePath } = target
+    const version = getVersion(filename, filePath)
+    const transformer = getRuntimeMatcher(moduleType).getTransformer(moduleName, version, filePath)
+    if (!transformer) return content
+
+    const { code, map } = transformer.transform(getSourceText(content), moduleType)
 
     if (!map) return code
 
@@ -70,22 +73,6 @@ function rewrite (content, filename, format, target) {
   }
 
   return content
-}
-
-/**
- * Creates the rewriter for one build-plan-relative diagnostic channel module.
- * Build output is independent of runtime integration enablement.
- *
- * @param {string} dcModule
- * @returns {BundlerRewriter}
- */
-function createBundlerRewriter (dcModule) {
-  const matcher = createMatcher(dcModule)
-  const getMatcher = () => matcher
-
-  return function rewriteBundled (content, filename, format, target, sourceMap) {
-    return rewriteWithSourceMap(content, filename, format, target, sourceMap, getMatcher)
-  }
 }
 
 /**
@@ -141,33 +128,6 @@ function createMatcher (dcModule) {
   return matcher
 }
 
-/**
- * @param {string|Buffer|ArrayBuffer|Uint8Array} content
- * @param {string} filename
- * @param {string} [format]
- * @param {{ moduleName: string, filePath: string }} [target]
- * @param {string|object} [sourceMap]
- * @param {MatcherProvider} getMatcher
- * @returns {{ code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }}
- */
-function rewriteWithSourceMap (content, filename, format, target, sourceMap, getMatcher) {
-  if (!content) return { code: content, map: sourceMap }
-
-  target ||= getRewriteTarget(filename)
-  if (!target) return { code: content, map: sourceMap }
-
-  filename = filename.replace('file://', '')
-
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
-  const { moduleName, filePath } = target
-
-  const version = getVersion(filename, filePath)
-  const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
-  if (!transformer) return { code: content, map: sourceMap }
-
-  return transformer.transform(getSourceText(content), moduleType, sourceMap)
-}
-
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
 
 /**
@@ -204,4 +164,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { createBundlerRewriter, rewrite, disable }
+module.exports = { createMatcher, disable, getSourceText, getVersion, rewrite }

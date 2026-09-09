@@ -7,7 +7,7 @@ const os = require('node:os')
 const path = require('node:path')
 const v8 = require('node:v8')
 
-const rewriter = require('../../../datadog-instrumentations/src/helpers/rewriter')
+const rewriter = require('../../../datadog-instrumentations/src/helpers/rewriter/bundler')
 
 let retired
 let active
