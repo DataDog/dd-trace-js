@@ -74,6 +74,7 @@ class Tracer {
   _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
     let origin = null
     let samplingPriority = traceFlag
+    let samplingMechanism
     const traceStateValue = typeof ts?.serialize === 'function' ? ts.serialize() : ts?.traceparent
     const traceState = TraceState.fromString(traceStateValue)
 
@@ -90,6 +91,8 @@ class Tracer {
         // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
         // Extract values as needed, similar to the original logic
         const samplingPriorityTs = ddTraceStateData.get('s')
+        const mechanism = Math.abs(Number.parseInt(ddTraceStateData.get('t.dm'), 10))
+        if (Number.isInteger(mechanism)) samplingMechanism = mechanism
         origin = ddTraceStateData.get('o') ?? null
         // Convert Map to object for meta
         const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
@@ -109,6 +112,7 @@ class Tracer {
     })
 
     spanContext._ddContext._sampling = { priority: samplingPriority }
+    if (samplingMechanism !== undefined) spanContext._ddContext._sampling.mechanism = samplingMechanism
     spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
     return spanContext
   }

@@ -9,9 +9,11 @@ const api = require('@opentelemetry/api')
 
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../ext/priority')
+const { MANUAL_DROP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
+const { SAMPLING_MECHANISM_APPSEC, SAMPLING_MECHANISM_AI_GUARD } = require('../../src/constants')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
@@ -275,6 +277,30 @@ describe('OTel Tracer', () => {
       assert.strictEqual(spanContext._ddContext._trace.origin, 'synthetics')
       assert.strictEqual(spanContext.traceFlags, 1)
     })
+
+    for (const [name, mechanism, setManualDrop] of [
+      ['single attributes', SAMPLING_MECHANISM_APPSEC, span => span.setAttribute(MANUAL_DROP, true)],
+      ['batch attributes', SAMPLING_MECHANISM_AI_GUARD, span => span.setAttributes({ [MANUAL_DROP]: true })],
+    ]) {
+      it(`preserves an inherited product force-keep before ${name}`, () => {
+        const otelTracer = new Tracer({}, {}, new TracerProvider())
+        const parent = api.trace.wrapSpanContext({
+          traceId: TRACE_ID,
+          spanId: SPAN_ID,
+          traceFlags: api.TraceFlags.SAMPLED,
+          traceState: api.createTraceState(`dd=s:2;t.dm:-${mechanism}`),
+          isRemote: true,
+        })
+        const parentContext = api.trace.setSpan(api.context.active(), parent)
+        const span = otelTracer.startSpan('name', {}, parentContext)
+
+        setManualDrop(span)
+
+        assert.strictEqual(span._ddSpan.context()._sampling.priority, USER_KEEP)
+        assert.strictEqual(span._ddSpan.context()._sampling.mechanism, mechanism)
+        span.end()
+      })
+    }
 
     it('preserves the existing _trace.started/finished/tags when writing origin', () => {
       const spanContext = convert(1, 'other=bleh,dd=s:1;o:foo')
