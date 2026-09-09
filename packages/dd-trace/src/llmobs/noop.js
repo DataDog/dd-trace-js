@@ -121,7 +121,7 @@ class NoopLLMObs {
   /**
    * Create a prompt and its first version.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.PromptTemplateItem[]} template
    * @param {import('../../../../index').llmobs.CreatePromptOptions} [options]
    * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
    */
@@ -130,7 +130,7 @@ class NoopLLMObs {
   /**
    * Create another version of an existing prompt.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.PromptTemplateItem[]} template
    * @param {import('../../../../index').llmobs.CreatePromptVersionOptions} [options]
    * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
    */

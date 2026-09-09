@@ -548,6 +548,21 @@ describe('PromptManager', () => {
     for (const call of calls) assert.strictEqual(call.options.redirect, 'error')
   })
 
+  it('authors message placeholders through the existing template field', async () => {
+    fetchStub.resolves(response(200, {}))
+    const manager = new PromptManager(makeConfig(), () => provider)
+    const template = [
+      { role: 'system', content: 'Be concise' },
+      { type: 'placeholder', name: 'history' },
+    ]
+
+    await manager.createPrompt('chat', template)
+    await manager.createPromptVersion('chat', template)
+
+    assert.deepStrictEqual(JSON.parse(fetchStub.firstCall.args[1].body).template, template)
+    assert.deepStrictEqual(JSON.parse(fetchStub.secondCall.args[1].body).template, template)
+  })
+
   it('evicts exact prompt-wide hot and warm selectors after successful mutations', async () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-manager-'))
     fetchStub.resolves(response(200, {}))
