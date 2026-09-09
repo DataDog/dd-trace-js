@@ -124,6 +124,11 @@ class SupabaseTestSetup {
   }
 
   /** @returns {Promise<object>} */
+  goTrueClientGetUserApiErrorRejected () {
+    return this.createSupabaseClient({ fail: true, throwOnError: true }).auth.getUser('token')
+  }
+
+  /** @returns {Promise<object>} */
   storageBucketApiListBuckets () {
     return this.createSupabaseClient().storage.listBuckets()
   }

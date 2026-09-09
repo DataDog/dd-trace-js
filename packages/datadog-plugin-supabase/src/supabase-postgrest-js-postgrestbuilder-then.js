@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const log = require('../../dd-trace/src/log')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
@@ -20,7 +21,9 @@ function finishSafely (plugin, ctx, hasError = false) {
   try {
     if (hasError) plugin.error(ctx)
     plugin.finish(ctx)
-  } catch {
+  } catch (error) {
+    log.error('Error in plugin handler:', error)
+    log.info('Disabling plugin: %s', plugin.constructor.name)
     plugin.configure(false)
   }
 }

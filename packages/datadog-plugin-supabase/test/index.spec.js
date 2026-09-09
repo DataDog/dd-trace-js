@@ -5,6 +5,7 @@ const { appendFileSync, writeFileSync } = require('node:fs')
 const sinon = require('sinon')
 
 const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
+const log = require('../../dd-trace/src/log')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const TestSetup = require('./test-setup')
 
@@ -619,16 +620,23 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
 
     it('preserves the fulfillment callback when tracing finalization throws', async () => {
       const plugin = meta.tracer._pluginManager._pluginsByName.supabase.SupabasePostgrestBuilderThenPlugin
+      const tracingError = new Error('tracing failure')
       const finishStub = sinon.stub(plugin, 'finish').callThrough()
       const configureStub = sinon.stub(plugin, 'configure')
-      finishStub.onFirstCall().throws(new Error('tracing failure'))
+      const errorLogStub = sinon.stub(log, 'error')
+      const infoLogStub = sinon.stub(log, 'info')
+      finishStub.onFirstCall().throws(tracingError)
 
       try {
         const result = await testSetup.postgrestBuilderThenWithCallback(result => result.data)
 
         assert.deepStrictEqual(result, [])
+        sinon.assert.calledWithExactly(errorLogStub, 'Error in plugin handler:', tracingError)
+        sinon.assert.calledWithExactly(infoLogStub, 'Disabling plugin: %s', plugin.constructor.name)
         sinon.assert.calledWithExactly(configureStub, false)
       } finally {
+        infoLogStub.restore()
+        errorLogStub.restore()
         configureStub.restore()
         finishStub.restore()
       }
@@ -636,16 +644,23 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
 
     it('preserves the rejection callback when tracing error handling throws', async () => {
       const plugin = meta.tracer._pluginManager._pluginsByName.supabase.SupabasePostgrestBuilderThenPlugin
+      const tracingError = new Error('tracing failure')
       const errorStub = sinon.stub(plugin, 'error').callThrough()
       const configureStub = sinon.stub(plugin, 'configure')
-      errorStub.onFirstCall().throws(new Error('tracing failure'))
+      const errorLogStub = sinon.stub(log, 'error')
+      const infoLogStub = sinon.stub(log, 'info')
+      errorStub.onFirstCall().throws(tracingError)
 
       try {
         const result = await testSetup.postgrestBuilderThenWithRejectionCallback(error => error.message)
 
         assert.strictEqual(result, 'Supabase request failed')
+        sinon.assert.calledWithExactly(errorLogStub, 'Error in plugin handler:', tracingError)
+        sinon.assert.calledWithExactly(infoLogStub, 'Disabling plugin: %s', plugin.constructor.name)
         sinon.assert.calledWithExactly(configureStub, false)
       } finally {
+        infoLogStub.restore()
+        errorLogStub.restore()
         configureStub.restore()
         errorStub.restore()
       }
@@ -875,6 +890,34 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
         scenario: 'error',
         expectedSpan: cases[0].expectedSpan,
         run: () => testSetup.goTrueClientGetUserRejected(),
+        shouldReject: true,
+      })
+    })
+
+    it('records the HTTP status when GoTrueClient.getUser() rejects an API error', async () => {
+      return runServerlessContract({
+        agent,
+        tracer: meta.tracer,
+        operationName: 'supabase.http.getuser',
+        scenario: 'error',
+        expectedSpan: {
+          name: 'supabase.http.getuser',
+          service: 'test',
+          resource: 'GET /auth/v1/user',
+          type: 'http',
+          meta: {
+            component: 'supabase',
+            'span.kind': 'client',
+            'http.method': 'GET',
+            'http.url': 'https://project.supabase.co/auth/v1/user',
+            'http.status_code': '401',
+            'error.type': 'AuthApiError',
+            'error.message': 'Invalid token',
+            'error.stack': ANY_STRING,
+          },
+          error: 1,
+        },
+        run: () => testSetup.goTrueClientGetUserApiErrorRejected(),
         shouldReject: true,
       })
     })

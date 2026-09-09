@@ -61,7 +61,9 @@ class SupabaseGoTrueClientGetUserPlugin extends ClientPlugin {
       super.error(ctx)
     }
 
-    const status = ctx.result?.error?.status || (ctx.result && !ctx.result.error ? 200 : undefined)
+    const status = ctx.result?.error?.status ??
+      ctx.error?.status ??
+      (ctx.result && !ctx.result.error ? 200 : undefined)
     if (status) ctx.currentStore?.span.setTag('http.status_code', status)
 
     super.finish(ctx)
