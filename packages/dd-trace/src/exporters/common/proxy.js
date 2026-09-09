@@ -44,6 +44,9 @@ function getHttpsProxyAgent (url, directAgent) {
       ? { keepAlive: directAgent.keepAlive, maxSockets: directAgent.maxSockets }
       : undefined
     agent = new HttpsProxyAgent(proxyUrl, options)
+    // AgentBase normally infers this from the node:https call stack. Interceptors such as MSW
+    // construct http.ClientRequest directly, so identify the target protocol explicitly.
+    agent.protocol = 'https:'
     agents.set(proxyUrl, agent)
   }
   return agent
