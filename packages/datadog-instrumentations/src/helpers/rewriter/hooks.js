@@ -2,6 +2,7 @@
 
 const { fileURLToPath } = require('node:url')
 
+const { isCompileShimInstalled } = require('./compile-shim.js')
 const { getRewriteTarget } = require('./targets.js')
 
 const rewrittenForCompileSymbol = Symbol.for('dd-trace.loader.rewritten-for-compile')
@@ -36,7 +37,12 @@ function rewriteSyncResult (result, url, format) {
 
   rewriteResult(result, url, format)
 
-  if (result.source !== source && format === 'commonjs' && url.startsWith('file:')) {
+  if (
+    result.source !== source &&
+    format === 'commonjs' &&
+    isCompileShimInstalled() &&
+    url.startsWith('file:')
+  ) {
     const rewrittenForCompile = globalThis[rewrittenForCompileSymbol] ??= new Set()
     rewrittenForCompile.add(fileURLToPath(url))
   }

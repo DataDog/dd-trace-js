@@ -34,9 +34,8 @@ if (!isSyncLoaderRegistered) {
   register('./loader-hook.mjs', parentURL)
 }
 
-// IITM leaves CommonJS source nullish when native loading semantics are required.
-// The compile rewriter is the fallback for only those loads; source rewritten by
-// synchronous hooks is marked so the compiler passes it through unchanged.
+// Unsupported loader paths install the CommonJS compiler fallback. The full
+// synchronous loader rewrites CommonJS directly and leaves _compile untouched.
 require('./packages/datadog-instrumentations/src/helpers/rewriter/loader.js')
 
 function shouldRegisterSyncLoaderHooks () {

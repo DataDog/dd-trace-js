@@ -204,8 +204,9 @@ describe('rewriter loader', () => {
     assertCommonJSRewritten(result.source)
   })
 
-  it('marks rewritten CommonJS for the compiler to pass through', () => {
+  it('does not create compile markers when the compile shim is absent', () => {
     const url = createAiModuleUrl()
+    const markerCount = globalThis[rewrittenForCompileSymbol]?.size ?? 0
 
     loadSync(
       url,
@@ -213,7 +214,8 @@ describe('rewriter loader', () => {
       () => ({ format: 'commonjs', source: commonJSSource })
     )
 
-    assert.strictEqual(globalThis[rewrittenForCompileSymbol].delete(fileURLToPath(url)), true)
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol]?.size ?? 0, markerCount)
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol]?.has(fileURLToPath(url)) ?? false, false)
   })
 
   it('keeps nullish CommonJS source unchanged for the compile fallback', () => {
@@ -248,13 +250,17 @@ describe('rewriter loader', () => {
   })
 
   it('rewrites ESM loaded through require in the sync loader', () => {
+    const url = createAiModuleUrl()
+    const markerCount = globalThis[rewrittenForCompileSymbol]?.size ?? 0
     const result = loadSync(
-      createAiModuleUrl(),
+      url,
       { conditions: ['require'] },
       () => ({ format: 'module', source })
     )
 
     assertRewritten(result.source)
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol]?.size ?? 0, markerCount)
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol]?.has(fileURLToPath(url)) ?? false, false)
   })
 
   it('trusts an ESM result format over the require condition', () => {
@@ -267,7 +273,7 @@ describe('rewriter loader', () => {
     assertRewritten(result.source)
   })
 
-  it('rewrites a CommonJS package once with the compile hook', function () {
+  it('rewrites CommonJS without installing the compile shim under the full sync loader', function () {
     if (!supportsSynchronousLoader) {
       this.skip()
     }
@@ -284,24 +290,13 @@ describe('rewriter loader', () => {
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
       const channel = tracingChannel('orchestrion:ai:getTracer')
       const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
-      const compile = Module.prototype._compile
-      const aiPath = require.resolve('ai')
       let starts = 0
-      let sourceMarked
 
       channel.subscribe({ start () { starts++ } })
-      Module.prototype._compile = function (content, filename, format) {
-        if (filename === aiPath) {
-          const rewritten = globalThis[Symbol.for(${JSON.stringify(rewrittenForCompileSymbolName)})]
-          sourceMarked = rewritten?.has(filename) ?? false
-        }
-        return compile.call(this, content, filename, format)
-      }
       const value = require('ai').getTracer()
-      require(${JSON.stringify(join(repositoryRoot, 'packages', 'datadog-instrumentations'))})
       console.log(JSON.stringify({
         compileChanged: Module.prototype._compile !== originalCompile,
-        sourceMarked,
+        markerCount: globalThis[Symbol.for(${JSON.stringify(rewrittenForCompileSymbolName)})]?.size ?? 0,
         starts,
         value,
       }))
@@ -315,8 +310,8 @@ describe('rewriter loader', () => {
     })
 
     assert.deepStrictEqual(result, {
-      compileChanged: true,
-      sourceMarked: true,
+      compileChanged: false,
+      markerCount: 0,
       starts: 1,
       value: 'tracer',
     })
@@ -342,12 +337,23 @@ describe('rewriter loader', () => {
       const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
       const channel = tracingChannel('orchestrion:ai:getTracer')
       const originalCompile = globalThis[Symbol.for(${JSON.stringify(originalCompileSymbol)})]
+      const compile = Module.prototype._compile
+      const aiPath = require.resolve('ai')
       let starts = 0
+      let sourceMarked
 
       channel.subscribe({ start () { starts++ } })
+      Module.prototype._compile = function (content, filename, format) {
+        if (filename === aiPath) {
+          const rewritten = globalThis[Symbol.for(${JSON.stringify(rewrittenForCompileSymbolName)})]
+          sourceMarked = rewritten?.has(filename) ?? false
+        }
+        return compile.call(this, content, filename, format)
+      }
       const value = require('ai').getTracer()
       console.log(JSON.stringify({
         compileChanged: Module.prototype._compile !== originalCompile,
+        sourceMarked,
         starts,
         value,
       }))
@@ -363,6 +369,7 @@ describe('rewriter loader', () => {
 
     assert.deepStrictEqual(result, {
       compileChanged: true,
+      sourceMarked: true,
       starts: 1,
       value: 'tracer',
     })
@@ -825,9 +832,6 @@ describe('rewriter loader', () => {
       console.log(JSON.stringify({ sourceMarked, starts, value }))
     `)
 
-    // import-in-the-middle clears the source of a CommonJS module it pulls into its
-    // ESM graph. The compile shim rewrites the source when Node loads it through
-    // the native CommonJS path.
     const result = runFixture(root, 'main.mjs', {
       NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')}`,
     })
@@ -867,6 +871,37 @@ describe('rewriter loader', () => {
 
     assert.strictEqual(result.status, 0, result.stderr)
     assert.strictEqual(result.stdout.trim(), '1')
+  })
+
+  it('marks and consumes rewritten CommonJS when the compile shim is installed', () => {
+    const Module = require('node:module')
+    const { ensureCompileShim, isCompileShimInstalled } = require(
+      '../../../src/helpers/rewriter/compile-shim.js'
+    )
+    const url = createAiModuleUrl()
+    const filename = fileURLToPath(url)
+
+    ensureCompileShim()
+    const compile = Module.prototype._compile
+    ensureCompileShim()
+
+    const result = loadSync(
+      url,
+      { format: 'commonjs' },
+      () => ({ format: 'commonjs', source: commonJSSource })
+    )
+
+    assert.strictEqual(isCompileShimInstalled(), true)
+    assert.strictEqual(Module.prototype._compile, compile)
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol].has(filename), true)
+
+    const testModule = new Module(filename)
+    testModule.filename = filename
+    testModule.paths = Module._nodeModulePaths(dirname(filename))
+    testModule._compile(result.source, filename)
+
+    assert.strictEqual(globalThis[rewrittenForCompileSymbol].has(filename), false)
+    assert.strictEqual(testModule.exports.getTracer(), 'tracer')
   })
 })
 

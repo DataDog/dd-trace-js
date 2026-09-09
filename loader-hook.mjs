@@ -161,9 +161,11 @@ function registerSyncLoaderHooks (data = {}) {
   // Node built-ins are instrumented under the synchronous loader as well: iitm
   // reads a built-in's exports through process.getBuiltinModule(), which
   // bypasses the registered hooks and therefore cannot re-enter them. The
-  // synchronous and asynchronous loaders share the same option preparation so
-  // that `import http from 'node:http'` is wrapped on both paths.
-  syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
+  // synchronous loader keeps CJS source available for the rewriter; the
+  // asynchronous loader leaves source stripping to iitm.
+  const syncOptions = prepareImportInTheMiddleOptions(data)
+  syncOptions.disableCjsSourceStripping = true
+  syncHook.applyOptions(syncOptions)
   Module.registerHooks({
     resolve: syncHook.resolveSync,
     load: loadSync,
