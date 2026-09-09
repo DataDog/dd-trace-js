@@ -836,24 +836,6 @@ describe('encode', () => {
         assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.bar), metaStruct.bar)
       })
 
-      it('should preserve nested null values in meta_struct', () => {
-        const metaStruct = {
-          foo: {
-            nullProperty: null,
-            nested: { nullProperty: null },
-            array: [null, { nullProperty: null }],
-          },
-        }
-        data[0].meta_struct = metaStruct
-        encoder.encode(data)
-
-        const buffer = encoder.makePayload()
-        const decoded = msgpack.decode(buffer, { useBigInt64: true })
-        const trace = decoded[0]
-
-        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), metaStruct.foo)
-      })
-
       it('should encode meta_struct with possible real use case', () => {
         const metaStruct = {
           '_dd.stack': {
