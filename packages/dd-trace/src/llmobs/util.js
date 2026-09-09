@@ -6,6 +6,10 @@ const {
   LLMOBS_PARENT_ID_BRIDGE_KEY,
   LLMOBS_TRACE_ID_BRIDGE_KEY,
   SPAN_KINDS,
+  SPAN_KIND,
+  NAME,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
 } = require('./constants/tags')
 
 const DECIMAL_TRACE_ID_REGEX = /^\d+$/
@@ -294,6 +298,45 @@ function getFunctionArguments (fn, args = []) {
   }
 }
 
+// The `x-datadog-tags` tagset encoder rejects commas (the entry delimiter) and any byte
+// outside 0x20-0x7E, and a raise there drops the ENTIRE header (taking ml_app,
+// llmobs_trace_id, parent_id, sampling with it). An agent name is arbitrary user text, so it
+// must be skipped rather than sanitized when unsafe: only the digit-safe id then propagates and
+// the backend resolves the real name by span id. `=` is legal in tagset values (illegal only in
+// keys), so a name containing `=` is safe and must not be dropped.
+/**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function agentNameWireSafe (name) {
+  // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
+  if (Buffer.byteLength(name, 'utf8') > 256) return false
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index)
+    if (code < 0x20 || code > 0x7E || code === 0x2C /* comma */) return false
+  }
+  return true
+}
+
+/**
+ * Resolve the nearest agent that a *child* of `span` should be attributed to.
+ *
+ * If `span` is itself an agent, the child attributes directly to `span`. Otherwise `span`
+ * already resolved its own nearest agent at registration, so the child inherits that with a
+ * single lookup rather than walking the ancestor chain. An agent never attributes itself.
+ *
+ * @param {Record<string, unknown> | undefined} tags - Registry entry for the parent span.
+ * @param {import('../opentracing/span')} [span] - The parent span itself (needed for span id / name).
+ * @returns {{ name: string | undefined, spanId: string | undefined }}
+ */
+function resolveAgentAttribution (tags, span) {
+  if (!tags) return { name: undefined, spanId: undefined }
+  if (tags[SPAN_KIND] === 'agent') {
+    return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
+  }
+  return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
+}
+
 function spanHasError (span) {
   const spanContext = span.context()
   return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
@@ -443,6 +486,7 @@ function formatAudioPart (data, mimeType) {
 }
 
 module.exports = {
+  agentNameWireSafe,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
@@ -450,6 +494,7 @@ module.exports = {
   llmObsTraceIdToWire,
   normalizeLlmObsTraceId,
   formatAudioPart,
+  resolveAgentAttribution,
   validateCostTags,
   validateKind,
   getFunctionArguments,

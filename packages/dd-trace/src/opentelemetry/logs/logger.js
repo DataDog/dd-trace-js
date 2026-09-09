@@ -1,8 +1,65 @@
 'use strict'
 
 const { context } = require('@opentelemetry/api')
-const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
+const {
+  millisToHrTime,
+  sanitizeAttributes,
+  timeInputToHrTime,
+} = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
+const log = require('../../log')
+
+const MAX_DATE_MILLISECONDS = 8.64e15
+const NANOSECONDS_PER_SECOND = 1e9
+const MAX_UINT64_SECONDS = 18_446_744_073
+const MAX_UINT64_NANOSECONDS = 709_551_615
+let invalidTimestampWarningLogged = false
+
+function isValidHrTime (hrTime) {
+  return Array.isArray(hrTime) &&
+    hrTime.length === 2 &&
+    Number.isInteger(hrTime[0]) &&
+    Number.isInteger(hrTime[1]) &&
+    hrTime[0] >= 0 &&
+    hrTime[1] >= 0 &&
+    hrTime[1] < NANOSECONDS_PER_SECOND &&
+    (hrTime[0] < MAX_UINT64_SECONDS ||
+      (hrTime[0] === MAX_UINT64_SECONDS && hrTime[1] <= MAX_UINT64_NANOSECONDS))
+}
+
+function toHrTime (timestamp) {
+  if (typeof timestamp === 'number') {
+    if (!Number.isFinite(timestamp)) return
+
+    // Older versions documented numeric timestamps as Unix nanoseconds.
+    if (Math.abs(timestamp) > MAX_DATE_MILLISECONDS) {
+      const seconds = Math.trunc(timestamp / NANOSECONDS_PER_SECOND)
+      const hrTime = [seconds, timestamp - seconds * NANOSECONDS_PER_SECOND]
+      return isValidHrTime(hrTime) ? hrTime : undefined
+    }
+  }
+
+  try {
+    const hrTime = timeInputToHrTime(timestamp)
+    return isValidHrTime(hrTime) ? hrTime : undefined
+  } catch {
+    // Invalid timestamps fall back to the current time in normalizeTimestamp.
+  }
+}
+
+function normalizeTimestamp (timestamp) {
+  if (timestamp !== undefined) {
+    const hrTime = toHrTime(timestamp)
+    if (hrTime) return hrTime
+
+    if (!invalidTimestampWarningLogged) {
+      invalidTimestampWarningLogged = true
+      log.warn('Invalid OpenTelemetry log timestamp; using the current time instead')
+    }
+  }
+
+  return millisToHrTime(Date.now())
+}
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -62,21 +119,20 @@ class Logger {
       return
     }
 
+    const record = {
+      ...logRecord,
+      timestamp: normalizeTimestamp(logRecord.timestamp),
+      context: logRecord.context || context.active(),
+    }
+
+    if (logRecord.observedTimestamp !== undefined) {
+      record.observedTimestamp = normalizeTimestamp(logRecord.observedTimestamp)
+    }
     if (logRecord.attributes) {
-      logRecord.attributes = sanitizeAttributes(logRecord.attributes)
+      record.attributes = sanitizeAttributes(logRecord.attributes)
     }
 
-    // Note: timestamp is in nanoseconds (as defined by OpenTelemetry LogRecord API)
-    if (!logRecord.timestamp) {
-      logRecord.timestamp = Number(process.hrtime.bigint())
-    }
-
-    if (!logRecord.context) {
-      // Store span context in the log record context for trace correlation
-      logRecord.context = context.active()
-    }
-
-    this.loggerProvider.processor.onEmit(logRecord, this.#instrumentationScope)
+    this.loggerProvider.processor.onEmit(record, this.#instrumentationScope)
   }
 }
 

@@ -10,6 +10,7 @@ const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
+const llmobsDisabledTestSetup = new TestSetup()
 const legacyStorage = storage('legacy')
 
 describe('plugin lifecycle', () => {
@@ -551,6 +552,73 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       } finally {
         testSetup.renameTestTool('test-tool')
       }
+
+      return traceAssertion
+    })
+  })
+})
+
+// `llmobs: false` opts the integration out of LLM Observability span capture only: APM tracing and
+// the client -> server trace context propagation must keep working.
+createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', {
+  subModule: '@modelcontextprotocol/sdk/client',
+  pluginConfig: { llmobs: false },
+}, (meta) => {
+  const { agent } = meta
+
+  before(async () => {
+    await llmobsDisabledTestSetup.setup(meta.mod, meta.versionMod)
+  })
+
+  after(async () => {
+    await llmobsDisabledTestSetup.teardown()
+  })
+
+  describe('with llmobs disabled', () => {
+    it('should still generate the client tool call span', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.request',
+        type: 'mcp',
+        resource: 'client_tool_call',
+        meta: {
+          component: 'modelcontextprotocol_client',
+          '_dd.integration': 'modelcontextprotocol_client',
+          'span.kind': 'client',
+        },
+      })
+
+      const result = await llmobsDisabledTestSetup.clientCallTool()
+      assert.equal(result.content[0].text, 'Result from test-tool')
+
+      return traceAssertion
+    })
+
+    it('should still generate the client list tools span', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.request',
+        type: 'mcp',
+        resource: 'ClientSession.list_tools',
+        meta: {
+          component: 'modelcontextprotocol_list_tools',
+          '_dd.integration': 'modelcontextprotocol_list_tools',
+          'span.kind': 'client',
+        },
+      })
+
+      const result = await llmobsDisabledTestSetup.clientListTools()
+      assert.equal(result.tools.length, 2)
+
+      return traceAssertion
+    })
+
+    it('should still parent the server request span to the client tool call span', async () => {
+      const spans = []
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        spans.push(...traces.flatMap(trace => trace))
+        assertClientServerParenting(spans, 'client_tool_call')
+      })
+
+      await llmobsDisabledTestSetup.clientCallTool()
 
       return traceAssertion
     })

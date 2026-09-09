@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "PATCH",
+    "url": "https://api.datadoghq.com/api/v2/llm-obs/v1/experiments/c85229a7-f9ee-4c23-803c-3945a698c466",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "User-Agent": "node",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "67"
+    },
+    "body": "{\"data\":{\"type\":\"experiments\",\"attributes\":{\"status\":\"completed\"}}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.api+json",
+      "vary": "Accept-Encoding",
+      "x-frame-options": "SAMEORIGIN",
+      "content-length": "0",
+      "date": "Fri, 31 Jul 2026 20:41:47 GMT",
+      "x-content-type-options": "nosniff",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "body": ""
+  }
+}

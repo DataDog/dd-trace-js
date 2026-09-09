@@ -1,10 +1,10 @@
 {
   "optionalDependencies": [
     "@datadog/libdatadog",
+    "@datadog/libdatadog-extras",
     "@datadog/native-appsec",
     "@datadog/native-iast-taint-tracking",
     "@datadog/native-metrics",
-    "@datadog/openfeature-node-server",
     "@datadog/pprof",
     "@datadog/wasm-js-rewriter",
     "oxc-parser"

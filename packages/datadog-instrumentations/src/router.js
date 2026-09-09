@@ -596,6 +596,7 @@ const visitedParams = new WeakSet()
 function wrapHandleRequest (original) {
   return function wrappedHandleRequest (...args) {
     const req = args[0]
+    // eslint-disable-next-line no-restricted-syntax -- arbitrary param names; publishing {} sets a WAF address
     if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && Object.keys(req.params).length) {
       visitedParams.add(req.params)
 
@@ -635,6 +636,7 @@ function wrapParam (original) {
     args[1] = shimmer.wrapFunction(args[1], (originalFn) => {
       return function wrappedFn (...fnArgs) {
         const req = fnArgs[0]
+        // eslint-disable-next-line no-restricted-syntax -- arbitrary param names; publishing {} sets a WAF address
         if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)
 

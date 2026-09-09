@@ -26,6 +26,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -72,7 +73,8 @@ tracer.init({
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
     { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
     { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
-    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } },
+    { sampleRate: 0, resource: '/health', discard: true }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -294,17 +296,22 @@ const openSearchOptions: plugins.opensearch = {
 };
 
 tracer.use('ai', true)
+tracer.use('ai', { llmobs: false })
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
+tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-sdk');
+tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('browser-bunyan');
 tracer.use('bullmq');
 tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
@@ -330,7 +337,9 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-cloud-vertexai', { llmobs: false });
 tracer.use('google-genai');
+tracer.use('google-genai', { llmobs: false });
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -372,8 +381,10 @@ tracer.use('kafkajs');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
+tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
+tracer.use('langgraph', { llmobs: false });
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -381,6 +392,7 @@ tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
 tracer.use('modelcontextprotocol-sdk');
+tracer.use('modelcontextprotocol-sdk', { llmobs: false });
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');
@@ -392,6 +404,8 @@ tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
 tracer.use('openai-agents');
+tracer.use('openai-agents', { llmobs: false });
+tracer.use('openai', { llmobs: false });
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -447,6 +461,13 @@ span = tracer.startSpan('test', {
 });
 span = tracer.startSpan('test', { childOf: null })
 span = tracer.startSpan('test', { integrationName: 'testIntegration' })
+span.recordException(new Error('payment declined'), {
+  handled: true,
+  attempt: 1,
+  stages: ['authorize', 'capture']
+})
+// @ts-expect-error Span event attribute arrays must be homogeneous.
+span.recordException(new Error('payment declined'), { stages: ['authorize', 1] })
 
 tracer.trace('test', () => { })
 tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
@@ -547,6 +568,9 @@ const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
 provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
+const otelMeterProvider = metrics.getMeterProvider() as ReturnType<typeof metrics.getMeterProvider> &
+  opentelemetry.MeterProvider
+const otelShutdown: (callback?: (error: Error | null) => void) => void = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
 otelTracer.startSpan("name", { startTime: new Date() })
@@ -780,6 +804,7 @@ tracer.init({
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
+      redactionEnabled: true,
       timeout: 1000
     }
   }
@@ -793,6 +818,14 @@ aiguard.evaluate([
   result.action && result.reason && result.tags
 })
 
+aiguard.evaluate([{
+  role: 'user',
+  content: [
+    { type: 'input_text', text: 'Describe this image' },
+    { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+  ],
+}])
+
 aiguard.evaluate([
   {
     role: 'assistant',
@@ -804,11 +837,18 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+})
+
+aiguard.evaluate([
+  { role: 'user', content: 'My SSN is 123-45-6789' },
+]).then(result => {
+  const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
+  replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })

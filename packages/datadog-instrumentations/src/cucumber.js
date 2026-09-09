@@ -116,7 +116,7 @@ let pickleByFile = {}
 const pickleResultByFile = {}
 
 let skippableSuites = []
-let skippableSuitesCoverage = {}
+let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
@@ -153,12 +153,6 @@ function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
 }
 
-function hasSkippableSuitesCoverage () {
-  return skippableSuitesCoverage &&
-    typeof skippableSuitesCoverage === 'object' &&
-    Object.keys(skippableSuitesCoverage).length > 0
-}
-
 function isTiaCoverageBackfillEnabled () {
   return isItrEnabled && isCoverageReportUploadEnabled
 }
@@ -172,7 +166,7 @@ function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
 }
 
 function getSkippedSuitesCoverageForRun () {
-  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && skippableSuitesCoverage !== undefined
     ? skippableSuitesCoverage
     : {}
 }
@@ -188,7 +182,7 @@ function getCucumberTestSessionCoverageFiles () {
 
 function resetSuiteSkippingRunState () {
   skippableSuites = []
-  skippableSuitesCoverage = {}
+  skippableSuitesCoverage = undefined
   skippedSuitesCoverage = {}
   skippedSuites = []
   isSuitesSkipped = false
@@ -1143,7 +1137,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
       errorSkippableRequest = skippableResponse.err
       skippableSuites = skippableResponse.skippableSuites ?? []
-      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage ?? {}
+      skippableSuitesCoverage = skippableResponse.skippableSuitesCoverage
 
       if (!errorSkippableRequest) {
         const filteredPickles = isCoordinator
@@ -1222,7 +1216,28 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
 
-    const result = await start.apply(this, arguments)
+    let result
+    try {
+      result = await start.apply(this, arguments)
+    } catch (error) {
+      try {
+        await getChannelPromise(sessionFinishCh, {
+          status: 'fail',
+          error,
+          isSuitesSkipped,
+          numSkippedSuites: skippedSuites.length,
+          hasUnskippableSuites: isUnskippable,
+          hasForcedToRunSuites: isForcedToRun,
+          isEarlyFlakeDetectionEnabled,
+          isEarlyFlakeDetectionFaulty,
+          isTestManagementTestsEnabled,
+          isParallel,
+        })
+      } catch (finalizationError) {
+        log.error('Cucumber test session finalization error: %s', finalizationError)
+      }
+      throw error
+    }
     const success = satisfies(frameworkVersion, '>=13.1.0') ? result.success : result
 
     let untestedCoverage
@@ -1467,12 +1482,12 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     this.options.retry = originalRetry
 
-    if (isNewerCucumberVersion && shouldRunEarlyFlakeDetection() && (isNew || isModified)) {
-      return shouldBePassedByEFD
-    }
-
     if (isNewerCucumberVersion && isTestManagementTestsEnabled && !isAttemptToFix && (isQuarantined || isDisabled)) {
       return shouldBePassedByTestManagement
+    }
+
+    if (isNewerCucumberVersion && shouldRunEarlyFlakeDetection() && (isNew || isModified)) {
+      return shouldBePassedByEFD
     }
 
     if (isNewerCucumberVersion && isAttemptToFix && shouldBeFailedByAttemptToFix) {

@@ -15,6 +15,8 @@ describe('agent/info', () => {
 
   describe('fetchAgentInfo', () => {
     afterEach(() => {
+      nock.abortPendingRequests()
+      nock.cleanAll()
       clearCache()
     })
 
@@ -59,6 +61,41 @@ describe('agent/info', () => {
         assert.strictEqual(scope.isDone(), true)
         done()
       })
+    })
+
+    it('allows the agent info request to be aborted by finalization', (done) => {
+      const controller = new AbortController()
+      nock(url)
+        .get('/info')
+        .delayConnection(1000)
+        .reply(200, JSON.stringify({ endpoints: ['/evp_proxy/v2'] }))
+      let callbackCount = 0
+
+      fetchAgentInfo(new URL(url), (err) => {
+        callbackCount++
+        assert.strictEqual(err.code, 'ABORT_ERR')
+        setImmediate(() => {
+          assert.strictEqual(callbackCount, 1)
+          done()
+        })
+      }, { deadline: Date.now() + 1000, signal: controller.signal })
+      controller.abort()
+    })
+
+    it('uses an injected Test Optimization request implementation', (done) => {
+      const request = sinon.stub().yieldsAsync(null, JSON.stringify({ endpoints: ['/evp_proxy/v4'] }))
+      const options = { deadline: Date.now() + 1000 }
+
+      fetchAgentInfo(new URL(url), (err, response) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(response.endpoints, ['/evp_proxy/v4'])
+        sinon.assert.calledOnceWithMatch(request, '', {
+          ...options,
+          path: '/info',
+          url: new URL(url),
+        })
+        done()
+      }, options, request)
     })
 
     describe('caching', () => {

@@ -97,6 +97,12 @@ const {
   getScreenshotUploadResult,
   setScreenshotUploadTags,
 } = require('../../dd-trace/src/ci-visibility/test-screenshot')
+const {
+  VIDEO_UPLOAD_RESULT_ERROR,
+  VIDEO_UPLOAD_RESULT_UPLOADED,
+  VIDEO_UPLOAD_SCOPE_TEST_SUITE,
+  setVideoUploadTags,
+} = require('../../dd-trace/src/ci-visibility/test-video')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -477,7 +483,7 @@ class CypressPlugin {
   testsToSkip = []
   skippedTests = []
   skippedTestIds = new Set()
-  skippableTestsCoverage = {}
+  skippableTestsCoverage
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
@@ -491,7 +497,10 @@ class CypressPlugin {
   attemptToFixExecutions = new Map()
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
+  uploadedVideoPaths = new Set()
+  pendingVideoUploads = []
   screenshotUploadPromisesByTraceId = new Map()
+  screenshotUploadAbortControllers = new Set()
   afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
@@ -565,7 +574,7 @@ class CypressPlugin {
     this.testsToSkip = []
     this.skippedTests = []
     this.skippedTestIds = new Set()
-    this.skippableTestsCoverage = {}
+    this.skippableTestsCoverage = undefined
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
@@ -580,7 +589,10 @@ class CypressPlugin {
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
+    this.uploadedVideoPaths = new Set()
+    this.pendingVideoUploads = []
     this.screenshotUploadPromisesByTraceId = new Map()
+    this.screenshotUploadAbortControllers = new Set()
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
@@ -644,6 +656,19 @@ class CypressPlugin {
   }
 
   /**
+   * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
+   *
+   * @param {Error} error - Error that triggered finalization
+   * @returns {void}
+   */
+  abortPendingScreenshotUploads (error) {
+    for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
+    this.screenshotUploadAbortControllers.clear()
+    this.screenshotUploadPromisesByTraceId.clear()
+    this.pendingScreenshotUploads = []
+  }
+
+  /**
    * Returns the current time in the same coordinate system used by span
    * start/finish. Captured at session span creation so it shares the same
    * epoch as the trace without reaching into span internals.
@@ -664,17 +689,6 @@ class CypressPlugin {
   }
 
   /**
-   * Returns whether the backend supplied skipped-test coverage data.
-   *
-   * @returns {boolean}
-   */
-  hasSkippableTestsCoverage () {
-    return !!(this.skippableTestsCoverage &&
-      typeof this.skippableTestsCoverage === 'object' &&
-      Object.keys(this.skippableTestsCoverage).length > 0)
-  }
-
-  /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
    * @returns {boolean}
@@ -683,7 +697,7 @@ class CypressPlugin {
     return this.isItrEnabled &&
       this.isCoverageReportUploadEnabled &&
       this.isTestsSkipped &&
-      this.hasSkippableTestsCoverage()
+      this.skippableTestsCoverage !== undefined
   }
 
   /**
@@ -796,10 +810,50 @@ class CypressPlugin {
     }
   }
 
+  /**
+   * Warns when video upload is enabled but Cypress cannot produce or send videos.
+   *
+   * @param {object} cypressConfig - Cypress resolved config
+   * @param {object} tracer - dd-trace proxy tracer
+   * @param {object} testOptimizationConfig - Test Optimization config
+   * @returns {void}
+   */
+  warnIfMisconfiguredTestFailureVideos (cypressConfig, tracer, testOptimizationConfig) {
+    if (!testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED) return
+
+    if (cypressConfig.video === false) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Cypress video capture is disabled.',
+        'Datadog cannot upload failure videos unless Cypress is configured to record videos.'
+      )
+      return
+    }
+
+    if (!tracer?._tracer?._exporter?.canUploadTestVideos?.()) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Cypress failure video upload is not supported',
+        'by the active Test Optimization transport.'
+      )
+    }
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    if (this.cypressConfig === cypressConfig && this.hasOriginalCypressRetries) {
+      cypressConfig.retries = this.originalCypressRetries !== null &&
+        typeof this.originalCypressRetries === 'object'
+        ? { ...this.originalCypressRetries }
+        : this.originalCypressRetries
+    } else {
+      this.originalCypressRetries = cypressConfig.retries !== null && typeof cypressConfig.retries === 'object'
+        ? { ...cypressConfig.retries }
+        : cypressConfig.retries
+      this.hasOriginalCypressRetries = true
+    }
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -811,6 +865,7 @@ class CypressPlugin {
     const testOptimizationConfig = getConfig().testOptimization
     this.rumFlushWaitMillis = testOptimizationConfig.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
     this.warnIfMisconfiguredTestFailureScreenshots(cypressConfig, tracer, testOptimizationConfig)
+    this.warnIfMisconfiguredTestFailureVideos(cypressConfig, tracer, testOptimizationConfig)
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -1063,9 +1118,13 @@ class CypressPlugin {
   }
 
   async beforeRun (details) {
-    // We need to make sure that the plugin is initialized before running the tests
-    // This is for the case where the user has not returned the promise from the init function
-    await this.libraryConfigurationPromise
+    if (this._isInit) {
+      // The user may not have returned the promise from the init function.
+      await this.libraryConfigurationPromise
+    } else {
+      // Cypress open reuses the same plugin process for every interactive run.
+      await this.init(this.tracer, this.cypressConfig)
+    }
 
     this.command = getCypressCommand(details)
     this.frameworkVersion = getCypressVersion(details)
@@ -1131,7 +1190,7 @@ class CypressPlugin {
       } else {
         const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
-        this.skippableTestsCoverage = skippableTestsCoverage || {}
+        this.skippableTestsCoverage = skippableTestsCoverage
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -1252,18 +1311,45 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats) {
+  afterRun (suiteStats, error) {
+    const hasPendingVideoSpans = this.pendingVideoUploads.length > 0
+    const videoUploadsPromise = this.uploadPendingTestSuiteVideos()
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
+      if (videoUploadsPromise) {
+        return Promise.all([videoUploadsPromise, this.#flushExporter(false)])
+          .then(() => this.#flushExporter(false))
+      }
       return
     }
+    const finalizationPromise = this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
+    if (videoUploadsPromise) {
+      return Promise.all([videoUploadsPromise, finalizationPromise])
+        .then(() => this.#flushExporter(false))
+    }
+    return finalizationPromise
+  }
+
+  /**
+   * Finalizes Cypress run state without starting queued video uploads.
+   *
+   * @param {object|undefined} suiteStats - Cypress run statistics
+   * @param {Error|undefined} error - Run finalization error
+   * @param {boolean} [hasPendingVideoSpans] - Whether video-owned spans will finish during finalization
+   * @returns {Promise<null>}
+   */
+  #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      if (error) {
+        this.testModuleSpan.setTag('error', error)
+        this.testSessionSpan.setTag('error', error)
+      }
 
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
@@ -1300,13 +1386,28 @@ class CypressPlugin {
         autoInjected: !!getConfig().testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
-      finishAllTraceSpans(this.testSessionSpan)
+      // Cypress finishes suite videos in after:run, so their spans must remain open until the upload result is known.
+      if (!hasPendingVideoSpans) {
+        finishAllTraceSpans(this.testSessionSpan)
+      }
     }
 
+    return this.#flushExporter(true)
+  }
+
+  /**
+   * Flushes Test Optimization data after Cypress finalization work.
+   *
+   * @param {boolean} closeRun - Whether to close the Cypress run and telemetry lifecycle
+   * @returns {Promise<null>}
+   */
+  #flushExporter (closeRun) {
     return new Promise(resolve => {
       const finishAfterRun = () => {
-        this._isInit = false
-        appClosingTelemetry()
+        if (closeRun) {
+          this._isInit = false
+          appClosingTelemetry()
+        }
         resolve(null)
       }
 
@@ -1358,13 +1459,13 @@ class CypressPlugin {
     }
   }
 
-  afterSpec (spec, results) {
-    const { tests, stats, screenshots } = results || {}
+  afterSpec (spec, results, error) {
+    const { tests, stats, screenshots, video } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
-    const testSpanFinishPromises = []
+    const testSpanFinishes = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1431,7 +1532,7 @@ class CypressPlugin {
         })
       }
 
-      skippedTestSpan.finish()
+      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: this._now() })
     }
 
     // Make sure that reported test statuses are the same as Cypress reports.
@@ -1572,28 +1673,46 @@ class CypressPlugin {
         const screenshotUploadResultPromise = failedTestTraceId
           ? this.getScreenshotUploadResultPromise(failedTestTraceId)
           : undefined
-        if (screenshotUploadResultPromise) {
-          testSpanFinishPromises.push(screenshotUploadResultPromise.then((uploadResult) => {
-            setScreenshotUploadTags(finishedTest.testSpan, uploadResult)
-            this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
-            finishedTest.testSpan.finish(finishedTest.finishTime)
-          }))
-        } else {
-          finishedTest.testSpan.finish(finishedTest.finishTime)
-        }
+        testSpanFinishes.push({
+          testSpan: finishedTest.testSpan,
+          finishTime: finishedTest.finishTime,
+          screenshotUploadResultPromise: error ? undefined : screenshotUploadResultPromise,
+          failedTestTraceId,
+        })
       }
     }
 
-    const finishSuite = () => {
-      if (this.testSuiteSpan) {
-        const status = getSuiteStatus(stats)
-        this.testSuiteSpan.setTag(TEST_STATUS, status)
+    const testSuiteFinishTime = this._now()
+    const suiteFailed = error || latestError || getSuiteStatus(stats) === 'fail'
+    const testSuiteSpan = this.testSuiteSpan
+    const uploadOptions = {
+      filePath: video,
+      testSessionId: typeof this.testSessionSpan?.context === 'function'
+        ? this.testSessionSpan.context().toTraceId()
+        : undefined,
+      testSuiteId: typeof testSuiteSpan?.context === 'function'
+        ? testSuiteSpan.context().toSpanId()
+        : undefined,
+    }
+    const shouldUploadVideo = suiteFailed && this.#canUploadTestSuiteVideo(uploadOptions)
+    if (testSuiteSpan) {
+      testSuiteSpan.setTag(TEST_STATUS, error ? 'fail' : getSuiteStatus(stats))
+      if (error || latestError) testSuiteSpan.setTag('error', error || latestError)
+      this.testSuiteSpan = null
+    }
 
-        if (latestError) {
-          this.testSuiteSpan.setTag('error', latestError)
-        }
-        this.testSuiteSpan.finish()
-        this.testSuiteSpan = null
+    let testSpansPromise
+    if (shouldUploadVideo) {
+      this.pendingVideoUploads.push({
+        ...uploadOptions,
+        testSpanFinishes,
+        testSuiteSpan,
+        testSuiteFinishTime,
+      })
+    } else {
+      testSpansPromise = this.finishTestSpans(testSpanFinishes)
+      if (testSuiteSpan) {
+        testSuiteSpan.finish(testSuiteFinishTime)
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
     }
@@ -1606,18 +1725,57 @@ class CypressPlugin {
       }
     }
 
-    finishSuite()
-
-    const screenshotUploadsPromise = waitForScreenshotUploads()
-    if (testSpanFinishPromises.length > 0) {
-      const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
-      if (screenshotUploadsPromise) {
-        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+    if (error) {
+      this.abortPendingScreenshotUploads(error)
+      const videoSpansPromise = this.#finishPendingTestSuiteVideos(VIDEO_UPLOAD_RESULT_ERROR)
+      const finalizationPromise = this.#finalizeRun(undefined, error)
+      if (videoSpansPromise) {
+        return Promise.all([videoSpansPromise, finalizationPromise]).then(() => null)
       }
-      return testSpansPromise
+      return finalizationPromise
     }
 
-    return screenshotUploadsPromise
+    const screenshotUploadsPromise = waitForScreenshotUploads()
+    let afterSpecPromise = screenshotUploadsPromise
+    if (testSpansPromise) {
+      if (screenshotUploadsPromise) {
+        afterSpecPromise = Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      } else {
+        afterSpecPromise = testSpansPromise
+      }
+    }
+
+    return afterSpecPromise
+  }
+
+  /**
+   * Applies media outcome tags and finishes test spans from one Cypress suite.
+   *
+   * @param {Array<object>} testSpanFinishes - Test spans and deferred screenshot outcomes
+   * @param {string|undefined} videoUploadResult - Test suite video upload outcome
+   * @returns {Promise<null>|undefined}
+   */
+  finishTestSpans (testSpanFinishes, videoUploadResult) {
+    const finishPromises = []
+    for (const {
+      testSpan,
+      finishTime,
+      screenshotUploadResultPromise,
+      failedTestTraceId,
+    } of testSpanFinishes) {
+      const finishTestSpan = (screenshotUploadResult) => {
+        setScreenshotUploadTags(testSpan, screenshotUploadResult)
+        setVideoUploadTags(testSpan, videoUploadResult, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+        if (failedTestTraceId) this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
+        testSpan.finish(finishTime)
+      }
+      if (screenshotUploadResultPromise) {
+        finishPromises.push(screenshotUploadResultPromise.then(finishTestSpan))
+      } else {
+        finishTestSpan()
+      }
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
   /**
@@ -1637,6 +1795,7 @@ class CypressPlugin {
     }
 
     const uploadPromises = []
+    const abortController = new AbortController()
 
     for (const screenshot of screenshots) {
       const filePath = getScreenshotFilePath(screenshot)
@@ -1655,6 +1814,7 @@ class CypressPlugin {
           traceId,
           idempotencyKey,
           capturedAtMs,
+          signal: abortController.signal,
         }, (err) => {
           resolve(err ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
         })
@@ -1662,10 +1822,116 @@ class CypressPlugin {
     }
 
     if (uploadPromises.length > 0) {
-      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
+      this.screenshotUploadAbortControllers.add(abortController)
+      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult).finally(() => {
+        this.screenshotUploadAbortControllers.delete(abortController)
+      })
       this.addScreenshotUploadPromise(traceId, uploadPromise)
       return uploadPromise
     }
+  }
+
+  /**
+   * Returns whether a Cypress test suite video can be uploaded.
+   *
+   * @param {object} options - Upload options
+   * @param {string|undefined} options.filePath - Cypress video path
+   * @param {string|undefined} options.testSessionId - Test session id
+   * @param {string|undefined} options.testSuiteId - Test suite id
+   * @returns {boolean}
+   */
+  #canUploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
+    const exporter = this.tracer?._tracer?._exporter
+    return Boolean(filePath && testSessionId && testSuiteId && !this.uploadedVideoPaths.has(filePath) &&
+      exporter?.canUploadTestVideos?.() && exporter.uploadTestSuiteVideo)
+  }
+
+  /**
+   * Uploads the Cypress spec video for a failed test suite.
+   *
+   * @param {object} options - Upload options
+   * @param {string|undefined} options.filePath - Cypress video path
+   * @param {string|undefined} options.testSessionId - Test session id
+   * @param {string|undefined} options.testSuiteId - Test suite id
+   * @returns {Promise<string>|undefined} Promise resolving to the upload outcome
+   */
+  uploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
+    const exporter = this.tracer?._tracer?._exporter
+    if (!this.#canUploadTestSuiteVideo({ filePath, testSessionId, testSuiteId })) return
+
+    this.uploadedVideoPaths.add(filePath)
+
+    return new Promise(resolve => {
+      exporter.uploadTestSuiteVideo({
+        filePath,
+        testSessionId,
+        testSuiteId,
+        idempotencyKey: `${testSessionId}:${testSuiteId}:${basename(filePath)}`,
+        capturedAtMs: Date.now(),
+      }, (error) => {
+        resolve(error ? VIDEO_UPLOAD_RESULT_ERROR : VIDEO_UPLOAD_RESULT_UPLOADED)
+      })
+    })
+  }
+
+  /**
+   * Tags and finishes every event that references one Cypress test suite video.
+   *
+   * @param {object} pendingVideoUpload - Pending video upload and owning spans
+   * @param {Array<object>} pendingVideoUpload.testSpanFinishes - Deferred test span finishes
+   * @param {object|undefined} pendingVideoUpload.testSuiteSpan - Owning test suite span
+   * @param {number} pendingVideoUpload.testSuiteFinishTime - Suite completion time captured by after:spec
+   * @param {string|undefined} uploadResult - Video upload outcome
+   * @returns {Promise<null>|undefined}
+   */
+  #finishPendingTestSuiteVideo ({ testSpanFinishes, testSuiteSpan, testSuiteFinishTime }, uploadResult) {
+    const testSpansPromise = this.finishTestSpans(testSpanFinishes, uploadResult)
+    if (testSuiteSpan) {
+      setVideoUploadTags(testSuiteSpan, uploadResult, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+      testSuiteSpan.finish(testSuiteFinishTime)
+      this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+    }
+    return testSpansPromise
+  }
+
+  /**
+   * Finishes queued video-owned spans when Cypress will not reach after:run.
+   *
+   * @param {string} uploadResult - Video upload outcome applied to every queued span
+   * @returns {Promise<null>|undefined}
+   */
+  #finishPendingTestSuiteVideos (uploadResult) {
+    const pendingVideoUploads = this.pendingVideoUploads
+    this.pendingVideoUploads = []
+    const finishPromises = []
+    for (const pendingVideoUpload of pendingVideoUploads) {
+      const finishPromise = this.#finishPendingTestSuiteVideo(pendingVideoUpload, uploadResult)
+      if (finishPromise) finishPromises.push(finishPromise)
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
+  }
+
+  /**
+   * Starts queued Cypress video uploads after Cypress has compressed the source files.
+   *
+   * @returns {Promise<null>|undefined}
+   */
+  uploadPendingTestSuiteVideos () {
+    const pendingVideoUploads = this.pendingVideoUploads
+    this.pendingVideoUploads = []
+    const finishPromises = []
+    for (const pendingVideoUpload of pendingVideoUploads) {
+      const { filePath, testSessionId, testSuiteId } = pendingVideoUpload
+      const uploadPromise = this.uploadTestSuiteVideo({ filePath, testSessionId, testSuiteId })
+      if (uploadPromise) {
+        finishPromises.push(uploadPromise.then(uploadResult =>
+          this.#finishPendingTestSuiteVideo(pendingVideoUpload, uploadResult)))
+      } else {
+        const finishPromise = this.#finishPendingTestSuiteVideo(pendingVideoUpload)
+        if (finishPromise) finishPromises.push(finishPromise)
+      }
+    }
+    if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
   getTasks () {

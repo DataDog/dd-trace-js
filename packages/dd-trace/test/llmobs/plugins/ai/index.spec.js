@@ -66,6 +66,20 @@ function getAiSdkAnthropicOrGoogleRange (vercelAiVersion) {
 }
 
 /**
+ * Starting with ai@5.0.241 and ai@6.0.260, tool execution is activated under the model span instead of the workflow
+ * span.
+ *
+ * @param {string} vercelAiVersion
+ * @param {Array<{span_id: string}>} llmobsSpans
+ * @returns {string}
+ */
+function getToolSpanParentId (vercelAiVersion, llmobsSpans) {
+  const toolRunsUnderModel = semifies(vercelAiVersion, '>=5.0.241 <6.0.0') ||
+    semifies(vercelAiVersion, '>=6.0.260 <7.0.0')
+  return (toolRunsUnderModel ? llmobsSpans[1] : llmobsSpans[0]).span_id
+}
+
+/**
  * @param {string} versionRange
  * @param {(
  *   version: string,
@@ -574,8 +588,7 @@ describe('Plugin', () => {
     })
 
     it('creates a span for a tool call', async () => {
-      let tools
-      let additionalOptions
+      const isLegacy = semifies(realVersion, '<5.0.0')
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -583,33 +596,17 @@ describe('Plugin', () => {
         },
         required: ['location'],
       })
-
-      if (semifies(realVersion, '>=5.0.0')) {
-        tools = {
-          weather: ai.tool({
-            description: 'Get the weather in a given location',
-            inputSchema: toolSchema,
-            execute: async ({ location }) => ({
-              location,
-              temperature: 72,
-            }),
-          }),
-        }
-
-        additionalOptions = { stopWhen: ai.stepCountIs(5) }
-      } else {
-        tools = [ai.tool({
-          id: 'weather',
+      const tools = {
+        weather: ai.tool({
           description: 'Get the weather in a given location',
-          parameters: toolSchema,
+          ...(isLegacy ? { parameters: toolSchema } : { inputSchema: toolSchema }),
           execute: async ({ location }) => ({
             location,
             temperature: 72,
           }),
-        })]
-
-        additionalOptions = { maxSteps: 5 }
+        }),
       }
+      const additionalOptions = isLegacy ? { maxSteps: 5 } : { stopWhen: ai.stepCountIs(5) }
 
       if (semifies(openaiVersion, '>=2.0.50')) {
         additionalOptions.providerOptions = {
@@ -719,8 +716,7 @@ describe('Plugin', () => {
     })
 
     it('created a span for a tool call from a stream', async () => {
-      let tools
-      let additionalOptions
+      const isLegacy = semifies(realVersion, '<5.0.0')
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -728,33 +724,17 @@ describe('Plugin', () => {
         },
         required: ['location'],
       })
-
-      if (semifies(realVersion, '>=5.0.0')) {
-        tools = {
-          weather: ai.tool({
-            description: 'Get the weather in a given location',
-            inputSchema: toolSchema,
-            execute: async ({ location }) => ({
-              location,
-              temperature: 72,
-            }),
-          }),
-        }
-
-        additionalOptions = { stopWhen: ai.stepCountIs(5) }
-      } else {
-        tools = [ai.tool({
-          id: 'weather',
+      const tools = {
+        weather: ai.tool({
           description: 'Get the weather in a given location',
-          parameters: toolSchema,
+          ...(isLegacy ? { parameters: toolSchema } : { inputSchema: toolSchema }),
           execute: async ({ location }) => ({
             location,
             temperature: 72,
           }),
-        })]
-
-        additionalOptions = { maxSteps: 5 }
+        }),
       }
+      const additionalOptions = isLegacy ? { maxSteps: 5 } : { stopWhen: ai.stepCountIs(5) }
 
       if (semifies(openaiVersion, '>=2.0.50')) {
         additionalOptions.providerOptions = {
@@ -828,18 +808,8 @@ describe('Plugin', () => {
 
       assertLlmObsSpanEvent(llmobsSpans[2], {
         span: apmSpans[2],
-        parentId: llmobsSpans[0].span_id,
-        /**
-         * Before `ai@4.0.2` with `@ai-sdk/openai@1.3.23`, the stream implementation did not finish the initial llm
-         * spans first to associate the tool call id with the tool itself (by matching descriptions).
-         *
-         * Usually, this would mean the tool call name is 'toolCall'. This is a limitation with the older library
-         * versions. Later AI or provider versions use the actual tool name instead of its index in the tools array.
-         */
-        name: semifies(realVersion, NODE_MAJOR < 22 ? '<=4.0.2' : '<4.0.2') &&
-            semifies(openaiVersion, '<1.3.24')
-          ? 'toolCall'
-          : 'weather',
+        parentId: getToolSpanParentId(realVersion, llmobsSpans),
+        name: 'weather',
         spanKind: 'tool',
         inputValue: JSON.stringify({ location: 'Tokyo' }),
         outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
@@ -940,9 +910,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('extracts last user message content from messages in generateText', async function () {
-      if (semifies(realVersion, '<5.0.0')) this.skip()
+    const generateTextMessageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    generateTextMessageTest('extracts last user message content from messages in generateText', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -963,7 +934,14 @@ describe('Plugin', () => {
         messages: [
           { role: 'user', content: 'First user message.' },
           { role: 'assistant', content: 'First response.' },
-          { role: 'user', content: 'Last user message.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Last user ' },
+              { type: 'image', image: new URL('https://example.com/image.png') },
+              { type: 'text', text: 'message.' },
+            ],
+          },
         ],
         experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
       })
@@ -981,9 +959,10 @@ describe('Plugin', () => {
       })
     })
 
-    it('extracts last user message content from messages in generateObject', async function () {
-      if (semifies(realVersion, '<5.0.0')) this.skip()
+    const generateObjectMessageTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
 
+    // Structured message content is only available from ai 5.0.0.
+    generateObjectMessageTest('extracts last user message content from messages in generateObject', async function () {
       const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
       const { createOpenAI } = OpenAIModule.get()
       const mockOpenai = createOpenAI({
@@ -1005,7 +984,14 @@ describe('Plugin', () => {
         messages: [
           { role: 'user', content: 'First user message.' },
           { role: 'assistant', content: 'First response.' },
-          { role: 'user', content: 'Last user message.' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Last user ' },
+              { type: 'image', image: new URL('https://example.com/image.png') },
+              { type: 'text', text: 'message.' },
+            ],
+          },
         ],
         experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
       })
@@ -1023,13 +1009,10 @@ describe('Plugin', () => {
       })
     })
 
-    describe('ToolLoopAgent', function () {
-      beforeEach(function () {
-        if (semifies(realVersion, '<6.0.0')) {
-          this.skip()
-        }
-      })
+    const toolLoopAgentDescribe = semifies(realVersion, '>=6.0.0') ? describe : describe.skip
 
+    // The cache-token metrics exercised here are only available from ai 6.0.0.
+    toolLoopAgentDescribe('ToolLoopAgent', function () {
       it('creates a text generation root span for ToolLoopAgent.generate', async () => {
         const agent = new ai.ToolLoopAgent({
           model: openai('gpt-4o-mini'),
@@ -1227,7 +1210,7 @@ describe('Plugin', () => {
 
         assertLlmObsSpanEvent(llmobsSpans[2], {
           span: apmSpans[2],
-          parentId: llmobsSpans[0].span_id,
+          parentId: getToolSpanParentId(realVersion, llmobsSpans),
           name: 'weather',
           spanKind: 'tool',
           inputValue: JSON.stringify({ location: 'Tokyo' }),
@@ -1301,34 +1284,21 @@ describe('Plugin', () => {
           type: 'object',
           properties: {},
         })
-        let tool
-        if (isLegacy) {
-          tool = ai.tool({
-            id: 'testTool',
-            description: 'Run the test tool and return its result',
-            parameters: schema,
-            execute: scenario.execute,
-          })
-        } else {
-          tool = ai.tool({
-            description: 'Run the test tool and return its result',
-            inputSchema: schema,
-            execute: scenario.execute,
-            toModelOutput: scenario.createModelOutput,
-          })
-        }
+        const tool = ai.tool({
+          description: 'Run the test tool and return its result',
+          ...(isLegacy
+            ? { parameters: schema }
+            : { inputSchema: schema, toModelOutput: scenario.createModelOutput }),
+          execute: scenario.execute,
+        })
 
         const options = {
           // Chat Completions serializes every tool result as text. The Responses API rejects some valid AI SDK
           // result variants before the instrumented request can capture their formatted value.
           model: openai.chat('gpt-4o-mini'),
           prompt: 'Run the test tool',
-          tools: isLegacy ? [tool] : { testTool: tool },
-        }
-        if (isLegacy) {
-          options.maxSteps = 2
-        } else {
-          options.stopWhen = ai.stepCountIs(2)
+          tools: { testTool: tool },
+          ...(isLegacy ? { maxSteps: 2 } : { stopWhen: ai.stepCountIs(2) }),
         }
         if (semifies(openaiVersion, '>=2.0.50')) {
           options.providerOptions = {
@@ -1586,8 +1556,11 @@ describe('Plugin', () => {
             // because the SDK never exposes the attribute there.
             const cacheReadOnDoGenerate = semifies(realVersion, '>=6.0.184')
 
-            if (scenarios.includes('cache-read')) {
-              it(`surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`, async () => {
+            {
+              const cacheReadTest = scenarios.includes('cache-read') ? it : it.skip
+              const cacheReadTitle = `surfaces cache_read_input_tokens when ${providerName} returns cache read tokens`
+
+              cacheReadTest(cacheReadTitle, async () => {
                 const model = buildModel(PackageModule, 'cache-read')
                 await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
@@ -1604,10 +1577,12 @@ describe('Plugin', () => {
                 assert.equal(doGenerateSpan.metrics.cache_read_input_tokens, expected.cache_read_input_tokens)
                 assert.equal(doGenerateSpan.metrics.cache_write_input_tokens, expected.cache_write_input_tokens)
               })
-            }
 
-            if (scenarios.includes('cache-write')) {
-              it(`surfaces cache_write_input_tokens when ${providerName} returns cache write tokens`, async () => {
+              const cacheWriteTest = scenarios.includes('cache-write') ? it : it.skip
+              const cacheWriteTitle = `surfaces cache_write_input_tokens when ${providerName} ` +
+                'returns cache write tokens'
+
+              cacheWriteTest(cacheWriteTitle, async () => {
                 const model = buildModel(PackageModule, 'cache-write')
                 await ai.generateText({ model, prompt: 'What does Datadog LLM Observability do?' })
 
@@ -1636,10 +1611,11 @@ describe('Plugin', () => {
       getPackageRange: getAiSdkBedrockRange,
       buildModel: (BedrockModule, scenario) => {
         const { createAmazonBedrock } = BedrockModule.get()
-        return createAmazonBedrock({
+        const model = createAmazonBedrock({
           region: 'us-east-1',
           fetch: makeMockFetch(`bedrock-${scenario}`),
-        })('anthropic.claude-3-haiku-20240307-v1:0')
+        })
+        return model('anthropic.claude-3-haiku-20240307-v1:0')
       },
       env: {
         AWS_ACCESS_KEY_ID: 'test-access-key',
@@ -1655,10 +1631,11 @@ describe('Plugin', () => {
       getPackageRange: getAiSdkAnthropicOrGoogleRange,
       buildModel: (AnthropicModule, scenario) => {
         const { createAnthropic } = AnthropicModule.get()
-        return createAnthropic({
+        const model = createAnthropic({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`anthropic-${scenario}`),
-        })('claude-3-5-haiku-20241022')
+        })
+        return model('claude-3-5-haiku-20241022')
       },
     })
 
@@ -1707,10 +1684,11 @@ describe('Plugin', () => {
         // `usage.input_tokens_details.cached_tokens`. As OpenAI migrates
         // customers from Chat Completions to Responses, this path should
         // become the more common one.
-        return createOpenAI({
+        const model = createOpenAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`openai-responses-${scenario}`),
-        })('gpt-4o-mini')
+        })
+        return model('gpt-4o-mini')
       },
       scenarios: ['cache-read'],
       getExpectedMetrics: openaiExpectedMetrics,
@@ -1727,10 +1705,11 @@ describe('Plugin', () => {
         // prove that the `ai.usage.cachedInputTokens` standardized-attribute
         // path works against a third upstream API shape distinct from the
         // OpenAI-compatible family (which xAI, Mistral OpenAI-mode, etc. share).
-        return createGoogleGenerativeAI({
+        const model = createGoogleGenerativeAI({
           apiKey: 'test-api-key',
           fetch: makeMockFetch(`google-${scenario}`),
-        })('gemini-2.5-flash')
+        })
+        return model('gemini-2.5-flash')
       },
       // Google's context caching is a separate API call to create the cache;
       // per-request responses only report cache reads.

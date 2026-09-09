@@ -7,7 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
-const chatCompletionsBeforeChannel = channel('dd-trace:openai:chat.completions:before')
+const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completions:intercept')
 
 describe('AIGuard integration wiring', () => {
   const config = { experimental: { aiguard: { block: true } } }
@@ -30,40 +30,38 @@ describe('AIGuard integration wiring', () => {
     sinon.restore()
   })
 
-  function publishChatBefore () {
-    const abortController = new AbortController()
-    const ctx = {
-      args: [{ messages: [{ role: 'user', content: 'Hello' }] }],
-      abortController,
-      pending: [],
-    }
-    chatCompletionsBeforeChannel.publish(ctx)
-    return ctx
+  function publishChatIntercept () {
+    const ctx = { arguments: [{ messages: [{ role: 'user', content: 'Hello' }] }], stream: false }
+    chatCompletionsInterceptChannel.publish(ctx)
+    return { ctx, intercepted: typeof ctx.beforeResult === 'function' }
   }
 
   it('subscribes, unsubscribes, and resubscribes AI Guard integrations', async () => {
     aiguard.enable({}, config)
 
-    const enabledCtx = publishChatBefore()
-    assert.strictEqual(enabledCtx.pending.length, 1)
-    await Promise.all(enabledCtx.pending)
+    const enabled = publishChatIntercept()
+    assert.strictEqual(enabled.intercepted, true)
+    await enabled.ctx.beforeResult()
     sinon.assert.calledOnce(evaluate)
 
     aiguard.disable()
 
-    const disabledCtx = publishChatBefore()
-    assert.strictEqual(disabledCtx.pending.length, 0)
+    assert.strictEqual(publishChatIntercept().intercepted, false)
 
     aiguard.enable({}, config)
 
-    const reenabledCtx = publishChatBefore()
-    assert.strictEqual(reenabledCtx.pending.length, 1)
-    await Promise.all(reenabledCtx.pending)
+    const reenabled = publishChatIntercept()
+    assert.strictEqual(reenabled.intercepted, true)
+    await reenabled.ctx.beforeResult()
     sinon.assert.calledTwice(AIGuard)
     sinon.assert.calledTwice(evaluate)
   })
 
   it('enables and disables providers through the integrations index', () => {
+    const anthropicIntegration = {
+      enable: sinon.stub(),
+      disable: sinon.stub(),
+    }
     const openaiIntegration = {
       enable: sinon.stub(),
       disable: sinon.stub(),
@@ -73,6 +71,7 @@ describe('AIGuard integration wiring', () => {
       disable: sinon.stub(),
     }
     const integrations = proxyquire('../../../src/aiguard/integrations', {
+      './anthropic': anthropicIntegration,
       './openai': openaiIntegration,
       './vercel-ai': vercelAiIntegration,
     })
@@ -81,15 +80,19 @@ describe('AIGuard integration wiring', () => {
     integrations.enable(aiguard, true)
     integrations.disable()
 
+    sinon.assert.calledOnceWithExactly(anthropicIntegration.enable, aiguard, true)
     sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true)
     sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnce(anthropicIntegration.disable)
     sinon.assert.calledOnce(openaiIntegration.disable)
     sinon.assert.calledOnce(vercelAiIntegration.disable)
     sinon.assert.callOrder(
+      anthropicIntegration.enable,
       openaiIntegration.enable,
       vercelAiIntegration.enable,
       vercelAiIntegration.disable,
       openaiIntegration.disable,
+      anthropicIntegration.disable,
     )
   })
 })

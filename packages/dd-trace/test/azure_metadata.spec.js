@@ -12,7 +12,11 @@ const {
   getAzureTagsFromMetadata,
   getAzureFunctionMetadata,
 } = proxyquire('../src/azure_metadata', {
-  './config': () => proxyquire.noPreserveCache()('../src/config', {})(),
+  './config': () => {
+    const loadConfig = proxyquire.noPreserveCache()
+    const createConfig = loadConfig('../src/config', {})
+    return createConfig()
+  },
 })
 
 describe('Azure metadata', () => {

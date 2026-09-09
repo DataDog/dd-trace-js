@@ -343,6 +343,7 @@ function getHostname (store, region) {
   if (!region) return
   const { awsParams, awsService } = store
   switch (awsService) {
+    case 'CloudWatchEvents':
     case 'EventBridge':
       return `events.${region}.amazonaws.com`
     case 'SQS':

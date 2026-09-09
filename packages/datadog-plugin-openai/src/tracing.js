@@ -102,23 +102,23 @@ class OpenAiTracingPlugin extends TracingPlugin {
       },
     }, false)
 
-    const openaiStore = Object.create(null)
-
     const tags = {} // The remaining tags are added one at a time
 
     if (payload.stream) {
       tags['openai.request.stream'] = payload.stream
     }
 
+    let openaiStore
+
     switch (normalizedMethodName) {
       case 'createImage':
       case 'createImageEdit':
       case 'createImageVariation':
-        commonCreateImageRequestExtraction(tags, payload, openaiStore)
+        openaiStore = commonCreateImageRequestExtraction(tags, payload)
         break
 
       case 'createChatCompletion':
-        createChatCompletionRequestExtraction(tags, payload, openaiStore)
+        openaiStore = createChatCompletionRequestExtraction(tags, payload)
         break
 
       case 'createFile':
@@ -128,7 +128,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'createTranscription':
       case 'createTranslation':
-        commonCreateAudioRequestExtraction(tags, payload, openaiStore)
+        openaiStore = commonCreateAudioRequestExtraction(tags, payload)
         break
 
       case 'retrieveModel':
@@ -136,11 +136,11 @@ class OpenAiTracingPlugin extends TracingPlugin {
         break
 
       case 'createEdit':
-        createEditRequestExtraction(tags, payload, openaiStore)
+        openaiStore = createEditRequestExtraction(tags, payload)
         break
 
       case 'createResponse':
-        createResponseRequestExtraction(tags, payload, openaiStore)
+        openaiStore = createResponseRequestExtraction(tags, payload)
         break
     }
 
@@ -177,8 +177,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
     body = coerceResponseBody(body, normalizedMethodName)
 
-    const openaiStore = store.openai
-
     if (!error && (path?.startsWith('https://') || path?.startsWith('http://'))) {
       // basic checking for if the path was set as a full URL
       // not using a full regex as it will likely be "https://api.openai.com/..."
@@ -204,7 +202,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
           'openai.response.created_at': body.created_at,
         }
 
-    responseDataExtractionByMethod(normalizedMethodName, tags, body, openaiStore)
+    const openaiStore = responseDataExtractionByMethod(normalizedMethodName, tags, body, store.openai)
     span.addTags(tags)
 
     span.finish()
@@ -298,7 +296,6 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
   sendLog (methodName, span, tags, openaiStore, error) {
     if (!openaiStore) return
-    if (!Object.keys(openaiStore).length) return
     if (!this.sampler.isSampled(span)) return
 
     const log = {
@@ -395,45 +392,54 @@ function normalizeMethodName (methodName) {
   }
 }
 
-function createEditRequestExtraction (tags, payload, openaiStore) {
-  const instruction = payload.instruction
-  openaiStore.instruction = instruction
+function createEditRequestExtraction (tags, payload) {
+  const openaiStore = Object.create(null)
+  openaiStore.instruction = payload.instruction
+  return openaiStore
 }
 
-function createResponseRequestExtraction (tags, payload, openaiStore) {
+function createResponseRequestExtraction (tags, payload) {
   // Extract model information
   if (payload.model) {
     tags['openai.request.model'] = payload.model
   }
 
   // Store the full payload for response extraction
+  const openaiStore = Object.create(null)
   openaiStore.responseData = payload
+  return openaiStore
 }
 
 function retrieveModelRequestExtraction (tags, payload) {
   tags['openai.request.id'] = payload.id
 }
 
-function createChatCompletionRequestExtraction (tags, payload, openaiStore) {
+function createChatCompletionRequestExtraction (tags, payload) {
   const messages = payload.messages
   if (!defensiveArrayLength(messages)) return
 
-  openaiStore.messages = payload.messages
+  const openaiStore = Object.create(null)
+  openaiStore.messages = messages
+  return openaiStore
 }
 
-function commonCreateImageRequestExtraction (tags, payload, openaiStore) {
+function commonCreateImageRequestExtraction (tags, payload) {
+  let openaiStore
+
   // createImageEdit, createImageVariation
   const img = payload.file || payload.image
   if (img !== null && typeof img === 'object' && img.path) {
-    const file = path.basename(img.path)
-    openaiStore.file = file
+    openaiStore = Object.create(null)
+    openaiStore.file = path.basename(img.path)
   }
 
   // createImageEdit
   if (payload.mask !== null && typeof payload.mask === 'object' && payload.mask.path) {
-    const mask = path.basename(payload.mask.path)
-    openaiStore.mask = mask
+    openaiStore ??= Object.create(null)
+    openaiStore.mask = path.basename(payload.mask.path)
   }
+
+  return openaiStore
 }
 
 function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
@@ -441,12 +447,10 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'createCompletion':
     case 'createChatCompletion':
     case 'createEdit':
-      commonCreateResponseExtraction(tags, body, openaiStore, methodName)
-      break
+      return commonCreateResponseExtraction(tags, body, openaiStore, methodName)
 
     case 'createResponse':
-      createResponseResponseExtraction(tags, body, openaiStore)
-      break
+      return createResponseResponseExtraction(tags, body, openaiStore)
 
     case 'listFiles':
     case 'listFineTunes':
@@ -475,6 +479,8 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
       retrieveModelResponseExtraction(tags, body)
       break
   }
+
+  return openaiStore
 }
 
 function retrieveModelResponseExtraction (tags, body) {
@@ -513,10 +519,11 @@ function deleteFileResponseExtraction (tags, body) {
   tags['openai.response.id'] = body.id
 }
 
-function commonCreateAudioRequestExtraction (tags, body, openaiStore) {
+function commonCreateAudioRequestExtraction (tags, body) {
   if (body.file !== null && typeof body.file === 'object' && body.file.path) {
-    const filename = path.basename(body.file.path)
-    openaiStore.file = filename
+    const openaiStore = Object.create(null)
+    openaiStore.file = path.basename(body.file.path)
+    return openaiStore
   }
 }
 
@@ -546,9 +553,11 @@ function commonListCountResponseExtraction (tags, body) {
 
 // createCompletion, createChatCompletion, createEdit
 function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
-  if (!body.choices) return
+  if (!body.choices) return openaiStore
 
+  openaiStore ??= Object.create(null)
   openaiStore.choices = body.choices
+  return openaiStore
 }
 
 function createResponseResponseExtraction (tags, body, openaiStore) {
@@ -568,7 +577,9 @@ function createResponseResponseExtraction (tags, body, openaiStore) {
   }
 
   // Store the full response for potential future use
+  openaiStore ??= Object.create(null)
   openaiStore.response = body
+  return openaiStore
 }
 
 // The server almost always responds with JSON

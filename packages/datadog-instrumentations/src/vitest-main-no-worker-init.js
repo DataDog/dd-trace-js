@@ -56,6 +56,22 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE = path.join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'ci',
+  'vitest-no-worker-init-runner-setup.mjs'
+)
+const VITEST_NO_WORKER_INIT_V5_SETUP_FILE = path.join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  'ci',
+  'vitest-no-worker-init-v5-setup.mjs'
+)
 const VITEST_BROWSER_SETUP_FILE_PLUGIN = {
   name: 'datadog:vitest-browser-setup-file',
   config: configureVitestBrowserSetupFile,
@@ -325,7 +341,10 @@ function isEarlyFlakeDetectionActive (state) {
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
   const { shouldReportTestModule, state } = options
   reserveEarlyFlakeDetectionSuite = options.reserveEarlyFlakeDetectionSuite
-  addSetupFileToVitestConfigs(ctx, VITEST_NO_WORKER_INIT_SETUP_FILE, testSpecifications)
+  const setupFile = satisfies(frameworkVersion, '>=5.0.0')
+    ? VITEST_NO_WORKER_INIT_V5_SETUP_FILE
+    : VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE
+  addSetupFileToVitestConfigs(ctx, setupFile, testSpecifications)
   addVitestBrowserSetupFileAccess(testSpecifications)
 
   const {
@@ -470,8 +489,15 @@ function allowVitestBrowserSetupFile (viteConfig) {
   const allow = viteConfig.server?.fs?.allow
   if (!allow) return
 
-  if (!allow.includes(VITEST_NO_WORKER_INIT_SETUP_FILE)) {
-    allow.push(VITEST_NO_WORKER_INIT_SETUP_FILE)
+  const setupFiles = [
+    VITEST_NO_WORKER_INIT_SETUP_FILE,
+    VITEST_NO_WORKER_INIT_RUNNER_SETUP_FILE,
+    VITEST_NO_WORKER_INIT_V5_SETUP_FILE,
+  ]
+  for (const setupFile of setupFiles) {
+    if (!allow.includes(setupFile)) {
+      allow.push(setupFile)
+    }
   }
 }
 
@@ -493,6 +519,7 @@ function addVitestBrowserSetupFileAccess (testSpecifications) {
     if (!browserServerProject) continue
 
     addVitestBrowserCommand(safeConfig(project))
+    addVitestBrowserRuntimeCommand(project)
     if (configuredProjects.has(browserServerProject)) continue
 
     configuredProjects.add(browserServerProject)
@@ -504,6 +531,13 @@ function addVitestBrowserSetupFileAccess (testSpecifications) {
     if (!browserServerProject.options.plugins.includes(VITEST_BROWSER_SETUP_FILE_PLUGIN)) {
       browserServerProject.options.plugins.push(VITEST_BROWSER_SETUP_FILE_PLUGIN)
     }
+  }
+}
+
+function addVitestBrowserRuntimeCommand (project) {
+  const parentBrowser = project?._parentBrowser || project?._parent?._parentBrowser
+  if (parentBrowser?.commands) {
+    parentBrowser.commands[VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND] = handleBrowserEfdSuiteAdmission
   }
 }
 
@@ -1058,7 +1092,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
   const errors = browserEnvironment
     ? normalizeVitestBrowserErrors(result?.errors)
     : result?.errors || []
-  const finalAttemptStatus = finalStatus(statuses)
+  const finalAttemptStatus = finalStatus(statuses, testProperties)
   const hasFailure = finalAttemptStatus === 'fail'
   const attempts = []
   const attemptCount = getRepeatedAttemptCount(task, statuses)
@@ -1095,8 +1129,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
         testProperties,
         type,
         statuses,
-        isFinalAttempt,
-        hasFailure
+        isFinalAttempt
       ),
       isRetry: index > 0,
       status: attemptStatus,
@@ -1136,11 +1169,10 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
  * @param {'attempt_to_fix'|'early_flake_detection'|'external'} type
  * @param {string[]} statuses
  * @param {boolean} isFinalAttempt
- * @param {boolean} hasFailure
  * @returns {boolean}
  */
-function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt, hasFailure) {
-  if (!isFinalAttempt || !hasFailure || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
+function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt) {
+  if (!isFinalAttempt || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
     return false
   }
 
@@ -1165,7 +1197,8 @@ function getAttemptToFixFinalStatus (statuses) {
   return statuses.includes('fail') ? 'fail' : 'pass'
 }
 
-function getEarlyFlakeDetectionFinalStatus (statuses) {
+function getEarlyFlakeDetectionFinalStatus (statuses, testProperties) {
+  if (testProperties.isDisabled || testProperties.isQuarantined) return 'skip'
   return statuses.includes('pass') ? 'pass' : 'fail'
 }
 
@@ -1274,7 +1307,6 @@ function reportFinalTestAttempt (testReport) {
         testProperties,
         'external',
         ['fail'],
-        true,
         true
       ),
       isRetry: (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
@@ -1604,15 +1636,18 @@ function splitNodeOptions (nodeOptions) {
 }
 
 function serializeNodeOptions (tokens) {
-  const serializedTokens = []
+  let serializedTokens = ''
+  let hasSerializedToken = false
   for (const token of tokens) {
+    if (hasSerializedToken) serializedTokens += ' '
     if (NODE_OPTIONS_QUOTE_RE.test(token)) {
-      serializedTokens.push(JSON.stringify(token))
+      serializedTokens += JSON.stringify(token)
     } else {
-      serializedTokens.push(token)
+      serializedTokens += token
     }
+    hasSerializedToken = true
   }
-  return serializedTokens.join(' ')
+  return serializedTokens
 }
 
 function getTestSpecificationProject (testSpecification) {

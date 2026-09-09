@@ -213,7 +213,7 @@ function getProjectObject (source, nameIndex, workspaceConfig) {
 function isStandaloneProjectObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
   const after = maskJavaScriptNonCode(source.slice(range.end + 1))
-  return PROJECT_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after)
+  return PROJECT_CALL_PATTERN.test(before) && /^\s*(?:,\s*)?\)[\s;]*$/.test(after)
 }
 
 /**
@@ -259,7 +259,7 @@ function isExportedConfigObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
   const after = maskJavaScriptNonCode(source.slice(range.end + 1))
   return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
-    (CONFIG_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after))
+    (CONFIG_CALL_PATTERN.test(before) && /^\s*(?:,\s*)?\)[\s;]*$/.test(after))
 }
 
 /**
@@ -276,7 +276,7 @@ function isWorkspaceProjectEntry (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, workspaceArray.start))
   const after = maskJavaScriptNonCode(source.slice(workspaceArray.end + 1))
   return (DIRECT_EXPORT_PATTERN.test(before) && /^[\s;]*$/.test(after)) ||
-    (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*,?\s*\)[\s;]*$/.test(after))
+    (WORKSPACE_ARRAY_CALL_PATTERN.test(before) && /^\s*(?:,\s*)?\)[\s;]*$/.test(after))
 }
 
 /**

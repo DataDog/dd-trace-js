@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const http = require('node:http')
 const { promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -34,11 +36,12 @@ describe('Kinesis', function () {
     // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
     const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
 
-    function createResources (streamName, cb) {
-      AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
-
+    /**
+     * @param {string} endpoint
+     */
+    function createKinesisClient (endpoint) {
       const params = {
-        endpoint: 'http://127.0.0.1:4566',
+        endpoint,
         region: 'us-east-1',
       }
 
@@ -48,7 +51,16 @@ describe('Kinesis', function () {
         params.requestHandler = new NodeHttpHandler()
       }
 
-      kinesis = new AWS.Kinesis(params)
+      return new AWS.Kinesis(params)
+    }
+
+    /**
+     * @param {string} streamName
+     * @param {(error?: Error) => void} cb
+     */
+    function createResources (streamName, cb) {
+      AWS = require(`../../../versions/${kinesisClientName}@${version}`).get()
+      kinesis = createKinesisClient('http://127.0.0.1:4566')
 
       kinesis.createStream({
         StreamName: streamName,
@@ -199,25 +211,66 @@ describe('Kinesis', function () {
       })
 
       it('records no DSM checkpoint when context plus the partition key would exceed the default cap', async () => {
-        const partitionKey = 'p'.repeat(256)
-        const data = Buffer.from(JSON.stringify({
-          myData: 'a'.repeat(KINESIS_DEFAULT_MAX_RECORD_BYTES - 500),
-        }))
+        const requestTargets = []
         /**
-         * @param {unknown} traces
+         * @param {import('node:http').IncomingMessage} request
+         * @param {import('node:http').ServerResponse} response
          */
-        const assertNoPathwayHash = traces => {
-          const span = /** @type {EncodedTraces} */ (traces)[0][0]
-          assert.match(span.resource, /^putRecord/)
-          assert.strictEqual(span.meta['pathway.hash'], undefined)
+        function respondToPutRecord (request, response) {
+          requestTargets.push(request.headers['x-amz-target'])
+          request.resume()
+          request.once('end', () => {
+            response.writeHead(200, {
+              connection: 'close',
+              'content-type': 'application/x-amz-json-1.1',
+              'x-amzn-requestid': 'test-request',
+            })
+            response.end(JSON.stringify({
+              SequenceNumber: '1',
+              ShardId: 'shardId-000000000000',
+            }))
+          })
         }
-        const tracePromise = agent.assertSomeTraces(assertNoPathwayHash, { spanResourceMatch: /^putRecord/ })
-        const params = { Data: data, PartitionKey: partitionKey, StreamName: streamNameDSM }
-        const requestPromise = promisesSupported
-          ? callViaPromise(kinesis, 'putRecord', params)
-          : promisify(kinesis.putRecord.bind(kinesis))(params)
 
-        await Promise.all([tracePromise, requestPromise])
+        const server = http.createServer(respondToPutRecord)
+        server.listen(0, '127.0.0.1')
+        await once(server, 'listening')
+        const address = server.address()
+        assert.notStrictEqual(address, null, 'Kinesis test server must have a listening address')
+        assert.strictEqual(typeof address, 'object', 'Kinesis test server must listen on a TCP port')
+        const testKinesis = createKinesisClient(`http://127.0.0.1:${address.port}`)
+
+        try {
+          const partitionKey = 'p'.repeat(256)
+          const data = Buffer.from(JSON.stringify({
+            myData: 'a'.repeat(KINESIS_DEFAULT_MAX_RECORD_BYTES - 500),
+          }))
+          /**
+           * @param {unknown} traces
+           */
+          const assertNoPathwayHash = traces => {
+            const span = /** @type {EncodedTraces} */ (traces)[0][0]
+            assert.match(span.resource, /^putRecord/)
+            assert.strictEqual(span.meta['pathway.hash'], undefined)
+          }
+          const tracePromise = agent.assertSomeTraces(assertNoPathwayHash, { spanResourceMatch: /^putRecord/ })
+          const params = { Data: data, PartitionKey: partitionKey, StreamName: streamNameDSM }
+          let requestPromise
+          if (promisesSupported) {
+            requestPromise = callViaPromise(testKinesis, 'putRecord', params)
+          } else {
+            const putRecordAsync = promisify(testKinesis.putRecord.bind(testKinesis))
+            requestPromise = putRecordAsync(params)
+          }
+
+          await Promise.all([tracePromise, requestPromise])
+          assert.deepStrictEqual(requestTargets, ['Kinesis_20131202.PutRecord'])
+        } finally {
+          const closePromise = once(server, 'close')
+          server.close()
+          testKinesis.destroy?.()
+          await closePromise
+        }
       })
 
       it('emits DSM stats to the agent during Kinesis putRecord', done => {

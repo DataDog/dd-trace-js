@@ -4,7 +4,8 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 
 const express = require('express')
-const upload = require('multer')()
+const createMulter = require('multer')
+const upload = createMulter()
 const proxyquire = require('proxyquire').noCallThru()
 const { describe, it, beforeEach, afterEach } = require('mocha')
 

@@ -1,11 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const path = require('path')
+const { once } = require('node:events')
+const path = require('node:path')
 const { inspect } = require('node:util')
+
 const Axios = require('axios')
+
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
+
 describe('Remote config client id', () => {
   let axios, cwd, appFile
 
@@ -47,39 +50,24 @@ describe('Remote config client id', () => {
       })
     })
 
-    it('should include process tags in remote config requests', (done) => {
-      const handleRemoteConfigRequest = (payload) => {
-        try {
-          const { client } = payload
-          assert.ok(client, 'client should exist in remote config request')
-          assert.ok(client.client_tracer, 'client_tracer should exist')
-          assert.ok(client.client_tracer.process_tags, 'process_tags should exist')
-
-          const processTags = client.client_tracer.process_tags
-
-          // Verify process_tags is an array of strings
-          assert.ok(Array.isArray(processTags), 'process_tags should be an array')
-
-          // Verify required process tags are present
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.basedir:')), `Got: ${inspect(processTags)}`)
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.name:')), `Got: ${inspect(processTags)}`)
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.type:')), `Got: ${inspect(processTags)}`)
-          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.workdir:')), `Got: ${inspect(processTags)}`)
-
-          // Verify entrypoint.type has the expected value
-          assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'), `Got: ${inspect(processTags)}`)
-          agent.removeListener('remote-config-request', handleRemoteConfigRequest)
-          done()
-        } catch (err) {
-          agent.removeListener('remote-config-request', handleRemoteConfigRequest)
-          done(err)
-        }
-      }
-
-      agent.on('remote-config-request', handleRemoteConfigRequest)
-
+    it('should include process tags in remote config requests', async () => {
+      const request = once(agent, 'remote-config-request')
       // Trigger a request to ensure remote config is polled
-      axios.get('/').catch(() => {})
+      await axios.get('/')
+      const [{ client }] = await request
+
+      assert.ok(client, 'client should exist in remote config request')
+      assert.ok(client.client_tracer, 'client_tracer should exist')
+      assert.ok(client.client_tracer.process_tags, 'process_tags should exist')
+
+      const processTags = client.client_tracer.process_tags
+
+      assert.ok(Array.isArray(processTags), 'process_tags should be an array')
+      assert.ok(processTags.some(tag => tag.startsWith('entrypoint.basedir:')), `Got: ${inspect(processTags)}`)
+      assert.ok(processTags.some(tag => tag.startsWith('entrypoint.name:')), `Got: ${inspect(processTags)}`)
+      assert.ok(processTags.some(tag => tag.startsWith('entrypoint.type:')), `Got: ${inspect(processTags)}`)
+      assert.ok(processTags.some(tag => tag.startsWith('entrypoint.workdir:')), `Got: ${inspect(processTags)}`)
+      assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'), `Got: ${inspect(processTags)}`)
     })
   })
 

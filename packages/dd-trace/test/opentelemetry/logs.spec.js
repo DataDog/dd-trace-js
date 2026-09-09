@@ -9,11 +9,26 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
+const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
 require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+function getVercelBatchLogRecordProcessor () {
+  process.env.VERCEL = '1'
+  const loadServerless = proxyquire.noPreserveCache()
+  const serverless = loadServerless('../../src/serverless', {})
+  const loadBatchLogRecordProcessor = proxyquire.noPreserveCache()
+  return loadBatchLogRecordProcessor('../../src/opentelemetry/logs/batch_log_processor', {
+    '../../serverless': serverless,
+  })
+}
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -40,8 +55,9 @@ describe('OpenTelemetry Logs', () => {
     logs.disable()
     const config = getConfigFresh()
     if (config.DD_LOGS_OTEL_ENABLED) {
+      const loadLogs = proxyquire.noPreserveCache()
       const { initializeOpenTelemetryLogs } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
+        loadLogs('../../src/opentelemetry/logs', {})
       initializeOpenTelemetryLogs(config)
     }
     return { config, logs, loggerProvider: logs.getLoggerProvider() }
@@ -53,13 +69,16 @@ describe('OpenTelemetry Logs', () => {
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
     process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize
 
-    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
+    const loadProxy = proxyquire.noPreserveCache()
+    const proxy = loadProxy('../../src/proxy', {
       './config': getConfigFresh,
     })
-    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
+    const loadSrc = proxyquire.noPreserveCache()
+    const TracerProxy = loadSrc('../../src', {
       './proxy': proxy,
     })
-    const tracer = proxyquire.noPreserveCache()('../../', {
+    const loadTracer = proxyquire.noPreserveCache()
+    const tracer = loadTracer('../../', {
       './src': TracerProxy,
     })
     tracer._initialized = false
@@ -71,7 +90,7 @@ describe('OpenTelemetry Logs', () => {
     let capturedPayload, capturedHeaders
     let validatorCalled = false
 
-    sinon.stub(http, 'request').callsFake((options, callback) => {
+    sinon.stub(http, 'request').callsFake((options, onResponse) => {
       // Only intercept OTLP logs requests
       if (options.path && options.path.includes('/v1/logs')) {
         capturedHeaders = options.headers
@@ -93,7 +112,7 @@ describe('OpenTelemetry Logs', () => {
           once: () => {},
           setTimeout: () => {},
         }
-        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+        onResponse({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
 
@@ -105,7 +124,7 @@ describe('OpenTelemetry Logs', () => {
         once: () => {},
         setTimeout: () => {},
       }
-      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
+      onResponse({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 
@@ -141,6 +160,133 @@ describe('OpenTelemetry Logs', () => {
   })
 
   describe('Logs Export', () => {
+    it('waits for an in-flight export during forceFlush', () => {
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
+      let exportDone
+      let flushDone
+      const processor = new VercelBatchLogRecordProcessor({
+        export: (records, done) => { exportDone = done },
+        flush: (done) => { flushDone = done },
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      exportDone({ code: 0 })
+      sinon.assert.notCalled(done)
+      flushDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('drains queued batches and waits for earlier size-triggered exports', () => {
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
+      const batches = []
+      const callbacks = []
+      const flushCallbacks = []
+      let activeExports = 0
+      const completeFlushes = () => {
+        if (activeExports !== 0) return
+        while (flushCallbacks.length > 0) {
+          const callback = flushCallbacks.shift()
+          callback()
+        }
+      }
+      const processor = new VercelBatchLogRecordProcessor({
+        export: (records, done) => {
+          batches.push(records)
+          activeExports++
+          callbacks.push(() => {
+            activeExports--
+            done({ code: 0 })
+            completeFlushes()
+          })
+        },
+        flush: (done) => {
+          if (activeExports === 0) done()
+          else flushCallbacks.push(done)
+        },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      for (let index = 0; index < 5; index++) {
+        processor.onEmit({ body: index }, { name: 'test' })
+      }
+      processor.forceFlush(done)
+
+      assert.deepStrictEqual(batches.map(batch => batch.map(record => record.body)), [
+        [0, 1], [2, 3], [4],
+      ])
+      const callback = callbacks.shift()
+      callback()
+      const firstCallback = callbacks.shift()
+      firstCallback()
+      const secondCallback = callbacks.shift()
+      secondCallback()
+
+      sinon.assert.calledOnce(done)
+    })
+
+    it('waits for an earlier export when the boundary batch throws', () => {
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
+      let priorFlushDone
+      const processor = new VercelBatchLogRecordProcessor({
+        export: sinon.stub()
+          .onFirstCall().callsFake(() => {})
+          .onSecondCall().throws(new Error('encode failed')),
+        flush: done => { priorFlushDone = done },
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.onEmit({ body: 'in flight' }, { name: 'test' })
+      processor.onEmit({ body: 'boundary' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(done)
+      priorFlushDone()
+      sinon.assert.calledOnce(done)
+    })
+
+    it('does not wait for records emitted after the flush boundary', () => {
+      const VercelBatchLogRecordProcessor = getVercelBatchLogRecordProcessor()
+      const exports = []
+      let firstExportDone
+      const processor = new VercelBatchLogRecordProcessor({
+        export: (records, done) => {
+          exports.push(records.map(record => record.body))
+          if (records[0].body === 'before') firstExportDone = done
+        },
+        flush: done => done(),
+      }, 60_000, 2)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'before' }, { name: 'test' })
+      processor.forceFlush(done)
+      processor.onEmit({ body: 'after' }, { name: 'test' })
+      firstExportDone({ code: 0 })
+
+      assert.deepStrictEqual(exports, [['before']])
+      sinon.assert.calledOnce(done)
+    })
+
+    it('does not retain log delivery outside Vercel', () => {
+      let exportDone
+      const processor = new BatchLogRecordProcessor({
+        export: (records, done) => { exportDone = done },
+        flush: sinon.spy(),
+      }, 60_000, 1)
+      const done = sinon.spy()
+
+      processor.onEmit({ body: 'outside Vercel' }, { name: 'test' })
+      processor.forceFlush(done)
+
+      sinon.assert.notCalled(processor.exporter.flush)
+      sinon.assert.calledOnce(done)
+      assert.strictEqual(typeof exportDone, 'function')
+    })
+
     it('exports logs with complete OTLP structure, trace correlation, and instrumentation info', () => {
       mockOtlpExport((decoded, capturedHeaders) => {
         const { resource } = decoded.resourceLogs[0]
@@ -207,6 +353,155 @@ describe('OpenTelemetry Logs', () => {
 
       const { logs } = setupLogs()
       logs.getLogger({ name: 'test' }).emit({ severityText: 'INFO', body: 'Protobuf format' })
+    })
+
+    it('timestamps logs with UNIX-epoch nanoseconds', () => {
+      const now = new Date('2023-11-14T22:13:20.123Z')
+      sinon.useFakeTimers({ now })
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), '1700000000123000000')
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit(Object.freeze({ body: 'Timestamp test' }))
+    })
+
+    it('normalizes timestamps before passing a cloned record to the processor', () => {
+      const { logs, loggerProvider } = setupLogs()
+      const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+      const timestamp = 1700000000123
+      const logRecord = Object.freeze({
+        body: 'Timestamp test',
+        timestamp,
+        observedTimestamp: new Date('2023-11-14T22:13:20.456Z'),
+        attributes: Object.freeze({ key: 'value' }),
+      })
+
+      logs.getLogger('test').emit(logRecord)
+
+      sinon.assert.calledOnce(onEmit)
+      const emittedRecord = onEmit.firstCall.args[0]
+      assert.notStrictEqual(emittedRecord, logRecord)
+      assert.deepStrictEqual(emittedRecord.timestamp, timeInputToHrTime(timestamp))
+      assert.deepStrictEqual(emittedRecord.observedTimestamp, [1700000000, 456000000])
+      assert.deepStrictEqual(emittedRecord.attributes, { key: 'value' })
+    })
+
+    it('warns once when replacing invalid timestamps', () => {
+      const { logs } = setupLogs()
+      const log = require('../../src/log')
+      const warn = sinon.stub(log, 'warn')
+      const logger = logs.getLogger('test')
+
+      logger.emit({ body: 'invalid timestamp', timestamp: null })
+      logger.emit({ body: 'another invalid timestamp', timestamp: NaN })
+
+      sinon.assert.calledOnceWithExactly(warn, 'Invalid OpenTelemetry log timestamp; using the current time instead')
+    })
+
+    for (const invalidTimestamp of [
+      null,
+      NaN,
+      Infinity,
+      new Date('invalid'),
+      new Date('1960-01-01'),
+      [],
+      [1],
+      [-1, 0],
+      [1, NaN],
+      [18_446_744_074, 0],
+    ]) {
+      it(`uses the current time for invalid timestamps: ${String(invalidTimestamp)}`, () => {
+        const { logs, loggerProvider } = setupLogs()
+        const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+        const logger = logs.getLogger('test')
+        const now = new Date('2023-11-14T22:13:20.123Z')
+        sinon.useFakeTimers({ now })
+
+        logger.emit({ body: 'invalid timestamp', timestamp: invalidTimestamp })
+        logger.emit({ body: 'invalid observed timestamp', observedTimestamp: invalidTimestamp })
+
+        sinon.assert.calledTwice(onEmit)
+        for (const emittedRecord of onEmit.args.map(args => args[0])) {
+          assert.deepStrictEqual(emittedRecord.timestamp, [1700000000, 123000000])
+        }
+        assert.deepStrictEqual(onEmit.secondCall.args[0].observedTimestamp, [1700000000, 123000000])
+      })
+    }
+
+    it('normalizes all OpenTelemetry timestamp input types without losing precision', () => {
+      const numericTimestamp = 1700000000123
+      const [numericSeconds, numericNanoseconds] = timeInputToHrTime(numericTimestamp)
+      mockOtlpExport((decoded) => {
+        const records = decoded.resourceLogs[0].scopeLogs[0].logRecords
+        assert.deepStrictEqual(records.map(record => record.timeUnixNano.toString()), [
+          (BigInt(numericSeconds) * 1_000_000_000n + BigInt(numericNanoseconds)).toString(),
+          '1700000000456000000',
+          '1700000000789123456',
+        ])
+        assert.strictEqual(records[0].observedTimeUnixNano.toString(), '1700000000987654321')
+      })
+
+      const { logs } = setupLogs(true, '3')
+      const logger = logs.getLogger('test')
+      logger.emit({
+        body: 'number timestamp',
+        timestamp: numericTimestamp,
+        observedTimestamp: [1700000000, 987654321],
+      })
+      logger.emit({ body: 'date timestamp', timestamp: new Date('2023-11-14T22:13:20.456Z') })
+      logger.emit({ body: 'hrtime timestamp', timestamp: [1700000000, 789123456] })
+    })
+
+    it('accepts frozen HrTime timestamps without mutating or copying them', () => {
+      const { logs, loggerProvider } = setupLogs()
+      const onEmit = sinon.stub(loggerProvider.processor, 'onEmit')
+      const timestamp = Object.freeze([1700000000, 789123456])
+
+      logs.getLogger('test').emit({ body: 'frozen HrTime', timestamp })
+
+      sinon.assert.calledOnce(onEmit)
+      assert.strictEqual(onEmit.firstCall.args[0].timestamp, timestamp)
+    })
+
+    it('preserves legacy numeric Unix-nanosecond timestamps', () => {
+      const legacyTimestamp = 1700000000123 * 1e6
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), BigInt(legacyTimestamp).toString())
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Legacy timestamp', timestamp: legacyTimestamp })
+    })
+
+    it('matches OpenTelemetry numeric timestamp handling', () => {
+      const timestamp = Date.UTC(1990, 0, 1)
+      const [seconds, nanoseconds] = timeInputToHrTime(timestamp)
+      mockOtlpExport((decoded) => {
+        const { timeUnixNano } = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(timeUnixNano.toString(), (BigInt(seconds) * 1_000_000_000n + BigInt(nanoseconds)).toString())
+      })
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({ body: 'Numeric timestamp', timestamp })
+    })
+
+    it('encodes exact timestamp strings using the OTLP JSON protocol', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      mockOtlpExport((decoded) => {
+        const record = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
+        assert.strictEqual(record.timeUnixNano, '1700000000789123456')
+        assert.strictEqual(record.observedTimeUnixNano, '1700000000987654321')
+      }, 'json')
+
+      const { logs } = setupLogs()
+      logs.getLogger('test').emit({
+        body: 'JSON timestamp test',
+        timestamp: [1700000000, 789123456],
+        observedTimestamp: [1700000000, 987654321],
+      })
     })
 
     it('exports logs using JSON protocol', () => {
@@ -331,7 +626,7 @@ describe('OpenTelemetry Logs', () => {
         traceFlags: 1,
       }
       logs.getLogger('test-service', '1.0.0').emit({
-        observedTimestamp: Date.now() * 1000000,
+        observedTimestamp: new Date(),
         severityText: 'ERROR',
         severityNumber: 17,
         body: 'HTTP test message',
@@ -644,9 +939,27 @@ describe('OpenTelemetry Logs', () => {
       })
 
       const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})
-      exporter.export([{ body: 'test', severityNumber: 9, timestamp: Date.now() * 1000000 }], () => {})
+      exporter.export([{ body: 'test', severityNumber: 9, timestamp: [1700000000, 0] }], () => {})
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('exports resource attributes rebuilt after identity refresh', () => {
+      const validator = mockOtlpExport((decoded) => {
+        const runtimeId = decoded.resourceLogs[0].resource.attributes.find(
+          attribute => attribute.key === 'runtime-id'
+        )
+        assert.strictEqual(runtimeId.value.stringValue, 'refreshed-id')
+      })
+      const { config, logs } = setupLogs()
+
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+      logs.getLogger('test-logger').emit({ body: 'test' })
+
+      validator()
     })
   })
 })

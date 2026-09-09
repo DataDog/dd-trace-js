@@ -4,11 +4,14 @@
 // Cypress does not call setupNodeEvents from inline config objects.
 import cypress from 'cypress'
 
+import getCypressTestEnvironment from './cypress-test-environment.js'
+
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
 
 async function runCypress () {
   const results = await cypress.run({
     config: {
+      ...getCypressTestEnvironment(),
       defaultCommandTimeout: 1000,
       retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
         ? { runMode: retries, openMode: 0 }
@@ -31,7 +34,7 @@ async function runCypress () {
       // CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
       // The 'esm' module type runs Cypress through this programmatic config rather
       // than cypress.config.js, so the same gating has to live here too.
-      video: false,
+      video: process.env.CYPRESS_ENABLE_FAILURE_VIDEOS === 'true',
       screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
     },
   })

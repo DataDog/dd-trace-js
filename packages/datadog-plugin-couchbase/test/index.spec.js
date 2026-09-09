@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { setTimeout } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
 const { after, afterEach, beforeEach, describe, it } = require('mocha')
@@ -31,17 +30,18 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(async function () {
           this.timeout(10_000)
-          tracer = global.tracer = await agent.load('couchbase')
+          tracer = global.tracer = await agent.load('couchbase', { enabled: false })
           couchbase = proxyquire(`../../../versions/couchbase@${versionKey}`, {}).get()
           cluster = await couchbase.connect('couchbase://localhost', {
             username: 'Administrator',
             password: 'password',
           })
           bucket = cluster.bucket('datadog-test')
-          if (semver.gte(resolvedVersion, '4.0.0')) {
-            await waitForBucketConnection(bucket, couchbase)
-          }
           collection = bucket.defaultCollection()
+          if (semver.gte(resolvedVersion, '4.0.0')) {
+            await waitForCollectionConnection(collection, couchbase)
+          }
+          agent.reload('couchbase', { enabled: true })
         })
 
         afterEach(async () => {
@@ -194,24 +194,20 @@ describe('Plugin', () => {
 })
 
 /**
- * Couchbase 4.x resolves connect before bucket() finishes opening its KV connection.
+ * Couchbase 4.x resolves connect before its collection KV connection is usable.
  *
  * @param {{
- *   ping(options: { serviceTypes: string[] }): Promise<{ services: Record<string, Array<{ state: number }>> }>
- * }} bucket
- * @param {{ ServiceType: { KeyValue: string }, PingState: { Ok: number } }} couchbase
+ *   exists(key: string): Promise<unknown>
+ * }} collection
+ * @param {{ TimeoutError: typeof Error }} couchbase
  */
-async function waitForBucketConnection (bucket, couchbase) {
-  const deadline = Date.now() + 8_000
-  while (Date.now() < deadline) {
-    const { services } = await bucket.ping({
-      serviceTypes: [couchbase.ServiceType.KeyValue],
-    })
-    const endpoints = services[couchbase.ServiceType.KeyValue] ?? []
-    for (const { state } of endpoints) {
-      if (state === couchbase.PingState.Ok) return
+async function waitForCollectionConnection (collection, couchbase) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await collection.exists('dd-trace-readiness')
+      return
+    } catch (error) {
+      if (!(error instanceof couchbase.TimeoutError) || attempt === 2) throw error
     }
-    await setTimeout(10)
   }
-  throw new Error('Couchbase KV connection did not become ready')
 }

@@ -40,6 +40,9 @@ function getJestRunArgs (options) {
   if (options.randomize) {
     args.push('--randomize', `--seed=${options.seed}`, '--showSeed')
   }
+  if (options.testSequencer) {
+    args.push('--testSequencer', options.testSequencer)
+  }
 
   return args
 }
@@ -120,6 +123,10 @@ if (process.env.JEST_RANDOMIZE) {
 
 if (process.env.JEST_TEST_NAME_PATTERN) {
   options.testNamePattern = process.env.JEST_TEST_NAME_PATTERN
+}
+
+if (process.env.TEST_SEQUENCER) {
+  options.testSequencer = process.env.TEST_SEQUENCER
 }
 
 if (process.env.USE_JEST_RUN) {

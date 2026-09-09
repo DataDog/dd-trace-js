@@ -191,32 +191,36 @@ function wrapCreateStream (original) {
     const ctx = getMessage(name, ['path', 'options'], arguments)
 
     return startChannel.runStores(ctx, () => {
+      let stream
+
       try {
-        const stream = original.apply(this, arguments)
-        const onError = error => {
-          ctx.error = error
-          errorChannel.publish(ctx)
-          onFinish()
-        }
-        const onFinish = () => {
-          finishChannel.runStores(ctx, () => {})
-          stream.removeListener('close', onFinish)
-          stream.removeListener('end', onFinish)
-          stream.removeListener('finish', onFinish)
-          stream.removeListener(errorMonitor, onError)
-        }
-
-        stream.once('close', onFinish)
-        stream.once('end', onFinish)
-        stream.once('finish', onFinish)
-        stream.once(errorMonitor, onError)
-
-        return stream
+        stream = original.apply(this, arguments)
       } catch (error) {
         ctx.error = error
         errorChannel.publish(ctx)
         finishChannel.runStores(ctx, () => {})
+        throw error
       }
+
+      const onError = error => {
+        ctx.error = error
+        errorChannel.publish(ctx)
+        onFinish()
+      }
+      const onFinish = () => {
+        finishChannel.runStores(ctx, () => {})
+        stream.removeListener('close', onFinish)
+        stream.removeListener('end', onFinish)
+        stream.removeListener('finish', onFinish)
+        stream.removeListener(errorMonitor, onError)
+      }
+
+      stream.once('close', onFinish)
+      stream.once('end', onFinish)
+      stream.once('finish', onFinish)
+      stream.once(errorMonitor, onError)
+
+      return stream
     })
   }
 }

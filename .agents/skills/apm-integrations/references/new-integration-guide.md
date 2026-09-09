@@ -177,6 +177,7 @@ class MyPlugin extends DatabasePlugin {
   // Orchestrion:              static prefix = 'tracing:orchestrion:<npm-package>:<channelName>'
   // Shimmer + tracingChannel: static prefix = 'tracing:apm:<name>:<operation>'
   // Shimmer + manual channels: omit prefix — defaults to `apm:${id}:${operation}`
+  static prefix = '<channel-prefix>'
   static peerServicePrecursors = ['db.name']
 
   bindStart (ctx) {
@@ -195,6 +196,11 @@ class MyPlugin extends DatabasePlugin {
     }, ctx)
 
     return ctx.currentStore
+  }
+
+  // Choose `end` (sync), `asyncEnd` (promise/callback), or `finish` (legacy manual channel).
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 }
 
@@ -215,7 +221,7 @@ If multiple npm packages map to the same plugin (e.g., `redis` and `@redis/clien
 
 ## Step 4: Add TypeScript Definitions
 
-In `index.d.ts`, add to the `plugins` namespace:
+Add the plugin type to the `plugins` namespace in every supported public TypeScript surface:
 
 ```typescript
 // In the Plugins interface:
@@ -296,7 +302,7 @@ PLUGINS="<name>" npm run test:plugins:ci
 - [ ] Registered in hooks.js (required for both orchestrion and shimmer paths)
 - [ ] Plugin created with correct base class
 - [ ] Plugin registered in `packages/dd-trace/src/plugins/index.js`
-- [ ] TypeScript definitions added to `index.d.ts`
+- [ ] TypeScript definitions added to every supported public TypeScript surface
 - [ ] Type check added to `docs/test.ts`
 - [ ] Documentation added to `docs/API.md`
 - [ ] CI job added to `.github/workflows/apm-integrations.yml`

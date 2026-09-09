@@ -4,9 +4,13 @@ const AgentWriter = require('../../../exporters/agent/writer')
 const AgentlessWriter = require('../agentless/writer')
 const CoverageWriter = require('../agentless/coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
+const request = require('../request')
 const { fetchAgentInfo } = require('../../../agent/info')
 const { DEBUGGER_INPUT_V1 } = require('../../../debugger/constants')
 
+// Product-specific discovery: newest advertised version, skip v3 (citestcycle), gzip if >= v4.
+// Shared `evp_proxy` discovery is an explicit path allowlist and does not cover this contract.
+const AGENT_INFO_TIMEOUT_MS = 5000
 const AGENT_EVP_PROXY_PATH_PREFIX = '/evp_proxy/v'
 const AGENT_EVP_PROXY_PATH_REGEX = /\/evp_proxy\/v(\d+)\/?/
 
@@ -43,9 +47,26 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       testOptimization,
     } = config
 
+    const initializationController = new AbortController()
+    const initializationOptions = {
+      deadline: Date.now() + AGENT_INFO_TIMEOUT_MS,
+      signal: initializationController.signal,
+      // Test runners await agent discovery before starting. A detached retry can let Node exit
+      // while that promise is still pending because promises alone do not keep the event loop alive.
+      keepProcessAlive: true,
+    }
+    this._initializationRequest = {
+      controller: initializationController,
+      options: initializationOptions,
+    }
+
     fetchAgentInfo(this._url, (err, agentInfo) => {
+      this._initializationRequest = undefined
+      const initializationAborted = initializationController.signal.aborted
+      const agentInfoError = err || (initializationAborted ? initializationController.signal.reason : undefined)
+
       this._isInitialized = true
-      let latestEvpProxyVersion = getLatestEvpProxyVersion(err, agentInfo)
+      let latestEvpProxyVersion = getLatestEvpProxyVersion(agentInfoError, agentInfo)
       const isEvpCompatible = latestEvpProxyVersion >= 2
       this._isGzipCompatible = latestEvpProxyVersion >= 4
 
@@ -72,7 +93,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
         // path with evpProxyPrefix and sets X-Datadog-EVP-Subdomain: api (see uploadTestScreenshot).
         this._testScreenshotUploadUrl = this._url
         if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
-          const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
+          const canFowardLogs = getCanForwardDebuggerLogs(agentInfoError, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')
             this._logsWriter = new DynamicInstrumentationLogsWriter({
@@ -89,14 +110,19 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           lookup,
           protocolVersion,
           headers,
+          isTestOptimization: true,
         })
         // coverages will never be used, so we discard them
         this._coverageBuffer = []
       }
       this._resolveCanUseCiVisProtocol(isEvpCompatible)
+      if (initializationAborted) {
+        this.resetUncodedTraces()
+        return
+      }
       this.exportUncodedTraces()
       this.exportUncodedCoverages()
-    })
+    }, initializationOptions, request)
   }
 
   setUrl (url, coverageUrl) {

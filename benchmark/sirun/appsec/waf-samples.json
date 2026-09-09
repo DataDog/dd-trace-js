@@ -1,0 +1,228 @@
+{
+  "knownAddresses": [
+    "graphql.server.all_resolvers",
+    "graphql.server.resolver",
+    "grpc.server.request.message",
+    "grpc.server.request.metadata",
+    "http.client_ip",
+    "server.business_logic.llm.event",
+    "server.business_logic.payment.cancellation",
+    "server.business_logic.payment.creation",
+    "server.business_logic.payment.failure",
+    "server.business_logic.payment.success",
+    "server.db.statement",
+    "server.db.system",
+    "server.io.fs.file",
+    "server.io.fs.file_write",
+    "server.io.net.request.headers",
+    "server.io.net.response.headers",
+    "server.io.net.response.status",
+    "server.io.net.url",
+    "server.request.body",
+    "server.request.body.filenames",
+    "server.request.cookies",
+    "server.request.headers.no_cookies",
+    "server.request.jwt",
+    "server.request.method",
+    "server.request.path_params",
+    "server.request.query",
+    "server.request.uri.raw",
+    "server.response.body",
+    "server.response.headers.no_cookies",
+    "server.response.status",
+    "server.sys.exec.cmd",
+    "server.sys.shell.cmd",
+    "usr.id",
+    "usr.session_id",
+    "waf.context.processor"
+  ],
+  "request": [
+    {
+      "payload": {
+        "persistent": {
+          "server.request.uri.raw": "/",
+          "server.request.headers.no_cookies": {
+            "host": "127.0.0.1:<port>",
+            "connection": "keep-alive"
+          },
+          "server.request.method": "GET",
+          "http.client_ip": "<loopback>"
+        }
+      },
+      "result": {
+        "metrics": {},
+        "timeout": false,
+        "duration": 0,
+        "attributes": {
+          "_dd.appsec.fp.http.header": "hdr-0100000000--1-4740ae63",
+          "_dd.appsec.fp.http.network": "net-0-0000000000",
+          "_dd.appsec.fp.http.endpoint": "http-get-8a5edab2--"
+        },
+        "keep": false
+      }
+    },
+    {
+      "payload": {
+        "persistent": {
+          "server.response.status": "404",
+          "server.response.headers.no_cookies": {}
+        }
+      },
+      "result": {
+        "metrics": {},
+        "timeout": false,
+        "duration": 0,
+        "keep": false
+      }
+    }
+  ],
+  "attack": [
+    {
+      "payload": {
+        "persistent": {
+          "server.request.uri.raw": "/../../../secret.txt?k=<script>alert()</script>",
+          "server.request.headers.no_cookies": {
+            "user-agent": "Arachni/v1",
+            "host": "127.0.0.1:<port>",
+            "connection": "keep-alive"
+          },
+          "server.request.method": "GET",
+          "http.client_ip": "<loopback>"
+        }
+      },
+      "result": {
+        "metrics": {},
+        "timeout": false,
+        "duration": 0,
+        "attributes": {
+          "_dd.appsec.fp.http.header": "hdr-0100000000-51fbd9d8-1-4740ae63",
+          "_dd.appsec.fp.http.network": "net-0-0000000000",
+          "_dd.appsec.fp.http.endpoint": "http-get-3f8012f9--"
+        },
+        "status": "match",
+        "events": [
+          {
+            "rule": {
+              "id": "ua0-600-12x",
+              "name": "Arachni",
+              "tags": {
+                "type": "attack_tool",
+                "category": "attack_attempt",
+                "confidence": "1",
+                "module": "waf",
+                "tool_name": "Arachni",
+                "cwe": "200",
+                "capec": "1000/118/169"
+              },
+              "on_match": []
+            },
+            "rule_matches": [
+              {
+                "operator": "match_regex",
+                "operator_value": "^Arachni\\/v",
+                "parameters": [
+                  {
+                    "address": "server.request.headers.no_cookies",
+                    "key_path": ["user-agent"],
+                    "value": "Arachni/v1",
+                    "highlight": ["Arachni/v"]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "rule": {
+              "id": "crs-930-110",
+              "name": "Simple Path Traversal Attack (/../)",
+              "tags": {
+                "type": "lfi",
+                "category": "attack_attempt",
+                "crs_id": "930110",
+                "confidence": "1",
+                "cwe": "22",
+                "capec": "1000/255/153/126",
+                "module": "waf"
+              },
+              "on_match": []
+            },
+            "rule_matches": [
+              {
+                "operator": "match_regex",
+                "operator_value": "(?:(?:^|[\\x5c/])\\.{2,3}[\\x5c/]|[\\x5c/]\\.{2,3}(?:[\\x5c/]|$))",
+                "parameters": [
+                  {
+                    "address": "server.request.uri.raw",
+                    "key_path": [],
+                    "value": "/../../../secret.txt?k=<script>alert()</script>",
+                    "highlight": ["/../"]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "actions": {},
+        "keep": true
+      }
+    },
+    {
+      "payload": {
+        "persistent": {
+          "server.response.status": "404",
+          "server.response.headers.no_cookies": {}
+        }
+      },
+      "result": {
+        "metrics": {},
+        "timeout": false,
+        "duration": 0,
+        "status": "match",
+        "events": [
+          {
+            "rule": {
+              "id": "nfd-000-001",
+              "name": "Detect common directory discovery scans",
+              "tags": {
+                "type": "security_scanner",
+                "category": "attack_attempt",
+                "cwe": "200",
+                "capec": "1000/118/169",
+                "confidence": "1"
+              },
+              "on_match": []
+            },
+            "rule_matches": [
+              {
+                "operator": "match_regex",
+                "operator_value": "^404$",
+                "parameters": [
+                  {
+                    "address": "server.response.status",
+                    "key_path": [],
+                    "value": "404",
+                    "highlight": ["404"]
+                  }
+                ]
+              },
+              {
+                "operator": "phrase_match",
+                "operator_value": "",
+                "parameters": [
+                  {
+                    "address": "server.request.uri.raw",
+                    "key_path": [],
+                    "value": "/../../../secret.txt?k=<script>alert()</script>",
+                    "highlight": ["../../.."]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "actions": {},
+        "keep": true
+      }
+    }
+  ]
+}

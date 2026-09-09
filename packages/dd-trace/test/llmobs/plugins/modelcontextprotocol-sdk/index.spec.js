@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const path = require('node:path')
 const { inspect } = require('node:util')
 const { describe, it, before, after } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
@@ -11,11 +12,40 @@ const {
   useLlmObs,
 } = require('../../util')
 
-describe('integrations', () => {
-  let Client
-  let McpServer
-  let InMemoryTransport
+/**
+ * Connects an in-memory MCP client/server pair for the given SDK version.
+ *
+ * @param {string} version
+ * @param {(server: object) => void} registerTools
+ * @returns {Promise<{ client: object, server: object }>}
+ */
+async function connectClientAndServer (version, registerTools) {
+  const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
 
+  // Require the client submodule first so RITM patches it before the server loads it transitively
+  const { Client } = versionModule.get('@modelcontextprotocol/sdk/client')
+
+  // The package exports map remaps package.json to dist/cjs/package.json, so navigate
+  // up from the resolved client entry path to find the SDK root directory
+  const clientEntryPath = versionModule.getPath('@modelcontextprotocol/sdk/client')
+  const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
+  const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
+
+  const { InMemoryTransport } = versionModule.get('@modelcontextprotocol/sdk/inMemory.js')
+
+  const server = new McpServer({ name: 'test-server', version: '1.0.0' })
+  registerTools(server)
+
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await server.connect(serverTransport)
+
+  const client = new Client({ name: 'test-client', version: '1.0.0' })
+  await client.connect(clientTransport)
+
+  return { client, server }
+}
+
+describe('integrations', () => {
   let client
   let server
 
@@ -24,54 +54,34 @@ describe('integrations', () => {
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
-        const path = require('path')
-        const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+        ;({ client, server } = await connectClientAndServer(version, (mcpServer) => {
+          mcpServer.registerTool(
+            'test-tool',
+            { description: 'A test tool', inputSchema: {} },
+            async () => ({
+              content: [{ type: 'text', text: 'Result from test-tool' }],
+            })
+          )
 
-        // Require the client submodule first so RITM patches it before the server loads it transitively
-        Client = versionModule.get('@modelcontextprotocol/sdk/client').Client
+          mcpServer.registerTool(
+            'error-tool',
+            { description: 'A tool that errors', inputSchema: {} },
+            async () => {
+              throw new Error('Intentional test error')
+            }
+          )
 
-        // The package exports map remaps package.json to dist/cjs/package.json, so navigate
-        // up from the resolved client entry path to find the SDK root directory
-        const clientEntryPath = versionModule.getPath('@modelcontextprotocol/sdk/client')
-        const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
-        McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
-
-        InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
-
-        server = new McpServer({ name: 'test-server', version: '1.0.0' })
-
-        server.registerTool(
-          'test-tool',
-          { description: 'A test tool', inputSchema: {} },
-          async () => ({
-            content: [{ type: 'text', text: 'Result from test-tool' }],
-          })
-        )
-
-        server.registerTool(
-          'error-tool',
-          { description: 'A tool that errors', inputSchema: {} },
-          async () => {
-            throw new Error('Intentional test error')
-          }
-        )
-
-        server.registerTool(
-          'multi-content-tool',
-          { description: 'Returns multiple content parts', inputSchema: {} },
-          async () => ({
-            content: [
-              { type: 'text', text: 'First part' },
-              { type: 'text', text: 'Second part' },
-            ],
-          })
-        )
-
-        const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-        await server.connect(serverTransport)
-
-        client = new Client({ name: 'test-client', version: '1.0.0' })
-        await client.connect(clientTransport)
+          mcpServer.registerTool(
+            'multi-content-tool',
+            { description: 'Returns multiple content parts', inputSchema: {} },
+            async () => ({
+              content: [
+                { type: 'text', text: 'First part' },
+                { type: 'text', text: 'Second part' },
+              ],
+            })
+          )
+        }))
       })
 
       after(async () => {
@@ -218,6 +228,52 @@ describe('integrations', () => {
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })
+      })
+    })
+  })
+
+  describe('modelcontextprotocol-sdk with llmobs disabled', () => {
+    const { assertNoLlmObsSpans } = useLlmObs({
+      plugin: 'modelcontextprotocol-sdk',
+      pluginConfig: { llmobs: false },
+    })
+
+    withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
+      let disabledClient
+      let disabledServer
+
+      before(async () => {
+        ({ client: disabledClient, server: disabledServer } = await connectClientAndServer(version, (mcpServer) => {
+          mcpServer.registerTool(
+            'test-tool',
+            { description: 'A test tool', inputSchema: {} },
+            async () => ({
+              content: [{ type: 'text', text: 'Result from test-tool' }],
+            })
+          )
+        }))
+      })
+
+      after(async () => {
+        if (disabledClient) await disabledClient.close()
+        if (disabledServer) await disabledServer.close()
+      })
+
+      it('does not create an LLMObs span for Client.callTool', async () => {
+        const result = await disabledClient.callTool({ name: 'test-tool', arguments: {} })
+        assert.equal(result.content[0].text, 'Result from test-tool')
+
+        // assertNoLlmObsSpans awaits the APM traces first, so this also pins that APM
+        // tracing for the integration survives the LLM Obs opt-out.
+        await assertNoLlmObsSpans()
+      })
+
+      it('does not create an LLMObs span for Client.listTools', async () => {
+        const result = await disabledClient.listTools()
+        assert.equal(result.tools.length, 1)
+        assert.equal(result.tools[0].name, 'test-tool')
+
+        await assertNoLlmObsSpans()
       })
     })
   })

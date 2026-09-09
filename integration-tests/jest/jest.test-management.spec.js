@@ -78,9 +78,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
-    'office-addin-mock',
-    'winston',
     'jest-image-snapshot',
+    'office-addin-mock',
   ].filter(Boolean), true)
 
   before(function () {
@@ -482,7 +481,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'across 1 of 1 test\\(s\\)\\.'
                   )
                 )
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
@@ -1874,7 +1873,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
           assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-          assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
+          assert.match(stdout, /test-quarantine-1[^\n\r\u2028\u2029›]*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
         }
@@ -3553,25 +3552,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // All retries should pass, so exit code should be 0
         assert.strictEqual(exitCode[0], 0)
       })
-    })
-  })
-
-  context('winston mocking', () => {
-    it('should allow winston to be mocked and verify createLogger is called', async () => {
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
-            SHOULD_CHECK_RESULTS: '1',
-          },
-        }
-      )
-
-      const [code] = await once(childProcess, 'exit')
-      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 

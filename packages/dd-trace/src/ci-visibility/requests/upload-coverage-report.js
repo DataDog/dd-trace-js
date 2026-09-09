@@ -4,6 +4,8 @@ const { closeSync, constants, fstatSync, openSync, readFileSync } = require('nod
 const { gzipSync } = require('node:zlib')
 
 const getConfig = require('../../config')
+const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
+const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const FormData = require('../../exporters/common/form-data')
 const request = require('../../exporters/common/request')
 const log = require('../../log')
@@ -98,8 +100,8 @@ function uploadCoverageReport (
   }
 
   if (isEvpProxy) {
-    options.path = `${evpProxyPrefix}/api/v2/cicovreprt`
-    options.headers['X-Datadog-EVP-Subdomain'] = 'ci-intake'
+    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/cicovreprt')
+    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'ci-intake'
   } else {
     options.path = '/api/v2/cicovreprt'
     options.headers['dd-api-key'] = DD_API_KEY

@@ -1,8 +1,8 @@
 'use strict'
 
-const assert = require('assert')
-const path = require('path')
-const { spawn } = require('child_process')
+const assert = require('node:assert/strict')
+const { spawn } = require('node:child_process')
+const path = require('node:path')
 
 const { BUN } = require('../helpers/bun')
 const { FakeAgent, useSandbox, sandboxCwd } = require('../helpers')
@@ -51,7 +51,7 @@ function assertBunSuccess (result) {
 describe('Bun runtime smoke tests', function () {
   this.timeout(30_000)
 
-  useSandbox()
+  useSandbox(['express'])
   let agent
 
   before(async function () {
@@ -119,18 +119,70 @@ describe('Bun runtime smoke tests', function () {
     assertBunSuccess(bunResult)
   })
 
-  it('should auto-instrument basic HTTP traffic', async () => {
+  it('should preserve async context across promises and timers', async () => {
     const messagePromise = agent.assertMessageReceived(({ payload }) => {
-      assert.ok(Array.isArray(payload), 'Expected trace payload array')
       const spans = payload.flat()
-      assert.ok(
-        spans.some(span => span.name === 'web.request' || span.name === 'http.request'),
-        'Expected web.request or http.request span'
-      )
+      const parentSpan = spans.find(span => span.name === 'bun.parent')
+      const promiseChildSpan = spans.find(span => span.name === 'bun.promise.child')
+      const timerChildSpan = spans.find(span => span.name === 'bun.timer.child')
+
+      assert.ok(parentSpan, 'Expected bun.parent span')
+      assert.ok(promiseChildSpan, 'Expected bun.promise.child span')
+      assert.ok(timerChildSpan, 'Expected bun.timer.child span')
+      assert.strictEqual(promiseChildSpan.trace_id.toString(), parentSpan.trace_id.toString())
+      assert.strictEqual(promiseChildSpan.parent_id.toString(), parentSpan.span_id.toString())
+      assert.strictEqual(timerChildSpan.trace_id.toString(), parentSpan.trace_id.toString())
+      assert.strictEqual(timerChildSpan.parent_id.toString(), parentSpan.span_id.toString())
+    }, 20_000)
+
+    const [bunResult] = await Promise.all([
+      runBun('bun/async-context.js', {
+        DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}`,
+      }),
+      messagePromise,
+    ])
+
+    assertBunSuccess(bunResult)
+  })
+
+  it('should propagate trace context across HTTP client and server spans', async () => {
+    const messagePromise = agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flat()
+      const clientSpan = spans.find(span => span.name === 'http.request')
+      const serverSpan = spans.find(span => span.name === 'web.request')
+
+      assert.ok(clientSpan, 'Expected http.request span')
+      assert.ok(serverSpan, 'Expected web.request span')
+      assert.strictEqual(serverSpan.trace_id.toString(), clientSpan.trace_id.toString())
+      assert.strictEqual(serverSpan.parent_id.toString(), clientSpan.span_id.toString())
+      assert.strictEqual(clientSpan.meta['span.kind'], 'client')
+      assert.strictEqual(serverSpan.meta['span.kind'], 'server')
     }, 20_000)
 
     const [bunResult] = await Promise.all([
       runBun('bun/http-instrumentation.js', {
+        DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}`,
+      }),
+      messagePromise,
+    ])
+
+    assertBunSuccess(bunResult)
+  })
+
+  it('should auto-instrument Express routes', async () => {
+    const messagePromise = agent.assertMessageReceived(({ payload }) => {
+      const spans = payload.flat()
+      const expressSpan = spans.find(span => span.name === 'express.request')
+
+      assert.ok(expressSpan, 'Expected express.request span')
+      assert.strictEqual(expressSpan.resource, 'GET /user/:id')
+      assert.strictEqual(expressSpan.meta.component, 'express')
+      assert.strictEqual(expressSpan.meta['http.route'], '/user/:id')
+      assert.strictEqual(expressSpan.meta['http.status_code'], '200')
+    }, 20_000)
+
+    const [bunResult] = await Promise.all([
+      runBun('bun/express-instrumentation.js', {
         DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}`,
       }),
       messagePromise,

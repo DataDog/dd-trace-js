@@ -188,7 +188,9 @@ function addNpmProductionDependencies (dependencies, packageLockPath) {
   if (!packages) throw new Error('package-lock.json does not contain package metadata')
 
   for (const [packagePath, dependency] of Object.entries(packages)) {
-    if (!packagePath || dependency.link || (dependency.dev && !dependency.devOptional)) continue
+    // A peer dependency is supplied by the consumer, not shipped by this package, the same
+    // way addYarnProductionDependencies excludes peerDependencies from its graph walk.
+    if (!packagePath || dependency.link || dependency.peer || (dependency.dev && !dependency.devOptional)) continue
 
     dependencies.add(dependency.name ?? getNameFromPackagePath(packagePath))
   }

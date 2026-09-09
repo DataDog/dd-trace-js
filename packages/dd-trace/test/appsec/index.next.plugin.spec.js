@@ -91,8 +91,10 @@ describe('test suite', () => {
             })
         })
 
-        if (appName === 'app-dir') {
-          it('in request body with .text() function', function (done) {
+        {
+          const requestTextTest = appName === 'app-dir' ? it : it.skip
+
+          requestTextTest('in request body with .text() function', function (done) {
             this.timeout(5000)
 
             const findBodyThreat = getFindBodyThreatMethod(done)

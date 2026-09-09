@@ -80,6 +80,10 @@ describe('noop', () => {
     llmobs.deregisterProcessor()
   })
 
+  it('exposes the no-op experiments facade', () => {
+    assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+  })
+
   it('using "annotationContext" should not throw', () => {
     const result = llmobs.annotationContext({}, () => {
       return 5

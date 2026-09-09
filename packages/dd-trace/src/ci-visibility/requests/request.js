@@ -13,12 +13,14 @@ const {
   singleJitteredDelay,
 } = require('../../exporters/common/retry')
 const { parseUrl } = require('../../exporters/common/url')
+const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
+const { getRateLimitResetDelay } = require('./rate-limit')
 
 const legacyStorage = storage('legacy')
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
- * Retries: 429 (with X-ratelimit-reset, max 30s wait),
+ * Retries: 429 (with Retry-After or X-RateLimit-Reset, max 30s wait),
  * >=500 and transient network errors (5–7.5s delay with jitter). Max one retry.
  * Destroys connections on errors to prevent reuse of bad connections. Preserves
  * original status code across retries for telemetry.
@@ -55,6 +57,16 @@ function request (data, options, callback) {
 
   if (!opts.socketPath) {
     opts.agent = isSecure ? httpsAgent : httpAgent
+  }
+
+  const hasApiKey = headers['dd-api-key'] !== undefined || headers['DD-API-KEY'] !== undefined
+  if (hasApiKey && isSecure) {
+    try {
+      opts.agent = getHttpsProxyAgent(opts, opts.agent)
+    } catch (error) {
+      callback(error)
+      return
+    }
   }
 
   let hasRetried = false
@@ -98,11 +110,7 @@ function request (data, options, callback) {
           }
 
           if (res.statusCode === 429 && !hasRetried) {
-            const resetHeader = res.headers['x-ratelimit-reset']
-            const resetTs = (resetHeader === null || resetHeader === undefined)
-              ? NaN
-              : Number.parseInt(resetHeader, 10)
-            const waitMs = Number.isFinite(resetTs) ? Math.max(0, resetTs * 1000 - Date.now()) : NaN
+            const waitMs = getRateLimitResetDelay(res.headers)
 
             if (Number.isFinite(waitMs) && waitMs <= RATE_LIMIT_MAX_WAIT_MS) {
               hasRetried = true

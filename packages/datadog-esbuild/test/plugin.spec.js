@@ -1,20 +1,44 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const ddPlugin = require('../index')
 
-function captureOptionalPeerOnLoad () {
+/**
+ * @param {object} [initialOptions]
+ */
+function captureOnLoad (initialOptions = {}) {
   let onLoad
   ddPlugin.setup({
-    initialOptions: {},
+    initialOptions,
     onResolve () {},
+    /**
+     * @param {object} options
+     * @param {Function} callback
+     */
     onLoad (options, callback) {
-      if (options.filter.source.includes('require-provider')) onLoad = callback
+      onLoad = callback
     },
   })
   return onLoad
+}
+
+/**
+ * @param {object} [initialOptions]
+ */
+function loadBuiltinWrapper (initialOptions) {
+  const onLoad = captureOnLoad(initialOptions)
+  return onLoad({
+    path: '/_dd_esm_internal_/node:dns/promises._dd_esbuild_intercepted',
+    pluginData: {
+      internal: true,
+      isESM: true,
+      pkgOfInterest: true,
+      raw: 'node:dns/promises',
+    },
+  })
 }
 
 function captureOnResolve () {
@@ -48,24 +72,36 @@ describe('datadog-esbuild plugin', () => {
     assert.strictEqual(result, undefined)
   })
 
-  describe('optional peer bundling', () => {
-    it('rewrites the installed peer load in require-provider into a literal require', () => {
-      const onLoad = captureOptionalPeerOnLoad()
-      const providerPath = require.resolve('../../dd-trace/src/openfeature/require-provider')
+  describe('ESM wrappers', () => {
+    it('uses the build directory to resolve imports in built-in module wrappers', async () => {
+      const absWorkingDir = path.dirname(process.cwd())
+      const result = await loadBuiltinWrapper({ absWorkingDir })
 
-      const result = onLoad({ path: providerPath })
-
-      assert.ok(result.contents.includes("require('@datadog/openfeature-node-server')"), 'should inline the peer')
-      assert.ok(
-        !result.contents.includes("requireOptionalPeer('@datadog/openfeature-node-server')"),
-        'should drop the opaque load'
-      )
+      assert.strictEqual(result.resolveDir, absWorkingDir)
     })
 
-    it('ignores files that match the filter but are not an optional-peer file', () => {
-      const onLoad = captureOptionalPeerOnLoad()
+    it('defaults the build directory to the current working directory', async () => {
+      const result = await loadBuiltinWrapper()
 
-      assert.strictEqual(onLoad({ path: '/somewhere/else/require-provider.js' }), undefined)
+      assert.strictEqual(result.resolveDir, process.cwd())
+    })
+
+    it('uses the module directory to resolve imports in package wrappers', async () => {
+      const onLoad = captureOnLoad()
+      const modulePath = path.join(__dirname, 'resources/export-method.mjs')
+
+      const result = await onLoad({
+        path: `${modulePath}._dd_esbuild_intercepted`,
+        pluginData: {
+          internal: false,
+          isESM: true,
+          pkg: 'fixture',
+          pkgOfInterest: true,
+          raw: 'fixture',
+        },
+      })
+
+      assert.strictEqual(result.resolveDir, path.dirname(modulePath))
     })
   })
 })

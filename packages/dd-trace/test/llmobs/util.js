@@ -33,6 +33,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   metrics?: Record<string, number | MockValue> | MockValue,
  *   metadata?: Record<string, unknown> | MockValue,
  *   toolDefinitions?: Array<Record<string, unknown> | MockValue> | MockValue,
+ *   agentAttribution?: { pagent_name?: string, pagent_span_id?: string },
  *   modelName?: string,
  *   modelProvider?: string,
  *   parentId?: string,
@@ -139,6 +140,7 @@ function assertLlmObsSpanEvent (actual, expected) {
     traceId = MOCK_STRING, // used for future custom LLMObs trace IDs,
     metrics,
     metadata,
+    agentAttribution,
     inputMessages,
     inputValue,
     inputDocuments,
@@ -211,10 +213,15 @@ function assertLlmObsSpanEvent (actual, expected) {
   const actualOutputDocuments = actual.meta.output.documents
   const actualTraceId = actual.trace_id
   const actualTags = actual.tags
+  // agent_attribution is present on every span that has an agent ancestor, which most callers
+  // don't restate. Pull it out and assert it only when a test opts in via `agentAttribution`;
+  // otherwise ignore it so unrelated nested-span assertions keep passing.
+  const actualAgentAttribution = actual.meta.agent_attribution
 
   delete actual.metrics
   delete actual.meta.metadata
   delete actual.meta.output
+  delete actual.meta.agent_attribution
   delete actual.trace_id
   delete actual.tags
   delete actual._dd // we do not care about asserting on the private dd fields
@@ -222,6 +229,7 @@ function assertLlmObsSpanEvent (actual, expected) {
   assertWithMockValues(actualTraceId, traceId, 'traceId')
   assertWithMockValues(actualMetrics, metrics ?? {}, 'metrics')
   assertWithMockValues(actualMetadata, metadata, 'metadata')
+  if (agentAttribution) assertWithMockValues(actualAgentAttribution, agentAttribution, 'agentAttribution')
 
   // 1a. sort tags since they might be unordered
   const expectedTags = expectedLLMObsTags({ span, tags, error, sessionId })
@@ -398,7 +406,9 @@ function fromBuffer (spanProperty, isNumber = false) {
 /**
  * @param {object} options
  * @param {string} options.plugin
+ * @param {object} [options.pluginConfig] - config passed to `tracer.use(plugin, ...)`
  * @param {object} options.tracerConfigOptions
+ * @param {number} [options.traceTimeoutMs] - maximum time to wait for APM traces
  * @returns {{
  *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
  *   assertNoLlmObsSpans: (windowMs?: number) => Promise<void>,
@@ -407,7 +417,9 @@ function fromBuffer (spanProperty, isNumber = false) {
  */
 function useLlmObs ({
   plugin,
+  pluginConfig = {},
   tracerConfigOptions = {},
+  traceTimeoutMs = 5000,
 } = {}) {
   /** @type {ReturnType<typeof agent.assertSomeTraces>} */
   let apmTracesPromise
@@ -420,7 +432,7 @@ function useLlmObs ({
       return apmTraces
         .flatMap(trace => trace)
         .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    }, { timeoutMs: 5000 })
+    }, { timeoutMs: traceTimeoutMs })
   }
 
   useEnv({
@@ -428,7 +440,7 @@ function useLlmObs ({
   })
 
   before(async () => {
-    await agent.load(plugin, {}, {
+    await agent.load(plugin, pluginConfig, {
       llmobs: {
         mlApp: 'test',
         agentlessEnabled: false,
@@ -488,11 +500,16 @@ function useLlmObs ({
       }
     },
 
-    getEvaluationMetrics: function () {
-      const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
-      return evaluationMetricsRequests
-        .flatMap(request => request.data.attributes.metrics)
-        .sort((a, b) => a.timestamp_ms - b.timestamp_ms)
+    getEvaluationMetrics: async function () {
+      const evaluationMetrics = []
+
+      while (evaluationMetrics.length === 0 && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const evaluationMetricsRequests = agent.getLlmObsEvaluationMetricsRequests(true)
+        evaluationMetrics.push(...evaluationMetricsRequests.flatMap(request => request.data.attributes.metrics))
+      }
+
+      return evaluationMetrics.sort((a, b) => a.timestamp_ms - b.timestamp_ms)
     },
   }
 }

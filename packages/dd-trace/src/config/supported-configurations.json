@@ -8,18 +8,28 @@
         "default": null
       }
     ],
+    "DD_AGENTLESS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "description": "Enable agentless mode for supported features and disable Agent-only features."
+      }
+    ],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "description": "Submit supported logger output directly to the Datadog logs intake."
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_URL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "description": "Override the automatic log submission intake URL."
       }
     ],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
@@ -91,6 +101,16 @@
           "experimental.aiguard.maxMessagesLength"
         ],
         "default": "16"
+      }
+    ],
+    "DD_AI_GUARD_REDACTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.redactionEnabled"
+        ],
+        "default": "true"
       }
     ],
     "DD_AI_GUARD_TIMEOUT": [
@@ -724,6 +744,7 @@
         "configurationNames": [
           "dogstatsd.port"
         ],
+        "allowed": "[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5]",
         "default": "8125"
       }
     ],
@@ -1341,6 +1362,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_PROJECT_NAME": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.projectName"
+        ],
+        "default": null
+      }
+    ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
         "implementation": "A",
@@ -1909,6 +1940,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_FAILURE_VIDEOS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_FLEET_CONFIG_PATH": [
       {
         "implementation": "A",
@@ -1990,6 +2029,7 @@
         "configurationNames": [
           "port"
         ],
+        "allowed": "[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5]",
         "default": "8126"
       }
     ],
@@ -2446,6 +2486,13 @@
       }
     ],
     "DD_TRACE_BODY_PARSER_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2992,6 +3039,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
+      }
+    ],
     "DD_TRACE_HTTP_ENABLED": [
       {
         "implementation": "A",
@@ -3512,6 +3566,13 @@
       }
     ],
     "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

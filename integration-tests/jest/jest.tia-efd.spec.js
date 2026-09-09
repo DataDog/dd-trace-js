@@ -3028,7 +3028,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     it('retries flaky tests and sets exit code to 0 as long as one attempt passes', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
-      // Tests from ci-visibility/test/occasionally-failing-test will be considered new
+      // Tests from ci-visibility/test/two-occasionally-failing-tests will be considered new
       receiver.setKnownTests({ jest: {} })
 
       const NUM_RETRIES_EFD = 3
@@ -3054,20 +3054,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-          // all but one has been retried
-          assert.strictEqual(tests.length - 1, retriedTests.length)
-          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
-          // Out of NUM_RETRIES_EFD + 1 total runs, half will be passing and half will be failing,
-          // based on the global counter in the test file
-          const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
-          const failingTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-          assert.strictEqual(passingTests.length, (NUM_RETRIES_EFD + 1) / 2)
-          assert.strictEqual(failingTests.length, (NUM_RETRIES_EFD + 1) / 2)
-          // Test name does not change
-          retriedTests.forEach(test => {
-            assert.strictEqual(test.meta[TEST_NAME], 'fail occasionally fails')
-          })
+          const numRuns = NUM_RETRIES_EFD + 1
+          const testNames = ['fail first occasionally fails', 'fail second occasionally fails']
+          assert.deepStrictEqual([...new Set(tests.map(test => test.meta[TEST_NAME]))].sort(), testNames)
+          for (const testName of testNames) {
+            const testRuns = tests.filter(test => test.meta[TEST_NAME] === testName)
+            const statuses = testRuns.map(test => test.meta[TEST_STATUS])
+            assert.strictEqual(
+              testRuns.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+              NUM_RETRIES_EFD
+            )
+            assert.strictEqual(statuses.filter(status => status === 'pass').length, Math.ceil(numRuns / 2))
+            assert.strictEqual(statuses.filter(status => status === 'fail').length, Math.floor(numRuns / 2))
+          }
         })
 
       let testOutput = ''
@@ -3077,7 +3076,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/occasionally-failing-test*',
+            TESTS_TO_RUN: '**/ci-visibility/test-early-flake-detection/two-occasionally-failing-tests*',
             SHOULD_CHECK_RESULTS: '1',
           },
         }
@@ -3092,7 +3091,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
 
-      assert.match(testOutput, /2 failed, 2 passed/)
       // Exit code is 0 because at least one retry of the new flaky test passes
       assert.strictEqual(exitCode, 0)
 
@@ -3100,7 +3098,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.match(testOutput, /Datadog Test Optimization/)
       assert.match(testOutput, /\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
       assert.match(testOutput, /Early Flake Detection/)
-      assert.match(testOutput, /occasionally-failing-test.*›.*fail occasionally fails/)
+      assert.match(testOutput, /two-occasionally-failing-tests[^\n\r\u2028\u2029›]*›.*fail first occasionally fails/)
+      assert.match(testOutput, /two-occasionally-failing-tests[^\n\r\u2028\u2029›]*›.*fail second occasionally fails/)
     })
 
     // resetting snapshot state logic only works in latest versions

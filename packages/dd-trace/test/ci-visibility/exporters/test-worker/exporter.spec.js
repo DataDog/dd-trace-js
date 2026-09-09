@@ -9,7 +9,11 @@ const sinon = require('sinon')
 
 require('../../../../../dd-trace/test/setup/core')
 const TestWorkerCiVisibilityExporter = proxyquire('../../../../src/ci-visibility/exporters/test-worker', {
-  '../../../config': () => proxyquire.noPreserveCache()('../../../../src/config', {})(),
+  '../../../config': () => {
+    const loadConfig = proxyquire.noPreserveCache()
+    const createConfig = loadConfig('../../../../src/config', {})
+    return createConfig()
+  },
 })
 
 const {
@@ -111,6 +115,18 @@ describe('CI Visibility Test Worker Exporter', () => {
       assert.strictEqual(callbacks.length, 1)
       callbacks[0]()
       sinon.assert.calledOnce(onDone)
+    })
+
+    it('reports an IPC send error after all writers settle', () => {
+      const error = new Error('IPC channel closed')
+      process.send = sinon.stub().callsFake((payload, callback) => callback(error))
+      const jestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      const onDone = sinon.spy()
+
+      jestWorkerExporter.export([{ type: 'test' }])
+      jestWorkerExporter.flush(onDone)
+
+      sinon.assert.calledOnceWithExactly(onDone, error)
     })
 
     it('does not break if process.send is undefined', () => {

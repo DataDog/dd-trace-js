@@ -25,6 +25,7 @@ const {
   getCoveredFilesFromCoverage,
   getExecutableFilesFromCoverage,
   getLineCoverageBitmap,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   applySkippedCoverageToCoverage,
   mergeCoverage,
@@ -46,12 +47,15 @@ const {
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
   getLibraryCapabilitiesTags,
+  finishAllTraceSpans,
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  getTestLineStart,
+  getFileAndLineNumberFromError,
 } = require('../../../src/plugins/util/test')
 
 const {
@@ -66,6 +70,32 @@ const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
 } = require('../../../src/ci-visibility/telemetry')
+
+describe('finishAllTraceSpans', () => {
+  it('does not finish completed spans twice', () => {
+    const tracer = { _config: getConfig() }
+    const processor = { process () {} }
+    const prioritySampler = { sample () {} }
+    const rootSpan = new Span(tracer, processor, prioritySampler, { operationName: 'root' })
+    const completedSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'completed',
+      parent: rootSpan.context(),
+    })
+    const activeSpan = new Span(tracer, processor, prioritySampler, {
+      operationName: 'active',
+      parent: rootSpan.context(),
+    })
+    sinon.spy(completedSpan, 'finish')
+    sinon.spy(activeSpan, 'finish')
+    completedSpan.finish()
+    completedSpan.finish.resetHistory()
+
+    finishAllTraceSpans(rootSpan)
+
+    sinon.assert.notCalled(completedSpan.finish)
+    sinon.assert.calledOnceWithExactly(activeSpan.finish)
+  })
+})
 
 describe('library capabilities', () => {
   it('advertises TIA for Vitest unless the execution mode does not support it', () => {
@@ -376,11 +406,13 @@ describe('getTestSessionName', () => {
   let originalEnv
 
   function getTestSessionNameWithMajor (ddMajor) {
-    const lage = proxyquire.noPreserveCache()('../../../src/ci-visibility/lage', {
+    const loadLage = proxyquire.noPreserveCache()
+    const lage = loadLage('../../../src/ci-visibility/lage', {
       '../../../../version': { DD_MAJOR: ddMajor },
     })
 
-    return proxyquire.noPreserveCache()('../../../src/plugins/util/test', {
+    const loadTest = proxyquire.noPreserveCache()
+    return loadTest('../../../src/plugins/util/test', {
       '../../ci-visibility/lage': lage,
     }).getTestSessionName
   }
@@ -754,7 +786,8 @@ describe('attempt to fix summary', () => {
 describe('test management summary', () => {
   it('does not read report configuration for unmanaged tests', () => {
     const getValueFromEnvSources = sinon.stub()
-    const { recordTestManagementExecution: recordExecution } = proxyquire.noPreserveCache()(
+    const loadTest = proxyquire.noPreserveCache()
+    const { recordTestManagementExecution: recordExecution } = loadTest(
       '../../../src/plugins/util/test',
       {
         '../../config/helper': {
@@ -1490,6 +1523,24 @@ describe('coverage utils', () => {
       assert.strictEqual(getTestCoverageLinesPercentage(partialCoverage, skippedCoverage), 75)
     })
 
+    it('calculates coverage and executable-line files together', () => {
+      const partialCoverage = getPartialCoverage()
+      const skippedCoverage = {
+        'file.js': getLineCoverageBitmap({
+          2: 1,
+          3: 1,
+        }, true).toString('base64'),
+      }
+
+      assert.deepStrictEqual(getTestCoverageLinesData(partialCoverage, skippedCoverage, undefined, true), {
+        percentage: 75,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
+    })
+
     it('uses rootDir to match skipped coverage to absolute coverage paths', () => {
       const rootDir = path.join(path.sep, 'repo')
       const coverage = getPartialCoverage(path.join(rootDir, 'file.js'))
@@ -1501,6 +1552,25 @@ describe('coverage utils', () => {
       }
 
       assert.strictEqual(getTestCoverageLinesPercentage(coverage, skippedCoverage, rootDir), 75)
+    })
+
+    it('merges coverage paths that normalize to the same file', () => {
+      const rootDir = path.join(path.sep, 'repo')
+      const filename = path.join(rootDir, 'file.js')
+      const alias = `${path.join(rootDir, 'sub')}${path.sep}..${path.sep}file.js`
+      const aliasedCoverage = getPartialCoverage(alias)
+      aliasedCoverage[alias].s[0] = 0
+
+      assert.deepStrictEqual(getTestCoverageLinesData({
+        ...getPartialCoverage(filename),
+        ...aliasedCoverage,
+      }, undefined, rootDir, true), {
+        percentage: 25,
+        executableFiles: [{
+          filename: 'file.js',
+          bitmap: Buffer.from('Hg==', 'base64'),
+        }],
+      })
     })
 
     it('ignores skipped coverage for files outside the executable coverage map', () => {
@@ -1792,6 +1862,7 @@ index 1234567..89abcde 100644
     assert.strictEqual(getModifiedFilesFromDiff(''), null)
     assert.strictEqual(getModifiedFilesFromDiff(null), null)
     assert.strictEqual(getModifiedFilesFromDiff(undefined), null)
+    assert.strictEqual(getModifiedFilesFromDiff('not a diff\n@@ -1 +1 @@\n'), null)
   })
 
   it('should handle multiple line changes in a single hunk', () => {
@@ -1938,6 +2009,21 @@ describe('getPullRequestBaseBranch', () => {
       sinon.assert.calledWith(getCountsStub, 'master', 'feature-branch')
       sinon.assert.calledWith(getCountsStub, 'trunk', 'feature-branch')
     })
+
+    it('returns null when no candidate branch has a merge base', () => {
+      const { getPullRequestBaseBranch } = proxyquire('../../../src/plugins/util/test', {
+        './git': {
+          getGitRemoteName: () => 'origin',
+          getSourceBranch: () => 'feature-branch',
+          getMergeBase: sinon.stub().returns(undefined),
+          checkAndFetchBranch: sinon.stub(),
+          getLocalBranches: sinon.stub().returns(['trunk', 'master', 'feature-branch']),
+          getCounts: sinon.stub().returns({ ahead: 0, behind: 0 }),
+        },
+      })
+
+      assert.strictEqual(getPullRequestBaseBranch(), null)
+    })
   })
 })
 
@@ -2054,5 +2140,140 @@ describe('checkShaDiscrepancies', () => {
     checkShaDiscrepancies(ciMetadata, userProvidedGitMetadata)
 
     sinon.assert.calledWith(incrementCountMetricStub, TELEMETRY_GIT_SHA_MATCH, { matched: true })
+  })
+})
+
+describe('getTestLineStart', () => {
+  it('returns the line of the first frame matching the suite path', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at assert (/repo/node_modules/chai/lib.js:100:7)',
+        '    at Context.<anonymous> (/repo/test/foo.spec.js:42:13)',
+      ].join('\n'),
+    }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('ignores parentheses in the function name', () => {
+    const error = { stack: 'Error\n    at foo(bar) (/repo/test/foo.spec.js:42:13)' }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('parses frames without a parenthesized function name', () => {
+    const error = { stack: 'Error\n    at /repo/test/bar.spec.js:7:2' }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/bar.spec.js'), 7)
+  })
+
+  it('parses a frame without a column number', () => {
+    const error = { stack: 'Error\n    at /repo/test/bar.spec.js:7' }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/bar.spec.js'), 7)
+  })
+
+  it('uses the source location from an eval frame', () => {
+    const error = {
+      stack: 'Error\n    at eval (eval at run (/repo/test/foo.spec.js:42:13), <anonymous>:1:3)',
+    }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('uses the source location from a nested eval frame', () => {
+    const error = {
+      stack: 'Error\n    at eval (eval at outer (eval at run (/repo/test/foo.spec.js:42:13)), <anonymous>:1:3)',
+    }
+    assert.strictEqual(getTestLineStart(error, '/repo/test/foo.spec.js'), 42)
+  })
+
+  it('returns null without a stack or matching frame', () => {
+    assert.strictEqual(getTestLineStart({}, '/repo/test/foo.spec.js'), null)
+    assert.strictEqual(getTestLineStart({ stack: 'Error\n    at fn (/repo/x.js:1:1)' }, '/repo/miss.js'), null)
+    assert.strictEqual(
+      getTestLineStart({ stack: 'Error\n    at /repo/test/foo.spec.js' }, '/repo/test/foo.spec.js'),
+      null
+    )
+  })
+
+  it('stays linear on an attacker-shaped newline-free frame', () => {
+    const suite = '/repo/test/evil.spec.js'
+    const error = { stack: `at ${'('.repeat(200_000)}${suite}:5:1` }
+    assert.strictEqual(getTestLineStart(error, suite), 5)
+  })
+})
+
+describe('getFileAndLineNumberFromError', () => {
+  it('returns the file, line, and index of the first non-dependency frame under the repo root', () => {
+    const error = {
+      stack: [
+        'Error: boom',
+        '    at dep (/repo/node_modules/x/index.js:9:9)',
+        '    at handler (/repo/src/server.js:128:20)',
+      ].join('\n'),
+    }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/server.js', 128, 1])
+  })
+
+  it('parses frames without a parenthesized function name', () => {
+    const error = { stack: 'Error\n    at /repo/src/run.js:3:7' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 3, 0])
+  })
+
+  it('preserves parentheses in wrapped and unwrapped file paths', () => {
+    const wrappedError = { stack: 'Error\n    at handler (/repo/src/a(b).js:12:3)' }
+    const unwrappedError = { stack: 'Error\n    at /repo/src/a(b).js:12:3' }
+
+    assert.deepStrictEqual(getFileAndLineNumberFromError(wrappedError, '/repo'), ['/repo/src/a(b).js', 12, 0])
+    assert.deepStrictEqual(getFileAndLineNumberFromError(unwrappedError, '/repo'), ['/repo/src/a(b).js', 12, 0])
+  })
+
+  it('preserves a repeated repository root in wrapped and unwrapped file paths', () => {
+    const wrappedError = { stack: 'Error\n    at handler (/app/packages/app/index.js:12:3)' }
+    const unwrappedError = { stack: 'Error\n    at /app/packages/app/index.js:12:3' }
+
+    assert.deepStrictEqual(
+      getFileAndLineNumberFromError(wrappedError, '/app'),
+      ['/app/packages/app/index.js', 12, 0]
+    )
+    assert.deepStrictEqual(
+      getFileAndLineNumberFromError(unwrappedError, '/app'),
+      ['/app/packages/app/index.js', 12, 0]
+    )
+  })
+
+  it('does not parse a repository root from the function name', () => {
+    const error = { stack: 'Error\n    at /app (/app/src/index.js:12:3)' }
+    const fileUrlError = { stack: 'Error\n    at /app (file:///app/packages/app/index.js:12:3)' }
+
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/app'), ['/app/src/index.js', 12, 0])
+    assert.deepStrictEqual(
+      getFileAndLineNumberFromError(fileUrlError, '/app'),
+      ['/app/packages/app/index.js', 12, 0]
+    )
+  })
+
+  it('ignores parentheses in the function name', () => {
+    const error = { stack: 'Error\n    at foo(bar) (/repo/src/run.js:12:3)' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 12, 0])
+  })
+
+  it('uses the source location from an eval frame', () => {
+    const error = { stack: 'Error\n    at eval (eval at run (/repo/src/run.js:42:13), <anonymous>:1:3)' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 42, 0])
+  })
+
+  it('uses the source location from a nested eval frame', () => {
+    const error = {
+      stack: 'Error\n    at eval (eval at outer (eval at run (/repo/src/run.js:42:13)), <anonymous>:1:3)',
+    }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), ['/repo/src/run.js', 42, 0])
+  })
+
+  it('returns an empty array when only dependency frames match', () => {
+    const error = { stack: 'Error\n    at dep (/repo/node_modules/x.js:1:1)' }
+    assert.deepStrictEqual(getFileAndLineNumberFromError(error, '/repo'), [])
+  })
+
+  it('stays linear on an attacker-shaped newline-free frame', () => {
+    const error = { stack: `at (${'a'.repeat(200_000)} /repo/src/x.js:5:1)` }
+    assert.strictEqual(getFileAndLineNumberFromError(error, '/repo')[1], 5)
   })
 })

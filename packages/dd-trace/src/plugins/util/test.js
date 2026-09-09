@@ -108,6 +108,9 @@ const TEST_SOURCE_FILE = 'test.source.file'
 const TEST_SOURCE_START = 'test.source.start'
 const TEST_FAILURE_SCREENSHOT_UPLOADED = 'test.failure_screenshot.uploaded'
 const TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR = 'test.failure_screenshot.upload_error'
+const TEST_FAILURE_VIDEO_UPLOADED = 'test.failure_video.uploaded'
+const TEST_FAILURE_VIDEO_UPLOAD_ERROR = 'test.failure_video.upload_error'
+const TEST_FAILURE_VIDEO_SCOPE = 'test.failure_video.scope'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
@@ -127,7 +130,7 @@ const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
 // eslint-disable-next-line no-control-regex
-const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g
+const TEST_OPTIMIZATION_NAME_CONTROL_RE = /[\u0000-\u0008\v\f\u000E-\u001F\u007F-\u009F]/g
 const TEST_OPTIMIZATION_NAME_WHITESPACE_RE = /\s+/g
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
@@ -474,6 +477,9 @@ module.exports = {
   TEST_SOURCE_FILE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_SCOPE,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -541,6 +547,7 @@ module.exports = {
   getRelativeCoverageFiles,
   getLineCoverageBitmap,
   applySkippedCoverageToCoverage,
+  getTestCoverageLinesData,
   getTestCoverageLinesPercentage,
   resetCoverage,
   mergeCoverage,
@@ -851,7 +858,7 @@ function getTestTypeFromFramework (testFramework) {
  */
 function finishAllTraceSpans (span) {
   for (const traceSpan of span.context()._trace.started) {
-    if (traceSpan !== span) {
+    if (traceSpan !== span && traceSpan._duration === undefined) {
       traceSpan.finish()
     }
   }
@@ -1359,6 +1366,34 @@ function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
   return bitmap
 }
 
+function getLineCoverageBitmaps (lineCoverage) {
+  let maxLine = 0
+  const entries = Object.entries(lineCoverage)
+
+  for (const [line] of entries) {
+    const lineNumber = Number(line)
+    if (Number.isSafeInteger(lineNumber) && lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+  if (maxLine === 0) return {}
+
+  const length = Math.ceil((maxLine + 1) / 8)
+  const coveredBitmap = Buffer.alloc(length)
+  const executableBitmap = Buffer.alloc(length)
+  for (const [line, hits] of entries) {
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    const byteIndex = lineNumber >> 3
+    const bit = 1 << (lineNumber % 8)
+    executableBitmap[byteIndex] |= bit
+    if (hits) coveredBitmap[byteIndex] |= bit
+  }
+
+  return { coveredBitmap, executableBitmap }
+}
+
 function mergeCoverageBitmaps (targetBitmap, bitmap) {
   if (!targetBitmap) {
     return Buffer.from(bitmap)
@@ -1419,16 +1454,6 @@ function getCoverageFileBitmap (bitmap) {
   }
 }
 
-function addCoverageFilesToMap (files, targetMap, rootDir) {
-  for (const file of files) {
-    const bitmap = getCoverageFileBitmap(file.bitmap)
-    if (!bitmap) continue
-
-    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
-    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
-  }
-}
-
 function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   if (!skippedCoverage) return
 
@@ -1439,27 +1464,57 @@ function addSkippedCoverageToMap (skippedCoverage, targetMap) {
   }
 }
 
-function hasSkippedCoverage (skippedCoverage) {
-  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
-}
+/**
+ * Calculates line coverage and optionally returns executable-line coverage files in the same traversal.
+ * @param {object} coverage
+ * @param {object} [skippedCoverage]
+ * @param {string} [rootDir]
+ * @param {boolean} [includeExecutableFiles]
+ * @returns {{ percentage: number, executableFiles?: Array<{ filename: string, bitmap: Buffer }> }}
+ */
+function getTestCoverageLinesData (coverage, skippedCoverage, rootDir, includeExecutableFiles = false) {
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  const coverageByFilename = new Map()
+  const executableFiles = includeExecutableFiles ? [] : undefined
 
-function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
-  const executableLinesByFile = new Map()
-  const coveredLinesByFile = new Map()
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const { coveredBitmap, executableBitmap } = getLineCoverageBitmaps(fileCoverage.getLineCoverage())
+    if (!executableBitmap) continue
 
-  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
-  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
-  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const existingCoverage = coverageByFilename.get(relativeFilename)
+    if (existingCoverage) {
+      existingCoverage.coveredBitmap = mergeCoverageBitmaps(existingCoverage.coveredBitmap, coveredBitmap)
+      existingCoverage.executableBitmap = mergeCoverageBitmaps(existingCoverage.executableBitmap, executableBitmap)
+    } else {
+      coverageByFilename.set(relativeFilename, { coveredBitmap, executableBitmap })
+    }
+  }
 
   let totalExecutableLines = 0
   let totalCoveredLines = 0
-
-  for (const [filename, executableLines] of executableLinesByFile) {
-    totalExecutableLines += countBitmapBits(executableLines)
-    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
+  for (const [filename, { coveredBitmap, executableBitmap }] of coverageByFilename) {
+    const skippedBitmap = skippedCoverageByFilename.get(filename)
+    const combinedCoveredBitmap = skippedBitmap
+      ? mergeCoverageBitmaps(coveredBitmap, skippedBitmap)
+      : coveredBitmap
+    totalExecutableLines += countBitmapBits(executableBitmap)
+    totalCoveredLines += countCoveredExecutableBits(combinedCoveredBitmap, executableBitmap)
+    if (executableFiles) {
+      executableFiles.push({ filename, bitmap: executableBitmap })
+    }
   }
 
-  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  const percentage = totalExecutableLines === 0
+    ? 0
+    : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+  return { percentage, executableFiles }
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  return getTestCoverageLinesData(coverage, skippedCoverage, rootDir).percentage
 }
 
 function isLineCoveredByBitmap (bitmap, line) {
@@ -1496,10 +1551,10 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
  * @returns {boolean}
  */
 function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
-  if (!hasSkippedCoverage(skippedCoverage)) return false
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  if (skippedCoverageByFilename.size === 0) return false
 
   const coverageMap = getCoverageMap(coverage)
-  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
   let matched = false
 
   for (const filename of coverageMap.files()) {
@@ -1556,19 +1611,77 @@ function fromCoverageMapToCoverage (coverageMap) {
   }, {})
 }
 
+/**
+ * @param {number} code
+ * @returns {boolean}
+ */
+function isAsciiDigit (code) {
+  return code >= 0x30 && code <= 0x39
+}
+
+/**
+ * Parse a V8 stack frame into its file path and 1-based line number.
+ *
+ * Stack text includes caller-controlled function names and can be overwritten. Scan numeric suffixes
+ * right-to-left and discard V8's trailing anonymous location for eval frames.
+ * @param {string} frame
+ * @param {string} expectedPath A known path contained in the frame.
+ * @returns {{ file: string, line: number } | null}
+ */
+function parseStackFrameLocation (frame, expectedPath) {
+  let pathStart = frame.lastIndexOf(expectedPath)
+  while (frame.charCodeAt(pathStart - 1) !== 0x28 /* ( */ &&
+        !frame.startsWith('at ', pathStart - 3) &&
+        !frame.startsWith('file://', pathStart - 7)) {
+    const previousPathStart = frame.lastIndexOf(expectedPath, pathStart - 1)
+    if (previousPathStart === -1) break
+    pathStart = previousPathStart
+  }
+  const scope = frame.slice(pathStart)
+  let end = scope.length
+  if (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
+
+  while (true) {
+    let lastNumberStart = end
+    while (lastNumberStart > 0 && isAsciiDigit(scope.charCodeAt(lastNumberStart - 1))) {
+      lastNumberStart--
+    }
+    if (lastNumberStart === end || scope.charCodeAt(lastNumberStart - 1) !== 0x3A /* : */) {
+      return null
+    }
+    const colonBeforeLast = lastNumberStart - 1
+    let lineStart = colonBeforeLast
+    while (lineStart > 0 && isAsciiDigit(scope.charCodeAt(lineStart - 1))) {
+      lineStart--
+    }
+    if (lineStart < colonBeforeLast && scope.charCodeAt(lineStart - 1) === 0x3A /* : */) {
+      const fileEnd = lineStart - 1
+      const anonymousStart = fileEnd - 11
+      if (scope.charCodeAt(fileEnd - 1) === 0x3E /* > */ && anonymousStart >= 3 &&
+          scope.startsWith('<anonymous>', anonymousStart) &&
+          scope.charCodeAt(anonymousStart - 1) === 0x20 /* space */ &&
+          scope.charCodeAt(anonymousStart - 2) === 0x2C /* , */ &&
+          scope.charCodeAt(anonymousStart - 3) === 0x29 /* ) */) {
+        end = anonymousStart - 3
+        while (scope.charCodeAt(end - 1) === 0x29 /* ) */) end--
+        continue
+      }
+      return { file: scope.slice(0, fileEnd), line: Number(scope.slice(lineStart, colonBeforeLast)) }
+    }
+    return { file: scope.slice(0, colonBeforeLast), line: Number(scope.slice(lastNumberStart, end)) }
+  }
+}
+
 // Get the start line of a test by inspecting a given error's stack trace
 function getTestLineStart (err, testSuitePath) {
   if (!err.stack) {
     return null
   }
-  // From https://github.com/felixge/node-stack-trace/blob/ba06dcdb50d465cd440d84a563836e293b360427/index.js#L40
   const testFileLine = err.stack.split('\n').find(line => line.includes(testSuitePath))
-  try {
-    const testFileLineMatch = testFileLine.match(/at (?:(.+?)\s+\()?(?:(.+?):(\d+)(?::(\d+))?|([^)]+))\)?/)
-    return Number.parseInt(testFileLineMatch[3], 10) || null
-  } catch {
+  if (!testFileLine) {
     return null
   }
+  return parseStackFrameLocation(testFileLine, testSuitePath)?.line || null
 }
 
 // Get the end line of a test by inspecting a given function's source code
@@ -1591,7 +1704,7 @@ function parseAnnotations (annotations) {
     }
     const { type, description } = annotation
     if (type.startsWith('DD_TAGS')) {
-      const regex = /\[(.*?)\]/
+      const regex = /^DD_TAGS\[([^\]]*)\]/
       const match = regex.exec(type)
       let tagValue = ''
       if (match) {
@@ -1695,15 +1808,9 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   }
 
   const topFrame = frames[topRelevantFrameIndex]
-  // Regular expression to match the file path, line number, and column number
-  const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
-  const match = topFrame.match(regex)
-
-  if (match) {
-    const filePath = match[1]
-    const lineNumber = Number(match[2])
-
-    return [filePath, lineNumber, topRelevantFrameIndex]
+  const location = parseStackFrameLocation(topFrame, repositoryRoot)
+  if (location) {
+    return [location.file, location.line, topRelevantFrameIndex]
   }
   return []
 }
@@ -1820,6 +1927,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
   }
 
   const metrics = {}
+  let hasMetrics = false
   for (const candidate of candidateBranches) {
     // Find common ancestor
     const baseSha = getMergeBase(candidate, sourceBranch)
@@ -1838,6 +1946,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
       ahead,
       baseSha,
     }
+    hasMetrics = true
   }
 
   function isDefaultBranch (branch) {
@@ -1846,7 +1955,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     )
   }
 
-  if (Object.keys(metrics).length === 0) {
+  if (!hasMetrics) {
     return null
   }
   // Find branch with smallest "ahead" value, preferring default branch on tie
@@ -1872,6 +1981,7 @@ function getPullRequestDiff (baseCommit, targetCommit) {
 function getModifiedFilesFromDiff (diff) {
   if (!diff) return null
   const result = {}
+  let hasModifiedFiles = false
 
   const filesRegex = /^diff --git a\/(?<file>.+) b\/(?<file2>.+)$/g
   const linesRegex = /^@@ -\d+(,\d+)? \+(?<start>\d+)(,(?<count>\d+))? @@/g
@@ -1886,6 +1996,7 @@ function getModifiedFilesFromDiff (diff) {
     if (fileMatch && fileMatch.groups.file) {
       currentFile = fileMatch.groups.file
       result[currentFile] = []
+      hasModifiedFiles = true
       continue
     }
 
@@ -1904,7 +2015,7 @@ function getModifiedFilesFromDiff (diff) {
     linesRegex.lastIndex = 0
   }
 
-  if (Object.keys(result).length === 0) {
+  if (!hasModifiedFiles) {
     return null
   }
   return result
@@ -2029,12 +2140,17 @@ function formatTestOptimizationList (items) {
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
 
-  return shown
-    .map(({ text, suffix }) => `  • ${truncateTestOptimizationNameMiddle(
+  let formattedItems = ''
+  let isFirstItem = true
+  for (const { text, suffix } of shown) {
+    if (!isFirstItem) formattedItems += '\n'
+    formattedItems += `  • ${truncateTestOptimizationNameMiddle(
       sanitizeTestOptimizationName(text),
       MAX_TEST_OPTIMIZATION_NAME_LENGTH
-    )}${suffix ? ` (${suffix})` : ''}`)
-    .join('\n') + moreSuffix
+    )}${suffix ? ` (${suffix})` : ''}`
+    isFirstItem = false
+  }
+  return formattedItems + moreSuffix
 }
 
 /**

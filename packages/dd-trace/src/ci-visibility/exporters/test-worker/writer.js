@@ -21,7 +21,7 @@ class Writer {
   }
 
   /**
-   * @param {() => void} [onDone]
+   * @param {(error?: Error) => void} [onDone]
    */
   flush (onDone) {
     const count = this._encoder.count()
@@ -69,8 +69,9 @@ class Writer {
 
     // child_process workers (jest default, cucumber)
     if (process.send) {
-      process.send(payload, () => {
-        onDone()
+      process.send(payload, (error) => {
+        if (error) log.error('Error sending message to parent process', error)
+        onDone(error)
       })
       return
     }
@@ -82,9 +83,12 @@ class Writer {
         parentPort.postMessage(payload)
       } catch (error) {
         log.error('Error posting message to parent port', error)
-      } finally {
-        onDone()
+        onDone(error)
+        return
       }
+      // postMessage has no acknowledgement callback. Completion means the
+      // message was accepted by the local port, not processed by the parent.
+      onDone()
       return
     }
 

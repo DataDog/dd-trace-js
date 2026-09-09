@@ -24,23 +24,25 @@ class BufferingExporter {
     this._export(trace)
   }
 
-  _export (payload, writer = this._writer, timerKey = '_timer') {
-    if (this._config.isCiVisibility) {
+  _export (payload, writer = this._writer, timerKey = '_timer', deferImmediateFlush = false) {
+    const appended = writer.append(payload)
+    if (this._config.isCiVisibility && appended !== false) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
-    writer.append(payload)
 
     const { flushInterval } = this._config
 
-    if (flushInterval === 0) {
+    if (flushInterval === 0 && !deferImmediateFlush) {
       writer.flush()
-    } else if (this[timerKey] === undefined) {
+    } else if (flushInterval !== 0 && this[timerKey] === undefined) {
       this[timerKey] = setTimeout(() => {
         writer.flush()
         this[timerKey] = undefined
       }, flushInterval)
       this[timerKey].unref?.()
     }
+
+    return appended
   }
 
   getUncodedTraces () {

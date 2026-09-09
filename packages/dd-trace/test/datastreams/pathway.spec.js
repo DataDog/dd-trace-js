@@ -15,6 +15,7 @@ const {
   decodePathwayContextBase64,
   DsmPathwayCodec,
 } = require('../../src/datastreams/pathway')
+const { PATHWAY_FIELD_BYTES } = require('../../src/datastreams/size')
 
 describe('encoding', () => {
   it('hash should always give the same value', () => {
@@ -189,6 +190,20 @@ describe('encoding', () => {
     } finally {
       debugChannel.unsubscribe(subscriber)
     }
+  })
+
+  it('should encode to the JSON field size producers reserve as PATHWAY_FIELD_BYTES', () => {
+    const nowNs = Date.now() * 1e6
+    const ctx = {
+      hash: computePathwayHash('test-service', 'test-env',
+        ['direction:out', 'type:eventbridge'], Buffer.from('0000000000000000', 'hex')),
+      pathwayStartNs: nowNs,
+      edgeStartNs: nowNs,
+    }
+
+    const [key, value] = Object.entries(DsmPathwayCodec.encode(ctx))[0]
+
+    assert.strictEqual(Buffer.byteLength(`,${JSON.stringify(key)}:${JSON.stringify(value)}`), PATHWAY_FIELD_BYTES)
   })
 
   it('returns undefined when the pathway context has no hash', () => {

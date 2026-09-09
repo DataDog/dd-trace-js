@@ -52,10 +52,12 @@ describe('config', () => {
 
     const tracerConfig = getConfigFresh(tracerOptions, configStubs)
 
-    const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
+    const loadGitMetadata = proxyquire.noPreserveCache()
+    const gitMetadata = loadGitMetadata('../../src/git_metadata', {})
     // Stubs are forwarded to both graphs; proxyquire only applies the keys each module requires
     // (e.g. the runtime version drives the config layer, serverless/azure drive the tag derivation).
-    const { buildProfilingRuntime } = proxyquire.noPreserveCache()('../../src/profiling/config', {
+    const loadConfig = proxyquire.noPreserveCache()
+    const { buildProfilingRuntime } = loadConfig('../../src/profiling/config', {
       '../git_metadata': gitMetadata,
       ...configStubs,
     })

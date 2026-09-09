@@ -406,4 +406,37 @@ describe('IAST Rewriter', () => {
       process.env.NODE_OPTIONS = origNodeOptions
     })
   })
+
+  describe('Compiling wrapped modules', () => {
+    const RealModule = require('module')
+    const realRewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')
+
+    afterEach(() => {
+      realRewriter.disable()
+    })
+
+    // with IAST enabled, requiring graphql/@apollo threw "TypeError: Cannot redefine property: BREAK" at load time.
+    // The compile wrapper executed the module body inside a try/catch and, on any throw,
+    // re-executed the same body on the already-initialized `exports`. graphql's
+    // `Object.defineProperty(exports, 'BREAK', ...)` omits `configurable` (so it
+    // defaults to false), so the second pass could not redefine it and masked the
+    // module's real error. The body must be compiled/executed exactly once.
+    it('should compile a module body only once when its first execution throws', () => {
+      realRewriter.enable(iastEnabledConfig)
+
+      const source = "Object.defineProperty(exports, 'BREAK', { enumerable: true, get () { return {} } })\n" +
+        "throw new Error('original module error')\n"
+      for (const filename of [
+        '/tmp/node_modules/graphql/index.js',
+        '/tmp/app/index.js',
+      ]) {
+        const module = new RealModule(filename)
+        module.filename = filename
+        assert.throws(
+          () => module._compile(source, filename),
+          { message: 'original module error' }
+        )
+      }
+    })
+  })
 })

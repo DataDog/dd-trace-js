@@ -2,7 +2,7 @@ name: Pull Request Title
 
 on:
   pull_request_target:
-    types: [opened, edited, reopened]
+    types: [opened, edited, reopened, synchronize]
     branches:
       - "master"
 
@@ -14,6 +14,7 @@ jobs:
   conventional-commit:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: write
     env:
       # Shared between both steps. Must stay portable across bash ERE and JS
@@ -21,6 +22,12 @@ jobs:
       # Revert PRs always get semver-patch regardless of the original change's type.
       PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
     steps:
+      - name: Checkout base revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Auto-rename GitHub revert title to Conventional Commit
         id: rename
         if: startsWith(github.event.pull_request.title, 'Revert "')
@@ -39,25 +46,44 @@ jobs:
             })
             core.setOutput('renamed', 'true')
 
-      - name: Validate PR title against Conventional Commits
+      - name: Validate PR title and release-note context
         if: >-
           steps.rename.outputs.renamed != 'true' &&
           (github.event.action != 'edited' || github.event.changes.title != null)
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          if [[ ! "$PR_TITLE" =~ $PR_TITLE_PATTERN ]]; then
-            echo "::error::PR title does not follow Conventional Commits format."
-            echo "Got:      $PR_TITLE"
-            echo "Expected: <type>(<scope>)?(!)?: <subject>"
-            echo "          revert(!)?: <subject>  (for reverts, always semver-patch)"
-            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore"
-            exit 1
-          fi
-          echo "PR title OK: $PR_TITLE"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pullRequest = context.payload.pull_request
+            const title = pullRequest.title || ''
+            const match = title.match(new RegExp(process.env.PR_TITLE_PATTERN))
+            if (!match) {
+              core.setFailed('PR title does not follow Conventional Commits format.')
+              return
+            }
+            core.info(`PR title OK: ${title}`)
+
+            const type = match[3]
+            if (!/^(?:feat|fix|perf|docs)$/.test(type)) return
+
+            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: pullRequest.number,
+              per_page: 100,
+            })
+            const files = []
+            const { appendChangedPaths, isInternalOnly } = require('./scripts/release/changelog')
+            appendChangedPaths(files, changedFiles)
+            if (isInternalOnly(files)) {
+              core.setFailed(`PR title type "${type}" is public, but every changed file is internal. ` +
+                'Use test, bench, ci, or chore.')
+            }
 
       - name: Sync labels with PR title
-        if: steps.rename.outputs.renamed != 'true'
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action == 'opened' ||
+          github.event.action == 'reopened' ||
+          (github.event.action == 'edited' && github.event.changes.title != null))
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |

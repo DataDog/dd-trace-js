@@ -4,47 +4,42 @@
   "instructions": true,
   "iterations": 30,
   "variants": {
-    "control": {
-      "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node server.js\"",
-      "env": {
-        "DD_APPSEC_ENABLED": "0",
-        "REQS": "6000"
-      }
-    },
     "appsec-enabled": {
+      "cpus": 2,
+      "iterations": 11,
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node server.js\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ./mock-native-appsec.js server.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ./mock-native-appsec.js server.js\"",
       "env": {
         "DD_APPSEC_ENABLED": "1",
-        "REQS": "7000"
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "WAF_SAMPLE": "request",
+        "OPERATIONS": "56000"
       }
     },
     "appsec-enabled-with-attacks": {
+      "cpus": 2,
+      "iterations": 9,
       "setup": "bash -c \"nohup node client.js >/dev/null 2>&1 &\"",
-      "run": "node server.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node server.js\"",
+      "setup_with_affinity": "bash -c \"nohup taskset -c $CPU_AFFINITY_SECOND node client.js >/dev/null 2>&1 &\"",
+      "run": "node --require ./mock-native-appsec.js server.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ./mock-native-appsec.js server.js\"",
       "env": {
         "DD_APPSEC_ENABLED": "1",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "WAF_SAMPLE": "attack",
         "ATTACK_UA": "1",
         "ATTACK_404": "1",
         "ATTACK_QS": "1",
-        "REQS": "5000"
-      }
-    },
-    "startup-time-control": {
-      "run": "node --require ../../../init.js insecure-bank.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
-      "env": {
-        "DD_APPSEC_ENABLED": "0"
+        "OPERATIONS": "60000"
       }
     },
     "startup-time-appsec-enabled": {
       "run": "node --require ../../../init.js insecure-bank.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js insecure-bank.js\"",
       "env": {
+        "DD_INJECT_FORCE": "true",
         "DD_APPSEC_ENABLED": "1"
       }
     }

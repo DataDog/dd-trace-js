@@ -11,6 +11,7 @@ import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
+import eslintPluginRegexp from 'eslint-plugin-regexp'
 import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
@@ -20,17 +21,27 @@ import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoCallResultInvocation from './eslint-rules/eslint-no-call-result-invocation.mjs'
+import eslintNoConditionalObjectSpread from './eslint-rules/eslint-no-conditional-object-spread.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
+import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
+import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireAgentStop from './eslint-rules/eslint-require-agent-stop.mjs'
 import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
+
+const PACKAGE_SRC_FILES = [
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs',
+]
 
 const SRC_FILES = [
   '*.js',
@@ -43,8 +54,31 @@ const SRC_FILES = [
   'scripts/**/*.mjs',
   'packages/*/*.js',
   'packages/*/*.mjs',
-  'packages/*/src/**/*.js',
-  'packages/*/src/**/*.mjs',
+  ...PACKAGE_SRC_FILES,
+]
+
+const PROCESS_ENV_DISABLE_ALLOW_FILES = [
+  '.mochamultireporterrc.js',
+  'ci/diagnose.js',
+  'ci/init.js',
+  'ci/test-optimization-validation/command-runner.js',
+  'ci/vitest-no-worker-init-setup.mjs',
+  'nyc.config.js',
+  'packages/datadog-esbuild/index.js',
+  'packages/datadog-esbuild/src/log.js',
+  'packages/datadog-instrumentations/src/cypress-config.js',
+  'packages/datadog-instrumentations/src/mocha/main.js',
+  'packages/datadog-instrumentations/src/vitest.js',
+  'packages/datadog-webpack/src/log.js',
+  'packages/dd-trace/src/ci-visibility/exporters/ci-validation/index.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-cache.js',
+  'packages/dd-trace/src/ci-visibility/test-optimization-http-cache.js',
+  'packages/dd-trace/src/config/helper.js',
+  'packages/dd-trace/src/config/index.js',
+  'packages/dd-trace/src/config/stable.js',
+  'packages/dd-trace/src/debugger/index.js',
+  'packages/dd-trace/src/log/index.js',
+  'packages/dd-trace/src/telemetry/session-propagation.js',
 ]
 
 const TEST_FILES = [
@@ -81,6 +115,37 @@ const GLOBAL_RESTRICTED_REQUIRES = [
     message: 'Please use `mocha` instead.',
   },
 ]
+
+const SRC_RESTRICTED_SYNTAX = [
+  {
+    // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
+    // `toString()` and run in chromium — coverage counters inside would ReferenceError.
+    selector:
+      "CallExpression[callee.property.name='evaluate']" +
+      ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
+    message:
+      'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
+      '(NYC-excluded in nyc.config.js) and import it here.',
+  },
+  {
+    // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
+    // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
+    selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
+    message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
+  },
+]
+
+// Matches only probe positions; a genuine count (`writeMapPrefix(Object.keys(x).length)`) must stay allowed.
+const OBJECT_KEYS_LENGTH_PROBE = {
+  selector:
+    ':matches(BinaryExpression[right.value=0], BinaryExpression[left.value=0], UnaryExpression[operator="!"],' +
+    ' IfStatement, ConditionalExpression, LogicalExpression, WhileStatement, DoWhileStatement)' +
+    " > MemberExpression[property.name='length']" +
+    " > CallExpression[callee.object.name='Object'][callee.property.name='keys']",
+  message: 'Do not probe emptiness with `Object.keys(obj).length`; the keys array is allocated on every call. ' +
+    'Track presence with a boolean at the assignment site, probe a known key (`obj.field !== undefined`), or ' +
+    'return `undefined` when there is nothing to report instead of an empty object.',
+}
 
 export default [
   {
@@ -412,11 +477,16 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-no-call-result-invocation': eslintNoCallResultInvocation,
+          'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
+          'eslint-no-unnecessary-array-join': eslintNoUnnecessaryArrayJoin,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-conditional-object-spread': eslintNoConditionalObjectSpread,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
+          'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
@@ -454,7 +524,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
-      'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-no-call-result-invocation': 'error',
       'eslint-rules/eslint-no-private-tags-access': ['error', {
         allowFiles: [
           // The span_context implementation defines and reads `_tags` directly.
@@ -485,6 +555,7 @@ export default [
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
+      'eslint-rules/eslint-safe-typeof-object': 'error',
       'import/no-extraneous-dependencies': 'error',
       // 72 errors. Instrumentation has to publish its finish event after invoking the wrapped
       // callback, so returning the callback call would drop the event.
@@ -600,6 +671,44 @@ export default [
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
     },
   },
+  eslintPluginRegexp.configs['flat/recommended'],
+  {
+    name: 'dd-trace/regexp',
+    rules: {
+      'regexp/no-dupe-disjunctions': 'error',
+      'regexp/optimal-lookaround-quantifier': 'error',
+      'regexp/no-useless-flag': 'error',
+      'regexp/no-useless-lazy': 'error',
+      'regexp/prefer-predefined-assertion': 'error',
+      'regexp/strict': 'error',
+      'regexp/prefer-range': 'error',
+      'regexp/no-useless-non-capturing-group': 'error',
+      'regexp/prefer-character-class': 'error',
+      'regexp/optimal-quantifier-concatenation': 'error',
+      'regexp/no-misleading-capturing-group': 'error',
+      'regexp/no-super-linear-move': 'off',
+      'regexp/no-unused-capturing-group': 'off',
+      'regexp/negation': 'off',
+      'regexp/prefer-w': 'off',
+      'regexp/use-ignore-case': 'off',
+      'regexp/prefer-d': 'off',
+      'regexp/sort-flags': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/regexp-generated',
+    files: [
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-secret-rules.js',
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-password-rules.js',
+    ],
+    rules: {
+      'regexp/no-dupe-disjunctions': 'off',
+      'regexp/prefer-range': 'off',
+      'regexp/optimal-quantifier-concatenation': 'off',
+      'regexp/prefer-character-class': 'off',
+      'regexp/no-useless-non-capturing-group': 'off',
+    },
+  },
   {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
@@ -607,28 +716,18 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     rules: {
+      'eslint-rules/eslint-no-process-env-disable': ['error', {
+        allowFiles: PROCESS_ENV_DISABLE_ALLOW_FILES,
+      }],
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-no-unnecessary-array-join': 'error',
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
-      'no-restricted-syntax': ['error', {
-        // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
-        // `toString()` and run in chromium — coverage counters inside would ReferenceError.
-        selector:
-          "CallExpression[callee.property.name='evaluate']" +
-          ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
-        message:
-          'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
-          '(NYC-excluded in nyc.config.js) and import it here.',
-      }, {
-        // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
-        // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
-        selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
-        message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
-      }],
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX],
 
       'n/no-restricted-require': ['error', [
         ...GLOBAL_RESTRICTED_REQUIRES,
@@ -753,6 +852,13 @@ export default [
     },
   },
   {
+    name: 'dd-trace/src/conditional-object-spread',
+    files: PACKAGE_SRC_FILES,
+    rules: {
+      'eslint-rules/eslint-no-conditional-object-spread': 'error',
+    },
+  },
+  {
     name: 'dd-trace/unicorn/all',
     // Unicorn is otherwise limited to production code, and `sonarjs/no-ignored-exceptions`
     // reports only a subset of the unused catch bindings in tests and fixtures.
@@ -762,6 +868,16 @@ export default [
     rules: {
       'unicorn/consistent-date-clone': 'error',
       'unicorn/prefer-optional-catch-binding': 'error',
+    },
+  },
+  {
+    name: 'dd-trace/packages/src',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE],
     },
   },
   {
@@ -931,14 +1047,20 @@ export default [
     },
     rules: {
       'eslint-rules/eslint-prefer-assert-match': 'error',
+      'eslint-rules/eslint-require-agent-stop': 'error',
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
+      'mocha/consistent-structure': 'off',
+      'mocha/handle-done-callback': 'off',
+      'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
+      'mocha/no-async-in-sync-tests': 'off',
+      'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
-      'mocha/no-setup-in-describe': 'off',
-      'mocha/no-sibling-hooks': 'off',
-      'mocha/no-top-level-hooks': 'off',
+      'mocha/no-pending-tests': 'off',
+      'mocha/no-root-hooks': 'off',
+      'mocha/no-setup-in-suite': 'off',
       'n/handle-callback-err': 'off',
       'n/no-extraneous-require': ['error', {
         allowModules: [
@@ -1083,6 +1205,19 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/package-source',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-unnecessary-array-join': ['error', {
+        reportLiteralArrayJoins: true,
+        reportMapJoinChains: true,
+      }],
     },
   },
 ]

@@ -5,6 +5,7 @@ import { Linter } from 'eslint'
  * @property {Set<string>} fieldNames
  * @property {string | undefined} legacyBaggagePrefix
  * @property {Set<string>} propagationHeaders
+ * @property {Map<string, string>} stringConstants
  */
 
 /**
@@ -17,11 +18,29 @@ function readStringLiteral (node) {
 
 /**
  * @param {import('estree').Node} node
+ * @param {CarrierModel} model
+ * @returns {string | undefined}
+ */
+function readHeaderName (node, model) {
+  const literal = readStringLiteral(node)
+  if (literal !== undefined) return literal
+  if (node.type === 'Identifier') return model.stringConstants.get(node.name)
+}
+
+/**
+ * @param {import('estree').Node} node
  * @param {Record<string, string[]>} visitorKeys
  * @param {CarrierModel} model
  * @returns {void}
  */
 function collectCarrierModel (node, visitorKeys, model) {
+  if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' && node.init &&
+      node.parent.type === 'VariableDeclaration' && node.parent.kind === 'const' &&
+      node.parent.parent.type === 'Program') {
+    const value = readStringLiteral(node.init)
+    if (value !== undefined) model.stringConstants.set(node.id.name, value)
+  }
+
   if (node.type === 'VariableDeclarator' && node.id.type === 'Identifier' &&
       node.id.name === 'legacyBaggagePrefix' && node.init) {
     const prefix = readStringLiteral(node.init)
@@ -38,7 +57,7 @@ function collectCarrierModel (node, visitorKeys, model) {
       ? readStringLiteral(fieldNameNode)
       : undefined
     const headerName = headerNameNode && headerNameNode.type !== 'SpreadElement'
-      ? readStringLiteral(headerNameNode)
+      ? readHeaderName(headerNameNode, model)
       : undefined
     const declarationName = parent.type === 'VariableDeclarator' && parent.id.type === 'Identifier' &&
       parent.init === node
@@ -50,7 +69,10 @@ function collectCarrierModel (node, visitorKeys, model) {
 
     if (fieldName === undefined || headerName === undefined ||
         (!hasMatchingDeclaration && !isStandalone)) {
-      throw new Error('Each defineField call must use string literals in a top-level statement or matching constant')
+      throw new Error(
+        'Each defineField call must use string literals or top-level string constants in a top-level statement ' +
+        'or matching constant'
+      )
     }
     if (model.fieldNames.has(fieldName) || model.propagationHeaders.has(headerName)) {
       throw new Error(`Duplicate carrier field or header declaration: ${fieldName}`)
@@ -96,6 +118,7 @@ export function parseCarrierModel (source) {
     fieldNames: new Set(),
     legacyBaggagePrefix: undefined,
     propagationHeaders: new Set(),
+    stringConstants: new Map(),
   }
   collectCarrierModel(sourceCode.ast, sourceCode.visitorKeys, model)
 

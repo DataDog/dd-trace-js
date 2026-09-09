@@ -46,7 +46,8 @@ const cipherCh = channel('datadog:crypto:cipher:start')
 
     describe('async APIs', () => {
       it('publishes pbkdf2 with iterations, keylen, digest captured', async () => {
-        await promisify(crypto.pbkdf2)('password', 'salt', 1000, 32, 'sha256')
+        const pbkdf2Async = promisify(crypto.pbkdf2)
+        await pbkdf2Async('password', 'salt', 1000, 32, 'sha256')
         sinon.assert.calledOnceWithMatch(start, {
           operation: 'pbkdf2',
           iterations: 1000,
@@ -62,7 +63,8 @@ const cipherCh = channel('datadog:crypto:cipher:start')
       })
 
       it('publishes randomBytes with size captured', async () => {
-        const buf = await promisify(crypto.randomBytes)(16)
+        const randomBytesAsync = promisify(crypto.randomBytes)
+        const buf = await randomBytesAsync(16)
         assert.equal(buf.length, 16)
         sinon.assert.calledOnceWithMatch(start, { operation: 'randomBytes', size: 16 })
         sinon.assert.calledOnce(finish)
@@ -87,7 +89,8 @@ const cipherCh = channel('datadog:crypto:cipher:start')
       })
 
       it('publishes hkdf with digest and keylen captured but ikm/salt/info skipped', async () => {
-        await promisify(crypto.hkdf)('sha256', Buffer.from('ikm'), Buffer.from('salt'), Buffer.from('info'), 32)
+        const hkdfAsync = promisify(crypto.hkdf)
+        await hkdfAsync('sha256', Buffer.from('ikm'), Buffer.from('salt'), Buffer.from('info'), 32)
         sinon.assert.calledOnceWithMatch(start, { operation: 'hkdf', digest: 'sha256', keylen: 32 })
         const ctx = start.firstCall.firstArg
         assert.equal('ikm' in ctx, false)
@@ -99,7 +102,8 @@ const cipherCh = channel('datadog:crypto:cipher:start')
         // crypto.sign captures arguments[0] as 'algorithm', which can be null for some keys.
         // A null algorithm must not be forwarded as a label since it is not a string or number.
         const { privateKey } = crypto.generateKeyPairSync('ed25519')
-        await promisify(crypto.sign)(null, Buffer.from('msg'), privateKey)
+        const signAsync = promisify(crypto.sign)
+        await signAsync(null, Buffer.from('msg'), privateKey)
         sinon.assert.calledOnce(start)
         const ctx = start.firstCall.firstArg
         assert.equal(ctx.operation, 'sign')

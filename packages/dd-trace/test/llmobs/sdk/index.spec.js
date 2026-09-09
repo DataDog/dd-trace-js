@@ -3,7 +3,6 @@
 const assert = require('node:assert')
 const { inspect } = require('node:util')
 
-const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -16,8 +15,6 @@ const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
 const { removeDestroyHandler } = require('../util')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
   let LLMObsSDK
@@ -2416,18 +2413,136 @@ describe('sdk', () => {
         parentId = span.context().toSpanId()
         traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
 
-        // simulate injection from http integration or from tracer
-        // something that triggers the text_map injection
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const wireTraceId = BigInt(`0x${traceId}`).toString(10)
+      const propagatedLlmobsTags = []
+      for (const tag of carrier['x-datadog-tags'].split(',')) {
+        if (tag.startsWith('_dd.p.llmobs_')) propagatedLlmobsTags.push(tag)
+      }
 
       assert.strictEqual(
-        carrier['x-datadog-tags'],
+        propagatedLlmobsTags.join(','),
         // eslint-disable-next-line @stylistic/max-len
         `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1,_dd.p.llmobs_trace_id=${wireTraceId}`
       )
+    })
+
+    it('propagates the agent attribution when injecting from within an agent', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
+        agentId = span.context().toSpanId()
+        tracer.inject(span, 'text_map', carrier)
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=my_agent'), tags)
+    })
+
+    it('inherits the agent attribution when injecting from a tool under an agent', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
+        agentId = span.context().toSpanId()
+        llmobs.trace({ kind: 'tool', name: 'my_tool' }, toolSpan => {
+          tracer.inject(toolSpan, 'text_map', carrier)
+        })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=my_agent'), tags)
+    })
+
+    it('does not propagate agent attribution when there is no agent in the chain', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      llmobs.trace({ kind: 'workflow', name: 'my_workflow' }, span => {
+        tracer.inject(span, 'text_map', carrier)
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_span_id'), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
+    })
+
+    it('skips an unsafe agent name but still propagates the id', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
+        agentId = span.context().toSpanId()
+        tracer.inject(span, 'text_map', carrier)
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
+    })
+
+    it('propagates an agent name containing "=" (legal in tagset values)', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      llmobs.trace({ kind: 'agent', name: 'model=gpt4' }, span => {
+        tracer.inject(span, 'text_map', carrier)
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=model=gpt4'), tags)
+    })
+
+    it('strips stale upstream pagent entries when a local agent overrides them', () => {
+      let agentId
+      const carrier = {}
+      llmobs.trace({ kind: 'agent', name: 'local_agent' }, span => {
+        agentId = span.context().toSpanId()
+        span.context()._trace.tags['_dd.p.llmobs_pagent_span_id'] = 'upstream_id'
+        span.context()._trace.tags['_dd.p.llmobs_pagent_name'] = 'upstream_agent'
+        tracer.inject(span, 'text_map', carrier)
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_pagent_name=local_agent'), tags)
+      assert.ok(!tags.includes('upstream_id'), tags)
+      assert.ok(!tags.includes('upstream_agent'), tags)
+    })
+
+    it('strips stale upstream pagent_name when local agent name is unsafe', () => {
+      let agentId
+      const carrier = {}
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
+        agentId = span.context().toSpanId()
+        span.context()._trace.tags['_dd.p.llmobs_pagent_span_id'] = 'upstream_id'
+        span.context()._trace.tags['_dd.p.llmobs_pagent_name'] = 'upstream_agent'
+        tracer.inject(span, 'text_map', carrier)
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_pagent_span_id=${agentId}`), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
+    })
+
+    it('drops the name when the budget is too tight for the id entry', () => {
+      const originalMax = tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+      const carrier = { 'x-datadog-tags': '' }
+
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
+        // First injection: measure the tags string length WITHOUT pagent entries.
+        tracer.inject(span, 'text_map', carrier)
+        const baseLength = carrier['x-datadog-tags']
+          .split(',').filter(e => !e.startsWith('_dd.p.llmobs_pagent')).join(',').length
+
+        // Second injection: budget allows the base tags but not the id entry (so name is also dropped).
+        carrier['x-datadog-tags'] = ''
+        tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = baseLength
+        tracer.inject(span, 'text_map', carrier)
+      })
+      tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = originalMax
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_span_id'), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_pagent_name'), tags)
     })
   })
 })

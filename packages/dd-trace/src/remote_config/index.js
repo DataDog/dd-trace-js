@@ -1,8 +1,13 @@
 'use strict'
 
+const { hostname: getHostname } = require('node:os')
+
+const { channel } = require('dc-polyfill')
+
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
+const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
 const getGitMetadata = require('../git_metadata')
@@ -10,17 +15,39 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
 const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
+const capabilities = require('./capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
-const clientId = uuid()
+/**
+ * @typedef {object} RemoteConfigChange
+ * @property {'add' | 'update' | 'remove'} kind
+ * @property {string} path
+ * @property {string} product
+ * @property {string} configId
+ * @property {number} version
+ * @property {string} [contents]
+ * @property {number} [length]
+ * @property {Record<string, string>} [hashes]
+ */
+
+let clientId = uuid()
+/** @type {{ id: string, client_tracer: { runtime_id: string, tags: string[] } } | undefined} */
+let client
+
+channel('datadog:identity:update').subscribe(refreshIdentity)
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
+const AGENTLESS_REQUEST_TIMEOUT_MS = 5000
+const capabilityEntries = Object.entries(capabilities)
 
 const kSupportsAckCallback = Symbol('kSupportsAckCallback')
 
 // There MUST NOT exist separate instances of RC clients in a tracer making separate ClientGetConfigsRequest
 // with their own separated Client.ClientState.
 class RemoteConfig {
+  #agentless
+  /** @type {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher | undefined} */
+  #fetcher
   #handlers = new Map()
   #products = new Set()
   #batchHandlers = new Map()
@@ -31,6 +58,7 @@ class RemoteConfig {
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
+    this.#agentless = config.DD_AGENTLESS_ENABLED
     this.url = config.url
 
     tagger.add(config.tags, {
@@ -38,13 +66,7 @@ class RemoteConfig {
     })
 
     const { commitSHA, repositoryUrl } = getGitMetadata(config)
-    const tags = repositoryUrl
-      ? {
-          ...config.tags,
-          [GIT_REPOSITORY_URL]: repositoryUrl,
-          [GIT_COMMIT_SHA]: commitSHA,
-        }
-      : config.tags
+    const tracerTags = getTagsString(config, repositoryUrl, commitSHA)
 
     const appliedConfigs = this.appliedConfigs = new Map()
 
@@ -84,12 +106,42 @@ class RemoteConfig {
           env: config.env,
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
-          tags: Object.entries(tags).map((pair) => pair.join(':')),
+          tags: tracerTags,
           [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
         capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
       },
       cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]), // updated by `parseConfig()`
+    }
+
+    client = this.state.client
+
+    if (this.#agentless) {
+      if (config.DD_API_KEY === undefined) {
+        log.error('[RC] DD_API_KEY is required for agentless Remote Config; Remote Config is disabled')
+        return
+      }
+      const siteUrl = createSiteUrl(config.site)
+      if (siteUrl === undefined) {
+        log.error('[RC] Invalid DD_SITE for agentless Remote Config: %s; Remote Config is disabled', config.site)
+        return
+      }
+
+      this.#fetcher = createAgentlessFetcher({
+        clientId,
+        runtimeId: config.tags['runtime-id'],
+        service: config.service,
+        env: config.env ?? '',
+        appVersion: config.version ?? '',
+        tags: tracerTags,
+        processTags: processTags.tagsArray,
+        language: 'node',
+        tracerVersion,
+        url: siteUrl.origin,
+        timeoutMs: AGENTLESS_REQUEST_TIMEOUT_MS,
+        apiKey: config.DD_API_KEY,
+        hostname: getHostname(),
+      })
     }
   }
 
@@ -99,20 +151,15 @@ class RemoteConfig {
    */
   updateCapabilities (mask, value) {
     const hex = Buffer.from(this.state.client.capabilities, 'base64').toString('hex')
+    let capabilities = BigInt(`0x${hex}`)
 
-    let num = BigInt(`0x${hex}`)
-
-    if (value) {
-      num |= mask
-    } else {
-      num &= ~mask
-    }
-
-    let str = num.toString(16)
+    capabilities = value ? capabilities | mask : capabilities & ~mask
+    let str = capabilities.toString(16)
 
     if (str.length % 2) str = `0${str}`
 
     this.state.client.capabilities = Buffer.from(str, 'hex').toString('base64')
+    this.#updateProductCapabilities()
   }
 
   /**
@@ -155,7 +202,7 @@ class RemoteConfig {
       this.#products.add(product)
     }
     this.updateProducts()
-    if (!hadProducts && this.#products.size > 0) {
+    if ((!this.#agentless || this.#fetcher) && !hadProducts && this.#products.size > 0) {
       this.scheduler.start()
     }
   }
@@ -181,6 +228,25 @@ class RemoteConfig {
 
   updateProducts () {
     this.state.client.products = [...this.#products]
+    this.#updateProductCapabilities()
+  }
+
+  /**
+   * Updates the native client with the current products and capabilities.
+   *
+   * @returns {void}
+   */
+  #updateProductCapabilities () {
+    const fetcher = this.#fetcher
+    if (fetcher === undefined) return
+
+    const unrecognizedNames = fetcher.setProductCapabilities(
+      this.state.client.products,
+      decodeCapabilities(this.state.client.capabilities)
+    )
+    if (unrecognizedNames.length !== 0) {
+      log.error('[RC] Unrecognized remote config products or capabilities: %s', unrecognizedNames.join(', '))
+    }
   }
 
   /**
@@ -214,6 +280,11 @@ class RemoteConfig {
   }
 
   poll (cb) {
+    if (this.#agentless) {
+      this.#pollAgentless(cb)
+      return
+    }
+
     const options = {
       url: this.url,
       method: 'POST',
@@ -253,6 +324,111 @@ class RemoteConfig {
     })
   }
 
+  /**
+   * @param {() => void} cb
+   */
+  #pollAgentless (cb) {
+    const fetcher = /** @type {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher} */ (this.#fetcher)
+
+    fetcher.setExtraServices(getExtraServices())
+
+    fetcher.fetchChanges().then(
+      (changes) => {
+        if (changes.length !== 0) this.#applyChanges(changes)
+        cb()
+      },
+      (error) => {
+        log.errorWithoutTelemetry('[RC] Error in request', error)
+        cb()
+      }
+    )
+  }
+
+  /**
+   * @param {RemoteConfigChange[]} changes
+   */
+  #applyChanges (changes) {
+    const toUnapply = /** @type {RcConfigState[]} */ ([])
+    const toApply = /** @type {RcConfigState[]} */ ([])
+    const toModify = /** @type {RcConfigState[]} */ ([])
+    const transactionByPath = new Map()
+    const transactionOutcomes = new Map()
+
+    for (const change of changes) {
+      const { path } = change
+      if (transactionByPath.has(path)) continue
+
+      const current = this.appliedConfigs.get(path)
+      if (change.kind === 'remove') {
+        if (current === undefined) continue
+        toUnapply.push(current)
+        transactionByPath.set(path, current)
+        continue
+      }
+
+      let file
+      try {
+        file = change.contents === '' ? null : JSON.parse(change.contents)
+      } catch (error) {
+        if (this.#fetcher === undefined) throw error
+
+        log.error('[RC] Could not parse the config file at path %s', path, error)
+        this.#fetcher.setConfigState(path, ERROR, error.toString())
+        continue
+      }
+
+      const config = /** @type {RcConfigState} */ ({
+        path,
+        product: change.product,
+        id: change.configId,
+        version: change.version,
+        apply_state: UNACKNOWLEDGED,
+        apply_error: '',
+        file,
+      })
+      if (change.hashes !== undefined) {
+        config.length = change.length
+        config.hashes = change.hashes
+      }
+      transactionByPath.set(path, config)
+
+      if (change.kind === 'update' && current !== undefined) {
+        toModify.push(config)
+      } else {
+        toApply.push(config)
+      }
+    }
+
+    if (transactionByPath.size === 0) return
+
+    const transaction = createUpdateTransaction(
+      { toUnapply, toApply, toModify },
+      transactionOutcomes
+    )
+
+    if (this.#batchHandlers.size) {
+      for (const [handler, products] of this.#batchHandlers) {
+        const transactionView = filterTransactionByProducts(transaction, products)
+        if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
+          handler(transactionView)
+        }
+      }
+    }
+
+    for (const [path, outcome] of transactionOutcomes) {
+      const item = transactionByPath.get(path)
+      if (item !== undefined) {
+        item.apply_state = outcome.state
+        item.apply_error = outcome.error
+        this.#fetcher?.setConfigState(path, outcome.state, outcome.error)
+      }
+    }
+
+    this.dispatch(toUnapply, 'unapply', transactionOutcomes)
+    this.dispatch(toApply, 'apply', transactionOutcomes)
+    this.dispatch(toModify, 'modify', transactionOutcomes)
+  }
+
   // `client_configs` is the list of config paths to have applied
   // `targets` is the signed index with metadata for config files
   // `target_files` is the list of config files containing the actual config data
@@ -261,17 +437,17 @@ class RemoteConfig {
     targets,
     target_files: targetFiles = [],
   }) {
-    const toUnapply = /** @type {RcConfigState[]} */ ([])
-    const toApply = /** @type {RcConfigState[]} */ ([])
-    const toModify = /** @type {RcConfigState[]} */ ([])
-    const transactionByPath = new Map()
-    const transactionHandledPaths = new Set()
-    const transactionOutcomes = new Map()
+    const changes = /** @type {RemoteConfigChange[]} */ ([])
 
     for (const appliedConfig of this.appliedConfigs.values()) {
       if (!clientConfigs.includes(appliedConfig.path)) {
-        toUnapply.push(appliedConfig)
-        transactionByPath.set(appliedConfig.path, appliedConfig)
+        changes.push({
+          kind: 'remove',
+          path: appliedConfig.path,
+          product: appliedConfig.product,
+          configId: appliedConfig.id,
+          version: appliedConfig.version,
+        })
       }
     }
 
@@ -284,15 +460,7 @@ class RemoteConfig {
 
         const current = this.appliedConfigs.get(path)
 
-        const newConf = /** @type {RcConfigState} */ ({})
-
-        if (current) {
-          if (current.hashes.sha256 === meta.hashes.sha256) continue
-
-          toModify.push(newConf)
-        } else {
-          toApply.push(newConf)
-        }
+        if (current?.hashes.sha256 === meta.hashes.sha256) continue
 
         const file = targetFiles.find(file => file.path === path)
         if (!file) throw new Error(`Unable to find file for path ${path}`)
@@ -305,45 +473,21 @@ class RemoteConfig {
 
         const { product, id } = parseConfigPath(path)
 
-        Object.assign(newConf, {
+        changes.push({
+          kind: current === undefined ? 'add' : 'update',
           path,
           product,
-          id,
+          configId: id,
           version: meta.custom.v,
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
+          contents: Buffer.from(file.raw, 'base64').toString(),
           length: meta.length,
           hashes: meta.hashes,
-          file: fromBase64JSON(file.raw),
         })
-        transactionByPath.set(path, newConf)
       }
-
-      this.state.client.state.targets_version = targets.signed.version
-      this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
     }
 
-    if (toUnapply.length || toApply.length || toModify.length) {
-      const transaction = createUpdateTransaction(
-        { toUnapply, toApply, toModify },
-        transactionHandledPaths,
-        transactionOutcomes
-      )
-
-      if (this.#batchHandlers.size) {
-        for (const [handler, products] of this.#batchHandlers) {
-          const transactionView = filterTransactionByProducts(transaction, products)
-          if (transactionView.toUnapply.length || transactionView.toApply.length || transactionView.toModify.length) {
-            handler(transactionView)
-          }
-        }
-      }
-
-      applyOutcomes(transactionByPath, transactionOutcomes)
-
-      this.dispatch(toUnapply, 'unapply', transactionHandledPaths)
-      this.dispatch(toApply, 'apply', transactionHandledPaths)
-      this.dispatch(toModify, 'modify', transactionHandledPaths)
+    if (changes.length !== 0) {
+      this.#applyChanges(changes)
 
       this.state.cached_target_files = /** @type {RcCachedTargetFile[]} */ ([])
 
@@ -359,6 +503,11 @@ class RemoteConfig {
         })
       }
     }
+
+    if (targets) {
+      this.state.client.state.targets_version = targets.signed.version
+      this.state.client.state.backend_client_state = targets.signed.custom.opaque_backend_state
+    }
   }
 
   /**
@@ -367,20 +516,39 @@ class RemoteConfig {
    *
    * @param {RcConfigState[]} list
    * @param {'apply' | 'modify' | 'unapply'} action
-   * @param {Set<string>} handledPaths
+   * @param {Map<string, {state: number, error: string}>} outcomes
    */
-  dispatch (list, action, handledPaths) {
+  dispatch (list, action, outcomes) {
     for (const item of list) {
-      if (!handledPaths.has(item.path)) {
+      if (action !== 'unapply') {
+        this.appliedConfigs.set(item.path, item)
+      }
+
+      if (!outcomes.has(item.path)) {
         this.#callHandlerFor(action, item)
       }
 
       if (action === 'unapply') {
         this.appliedConfigs.delete(item.path)
-      } else {
-        this.appliedConfigs.set(item.path, item)
+      } else if (item.apply_state === UNACKNOWLEDGED) {
+        this.#fetcher?.setConfigState(item.path, UNACKNOWLEDGED, '')
       }
     }
+  }
+
+  /**
+   * @param {RcConfigState} item
+   * @param {'apply' | 'modify' | 'unapply'} action
+   * @param {number} applyState
+   * @param {string} applyError
+   */
+  #setApplyState (item, action, applyState, applyError) {
+    const current = this.appliedConfigs.get(item.path)
+    if (current !== item && (action !== 'unapply' || current !== undefined)) return
+
+    item.apply_state = applyState
+    item.apply_error = applyError
+    this.#fetcher?.setConfigState(item.path, applyState, applyError)
   }
 
   /**
@@ -399,12 +567,11 @@ class RemoteConfig {
       if (supportsAckCallback(handler)) {
         // If the handler accepts an `ack` callback, expect that to be called and set `apply_state` accordingly
         // TODO: do we want to pass old and new config ?
-        handler(action, item.file, item.id, (err) => {
-          if (err) {
-            item.apply_state = ERROR
-            item.apply_error = err.toString()
+        handler(action, item.file, item.id, (error) => {
+          if (error) {
+            this.#setApplyState(item, action, ERROR, error.toString())
           } else if (item.apply_state !== ERROR) {
-            item.apply_state = ACKNOWLEDGED
+            this.#setApplyState(item, action, ACKNOWLEDGED, '')
           }
         })
       } else {
@@ -414,19 +581,15 @@ class RemoteConfig {
         const result = handler(action, item.file, item.id)
         if (result instanceof Promise) {
           result.then(
-            () => { item.apply_state = ACKNOWLEDGED },
-            (err) => {
-              item.apply_state = ERROR
-              item.apply_error = err.toString()
-            }
+            () => this.#setApplyState(item, action, ACKNOWLEDGED, ''),
+            (error) => this.#setApplyState(item, action, ERROR, error.toString())
           )
         } else {
-          item.apply_state = ACKNOWLEDGED
+          this.#setApplyState(item, action, ACKNOWLEDGED, '')
         }
       }
-    } catch (err) {
-      item.apply_state = ERROR
-      item.apply_error = err.toString()
+    } catch (error) {
+      this.#setApplyState(item, action, ERROR, error.toString())
     }
   }
 }
@@ -443,8 +606,8 @@ class RemoteConfig {
  * @property {unknown} file
  * @property {number} apply_state
  * @property {string} apply_error
- * @property {number} length
- * @property {Record<string, string>} hashes
+ * @property {number} [length]
+ * @property {Record<string, string>} [hashes]
  */
 
 /**
@@ -472,22 +635,19 @@ class RemoteConfig {
  * Create an immutable "view" of the batch changes and attach explicit outcome reporting.
  *
  * @param {{toUnapply: RcConfigState[], toApply: RcConfigState[], toModify: RcConfigState[]}} changes
- * @param {Set<string>} handledPaths
  * @param {Map<string, {state: number, error: string}>} outcomes
  * @returns {RcBatchUpdateTransaction}
  */
-function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths, outcomes) {
+function createUpdateTransaction ({ toUnapply, toApply, toModify }, outcomes) {
   return {
     toUnapply,
     toApply,
     toModify,
     ack (path) {
       outcomes.set(path, { state: ACKNOWLEDGED, error: '' })
-      handledPaths.add(path)
     },
     error (path, err) {
       outcomes.set(path, { state: ERROR, error: err ? err.toString() : 'Error' })
-      handledPaths.add(path)
     },
   }
 }
@@ -523,16 +683,6 @@ function filterTransactionByProducts (transaction, products) {
     toModify,
     ack: transaction.ack,
     error: transaction.error,
-  }
-}
-
-function applyOutcomes (byPath, outcomes) {
-  for (const [path, outcome] of outcomes) {
-    const item = byPath.get(path)
-    if (item) {
-      item.apply_state = outcome.state
-      item.apply_error = outcome.error
-    }
   }
 }
 
@@ -573,6 +723,74 @@ function supportsAckCallback (handler) {
   handler[kSupportsAckCallback] = result
 
   return result
+}
+
+/**
+ * @param {import('@datadog/libdatadog/remote-config').RemoteConfigFetcherOptions} options
+ * @returns {import('@datadog/libdatadog/remote-config').RemoteConfigFetcher}
+ */
+function createAgentlessFetcher (options) {
+  const { RemoteConfigFetcher, setStorage } = require('@datadog/libdatadog/remote-config')
+  const { storage } = require('../../../datadog-core')
+  const legacyStorage = storage('legacy')
+
+  /** @param {() => void} callback */
+  function runWithoutTracing (callback) {
+    legacyStorage.run({ noop: true }, callback)
+  }
+
+  setStorage(runWithoutTracing)
+  return new RemoteConfigFetcher(options)
+}
+
+/**
+ * @param {string} encodedCapabilities
+ * @returns {string[]}
+ */
+function decodeCapabilities (encodedCapabilities) {
+  const hex = Buffer.from(encodedCapabilities, 'base64').toString('hex')
+  const mask = BigInt(`0x${hex}`)
+  const names = []
+
+  for (const [name, capability] of capabilityEntries) {
+    if ((mask & capability) !== 0n) names.push(name)
+  }
+
+  return names
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @param {string} repositoryUrl
+ * @param {string} commitSHA
+ * @returns {string[]}
+ */
+function getTagsString (config, repositoryUrl, commitSHA) {
+  const tags = repositoryUrl
+    ? {
+        ...config.tags,
+        [GIT_REPOSITORY_URL]: repositoryUrl,
+        [GIT_COMMIT_SHA]: commitSHA,
+      }
+    : config.tags
+  return Object.entries(tags).map((pair) => pair.join(':'))
+}
+
+/**
+ * Regenerates the RC client ID and rebuilds the RC tag list, so subsequent RC polls report the
+ * clone's identity. No-ops on the tags before the first `RemoteConfig` is constructed.
+ *
+ * @param {import('../config/config-base')} config
+ */
+function refreshIdentity (config) {
+  clientId = uuid()
+  if (client !== undefined) {
+    config.tags['_dd.rc.client_id'] = clientId
+    client.id = clientId
+    client.client_tracer.runtime_id = config.tags['runtime-id']
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    client.client_tracer.tags = getTagsString(config, repositoryUrl, commitSHA)
+  }
 }
 
 module.exports = RemoteConfig

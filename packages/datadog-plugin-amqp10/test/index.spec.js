@@ -16,6 +16,7 @@ describe('Plugin', () => {
   let client
   let receiver
   let sender
+  let namedSender
   let callbackPolicy
 
   describe('amqp10', () => {
@@ -29,10 +30,13 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        return Promise.all([
+        const links = [
           receiver && receiver.detach(),
           sender && sender.detach(),
-        ])
+          namedSender && namedSender.detach(),
+        ]
+        namedSender = undefined
+        return Promise.all(links)
       })
 
       afterEach(() => client.disconnect())
@@ -152,6 +156,16 @@ describe('Plugin', () => {
                 `Got: ${inspect(!Object.hasOwn(promise, 'value'))} && ${inspect('value' in promise)}`
               )
             })
+          })
+
+          it('uses a caller-provided link name without an underscore as the resource', async () => {
+            namedSender = await client.createSender('amq.topic', { name: 'custom-link' })
+
+            const traces = agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, 'send custom-link')
+            })
+            namedSender.send({ key: 'value' })
+            await traces
           })
 
           withNamingSchema(

@@ -3,25 +3,25 @@
 const { addHook, getHooks } = require('./helpers/instrument')
 
 // Orchestrion rewriter handles wrapping of:
-// - graphql: execute, parse, validate (CJS + ESM)
-// - @graphql-tools/executor: execute, normalizedExecutor (CJS + ESM)
+// - graphql: execute, locatedError, parse, validate (CJS + ESM)
+// - @graphql-tools/executor: execute, handleFieldError, normalizedExecutor (CJS + ESM)
 // See helpers/rewriter/instrumentations/graphql.js for the full config.
-//
-// The plugin (packages/datadog-plugin-graphql/src/execute.js) handles the
-// `apm:graphql:execute:start` AppSec/WAF contract from inside its bindStart:
-// publishing the channel synchronously runs subscribers, and an
-// `abortController.abort()` from a subscriber is observed by replacing
-// `ctx.arguments[0]` with an object whose getters throw AbortError. The
-// orchestrion-emitted wrapper's `catch { ...; throw err }` block propagates
-// that throw to the caller of graphql.execute. No outer wrap needed.
 
-for (const hook of getHooks('graphql')) {
-  addHook(hook, exports => exports)
+/**
+ * @param {string} name
+ */
+function addRewriterHooks (name) {
+  const files = new Set()
+  for (const hook of getHooks(name)) {
+    if (files.has(hook.file)) continue
+    files.add(hook.file)
+    addHook(hook, exports => exports)
+  }
 }
 
-for (const hook of getHooks('@graphql-tools/executor')) {
-  addHook(hook, exports => exports)
-}
+addRewriterHooks('graphql')
+addRewriterHooks('@graphql-tools/executor')
+addRewriterHooks('graphql-jit')
 
 // Module-load hooks: capture references on ddGlobal for cross-plugin access
 // (read lazily inside each callback so agent.load() between mocha suites can

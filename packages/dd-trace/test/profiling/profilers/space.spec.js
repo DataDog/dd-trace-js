@@ -4,17 +4,19 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
-const { describe, it, beforeEach } = require('mocha')
-const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 require('../../setup/core')
 const { AgentExporter } = require('../../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../../src/profiling/exporters/file')
 
-// Test adapter: the space profiler reads the canonical DD_PROFILING_* names (allocation and OOM
-// monitoring included) straight off the tracer config; only tags and exporters are passed through.
-// Map the legacy flat option names onto a config-shaped object.
+// Map the legacy flat test options onto the production constructor shape.
+const identityRefreshChannel = channel('datadog:identity:refresh')
+const activeProfilers = []
+
 function makeSpace (Cls, {
   allocationProfilingEnabled = false,
   heapSamplingInterval = 512 * 1024,
@@ -25,24 +27,30 @@ function makeSpace (Cls, {
   tags = {},
   exporters = [],
 } = {}) {
-  return new Cls({
+  const profiler = new Cls({
     DD_PROFILING_HEAP_SAMPLING_INTERVAL: heapSamplingInterval,
     DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled,
     DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: oomMonitoringEnabled,
     DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: heapLimitExtensionSize,
     DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: maxHeapExtensionCount,
     DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: exportStrategies,
-  }, { tags, exporters })
+    tags,
+  }, { tags: { ...tags }, exporters })
+  activeProfilers.push(profiler)
+  return profiler
 }
 
 const exporterCliPath = path.join(__dirname, '../../../src/profiling', 'exporter_cli.js')
 
 describe('profilers/native/space', () => {
   let NativeSpaceProfiler
+  let logger
   let pprof
   let profile0
 
   beforeEach(() => {
+    activeProfilers.length = 0
+    logger = { error: sinon.stub() }
     profile0 = {
       encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
     }
@@ -58,7 +66,14 @@ describe('profilers/native/space', () => {
 
     NativeSpaceProfiler = proxyquire('../../../src/profiling/profilers/space', {
       '@datadog/pprof': pprof,
+      '../../log': logger,
     })
+  })
+
+  afterEach(() => {
+    for (const profiler of activeProfilers) {
+      profiler.stop()
+    }
   })
 
   it('should start the internal space profiler', () => {
@@ -99,11 +114,10 @@ describe('profilers/native/space', () => {
     sinon.assert.calledOnce(pprof.heap.stop)
   })
 
-  it('should provide info', () => {
+  it('should not provide info', () => {
     const profiler = makeSpace(NativeSpaceProfiler)
 
-    const info = profiler.getInfo()
-    assert.strictEqual(Object.keys(info).length, 0)
+    assert.strictEqual(profiler.getInfo(), undefined)
   })
 
   it('should collect profiles from the pprof space profiler', () => {
@@ -221,5 +235,50 @@ describe('profilers/native/space', () => {
     const [, , logsEnabled, exportCommand] = pprof.heap.monitorOutOfMemory.firstCall.args
     assert.strictEqual(logsEnabled, true)
     assert.deepStrictEqual(exportCommand, [])
+  })
+
+  it('should re-register the OOM export command with refreshed tags', () => {
+    const url = new URL('http://127.0.0.1:8126/')
+    const tags = { 'runtime-id': 'initial-id' }
+    const profiler = makeSpace(NativeSpaceProfiler, {
+      oomMonitoringEnabled: true,
+      exportStrategies: ['process'],
+      tags,
+      exporters: [new AgentExporter({ url, DD_PROFILING_UPLOAD_TIMEOUT: 60_000 })],
+    })
+
+    profiler.start()
+    tags['runtime-id'] = 'refreshed-id'
+    identityRefreshChannel.publish()
+
+    sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
+    const exportCommand = pprof.heap.monitorOutOfMemory.secondCall.args[3]
+    assert.deepStrictEqual(exportCommand, [
+      process.execPath,
+      exporterCliPath,
+      'http://127.0.0.1:8126/',
+      'runtime-id:refreshed-id,snapshot:on_oom',
+      'space',
+    ])
+
+    profiler.stop()
+    tags['runtime-id'] = 'another-id'
+    identityRefreshChannel.publish()
+
+    sinon.assert.calledTwice(pprof.heap.monitorOutOfMemory)
+  })
+
+  it('should contain OOM export refresh failures', () => {
+    const error = new Error('boom')
+    const profiler = makeSpace(NativeSpaceProfiler, {
+      oomMonitoringEnabled: true,
+      exportStrategies: ['process'],
+    })
+
+    profiler.start()
+    pprof.heap.monitorOutOfMemory.onSecondCall().throws(error)
+
+    identityRefreshChannel.publish()
+    sinon.assert.calledOnceWithExactly(logger.error, error)
   })
 })

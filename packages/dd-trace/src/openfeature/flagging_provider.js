@@ -1,13 +1,13 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+
+const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
-
-const { DatadogNodeServerProvider } = require('./require-provider')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -46,6 +46,22 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
     this.#configurationSource?.start()
+  }
+
+  /**
+   * @param {import('@openfeature/core').EvaluationContext} [context]
+   * @returns {Promise<void>}
+   */
+  initialize (context) {
+    const promise = super.initialize(context)
+
+    // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
+    // otherwise keep an idle process (a short script, a serverless handler) alive for up to
+    // `initializationTimeoutMs` while waiting for configuration to arrive.
+    // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
+    this.initController?.timeoutId?.unref?.()
+
+    return promise
   }
 
   /**

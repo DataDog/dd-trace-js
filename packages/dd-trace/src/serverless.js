@@ -2,6 +2,9 @@
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
+const IS_AWS_LAMBDA_MICROVM = getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN') !== undefined
+const isVercelAtStartup = getEnvironmentVariable('VERCEL') === '1'
+
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
     getEnvironmentVariable('FUNCTION_NAME') !== undefined &&
@@ -39,13 +42,71 @@ function isInServerlessEnvironment () {
   const isGCPFunction = getIsGCPFunction()
   const isAzureFunction = getIsAzureFunction()
 
-  return inAWSLambda || isGCPFunction || isAzureFunction
+  return IS_AWS_LAMBDA_MICROVM || inAWSLambda || isGCPFunction || isAzureFunction
+}
+
+/**
+ * Gets tags describing the serverless platform where the tracer is running.
+ *
+ * @param {{ isVercel: boolean }} [platform] Detected serverless platform.
+ * @returns {string[]|undefined}
+ */
+function getServerlessPlatformTags (platform = getServerlessPlatform()) {
+  if (platform.isVercel) {
+    return require('./serverless/vercel').getVercelPlatformTags()
+  }
+}
+
+/**
+ * Detects the serverless platform once while configuration is built.
+ * @returns {{ isVercel: boolean }}
+ */
+function getServerlessPlatform () {
+  return { isVercel: supportsServerlessTelemetryRetention() }
+}
+
+/**
+ * Whether the current platform can retain an invocation for telemetry delivery.
+ *
+ * Add future serverless platforms here as they gain an equivalent retention hook.
+ * @returns {boolean}
+ */
+function supportsServerlessTelemetryRetention () {
+  return isVercelAtStartup
+}
+
+/**
+ * Creates delivery tracking for platforms with an invocation retention hook.
+ */
+function createServerlessDeliveryTracker () {
+  if (supportsServerlessTelemetryRetention()) {
+    return new (require('./serverless/telemetry-delivery-tracker'))()
+  }
+}
+
+/**
+ * Registers the lifecycle adapter selected by the detected serverless platform.
+ * @param {{ flushAll?: (done: () => void) => void }} tracer
+ */
+function initializeServerlessTelemetry (tracer) {
+  if (supportsServerlessTelemetryRetention()) {
+    return require('./serverless/vercel').registerVercelTelemetryRetention(tracer)
+  }
 }
 
 module.exports = {
+  getServerlessPlatformTags,
+  getServerlessPlatform,
+  supportsServerlessTelemetryRetention,
+  createServerlessDeliveryTracker,
   getIsGCPFunction,
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  initializeServerlessTelemetry,
+  IS_AWS_LAMBDA_MICROVM,
+  // true only for a Node that bundles its own OpenSSL, whose CSPRNG keeps the snapshot's DRBG
+  // state across a MicroVM clone resume
+  NODE_BUNDLES_OPENSSL: process.config.variables.node_shared_openssl === false,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

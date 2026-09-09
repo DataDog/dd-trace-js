@@ -7,7 +7,12 @@ const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_thr
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const getDebuggerConfig = require('./config')
-const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
+const {
+  DEBUGGER_DIAGNOSTICS_V1,
+  DEBUGGER_INPUT_DIRECT,
+  DEBUGGER_INPUT_V2,
+  INSPECT_SEGMENT_GLOBAL_PROPERTY,
+} = require('./constants')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -55,6 +60,10 @@ function isStarted () {
  */
 function start (config, rcInstance) {
   if (worker !== null) return
+  if (config.DD_AGENTLESS_ENABLED && getDebuggerConfig(config) === undefined) {
+    log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
+    return
+  }
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
@@ -64,7 +73,9 @@ function start (config, rcInstance) {
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
-  globalThis[Symbol.for('dd-trace')].utilTypes = types
+  const debuggerGlobals = globalThis[Symbol.for('dd-trace')]
+  debuggerGlobals.utilTypes = types
+  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
 
   const probeSamplerBuffer = installProbeSampler()
 
@@ -154,7 +165,12 @@ function start (config, rcInstance) {
  */
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(getDebuggerConfig(config, inputPath))
+  const debuggerConfig = getDebuggerConfig(config, inputPath)
+  if (debuggerConfig === undefined) {
+    log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
+    return
+  }
+  configChannel.port2.postMessage(debuggerConfig)
 }
 
 /**
@@ -199,7 +215,8 @@ function cleanup (error) {
   // Pass error for unexpected exits, or undefined for graceful shutdown
   if (rcAckCallbacks) {
     for (const ackId of rcAckCallbacks.keys()) {
-      rcAckCallbacks.get(ackId)(error)
+      const acknowledge = rcAckCallbacks.get(ackId)
+      acknowledge(error)
       rcAckCallbacks.delete(ackId)
     }
     rcAckCallbacks = null
@@ -213,6 +230,11 @@ function cleanup (error) {
  * @param {(endpointPath: string) => void} cb - Callback with the detected endpoint path
  */
 function detectDebuggerEndpoint (config, cb) {
+  if (config.DD_AGENTLESS_ENABLED) {
+    cb(DEBUGGER_INPUT_DIRECT)
+    return
+  }
+
   log.debug('[debugger] Detecting available debugger endpoints...')
 
   fetchAgentInfo(config.url, (err, agentInfo) => {

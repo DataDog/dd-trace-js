@@ -20,7 +20,7 @@ describe('Plugin', () => {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
   })
 
-  const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk' })
+  const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk', traceTimeoutMs: 10000 })
 
   withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version, moduleName, realVersion) => {
     let client
@@ -41,7 +41,7 @@ describe('Plugin', () => {
     })
 
     it('instruments a full agentic call with subagents', async function () {
-      this.timeout(10000)
+      this.timeout(15000)
       const { z } = zod
 
       const fetchWeather = client.tool(
@@ -62,6 +62,7 @@ describe('Plugin', () => {
         prompt: PROMPT,
         options: {
           model: 'claude-sonnet-4-6',
+          title: 'Claude Agent SDK test',
           mcpServers: { local: localToolsServer },
           // Strip Claude Code built-in tools from the request payload so cassette hashes
           // stay stable across SDK versions (built-in tool descriptions change patch-to-patch).
@@ -102,9 +103,9 @@ describe('Plugin', () => {
       const sessionId = llmobsSpans[0].session_id
       const is03 = semifies(realVersion, '>=0.3.0')
 
-      // Subagent prompt is determined by the LLM at the previous step - differs between SDK versions
+      // Subagent prompt is determined by the LLM at the previous step.
       const subagentPrompt = is03
-        ? 'Please fetch the current weather for New York (NY) in fahrenheit.'
+        ? 'Fetch the current weather for New York (state code: NY) in fahrenheit and report back the result.'
         : 'Please fetch the current weather for New York state (NY) in fahrenheit.'
 
       const subagentNYResult = is03
@@ -113,35 +114,38 @@ describe('Plugin', () => {
 
       const outerThinkingText = is03
         ? 'The user wants me to:\n' +
-          '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
-          '2. After that subagent completes, get the weather in California myself (fahrenheit)\n' +
+          '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
+          '2. After that subagent completes, get the weather in California myself (in fahrenheit)\n' +
           '\n' +
           'Let me spawn the subagent for New York first, and wait for it to complete before doing California.'
         : 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
-          '2. After that, get the weather in California myself (fahrenheit)\n' +
+          '2. After that, get the weather in California directly (not in a subagent), also in fahrenheit\n' +
           '\n' +
-          'Let me start by spawning the subagent for New York.'
+          'Let me start with the subagent for New York.'
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
-        ? 'Sure! Let me start by spawning a subagent to fetch the weather in New York first!'
-        : 'Sure! Let me first spawn a subagent to fetch the weather in New York!'
+        ? "Sure! Let me first spawn a subagent to fetch the weather in New York, and then I'll fetch " +
+          "California's weather myself afterward.\n\n**Step 1: Spawning a subagent for New York...**"
+        : 'Sure! Let me start by spawning a subagent to fetch the New York weather first!'
 
       // The assistant's text preamble before fetching CA weather directly
       const outerCaPreamble = is03
-        ? "The subagent got New York's weather — **72°F**! Now let me fetch California's weather directly myself:"
-        : 'The subagent returned the New York weather: **72°F**. Now let me fetch the California weather myself!'
+        ? 'The subagent returned: **New York is currently 72°F.**\n\n' +
+          "**Step 2: Now fetching California's weather myself...**"
+        : 'The subagent has returned — New York is currently **72°F**. ' +
+          'Now let me fetch the California weather directly!'
 
-      // The Agent tool's `description` argument (chosen by the LLM at outer step-0); differs by SDK version
-      const agentDescription = is03 ? 'Fetch NY weather' : 'Fetch New York weather'
+      // The Agent tool's `description` argument is chosen by the LLM at outer step-0.
+      const agentDescription = 'Fetch NY weather'
 
       const agentToolId = is03
-        ? 'toolu_016VmQ6ndQNjrpmkSStPeqfP'
-        : 'toolu_01SU9BpPjFH3AT2rQq5erY6e'
+        ? 'toolu_01B6KvzhTYAZcSCPh27AMhWr'
+        : 'toolu_01J8D2bfeJuABv5T2kxWtn6w'
       const caToolId = is03
-        ? 'toolu_01EBvgoEf1PUX7p7t1Eut5ir'
-        : 'toolu_011eagJ7ZyfQBNE1q8Yd61Bt'
+        ? 'toolu_01R3LW8o9V7NUR3sDjVgkLnd'
+        : 'toolu_01E8hMpKVmX8f2sgk13QoN7S'
 
       // [0] root query span
       assertLlmObsSpanEvent(llmobsSpans[0], {
