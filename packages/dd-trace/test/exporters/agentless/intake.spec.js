@@ -4,7 +4,12 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
-const { computeIntakeUrl, INTAKE_URLS, INTAKE_PATH } = require('../../../src/exporters/agentless/intake')
+const {
+  computeIntakeUrl,
+  computeStatsIntakeUrl,
+  INTAKE_URLS,
+  INTAKE_PATH,
+} = require('../../../src/exporters/agentless/intake')
 
 require('../../setup/core')
 
@@ -37,5 +42,22 @@ describe('agentless intake', () => {
 
   it('targets the JSON span intake path', () => {
     assert.strictEqual(INTAKE_PATH, '/api/v2/spans')
+  })
+
+  describe('computeStatsIntakeUrl', () => {
+    it('targets the client stats intake for the configured site', () => {
+      assert.strictEqual(
+        computeStatsIntakeUrl('US3.DataDogHQ.com'),
+        'https://trace.agent.us3.datadoghq.com/api/v0.2/stats'
+      )
+    })
+
+    it('defaults to the datadoghq.com client stats intake', () => {
+      assert.strictEqual(computeStatsIntakeUrl(), 'https://trace.agent.datadoghq.com/api/v0.2/stats')
+    })
+
+    it('rejects sites with URL components', () => {
+      assert.throws(() => computeStatsIntakeUrl('datadoghq.com@evil.example'), /Invalid Datadog site/)
+    })
   })
 })

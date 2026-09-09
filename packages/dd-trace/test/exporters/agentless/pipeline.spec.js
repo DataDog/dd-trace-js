@@ -5,6 +5,8 @@ const http = require('node:http')
 const { URL } = require('node:url')
 const zlib = require('node:zlib')
 
+const { supportsAgentlessStats } = require('@datadog/libdatadog')
+const { decode } = require('@msgpack/msgpack')
 const { after, before, describe, it } = require('mocha')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../../../../version')
@@ -26,6 +28,20 @@ describe('AgentlessWriter data pipeline', () => {
   let intakeUrl
   let resolveRequest
   let request
+
+  /**
+   * @param {number} count
+   * @returns {Promise<object[]>}
+   */
+  function receiveRequests (count) {
+    const requests = []
+    return new Promise(resolve => {
+      resolveRequest = received => {
+        requests.push(received)
+        if (requests.length === count) resolve(requests)
+      }
+    })
+  }
 
   before(done => {
     process.env.DD_API_KEY = 'test-api-key'
@@ -128,5 +144,66 @@ describe('AgentlessWriter data pipeline', () => {
     await new Promise(resolve => writer.flush(resolve))
     await request
     await noIntakeTrace
+  })
+
+  const nativeStatsIt = supportsAgentlessStats ? it : it.skip
+  nativeStatsIt('exports traces and native client stats from one v0.4 payload', async () => {
+    request = receiveRequests(3)
+    const metadata = {
+      env: 'test-env',
+      hostname: 'test-host',
+      runtimeID: 'test-runtime-id',
+      containerId: 'container-id',
+      entityId: 'in-1234',
+    }
+    const writer = new AgentlessWriter({
+      url: intakeUrl,
+      stats: {
+        endpoint: new URL('/api/v0.2/stats', intakeUrl).href,
+        intervalMs: 10_000,
+      },
+      metadata,
+    })
+
+    writer.append([{
+      duration: 1,
+      error: 0,
+      meta: {},
+      metrics: {},
+      name: 'operation',
+      parent_id: id('0'),
+      resource: 'resource',
+      service: 'service',
+      span_id: id('2'),
+      start: 1,
+      trace_id: id('1'),
+    }])
+
+    await new Promise(resolve => writer.flush(resolve))
+    metadata.env = 'next-env'
+    writer.append([])
+    await new Promise(resolve => writer.flush(resolve))
+    const received = await request
+    const traceRequest = received.find(({ path }) => path === '/api/v2/spans')
+    const statsRequest = received.find(({ path }) => path === '/api/v0.2/stats')
+
+    assert.notStrictEqual(traceRequest, undefined)
+    assert.notStrictEqual(statsRequest, undefined)
+    assert.strictEqual(traceRequest.headers['datadog-client-computed-stats'], 'true')
+    assert.strictEqual(traceRequest.headers['datadog-client-computed-top-level'], 'true')
+    assert.strictEqual(traceRequest.headers['datadog-entity-id'], 'in-1234')
+    assert.strictEqual(statsRequest.headers['datadog-client-computed-stats'], 'true')
+    assert.strictEqual(statsRequest.headers['datadog-client-computed-top-level'], 'true')
+    assert.strictEqual(statsRequest.headers['datadog-entity-id'], 'in-1234')
+    assert.deepStrictEqual(statsRequest.payload.subarray(0, ZSTD_MAGIC.length), ZSTD_MAGIC)
+    if (zstdDecompressSync) {
+      const payload = decode(zstdDecompressSync(statsRequest.payload), { useBigInt64: true })
+      assert.strictEqual(payload.AgentHostname, 'test-host')
+      assert.strictEqual(payload.AgentEnv, 'test-env')
+      assert.strictEqual(payload.ClientComputed, true)
+      assert.strictEqual(payload.Stats[0].RuntimeID, 'test-runtime-id')
+      assert.strictEqual(payload.Stats[0].ContainerID, 'container-id')
+      assert.strictEqual(payload.Stats[0].Stats[0].Stats[0].Resource, 'resource')
+    }
   })
 })

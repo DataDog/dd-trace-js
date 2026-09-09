@@ -1,5 +1,7 @@
 'use strict'
 
+const { createSiteUrl } = require('../common/url')
+
 // Per-site hosts for the agentless JSON span intake. Regional data centers serve it from
 // browser-intake-* hosts rather than public-trace-http-intake.logs.<site>, so a single template
 // silently drops spans on us3/us5/ap1/ap2. Mirrors dd-trace-py's AgentlessTraceWriter.INTAKE_URLS
@@ -17,6 +19,7 @@ const INTAKE_URLS = {
 
 // Path of the JSON span intake on every intake host.
 const INTAKE_PATH = '/api/v2/spans'
+const STATS_INTAKE_PATH = '/api/v0.2/stats'
 
 /**
  * Resolves the agentless intake origin for a Datadog site.
@@ -40,4 +43,18 @@ function computeIntakeUrl (site = 'datadoghq.com') {
   return `https://browser-intake-${prefix.replaceAll('.', '-')}.${tld}`
 }
 
-module.exports = { INTAKE_URLS, INTAKE_PATH, computeIntakeUrl }
+/**
+ * @param {string} [site] - The Datadog site. Defaults to 'datadoghq.com'.
+ * @returns {string} The client stats intake endpoint.
+ */
+function computeStatsIntakeUrl (site = 'datadoghq.com') {
+  const url = createSiteUrl(site, 'trace.agent')
+  if (url === undefined) {
+    throw new TypeError(`Invalid Datadog site: ${site}`)
+  }
+
+  url.pathname = STATS_INTAKE_PATH
+  return url.href
+}
+
+module.exports = { INTAKE_URLS, INTAKE_PATH, computeIntakeUrl, computeStatsIntakeUrl }
