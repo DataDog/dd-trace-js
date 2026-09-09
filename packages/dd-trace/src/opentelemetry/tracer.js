@@ -6,7 +6,6 @@ const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/c
 const { AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const tracer = require('../../')
 
-const { DECISION_MAKER_KEY } = require('../constants')
 const id = require('../id')
 const log = require('../log')
 const TraceState = require('../opentracing/propagation/tracestate')
@@ -108,10 +107,7 @@ class Tracer {
 
     spanContext._ddContext._sampling = { priority: samplingPriority }
     spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
-    if (samplingMechanism !== undefined) {
-      spanContext._ddContext._sampling.mechanism = samplingMechanism
-      spanContext._ddContext._trace.tags[DECISION_MAKER_KEY] = `-${samplingMechanism}`
-    }
+    if (samplingMechanism !== undefined) spanContext._ddContext._sampling.mechanism = samplingMechanism
     return spanContext
   }
 

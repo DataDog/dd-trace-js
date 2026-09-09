@@ -14,7 +14,6 @@ const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
 const {
-  DECISION_MAKER_KEY,
   SAMPLING_MECHANISM_APPSEC,
   SAMPLING_MECHANISM_AI_GUARD,
 } = require('../../src/constants')
@@ -289,9 +288,7 @@ describe('OTel Tracer', () => {
       )
 
       assert.deepStrictEqual(spanContext._ddContext.getTags(), {})
-      assert.deepStrictEqual(spanContext._ddContext._trace.tags, {
-        [DECISION_MAKER_KEY]: '-4',
-      })
+      assert.deepStrictEqual(spanContext._ddContext._trace.tags, {})
       assert.strictEqual(
         spanContext._ddContext._tracestate.get('dd'),
         's:2;p:76543210fedcba98;o:synthetics;t.dm:-4;t.foo:bar~baz;t.tid:0123456789abcdef'
@@ -318,7 +315,6 @@ describe('OTel Tracer', () => {
 
         assert.strictEqual(span._ddSpan.context()._sampling.priority, USER_KEEP)
         assert.strictEqual(span._ddSpan.context()._sampling.mechanism, mechanism)
-        assert.strictEqual(span._ddSpan.context()._trace.tags[DECISION_MAKER_KEY], `-${mechanism}`)
         span.end()
       })
     }
