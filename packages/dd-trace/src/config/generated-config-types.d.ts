@@ -415,6 +415,7 @@ export interface GeneratedConfig {
   env: string | undefined;
   experimental: {
     aiguard: {
+      analyzeStreamResponsesEnabled: boolean;
       block: boolean;
       enabled: boolean;
       endpoint: string | undefined;
@@ -615,6 +616,7 @@ export interface GeneratedEnvVarConfig {
   DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
+  DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_AI_GUARD_BLOCK: boolean;
   DD_AI_GUARD_ENABLED: boolean;
   DD_AI_GUARD_ENDPOINT: string | undefined;

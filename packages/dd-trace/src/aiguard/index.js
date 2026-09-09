@@ -18,9 +18,10 @@ function enable (tracer, config) {
   try {
     aiguard = new AIGuard(tracer, config)
     const block = config.experimental?.aiguard?.block !== false
+    const analyzeStreamResponses = config.experimental?.aiguard?.analyzeStreamResponsesEnabled
 
     incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-    integrations.enable(aiguard, block)
+    integrations.enable(aiguard, block, analyzeStreamResponses)
 
     isEnabled = true
   } catch (err) {

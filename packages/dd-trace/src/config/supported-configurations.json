@@ -53,6 +53,17 @@
         ]
       }
     ],
+    "DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.analyzeStreamResponsesEnabled"
+        ],
+        "default": "false",
+        "description": "Buffer Vercel AI streamed responses for After Model evaluation before replaying them."
+      }
+    ],
     "DD_AI_GUARD_BLOCK": [
       {
         "implementation": "C",

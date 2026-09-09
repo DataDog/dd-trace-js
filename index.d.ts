@@ -789,6 +789,12 @@ declare namespace tracer {
          */
         enabled?: boolean,
         /**
+         * Buffer streamed responses for After Model evaluation before replaying them.
+         * @default false
+         * @env DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED
+         */
+        analyzeStreamResponsesEnabled?: boolean,
+        /**
          * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
          * When `true`, AI Guard will block requests that violate security policies.
          * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
