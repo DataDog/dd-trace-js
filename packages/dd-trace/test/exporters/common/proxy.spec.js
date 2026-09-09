@@ -6,6 +6,7 @@ const https = require('node:https')
 const { once } = require('node:events')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 require('../../setup/core')
 
@@ -101,6 +102,29 @@ describe('HTTPS proxy agent selection', () => {
       )
     } finally {
       directAgent.destroy()
+    }
+  })
+
+  it('supports wrappers that instantiate http.ClientRequest for HTTPS targets', () => {
+    process.env.HTTPS_PROXY = 'http://proxy.example:8202'
+    const directAgent = new https.Agent()
+    const agent = getHttpsProxyAgent('https://intake.example/path', directAgent)
+    sinon.stub(agent, 'addRequest')
+    let request
+
+    try {
+      request = new http.ClientRequest({
+        agent,
+        hostname: 'intake.example',
+        path: '/',
+        protocol: 'https:',
+        _defaultAgent: https.globalAgent,
+      })
+      request.on('error', () => {})
+    } finally {
+      request?.destroy()
+      directAgent.destroy()
+      agent.destroy()
     }
   })
 
