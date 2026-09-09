@@ -60,8 +60,6 @@ const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
-// Model-backed kinds always report a model and a provider, falling back to this when the
-// integration or the user did not supply one.
 const DEFAULT_MODEL = 'custom'
 const MODEL_BACKED_SPAN_KINDS = new Set(['llm', 'embedding'])
 
@@ -121,8 +119,6 @@ class LLMObsSpanProcessor {
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
 
-    // Ahead of `format`, so the APM span keeps these even when the user span processor drops the
-    // LLMObs event or formatting throws.
     try {
       this.#setGenAiApmTags(span)
     } catch (e) {
@@ -324,13 +320,7 @@ class LLMObsSpanProcessor {
 
   /**
    * Writes the scalar `gen_ai.*` attributes onto the APM span, so model, provider, application,
-   * conversation and token usage are searchable, facetable and monitorable in APM. Message bodies
-   * (input, output, tool definitions, retrieval documents) stay off the APM span: they are
-   * unbounded and not usefully queryable once serialized, and the UI keeps joining the LLMObs
-   * track for those.
-   *
-   * `gen_ai.operation.name` carries the raw LLMObs span kind rather than the OTel `gen_ai` enum,
-   * matching what the UI already writes into that key so both values agree.
+   * conversation and token usage are searchable in APM. Message bodies stay off the APM span.
    *
    * @param {import('../opentracing/span')} span
    */
