@@ -2243,7 +2243,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              TEST_DIR: 'ci-visibility/vitest-tests/efd-always-fails.mjs',
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
               VITEST_NATIVE_MODULE_RUNNER: 'true',
             },
           }
@@ -2284,6 +2284,65 @@ versions.forEach((version) => {
         assert.strictEqual(assertionResults.length, 1)
         assert.strictEqual(assertionResults[0].status, 'failed')
         assert.ok(assertionResults[0].failureMessages.length > 0)
+      })
+
+      nativeModuleRunnerIt('reports success when an EFD attempt passes with native module loading', async function () {
+        this.timeout(60_000)
+        testOutput = ''
+
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --reporter=json --outputFile=efd-results.json',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
+              VITEST_NATIVE_MODULE_RUNNER: 'true',
+              EFD_PASS_ATTEMPT: '2',
+            },
+          }
+        )
+        childProcess.stdout.on('data', data => { testOutput += data })
+        childProcess.stderr.on('data', data => { testOutput += data })
+
+        const [[code, signal]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url === '/api/v2/citestcycle',
+            payloads => {
+              const tests = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+
+              assert.ok(tests.some(test => test.meta[TEST_STATUS] === 'fail'), testOutput)
+              assert.ok(tests.some(test => test.meta[TEST_STATUS] === 'pass'), testOutput)
+            }
+          ),
+        ])
+
+        assert.strictEqual(signal, null, testOutput)
+        assert.strictEqual(code, 0, testOutput)
+
+        const report = JSON.parse(fs.readFileSync(path.join(cwd, 'efd-results.json'), 'utf8'))
+        const assertionResults = report.testResults.flatMap(({ assertionResults }) => assertionResults)
+
+        assert.strictEqual(report.success, true)
+        assert.strictEqual(assertionResults.length, 1)
+        assert.strictEqual(assertionResults[0].status, 'passed')
       })
 
       it('bails out of EFD if the percentage of new tests is too high', (done) => {
