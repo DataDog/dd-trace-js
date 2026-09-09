@@ -98,6 +98,7 @@ describe('PromptManager', () => {
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/greeting')
     assert.strictEqual(fetchStub.secondCall.args[0],
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/a%2Fb/versions/3')
+    assert.strictEqual(fetchStub.firstCall.args[1].redirect, 'error')
     assert.strictEqual(latest.source, 'registry')
     assert.strictEqual(exact.version, '0.3.0')
     assert.strictEqual(exact.promptVersionUuid, 'backend-version-id')
@@ -535,6 +536,7 @@ describe('PromptManager', () => {
     assert.deepStrictEqual(JSON.parse(calls[3].options.body), { description: '', env_ids: [] })
     for (const call of calls.slice(0, 5)) assert.strictEqual(call.options.headers['DD-APPLICATION-KEY'], 'app-key')
     for (const call of calls.slice(5)) assert.strictEqual(call.options.headers['DD-APPLICATION-KEY'], undefined)
+    for (const call of calls) assert.strictEqual(call.options.redirect, 'error')
   })
 
   it('evicts exact prompt-wide hot and warm selectors after successful mutations', async () => {

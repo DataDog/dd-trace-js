@@ -246,6 +246,7 @@ class PromptManager {
         method,
         headers,
         body,
+        redirect: 'error',
         signal: requestSignal(this.timeoutMs, cacheSignal),
       })
       const responseBody = await response.text()
@@ -479,6 +480,7 @@ class PromptManager {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        redirect: 'error',
         signal: AbortSignal.timeout(this.timeoutMs),
       })
 
