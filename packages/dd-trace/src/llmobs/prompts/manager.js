@@ -13,7 +13,7 @@ const SOURCE_CACHE = 'cache'
 /**
  * @typedef {object} PromptRequest
  * @property {string} promptId
- * @property {string | number | undefined} version
+ * @property {number | undefined} version
  * @property {string | undefined} env
  * @property {string | undefined} targetingKey
  * @property {Record<string, unknown>} attributes
@@ -40,7 +40,7 @@ function isPlainObject (value) {
  * Build a canonical prompt selector.
  * @param {string} promptId
  * @param {object} [options]
- * @param {string | number} [options.version]
+ * @param {number} [options.version]
  * @param {string} [options.env]
  * @param {string} [options.targetingKey]
  * @param {Record<string, unknown>} [options.attributes]
@@ -376,7 +376,7 @@ class PromptManager {
    * Get a prompt by exact version or current environment.
    * @param {string} promptId
    * @param {object} [options]
-   * @param {string | number} [options.version]
+   * @param {number} [options.version]
    * @param {string | object | Array<{role: string, content: string}> |
    *   (() => string | object | Array<{role: string, content: string}>)} [options.fallback]
    * @param {string} [options.targetingKey]
