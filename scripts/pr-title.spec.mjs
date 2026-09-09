@@ -144,9 +144,8 @@ describe('PR title workflow', () => {
     assert.deepStrictEqual([...request.labels], ['fix', 'http', 'tests', 'semver-patch'])
   })
 
-  it('inspects files whenever the title or changed files can differ', () => {
-    const inspectionCondition = "steps.rename.outputs.renamed != 'true' && " +
-      "(github.event.action != 'edited' || github.event.changes.title != null)"
+  it('inspects files for every event unless the title was auto-renamed', () => {
+    const inspectionCondition = "steps.rename.outputs.renamed != 'true'"
     const titleCondition = "steps.rename.outputs.renamed != 'true' && " +
       "(github.event.action == 'opened' || " +
       "github.event.action == 'reopened' || " +

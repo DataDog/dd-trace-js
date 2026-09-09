@@ -41,9 +41,7 @@ jobs:
             core.setOutput('renamed', 'true')
 
       - name: Checkout base revision
-        if: >-
-          steps.rename.outputs.renamed != 'true' &&
-          (github.event.action != 'edited' || github.event.changes.title != null)
+        if: steps.rename.outputs.renamed != 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
@@ -53,9 +51,7 @@ jobs:
       # Fetch the PR head as Git objects only. The privileged pull_request_target
       # job must never check out or execute code from this ref.
       - name: Fetch pull request head
-        if: >-
-          steps.rename.outputs.renamed != 'true' &&
-          (github.event.action != 'edited' || github.event.changes.title != null)
+        if: steps.rename.outputs.renamed != 'true'
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: >-
@@ -63,9 +59,7 @@ jobs:
           "+refs/pull/${PR_NUMBER}/head:refs/remotes/pull-request/head"
 
       - name: Validate PR title and release-note context
-        if: >-
-          steps.rename.outputs.renamed != 'true' &&
-          (github.event.action != 'edited' || github.event.changes.title != null)
+        if: steps.rename.outputs.renamed != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
