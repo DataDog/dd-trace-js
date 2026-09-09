@@ -45,6 +45,12 @@ if (process.env.NO_ISOLATE) {
   config.test.isolate = false
 }
 
+if (process.env.VITEST_NATIVE_MODULE_RUNNER) {
+  config.test.experimental = {
+    viteModuleRunner: false,
+  }
+}
+
 if (process.env.POOL_NO_ISOLATE) {
   config.test.poolOptions = {
     [poolConfig]: {

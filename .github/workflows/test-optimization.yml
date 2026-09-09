@@ -521,12 +521,8 @@ jobs:
           - vitest.tia
           - vitest.test-management
           - vitest.advanced
-          - vitest.efd-reporting
           - vitest.msw
           - vitest.no-worker-init
-        exclude:
-          - version: oldest
-            spec: vitest.efd-reporting
     name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})
     env:
       DD_SERVICE: dd-trace-js-integration-tests
