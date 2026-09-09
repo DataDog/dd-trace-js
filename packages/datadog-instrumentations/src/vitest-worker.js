@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
@@ -244,7 +245,17 @@ function wrapVitestCoverageRpc () {
       if (property !== 'onAfterSuiteRun' || typeof value !== 'function') return value
 
       return function (metadata) {
-        vitestCoverageSnapshot = metadata?.coverage
+        const coverage = metadata?.coverage
+        if (typeof coverage === 'string') {
+          try {
+            vitestCoverageSnapshot = JSON.parse(fs.readFileSync(coverage, 'utf8'))
+          } catch (error) {
+            log.warn('Could not read Vitest V8 coverage: %s', error?.message)
+            vitestCoverageSnapshot = undefined
+          }
+        } else {
+          vitestCoverageSnapshot = coverage
+        }
         return value.apply(this, arguments)
       }
     },
@@ -707,7 +718,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
-    const shouldFlipStatus = isEfd || isAtf
+    const shouldResetStatus = isEfd || isAtf
     const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -727,13 +738,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         if (shouldTrackStatuses && statuses) {
           statuses.push(lastExecutionStatus)
         }
-        if (shouldFlipStatus) {
-          // If we don't "reset" the result.state to "pass", once a repetition fails,
-          // vitest will always consider the test as failed, so we can't read the actual status
-          // This means that we change vitest's behavior:
-          // if the last attempt passes, vitest would consider the test as failed
-          // but after this change, it will consider the test as passed
-          task.result.state = 'pass'
+        if (shouldResetStatus) {
+          // Reset to Vitest's neutral state so a previous failure does not affect the next repetition.
+          // A terminal pass state can leak into reporters before the next repetition determines its status.
+          task.result.state = 'run'
         }
       }
     } else if (numRepetition === task.repeats) {
@@ -748,8 +756,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
       }
-      if (shouldFlipStatus) {
-        task.result.state = 'pass'
+      if (shouldResetStatus) {
+        task.result.state = 'run'
       }
     }
 
@@ -891,22 +899,36 @@ function wrapVitestTestRunner (VitestTestRunner) {
 }
 
 function captureRunnerFunctions (pkg) {
-  if (vitestGetFn) return
   const getFnExport = findExportByName(pkg, 'getFn')
   const setFnExport = findExportByName(pkg, 'setFn')
-  if (getFnExport && setFnExport) {
+  if (!vitestGetFn && getFnExport) {
     vitestGetFn = getFnExport.value
+  }
+  if (!vitestSetFn && setFnExport) {
     vitestSetFn = setFnExport.value
   }
   const getHooksExport = findExportByName(pkg, 'getHooks')
-  if (getHooksExport) {
+  if (!vitestGetHooks && getHooksExport) {
     vitestGetHooks = getHooksExport.value
+  }
+}
+
+function installTestScopedRunTask (VitestTestRunner) {
+  if (VitestTestRunner.prototype.runTask) return
+
+  VitestTestRunner.prototype.runTask = function (task) {
+    const fn = vitestGetFn?.(task)
+    if (!fn) {
+      throw new Error('Test function is not found. Did you add it using setFn?')
+    }
+    const testFn = wrapTestScopedFn(task, fn)
+    return testFn()
   }
 }
 
 addHook({
   name: 'vitest',
-  versions: ['>=4.0.0'],
+  versions: ['>=4.0.0 <5.0.0'],
   filePattern: 'dist/chunks/test.*',
 }, (testPackage) => {
   const testRunner = getTestRunnerExport(testPackage)
@@ -918,6 +940,30 @@ addHook({
   wrapVitestTestRunner(testRunner.value)
 
   return testPackage
+})
+
+// Vitest 5 bundled the former @vitest/runner implementation into separate index and run chunks.
+addHook({
+  name: 'vitest',
+  versions: ['>=5.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, (testPackage) => {
+  const testRunner = getTestRunnerExport(testPackage)
+  if (testRunner) {
+    wrapVitestTestRunner(testRunner.value)
+    installTestScopedRunTask(testRunner.value)
+  }
+  return testPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=5.0.0'],
+  filePattern: 'dist/chunks/run.*',
+}, (runnerPackage, frameworkVersion) => {
+  captureRunnerFunctions(runnerPackage)
+  wrapStartTests(runnerPackage, frameworkVersion)
+  return runnerPackage
 })
 
 addHook({
@@ -946,13 +992,8 @@ addHook({
   return vitestPackage
 })
 
-// test suite start and finish
-// only relevant for workers
-addHook({
-  name: '@vitest/runner',
-  versions: ['>=1.6.0'],
-}, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
+function getStartTestsWrapper (frameworkVersion) {
+  return startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteFinishCh.hasSubscribers) {
       return startTests.apply(this, arguments)
@@ -1166,7 +1207,20 @@ addHook({
     })
 
     return startTestsResponse
-  })
+  }
+}
 
+function wrapStartTests (vitestPackage, frameworkVersion) {
+  const startTests = findExportByName(vitestPackage, 'startTests')
+  if (startTests) {
+    shimmer.wrap(vitestPackage, startTests.key, getStartTestsWrapper(frameworkVersion))
+  }
   return vitestPackage
-})
+}
+
+// test suite start and finish
+// only relevant for workers
+addHook({
+  name: '@vitest/runner',
+  versions: ['>=1.6.0'],
+}, wrapStartTests)

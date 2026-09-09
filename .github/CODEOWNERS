@@ -190,7 +190,7 @@
 /packages/datadog-instrumentations/src/cucumber-worker-threads.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress-config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress-legacy-finalizers.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/rum-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright-reporter.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/webdriverio.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/nyc.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
@@ -470,6 +470,7 @@
 /integration-tests/mocha-parallel-files.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+/integration-tests/process-lifecycle.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/tsconfig.json @DataDog/dd-trace-js @DataDog/lang-platform-js

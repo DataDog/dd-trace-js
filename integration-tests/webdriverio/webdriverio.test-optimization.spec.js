@@ -19,6 +19,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   DI_DEBUG_ERROR_PREFIX,
   DI_ERROR_DEBUG_INFO_CAPTURED,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
   TEST_CODE_COVERAGE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -27,6 +29,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_IS_RUM_ACTIVE,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_MANAGEMENT_ENABLED,
@@ -55,29 +58,79 @@ const TEST_MANAGEMENT_PATH = '/api/v2/test/libraries/test-management/tests'
 /**
  * Starts the minimal W3C WebDriver endpoint required by WebdriverIO workers.
  *
- * @returns {Promise<{port: number, server: import('node:http').Server, getSessionCount: () => number}>}
+ * @returns {Promise<{
+ *   port: number,
+ *   server: import('node:http').Server,
+ *   getSessionCount: () => number,
+ *   getRequests: () => Array<{
+ *     body: {cookie?: {value: string}}|undefined,
+ *     method: string|undefined,
+ *     pageUrl: string|undefined,
+ *     url: string|undefined
+ *   }>
+ * }>}
  */
 function startWebDriverServer () {
   let sessionCount = 0
+  let currentWindowHandle
+  let windowHandles
+  const windowUrls = new Map()
+  const requests = []
   const server = http.createServer((request, response) => {
-    request.resume()
+    const chunks = []
+    request.on('data', chunk => chunks.push(chunk))
     request.once('end', () => {
       const isNewSession = request.method === 'POST' && request.url === '/session'
+      const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined
+      const pageUrl = windowUrls.get(currentWindowHandle)
       let value = null
 
       if (isNewSession) {
         sessionCount++
+        currentWindowHandle = 'window-a'
+        windowHandles = ['window-a']
+        windowUrls.clear()
+        windowUrls.set(currentWindowHandle, 'about:blank')
         value = {
           sessionId: `webdriverio-${sessionCount}`,
           capabilities: {
             browserName: 'chrome',
             browserVersion: 'test',
+            'goog:chromeOptions': {},
             platformName: process.platform,
           },
         }
       } else if (request.method === 'GET' && request.url === '/status') {
         value = { ready: true, message: '' }
+      } else if (request.method === 'GET' && request.url?.endsWith('/window')) {
+        value = currentWindowHandle
+      } else if (request.method === 'GET' && request.url?.endsWith('/window/handles')) {
+        value = windowHandles
+      } else if (request.method === 'POST' && request.url?.endsWith('/window')) {
+        currentWindowHandle = body.handle
+      } else if (request.method === 'DELETE' && request.url?.endsWith('/window')) {
+        windowHandles = windowHandles.filter(windowHandle => windowHandle !== currentWindowHandle)
+        windowUrls.delete(currentWindowHandle)
+        currentWindowHandle = windowHandles[0]
+        value = windowHandles
+      } else if (request.method === 'GET' && request.url?.endsWith('/url')) {
+        value = windowUrls.get(currentWindowHandle)
+      } else if (request.method === 'POST' && request.url?.endsWith('/url')) {
+        windowUrls.set(currentWindowHandle, body.url)
+      } else if (request.method === 'POST' && request.url?.endsWith('/execute/sync')) {
+        if (body.script.includes('getInternalContext')) {
+          value = { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        } else {
+          value = true
+        }
       }
+
+      requests.push({
+        body,
+        method: request.method,
+        pageUrl,
+        url: request.url,
+      })
 
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ value }))
@@ -99,6 +152,7 @@ function startWebDriverServer () {
         port: address.port,
         server,
         getSessionCount: () => sessionCount,
+        getRequests: () => requests,
       })
     })
   })
@@ -160,15 +214,17 @@ for (const version of versions) {
     let testOutput = ''
     let webDriver
 
-    useSandbox([
+    const dependencies = [
       `@wdio/cli@${version}`,
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
-      'bunyan',
-      'pino',
-      'winston',
-    ], true, [
+    ]
+    if (version === 'latest') {
+      dependencies.push('bunyan', 'pino', 'winston')
+    }
+
+    useSandbox(dependencies, true, [
       './integration-tests/webdriverio/fixtures/*',
       './integration-tests/ci-visibility/dynamic-instrumentation/dependency.js',
     ])
@@ -207,7 +263,7 @@ for (const version of versions) {
      * @param {'mocha'|'jasmine'} framework
      * @param {string} scenario
      * @param {number} expectedWebDriverSessions
-     * @param {(payloads: object[]) => void} assertPayloads
+     * @param {(payloads: object[], requests: object[]) => void} assertPayloads
      * @param {object} [extraEnvironment]
      * @param {number} [expectedExitCode]
      * @param {string} [workingDirectory]
@@ -223,6 +279,7 @@ for (const version of versions) {
       workingDirectory = cwd
     ) {
       const initialWebDriverSessionCount = webDriver.getSessionCount()
+      const initialWebDriverRequestCount = webDriver.getRequests().length
       const executable = path.join(cwd, 'node_modules', '.bin', 'wdio')
       childProcess = exec(`"${executable}" run ./wdio.conf.js`, {
         cwd: workingDirectory,
@@ -238,6 +295,7 @@ for (const version of versions) {
           ...extraEnvironment,
         },
       })
+      const childClosed = once(childProcess, 'close')
       childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
@@ -248,17 +306,24 @@ for (const version of versions) {
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
         undefined,
-        assertPayloads,
-        { hardTimeout: 60_000 }
+        payloads => assertPayloads(
+          payloads,
+          webDriver.getRequests().slice(initialWebDriverRequestCount)
+        ),
+        // WebdriverIO worker and coordinator shutdown wait for pending exports.
+        { gracePeriod: 0, hardTimeout: 60_000 }
       )
 
       let exitCode
       try {
         [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
+          childClosed,
           payloadsPromise,
         ])
       } catch (error) {
+        if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+          await childClosed.catch(() => {})
+        }
         error.message += `\n${testOutput}`
         throw error
       }
@@ -278,7 +343,7 @@ for (const version of versions) {
          *
          * @param {string} scenario
          * @param {number} expectedWebDriverSessions
-         * @param {(payloads: object[]) => void} assertPayloads
+         * @param {(payloads: object[], requests: object[]) => void} assertPayloads
          * @param {object} [extraEnvironment]
          * @param {number} [expectedExitCode]
          * @param {string} [workingDirectory]
@@ -310,85 +375,114 @@ for (const version of versions) {
               pino: { level: 30, messageKey: 'msg' },
               winston: { level: 'info', messageKey: 'message' },
             }
+            const loggerNames = Object.keys(loggers)
 
-            for (const [loggerName, { level: expectedLevel, messageKey }] of Object.entries(loggers)) {
-              describe(`with ${loggerName}`, () => {
-                it('submits correlated logs', async () => {
-                  await runScenario('automaticLogSubmission', 1, payloads => {
-                    const logRequests = getLogRequests(payloads)
-
-                    assert.ok(logRequests.length > 0)
-                    for (const logRequest of logRequests) {
-                      assert.strictEqual(logRequest.headers['dd-api-key'], '1')
-                      assert.strictEqual(logRequest.headers['content-type'], 'application/json')
-                      assert.strictEqual(
-                        logRequest.url,
-                        `/api/v2/logs?ddsource=${loggerName}&service=my-service`
-                      )
-                    }
-
-                    const logMessages = logRequests.flatMap(({ logMessage }) => logMessage)
-                    assert.strictEqual(logMessages.length, 2)
-
-                    const logMessage = logMessages.find(
-                      logMessage => logMessage[messageKey] === 'Hello from WebdriverIO!'
-                    )
-                    const afterHookLogMessage = logMessages.find(
-                      logMessage => logMessage[messageKey] === 'Hello from WebdriverIO after hook!'
-                    )
-                    const test = getEvents(payloads).find(event => event.type === 'test').content
-
-                    assert.ok(logMessage)
-                    assert.strictEqual(logMessage.level, expectedLevel)
-                    assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
-                    assert.strictEqual(logMessage.dd.service, 'my-service')
-                    assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
-                    assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
-                    assert.ok(afterHookLogMessage)
-                    assert.strictEqual(afterHookLogMessage.level, expectedLevel)
-                  }, {
-                    DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                    DD_SERVICE: 'my-service',
-                    TEST_LOGGER: loggerName,
-                  })
-
-                  assert.match(testOutput, /Hello from WebdriverIO!/)
-                })
-
-                it('does not submit logs when automatic submission is disabled', async () => {
-                  await runScenario('automaticLogSubmission', 1, payloads => {
-                    assert.strictEqual(getLogRequests(payloads).length, 0)
-                  }, {
-                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                    DD_SERVICE: 'my-service',
-                    TEST_LOGGER: loggerName,
-                  })
-
-                  assert.match(testOutput, /Hello from WebdriverIO!/)
-                  assert.match(testOutput, /span_id/)
-                })
-
-                it('does not submit logs when the API key is missing', async () => {
-                  await runScenario('automaticLogSubmission', 1, payloads => {
-                    assert.strictEqual(getLogRequests(payloads).length, 0)
-                  }, {
-                    ...getCiVisEvpProxyConfig(receiver.port),
-                    DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                    DD_API_KEY: '',
-                    DD_SERVICE: 'my-service',
-                    NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
-                    TEST_LOGGER: loggerName,
-                  })
-
-                  assert.match(testOutput, /Hello from WebdriverIO!/)
-                  assert.match(testOutput, /span_id/)
-                })
-              })
+            /**
+             * @param {boolean} [includesTraceIds]
+             * @returns {void}
+             */
+            function assertLoggerOutput (includesTraceIds = false) {
+              const lines = testOutput.split('\n')
+              for (const loggerName of loggerNames) {
+                const line = lines.find(line => line.includes(`Hello from WebdriverIO ${loggerName}!`))
+                assert.ok(line)
+                if (includesTraceIds) {
+                  assert.match(line, /span_id/)
+                }
+              }
             }
+
+            it('submits correlated logs from supported loggers', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                const logRequests = getLogRequests(payloads)
+                const test = getEvents(payloads).find(event => event.type === 'test').content
+                const expectedUrls = new Set(loggerNames.map(loggerName =>
+                  `/api/v2/logs?ddsource=${loggerName}&service=my-service`))
+
+                assert.ok(logRequests.length > 0)
+                for (const logRequest of logRequests) {
+                  assert.ok(expectedUrls.has(logRequest.url))
+                  assert.strictEqual(logRequest.headers['dd-api-key'], '1')
+                  assert.strictEqual(logRequest.headers['content-type'], 'application/json')
+                }
+                for (const [loggerName, { level: expectedLevel, messageKey }] of Object.entries(loggers)) {
+                  const loggerRequests = logRequests.filter(({ url }) =>
+                    url === `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
+
+                  assert.ok(loggerRequests.length > 0)
+                  const logMessages = loggerRequests.flatMap(({ logMessage }) => logMessage)
+                  assert.strictEqual(logMessages.length, 2)
+
+                  const logMessage = logMessages.find(
+                    logMessage => logMessage[messageKey] === `Hello from WebdriverIO ${loggerName}!`
+                  )
+                  const afterHookLogMessage = logMessages.find(
+                    logMessage => logMessage[messageKey] === `Hello from WebdriverIO ${loggerName} after hook!`
+                  )
+
+                  assert.ok(logMessage)
+                  assert.strictEqual(logMessage.level, expectedLevel)
+                  assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
+                  assert.strictEqual(logMessage.dd.service, 'my-service')
+                  assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
+                  assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
+                  assert.ok(afterHookLogMessage)
+                  assert.strictEqual(afterHookLogMessage.level, expectedLevel)
+                }
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+
+              assertLoggerOutput()
+            })
+
+            it('does not submit logs when automatic submission is disabled', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                assert.strictEqual(getLogRequests(payloads).length, 0)
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+
+              assertLoggerOutput(true)
+            })
+
+            it('does not submit logs when the API key is missing', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                assert.strictEqual(getLogRequests(payloads).length, 0)
+              }, {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_API_KEY: '',
+                DD_SERVICE: 'my-service',
+                NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
+              })
+
+              assertLoggerOutput(true)
+            })
           })
         }
+
+        it('does not correlate or retain classic WebDriver tests with RUM sessions', async () => {
+          await runScenario('rum', 1, (payloads, requests) => {
+            const tests = getEvents(payloads)
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+            const navigatedTest = tests.find(test =>
+              test.meta[TEST_NAME].endsWith('correlates the RUM session with the test execution'))
+
+            assert.strictEqual(tests.length, 3)
+            assert.ok(tests.every(test => test.meta[TEST_IS_RUM_ACTIVE] === undefined))
+            assert.strictEqual(navigatedTest.meta[TEST_BROWSER_NAME], 'chrome')
+            assert.strictEqual(navigatedTest.meta[TEST_BROWSER_VERSION], 'test')
+            assert.ok(requests.some(({ url }) => url?.endsWith('/refresh')))
+            assert.strictEqual(requests.some(({ url }) => url?.includes('/cookie')), false)
+            assert.strictEqual(requests.some(({ url }) => url?.endsWith('/chromium/send_command')), false)
+          })
+        })
 
         it('requests enabled data once and keeps TIA disabled across parallel workers', async () => {
           receiver.setSettings({

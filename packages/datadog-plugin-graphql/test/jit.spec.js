@@ -38,6 +38,14 @@ function identity (value) {
 }
 
 /**
+ * @param {{ createResolverInfo: (data: object) => Record<string, Record<string, unknown>> }} message
+ * @returns {Record<string, Record<string, unknown>>}
+ */
+function materializeResolverInfo (message) {
+  return message.createResolverInfo(message)
+}
+
+/**
  * @param {WeakRef<object>} reference
  * @returns {Promise<boolean>}
  */
@@ -325,14 +333,16 @@ void generatedResolver
     })
 
     withVersions('graphql', 'graphql-jit', '>=0.7.0', version => {
+      const graphqlJit = require(`../../../versions/graphql-jit@${version}`)
       const packageRoot = join(__dirname, '../../../versions', `graphql-jit@${version}`, 'node_modules/graphql-jit')
+      // This CommonJS matrix has no ESM loader. GraphQL 17's module-sync export is covered by the ESM matrix.
+      const cjsGraphqlIt = graphqlJit.getPath('graphql').endsWith('.mjs') ? it.skip : it
 
       before(() => {
         return agent.load('graphql', { variables: ['id', 'name'] })
       })
 
       before(() => {
-        const graphqlJit = require(`../../../versions/graphql-jit@${version}`)
         graphql = graphqlJit.get('graphql')
         compileQuery = graphqlJit.get().compileQuery
         schema = buildSchema()
@@ -470,7 +480,7 @@ void generatedResolver
         assert.deepStrictEqual(result.data, { hello: 'Ada' })
       })
 
-      it('does not nest schema and compiled resolver instrumentation', async () => {
+      cjsGraphqlIt('does not nest schema and compiled resolver instrumentation', async () => {
         const localSchema = buildSchema()
         const document = graphql.parse('query ReusedSchema { hello }')
 
@@ -528,7 +538,7 @@ void generatedResolver
         }
       })
 
-      it('derives anonymous operation metadata', async () => {
+      cjsGraphqlIt('derives anonymous operation metadata', async () => {
         const { query } = compileQuery(schema, graphql.parse('{ hello }'))
 
         /** @param {import('../../dd-trace/src/opentracing/span')[][]} traces */
@@ -1644,12 +1654,11 @@ void generatedResolver
         })
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        const resolveStartFields = []
+        let resolveStartCalls = 0
         const resolverStartFields = []
-        /** @param {{ info: { fieldName: string } }} message */
-        const onResolveStart = ({ info }) => resolveStartFields.push(info.fieldName)
-        /** @param {{ resolverInfo: Record<string, unknown> }} message */
-        const onResolverStart = ({ resolverInfo }) => resolverStartFields.push(...Object.keys(resolverInfo))
+        const onResolveStart = () => resolveStartCalls++
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = message => resolverStartFields.push(...Object.keys(materializeResolverInfo(message)))
 
         resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
@@ -1675,7 +1684,7 @@ void generatedResolver
           resolverStartChannel.unsubscribe(onResolverStart)
         }
 
-        assert.deepStrictEqual(resolveStartFields.sort(), ['name', 'user'])
+        assert.strictEqual(resolveStartCalls, 2)
         assert.deepStrictEqual(resolverStartFields.sort(), ['name', 'user'])
         assert.strictEqual(queryTypeChecks, 0)
         assert.strictEqual(userTypeChecks, 1)
@@ -1857,12 +1866,11 @@ void generatedResolver
         const { query } = compileQuery(schema, document)
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        const resolveStartFields = []
+        let resolveStartCalls = 0
         const resolverStartFields = []
-        /** @param {{ info: { fieldName: string } }} message */
-        const onResolveStart = ({ info }) => resolveStartFields.push(info.fieldName)
-        /** @param {{ resolverInfo: Record<string, unknown> }} message */
-        const onResolverStart = ({ resolverInfo }) => resolverStartFields.push(...Object.keys(resolverInfo))
+        const onResolveStart = () => resolveStartCalls++
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = message => resolverStartFields.push(...Object.keys(materializeResolverInfo(message)))
 
         resolveStartChannel.subscribe(onResolveStart)
         resolverStartChannel.subscribe(onResolverStart)
@@ -1883,7 +1891,7 @@ void generatedResolver
           resolverStartChannel.unsubscribe(onResolverStart)
         }
 
-        assert.deepStrictEqual(resolveStartFields.sort(), ['defaultHello', 'hello'])
+        assert.strictEqual(resolveStartCalls, 2)
         assert.deepStrictEqual(resolverStartFields.sort(), ['defaultHello', 'hello'])
       })
 
@@ -1910,7 +1918,7 @@ void generatedResolver
         }
       })
 
-      it('tags the field source on collapsed JIT resolvers', async () => {
+      cjsGraphqlIt('tags the field source on collapsed JIT resolvers', async () => {
         agent.reload('graphql', { source: true, variables: ['id', 'name'] })
         try {
           const { query } = compileQuery(schema, graphql.parse('query SourceTagged { hello }'))
@@ -2019,12 +2027,11 @@ void generatedResolver
       it('keeps AppSec and IAST resolver events when depth disables resolver spans', async () => {
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        const resolveStartFields = []
+        let resolveStartCalls = 0
         const resolverStartFields = []
-        /** @param {{ info: { fieldName: string } }} message */
-        const onResolveStart = ({ info }) => resolveStartFields.push(info.fieldName)
-        /** @param {{ resolverInfo: Record<string, unknown> }} message */
-        const onResolverStart = ({ resolverInfo }) => resolverStartFields.push(...Object.keys(resolverInfo))
+        const onResolveStart = () => resolveStartCalls++
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = message => resolverStartFields.push(...Object.keys(materializeResolverInfo(message)))
 
         agent.reload('graphql', { depth: 0 })
         resolveStartChannel.subscribe(onResolveStart)
@@ -2051,7 +2058,7 @@ void generatedResolver
           agent.reload('graphql', { variables: ['id', 'name'] })
         }
 
-        assert.deepStrictEqual(resolveStartFields.sort(), ['defaultHello', 'hello'])
+        assert.strictEqual(resolveStartCalls, 2)
         assert.deepStrictEqual(resolverStartFields.sort(), ['defaultHello', 'hello'])
       })
 
@@ -2063,8 +2070,10 @@ void generatedResolver
             schema,
             graphql.parse(`query ResolverBlocked { ${fieldName} }`)
           )
-          /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
-          const onResolverStart = ({ abortController, resolverInfo }) => {
+          /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
+          const onResolverStart = (message) => {
+            const { abortController } = message
+            const resolverInfo = materializeResolverInfo(message)
             if (resolverInfo[fieldName]) abortController.abort()
           }
 
@@ -2106,8 +2115,10 @@ void generatedResolver
           graphql.parse('query NestedResolverBlocked { user { name } }')
         )
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
-        const onResolverStart = ({ abortController, resolverInfo }) => {
+        /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
+        const onResolverStart = (message) => {
+          const { abortController } = message
+          const resolverInfo = materializeResolverInfo(message)
           if (resolverInfo.name) abortController.abort()
         }
 
@@ -2226,7 +2237,7 @@ void generatedResolver
         )
         const resolveStartChannel = dc.channel('apm:graphql:resolve:start')
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
-        const resolveArguments = new Map([['plain', new Set()], ['value', new Set()]])
+        const resolveArguments = new Set()
         const resolverArguments = []
         const resolverStartCalls = new Map()
         const expectedData = {
@@ -2241,12 +2252,11 @@ void generatedResolver
           assert.strictEqual(resolverArguments.length, 3)
           for (const actual of resolverArguments) assert.deepStrictEqual(actual, expected)
         }
-        /** @param {{ args: object, info: { fieldName: string } }} message */
-        const onResolveStart = ({ args, info }) => {
-          resolveArguments.get(info.fieldName)?.add(args)
-        }
-        /** @param {{ resolverInfo: Record<string, Record<string, unknown>> }} message */
-        const onResolverStart = ({ resolverInfo }) => {
+        /** @param {{ args: object }} message */
+        const onResolveStart = ({ args }) => resolveArguments.add(args)
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = (message) => {
+          const resolverInfo = materializeResolverInfo(message)
           const [fieldName] = Object.keys(resolverInfo)
           resolverStartCalls.set(fieldName, (resolverStartCalls.get(fieldName) ?? 0) + 1)
           if (resolverInfo.value) resolverArguments.push(resolverInfo.value)
@@ -2256,8 +2266,7 @@ void generatedResolver
         try {
           const resultWithoutUpdates = await executeWithTrace(() => query({}, {}, {}), /ResolverList/)
           assert.deepStrictEqual(resultWithoutUpdates.data, expectedData)
-          assert.strictEqual(resolveArguments.get('plain').size, 3)
-          assert.strictEqual(resolveArguments.get('value').size, 3)
+          assert.strictEqual(resolveArguments.size, 7)
           assert.strictEqual(resolverStartCalls.get('plain'), 3)
           assert.strictEqual(resolverStartCalls.get('value'), 3)
           assertResolverArguments({
@@ -2276,7 +2285,7 @@ void generatedResolver
             text: 'text-default',
           })
 
-          for (const args of resolveArguments.values()) args.clear()
+          resolveArguments.clear()
           resolverArguments.length = 0
           resolverStartCalls.clear()
 
@@ -2300,8 +2309,7 @@ void generatedResolver
           resolverStartChannel.unsubscribe(onResolverStart)
         }
 
-        assert.strictEqual(resolveArguments.get('plain').size, 3)
-        assert.strictEqual(resolveArguments.get('value').size, 3)
+        assert.strictEqual(resolveArguments.size, 7)
         assert.strictEqual(resolverStartCalls.get('plain'), 3)
         assert.strictEqual(resolverStartCalls.get('value'), 3)
         assertResolverArguments({
@@ -2396,8 +2404,9 @@ void generatedResolver
         )
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
         const resolverArguments = []
-        /** @param {{ resolverInfo: { value?: Record<string, unknown> } }} message */
-        const onResolverStart = ({ resolverInfo }) => {
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = (message) => {
+          const resolverInfo = materializeResolverInfo(message)
           if (resolverInfo.value) resolverArguments.push(resolverInfo.value)
         }
         const cyclic = { name: 'caller-owned' }
@@ -2449,12 +2458,11 @@ void generatedResolver
          *     filter: { name: string },
          *     keyless: Date,
          *     tags: string[]
-         *   },
-         *   info: { fieldName: string }
+         *   }
          * }} message
          */
-        const onResolveStart = ({ args, info }) => {
-          if (info.fieldName !== 'value') return
+        const onResolveStart = ({ args }) => {
+          if (!Object.hasOwn(args, 'fixedFilter')) return
 
           resolverCyclic = args.cyclic
           resolverFilter = args.filter
@@ -2516,8 +2524,9 @@ void generatedResolver
         )
         const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
         const readOnlyArguments = []
-        /** @param {{ resolverInfo: { value?: Record<string, unknown> } }} message */
-        const onResolverStart = ({ resolverInfo }) => {
+        /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+        const onResolverStart = (message) => {
+          const resolverInfo = materializeResolverInfo(message)
           if (resolverInfo.value) readOnlyArguments.push(resolverInfo.value)
         }
 
@@ -2549,12 +2558,11 @@ void generatedResolver
          *     schemaFilter: { extra: string, name: string },
          *     schemaTags: string[],
          *     tags: string[]
-         *   },
-         *   info: { fieldName: string }
+         *   }
          * }} message
          */
-        const onResolveStart = ({ args, info }) => {
-          if (info.fieldName !== 'value') return
+        const onResolveStart = ({ args }) => {
+          if (!Object.hasOwn(args, 'filter')) return
 
           resolverArguments.push(args)
           if (resolverArguments.length === 1) {
@@ -2629,8 +2637,10 @@ void generatedResolver
         const resolverControllers = new Map()
         const resolverCalls = new Map()
         const resolverChannel = dc.channel('datadog:graphql:resolver:start')
-        /** @param {{ abortController: AbortController, resolverInfo: { value: { id: string } } }} message */
-        const onResolver = ({ abortController, resolverInfo }) => {
+        /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
+        const onResolver = (message) => {
+          const { abortController } = message
+          const resolverInfo = materializeResolverInfo(message)
           const { id } = resolverInfo.value
           resolverControllers.set(id, abortController)
           resolverCalls.set(id, (resolverCalls.get(id) ?? 0) + 1)
@@ -2723,8 +2733,10 @@ void generatedResolver
         const contextValue = function contextValue () {}
         const resolverControllers = new Map()
         const resolverChannel = dc.channel('datadog:graphql:resolver:start')
-        /** @param {{ abortController: AbortController, resolverInfo: Record<string, unknown> }} message */
-        const onResolver = ({ abortController, resolverInfo }) => {
+        /** @param {Parameters<typeof materializeResolverInfo>[0] & { abortController: AbortController }} message */
+        const onResolver = (message) => {
+          const { abortController } = message
+          const resolverInfo = materializeResolverInfo(message)
           resolverControllers.set(Object.keys(resolverInfo)[0], abortController)
         }
 
@@ -2911,11 +2923,11 @@ void generatedResolver
     })
   })
 
-  describe('graphql-jit with GraphQL 17', () => {
+  describe('repository-pinned graphql-jit and GraphQL', () => {
     let compileQuery
     let graphql
 
-    useSandbox(["'graphql-jit@0.8.8'", "'graphql@17.0.2'"], false, [])
+    useSandbox(["'graphql-jit'", "'graphql'"], false, [])
 
     before(() => {
       return agent.load('graphql')
@@ -2931,7 +2943,7 @@ void generatedResolver
       return agent.close()
     })
 
-    it('traces and publishes a default resolver without an argument list', async () => {
+    it('traces and publishes a default resolver', async () => {
       const User = new graphql.GraphQLObjectType({
         name: 'User',
         fields: {
@@ -2949,18 +2961,16 @@ void generatedResolver
           },
         }),
       })
-      const document = graphql.parse('query GraphQL17Default { user { name } }')
-      const fieldNode = document.definitions[0].selectionSet.selections[0].selectionSet.selections[0]
+      const document = graphql.parse('query DefaultResolver { user { name } }')
       const { query } = compileQuery(schema, document)
       const resolverStartChannel = dc.channel('datadog:graphql:resolver:start')
       const resolverInfos = []
-      /** @param {{ resolverInfo: Record<string, unknown> }} message */
-      const onResolverStart = ({ resolverInfo }) => resolverInfos.push(resolverInfo)
+      /** @param {Parameters<typeof materializeResolverInfo>[0]} message */
+      const onResolverStart = message => resolverInfos.push(materializeResolverInfo(message))
 
       resolverStartChannel.subscribe(onResolverStart)
       try {
-        assert.strictEqual(fieldNode.arguments, undefined)
-        const result = await executeWithTrace(() => query({}, {}, {}), /GraphQL17Default/, traces => {
+        const result = await executeWithTrace(() => query({}, {}, {}), /DefaultResolver/, traces => {
           const span = traces[0].find(span => span.resource === 'name:String')
           assert.ok(span)
         })

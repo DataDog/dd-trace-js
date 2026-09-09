@@ -1,9 +1,12 @@
 import 'dd-trace/init.js'
+import tracer from 'dd-trace'
 import { createServer } from 'node:http'
 
 import dc from 'dc-polyfill'
 import * as graphql from 'graphql'
 import { compileQuery } from 'graphql-jit'
+
+tracer.use('graphql', { source: true })
 
 const User = new graphql.GraphQLObjectType({
   name: 'User',
@@ -40,8 +43,9 @@ if (warmResult.errors) throw warmResult.errors[0]
 
 /** @type {Record<string, number>} */
 const resolverCalls = {}
-/** @param {{ resolverInfo: Record<string, unknown> }} message */
-dc.channel('datadog:graphql:resolver:start').subscribe(({ resolverInfo }) => {
+/** @param {{ createResolverInfo: (data: object) => Record<string, unknown> }} message */
+dc.channel('datadog:graphql:resolver:start').subscribe((message) => {
+  const resolverInfo = message.createResolverInfo(message)
   const [fieldName] = Object.keys(resolverInfo)
   resolverCalls[fieldName] = (resolverCalls[fieldName] ?? 0) + 1
 })
