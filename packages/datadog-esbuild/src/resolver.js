@@ -9,42 +9,32 @@ const MAX_PENDING_REQUESTS = 1024
 const MAX_STDERR_LENGTH = 16 * 1024
 const LOAD_OPERATION = 0
 const RESOLVE_OPERATION = 1
-const RESOLVER_SOURCE = `
-import { createRequire, isBuiltin } from 'node:module'
+const RESOLVER_SOURCE = String.raw`
+import { createReadStream, createWriteStream } from 'node:fs'
 import readline from 'node:readline'
-import { pathToFileURL } from 'node:url'
 
-const lines = readline.createInterface({ input: process.stdin })
+const requests = createReadStream(null, { fd: 3, autoClose: false })
+const responses = createWriteStream(null, { fd: 4, autoClose: false })
+const lines = readline.createInterface({ input: requests })
 
 for await (const line of lines) {
   let request
   try {
     request = JSON.parse(line)
-    let url
-    if (request.kind === 'import') {
-      url = await import.meta.resolve(request.specifier, request.parentURL)
-    } else if (request.kind === 'require') {
-      const resolved = createRequire(request.parentURL).resolve(request.specifier)
-      url = isBuiltin(resolved)
-        ? (resolved.startsWith('node:') ? resolved : \`node:\${resolved}\`)
-        : pathToFileURL(resolved).href
-    } else {
-      throw new Error(\`Unsupported resolution kind: \${request.kind}\`)
-    }
-    process.stdout.write(JSON.stringify({ id: request.id, url }) + '\\n')
+    const url = await import.meta.resolve(request.specifier, request.parentURL)
+    responses.write(JSON.stringify({ id: request.id, url }) + '\n')
   } catch (error) {
-    process.stdout.write(JSON.stringify({
+    responses.write(JSON.stringify({
       error: {
         code: error?.code,
         message: String(error?.message ?? error),
       },
       id: request?.id,
-    }) + '\\n')
+    }) + '\n')
   }
 }
+responses.end()
 `
-
-/** @typedef {'import'|'require'} ResolutionKind */
 
 /** @typedef {{ specifier: string, parentURL: string }} StarReexport */
 
@@ -80,6 +70,7 @@ class EsmResolver {
   #pending = new Map()
   #readline
   #rejectClosed
+  #request
   #resolveClosed
   #stderr = ''
 
@@ -95,10 +86,9 @@ class EsmResolver {
   /**
    * @param {string} specifier
    * @param {URL|string} parentURL
-   * @param {ResolutionKind} [kind]
    * @returns {Promise<string>}
    */
-  resolve (specifier, parentURL, kind = 'import') {
+  resolve (specifier, parentURL) {
     if (this.#closed) return Promise.reject(this.#failure ?? new Error('The ESM resolver is closed'))
     if (this.#pending.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error(`The ESM resolver has more than ${MAX_PENDING_REQUESTS} pending requests`))
@@ -115,7 +105,7 @@ class EsmResolver {
     const id = this.#nextId++
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { reject, resolve })
-      this.#child.stdin.write(`${JSON.stringify({ id, kind, parentURL: String(parentURL), specifier })}\n`, error => {
+      this.#request.write(`${JSON.stringify({ id, parentURL: String(parentURL), specifier })}\n`, error => {
         if (error) this.#rejectRequest(id, error)
       })
     })
@@ -125,7 +115,7 @@ class EsmResolver {
   close () {
     if (!this.#closed) {
       this.#closed = true
-      if (this.#child) this.#child.stdin.end()
+      if (this.#child) this.#request.end()
       else this.#resolveClosed()
     }
     return this.#closedPromise
@@ -145,11 +135,13 @@ class EsmResolver {
       RESOLVER_SOURCE,
     ], {
       env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'],
     })
-    this.#readline = readline.createInterface({ input: this.#child.stdout })
+    this.#request = this.#child.stdio[3]
+    this.#readline = readline.createInterface({ input: this.#child.stdio[4] })
     this.#readline.on('line', this.#handleLine)
-    this.#child.stdin.on('error', this.#handleError)
+    this.#request.once('error', this.#handleError)
+    this.#child.stdio[4].once('error', this.#handleError)
     this.#child.stderr.on('data', this.#handleStderr)
     this.#child.once('error', this.#handleError)
     this.#child.once('close', this.#handleClose)
@@ -236,7 +228,7 @@ class EsmResolver {
     this.#failure = error
     this.#closed = true
     this.#rejectAll(error)
-    this.#child?.stdin.destroy()
+    this.#request?.destroy()
     this.#child?.kill()
   }
 

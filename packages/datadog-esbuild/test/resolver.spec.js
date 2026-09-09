@@ -14,9 +14,8 @@ let spawn
 
 function createChild () {
   const child = new EventEmitter()
-  child.stdin = new PassThrough()
-  child.stdout = new PassThrough()
   child.stderr = new PassThrough()
+  child.stdio = [null, null, child.stderr, new PassThrough(), new PassThrough()]
   child.kill = sinon.stub()
   return child
 }
@@ -79,6 +78,21 @@ describe('ESM resolver', () => {
     }
   })
 
+  it('isolates resolver responses from inherited standard output', async () => {
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    const preloadPath = require.resolve('./resources/resolver-stdout.cjs')
+    process.env.NODE_OPTIONS = `--require=${JSON.stringify(preloadPath)}`
+    const resolver = createEsmResolver()
+
+    try {
+      assert.equal(await resolver.resolve('./export-method.mjs', parentURL), parentURL.href)
+    } finally {
+      await resolver.close()
+      if (originalNodeOptions === undefined) delete process.env.NODE_OPTIONS
+      else process.env.NODE_OPTIONS = originalNodeOptions
+    }
+  })
+
   it('preserves mixed NODE_OPTIONS while disabling Datadog in the child', async () => {
     const originalNodeOptions = process.env.NODE_OPTIONS
     const hookURL = pathToFileURL(require.resolve('./resources/resolution-hook.mjs')).href
@@ -92,7 +106,7 @@ describe('ESM resolver', () => {
 
     try {
       env = spawn.firstCall.args[2].env
-      child.stdout.write(`${JSON.stringify({ id: 0, url: 'file:///first.mjs' })}\n`)
+      child.stdio[4].write(`${JSON.stringify({ id: 0, url: 'file:///first.mjs' })}\n`)
       assert.equal(await resolved, 'file:///first.mjs')
     } finally {
       const closed = resolver.close()
@@ -108,14 +122,12 @@ describe('ESM resolver', () => {
     assert.equal(env.DD_TRACE_ENABLED, 'false')
   })
 
-  it('rejects require-only and invalid encoded ESM requests without affecting siblings', async () => {
+  it('rejects invalid encoded ESM requests without affecting siblings', async () => {
     const resolver = createEsmResolver()
     try {
-      const requireOnly = resolver.resolve('@actions/core', parentURL, 'require')
       const encodedSeparator = resolver.resolve('./%2F.mjs', parentURL)
       const sibling = resolver.resolve('./export-method.mjs', parentURL)
-      const [, , resolved] = await Promise.all([
-        assert.rejects(requireOnly, { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' }),
+      const [, resolved] = await Promise.all([
         assert.rejects(encodedSeparator, { code: 'ERR_INVALID_MODULE_SPECIFIER' }),
         sibling,
       ])
@@ -202,8 +214,8 @@ describe('ESM resolver', () => {
     const resolver = createStubbedResolver(child)
     const first = resolver.resolve('first', parentURL)
     const second = resolver.resolve('second', parentURL)
-    child.stdout.write(`${JSON.stringify({ id: 0, url: 1 })}\n`)
-    child.stdout.write(`${JSON.stringify({ id: 1, url: 'file:///second.mjs' })}\n`)
+    child.stdio[4].write(`${JSON.stringify({ id: 0, url: 1 })}\n`)
+    child.stdio[4].write(`${JSON.stringify({ id: 1, url: 'file:///second.mjs' })}\n`)
 
     const [, resolved] = await Promise.all([
       assert.rejects(first, /malformed response/),
@@ -216,7 +228,7 @@ describe('ESM resolver', () => {
     await closed
   })
 
-  it('rejects synchronous spawn and standard-input write failures', async () => {
+  it('rejects synchronous spawn and request write failures', async () => {
     const spawnError = new Error('spawn failed')
     spawn = sinon.stub(childProcess, 'spawn').throws(spawnError)
     const resolver = createEsmResolver()
@@ -226,7 +238,7 @@ describe('ESM resolver', () => {
 
     const child = createChild()
     const writeError = new Error('write failed')
-    sinon.stub(child.stdin, 'write').callsFake((value, callback) => {
+    sinon.stub(child.stdio[3], 'write').callsFake((value, callback) => {
       callback(writeError)
       return true
     })
@@ -238,7 +250,7 @@ describe('ESM resolver', () => {
     await closed
   })
 
-  it('uses a standard-input EPIPE as the resolver lifecycle failure', async () => {
+  it('uses a request EPIPE as the resolver lifecycle failure', async () => {
     const child = createChild()
     const resolver = createStubbedResolver(child)
     const failure = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })
@@ -249,7 +261,7 @@ describe('ESM resolver', () => {
     ])
     let emitted
     try {
-      child.stdin.emit('error', failure)
+      child.stdio[3].emit('error', failure)
     } catch (error) {
       emitted = error
     }
@@ -269,7 +281,7 @@ describe('ESM resolver', () => {
     process.once('unhandledRejection', onUnhandledRejection)
 
     try {
-      child.stdout.write('not JSON\n')
+      child.stdio[4].write('not JSON\n')
       await assert.rejects(pending, /malformed JSON/)
       child.emit('close', 1, null)
       await new Promise(resolve => setImmediate(resolve))
@@ -284,13 +296,13 @@ describe('ESM resolver', () => {
   it('ignores a late write failure after the response completed', async () => {
     const child = createChild()
     let writeCallback
-    sinon.stub(child.stdin, 'write').callsFake((value, callback) => {
+    sinon.stub(child.stdio[3], 'write').callsFake((value, callback) => {
       writeCallback = callback
       return true
     })
     const resolver = createStubbedResolver(child)
     const resolved = resolver.resolve('first', parentURL)
-    child.stdout.write(`${JSON.stringify({ id: 0, url: 'file:///first.mjs' })}\n`)
+    child.stdio[4].write(`${JSON.stringify({ id: 0, url: 'file:///first.mjs' })}\n`)
 
     assert.equal(await resolved, 'file:///first.mjs')
     writeCallback(new Error('late write failure'))
@@ -307,7 +319,7 @@ describe('ESM resolver', () => {
       assert.rejects(pending, /unknown request identifier/),
       assert.rejects(resolver.close(), /unknown request identifier/),
     ])
-    child.stdout.write(`${JSON.stringify({ id: 1, url: 'file:///unknown.mjs' })}\n`)
+    child.stdio[4].write(`${JSON.stringify({ id: 1, url: 'file:///unknown.mjs' })}\n`)
     child.emit('error', new Error('later child error'))
     child.emit('close', 1, null)
 
@@ -359,7 +371,7 @@ describe('ESM resolver', () => {
     ])
     child.stderr.write('resolver failed')
     child.emit('close', 1, null)
-    child.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+    child.stdio[3].emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
 
     await results
   })
@@ -377,7 +389,7 @@ describe('ESM resolver', () => {
       ...pending.map(request => assert.rejects(request, /malformed JSON/)),
       assert.rejects(resolver.close(), /malformed JSON/),
     ])
-    child.stdout.write('not JSON\n')
+    child.stdio[4].write('not JSON\n')
     child.emit('close', 1, null)
 
     await results
