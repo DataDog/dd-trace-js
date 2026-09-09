@@ -1546,6 +1546,26 @@ describe('TextMapPropagator', () => {
       assert.match(carrier.tracestate, /(?:^|,)ot=rv:123456789abcde;th:8(?:,|$)/)
     })
 
+    it('should merge implicit tracecontext state into a matching B3 context', () => {
+      const traceId = '0000000000000000000000000000007b'
+      const spanId = '00000000000001c8'
+      textMap = {
+        b3: `${traceId}-${spanId}`,
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        traceparent: `00-${traceId}-${spanId}-01`,
+        tracestate: 'ot=rv:ffffffffffffff;th:8',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'datadog']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
+    })
+
     it('should inherit a tracecontext drop when matching B3 headers omit a sampling decision', () => {
       const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
       const spanId = '5555eeee6666ffff'

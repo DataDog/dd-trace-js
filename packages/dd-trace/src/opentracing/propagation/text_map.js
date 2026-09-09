@@ -782,7 +782,8 @@ class TextMapPropagator {
               traceContext = this.#extractTraceparentContext(carrier)
               traceContextExtracted = true
             }
-            this.#addTraceContextState(extractedContext, traceContext)
+            const selectedContext = context && context !== traceContext ? context : extractedContext
+            this.#addTraceContextState(selectedContext, traceContext)
           }
           break
         case 'tracecontext':
