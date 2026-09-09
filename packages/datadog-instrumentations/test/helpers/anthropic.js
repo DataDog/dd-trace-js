@@ -42,9 +42,13 @@ class FakeAPIPromise {
 
 class FakeMessages {
   /**
+   * Records what the SDK actually received, so tests can assert on argument substitution.
+   *
+   * @param {...unknown} args
    * @returns {FakeAPIPromise}
    */
-  create () {
+  create (...args) {
+    this.sentArgs = args
     return this._nextApiPromise
   }
 }
@@ -93,6 +97,7 @@ function loadAnthropicInstrumentation () {
     require('../../src/anthropic')
   } finally {
     cache.exports = previousExports
+    delete require.cache[require.resolve('../../src/anthropic')]
   }
 
   return hookCallbacks
