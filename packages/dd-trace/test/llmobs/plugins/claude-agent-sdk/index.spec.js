@@ -88,8 +88,9 @@ describe('Plugin', () => {
           pathToClaudeCodeExecutable,
           env: {
             ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
+            // Keep cassette-backed tests independent of Claude Code's remote configuration.
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
             CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,
-            // Prevent server-controlled token-budget reminders from changing cassette request shapes.
             CLAUDE_CODE_TOTAL_TOKENS_REMINDER: 'off',
             ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
           },
