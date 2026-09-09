@@ -13,7 +13,11 @@ const { MANUAL_DROP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
-const { SAMPLING_MECHANISM_APPSEC, SAMPLING_MECHANISM_AI_GUARD } = require('../../src/constants')
+const {
+  DECISION_MAKER_KEY,
+  SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
+} = require('../../src/constants')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
@@ -298,6 +302,7 @@ describe('OTel Tracer', () => {
 
         assert.strictEqual(span._ddSpan.context()._sampling.priority, USER_KEEP)
         assert.strictEqual(span._ddSpan.context()._sampling.mechanism, mechanism)
+        assert.strictEqual(span._ddSpan.context()._trace.tags[DECISION_MAKER_KEY], `-${mechanism}`)
         span.end()
       })
     }
