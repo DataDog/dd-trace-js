@@ -10,14 +10,24 @@ const logger = loggerName === 'bunyan'
   ? bunyan.createLogger({ name: 'test-logger' })
   : loggerName === 'pino'
     ? pino({ level: 'info' })
-    : winston.createLogger({
-      level: 'info',
-      exitOnError: false,
-      format: winston.format.json(),
-      transports: [
-        new winston.transports.Console(),
-      ],
-    })
+    : loggerName === 'console'
+      ? {
+          // eslint-disable-next-line no-console
+          info: (...args) => console.log(...args),
+        }
+      : winston.createLogger({
+        level: 'info',
+        exitOnError: false,
+        format: winston.format.json(),
+        transports: [
+          new winston.transports.Console(),
+        ],
+      })
+
+if (loggerName === 'console') {
+  // eslint-disable-next-line no-console
+  console.log('outside a test')
+}
 
 describe('test', () => {
   it('should return true', () => {

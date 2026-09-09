@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -8,8 +9,11 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
+const { storage } = require('../../../datadog-core')
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
 
+const legacyStorage = storage('legacy')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const winstonAddTransportCh = channel('ci:log-submission:winston:add-transport')
@@ -17,6 +21,15 @@ const winstonConfigureCh = channel('ci:log-submission:winston:configure')
 const request = sinon.stub()
 const log = {
   error: sinon.stub(),
+}
+const tracer = {
+  inject (span, format, carrier) {
+    carrier.dd = { service: 'my service' }
+    if (span) {
+      carrier.dd.span_id = span.spanId
+      carrier.dd.trace_id = span.traceId
+    }
+  },
 }
 const pluginConfig = {
   enabled: true,
@@ -51,7 +64,7 @@ describe('LogSubmissionPlugin', () => {
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     const previousBeforeExitHandlers = new Set(beforeExitHandlers)
-    plugin = new LogSubmissionPlugin({}, {})
+    plugin = new LogSubmissionPlugin(tracer, {})
     plugin.configure(pluginConfig)
     beforeExitHandler = [...beforeExitHandlers].find(handler => !previousBeforeExitHandlers.has(handler))
   })
@@ -108,6 +121,70 @@ describe('LogSubmissionPlugin', () => {
     const [data, options] = request.firstCall.args
     assert.deepStrictEqual(JSON.parse(data), [{ level: 'info', message: 'hello' }])
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service')
+  })
+
+  it('formats and submits console logs with the active span', () => {
+    const span = { spanId: '123', traceId: '456' }
+    legacyStorage.run({ span }, () => {
+      consoleLogSubmissionCh.publish({ method: 'log', args: ['hello %s %d', 'world', 42] })
+    })
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const [data, options] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{
+      dd: {
+        service: 'my service',
+        span_id: '123',
+        trace_id: '456',
+      },
+      message: 'hello world 42',
+      status: 'info',
+    }])
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=console&service=my+service')
+  })
+
+  it('submits console logs without trace correlation when no span is active', () => {
+    consoleLogSubmissionCh.publish({ method: 'warn', args: ['outside a test'] })
+    clock.tick(1000)
+
+    const [data] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{
+      dd: { service: 'my service' },
+      message: 'outside a test',
+      status: 'warn',
+    }])
+  })
+
+  it('maps console methods to log statuses', () => {
+    for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
+      consoleLogSubmissionCh.publish({ method, args: [method] })
+    }
+    clock.tick(1000)
+
+    const [data] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data).map(({ status }) => status), [
+      'debug',
+      'error',
+      'info',
+      'info',
+      'warn',
+    ])
+  })
+
+  it('does not disable submission when a console argument cannot be formatted', () => {
+    const error = new Error('boom')
+    const argument = {
+      [inspect.custom] () {
+        throw error
+      },
+    }
+
+    consoleLogSubmissionCh.publish({ method: 'log', args: [argument] })
+
+    sinon.assert.notCalled(request)
+    sinon.assert.calledWith(log.error, 'Could not format console log for automatic submission', error)
+    assert.strictEqual(plugin._enabled, true)
   })
 
   it('flushes pending Bunyan logs before exit', () => {
