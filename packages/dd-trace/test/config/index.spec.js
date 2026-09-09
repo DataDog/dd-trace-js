@@ -1545,7 +1545,7 @@ describe('Config', () => {
     process.env.DD_TRACE_REPORT_HOSTNAME = 'true'
     process.env.DD_TRACE_SAMPLE_RATE = '0.5'
     process.env.DD_TRACE_SAMPLING_RULES = `[
-      {"service":"usersvc","name":"healthcheck","sample_rate":0.0 },
+      {"service":"usersvc","name":"healthcheck","sample_rate":0.0,"discard":true },
       {"service":"usersvc","sample_rate":0.5},
       {"service":"authsvc","sample_rate":1.0},
       {"sample_rate":0.1}
@@ -1702,7 +1702,7 @@ describe('Config', () => {
       sampleRate: 0.5,
       rateLimit: -1,
       rules: [
-        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0 },
+        { service: 'usersvc', name: 'healthcheck', sampleRate: 0.0, discard: true },
         { service: 'usersvc', sampleRate: 0.5 },
         { service: 'authsvc', sampleRate: 1.0 },
         { sampleRate: 0.1 },
@@ -2526,6 +2526,58 @@ describe('Config', () => {
       "Invalid value: 'foo' for DD_TRACE_SPAN_ATTRIBUTE_SCHEMA (source: env_var), picked default",
     )
     assert.strictEqual(config.spanAttributeSchema, 'v0')
+  })
+
+  it('should accept valid port boundaries', () => {
+    process.env.DD_DOGSTATSD_PORT = '1'
+    process.env.DD_TRACE_AGENT_PORT = '1'
+
+    let config = getConfig()
+
+    assert.strictEqual(config.dogstatsd.port, 1)
+    assert.strictEqual(config.port, 1)
+
+    process.env.DD_DOGSTATSD_PORT = '65535'
+    process.env.DD_TRACE_AGENT_PORT = '65535'
+
+    config = getConfig()
+
+    assert.strictEqual(config.dogstatsd.port, 65535)
+    assert.strictEqual(config.port, 65535)
+  })
+
+  it('should reject invalid port boundaries', () => {
+    process.env.DD_DOGSTATSD_PORT = '0'
+    process.env.DD_TRACE_AGENT_PORT = '0'
+
+    let config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_DOGSTATSD_PORT (source: env_var), picked default',
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 0 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
+    )
+    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.port, 8126)
+
+    process.env.DD_DOGSTATSD_PORT = '65536'
+    process.env.DD_TRACE_AGENT_PORT = '65536'
+
+    config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 65536 for DD_DOGSTATSD_PORT (source: env_var), picked default',
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: 65536 for DD_TRACE_AGENT_PORT (source: env_var), picked default',
+    )
+    assert.strictEqual(config.dogstatsd.port, 8125)
+    assert.strictEqual(config.port, 8126)
   })
 
   it('should parse integer range sets', () => {
@@ -5302,7 +5354,7 @@ rules:
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       assert.strictEqual(config.logInjection, false)
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
@@ -5328,18 +5380,18 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.sampleRate, 0.25)
     })
 
-    it('should not infer an OTel sample rate from a disabled trace exporter', () => {
+    it('should infer an OTel sample rate from the OTLP trace exporter in agentless mode', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.sampleRate, 1)
     })
 
     it('should preserve explicit OTel span metrics', () => {
@@ -5467,6 +5519,7 @@ rules:
 
     it('should disable stats computation when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
       const config = getConfig()
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
     })
@@ -5504,6 +5557,34 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+
+    it('should default OTLP logs/metrics endpoints to the per-site intake and add the API key ' +
+      'header when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'agentless-api-key'
+      process.env.DD_SITE = 'datadoghq.eu'
+      const config = getConfig()
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/logs')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://otlp.datadoghq.eu/v1/traces')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
+    })
+
+    it('should preserve an explicit OTLP endpoint when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://custom-collector:4318'
+      const config = getConfig()
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://custom-collector:4318/v1/logs')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://custom-collector:4318/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://custom-collector:4318/v1/traces')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
     })
   })
 

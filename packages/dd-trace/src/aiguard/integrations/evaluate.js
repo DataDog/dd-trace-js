@@ -3,44 +3,68 @@
 const log = require('../../log')
 
 /**
- * Starts one AI Guard evaluation for a lifecycle ctx.
+ * Runs one evaluation per conversation and rejects if any of them says block.
  *
- * Async evaluations are pushed synchronously during channel publication. If
- * evaluation throws synchronously, the error is handled before publish returns.
+ * Evaluations run concurrently and all of them are awaited, so a slow one cannot hide a block
+ * from a fast one. Any failure that is not a verdict is logged and ignored, because AI Guard
+ * must never break the caller.
  *
- * @param {object} ctx
- * @param {AbortController} ctx.abortController
- * @param {object} [ctx.parentSpan]
- * @param {Array<Promise<void>>} ctx.pending
+ * @param {object} interceptCtx The intercept payload, whose tracing ctx parents the span.
  * @param {object} aiguard
- * @param {Array<object>|undefined} messages
+ * @param {Array<Array<object>>} conversations One complete message list per evaluation.
  * @param {object} opts
+ * @returns {Promise<void>|undefined} `undefined` when there is nothing to evaluate.
  */
-function pushEvaluation (ctx, aiguard, messages, opts) {
-  if (!messages?.length) return
+function evaluate (interceptCtx, aiguard, conversations, opts) {
+  if (!conversations?.length) return
 
-  const evaluateOpts = ctx.parentSpan ? { ...opts, childOf: ctx.parentSpan } : opts
+  const parentSpan = interceptCtx?.tracingContext?.currentStore?.span
+  const evaluateOpts = parentSpan ? { ...opts, childOf: parentSpan } : opts
+  const evaluations = []
 
+  for (const messages of conversations) {
+    if (messages?.length) evaluations.push(evaluateOne(aiguard, messages, evaluateOpts))
+  }
+
+  if (evaluations.length === 0) return
+
+  return Promise.allSettled(evaluations).then(throwFirstBlock)
+}
+
+/**
+ * Turns a synchronous throw into a rejection, so every outcome is inspected the same way.
+ *
+ * @param {object} aiguard
+ * @param {Array<object>} messages
+ * @param {object} opts
+ * @returns {Promise<unknown>}
+ */
+function evaluateOne (aiguard, messages, opts) {
   try {
-    ctx.pending.push(aiguard.evaluate(messages, evaluateOpts).catch(handleEvaluationError.bind(null, ctx)))
-  } catch (err) {
-    handleEvaluationError(ctx, err)
+    return aiguard.evaluate(messages, opts)
+  } catch (error) {
+    return Promise.reject(error)
   }
 }
 
 /**
- * Handles an AI Guard evaluation failure.
- *
- * @param {object} ctx
- * @param {AbortController} ctx.abortController
- * @param {Error} err
+ * @param {Array<{ status: string, reason?: Error }>} results
+ * @throws {Error} The first block verdict, if any evaluation returned one.
  */
-function handleEvaluationError (ctx, err) {
-  if (err.name === 'AIGuardAbortError') {
-    ctx.abortController.abort(err)
-  } else {
-    log.error('AIGuard: unexpected error during evaluation: %s', err.message)
+function throwFirstBlock (results) {
+  let block
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') continue
+
+    if (result.reason?.name === 'AIGuardAbortError') {
+      block ??= result.reason
+    } else {
+      log.error('AIGuard: unexpected error during evaluation: %s', result.reason?.message)
+    }
   }
+
+  if (block) throw block
 }
 
-module.exports = { pushEvaluation }
+module.exports = { evaluate }

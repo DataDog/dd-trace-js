@@ -4,7 +4,7 @@ runs:
   using: composite
   steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - run: docker compose up -d testagent || docker compose up -d testagent
+    - run: VCR_CI_MODE=true docker compose up -d testagent || VCR_CI_MODE=true docker compose up -d testagent
       shell: bash
     - name: Wait for test agent to be ready
       run: timeout 30 bash -c 'until curl -sf http://127.0.0.1:9126/info >/dev/null; do sleep 1; done'
