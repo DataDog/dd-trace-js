@@ -12,8 +12,8 @@ let metadataHandle
 function storeConfig (config) {
   try {
     // Load binding first to not import other modules if it throws
-    const libdatadog = require('@datadog/libdatadog')
-    const processDiscovery = libdatadog.maybeLoad('process-discovery')
+    const libdatadogExtras = require('@datadog/libdatadog-extras')
+    const processDiscovery = libdatadogExtras.maybeLoad('process-discovery')
     if (processDiscovery === undefined) {
       return
     }

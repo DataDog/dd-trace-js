@@ -273,11 +273,13 @@ function getCiVerdict (results) {
   if (ci.evidence?.reasonCode === 'remote-ci-command-unavailable') {
     return 'INCOMPLETE — test execution is delegated to unavailable remote CI code'
   }
-  const facts = []
-  if (ci.evidence?.ciFacts?.initialization?.status === 'missing') facts.push('initialization not visible')
-  if (ci.evidence?.ciFacts?.transport?.status === 'missing') facts.push('transport not visible')
-  if (ci.evidence?.ciFacts?.runnerInvocation?.status === 'unresolved') facts.push('runner path unresolved')
-  return `INCOMPLETE${facts.length > 0 ? ` — ${facts.join('; ')}` : ''}`
+  let facts = ''
+  if (ci.evidence?.ciFacts?.initialization?.status === 'missing') facts = 'initialization not visible'
+  if (ci.evidence?.ciFacts?.transport?.status === 'missing') facts += `${facts ? '; ' : ''}transport not visible`
+  if (ci.evidence?.ciFacts?.runnerInvocation?.status === 'unresolved') {
+    facts += `${facts ? '; ' : ''}runner path unresolved`
+  }
+  return `INCOMPLETE${facts ? ` — ${facts}` : ''}`
 }
 
 function getPrerequisiteVerdict (results) {

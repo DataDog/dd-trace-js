@@ -24,7 +24,7 @@ class Writer extends BaseWriter {
   #requestTracker
 
   constructor ({ url, tags, evpProxyPrefix = '' }) {
-    super(...arguments)
+    super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { tags })
@@ -79,11 +79,11 @@ class Writer extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'test_cycle', statusCode }
+          { endpoint: 'test_cycle', statusCode, errorType: statusCode ? undefined : err.code }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'test_cycle' }
+          { endpoint: 'test_cycle', statusCode, errorType: statusCode ? undefined : err.code }
         )
         log.error('Error sending CI agentless payload', err)
         done(err)

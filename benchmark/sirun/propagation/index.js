@@ -1,7 +1,8 @@
 'use strict'
 
-const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
+// eslint-disable-next-line import/order -- The startup guard must run before every other require.
+const assert = require('node:assert/strict')
 
 const { getAllBaggageItems } = require('../../../packages/dd-trace/src/baggage')
 const id = require('../../../packages/dd-trace/src/id')

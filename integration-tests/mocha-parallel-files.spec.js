@@ -2,11 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { spawn } = require('node:child_process')
+const fs = require('node:fs')
 const path = require('node:path')
 
 const repoRoot = path.resolve(__dirname, '..')
 const parallelScript = path.join(repoRoot, 'scripts', 'mocha-parallel-files.js')
 const fixturesDir = path.join(__dirname, 'mocha-parallel-files-fixtures')
+const junitFile = path.join(repoRoot, `node-${process.versions.node}-junit.xml`)
 
 /**
  * @typedef {{
@@ -19,6 +21,7 @@ const fixturesDir = path.join(__dirname, 'mocha-parallel-files-fixtures')
  * @typedef {{
  *   killSignal?: keyof import('node:os').SignalConstants,
  *   killOnFirstStdout?: boolean,
+ *   env?: Record<string, string|undefined>,
  *   timeoutMs?: number
  * }} RunOpts
  */
@@ -32,7 +35,7 @@ function runParallel (args, opts = {}) {
   return new Promise((resolve, reject) => {
     // Drop CI from the inherited env; otherwise mocha-parallel-files writes a
     // junit file under the repo root for every spawn here.
-    const env = { ...process.env, CI: '' }
+    const env = { ...process.env, CI: '', ...opts.env }
     const child = spawn(process.execPath, [parallelScript, ...args], { cwd: repoRoot, env })
     let stdout = ''
     let stderr = ''
@@ -83,6 +86,35 @@ describe('mocha-parallel-files script', function () {
     assert.match(stdout, /Total:\s+1\b/)
     assert.match(stdout, /Passed:\s+1\b/)
     assert.match(stdout, /Failed:\s+0\b/)
+  })
+
+  it('stamps the originating GitHub job metadata into the merged xunit report', async () => {
+    const fixture = path.join(fixturesDir, 'extra-ipc-message.js')
+    try {
+      const { code } = await runParallel(['--', fixture], {
+        env: {
+          CI: 'true',
+          GITHUB_JOB: 'trace-core',
+          GITHUB_REPOSITORY: 'DataDog/dd-trace-js',
+          GITHUB_RUN_ID: '123',
+          GITHUB_RUN_NUMBER: '456',
+          GITHUB_SERVER_URL: 'https://github.com',
+          GITHUB_WORKFLOW: 'Core & "smoke"',
+        },
+      })
+
+      assert.strictEqual(code, 0)
+      const xml = fs.readFileSync(junitFile, 'utf8')
+      assert.match(xml, new RegExp(`<property name="node_version" value="${process.versions.node}"/>`))
+      assert.match(xml, /<property name="ci\.pipeline\.name" value="Core &amp; &quot;smoke&quot;"\/>/)
+      assert.match(xml, /<property name="ci\.pipeline\.id" value="123"\/>/)
+      assert.match(xml, /<property name="ci\.pipeline\.number" value="456"\/>/)
+      assert.match(xml, /<property name="ci\.pipeline\.url" value="https:\/\/github\.com\/DataDog\/dd-trace-js\/actions\/runs\/123"\/>/)
+      assert.match(xml, /<property name="ci\.job\.name" value="trace-core"\/>/)
+    } finally {
+      fs.rmSync(junitFile, { force: true })
+      fs.rmSync(path.join(repoRoot, '.junit-tmp'), { force: true, recursive: true })
+    }
   })
 
   {

@@ -97,6 +97,14 @@ describe('OpenFeature Module', () => {
       sinon.assert.calledOnceWithExactly(replacementWriter.setEnabled, true, currentRoute)
     })
 
+    it('should setup direct exposure delivery in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      openfeatureModule.enable(config)
+
+      sinon.assert.calledOnceWithExactly(ExposuresWriterStub, config)
+      sinon.assert.calledOnceWithExactly(setExposureDeliveryStrategyStub, config, sinon.match.func)
+    })
+
     it('should handle multiple enable calls gracefully', () => {
       openfeatureModule.enable(config)
       openfeatureModule.enable(config)

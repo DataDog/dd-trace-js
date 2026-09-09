@@ -3,6 +3,11 @@
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
+const {
+  wrapPoolRelease,
+  wrapPromisePoolAcquire,
+  wrapPromisePoolQueryMethod,
+} = require('./helpers/pool-acquire')
 
 const startRawQueryCh = channel('datadog:knex:raw:start')
 const rawQuerySubscribes = channel('datadog:knex:raw:subscribes')
@@ -32,6 +37,14 @@ addHook({
   versions: ['>=2'],
   file: 'lib/knex-builder/Knex.js',
 }, Knex => {
+  shimmer.wrap(Knex.Client.prototype, 'acquireConnection', acquireConnection => wrapPromisePoolAcquire(
+    acquireConnection,
+    resolveKnexDriver,
+    resolveKnexConfig,
+    knexHasIdleConnection
+  ))
+  shimmer.wrap(Knex.Client.prototype, 'releaseConnection', wrapPoolRelease)
+
   shimmer.wrap(Knex.Client.prototype, 'raw', raw => function (...args) {
     if (!startRawQueryCh.hasSubscribers) {
       return raw.apply(this, args)
@@ -77,10 +90,73 @@ addHook({
   return Knex
 })
 
+addHook({
+  name: 'knex',
+  versions: ['>=2'],
+  file: 'lib/execution/runner.js',
+}, Runner => {
+  shimmer.wrap(Runner.prototype, 'ensureConnection', ensureConnection => wrapPromisePoolQueryMethod(
+    ensureConnection,
+    runner => runner.connection || runner.builder?._connection ? undefined : runner.client,
+    runner => resolveKnexDriver(runner.client)
+  ))
+
+  return Runner
+})
+
+addHook({
+  name: 'knex',
+  versions: ['>=2'],
+  file: 'lib/execution/transaction.js',
+}, Transaction => {
+  shimmer.wrap(Transaction.prototype, 'acquireConnection', acquireConnection => wrapPromisePoolQueryMethod(
+    acquireConnection,
+    (transaction, args) => args[0]?.connection ? undefined : transaction.client,
+    transaction => resolveKnexDriver(transaction.client)
+  ))
+
+  return Transaction
+})
+
 function wrapCallbackWithFinish (callback, finish, context) {
   if (typeof callback !== 'function') return callback
 
   return shimmer.wrapFunction(callback, callback => function (...args) {
     finish(context, () => callback.apply(this, args))
   })
+}
+
+/**
+ * @param {{ pool?: { numFree?: () => number, numPendingAcquires?: () => number } }} client
+ * @returns {boolean}
+ */
+function knexHasIdleConnection (client) {
+  const pool = client.pool
+  if (typeof pool?.numFree !== 'function') return false
+  return pool.numFree() > pool.numPendingAcquires()
+}
+
+/**
+ * @param {{ driverName?: string }|undefined} client
+ * @returns {'mysql'|'mysql2'|'pg'|undefined}
+ */
+function resolveKnexDriver (client) {
+  switch (client?.driverName) {
+    case 'mysql':
+      return 'mysql'
+    case 'mysql2':
+      return 'mysql2'
+    case 'pg':
+    case 'cockroachdb':
+    case 'pg-redshift':
+      return 'pg'
+  }
+}
+
+/**
+ * @param {{ connectionSettings?: Record<string, unknown> }} client
+ * @returns {Record<string, unknown>}
+ */
+function resolveKnexConfig (client) {
+  return client.connectionSettings ?? {}
 }

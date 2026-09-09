@@ -243,19 +243,21 @@ class TracingPlugin extends Plugin {
       serviceSource = undefined
     }
 
+    const tags = {
+      [COMPONENT]: component,
+      'service.name': serviceName || tracer._service,
+      'resource.name': resource,
+      'span.kind': kind,
+      'span.type': type,
+      ...meta,
+      ...metrics,
+    }
+    if (serviceSource !== undefined && !Object.hasOwn(tags, SVC_SRC_KEY)) tags[SVC_SRC_KEY] = serviceSource
+
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
-      tags: {
-        [COMPONENT]: component,
-        'service.name': serviceName || tracer._service,
-        'resource.name': resource,
-        'span.kind': kind,
-        'span.type': type,
-        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
-        ...meta,
-        ...metrics,
-      },
+      tags,
       integrationName: integrationName || component,
       links: childOf?._links,
     })

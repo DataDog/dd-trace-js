@@ -12,10 +12,10 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../../../dd-trace/test/setup/core')
 const AgentProxyCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agent-proxy')
+const { FINAL_FLUSH_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 const AgentlessWriter = require('../../../../src/ci-visibility/exporters/agentless/writer')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
-const { FINAL_FLUSH_TIMEOUT } = require('../../../../src/ci-visibility/final-flush')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
 const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
@@ -38,6 +38,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   const flushInterval = 50
   const url = new URL(`http://${hostname}:${port}`)
   const queryDelay = 50
+  const agentInfoTimeoutMs = 5000
   const tags = {}
 
   function createControlledExporter () {
@@ -97,6 +98,29 @@ describe('AgentProxyCiVisibilityExporter', () => {
     assert.strictEqual(scope.isDone(), true)
   })
 
+  it('bounds agent info initialization independently of the final flush timeout', () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+
+      assert.strictEqual(controlled.getRequestOptions().deadline, Date.now() + agentInfoTimeoutMs)
+      assert.strictEqual(controlled.getRequestOptions().timeoutFromCreation, undefined)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('aborts pending agent info initialization when an empty final flush completes', () => {
+    const controlled = createControlledExporter()
+    const done = sinon.spy()
+    const { signal } = controlled.getRequestOptions()
+
+    controlled.exporter.flush(done)
+
+    assert.strictEqual(signal.aborted, true)
+    sinon.assert.calledOnceWithExactly(done)
+  })
+
   it('exports buffered data and flushes it when initialization finishes within the final deadline', async () => {
     const clock = sinon.useFakeTimers()
     try {
@@ -108,8 +132,9 @@ describe('AgentProxyCiVisibilityExporter', () => {
       controlled.exporter.flush(done)
 
       const requestOptions = controlled.getRequestOptions()
+      assert.strictEqual(requestOptions.keepProcessAlive, true)
       assert.strictEqual(requestOptions.signal.aborted, false)
-      assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
+      assert.strictEqual(requestOptions.deadline, Date.now() + agentInfoTimeoutMs)
 
       controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
       await Promise.resolve()
@@ -118,7 +143,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
       sinon.assert.calledOnceWithExactly(controlled.writers[0].append, trace)
       for (const writer of controlled.writers) {
         sinon.assert.calledOnce(writer.flush)
-        assert.strictEqual(writer.flush.firstCall.args[1].deadline, requestOptions.deadline)
+        assert.strictEqual(writer.flush.firstCall.args[1].deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
       }
       sinon.assert.calledOnceWithExactly(done, undefined)
     } finally {
@@ -195,21 +220,22 @@ describe('AgentProxyCiVisibilityExporter', () => {
       const controlled = createControlledExporter()
       const firstDone = sinon.spy()
       const firstTrace = [{ type: 'test', name: 'first session' }]
+      const overlapDelay = FINAL_FLUSH_TIMEOUT / 2
 
       controlled.exporter.export(firstTrace)
       controlled.exporter.flush(firstDone)
       const requestOptions = controlled.getRequestOptions()
 
-      clock.tick(FINAL_FLUSH_TIMEOUT / 2)
+      clock.tick(overlapDelay)
 
       const secondDone = sinon.spy()
       const secondTrace = [{ type: 'test', name: 'second session' }]
       controlled.exporter.export(secondTrace)
       controlled.exporter.flush(secondDone)
 
-      assert.strictEqual(requestOptions.deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
+      assert.strictEqual(requestOptions.deadline, agentInfoTimeoutMs)
 
-      clock.tick(FINAL_FLUSH_TIMEOUT / 2)
+      clock.tick(overlapDelay)
 
       assert.strictEqual(requestOptions.signal.aborted, false)
       sinon.assert.calledOnce(firstDone)

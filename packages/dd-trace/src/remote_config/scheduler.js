@@ -1,29 +1,54 @@
 'use strict'
 
 class Scheduler {
-  _timer = null
+  #active = false
+  #callback
+  #generation = 0
+  #inFlight = false
+  #interval
+  #timer
 
+  /**
+   * @param {(done: () => void) => void} callback
+   * @param {number} interval
+   */
   constructor (callback, interval) {
-    this._callback = callback
-    this._interval = interval
+    this.#callback = callback
+    this.#interval = interval
   }
 
   start () {
-    if (this._timer) return
+    if (this.#active) return
 
-    this.runAfterDelay(0)
+    this.#active = true
+    this.#generation++
+    if (!this.#inFlight) this.#runAfterDelay(0)
   }
 
-  runAfterDelay (interval = this._interval) {
-    this._timer = setTimeout(this._callback, interval, () => this.runAfterDelay())
+  /**
+   * @param {number} interval
+   */
+  #runAfterDelay (interval) {
+    const generation = this.#generation
+    this.#timer = setTimeout(() => {
+      this.#timer = undefined
+      this.#inFlight = true
+      this.#callback(() => {
+        this.#inFlight = false
+        if (!this.#active) return
 
-    this._timer.unref?.()
+        this.#runAfterDelay(this.#generation === generation ? this.#interval : 0)
+      })
+    }, interval)
+
+    this.#timer.unref?.()
   }
 
   stop () {
-    clearTimeout(this._timer)
+    this.#active = false
+    clearTimeout(this.#timer)
 
-    this._timer = null
+    this.#timer = undefined
   }
 }
 

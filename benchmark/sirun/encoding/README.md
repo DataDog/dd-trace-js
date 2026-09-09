@@ -1,9 +1,5 @@
-Measures the agent trace encoder in isolation: a pre-built trace is encoded many
-times through a null writer so only the encoder cost is measured. The fixture
-(`trace-fixture.js`) mirrors a typical Node.js HTTP-service request (~30 spans:
-an Express root, middleware, Postgres/Redis/HTTP-client/DNS spans, one error
-span) with reused keys and hot values to match the encoder's string cache.
-`tickTrace` rewrites the per-request dynamic fields before each encode so V8 does
-not collapse the magnitude branches and stale-cache hits the encoder must
-exercise. `TRACE_SPANS=<n>` scales the trace; variants `0.4`/`0.5` cover the wire
-formats and the `*-events-*` variants the span-event paths.
+Measures agent trace encoding with pre-built HTTP-service traces. The fixtures
+include Express, Postgres, Redis, HTTP-client, DNS, and error spans. Each
+operation updates request-specific fields while it keeps common span data
+stable. The immediate-flush workload uses a ten-span API request and
+`flushInterval: 0`, then assembles one payload per trace before a no-op send.

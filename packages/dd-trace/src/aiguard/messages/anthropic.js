@@ -208,7 +208,14 @@ function walkContentBlocks (blocks) {
 function partsToContent (parts, hasImages) {
   if (!parts.length) return
   if (hasImages) return parts
-  return parts.map(p => p.text).join('\n')
+  let content = ''
+  let isFirstPart = true
+  for (const part of parts) {
+    if (!isFirstPart) content += '\n'
+    content += part.text
+    isFirstPart = false
+  }
+  return content
 }
 
 /**

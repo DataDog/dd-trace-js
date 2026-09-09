@@ -13,9 +13,13 @@ const MochaTest = require('mocha/lib/test')
 const sinon = require('sinon')
 
 const MochaPlugin = require('../../datadog-plugin-mocha/src')
+const { storage } = require('../../datadog-core')
+const log = require('../../dd-trace/src/log')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
+const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('../src/rum-browser-scripts')
 const {
   adjustRunnerFailuresForTestOptimization,
   efdTests,
@@ -24,7 +28,12 @@ const {
   MOCHA_WORKER_LOGS_PAYLOAD_CODE,
   MOCHA_WORKER_TELEMETRY_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
+  TEST_IS_RUM_ACTIVE,
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_NAME,
@@ -35,10 +44,14 @@ const {
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
+  requestWebdriverioScreenshotUpload,
+  SCREENSHOT_UPLOAD_RESPONSE,
+  SCREENSHOT_UPLOAD_TIMEOUT_MS,
   SUITE_FINISH,
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
 } = require('../src/mocha/webdriverio-protocol')
+const { FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 
 const fixturePath = path.join(__dirname, 'fixtures', 'webdriverio-local-runner.mjs')
 const delayedWorkerFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-delayed-worker.js')
@@ -103,9 +116,114 @@ const utilsFixtureModulePath = path.join(
   'build',
   'index.js'
 )
+const browserFixturePath = path.join(__dirname, 'fixtures', 'webdriverio-browser.mjs')
+const browserFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  'webdriverio',
+  'build',
+  file
+))
+const webdriverFixturePath = path.join(__dirname, 'fixtures', 'webdriver.mjs')
+const webdriverFixtureModulePaths = ['index.js', 'node.js'].map(file => path.join(
+  __dirname,
+  'fixtures',
+  'node_modules',
+  'webdriver',
+  'build',
+  file
+))
 const execFileAsync = promisify(execFile)
+const PNG_SCREENSHOT = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+
+/**
+ * Waits for a rewriter completion callback in unit tests.
+ *
+ * @param {(onDone: () => void) => void} callback
+ * @returns {Promise<void>}
+ */
+function runCallback (callback) {
+  return new Promise(callback)
+}
+
+/**
+ * Cleans retained browser state through the same lifecycle used at worker exit.
+ *
+ * @returns {Promise<void>}
+ */
+async function cleanupRumState () {
+  const context = {}
+  tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync').asyncEnd.publish(context)
+  if (context.resolveCallback) await runCallback(context.resolveCallback)
+}
+
+/**
+ * Advances the test-function lifecycle to the next non-afterEach hook.
+ *
+ * @returns {Promise<void>}
+ */
+async function cleanupPendingRumTest () {
+  const context = {
+    arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterAll'],
+  }
+  tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper').start.publish(context)
+  assert.strictEqual(typeof context.rumCleanupCallback, 'function')
+  await context.rumCleanupCallback()
+}
 
 describe('webdriverio instrumentation', () => {
+  it('detects RUM before its initialization configuration is available', () => {
+    const previousWindow = global.window
+    global.window = {
+      DD_RUM: {
+        getInitConfiguration: () => undefined,
+        getInternalContext: () => undefined,
+      },
+    }
+
+    try {
+      assert.deepStrictEqual(detectRum(), {
+        isRumActive: false,
+        isRumInstrumented: true,
+        rumSamplingRate: null,
+      })
+    } finally {
+      if (previousWindow === undefined) {
+        delete global.window
+      } else {
+        global.window = previousWindow
+      }
+    }
+  })
+
+  it('keeps cleanup separate from RUM activity when stopping a session', () => {
+    const previousWindow = global.window
+    const getInternalContext = sinon.stub()
+      .onFirstCall().returns(undefined)
+      .onSecondCall().returns({ application_id: 'rum-app' })
+    const stopSession = sinon.stub()
+    global.window = {
+      DD_RUM: {
+        getInternalContext,
+        stopSession,
+      },
+    }
+
+    try {
+      assert.strictEqual(stopRumSession(), true)
+      assert.strictEqual(stopRumSessionAndReportActivity(), false)
+      assert.strictEqual(stopRumSessionAndReportActivity(), true)
+      assert.strictEqual(stopSession.callCount, 3)
+    } finally {
+      if (previousWindow === undefined) {
+        delete global.window
+      } else {
+        global.window = previousWindow
+      }
+    }
+  })
+
   it('rewrites the ESM launcher scheduler', () => {
     const source = fs.readFileSync(launcherFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, launcherFixtureModulePath, 'module')
@@ -130,6 +248,8 @@ describe('webdriverio instrumentation', () => {
     const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
 
     assert.notStrictEqual(rewrittenSource, source)
+    assert.match(rewrittenSource, /orchestrion:@wdio\/runner:Runner_run/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/runner:BaseReporter_waitForSync/)
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
@@ -157,6 +277,741 @@ describe('webdriverio instrumentation', () => {
     assert.notStrictEqual(rewrittenSource, source)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:executeAsync/)
     assert.match(rewrittenSource, /orchestrion:@wdio\/utils:testFrameworkFnWrapper/)
+    assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.rumStartCallback/)
+    assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
+  })
+
+  it('rewrites WebdriverIO URL navigation and waits for RUM correlation', () => {
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    for (const modulePath of browserFixtureModulePaths) {
+      const rewrittenSource = rewriter.rewrite(source, modulePath, 'module')
+
+      assert.notStrictEqual(rewrittenSource, source)
+      assert.match(rewrittenSource, /orchestrion:webdriverio:newWindow/)
+      assert.match(rewrittenSource, /orchestrion:webdriverio:url/)
+      assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
+      assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
+    }
+
+    const webdriverSource = fs.readFileSync(webdriverFixturePath, 'utf8')
+    for (const modulePath of webdriverFixtureModulePaths) {
+      const rewrittenSource = rewriter.rewrite(webdriverSource, modulePath, 'module')
+
+      assert.notStrictEqual(rewrittenSource, webdriverSource)
+      assert.match(rewrittenSource, /orchestrion:webdriver:command/)
+    }
+  })
+
+  it('installs BiDi RUM correlation before a non-blocking navigation', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, browserFixtureModulePaths[0], 'module')
+    const webdriverSource = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenWebdriverSource = rewriter.rewrite(webdriverSource, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-browser-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const webdriverOutputPath = path.join(outputDirectory, 'webdriver.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    const rumStates = []
+    const browser = {
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().callsFake(() => {
+          calls.push('detect')
+          return Promise.resolve({
+            isRumActive: false,
+            isRumInstrumented: false,
+            rumSamplingRate: null,
+          })
+        })
+        .onSecondCall().callsFake(() => {
+          calls.push('detect-at-test-end')
+          return Promise.resolve({
+            isRumActive: true,
+            isRumInstrumented: true,
+            rumSamplingRate: 100,
+          })
+        })
+        .onThirdCall().callsFake(() => {
+          calls.push('detect-after-each')
+          return Promise.resolve(false)
+        }),
+      getWindowHandle: sinon.stub().callsFake(() => {
+        calls.push('handle')
+        return Promise.resolve('window-a')
+      }),
+      getWindowHandles: sinon.stub().callsFake(() => {
+        calls.push('handles')
+        return Promise.resolve(['window-a'])
+      }),
+      isBidi: true,
+      calls,
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      fs.writeFileSync(webdriverOutputPath, rewrittenWebdriverSource)
+      const { url3 } = await import(pathToFileURL(outputPath))
+      const { navigateTo } = await import(pathToFileURL(webdriverOutputPath))
+      browser.navigateTo = (...args) => navigateTo.call(browser, ...args)
+      await url3.call(browser, 'https://example.test', { wait: 'none' })
+
+      assert.deepStrictEqual(calls, [
+        'handle',
+        'add-preload',
+        'navigateTo',
+        'detect',
+      ])
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      assert.deepStrictEqual(calls.slice(4), [
+        'handle',
+        'handles',
+        'detect-at-test-end',
+      ])
+      assert.deepStrictEqual(rumStates, [undefined, false, true])
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls.slice(7), [
+        'handle',
+        'handles',
+        'detect-after-each',
+        'remove-preload',
+        'handle',
+        'handles',
+        'delete',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('preloads RUM correlation for a direct navigateTo command', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriver-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const calls = []
+    const browser = {
+      calls,
+      capabilities: {},
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { getTitle, navigateTo } = await import(pathToFileURL(outputPath))
+      await getTitle.call(browser)
+      await navigateTo.call(browser, 'https://example.test')
+
+      assert.deepStrictEqual(calls, ['getTitle', 'add-preload', 'navigateTo'])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('publishes browser metadata for a direct classic navigateTo command', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriver-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const correlationContexts = []
+    const browser = {
+      calls: [],
+      capabilities: {
+        browserName: 'chrome',
+        browserVersion: '123',
+      },
+    }
+    const correlate = context => {
+      correlationContexts.push({
+        browserName: context.browserName,
+        browserVersion: context.browserVersion,
+        isRumActive: context.isRumActive,
+      })
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { navigateTo } = await import(pathToFileURL(outputPath))
+      await navigateTo.call(browser, 'https://example.test')
+
+      assert.deepStrictEqual(browser.calls, ['navigateTo'])
+      assert.deepStrictEqual(correlationContexts, [{
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: undefined,
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('preloads RUM correlation for a direct browsingContextNavigate command', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriver-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const calls = []
+    const browser = {
+      calls,
+      capabilities: {},
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { initiateBidi } = await import(pathToFileURL(outputPath))
+      Object.defineProperties(browser, initiateBidi())
+      await browser.browsingContextNavigate({ context: 'window-a', url: 'https://example.test' })
+
+      assert.deepStrictEqual(calls, ['add-preload', 'browsingContextNavigate'])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('installs BiDi RUM correlation before newWindow loads its first document', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, browserFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-browser-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const calls = []
+    const browser = {
+      browsingContextCreate: sinon.stub().callsFake(() => {
+        calls.push('create-window')
+        return Promise.resolve({ context: 'window-b' })
+      }),
+      browsingContextNavigate: sinon.stub().callsFake(() => {
+        calls.push('navigate-window')
+        return Promise.resolve()
+      }),
+      capabilities: {},
+      execute: sinon.stub().callsFake((script) => {
+        calls.push(script.name === 'detectRum' ? 'detect' : 'stop')
+        return Promise.resolve(script.name === 'detectRum'
+          ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+          : false)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set-cookie')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake(() => {
+        calls.push('switch-window')
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { newWindow3 } = await import(pathToFileURL(outputPath))
+      await newWindow3.call(browser, 'https://example.test')
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'create-window',
+        'navigate-window',
+        'switch-window',
+        'detect',
+        'set-cookie',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('does not correlate classic WebDriver sessions', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {
+        browserName: 'chrome',
+        browserVersion: '123',
+      },
+      execute: sinon.stub().resolves({
+        isRumActive: false,
+        isRumInstrumented: true,
+        rumSamplingRate: null,
+      }),
+      sendCommand: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+    }
+    const correlationContexts = []
+    const correlate = context => {
+      correlationContexts.push({
+        browserName: context.browserName,
+        browserVersion: context.browserVersion,
+        isRumActive: context.isRumActive,
+      })
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      await executeAsyncContext.rumStartCallback()
+
+      assert.deepStrictEqual(correlationContexts, [{
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: false,
+      }])
+      assert.strictEqual(browser.execute.callCount, 0)
+      assert.strictEqual(browser.setCookies.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('does not retain standalone WebdriverIO clients in regular Mocha tests', async () => {
+    require('../src/webdriverio')
+    await cleanupRumState()
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().resolves({
+        isRumActive: true,
+        isRumInstrumented: true,
+        rumSamplingRate: 100,
+      }),
+      setCookies: sinon.stub().resolves(),
+    }
+    const ignoreCorrelation = () => {}
+    correlationCh.subscribe(ignoreCorrelation)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      const workerExitContext = {}
+      tracingChannel('orchestrion:@wdio/runner:BaseReporter_waitForSync').asyncEnd.publish(workerExitContext)
+
+      assert.strictEqual(browser.execute.callCount, 0)
+      assert.strictEqual(browser.setCookies.callCount, 0)
+      assert.strictEqual(workerExitContext.resolveCallback, undefined)
+    } finally {
+      correlationCh.unsubscribe(ignoreCorrelation)
+    }
+  })
+
+  it('correlates a page left behind by a rejected URL command', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(browserFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, browserFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-browser-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const navigationError = new Error('page load timed out')
+    const calls = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake((name) => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onSecondCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onThirdCall().resolves(false),
+      navigateTo: sinon.stub().callsFake(() => {
+        calls.push('navigate')
+        return Promise.reject(navigationError)
+      }),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { url3 } = await import(pathToFileURL(outputPath))
+      await assert.rejects(url3.call(browser, 'https://example.test'), error => error === navigationError)
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls, [
+        'navigate',
+        'set',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+      ])
+      assert.strictEqual(browser.execute.callCount, 3)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('preserves a suite-hook page while RUM initialization is pending', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    let hasTestSpan = false
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: true,
+          rumSamplingRate: null,
+        })
+        .onSecondCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: true,
+          rumSamplingRate: null,
+        })
+        .onThirdCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onCall(3).resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      context.isTestOptimizationRunner = true
+      if (hasTestSpan) context.testExecutionId = 'suite-test-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      hasTestSpan = true
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      await executeAsync(() => {
+        calls.push('test')
+      }, { attempts: 0, limit: 0 })
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls, ['set', 'test', 'delete'])
+      assert.strictEqual(browser.execute.callCount, 4)
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+      assert.deepStrictEqual(browser.setCookies.firstCall.args, [{
+        name: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
+        value: 'suite-test-id',
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('retains a suite-hook browser when post-navigation RUM detection fails', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    let hasTestSpan = false
+    const browser = {
+      capabilities: {},
+      execute: sinon.stub()
+        .onFirstCall().rejects(new Error('unexpected alert open'))
+        .onSecondCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      context.isTestOptimizationRunner = true
+      if (hasTestSpan) context.testExecutionId = 'test-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      hasTestSpan = true
+      const testContext = {}
+      executeAsyncCh.start.publish(testContext)
+      await testContext.rumStartCallback()
+
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.setCookies.callCount, 1)
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('keeps an inactive retained page correlated in case RUM is restarted', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: false, isRumInstrumented: true, rumSamplingRate: 50 }
+        : false)),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const firstTestContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(firstTestContext)
+      await runCallback(firstTestContext.resolveCallback)
+      await cleanupPendingRumTest()
+      browser.execute.resetHistory()
+
+      const secondTestContext = {}
+      executeAsyncCh.start.runStores(secondTestContext, () => {})
+      await secondTestContext.rumStartCallback()
+
+      assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.strictEqual(browser.setCookies.callCount, 1)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('re-correlates an initializing background page when the current page is sampled out', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    let currentWindowHandle = 'window-a'
+    let testExecutionId = 'first-test-id'
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? {
+            isRumActive: false,
+            isRumInstrumented: true,
+            rumSamplingRate: currentWindowHandle === 'window-a' ? 50 : null,
+          }
+        : false)),
+      getWindowHandle: sinon.stub().callsFake(() => Promise.resolve(currentWindowHandle)),
+      getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentWindowHandle = windowHandle
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = testExecutionId }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const firstTestContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(firstTestContext)
+      await runCallback(firstTestContext.resolveCallback)
+      await cleanupPendingRumTest()
+
+      testExecutionId = 'second-test-id'
+      browser.execute.resetHistory()
+      browser.scriptAddPreloadScript.resetHistory()
+      browser.setCookies.resetHistory()
+      browser.switchToWindow.resetHistory()
+
+      const secondTestContext = {}
+      executeAsyncCh.start.runStores(secondTestContext, () => {})
+      await secondTestContext.rumStartCallback()
+
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
+        'window-b',
+        'window-a',
+        'window-b',
+        'window-a',
+      ])
+      assert.deepStrictEqual(browser.setCookies.args, [
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'second-test-id' }],
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'second-test-id' }],
+      ])
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
   })
 
   it('rewrites legacy and modern Jasmine spec lifecycles', () => {
@@ -178,8 +1033,9 @@ describe('webdriverio instrumentation', () => {
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
     const subscriber = {
       start (ctx) {
-        ctx.retryCallback = error => {
+        ctx.retryCallback = async function (error) {
           callbacks.push(error.message)
+          await new Promise(resolve => setImmediate(resolve))
         }
       },
     }
@@ -215,7 +1071,7 @@ describe('webdriverio instrumentation', () => {
     const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
     const subscriber = {
       start (ctx) {
-        ctx.retryCallback = () => {
+        ctx.retryCallback = async function () {
           failedRetries.limit = 0
         }
       },
@@ -271,6 +1127,1295 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(retries.attempts, 1)
     } finally {
       executeAsyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('keeps RUM correlated after a failed beforeEach hook', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const rumStates = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake((name) => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+      execute: sinon.stub().resolves({
+        isRumActive: true,
+        isRumInstrumented: true,
+        rumSamplingRate: 100,
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = '1234'
+    }
+    const beforeEachError = new Error('beforeEach failed')
+
+    correlationCh.subscribe(correlate)
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { testFrameworkFnWrapper } = await import(pathToFileURL(outputPath))
+      await assert.rejects(testFrameworkFnWrapper(
+        {},
+        'Hook',
+        { specFn: () => { throw beforeEachError } },
+        undefined,
+        undefined,
+        '0-0',
+        0,
+        'beforeEach'
+      ), error => error === beforeEachError)
+
+      assert.deepStrictEqual(calls, [
+        'set',
+      ])
+      assert.strictEqual(browser.execute.callCount, 3)
+      assert.strictEqual(rumStates.at(-1), true)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('keeps RUM correlated through every afterEach hook', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    const rumStates = []
+    const browser = {
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      capabilities: {
+        browserName: 'chrome',
+        browserVersion: '123',
+      },
+      deleteCookies: sinon.stub().callsFake((name) => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: false,
+          rumSamplingRate: null,
+        })
+        .onSecondCall().resolves({
+          isRumActive: false,
+          isRumInstrumented: false,
+          rumSamplingRate: null,
+        })
+        .onThirdCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onCall(3).resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        }),
+      isBidi: true,
+      setCookies: sinon.stub().callsFake((cookie) => {
+        calls.push(`set:${cookie.value}`)
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      assert.strictEqual(context.browserName, 'chrome')
+      assert.strictEqual(context.browserVersion, '123')
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      assert.strictEqual(browser.execute.callCount, 1)
+      assert.strictEqual(browser.execute.firstCall.args.length, 1)
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+      ])
+      assert.deepStrictEqual(rumStates, [undefined, false])
+
+      calls.push('user-after-test')
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'user-after-test',
+      ])
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.deepStrictEqual(rumStates, [undefined, false])
+
+      calls.push('user-after-each:1')
+
+      const firstAfterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(firstAfterEachContext)
+      await runCallback(firstAfterEachContext.resolveCallback)
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'user-after-test',
+        'user-after-each:1',
+      ])
+      assert.strictEqual(browser.execute.callCount, 3)
+      assert.deepStrictEqual(rumStates, [undefined, false, true])
+
+      const secondAfterEachStartContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.start.publish(secondAfterEachStartContext)
+      assert.strictEqual(secondAfterEachStartContext.rumCleanupCallback, undefined)
+
+      calls.push('user-after-each:2')
+      const secondAfterEachErrorContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.error.publish(secondAfterEachErrorContext)
+      await runCallback(secondAfterEachErrorContext.rejectCallback)
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'user-after-test',
+        'user-after-each:1',
+        'user-after-each:2',
+      ])
+      assert.strictEqual(browser.execute.callCount, 4)
+      assert.deepStrictEqual(rumStates, [undefined, false, true, true])
+
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'user-after-test',
+        'user-after-each:1',
+        'user-after-each:2',
+        'remove-preload',
+        `delete:${RUM_TEST_EXECUTION_ID_COOKIE_NAME}`,
+      ])
+      assert.strictEqual(browser.execute.callCount, 4)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('re-correlates a reused RUM page before failing WebdriverIO test and hook callbacks', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub().callsFake((script) => {
+        if (script.name === 'detectRum') {
+          calls.push('detect')
+          return Promise.resolve({
+            isRumActive: true,
+            isRumInstrumented: true,
+            rumSamplingRate: 100,
+          })
+        }
+        calls.push('stop')
+        return Promise.resolve(true)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(({ value }) => {
+        calls.push(`set:${value}`)
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    let testExecutionId
+    const correlate = context => {
+      context.isTestOptimizationRunner = true
+      context.testExecutionId = testExecutionId
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { testFrameworkFnWrapper } = await import(pathToFileURL(outputPath))
+      testExecutionId = 'first-test-id'
+      const firstTestError = new Error('first test failed')
+      await assert.rejects(testFrameworkFnWrapper({}, 'Test', {
+        specFn () {
+          calls.push('first-test')
+          throw firstTestError
+        },
+      }, {
+        beforeFn () {
+          calls.push('before-first-test')
+        },
+      }), error => error === firstTestError)
+      testExecutionId = 'second-test-id'
+      const beforeTestError = new Error('before test failed')
+      await assert.rejects(testFrameworkFnWrapper({}, 'Test', {
+        specFn () {
+          calls.push('second-test')
+        },
+      }, {
+        beforeFn () {
+          calls.push('before-test')
+          throw beforeTestError
+        },
+      }), error => error === beforeTestError)
+
+      testExecutionId = 'third-test-id'
+      const beforeHookError = new Error('before hook failed')
+      await assert.rejects(testFrameworkFnWrapper(
+        {},
+        'Hook',
+        {
+          specFn () {
+            calls.push('before-each')
+          },
+        },
+        {
+          beforeFn () {
+            calls.push('before-hook')
+            throw beforeHookError
+          },
+        },
+        undefined,
+        '0-0',
+        0,
+        'beforeEach'
+      ), error => error === beforeHookError)
+
+      assert.deepStrictEqual(calls, [
+        'detect',
+        'detect',
+        'set:first-test-id',
+        'before-first-test',
+        'first-test',
+        'detect',
+        'delete',
+        'detect',
+        'set:second-test-id',
+        'before-test',
+        'detect',
+        'delete',
+        'detect',
+        'set:third-test-id',
+        'before-hook',
+        'detect',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('reinstalls a cached BiDi preload after the browser session changes', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const browser = {
+      capabilities: {},
+      execute: sinon.stub().resolves(false),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => Promise.resolve({
+        script: `rum-preload-${browser.sessionId}`,
+      })),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      sessionId: 'session-a',
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    const prepareNavigation = async () => {
+      const context = { self: browser }
+      urlCh.start.runStores(context, () => {})
+      await context.rumPreloadCallback.call(browser)
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      await prepareNavigation()
+      await prepareNavigation()
+      browser.sessionId = 'session-b'
+      await prepareNavigation()
+
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.strictEqual(browser.scriptRemovePreloadScript.callCount, 0)
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.args.map(([options]) => options.arguments), [
+        [{ type: 'string', value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=test-id; path=/` }],
+        [{ type: 'string', value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=test-id; path=/` }],
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('does not install a second BiDi preload when removing the previous one fails', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    let testExecutionId = 'first-test-id'
+    const browser = {
+      capabilities: {},
+      execute: sinon.stub().resolves(false),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub()
+        .onFirstCall().resolves({ script: 'first-preload' })
+        .onSecondCall().resolves({ script: 'second-preload' }),
+      scriptRemovePreloadScript: sinon.stub()
+        .onFirstCall().rejects(new Error('temporary BiDi failure'))
+        .onSecondCall().resolves(),
+      sessionId: 'session-a',
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => { context.testExecutionId = testExecutionId }
+    const prepareNavigation = (browser) => {
+      const context = { self: browser }
+      urlCh.start.runStores(context, () => {})
+      return context.rumPreloadCallback.call(browser)
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      await prepareNavigation(browser)
+      testExecutionId = 'second-test-id'
+      await prepareNavigation(browser)
+
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 1)
+
+      await prepareNavigation(browser)
+
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.deepStrictEqual(browser.scriptRemovePreloadScript.args, [
+        [{ script: 'first-preload' }],
+        [{ script: 'first-preload' }],
+      ])
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.secondCall.args[0].arguments, [{
+        type: 'string',
+        value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=second-test-id; path=/`,
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('flushes RUM before a WebDriver session is deleted and then forgets the browser', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const webdriverSource = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenWebdriverSource = rewriter.rewrite(webdriverSource, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const webdriverOutputPath = path.join(outputDirectory, 'webdriver.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const browser = Object.assign(new EventEmitter(), {
+      calls,
+      capabilities: {},
+      execute: sinon.stub().callsFake(() => {
+        calls.push('stop-rum')
+        return Promise.resolve(true)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-cookies')
+        return Promise.resolve()
+      }),
+    })
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      fs.writeFileSync(webdriverOutputPath, rewrittenWebdriverSource)
+      const { deleteSession } = await import(pathToFileURL(webdriverOutputPath))
+      await deleteSession.call(browser)
+      assert.deepStrictEqual(calls, [
+        'remove-preload',
+        'stop-rum',
+        'delete-cookies',
+        'deleteSession',
+      ])
+
+      browser.execute.resetHistory()
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      await executeAsync(() => {}, { attempts: 0, limit: 0 })
+
+      assert.strictEqual(browser.execute.callCount, 0)
+      assert.strictEqual(browser.listenerCount('result'), 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('flushes RUM only when closeWindow terminates the final WebDriver session', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(webdriverFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, webdriverFixtureModulePaths[0], 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriver-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const browser = Object.assign(new EventEmitter(), {
+      calls,
+      capabilities: {},
+      execute: sinon.stub().callsFake(() => {
+        calls.push('stop-rum')
+        return Promise.resolve(true)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-cookies')
+        return Promise.resolve()
+      }),
+      windowHandles: ['window-a', 'window-b'],
+    })
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { closeWindow, getWindowHandles } = await import(pathToFileURL(outputPath))
+      browser.getWindowHandles = getWindowHandles
+
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      await closeWindow.call(browser)
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'getWindowHandles',
+        'closeWindow',
+      ])
+
+      await closeWindow.call(browser)
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'getWindowHandles',
+        'closeWindow',
+        'getWindowHandles',
+        'remove-preload',
+        'stop-rum',
+        'delete-cookies',
+        'closeWindow',
+      ])
+
+      browser.execute.resetHistory()
+      const nextTestContext = {}
+      executeAsyncCh.start.runStores(nextTestContext, () => {})
+      await nextTestContext.rumStartCallback()
+      assert.strictEqual(browser.execute.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('preloads RUM correlation in current and future browsing contexts', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    let frameSelected = true
+    let preloadScript
+    const browser = {
+      scriptAddPreloadScript: sinon.stub().callsFake((options) => {
+        calls.push('add-preload')
+        preloadScript = options.functionDeclaration
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-current')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        : false)),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a']),
+      isBidi: true,
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set-current')
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        frameSelected = false
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-all')
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const firstNavigationContext = { self: browser }
+      urlCh.asyncEnd.publish(firstNavigationContext)
+      await runCallback(firstNavigationContext.resolveCallback)
+
+      assert.strictEqual(
+        preloadScript,
+        'cookie => { globalThis.document.cookie = cookie }'
+      )
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls, [
+        'set-current',
+        'add-preload',
+        'remove-preload',
+        'delete-current',
+        'delete-all',
+      ])
+      assert.strictEqual(frameSelected, true)
+      assert.deepStrictEqual(browser.storageDeleteCookies.firstCall.args, [{
+        filter: { name: RUM_TEST_EXECUTION_ID_COOKIE_NAME },
+      }])
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.firstCall.args, [{
+        arguments: [{
+          type: 'string',
+          value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=1234; path=/`,
+        }],
+        functionDeclaration: preloadScript,
+      }])
+      assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
+      assert.strictEqual(browser.execute.callCount, 3)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('detects active RUM in a background window before re-correlating every window', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    let currentWindowHandle = 'window-a'
+    let currentContext = 'frame-a'
+    const browser = {
+      capabilities: {
+        browserName: 'chrome',
+        browserVersion: '123',
+      },
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().callsFake((script) => {
+        if (script.name === 'getCurrentRumContext') return Promise.resolve({ context: currentContext })
+        return Promise.resolve(script.name === 'detectRum'
+          ? {
+              isRumActive: currentWindowHandle === 'window-b',
+              isRumInstrumented: currentWindowHandle === 'window-b',
+              rumSamplingRate: currentWindowHandle === 'window-b' ? 100 : null,
+            }
+          : false)
+      }),
+      getWindowHandle: sinon.stub().callsFake(() => Promise.resolve(currentWindowHandle)),
+      getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentWindowHandle = windowHandle
+        currentContext = windowHandle
+        return Promise.resolve()
+      }),
+      switchFrame: sinon.stub().callsFake((context) => {
+        currentContext = context
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'initial-execution-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      browser.setCookies.resetHistory()
+      browser.switchToWindow.resetHistory()
+
+      const rumCorrelation = await executeAsyncContext.rumRetryCallback()
+      await executeAsyncContext.rumRetryCallback('retry-execution-id')
+
+      assert.deepStrictEqual(browser.switchToWindow.args.map(([windowHandle]) => windowHandle), [
+        'window-a',
+        'window-b',
+        'window-a',
+        'window-a',
+        'window-b',
+        'window-a',
+      ])
+      assert.deepStrictEqual(browser.switchFrame.args, [['frame-a'], ['frame-a']])
+      assert.strictEqual(currentContext, 'frame-a')
+      assert.deepStrictEqual(browser.setCookies.args, [
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
+        [{ name: RUM_TEST_EXECUTION_ID_COOKIE_NAME, value: 'retry-execution-id' }],
+      ])
+      assert.strictEqual(browser.scriptAddPreloadScript.callCount, 2)
+      assert.deepStrictEqual(browser.scriptAddPreloadScript.secondCall.args, [{
+        arguments: [{
+          type: 'string',
+          value: `${RUM_TEST_EXECUTION_ID_COOKIE_NAME}=retry-execution-id; path=/`,
+        }],
+        functionDeclaration: 'cookie => { globalThis.document.cookie = cookie }',
+      }])
+      assert.deepStrictEqual(browser.scriptRemovePreloadScript.firstCall.args, [{ script: 'rum-preload' }])
+      assert.strictEqual(browser.execute.callCount, 4)
+      assert.deepStrictEqual(rumCorrelation, {
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: true,
+      })
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('uses the active browser metadata for Mocha and Jasmine retries', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const correlationContexts = []
+    const createBrowser = (browserName, browserVersion, isRumActive) => ({
+      capabilities: { browserName, browserVersion },
+      execute: sinon.stub().resolves({
+        isRumActive,
+        isRumInstrumented: true,
+        rumSamplingRate: isRumActive ? 100 : 50,
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: `rum-preload-${browserName}` }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    })
+    const inactiveBrowser = createBrowser('firefox', '122', false)
+    const activeBrowser = createBrowser('chrome', '123', true)
+    const correlate = context => {
+      correlationContexts.push({
+        browserName: context.browserName,
+        browserVersion: context.browserVersion,
+        isRumActive: context.isRumActive,
+      })
+      context.testExecutionId = 'retry-execution-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      for (const browser of [inactiveBrowser, activeBrowser]) {
+        const navigationContext = { self: browser }
+        urlCh.start.runStores(navigationContext, () => {})
+        await navigationContext.rumPreloadCallback.call(browser)
+      }
+      correlationContexts.length = 0
+
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+
+      assert.deepStrictEqual(await executeAsyncContext.rumRetryCallback(), {
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: true,
+      })
+
+      await executeAsyncContext.retryCallback()
+      assert.deepStrictEqual(correlationContexts, [{
+        browserName: 'chrome',
+        browserVersion: '123',
+        isRumActive: true,
+      }])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('checks RUM before marking a Mocha retry as RUM-active', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const rumStates = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().resolves(),
+      execute: sinon.stub().resolves({
+        isRumActive: false,
+        isRumInstrumented: false,
+        rumSamplingRate: null,
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = 'retry-execution-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      rumStates.length = 0
+
+      const executeAsyncContext = {}
+      channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      await executeAsyncContext.retryCallback()
+
+      assert.deepStrictEqual(rumStates, [false])
+      assert.strictEqual(browser.execute.callCount, 1)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('preserves Mocha RUM correlation across a native WebdriverIO retry', async () => {
+    require('../src/webdriverio')
+
+    const source = fs.readFileSync(utilsFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, utilsFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-utils-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    let attempts = 0
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub().callsFake((script) => Promise.resolve(script.name === 'detectRum'
+        ? { isRumActive: true, isRumInstrumented: true, rumSamplingRate: 100 }
+        : false)),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().callsFake(() => {
+        calls.push('set')
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().resolves(),
+    }
+    const correlate = context => {
+      context.testExecutionId = 'mocha-attempt-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      fs.writeFileSync(outputPath, rewrittenSource)
+      const { executeAsync } = await import(pathToFileURL(outputPath))
+      const result = await executeAsync(() => {
+        attempts++
+        calls.push(`attempt:${attempts}`)
+        if (attempts === 1) throw new Error('retry me')
+        return 'passed'
+      }, { attempts: 0, limit: 1 })
+
+      assert.strictEqual(result, 'passed')
+      assert.deepStrictEqual(calls, [
+        'set',
+        'attempt:1',
+        'set',
+        'attempt:2',
+      ])
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runCallback(afterEachContext.resolveCallback)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('cleans RUM in every open browser window and restores the original window', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const calls = []
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete')
+        return Promise.resolve()
+      }),
+      execute: sinon.stub()
+        .onFirstCall().resolves({
+          isRumActive: true,
+          isRumInstrumented: true,
+          rumSamplingRate: 100,
+        })
+        .onSecondCall().resolves(false)
+        .onThirdCall().resolves(false),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      setCookies: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      context.testExecutionId = '1234'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.asyncEnd.publish(navigationContext)
+      await runCallback(navigationContext.resolveCallback)
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      const afterEachContext = {
+        arguments: [undefined, 'Hook', undefined, undefined, undefined, undefined, undefined, 'afterEach'],
+      }
+      testFunctionCh.asyncEnd.publish(afterEachContext)
+      await runCallback(afterEachContext.resolveCallback)
+      await cleanupPendingRumTest()
+
+      assert.deepStrictEqual(calls, [
+        'switch:window-b',
+        'switch:window-a',
+        'switch:window-b',
+        'switch:window-a',
+        'switch:window-b',
+        'switch:window-a',
+        'delete',
+        'switch:window-b',
+        'delete',
+        'switch:window-a',
+      ])
+      assert.deepStrictEqual(browser.deleteCookies.firstCall.args, [[RUM_TEST_EXECUTION_ID_COOKIE_NAME]])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+    }
+  })
+
+  it('stops every RUM window before one browser-wide flush and cookie cleanup', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    let currentWindowHandle = 'window-a'
+    const browser = {
+      capabilities: {},
+      deleteCookies: sinon.stub(),
+      execute: sinon.stub().callsFake(() => {
+        calls.push(`stop:${currentWindowHandle}`)
+        return Promise.resolve(true)
+      }),
+      getWindowHandle: sinon.stub().callsFake(() => {
+        calls.push('handle')
+        return Promise.resolve(currentWindowHandle)
+      }),
+      getWindowHandles: sinon.stub().callsFake(() => {
+        calls.push('handles')
+        return Promise.resolve(['window-a', 'window-b'])
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().callsFake(() => {
+        calls.push('add-preload')
+        return Promise.resolve({ script: 'rum-preload' })
+      }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push('remove-preload')
+        return Promise.resolve()
+      }),
+      sessionId: 'session-a',
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push('delete-all')
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentWindowHandle = windowHandle
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      await cleanupRumState()
+
+      assert.deepStrictEqual(calls, [
+        'add-preload',
+        'remove-preload',
+        'handle',
+        'handles',
+        'stop:window-a',
+        'switch:window-b',
+        'stop:window-b',
+        'switch:window-a',
+        'delete-all',
+      ])
+      assert.strictEqual(browser.execute.callCount, 2)
+      assert.strictEqual(browser.deleteCookies.callCount, 0)
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('visits every window when the saved current window is last', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    let currentWindowHandle = 'window-b'
+    const browser = {
+      capabilities: {},
+      execute: sinon.stub().callsFake(() => {
+        calls.push(`stop:${currentWindowHandle}`)
+        return Promise.resolve(true)
+      }),
+      getWindowHandle: sinon.stub().resolves(currentWindowHandle),
+      getWindowHandles: sinon.stub().resolves(['window-a', 'window-b']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentWindowHandle = windowHandle
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      await cleanupRumState()
+
+      assert.deepStrictEqual(calls, [
+        'switch:window-a',
+        'stop:window-a',
+        'switch:window-b',
+        'stop:window-b',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('visits every child frame before restoring a selected frame', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    let currentContext = 'frame-a'
+    const browser = {
+      browsingContextGetTree: sinon.stub().resolves({
+        contexts: [{
+          context: 'window-a',
+          children: [{
+            context: 'frame-a',
+            children: [{ context: 'frame-b', children: [] }],
+          }],
+        }],
+      }),
+      capabilities: {},
+      execute: sinon.stub().callsFake((script) => {
+        if (script.name === 'getCurrentRumContext') return Promise.resolve({ context: currentContext })
+        calls.push(`stop:${currentContext}`)
+        return Promise.resolve(true)
+      }),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchFrame: sinon.stub().callsFake((context) => {
+        currentContext = context
+        calls.push(`frame:${context}`)
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((windowHandle) => {
+        currentContext = windowHandle
+        calls.push(`switch:${windowHandle}`)
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+      await cleanupRumState()
+
+      assert.deepStrictEqual(calls, [
+        'switch:window-a',
+        'stop:window-a',
+        'switch:window-a',
+        'frame:frame-a',
+        'stop:frame-a',
+        'switch:window-a',
+        'frame:frame-b',
+        'stop:frame-b',
+        'switch:window-a',
+        'frame:frame-a',
+      ])
+      assert.deepStrictEqual(browser.switchFrame.args, [['frame-a'], ['frame-b'], ['frame-a']])
+      assert.strictEqual(currentContext, 'frame-a')
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('detects active RUM inside a child frame at test completion', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const testFunctionCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
+    const rumStates = []
+    let currentContext = 'window-a'
+    const browser = {
+      browsingContextGetTree: sinon.stub().resolves({
+        contexts: [{
+          context: 'window-a',
+          children: [{ context: 'rum-frame', children: [] }],
+        }],
+      }),
+      capabilities: {},
+      execute: sinon.stub().callsFake((script) => {
+        if (script.name === 'getCurrentRumContext') return Promise.resolve({ context: currentContext })
+        if (script.name === 'detectRum') {
+          const isRumActive = currentContext === 'rum-frame'
+          return Promise.resolve({ isRumActive, isRumInstrumented: isRumActive, rumSamplingRate: 100 })
+        }
+        return Promise.resolve(false)
+      }),
+      getWindowHandle: sinon.stub().resolves('window-a'),
+      getWindowHandles: sinon.stub().resolves(['window-a']),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: 'rum-preload' }),
+      scriptRemovePreloadScript: sinon.stub().resolves(),
+      storageDeleteCookies: sinon.stub().resolves(),
+      switchFrame: sinon.stub().callsFake((context) => {
+        currentContext = context
+        return Promise.resolve()
+      }),
+      switchToWindow: sinon.stub().callsFake((context) => {
+        currentContext = context
+        return Promise.resolve()
+      }),
+    }
+    const correlate = context => {
+      rumStates.push(context.isRumActive)
+      context.testExecutionId = 'test-id'
+    }
+    correlationCh.subscribe(correlate)
+
+    try {
+      const navigationContext = { self: browser }
+      urlCh.start.runStores(navigationContext, () => {})
+      await navigationContext.rumPreloadCallback.call(browser)
+
+      const testContext = { arguments: [undefined, 'Test'] }
+      testFunctionCh.asyncEnd.publish(testContext)
+      await runCallback(testContext.resolveCallback)
+
+      assert.deepStrictEqual(rumStates, [undefined, true])
+      assert.strictEqual(currentContext, 'window-a')
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
+    }
+  })
+
+  it('stops every retained browser before the shared RUM flush and cookie cleanup', async () => {
+    require('../src/webdriverio')
+
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+    const urlCh = tracingChannel('orchestrion:webdriverio:url')
+    const calls = []
+    const createBrowser = (name) => ({
+      capabilities: {},
+      execute: sinon.stub().callsFake(() => {
+        calls.push(`stop:${name}`)
+        return Promise.resolve(true)
+      }),
+      isBidi: true,
+      scriptAddPreloadScript: sinon.stub().resolves({ script: `rum-preload-${name}` }),
+      scriptRemovePreloadScript: sinon.stub().callsFake(() => {
+        calls.push(`remove:${name}`)
+        return Promise.resolve()
+      }),
+      storageDeleteCookies: sinon.stub().callsFake(() => {
+        calls.push(`delete:${name}`)
+        return Promise.resolve()
+      }),
+    })
+    const browsers = [createBrowser('a'), createBrowser('b')]
+    const correlate = context => { context.testExecutionId = 'test-id' }
+    correlationCh.subscribe(correlate)
+
+    try {
+      for (const browser of browsers) {
+        const navigationContext = { self: browser }
+        urlCh.start.runStores(navigationContext, () => {})
+        await navigationContext.rumPreloadCallback.call(browser)
+      }
+
+      await cleanupRumState()
+
+      assert.deepStrictEqual(calls, [
+        'remove:a',
+        'stop:a',
+        'remove:b',
+        'stop:b',
+        'delete:a',
+        'delete:b',
+      ])
+    } finally {
+      correlationCh.unsubscribe(correlate)
+      await cleanupRumState()
     }
   })
 
@@ -349,6 +2494,39 @@ describe('webdriverio instrumentation', () => {
       assert.deepStrictEqual(steps, ['asyncEnd', 'logs', 'exit:0'])
     } finally {
       reporterWaitForSyncCh.unsubscribe(subscriber)
+    }
+  })
+
+  it('cleans RUM before the SIGINT path ends the browser session', async () => {
+    const source = fs.readFileSync(runnerFixturePath, 'utf8')
+    const rewrittenSource = rewriter.rewrite(source, runnerFixtureModulePath, 'module')
+    const outputDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webdriverio-runner-rum-rewriter-'))
+    const outputPath = path.join(outputDirectory, 'index.mjs')
+    const runCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
+    const steps = []
+    const subscriber = {
+      start (context) {
+        context.rumCleanupCallback = async function () {
+          steps.push('cleanup:start')
+          await new Promise(resolve => setImmediate(resolve))
+          steps.push('cleanup:end')
+        }
+      },
+    }
+
+    fs.writeFileSync(outputPath, rewrittenSource)
+    runCh.subscribe(subscriber)
+
+    try {
+      const { Runner } = await import(pathToFileURL(outputPath))
+      const runner = new Runner()
+      runner._sigintWasCalled = true
+      runner.onEvent = event => steps.push(event)
+
+      assert.strictEqual(await runner.run({ watch: false }), 0)
+      assert.deepStrictEqual(steps, ['cleanup:start', 'cleanup:end', 'sigint', 'session:end'])
+    } finally {
+      runCh.unsubscribe(subscriber)
     }
   })
 
@@ -500,6 +2678,7 @@ describe('webdriverio instrumentation', () => {
 
   it('configures the Mocha worker plugin with the WebdriverIO framework', () => {
     const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+    const logError = sinon.stub(log, 'error')
     plugin.configure({ enabled: true })
 
     try {
@@ -512,8 +2691,437 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(plugin.testFramework, 'webdriverio')
       assert.strictEqual(plugin.testFrameworkAdapter, 'mocha')
+
+      const correlationContext = {}
+      channel('ci:webdriverio:rum:page-navigate').publish(correlationContext)
+      assert.strictEqual(correlationContext.isTestOptimizationRunner, true)
+      assert.strictEqual(logError.calledWith('ci:webdriverio:rum:page-navigate: test span not found'), false)
     } finally {
       plugin.configure(false)
+      logError.restore()
+    }
+  })
+
+  it('allows the WebdriverIO screenshot IPC response to outlive the exporter upload deadline', () => {
+    assert.strictEqual(SCREENSHOT_UPLOAD_TIMEOUT_MS, FINAL_FLUSH_TIMEOUT + 5000)
+  })
+
+  it('shares one response dispatcher across concurrent screenshot upload requests', () => {
+    const originalConnected = process.connected
+    const originalSend = process.send
+    const initialDisconnectListeners = process.listenerCount('disconnect')
+    const initialMessageListeners = process.listenerCount('message')
+    const sentMessages = []
+    const uploadCallbacks = Array.from({ length: 11 }, () => sinon.spy())
+    process.connected = true
+    process.send = (message, onDone) => {
+      sentMessages.push(message)
+      onDone()
+    }
+
+    try {
+      for (const uploadCallback of uploadCallbacks) {
+        requestWebdriverioScreenshotUpload({ screenshot: PNG_SCREENSHOT }, uploadCallback)
+      }
+
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners + 1)
+      assert.strictEqual(process.listenerCount('disconnect'), initialDisconnectListeners + 1)
+      assert.strictEqual(sentMessages.length, 11)
+
+      for (const message of sentMessages) {
+        process.emit('message', {
+          name: SCREENSHOT_UPLOAD_RESPONSE,
+          content: { requestId: message.args.content.requestId },
+        })
+      }
+
+      for (const uploadCallback of uploadCallbacks) {
+        sinon.assert.calledOnceWithExactly(uploadCallback, undefined)
+      }
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+      assert.strictEqual(process.listenerCount('disconnect'), initialDisconnectListeners)
+    } finally {
+      for (const message of sentMessages) {
+        process.emit('message', {
+          name: SCREENSHOT_UPLOAD_RESPONSE,
+          content: { requestId: message.args.content.requestId },
+        })
+      }
+      if (originalConnected === undefined) {
+        delete process.connected
+      } else {
+        process.connected = originalConnected
+      }
+      if (originalSend === undefined) {
+        delete process.send
+      } else {
+        process.send = originalSend
+      }
+    }
+  })
+
+  it('rejects malformed coordinator screenshot payloads before upload', () => {
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy(),
+    }
+    const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization: {} })
+    const errors = []
+    plugin.configure({ enabled: true })
+
+    try {
+      for (const screenshot of [
+        `${PNG_SCREENSHOT}!!!`,
+        Buffer.from('not a PNG').toString('base64'),
+      ]) {
+        channel('ci:webdriverio:screenshot:upload').publish({
+          capturedAtMs: Date.now(),
+          idempotencyKey: '123:webdriverio-failure-0.png',
+          onDone: error => errors.push(error),
+          screenshot,
+          traceId: '123',
+        })
+      }
+
+      sinon.assert.notCalled(exporter.uploadTestScreenshot)
+      assert.strictEqual(errors.length, 2)
+      assert.match(errors[0].message, /invalid Base64 screenshot data/)
+      assert.match(errors[1].message, /invalid PNG screenshot data/)
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('releases failed tests and worker shutdown when screenshot capture times out', () => {
+    const originalBrowser = globalThis.browser
+    const clock = sinon.useFakeTimers()
+    const workerFinished = sinon.spy()
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      flush: sinon.spy(callback => callback()),
+      uploadTestScreenshot: sinon.spy(),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().returns({ then () {} }),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-timeout.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot timeout', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+      channel('ci:mocha:worker:finish').publish({ onDone: workerFinished })
+
+      clock.tick(29_999)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      sinon.assert.notCalled(exporter.flush)
+      sinon.assert.notCalled(workerFinished)
+
+      clock.tick(1)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+      sinon.assert.notCalled(exporter.uploadTestScreenshot)
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(workerFinished)
+    } finally {
+      plugin.configure(false)
+      clock.restore()
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('waits for every WebdriverIO screenshot upload before finishing a failed Jasmine test', async () => {
+    const originalBrowser = globalThis.browser
+    const screenshot = PNG_SCREENSHOT
+    const uploadCallbacks = []
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      flush: sinon.spy(callback => callback()),
+      uploadTestScreenshot: sinon.spy((options, callback) => uploadCallbacks.push(callback)),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves([screenshot, screenshot]),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      const finishContext = {
+        arguments: [result],
+        self: { _specs: [file] },
+      }
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(finishContext)
+      await Promise.resolve()
+      await Promise.resolve()
+
+      assert.strictEqual(finishContext.result, undefined)
+      sinon.assert.calledOnce(globalThis.browser.takeScreenshot)
+      sinon.assert.calledTwice(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      for (const call of exporter.uploadTestScreenshot.getCalls()) {
+        assert.deepStrictEqual(call.args[0].content, Buffer.from(PNG_SCREENSHOT, 'base64'))
+        assert.strictEqual(call.args[0].traceId, spans[0].context().toTraceId())
+      }
+
+      const workerFinished = sinon.spy()
+      channel('ci:mocha:worker:finish').publish({ onDone: workerFinished })
+      sinon.assert.notCalled(exporter.flush)
+      sinon.assert.notCalled(workerFinished)
+
+      uploadCallbacks[0](null)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+      uploadCallbacks[1](null)
+
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(workerFinished)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('prefers the registered WebdriverIO browser when global injection is disabled', async () => {
+    const originalBrowser = globalThis.browser
+    const originalWdioGlobals = globalThis._wdioGlobals
+    const screenshot = PNG_SCREENSHOT
+    const browser = {
+      takeScreenshot: sinon.stub().resolves(screenshot),
+    }
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy((_options, callback) => callback()),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().rejects(new Error('not the WebdriverIO browser')),
+    }
+    globalThis._wdioGlobals = new Map([['browser', browser]])
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-no-globals.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot without globals', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      sinon.assert.calledOnce(browser.takeScreenshot)
+      sinon.assert.notCalled(globalThis.browser.takeScreenshot)
+      sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+    } finally {
+      plugin.configure(false)
+      globalThis._wdioGlobals = originalWdioGlobals
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('cleans up Failed Test Replay before a screenshot upload can overlap the next test', async () => {
+    const originalBrowser = globalThis.browser
+    const uploadCallbacks = []
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    }
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: (_options, callback) => uploadCallbacks.push(callback),
+    }
+    const { plugin } = createJasminePlugin({
+      isDiEnabled: true,
+      isTestFailureScreenshotsEnabled: true,
+    }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-replay-cleanup.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot replay cleanup', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+    const firstProbe = { file, line: 1 }
+    const secondProbe = { file, line: 2 }
+    plugin.di = {}
+    plugin.runningTestProbe = firstProbe
+    const cancelDiBreakpointHitWait = sinon.stub(plugin, 'cancelDiBreakpointHitWait')
+    const removeDiProbe = sinon.stub(plugin, 'removeDiProbe')
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+
+      sinon.assert.calledOnce(cancelDiBreakpointHitWait)
+      sinon.assert.calledOnceWithExactly(removeDiProbe, firstProbe)
+      assert.strictEqual(plugin.runningTestProbe, null)
+
+      plugin.runningTestProbe = secondProbe
+      await Promise.resolve()
+      uploadCallbacks[0]()
+
+      sinon.assert.calledOnce(cancelDiBreakpointHitWait)
+      sinon.assert.calledOnce(removeDiProbe)
+      assert.strictEqual(plugin.runningTestProbe, secondProbe)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('tags a failed Jasmine test when its WebdriverIO screenshot upload fails', async () => {
+    const originalBrowser = globalThis.browser
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy((_options, callback) => callback(new Error('upload failed'))),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-error.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot error', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      const finishContext = {
+        arguments: [result],
+        self: { _specs: [file] },
+      }
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish(finishContext)
+      await finishContext.result
+
+      sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
+  it('tags malformed WebdriverIO screenshot data as an upload error', async () => {
+    const originalBrowser = globalThis.browser
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: sinon.spy(),
+    }
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(`${PNG_SCREENSHOT}!!!`),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureScreenshotsEnabled: true }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'failure-screenshot-invalid-data.spec.js')
+    const result = {
+      ...createJasmineResult('failure screenshot invalid data', file, 'failed'),
+      failedExpectations: [{ message: 'expected failure' }],
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish({
+        result: 'failed',
+        self: { id: result.id },
+      })
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [result],
+        self: { _specs: [file] },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      sinon.assert.notCalled(exporter.uploadTestScreenshot)
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+      assert.strictEqual(spans[0].context().getTags()[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
     }
   })
 
@@ -624,6 +3232,74 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('starts managed Jasmine retries while screenshot uploads are pending', async () => {
+    const originalBrowser = globalThis.browser
+    const uploadCallbacks = []
+    globalThis.browser = {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    }
+    const exporter = {
+      canUploadTestScreenshots: () => true,
+      uploadTestScreenshot: (_options, callback) => uploadCallbacks.push(callback),
+    }
+    const { plugin, spans } = createJasminePlugin({
+      flakyTestRetriesCount: 1,
+      isFlakyTestRetriesEnabled: true,
+      isTestFailureScreenshotsEnabled: true,
+    }, {
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+    })
+    const file = path.join(process.cwd(), 'retry-with-screenshot-upload.spec.js')
+    const result = createJasmineResult('retry with screenshot upload', file, 'failed')
+    const onComplete = sinon.spy()
+    const spec = {
+      execute: sinon.spy(),
+      id: result.id,
+      queueableFn: { fn () {} },
+      reset: sinon.spy(),
+    }
+    const executeContext = {
+      arguments: [() => {}, onComplete, true, {}],
+      self: spec,
+    }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      channel('tracing:orchestrion:jasmine-core:Spec_execute:start').runStores(executeContext, () => {})
+
+      const attemptContext = { result: 'failed', self: spec }
+      channel('tracing:orchestrion:jasmine-core:Spec_attemptDone:end').publish(attemptContext)
+      channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+        arguments: [{
+          ...result,
+          failedExpectations: [{ message: 'managed retry failure' }],
+        }],
+        self: { _specs: [file] },
+      })
+      await Promise.resolve()
+      executeContext.arguments[1]()
+
+      assert.strictEqual(uploadCallbacks.length, 1)
+      assert.strictEqual(spans.length, 2)
+      assert.strictEqual(spec.execute.callCount, 1)
+      assert.strictEqual(spans[0].context()._isFinished, false)
+
+      uploadCallbacks[0]()
+
+      assert.strictEqual(spans[0].context()._isFinished, true)
+      assert.strictEqual(plugin.activeTestSpan, spans[1])
+      sinon.assert.notCalled(onComplete)
+    } finally {
+      plugin.configure(false)
+      if (originalBrowser === undefined) {
+        delete globalThis.browser
+      } else {
+        globalThis.browser = originalBrowser
+      }
+    }
+  })
+
   it('finishes Failed Test Replay before the next Jasmine spec starts', async () => {
     const source = fs.readFileSync(jasmineFixturePath, 'utf8')
     const rewrittenSource = rewriter.rewrite(source, jasmineFixtureModulePath, 'module')
@@ -703,17 +3379,49 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
-  it('starts native WebdriverIO retry spans after retry setup settles', async () => {
+  it('preserves active RUM browser metadata when an inactive browser reports later', () => {
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'multiple-browsers.spec.js')
+    const result = createJasmineResult('multiple browsers', file, 'passed')
+    const correlationCh = channel('ci:webdriverio:rum:page-navigate')
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      storage('legacy').run({ span: spans[0] }, () => {
+        correlationCh.publish({
+          browserName: 'chrome',
+          browserVersion: '123',
+          isRumActive: true,
+        })
+        correlationCh.publish({
+          browserName: 'firefox',
+          browserVersion: '122',
+          isRumActive: false,
+        })
+      })
+
+      assert.strictEqual(spans[0].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+      assert.strictEqual(spans[0].context().getTag(TEST_BROWSER_NAME), 'chrome')
+      assert.strictEqual(spans[0].context().getTag(TEST_BROWSER_VERSION), '123')
+    } finally {
+      plugin.configure(false)
+    }
+  })
+
+  it('starts native WebdriverIO retry spans without stopping the active RUM session', async () => {
     const retryCh = channel('ci:mocha:test:retry')
     const { plugin, spans } = createJasminePlugin({})
     const file = path.join(process.cwd(), 'native-retry.spec.js')
     const result = createJasmineResult('native-retry', file, 'failed')
     const retries = { attempts: 0, limit: 1 }
+    const correlations = []
+    const rumTagsAtRetry = []
     let finishRetrySetup
     const retrySetup = new Promise(resolve => {
       finishRetrySetup = resolve
     })
-    const onRetry = ({ promises }) => {
+    const onRetry = ({ promises, test }) => {
+      rumTagsAtRetry.push(test.span.context().getTag(TEST_IS_RUM_ACTIVE))
       promises.setProbePromise = retrySetup
     }
 
@@ -727,6 +3435,15 @@ describe('webdriverio instrumentation', () => {
       channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
         channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
       })
+      executeAsyncContext.rumRetryCallback = async function (testExecutionId) {
+        correlations.push({ spanCount: spans.length, testExecutionId })
+        await Promise.resolve()
+        return {
+          browserName: 'chrome',
+          browserVersion: '123',
+          isRumActive: true,
+        }
+      }
 
       const retryPromise = executeAsyncContext.retryCallback(new Error('native retry failure'))
       assert.strictEqual(spans.length, 1)
@@ -735,12 +3452,56 @@ describe('webdriverio instrumentation', () => {
       await retryPromise
 
       assert.strictEqual(spans.length, 2)
+      assert.deepStrictEqual(correlations, [
+        { spanCount: 1, testExecutionId: undefined },
+        { spanCount: 2, testExecutionId: '2' },
+      ])
+      assert.deepStrictEqual(rumTagsAtRetry, ['true'])
+      assert.strictEqual(spans[0].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+      assert.strictEqual(spans[1].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+      assert.strictEqual(spans[1].context().getTag(TEST_BROWSER_NAME), 'chrome')
+      assert.strictEqual(spans[1].context().getTag(TEST_BROWSER_VERSION), '123')
 
       retryCh.unsubscribe(onRetry)
-      assert.strictEqual(executeAsyncContext.retryCallback(new Error('immediate native retry failure')), undefined)
+      await executeAsyncContext.retryCallback(new Error('immediate native retry failure'))
       assert.strictEqual(spans.length, 3)
+      assert.deepStrictEqual(correlations.slice(2), [
+        { spanCount: 2, testExecutionId: undefined },
+        { spanCount: 3, testExecutionId: '3' },
+      ])
+      assert.strictEqual(spans[2].context().getTag(TEST_IS_RUM_ACTIVE), 'true')
+      assert.strictEqual(spans[2].context().getTag(TEST_BROWSER_NAME), 'chrome')
+      assert.strictEqual(spans[2].context().getTag(TEST_BROWSER_VERSION), '123')
     } finally {
       retryCh.unsubscribe(onRetry)
+      plugin.configure(false)
+    }
+  })
+
+  it('does not mark a native WebdriverIO retry RUM-active without an active RUM browser', async () => {
+    const { plugin, spans } = createJasminePlugin({})
+    const file = path.join(process.cwd(), 'native-retry-without-rum.spec.js')
+    const result = createJasmineResult('native-retry-without-rum', file, 'failed')
+    const retries = { attempts: 0, limit: 1 }
+
+    try {
+      reportJasmineSpecStarted(result, file)
+      const wrapperContext = {
+        arguments: [undefined, 'Test', { specFn () {} }, undefined, undefined, undefined, 1],
+      }
+      const executeAsyncContext = { arguments: [undefined, retries] }
+      channel('tracing:orchestrion:@wdio/utils:testFrameworkFnWrapper:start').runStores(wrapperContext, () => {
+        channel('tracing:orchestrion:@wdio/utils:executeAsync:start').runStores(executeAsyncContext, () => {})
+      })
+      const retryRumBrowsers = sinon.stub().resolves({ isRumActive: false })
+      executeAsyncContext.rumRetryCallback = retryRumBrowsers
+
+      await executeAsyncContext.retryCallback(new Error('native retry without RUM'))
+
+      assert.strictEqual(spans.length, 2)
+      assert.deepStrictEqual(retryRumBrowsers.args, [[], ['2']])
+      assert.strictEqual(spans[1].context().getTag(TEST_IS_RUM_ACTIVE), undefined)
+    } finally {
       plugin.configure(false)
     }
   })
@@ -1374,6 +4135,7 @@ describe('webdriverio instrumentation', () => {
         isKnownTestsEnabled: true,
         isSuitesSkippingEnabled: false,
         isTestDynamicInstrumentationEnabled: true,
+        isTestFailureScreenshotsEnabled: false,
         isTestManagementTestsEnabled: true,
         knownTests: {
           mocha: {
@@ -2053,20 +4815,28 @@ function createWorker () {
  * Creates a configured Jasmine worker plugin with observable test spans.
  *
  * @param {object} libraryConfig
+ * @param {object} [options]
+ * @param {object} [options.exporter]
+ * @param {object} [options.testOptimization]
  * @returns {{plugin: MochaPlugin, spans: object[]}}
  */
-function createJasminePlugin (libraryConfig) {
-  const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
+function createJasminePlugin (libraryConfig, options = {}) {
+  const { exporter = {}, testOptimization = {} } = options
+  const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization })
   const spans = []
   sinon.stub(plugin, 'startTestSpan').callsFake(() => {
-    const tags = {}
+    const tags = { 'span.type': 'test' }
+    const traceId = String(spans.length + 1)
     const context = {
       _isFinished: false,
       _trace: { started: [] },
+      getTag: name => tags[name],
       getTags: () => tags,
+      toTraceId: () => traceId,
     }
     const span = {
       context: () => context,
+      _getTime: () => Date.now(),
       finish: () => {
         context._isFinished = true
       },

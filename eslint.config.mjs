@@ -11,6 +11,7 @@ import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
+import eslintPluginRegexp from 'eslint-plugin-regexp'
 import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
@@ -21,6 +22,7 @@ import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNoCallResultInvocation from './eslint-rules/eslint-no-call-result-invocation.mjs'
+import eslintNoConditionalObjectSpread from './eslint-rules/eslint-no-conditional-object-spread.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
 import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
@@ -36,6 +38,11 @@ import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
+const PACKAGE_SRC_FILES = [
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs',
+]
+
 const SRC_FILES = [
   '*.js',
   '*.mjs',
@@ -47,8 +54,7 @@ const SRC_FILES = [
   'scripts/**/*.mjs',
   'packages/*/*.js',
   'packages/*/*.mjs',
-  'packages/*/src/**/*.js',
-  'packages/*/src/**/*.mjs',
+  ...PACKAGE_SRC_FILES,
 ]
 
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
@@ -478,6 +484,7 @@ export default [
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-conditional-object-spread': eslintNoConditionalObjectSpread,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
           'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
@@ -664,6 +671,44 @@ export default [
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
     },
   },
+  eslintPluginRegexp.configs['flat/recommended'],
+  {
+    name: 'dd-trace/regexp',
+    rules: {
+      'regexp/no-dupe-disjunctions': 'error',
+      'regexp/optimal-lookaround-quantifier': 'error',
+      'regexp/no-useless-flag': 'error',
+      'regexp/no-useless-lazy': 'error',
+      'regexp/prefer-predefined-assertion': 'error',
+      'regexp/strict': 'error',
+      'regexp/prefer-range': 'error',
+      'regexp/no-useless-non-capturing-group': 'error',
+      'regexp/prefer-character-class': 'error',
+      'regexp/optimal-quantifier-concatenation': 'error',
+      'regexp/no-misleading-capturing-group': 'error',
+      'regexp/no-super-linear-move': 'off',
+      'regexp/no-unused-capturing-group': 'off',
+      'regexp/negation': 'off',
+      'regexp/prefer-w': 'off',
+      'regexp/use-ignore-case': 'off',
+      'regexp/prefer-d': 'off',
+      'regexp/sort-flags': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/regexp-generated',
+    files: [
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-secret-rules.js',
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-password-rules.js',
+    ],
+    rules: {
+      'regexp/no-dupe-disjunctions': 'off',
+      'regexp/prefer-range': 'off',
+      'regexp/optimal-quantifier-concatenation': 'off',
+      'regexp/prefer-character-class': 'off',
+      'regexp/no-useless-non-capturing-group': 'off',
+    },
+  },
   {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
@@ -804,6 +849,13 @@ export default [
       'unicorn/prefer-array-from-map': 'off', // few | loops avoid callback allocation
       'unicorn/prefer-continue': 'off', // many
       'unicorn/prefer-ternary': 'off', // many
+    },
+  },
+  {
+    name: 'dd-trace/src/conditional-object-spread',
+    files: PACKAGE_SRC_FILES,
+    rules: {
+      'eslint-rules/eslint-no-conditional-object-spread': 'error',
     },
   },
   {
@@ -1153,6 +1205,19 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/package-source',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-unnecessary-array-join': ['error', {
+        reportLiteralArrayJoins: true,
+        reportMapJoinChains: true,
+      }],
     },
   },
 ]

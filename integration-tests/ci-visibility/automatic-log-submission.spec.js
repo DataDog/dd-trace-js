@@ -15,6 +15,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
 const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const webAppServer = require('./web-app-server')
 
@@ -27,7 +28,7 @@ describe('test optimization automatic log submission', () => {
   let testOutput = ''
 
   useSandbox([
-    'mocha',
+    `mocha@${getLatestMochaSpecifier()}`,
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
     'jest',

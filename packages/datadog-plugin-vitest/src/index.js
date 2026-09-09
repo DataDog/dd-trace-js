@@ -361,13 +361,13 @@ class VitestPlugin extends CiPlugin {
         [TEST_SOURCE_START]: testStartLine || 1,
         [TEST_STATUS]: 'skip',
         [TEST_FINAL_STATUS]: 'skip',
-        ...(isAttemptToFix ? { [TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]: 'true' } : {}),
-        ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
-        ...(isQuarantined ? { [TEST_MANAGEMENT_IS_QUARANTINED]: 'true' } : {}),
-        ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
-        ...(isRumActive ? { [TEST_IS_RUM_ACTIVE]: 'true' } : {}),
-        ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
       }
+      if (isAttemptToFix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+      if (isDisabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+      if (isQuarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+      if (isNew) extraTags[TEST_IS_NEW] = 'true'
+      if (isRumActive) extraTags[TEST_IS_RUM_ACTIVE] = 'true'
+      if (isTestFrameworkWorker) extraTags[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       setBrowserTags(extraTags, {
         browserDriver,
         browserName,
