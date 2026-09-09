@@ -79,25 +79,38 @@ describe('esbuild utils', () => {
       assert.strictEqual(setters.has('readFile'), true)
     })
 
-    it('should reject non-file and non-JavaScript star export targets', async () => {
+    it('should reject non-file star export targets', async () => {
       const nonFilePath = path.join(__dirname, 'resources', 'export-non-file.mjs')
-      const jsonPath = path.join(__dirname, 'resources', 'export-json.mjs')
 
-      await Promise.all([
-        assert.rejects(processModule({
-          path: nonFilePath,
-          context: { format: 'module' },
-          moduleSources: new Map([[
-            nonFilePath,
-            "export * from 'data:text/javascript,export const value = true'\n",
-          ]]),
-        }), /Unsupported ESM resolution URL: data:/),
-        assert.rejects(processModule({
-          path: jsonPath,
-          context: { format: 'module' },
-          moduleSources: new Map([[jsonPath, "export * from './value.json'\n"]]),
-        }), /Unsupported ESM analysis target: .*value\.json/),
-      ])
+      await assert.rejects(processModule({
+        path: nonFilePath,
+        context: { format: 'module' },
+        moduleSources: new Map([[
+          nonFilePath,
+          "export * from 'data:text/javascript,export const value = true'\n",
+        ]]),
+      }), /Unsupported ESM resolution URL: data:/)
+    })
+
+    it('should reject native module star exports', async () => {
+      const nativePath = path.join(__dirname, 'resources', 'export-native.mjs')
+
+      await assert.rejects(processModule({
+        path: nativePath,
+        context: { format: 'module' },
+        moduleSources: new Map([[nativePath, "export * from './value.node'\n"]]),
+      }), /Unsupported ESM analysis target: .*value\.node/)
+    })
+
+    it('should ignore JSON star exports', async () => {
+      const jsonPath = path.join(__dirname, 'resources', 'export-json.mjs')
+      const setters = await processModule({
+        path: jsonPath,
+        context: { format: 'module' },
+        moduleSources: new Map([[jsonPath, "export * from './value.json'\n"]]),
+      })
+
+      assert.deepStrictEqual([...setters.keys()], [])
     })
 
     it('should terminate cyclic star exports', async () => {
@@ -110,13 +123,27 @@ describe('esbuild utils', () => {
     })
 
     it('should set TypeScript star exports', async () => {
+      let transforms = 0
       const setters = await processModule({
         path: path.join(__dirname, 'resources', 'export-typescript-star.mjs'),
         context: { format: 'module' },
-        transform: transformTypeScript,
+        transform: (source, options) => {
+          transforms++
+          return transformTypeScript(source, options)
+        },
       })
 
-      assert.deepStrictEqual([...setters.keys()].sort(), ['Client', 'value'])
+      assert.deepStrictEqual([...setters.keys()].sort(), ['Client', 'sibling', 'value'])
+      assert.strictEqual(transforms, 3)
+    })
+
+    it('should preserve explicit ESM module.exports star exports', async () => {
+      const setters = await processModule({
+        path: path.join(__dirname, 'resources', 'export-module-exports-star.mjs'),
+        context: { format: 'module' },
+      })
+
+      assert.deepStrictEqual([...setters.keys()], ['module.exports'])
     })
 
     it('should set the native module exports', async () => {

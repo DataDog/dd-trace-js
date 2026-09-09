@@ -26,6 +26,7 @@ const loadGetExportsModule = () => {
  * @param {EsmResolver} resolver
  * @returns {Promise<{
  *   exportNames: Iterable<string>,
+ *   hasModuleExportsCJSDefault: boolean,
  *   starReexports?: Array<{ specifier: string, parentURL: string }>
  * }>}
  */
@@ -38,7 +39,12 @@ const getExports = async (srcUrl, context, getSource, resolver) => {
    * @returns {Promise<{ format: string, url: URL }>}
    */
   const resolve = (specifier, operationContext) => resolveModule(specifier, operationContext, resolver)
-  return driveGetExportsGenerator(exportsGenerator, getSource, resolve)
+  const result = await driveGetExportsGenerator(exportsGenerator, getSource, resolve)
+  return {
+    exportNames: result.exportNames,
+    hasModuleExportsCJSDefault: mod.hasModuleExportsCJSDefault,
+    starReexports: result.starReexports,
+  }
 }
 
 function isStarExportLine (line) {
@@ -77,6 +83,7 @@ function isBareSpecifier (specifier) {
 function getModuleFormat (modulePath, format) {
   if (modulePath.endsWith('.mts')) return 'module-typescript'
   if (modulePath.endsWith('.cts')) return 'commonjs-typescript'
+  if (modulePath.endsWith('.ts')) return `${format}-typescript`
   return format
 }
 
@@ -94,11 +101,11 @@ async function resolveModule (specifier, context, resolver) {
   if (url.protocol !== 'file:') throw new Error(`Unsupported ESM resolution URL: ${url.href}`)
 
   const resolved = fileURLToPath(url)
-  if (resolved.endsWith('.json') || resolved.endsWith('.node')) {
+  if (resolved.endsWith('.node')) {
     throw new Error(`Unsupported ESM analysis target: ${resolved}`)
   }
   const format = isESMFile(resolved) ? 'module' : 'commonjs'
-  return { format: getModuleFormat(resolved, format), url }
+  return { format, url }
 }
 
 /**
@@ -209,7 +216,12 @@ async function processModuleWithResolver (
 
   let starReexports = moduleExports.starReexports
   for (const n of moduleExports.exportNames) {
-    if (n === 'default' && excludeDefault) continue
+    const isDefault = n === 'default' || (
+      n === 'module.exports' &&
+      moduleExports.hasModuleExportsCJSDefault &&
+      (context.format === 'commonjs' || context.format === 'commonjs-typescript')
+    )
+    if (isDefault && excludeDefault) continue
 
     if (isStarExportLine(n)) {
       starReexports ??= []
