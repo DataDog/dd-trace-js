@@ -98,7 +98,7 @@ describe('Plugin', () => {
                 meta: {
                   'span.kind': 'client',
                   'http.request.method': 'GET',
-                  'url.full': `http://localhost:${port}/user`,
+                  'url.full': `http://localhost:${port}/user?page=2`,
                   'server.address': 'localhost',
                 },
                 metrics: {
@@ -112,7 +112,42 @@ describe('Plugin', () => {
               assert.ok(!Object.hasOwn(span.meta, 'out.host'))
             }).then(done).catch(done)
 
-            fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
+            fetch.fetch(`http://localhost:${port}/user?page=2`, { method: 'GET' })
+          })
+        })
+      })
+
+      describe('with OTel semantics and query string tagging disabled', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING = 'false'
+          return agent.load('undici', {
+            service: 'test',
+          })
+            .then(() => {
+              express = require('express')
+              fetch = require(`../../../versions/undici@${version}`, {}).get()
+            })
+        })
+
+        afterEach(() => {
+          express = null
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          delete process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING
+        })
+
+        it('omits the query string from url.full', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan({
+              meta: { 'url.full': `http://localhost:${port}/user` },
+            }).then(done).catch(done)
+
+            fetch.fetch(`http://localhost:${port}/user?page=2`, { method: 'GET' })
           })
         })
       })
@@ -366,7 +401,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should remove the query string from the URL', done => {
+        it('should report a repeated query schema without retaining values', done => {
           const app = express()
 
           app.get('/user', (req, res) => {
@@ -374,15 +409,34 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            agent
-              .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              })
-              .then(done)
-              .catch(done)
+            const strippedUrl = `http://localhost:${port}/user`
 
-            fetch.fetch(`http://localhost:${port}/user?foo=bar`)
+            /**
+             * @param {number} page
+             * @param {string} expectedUrl
+             * @returns {Promise<void>}
+             */
+            async function sendRequest (page, expectedUrl) {
+              const trace = agent.assertFirstTraceSpan({
+                meta: {
+                  'http.status_code': '200',
+                  'http.url': expectedUrl,
+                },
+              })
+              await Promise.all([
+                trace,
+                fetch.fetch(`${strippedUrl}?page=${page}`),
+              ])
+            }
+
+            async function run () {
+              await sendRequest(1, strippedUrl)
+              await sendRequest(2, strippedUrl)
+              await sendRequest(3, `${strippedUrl}?page=<number>`)
+              done()
+            }
+
+            run().catch(done)
           })
         })
 

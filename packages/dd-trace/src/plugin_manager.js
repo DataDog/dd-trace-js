@@ -69,6 +69,9 @@ function getEnabled (Plugin) {
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
+  /** @type {import('./plugins/util/url').ClientQueryStringSchema | undefined} */
+  #clientQueryStringSchema
+
   constructor (tracer) {
     this._tracer = tracer
     this._pluginsByName = {}
@@ -166,7 +169,9 @@ module.exports = class PluginManager {
       dbmPropagationMode,
       dsmEnabled,
       DD_TRACE_HTTP_CLIENT_ERROR_STATUSES,
+      DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING,
       DD_TRACE_HTTP_SERVER_ERROR_STATUSES,
+      DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST,
       clientIpEnabled,
       clientIpHeader,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
@@ -216,6 +221,14 @@ module.exports = class PluginManager {
 
     if (DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP !== undefined) {
       sharedConfig.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+    }
+
+    if (name === 'electron' || name === 'fetch' || name === 'http' || name === 'http2' || name === 'undici') {
+      const { ClientQueryStringSchema } = require('./plugins/util/url')
+      this.#clientQueryStringSchema ??= new ClientQueryStringSchema()
+      sharedConfig.queryStringAllowlist = DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST
+      sharedConfig.queryStringSchema = this.#clientQueryStringSchema
+      sharedConfig.queryStringTaggingEnabled = DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING
     }
 
     if (serviceMapping && serviceMapping[name]) {
