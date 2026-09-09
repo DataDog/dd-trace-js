@@ -27,16 +27,28 @@ try {
   const data = await fs.readFile('./outfile.js', 'utf8')
 
   if (NODE_MAJOR >= 22) {
-    // it is resolved as ESM module only in node 22+, becaues the require.resolve accepts conditions in node 22+
-    assert.match(data, /register.*koa.mjs".*"koa"\);$/m, 'Bundle should contain the koa ESM instrumentation')
+    // It resolves as ESM only in Node.js 22+, where require.resolve accepts conditions.
     assert.match(
       data,
-      /register.*@koa\/router[^\n\r"\u2028\u2029]*".*"@koa\/router"\);$/m,
+      /registerWithData.*koa\.mjs".*"koa".*\{ "moduleName": "koa"/,
+      'Bundle should contain the koa ESM instrumentation'
+    )
+    assert.match(
+      data,
+      /registerWithData.*@koa\/router[^\n\r"\u2028\u2029]*".*"@koa\/router".*"moduleName": "@koa\/router"/,
       'Bundle should contain the @koa/router instrumentation'
     )
   } else {
-    assert.match(data, /^ {8}package: "koa",$/m, 'Bundle should contain the koa CJS instrumentation')
-    assert.match(data, /^ {8}package: "@koa\/router",$/m, 'Bundle should contain the @koa/router instrumentation')
+    assert.match(
+      data,
+      /registerCommonJS.*"koa".*\{ "moduleName": "koa"/,
+      'Bundle should contain the koa CJS instrumentation'
+    )
+    assert.match(
+      data,
+      /registerCommonJS.*"@koa\/router".*\{ "moduleName": "@koa\/router"/,
+      'Bundle should contain the @koa/router CJS instrumentation'
+    )
   }
 
   console.log('ok') // eslint-disable-line no-console

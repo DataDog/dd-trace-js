@@ -23,31 +23,33 @@ const PACKAGE_PATH_PATTERN = createPackagePathPattern()
  * @returns {Function}
  */
 function withDatadogTurbopack (nextConfig = {}) {
-  const nextMajor = getNextMajor()
+  const nextInfo = getNextInfo()
 
   return function datadogNextConfig (...args) {
     const config = typeof nextConfig === 'function'
       ? nextConfig.apply(this, args)
       : nextConfig
     if (config && typeof config.then === 'function') {
-      return config.then(config => configureTurbopack(config, args[0], nextMajor))
+      return config.then(config => configureTurbopack(config, args[0], nextInfo))
     }
-    return configureTurbopack(config, args[0], nextMajor)
+    return configureTurbopack(config, args[0], nextInfo)
   }
 }
 
 /**
  * @param {object|undefined} config
  * @param {unknown} phase
- * @param {number} nextMajor
+ * @param {{ compiler: { parser: string, traverse: string }, major: number }} nextInfo
  * @returns {object}
  */
-function configureTurbopack (config, phase, nextMajor) {
+function configureTurbopack (config, phase, nextInfo) {
   const normalized = normalizeConfig(config)
   if (phase === PHASE_PRODUCTION_SERVER || hasDatadogLoader(normalized.turbopack?.rules)) return normalized
 
   const turbopack = normalized.turbopack ?? {}
-  const configured = nextMajor === 15 ? addLegacyRule(turbopack) : addModernRules(turbopack)
+  const configured = nextInfo.major === 15
+    ? addLegacyRule(turbopack, nextInfo.compiler)
+    : addModernRules(turbopack, nextInfo.compiler)
   return { ...normalized, turbopack: configured }
 }
 
@@ -82,14 +84,15 @@ function isObject (value) {
 
 /**
  * @param {object} turbopack
+ * @param {{ parser: string, traverse: string }} compiler
  * @returns {object}
  */
-function addModernRules (turbopack) {
+function addModernRules (turbopack, compiler) {
   const rules = { ...turbopack.rules }
   for (const extension of SOURCE_EXTENSIONS) {
     appendRule(rules, extension, {
       condition: { all: ['node', 'foreign', { path: PACKAGE_PATH_PATTERN }] },
-      loaders: [createLoader()],
+      loaders: [createLoader(compiler)],
     })
   }
   appendRule(rules, '*', {
@@ -97,7 +100,7 @@ function addModernRules (turbopack) {
     condition: {
       all: ['node', 'foreign', { path: PACKAGE_PATH_PATTERN }, { path: EXTENSIONLESS_PATH_PATTERN }],
     },
-    loaders: [createLoader()],
+    loaders: [createLoader(compiler)],
   })
   return { ...turbopack, rules }
 }
@@ -118,9 +121,10 @@ function appendRule (rules, extension, rule) {
 
 /**
  * @param {object} turbopack
+ * @param {{ parser: string, traverse: string }} compiler
  * @returns {object}
  */
-function addLegacyRule (turbopack) {
+function addLegacyRule (turbopack, compiler) {
   const name = '#dd-trace/modules'
   const conditions = { ...turbopack.conditions }
   const rules = { ...turbopack.rules }
@@ -133,15 +137,16 @@ function addLegacyRule (turbopack) {
       { any: [{ path: SOURCE_PATH_PATTERN }, { path: EXTENSIONLESS_PATH_PATTERN }] },
     ],
   }
-  rules[name] = { node: { foreign: { loaders: [createLoader()] } } }
+  rules[name] = { node: { foreign: { loaders: [createLoader(compiler)] } } }
   return { ...turbopack, conditions, rules }
 }
 
 /**
- * @returns {{ loader: string, options: object }}
+ * @param {{ parser: string, traverse: string }} compiler
+ * @returns {{ loader: string, options: { compiler: { parser: string, traverse: string } } }}
  */
-function createLoader () {
-  return { loader, options: {} }
+function createLoader (compiler) {
+  return { loader, options: { compiler } }
 }
 
 /**
@@ -176,25 +181,26 @@ function escapeRegExp (value) {
 }
 
 /**
- * @returns {number}
+ * @returns {{ compiler: { parser: string, traverse: string }, major: number }}
  */
-function getNextMajor () {
+function getNextInfo () {
   const entrypoints = []
   if (require.main?.filename) entrypoints.push(require.main.filename)
   entrypoints.push(path.join(process.cwd(), 'package.json'))
 
+  let appRequire
   let version
   let resolutionError
   for (const entrypoint of entrypoints) {
     try {
-      const appRequire = Module.createRequire(entrypoint)
+      appRequire = Module.createRequire(entrypoint)
       version = JSON.parse(fs.readFileSync(appRequire.resolve('next/package.json'), 'utf8')).version
       break
     } catch (error) {
       resolutionError = error
     }
   }
-  if (!version) {
+  if (!version || !appRequire) {
     throw new Error('withDatadogTurbopack could not resolve the active Next.js installation', {
       cause: resolutionError,
     })
@@ -206,7 +212,20 @@ function getNextMajor () {
   if (!satisfies(version, '>=15.5.0')) {
     throw new RangeError(`withDatadogTurbopack requires Next.js 15.5 or newer; found ${version}`)
   }
-  return Number.parseInt(version, 10)
+
+  try {
+    return {
+      compiler: {
+        parser: appRequire.resolve('next/dist/compiled/babel/parser'),
+        traverse: appRequire.resolve('next/dist/compiled/babel/traverse'),
+      },
+      major: Number.parseInt(version, 10),
+    }
+  } catch (error) {
+    throw new Error(`Next.js ${version} does not provide the compiler required by withDatadogTurbopack`, {
+      cause: error,
+    })
+  }
 }
 
 module.exports = { withDatadogTurbopack }

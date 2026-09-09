@@ -1,35 +1,19 @@
 'use strict'
 
 const { execSync } = require('node:child_process')
-const fs = require('node:fs')
+const { pathToFileURL } = require('node:url')
 
-const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
-const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
-const hooks = require('../datadog-instrumentations/src/helpers/hooks')
-const { isESMFile } = require('../datadog-esbuild/src/utils')
+const { getBundlerTarget } = require('../datadog-instrumentations/src/helpers/bundler-target')
+const wrapperLoader = require('./src/loader')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
 
-for (const hook of Object.values(hooks)) {
-  if (hook !== null && typeof hook === 'object') {
-    hook.fn()
-  } else {
-    hook()
-  }
-}
-
-const modulesOfInterest = new Set()
-
-for (const [name, instrumentation] of Object.entries(instrumentations)) {
-  for (const entry of instrumentation) {
-    if (entry.file) {
-      modulesOfInterest.add(`${name}/${entry.file}`) // e.g. "redis/my/file.js"
-    } else {
-      modulesOfInterest.add(name) // e.g. "redis"
-    }
-  }
-}
+/**
+ * @typedef {object} ResolveData
+ * @property {{ loaders?: object[], resource?: string, settings: { sideEffects?: boolean } }} [createData]
+ * @property {string} [request]
+ */
 
 /**
  * @returns {{ repositoryURL: string | null, commitSHA: string | null }}
@@ -127,63 +111,35 @@ class DatadogWebpackPlugin {
     }
 
     compiler.hooks.normalModuleFactory.tap(PLUGIN_NAME, (nmf) => {
-      nmf.hooks.afterResolve.tap(PLUGIN_NAME, (resolveData) => {
+      nmf.hooks.afterResolve.tap(PLUGIN_NAME, /** @param {ResolveData} resolveData */ (resolveData) => {
         const { createData } = resolveData
         const resource = createData?.resource
         if (!resource) {
           return
         }
-
-        const normalizedResource = resource.replaceAll('\\', '/')
-
-        if (!resource.includes('node_modules')) {
-          return
-        }
-
-        const { pkg, path: modulePath, pkgJson } = extractPackageAndModulePath(normalizedResource)
-        if (!pkg) {
-          return
-        }
+        if (resource.endsWith(wrapperLoader.ORIGINAL_QUERY)) return
 
         const request = resolveData.request
+        if (!request) return
 
-        if (!modulesOfInterest.has(request) && !modulesOfInterest.has(`${pkg}/${modulePath}`)) {
-          return
-        }
-
-        if (!pkgJson) {
-          return
-        }
-
-        let packageJson
-        try {
-          packageJson = JSON.parse(fs.readFileSync(pkgJson).toString())
-        } catch (e) {
-          if (e.code === 'ENOENT') {
-            log.debug(
-              'Skipping `package.json` lookup for %s. The package may be vendored.',
-              pkg
-            )
-            return
-          }
-          throw e
-        }
-
-        if (isESMFile(normalizedResource, pkgJson, packageJson)) {
-          log.warn('Skipping ESM module (ESM support is not available in the webpack plugin): %s', resource)
-          return
-        }
-
-        const version = packageJson.version
-        const pkgPath = request === pkg ? pkg : `${pkg}/${modulePath}`
+        const url = pathToFileURL(resource).href
+        const target = getBundlerTarget(request, url)
+        if (target === undefined) return
 
         createData.loaders ||= []
         createData.loaders.unshift({
           loader: require.resolve('./src/loader'),
-          options: { pkg, version, path: pkgPath },
+          options: {
+            format: target.format,
+            moduleName: target.moduleName,
+            specifier: target.package,
+            url: target.url,
+            version: target.version,
+          },
         })
+        createData.settings.sideEffects = true
 
-        log.debug('LOAD: %s@%s, pkg "%s"', pkg, version, pkgPath)
+        log.debug('LOAD: %s@%s, pkg "%s"', target.package, target.version, target.path)
       })
     })
   }

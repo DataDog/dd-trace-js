@@ -89,6 +89,24 @@ describe('register', () => {
     }
   }
 
+  /**
+   * @param {string} name
+   * @param {string} version
+   * @param {string} errorType
+   * @param {string} errorMessage
+   */
+  function assertInstrumentationError (name, version, errorType, errorMessage) {
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'error', [
+      `error_type:${errorType}`,
+      `integration:${name}`,
+      `integration_version:${version}`,
+    ], {
+      result: 'error',
+      result_class: 'internal_error',
+      result_reason: `Error during instrumentation of ${name}@${version}: ${errorMessage}`,
+    })
+  }
+
   it('should disable hooks that are disabled by DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
     loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: 'mongodb-core,@confluentinc/kafka-javascript' })
 
@@ -244,6 +262,31 @@ describe('register', () => {
     })
   })
 
+  it('should instrument an already evaluated module through the registered hook', () => {
+    const patch = sinon.stub().returns({ patched: true })
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ file: 'logger.js', hook: patch }]
+    loadRegisterWithEnv()
+    const { instrumentModule } = require('../../src/helpers/register')
+    const moduleExports = { original: true }
+
+    const uninstrumented = instrumentModule(moduleExports, 'missing', 'missing', '/path/to/missing', '1.0.0')
+    assert.strictEqual(uninstrumented, moduleExports)
+    const result = instrumentModule(
+      moduleExports,
+      'example',
+      'example/logger.js',
+      '/path/to/example',
+      '1.0.0'
+    )
+
+    assert.deepStrictEqual(result, { patched: true })
+    sinon.assert.calledOnceWithExactly(patch, moduleExports, '1.0.0', undefined, {
+      moduleBaseDir: '/path/to/example',
+      moduleName: 'example/logger.js',
+    })
+  })
+
   it('should match relative instrumentation names', () => {
     const name = './runtime/library.js'
     const patch = sinon.stub()
@@ -273,6 +316,53 @@ describe('register', () => {
     const moduleExports = {}
 
     assert.strictEqual(hook(moduleExports, 'example/internal.js', '/path/to/example', '1.0.0'), moduleExports)
+    sinon.assert.notCalled(patch)
+  })
+
+  for (const [error, errorType, errorMessage] of [
+    [new Error('hook load failed'), 'Error', 'hook load failed'],
+    ['hook load failed', 'string', 'string'],
+  ]) {
+    it(`should return original exports when loading an integration throws ${errorType}`, () => {
+      hooksMock.example = { fn: sinon.stub().callsFake(() => { throw error }) }
+      loadRegisterWithEnv()
+
+      const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+      const hook = hookCall.args[2]
+
+      assert.strictEqual(hook('original', 'example', '/path/to/example', '1.0.0'), 'original')
+      assertInstrumentationError('example', '1.0.0', errorType, errorMessage)
+    })
+  }
+
+  it('should return original exports when an instrumentation patch throws', () => {
+    const moduleExports = {}
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ hook: sinon.stub().throws(new Error('patch failed')) }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+
+    assert.strictEqual(hook(moduleExports, 'example', '/path/to/example', '1.0.0'), moduleExports)
+    assertInstrumentationError('example', '1.0.0', 'Error', 'patch failed')
+  })
+
+  it('should not load a relative hook owned by a disabled integration', () => {
+    const load = sinon.stub()
+    const patch = sinon.stub()
+    hooksMock['./runtime/library.js'] = { fn: load }
+    instrumentationsMock['./runtime/library.js'] = [{ hook: patch }]
+    loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: '@prisma/client' })
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === './runtime/library.js')
+    const hook = hookCall.args[2]
+
+    assert.strictEqual(
+      hook('original', './runtime/library.js', '/path/to/runtime', '6.1.0', false, '@prisma/client'),
+      'original'
+    )
+    sinon.assert.notCalled(load)
     sinon.assert.notCalled(patch)
   })
 })

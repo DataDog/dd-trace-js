@@ -73,7 +73,7 @@ describe('withDatadogTurbopack', () => {
     assert.equal(extensionlessPath.test('/app/node_modules/ioredis/native.node'), false)
     assert.equal(extensionlessRule.as, '*.__dd_trace_turbopack.js')
     assert.equal(typeof sourceRule.loaders[0].loader, 'string')
-    assert.deepStrictEqual(sourceRule.loaders[0].options, {})
+    assertLoaderOptions(sourceRule.loaders[0].options)
   })
 
   it('uses one named foreign-module rule for Next 15', async () => {
@@ -101,7 +101,7 @@ describe('withDatadogTurbopack', () => {
     assert.equal(source.path.test('/app/node_modules/native/addon.node'), false)
     assert.equal(extensionless.path.test('/app/node_modules/native/addon.node'), false)
     assert.equal(typeof rule.node.foreign.loaders[0].loader, 'string')
-    assert.deepStrictEqual(rule.node.foreign.loaders[0].options, {})
+    assertLoaderOptions(rule.node.foreign.loaders[0].options)
     assert.equal(rule.condition, undefined)
   })
 
@@ -202,6 +202,8 @@ describe('withDatadogTurbopack', () => {
   it('reports missing and malformed Next.js installations', () => {
     const missingProject = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-turbopack-'))
     directories.push(missingProject)
+    const missingCompilerProject = createProject('16.2.0')
+    fs.rmSync(path.join(missingCompilerProject, 'node_modules/next/dist/compiled/babel/parser.js'))
 
     assert.throws(
       () => withProjectDirectory(missingProject, () => withDatadogTurbopack({})),
@@ -212,6 +214,10 @@ describe('withDatadogTurbopack', () => {
     assert.throws(
       () => withProjectDirectory(malformedProject, () => withDatadogTurbopack({})),
       /could not parse Next\.js version canary/
+    )
+    assert.throws(
+      () => withProjectDirectory(missingCompilerProject, () => withDatadogTurbopack({})),
+      /does not provide the compiler required by withDatadogTurbopack/
     )
   })
 
@@ -236,7 +242,23 @@ function createProject (version) {
   const nextDirectory = path.join(projectDir, 'node_modules', 'next')
   fs.mkdirSync(nextDirectory, { recursive: true })
   fs.writeFileSync(path.join(nextDirectory, 'package.json'), JSON.stringify({ name: 'next', version }))
+  for (const name of ['parser', 'traverse']) {
+    const filename = path.join(nextDirectory, 'dist/compiled/babel', `${name}.js`)
+    const modulePath = require.resolve(`@babel/${name}`)
+    fs.mkdirSync(path.dirname(filename), { recursive: true })
+    fs.writeFileSync(filename, `module.exports = require(${JSON.stringify(modulePath)})\n`)
+  }
   return projectDir
+}
+
+/**
+ * @param {unknown} value
+ */
+function assertLoaderOptions (value) {
+  const options = /** @type {{ compiler: { parser: string, traverse: string } }} */ (value)
+  assert.deepStrictEqual(Object.keys(options), ['compiler'])
+  assert.equal(typeof options.compiler.parser, 'string')
+  assert.equal(typeof options.compiler.traverse, 'string')
 }
 
 /**

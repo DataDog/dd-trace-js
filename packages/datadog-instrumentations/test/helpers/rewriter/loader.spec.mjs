@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 import { before, describe, it } from 'mocha'
+import { supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 
 const require = createRequire(import.meta.url)
 const source = 'export function getTracer () { return "tracer" }\n'

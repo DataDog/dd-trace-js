@@ -183,7 +183,7 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.11",
-    "import-in-the-middle": "3.4.0",
+    "import-in-the-middle": "github:nodejs/import-in-the-middle#7d81ae2ffd35f5ba79784178aa525ba8503970fe",
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {

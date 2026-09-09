@@ -31,7 +31,70 @@ describe('Hook', () => {
 
     const hook = ritm.args[0][2]
     assert.strictEqual(hook(undefined, 'test-package', '/test-package', '1.0.0'), undefined)
-    sinon.assert.calledOnceWithExactly(onrequire, undefined, 'test-package', '/test-package', '1.0.0', undefined)
+    sinon.assert.calledOnceWithExactly(onrequire, undefined, 'test-package', '/test-package', '1.0.0', undefined,
+      undefined)
+  })
+
+  it('uses bundler metadata and CommonJS export semantics', () => {
+    const moduleExports = { default: sinon.stub() }
+    const replacement = { instrumented: true }
+    const onrequire = sinon.stub().returns(replacement)
+
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(
+      hook(
+        moduleExports,
+        'test-package',
+        '/test-package',
+        { integration: 'test-owner', moduleName: 'test-package/internal.js', version: '2.0.0' },
+        'commonjs'
+      ),
+      replacement
+    )
+    sinon.assert.calledOnceWithExactly(
+      onrequire,
+      moduleExports,
+      'test-package/internal.js',
+      '/test-package',
+      '2.0.0',
+      false,
+      'test-owner'
+    )
+  })
+
+  it('keeps ESM semantics when bundler metadata is present', () => {
+    const moduleExports = { default: sinon.stub() }
+    const onrequire = sinon.stub().returns(moduleExports)
+
+    Hook(['test-package'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(
+      hook(moduleExports, 'test-package', '/test-package', { version: '2.0.0' }, 'module'),
+      moduleExports
+    )
+    sinon.assert.calledWithExactly(
+      onrequire,
+      moduleExports.default,
+      'test-package',
+      '/test-package',
+      '2.0.0',
+      true,
+      undefined
+    )
+  })
+
+  it('normalizes builtin names from bundler metadata', () => {
+    const moduleExports = {}
+    const onrequire = sinon.stub().returns(moduleExports)
+
+    Hook(['url'], onrequire)
+
+    const hook = iitm.args[0][2]
+    assert.strictEqual(hook(moduleExports, 'url', undefined, { moduleName: 'node:url' }, 'commonjs'), moduleExports)
+    sinon.assert.calledOnceWithExactly(onrequire, moduleExports, 'url', undefined, process.version, false, undefined)
   })
 
   it('rebinds named aliases on the ESM namespace', () => {
@@ -68,7 +131,7 @@ describe('Hook', () => {
     const hook = iitm.args[0][2]
     assert.strictEqual(hook(namespace, 'url', undefined), namespace)
     assert.strictEqual(namespace.parse, wrapped)
-    sinon.assert.calledOnceWithExactly(onrequire, cjsExports, 'url', undefined, process.version, true)
+    sinon.assert.calledOnceWithExactly(onrequire, cjsExports, 'url', undefined, process.version, true, undefined)
   })
 
   it('leaves a builtin export the ESM view does not carry', () => {
