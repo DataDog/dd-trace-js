@@ -132,9 +132,13 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.origin, 'http://127.0.0.1:8126')
   })
 
-  it('uses the injected provider lazily with targeting-key precedence', async () => {
+  it('uses the provider without credentials and preserves targeting-key precedence', async () => {
     provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1', template: undefined }) })
-    const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
+    const manager = new PromptManager(makeConfig({
+      DD_API_KEY: undefined,
+      DD_APP_KEY: undefined,
+      env: 'production',
+    }), () => provider)
     const fallback = sinon.spy()
 
     const prompt = await manager.getPrompt('greeting', {
@@ -217,16 +221,22 @@ describe('PromptManager', () => {
       data: { type: 'prompt_resolve_requests', attributes: { env: 'production' } },
     })
     assert.strictEqual(fetchStub.firstCall.args[1].headers['DD-APPLICATION-KEY'], 'app-key')
+    assert.strictEqual(fetchStub.firstCall.args[1].headers['DD-API-KEY'], 'api-key')
   })
 
-  it('skips an unauthorized resolve request and uses the caller fallback', async () => {
-    const manager = new PromptManager(makeConfig({ env: 'production', DD_APP_KEY: undefined }), () => provider)
+  it('uses the fallback without HTTP when the provider and credentials are unavailable', async () => {
+    const manager = new PromptManager(makeConfig({
+      DD_API_KEY: undefined,
+      DD_APP_KEY: undefined,
+      env: 'production',
+    }), () => provider)
     const fallback = sinon.stub().returns({ template: 'Local {name}', version: 'local' })
 
     const prompt = await manager.getPrompt('greeting', { fallback })
 
     assert.strictEqual(prompt.source, 'fallback')
     assert.strictEqual(prompt.version, 'local')
+    sinon.assert.calledOnce(provider.resolveObjectEvaluation)
     sinon.assert.calledOnce(fallback)
     sinon.assert.notCalled(fetchStub)
   })
@@ -546,29 +556,53 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.warmCache.get(second).prompt.id, 'foo:bar')
   })
 
-  it('rejects missing API credentials before provider, cache, HTTP, or fallback', async () => {
-    const crudError = sinon.stub(telemetry, 'recordPromptCrudError')
-    const fallback = sinon.spy()
-    const manager = new PromptManager(makeConfig({ DD_API_KEY: undefined, env: 'production' }), () => provider)
+  it('requires an API key for Registry requests and both keys for /resolve', async () => {
+    const noApi = new PromptManager(makeConfig({ DD_API_KEY: undefined }), () => provider)
+    for (const options of [{}, { version: 1 }]) {
+      await assert.rejects(noApi.getPrompt('greeting', options), {
+        name: 'PromptAuthError',
+        status: 0,
+        detail: 'DD_API_KEY is required for prompt operations',
+      })
+    }
+    sinon.assert.notCalled(fetchStub)
 
-    await assert.rejects(manager.getPrompt('greeting', { fallback }), {
+    fetchStub.resolves(response(200, promptResponse()))
+    const registryNoApp = new PromptManager(makeConfig({
+      DD_APP_KEY: undefined,
+      DD_LLMOBS_PROMPTS_CACHE_TTL: 0,
+    }), () => provider)
+    await registryNoApp.getPrompt('greeting')
+    await registryNoApp.getPrompt('greeting', { version: 1 })
+    for (const call of fetchStub.getCalls()) {
+      assert.strictEqual(call.args[1].headers['DD-API-KEY'], 'api-key')
+      assert.strictEqual(call.args[1].headers['DD-APPLICATION-KEY'], undefined)
+    }
+
+    const noResolveApi = new PromptManager(makeConfig({ DD_API_KEY: undefined, env: 'production' }), () => provider)
+    await assert.rejects(noResolveApi.getPrompt('greeting'), {
       name: 'PromptAuthError',
       status: 0,
       detail: 'DD_API_KEY is required for prompt operations',
     })
-    await assert.rejects(manager.updatePrompt('greeting', { title: 'Greeting' }), {
-      name: 'PromptAuthError', status: 0,
+
+    const noResolveApp = new PromptManager(makeConfig({ DD_APP_KEY: undefined, env: 'production' }), () => provider)
+    await assert.rejects(noResolveApp.getPrompt('greeting'), {
+      message: "Prompt 'greeting' could not be fetched and no fallback was provided: " +
+        'DD_APP_KEY is required to resolve prompts for an environment',
     })
-    sinon.assert.notCalled(provider.resolveObjectEvaluation)
-    sinon.assert.notCalled(fetchStub)
-    sinon.assert.notCalled(fallback)
-    sinon.assert.calledOnceWithExactly(crudError, 'PATCH', 'PromptAuthError', 0)
+
+    sinon.assert.calledTwice(provider.resolveObjectEvaluation)
+    sinon.assert.calledTwice(fetchStub)
   })
 
   it('validates update fields and write application credentials', async () => {
     const manager = new PromptManager(makeConfig(), () => provider)
     await assert.rejects(manager.updatePrompt('p'), { name: 'PromptValidationError', status: 0 })
     await assert.rejects(manager.updatePromptVersion('p', 1), { name: 'PromptValidationError', status: 0 })
+
+    const noApi = new PromptManager(makeConfig({ DD_API_KEY: undefined }), () => provider)
+    await assert.rejects(noApi.updatePrompt('p', { title: 'Prompt' }), { name: 'PromptAuthError', status: 0 })
 
     const noApp = new PromptManager(makeConfig({ DD_APP_KEY: undefined }), () => provider)
     await assert.rejects(noApp.deletePrompt('p'), { name: 'PromptAuthError', status: 0 })

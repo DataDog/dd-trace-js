@@ -27,6 +27,7 @@ const SOURCE_CACHE = 'cache'
  * @property {string} [reason]
  * @property {boolean} [notFound]
  * @property {boolean} [cacheable]
+ * @property {PromptAPIError} [error]
  */
 
 function isPlainObject (value) {
@@ -171,7 +172,7 @@ class PromptManager {
   }
 
   /**
-   * Require API authentication before using any prompt path.
+   * Require API authentication before using an HTTP prompt path.
    */
   #requireApiKey () {
     if (!this.config.DD_API_KEY) {
@@ -218,7 +219,12 @@ class PromptManager {
    * @returns {Promise<PromptFetchResult>}
    */
   async #fetchHttp (request, cacheSignal) {
-    const apiKey = this.#requireApiKey()
+    let apiKey
+    try {
+      apiKey = this.#requireApiKey()
+    } catch (error) {
+      return { reason: error.detail, error }
+    }
     if (request.resolve && !this.config.DD_APP_KEY) {
       return { reason: 'DD_APP_KEY is required to resolve prompts for an environment' }
     }
@@ -370,6 +376,7 @@ class PromptManager {
     }
 
     if (fallback === undefined) {
+      if (result.error) throw result.error
       const reason = result.reason ? `: ${result.reason}` : ''
       throw new Error(`Prompt '${request.promptId}' could not be fetched and no fallback was provided${reason}`)
     }
@@ -390,7 +397,6 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt>}
    */
   async getPrompt (promptId, options = {}) {
-    this.#requireApiKey()
     const { version, fallback, targetingKey, attributes = {} } = options
     if (version !== undefined) {
       return this.#getHttpPrompt(promptRequest(promptId, { version }), fallback)

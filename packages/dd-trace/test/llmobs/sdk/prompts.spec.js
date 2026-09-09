@@ -14,9 +14,10 @@ const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
 const { getConfigFresh } = require('../../helpers/config')
 
 describe('sdk prompts', () => {
-  it('works through the configured SDK while LLMObs span export is disabled', async () => {
+  it('resolves provider prompts without credentials while LLMObs span export is disabled', async () => {
     const config = getConfigFresh({})
-    config.DD_API_KEY = 'api-key'
+    config.DD_API_KEY = undefined
+    config.DD_APP_KEY = undefined
     config.env = 'production'
     const provider = {
       resolveObjectEvaluation: sinon.stub().resolves({
