@@ -194,4 +194,56 @@ describe('register', () => {
     assert.strictEqual(hook(namespace, 'mocha', '/path/to/mocha', '12.0.0', true), namespace)
     sinon.assert.calledOnceWithExactly(patch, Mocha)
   })
+
+  it('should match file patterns', () => {
+    const patch = sinon.stub()
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ filePattern: 'dist/cli.*', hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(
+      hook(moduleExports, 'example/dist/cli-123.js', '/path/to/example', '1.0.0'),
+      moduleExports
+    )
+    sinon.assert.calledOnceWithExactly(patch, moduleExports, '1.0.0', undefined, {
+      moduleBaseDir: '/path/to/example',
+      moduleName: 'example/dist/cli-123.js',
+    })
+  })
+
+  it('should match relative instrumentation names', () => {
+    const name = './runtime/library.js'
+    const patch = sinon.stub()
+    hooksMock[name] = { fn: sinon.stub() }
+    instrumentationsMock[name] = [{ hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === name)
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(hook(moduleExports, 'different/path.js', '/path/to/package', '1.0.0'), moduleExports)
+    sinon.assert.calledOnceWithExactly(patch, moduleExports, '1.0.0', undefined, {
+      moduleBaseDir: '/path/to/package',
+      moduleName: 'different/path.js',
+    })
+  })
+
+  it('should not treat an empty file pattern as a wildcard', () => {
+    const patch = sinon.stub()
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ filePattern: '', hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(hook(moduleExports, 'example/internal.js', '/path/to/example', '1.0.0'), moduleExports)
+    sinon.assert.notCalled(patch)
+  })
 })
