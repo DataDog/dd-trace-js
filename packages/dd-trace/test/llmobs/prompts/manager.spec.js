@@ -119,6 +119,15 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.origin, 'http://127.0.0.1:8126')
   })
 
+  it('rejects DD_SITE values containing URL authority delimiters', () => {
+    assert.throws(() => new PromptManager(makeConfig({ site: 'datadoghq.com@collector.example' }), () => provider), {
+      name: 'PromptAuthError',
+      status: 0,
+      detail: 'DD_SITE is invalid for prompt operations',
+    })
+    sinon.assert.notCalled(fetchStub)
+  })
+
   it('uses the provider without credentials and preserves targeting-key precedence', async () => {
     provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1', template: undefined }) })
     const manager = new PromptManager(makeConfig({
