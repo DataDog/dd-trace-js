@@ -4,33 +4,54 @@ const assert = require('assert')
 const { execFileSync, spawn } = require('child_process')
 const fs = require('fs')
 const http = require('http')
+const os = require('os')
 const path = require('path')
 
-const { useSandbox, sandboxCwd } = require('../helpers')
+const { withElectronPackageJson, ROOT } = require('../../scripts/release/helpers/electron-package-json')
+const { withBun } = require('../helpers/bun')
+const { useSandbox, sandboxCwd, packTarball } = require('../helpers')
 const { assertTraceReceived } = require('./helpers')
+
+/**
+ * Packs dd-trace-electron (not plain dd-trace) into a standalone tarball, so this test
+ * exercises the actual reduced-dependency package real consumers install, the same one
+ * `scripts/release/publish-electron.js` publishes. Reuses the same `bun pm pack` helper the
+ * sandbox itself packs plain dd-trace with, just against a package.json swapped to the
+ * electron variant.
+ *
+ * @param {string} destPath - Where to write the packed tarball.
+ * @returns {Promise<void>}
+ */
+function packElectronTarball (destPath) {
+  execFileSync('node', ['scripts/generate-electron-package.js'], { cwd: ROOT, stdio: 'pipe' })
+
+  return withElectronPackageJson(() => packTarball(destPath, withBun()))
+}
 
 describe('Electron integration', function () {
   let httpServer
   let httpPort
   let binaryPath
   let child
+  let ddTraceElectronTgz
 
-  // Create a sandbox with electron and @electron/packager installed alongside dd-trace.
-  // The app source files are copied in; dd-trace is then installed into the app directory
-  // from the pre-packed sandbox tgz so electron-packager bundles it inside the binary.
+  // Create a sandbox with electron and @electron/packager installed alongside dd-trace-electron.
+  // The app source files are copied in; dd-trace-electron is then installed into the app
+  // directory from a freshly packed tarball so electron-packager bundles it inside the binary.
   useSandbox(['electron', '@electron/packager'], false, [path.join(__dirname, 'app')])
 
   before(async function () {
-    this.timeout(30_000)
+    this.timeout(60_000)
 
     const sandboxFolder = sandboxCwd()
     const appDir = path.join(sandboxFolder, 'app')
 
-    // createSandbox packs dd-trace into a .tgz one level above the sandbox folder.
-    // We reference it with a file: URL so npm installs the exact local build.
-    const ddTraceTgz = path.join(path.dirname(sandboxFolder), 'dd-trace.tgz')
+    // Pack dd-trace-electron (the reduced-dependency package, not plain dd-trace) fresh for
+    // this run, so the binary bundles the same thing real consumers of dd-trace-electron get.
+    ddTraceElectronTgz = path.join(os.tmpdir(), `dd-trace-electron-${process.pid}.tgz`)
+    await packElectronTarball(ddTraceElectronTgz)
 
-    // Write the app's package.json with dd-trace as a bundled dependency so that
+    // Write the app's package.json with dd-trace-electron as a bundled dependency so that
     // electron-packager includes it inside the binary together with the app source.
     fs.writeFileSync(
       path.join(appDir, 'package.json'),
@@ -38,11 +59,11 @@ describe('Electron integration', function () {
         name: 'ElectronTest',
         version: '1.0.0',
         main: 'main.js',
-        dependencies: { 'dd-trace': `file:${ddTraceTgz}` },
+        dependencies: { 'dd-trace-electron': `file:${ddTraceElectronTgz}` },
       })
     )
 
-    // Install dd-trace and its transitive dependencies into the app directory.
+    // Install dd-trace-electron and its transitive dependencies into the app directory.
     execFileSync('npm', ['install'], { cwd: appDir, stdio: 'pipe' })
 
     // Use the electron version already installed in the sandbox so that
@@ -97,6 +118,7 @@ describe('Electron integration', function () {
 
   after(async function () {
     if (httpServer) await new Promise(resolve => httpServer.close(resolve))
+    if (ddTraceElectronTgz) fs.rmSync(ddTraceElectronTgz, { force: true })
   })
 
   beforeEach(function (done) {

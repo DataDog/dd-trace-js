@@ -30,7 +30,9 @@ const EXPECTED_MODULE = 'node_modules/@datadog/native-appsec'
 
 const compiler = webpack({
   mode: 'development',
-  entry: path.join(__dirname, '..', '..', 'packages', 'dd-trace', 'index.electron.js'),
+  // The root index.electron.js, not the packages/dd-trace one directly: this is the file
+  // package.electron.json's `main` actually points consumers of dd-trace-electron at.
+  entry: path.join(__dirname, '..', '..', 'index.electron.js'),
   target: 'node',
   externalsType: 'commonjs',
   ...(experiments && { experiments }),

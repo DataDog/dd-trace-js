@@ -2,9 +2,9 @@
 
 const { channel } = require('node:diagnostics_channel')
 
-// dd-trace is bundled inside the binary alongside the app source.
+// dd-trace-electron is bundled inside the binary alongside the app source.
 // No external path or NODE_OPTIONS injection needed.
-require('dd-trace').init({
+require('dd-trace-electron').init({
   service: 'electron-integration-test',
   flushInterval: 0,
   plugins: false,

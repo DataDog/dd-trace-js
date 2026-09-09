@@ -1372,4 +1372,5 @@ module.exports = {
   warmCypressBinary,
   createParallelIt,
   withReceiver,
+  packTarball,
 }
