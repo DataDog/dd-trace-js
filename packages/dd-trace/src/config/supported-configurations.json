@@ -57,9 +57,6 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "configurationNames": [
-          "experimental.aiguard.analyzeStreamResponsesEnabled"
-        ],
         "default": "false",
         "description": "Buffer Vercel AI streamed responses for After Model evaluation before replaying them."
       }
