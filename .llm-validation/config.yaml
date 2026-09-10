@@ -23,6 +23,7 @@ instruction_files:
   - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/no-harness-review.md
   - .agents/dd-apm-sdk-review-overrides/repo-context.md
 
 # Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
