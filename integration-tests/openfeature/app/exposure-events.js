@@ -32,6 +32,7 @@ app.get('/evaluate-flags', async (req, res) => {
   }
 
   try {
+    const evaluationStartedAt = Date.now()
     const booleanResult = await client.getBooleanValue('test-boolean-flag', false, {
       targetingKey: 'test-user-123',
       user: 'test-user-123',
@@ -50,6 +51,8 @@ app.get('/evaluate-flags', async (req, res) => {
         string: stringResult,
       },
       evaluationsCompleted: 2,
+      evaluationStartedAt,
+      evaluationFinishedAt: Date.now(),
     })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -62,6 +65,7 @@ app.get('/evaluate-multiple-flags', async (req, res) => {
   }
 
   try {
+    const evaluationStartedAt = Date.now()
     const results = []
 
     const users = [
@@ -90,6 +94,8 @@ app.get('/evaluate-multiple-flags', async (req, res) => {
     res.json({
       results,
       evaluationsCompleted: users.length * 2,
+      evaluationStartedAt,
+      evaluationFinishedAt: Date.now(),
     })
   } catch (error) {
     res.status(500).json({ error: error.message })
