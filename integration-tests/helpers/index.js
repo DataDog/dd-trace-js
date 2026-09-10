@@ -952,6 +952,7 @@ function getCiVisAgentlessConfig (port) {
   const { GITHUB_ACTIONS, GITHUB_EVENT_PATH, GITHUB_RUN_ID, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
+    DATADOG_API_KEY: undefined,
     DD_API_KEY: '1',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
@@ -972,6 +973,8 @@ function getCiVisEvpProxyConfig (port) {
   const { GITHUB_ACTIONS, GITHUB_EVENT_PATH, GITHUB_RUN_ID, GITHUB_WORKSPACE, MOCHA_OPTIONS, ...rest } = process.env
   return {
     ...rest,
+    DATADOG_API_KEY: undefined,
+    DD_API_KEY: undefined,
     DD_TRACE_AGENT_PORT: String(port),
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
