@@ -100,6 +100,42 @@ describe('bundler register', () => {
     assert.equal(Object.hasOwn(payload, 'module'), false)
   })
 
+  it('does not report activation-only integrations as missing export hooks', () => {
+    const activationHook = sinon.stub()
+    const exportHook = sinon.stub()
+    const { log, publish } = loadBundlerRegister({
+      hooks: {
+        'test-activation-only': activationHook,
+        'test-missing-export-hook': exportHook,
+      },
+      instrumentations: {},
+    })
+
+    publish({
+      activate: true,
+      package: 'test-activation-only',
+      path: 'test-activation-only/index.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.notCalled(log.error)
+    sinon.assert.calledOnceWithExactly(activationHook)
+
+    publish({
+      module: {},
+      package: 'test-missing-export-hook',
+      path: 'test-missing-export-hook',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(
+      log.error,
+      'esbuild-wrapped %s missing in list of instrumentations',
+      'test-missing-export-hook'
+    )
+    sinon.assert.calledOnceWithExactly(exportHook)
+  })
+
   it('patches file-pattern publications', () => {
     const integrationHook = sinon.stub().returns({ patched: true })
     const { publish } = loadBundlerRegister({

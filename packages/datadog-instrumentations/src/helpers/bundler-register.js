@@ -111,7 +111,7 @@ dc.subscribe(CHANNEL, (message) => {
   const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
 
   if (!instrumentation) {
-    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
+    if (!payload.activate) log.error('esbuild-wrapped %s missing in list of instrumentations', name)
     return
   }
 
