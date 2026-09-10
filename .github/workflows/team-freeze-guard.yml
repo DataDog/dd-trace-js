@@ -37,7 +37,6 @@ jobs:
             dev/testing
             github_actions
           frozen-teams: |
-            @DataDog/dd-trace-js
             @DataDog/apm-idm-js
             @DataDog/ml-observability
             @DataDog/lang-platform-js
