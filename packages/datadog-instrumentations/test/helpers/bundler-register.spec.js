@@ -185,13 +185,25 @@ describe('bundler register', () => {
   it('contains non-Error loader and instrumentation failures', () => {
     const loadHook = sinon.stub().callsFake(() => throwValue('load failed'))
     const integrationHook = sinon.stub().callsFake(() => throwValue('patch failed'))
+    const activationHook = sinon.stub().callsFake(() => throwValue('activation failed'))
     const { log, publish } = loadBundlerRegister({
       hooks: { 'test-hook-errors': loadHook },
       instrumentations: {
+        'test-activation-errors': [{
+          hook: activationHook,
+          sourceRewrite: 'dist/index.js',
+          versions: ['1'],
+        }],
         'test-hook-errors': [{ hook: integrationHook }],
       },
     })
 
+    publish({
+      activate: true,
+      package: 'test-activation-errors',
+      path: 'test-activation-errors/dist/index.js',
+      version: '1.0.0',
+    })
     publish({
       module: {},
       package: 'test-hook-errors',
@@ -200,6 +212,7 @@ describe('bundler register', () => {
     })
 
     sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'load failed')
+    sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'activation failed')
     sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
   })
 })
