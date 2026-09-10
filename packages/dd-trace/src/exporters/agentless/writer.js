@@ -16,6 +16,16 @@ const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 const legacyStorage = storage('legacy')
 
 /**
+ * @param {(error?: Error) => void} done
+ * @param {{ reportErrors?: boolean }|undefined} options
+ * @param {unknown} reason
+ */
+function completeFlush (done, options, reason) {
+  if (!options?.reportErrors) return done()
+  done(reason instanceof Error ? reason : new Error(String(reason)))
+}
+
+/**
  * Writer for agentless APM trace intake.
  * Encodes traces as v0.4 MessagePack and delegates transformation and delivery
  * to the APM data pipeline.
@@ -74,16 +84,17 @@ class AgentlessWriter extends BaseWriter {
   /**
    * @param {Buffer} data - v0.4 MessagePack payload.
    * @param {number} count - Number of traces in the payload.
-   * @param {() => void} done - Callback invoked after delivery completes or fails.
+   * @param {(error?: Error) => void} done - Callback invoked after delivery completes or fails.
+   * @param {{ reportErrors?: boolean }} [options]
    */
-  _sendPayload (data, count, done) {
+  _sendPayload (data, count, done, options) {
     if (!this._url) {
       if (!this.#urlMissing) {
         this.#urlMissing = true
         log.error('No valid URL configured for agentless trace intake. Traces will not be sent.')
       }
       log.debug('Dropping %d trace(s) due to missing URL', count)
-      done()
+      completeFlush(done, options, 'No valid URL configured for agentless trace intake')
       return
     }
 
@@ -94,7 +105,7 @@ class AgentlessWriter extends BaseWriter {
         log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
       }
       log.debug('Dropping %d trace(s) due to missing DD_API_KEY', count)
-      done()
+      completeFlush(done, options, 'DD_API_KEY is required for agentless trace intake')
       return
     }
     this.#apiKeyMissing = false
@@ -107,13 +118,13 @@ class AgentlessWriter extends BaseWriter {
         if (exporter) {
           exporter.sendV04(data, done, log)
         } else {
-          done()
+          completeFlush(done, options, 'DD_API_KEY cannot be sent to the configured agentless trace intake')
         }
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       log.error('Failed to send %d trace(s) to the agentless intake: %s', count, message)
-      done()
+      completeFlush(done, options, error)
     }
   }
 

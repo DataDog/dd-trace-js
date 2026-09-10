@@ -135,13 +135,24 @@ describe('AgentlessWriter', () => {
     assert.strictEqual(flushed, true)
   })
 
-  it('contains synchronous data-pipeline construction failures', async () => {
+  it('does not report data-pipeline failures by default', async () => {
+    const error = new Error('exporter unavailable')
+    createAgentlessExporter.throws(error)
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    const flushError = await new Promise(resolve => writer.flush(resolve))
+
+    assert.strictEqual(flushError, undefined)
+  })
+
+  it('reports synchronous data-pipeline construction failures when requested', async () => {
     const error = { toString: () => 'exporter unavailable' }
     createAgentlessExporter.callsFake(() => { throw error })
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 
-    await new Promise(resolve => writer.flush(resolve))
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
 
+    assert.strictEqual(flushError.message, 'exporter unavailable')
     sinon.assert.calledWithExactly(
       log.error,
       'Failed to send %d trace(s) to the agentless intake: %s',
@@ -150,13 +161,14 @@ describe('AgentlessWriter', () => {
     )
   })
 
-  it('contains proxy configuration failures before constructing the data pipeline', async () => {
+  it('reports proxy configuration failures before constructing the data pipeline when requested', async () => {
     const error = new Error('invalid proxy URL')
     getHttpsProxyAgent.throws(error)
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 
-    await new Promise(resolve => writer.flush(resolve))
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
 
+    assert.strictEqual(flushError, error)
     sinon.assert.notCalled(createAgentlessExporter)
     sinon.assert.calledWithExactly(
       log.error,
@@ -166,12 +178,15 @@ describe('AgentlessWriter', () => {
     )
   })
 
-  it('contains synchronous data-pipeline send failures', async () => {
-    exporter.sendV04.throws(new Error('send failed'))
+  it('reports synchronous data-pipeline send failures when requested', async () => {
+    const error = new Error('send failed')
+    exporter.sendV04.resetBehavior()
+    exporter.sendV04.throws(error)
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 
-    await new Promise(resolve => writer.flush(resolve))
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
 
+    assert.strictEqual(flushError, error)
     sinon.assert.calledWithExactly(
       log.error,
       'Failed to send %d trace(s) to the agentless intake: %s',
@@ -192,6 +207,31 @@ describe('AgentlessWriter', () => {
       log.warn,
       'DD_API_KEY will not be sent because the configured receiver is neither HTTPS nor loopback.'
     )
+  })
+
+  it('reports an unsafe receiver when requested', async () => {
+    writer = new AgentlessWriter({ url: new URL('http://intake.example') })
+
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
+
+    assert.strictEqual(flushError.message, 'DD_API_KEY cannot be sent to the configured agentless trace intake')
+  })
+
+  it('reports a missing API key when requested', async () => {
+    apiKey = undefined
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
+
+    assert.strictEqual(flushError.message, 'DD_API_KEY is required for agentless trace intake')
+  })
+
+  it('reports a missing intake URL when requested', async () => {
+    writer = new AgentlessWriter({ site: 'bad host' })
+
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
+
+    assert.strictEqual(flushError.message, 'No valid URL configured for agentless trace intake')
   })
 
   it('keeps loopback HTTP receivers direct', async () => {

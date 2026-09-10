@@ -280,6 +280,48 @@ describe('AgentlessExporter', () => {
     it('should call callback when done', (done) => {
       exporter.flush(done)
     })
+
+    it('reports writer failures when requested', () => {
+      const error = new Error('writer failed')
+      writer.flush.callsFake(done => done(error))
+      const done = sinon.spy()
+
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.calledOnceWithExactly(writer.flush, done, { reportErrors: true })
+      sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('reports synchronous writer failures when requested', () => {
+      const error = new Error('writer failed')
+      writer.flush.throws(error)
+      const done = sinon.spy()
+
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('suppresses synchronous writer failures by default', () => {
+      writer.flush.throws(new Error('writer failed'))
+      const done = sinon.spy()
+
+      exporter.flush(done)
+
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    })
+
+    it('normalizes non-error flush failures when requested', () => {
+      const error = { toString: () => 'writer failed' }
+      writer.flush.callsFake(() => { throw error })
+      const done = sinon.spy()
+
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.calledOnce(done)
+      assert.ok(done.firstCall.firstArg instanceof Error)
+      assert.strictEqual(done.firstCall.firstArg.message, 'writer failed')
+    })
   })
 
   describe('setUrl', () => {

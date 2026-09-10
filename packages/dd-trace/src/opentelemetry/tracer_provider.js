@@ -12,6 +12,7 @@ const Tracer = require('./tracer')
 /**
  * @typedef {{
  *   flush?: (done?: (error?: Error) => void, options?: { reportErrors?: boolean }) => void
+ *   forceFlush?: (done?: (error?: Error) => void) => void
  * }} TraceExporter
  */
 
@@ -20,7 +21,7 @@ const Tracer = require('./tracer')
  * @returns {Promise<void>}
  */
 function flushExporter (exporter) {
-  if (typeof exporter.flush !== 'function') return Promise.resolve()
+  if (typeof exporter.forceFlush !== 'function' && typeof exporter.flush !== 'function') return Promise.resolve()
 
   /**
    * @param {() => void} resolve
@@ -35,7 +36,11 @@ function flushExporter (exporter) {
       else resolve()
     }
 
-    exporter.flush(done, { reportErrors: true })
+    if (typeof exporter.forceFlush === 'function') {
+      exporter.forceFlush(done)
+    } else {
+      exporter.flush(done, { reportErrors: true })
+    }
   }
 
   return new Promise(flush)
@@ -44,7 +49,6 @@ function flushExporter (exporter) {
 class TracerProvider {
   #activeProcessor = new NoopSpanProcessor()
   #contextManager = new ContextManager()
-  #flush
   #processors = []
   #tracers = new Map()
 
@@ -117,19 +121,10 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    const flush = () => settleAllFlushes([
+    return settleAllFlushes([
       flushExporter(exporter),
       this.#activeProcessor.forceFlush(),
     ])
-    const pending = this.#flush ? this.#flush.then(flush, flush) : flush()
-    this.#flush = pending
-
-    const clear = () => {
-      if (this.#flush === pending) this.#flush = undefined
-    }
-    pending.then(clear, clear)
-
-    return pending
   }
 
   shutdown () {

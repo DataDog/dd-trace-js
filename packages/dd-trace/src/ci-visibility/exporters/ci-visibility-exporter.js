@@ -738,8 +738,27 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   flush (done) {
-    const isFinalFlush = typeof done === 'function'
+    this.#flush(done, typeof done === 'function', false)
+  }
+
+  /**
+   * Flushes data owned by the current completion boundary without finalizing the test session.
+   * @param {(error?: Error) => void} [done]
+   */
+  forceFlush (done) {
+    this.#flush(done, false, true)
+  }
+
+  /**
+   * @param {((error?: Error) => void)|undefined} done
+   * @param {boolean} isFinalFlush
+   * @param {boolean} isForceFlush
+   */
+  #flush (done, isFinalFlush, isForceFlush) {
     const onDone = done || (() => {})
+    const hasBufferedData = this._traceBuffer.length !== 0 || this._coverageBuffer.length !== 0
+    const hasPendingFinalData = hasBufferedData ||
+      this.#deferredTestSuiteSpans.size !== 0 || this.#deferredTestSessionTraces.length !== 0
     let finalFlush
 
     if (isFinalFlush && this.#finalFlush) {
@@ -748,10 +767,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
-    if (isFinalFlush && !this._isInitialized &&
-      this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredTestSuiteSpans.size === 0 && this.#deferredTestSessionTraces.length === 0 &&
-      this.#pendingMediaUploads.size === 0) {
+    if (isFinalFlush && !this._isInitialized && !hasPendingFinalData && this.#pendingMediaUploads.size === 0) {
       this._initializationRequest?.controller.abort()
       onDone()
       return
@@ -766,7 +782,7 @@ class CiVisibilityExporter extends BufferingExporter {
       this.#finalFlush = finalFlush
     }
 
-    const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
+    const deadline = isFinalFlush || isForceFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
     let hasCompleted = false
     let initializationTimeoutId
     let mediaTimeoutId
@@ -867,7 +883,7 @@ class CiVisibilityExporter extends BufferingExporter {
       }, Math.max(0, deadline - Date.now()))
     }
 
-    if (!isFinalFlush) {
+    if (!isFinalFlush && !isForceFlush) {
       if (this._isInitialized) flushWriters()
       else complete()
       return
@@ -875,6 +891,11 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (this._isInitialized) {
       flushWriters()
+      return
+    }
+
+    if (!hasBufferedData) {
+      complete()
       return
     }
 
