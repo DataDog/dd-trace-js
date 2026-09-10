@@ -59,9 +59,7 @@ function loadAiInstrumentation () {
 
   if (hookCallbacks.length === 0) throw new Error('ai instrumentation registered no hooks')
 
-  for (const { spec, callback } of hookCallbacks) {
-    if (spec.sourceRewrite) callback()
-  }
+  for (const { callback } of hookCallbacks) callback()
 
   return channelNames.map(name => subscriptionCounts.get(name))
 }

@@ -49,8 +49,28 @@ describe('bundler rewriter', () => {
     const rewrite = createBundlerRewriter('/absolute/dc-polyfill.js')
 
     assert.deepStrictEqual(
+      rewrite('', '/project/application.js', 'commonjs', undefined, sourceMap),
+      { code: '', map: sourceMap }
+    )
+    assert.deepStrictEqual(
       rewrite('module.exports = true', '/project/application.js', 'commonjs', undefined, sourceMap),
       { code: 'module.exports = true', map: sourceMap }
+    )
+  })
+
+  it('preserves sources and maps without a matching transformer', () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-rewriter-'))
+    const packageDirectory = path.join(directory, 'node_modules', 'unsupported')
+    const filename = path.join(packageDirectory, 'index.js')
+    const source = 'module.exports = true\n'
+    const sourceMap = { mappings: '', version: 3 }
+    fs.mkdirSync(packageDirectory, { recursive: true })
+    fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({ version: '1.0.0' }))
+    const rewrite = createBundlerRewriter('/absolute/dc-polyfill.js')
+
+    assert.deepStrictEqual(
+      rewrite(source, filename, 'commonjs', { filePath: 'index.js', moduleName: 'unsupported' }, sourceMap),
+      { code: source, map: sourceMap }
     )
   })
 

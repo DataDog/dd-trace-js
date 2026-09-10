@@ -12,12 +12,11 @@ const instrumentations = require('../../datadog-instrumentations/src/helpers/ins
 const { filename, matchesInstrumentation } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const { createBundlerRewriter } = require('../../datadog-instrumentations/src/helpers/rewriter')
 const { getRewriteTarget } = require('../../datadog-instrumentations/src/helpers/rewriter/targets')
-const rewriteTargets = require('../../datadog-instrumentations/src/helpers/rewriter/targets.json')
 const { isESMFile } = require('../../datadog-esbuild/src/utils')
 const { SYNTHETIC_EXTENSION } = require('./constants')
 
 const CHANNEL = 'dd-trace:bundler:load'
-const targetPackages = new Set([...Object.keys(hooks), ...Object.values(rewriteTargets)])
+const targetPackages = new Set(Object.keys(hooks))
 const entrypoints = new Map()
 const loadedHooks = new Set()
 const packageCache = new Map()
@@ -52,20 +51,20 @@ module.exports = function loader (source, inputSourceMap) {
     const nativeResourcePath = fs.realpathSync(getResourcePath(this))
     const resourcePath = nativeResourcePath.replaceAll('\\', '/')
     const extracted = extractPackageAndModulePath(resourcePath)
-    const rewriteTarget = getRewriteTarget(resourcePath)
-    if (!rewriteTarget && (!extracted.pkg || !targetPackages.has(extracted.pkg))) {
+    if (!extracted.pkg || !targetPackages.has(extracted.pkg)) {
       this.callback(undefined, source, inputSourceMap)
       return
     }
 
-    const packageInfo = extracted.pkg && extracted.pkgJson
-      ? getPackageInfo(nativeResourcePath, extracted.pkg, extracted.path, path.normalize(extracted.pkgJson))
-      : undefined
-    if (rewriteTarget && !packageInfo) {
-      throw new Error(`Could not derive package metadata for Turbopack rewrite target ${resourcePath}`)
-    }
-    const esm = packageInfo?.esm ?? isESMFile(nativeResourcePath)
-    const publications = !esm && packageInfo ? getPublications(resourcePath, packageInfo) : []
+    const rewriteTarget = getRewriteTarget(resourcePath)
+    const packageInfo = getPackageInfo(
+      nativeResourcePath,
+      extracted.pkg,
+      /** @type {string} */ (extracted.path),
+      path.normalize(/** @type {string} */ (extracted.pkgJson))
+    )
+    const esm = packageInfo.esm
+    const publications = esm ? [] : getPublications(resourcePath, packageInfo)
     if (!rewriteTarget && publications.length === 0) {
       this.callback(undefined, source, inputSourceMap)
       return
@@ -109,7 +108,9 @@ module.exports = function loader (source, inputSourceMap) {
     }
     this.callback(undefined, code, sourceMap)
   } catch (error) {
-    this.callback(error instanceof Error ? error : new Error(String(error)))
+    const warning = error instanceof Error ? error : new Error(String(error))
+    this.emitWarning?.(warning)
+    this.callback(undefined, source, inputSourceMap)
   }
 }
 
@@ -128,7 +129,7 @@ function getResourcePath (context) {
 /**
  * @param {string} nativeResourcePath
  * @param {string} name
- * @param {string|null} modulePath
+ * @param {string} modulePath
  * @param {string} packageJsonPath
  * @returns {PackageInfo}
  */
@@ -142,7 +143,7 @@ function getPackageInfo (nativeResourcePath, name, modulePath, packageJsonPath) 
 
   return {
     esm: isESMFile(nativeResourcePath, packageJsonPath, cached.packageJson),
-    moduleName: filename(name, modulePath || undefined),
+    moduleName: filename(name, modulePath),
     name,
     packageJsonPath,
     version: cached.version,

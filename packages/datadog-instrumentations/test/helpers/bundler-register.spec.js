@@ -22,9 +22,10 @@ describe('bundler register', () => {
   })
 
   it('patches modules published by existing bundlers', () => {
-    const Original = class Original {}
-    const Patched = class Patched {}
-    const hook = sinon.stub().returns(Patched)
+    const moduleExports = { original: true }
+    const hook = sinon.stub().callsFake(exports => {
+      exports.patched = true
+    })
     const { loadChannel, publish } = loadBundlerRegister({
       hooks: { 'test-commonjs-export': sinon.stub() },
       instrumentations: {
@@ -32,7 +33,7 @@ describe('bundler register', () => {
       },
     })
     const payload = {
-      module: { Original },
+      module: moduleExports,
       package: 'test-commonjs-export',
       path: 'test-commonjs-export/index.js',
       version: '1.0.0',
@@ -40,9 +41,10 @@ describe('bundler register', () => {
 
     publish(payload)
 
-    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0')
+    sinon.assert.calledOnceWithExactly(hook, moduleExports, '1.0.0')
     sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-commonjs-export' })
-    assert.equal(payload.module, Patched)
+    assert.strictEqual(payload.module, moduleExports)
+    assert.equal(payload.module.patched, true)
   })
 
   it('does not activate explicitly disabled bundled integrations', () => {

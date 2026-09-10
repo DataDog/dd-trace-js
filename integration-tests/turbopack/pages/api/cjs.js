@@ -1,18 +1,17 @@
 'use strict'
 
 const express = require('express')
-const { generateText } = require('ai')
-
-const model = require('../../app/model')
+const Redis = require('ioredis')
 
 const app = express()
 app.use(async (_request, response) => {
-  const result = await generateText({
-    model,
-    prompt: 'Say ok',
-    experimental_telemetry: { isEnabled: true },
+  const redis = new Redis()
+  const value = await redis.sendCommand({
+    args: ['key'],
+    name: 'get',
+    promise: Promise.resolve('extensionless'),
   })
-  response.json({ dependency: 'express', text: result.text })
+  response.json({ value })
 })
 
 module.exports = (request, response) => app(request, response)

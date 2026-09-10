@@ -12,19 +12,21 @@ const instrumentations = require('../../src/helpers/instrumentations')
 describe('helpers/instrument', () => {
   it('marks source-rewrite hooks with their original file path', () => {
     const hooks = getHooks(['ai'])
+    const instrumentation = hooks.find(({ file }) => file === 'dist/index.js')
     const original = instrumentations.ai
+    const originalLength = original?.length ?? 0
 
-    assert.ok(hooks.length > 0)
-    for (const hook of hooks) {
-      assert.equal(hook.sourceRewrite, hook.file)
-    }
+    assert.ok(instrumentation)
+    assert.equal(Object.hasOwn(instrumentation, 'sourceRewrite'), false)
+    instrumentation.file = null
 
     try {
-      addHook(hooks[0], () => {})
-      assert.equal(instrumentations.ai.at(-1).sourceRewrite, hooks[0].file)
+      addHook(instrumentation, () => {})
+      assert.equal(instrumentations.ai.at(-1).file, null)
+      assert.equal(instrumentations.ai.at(-1).sourceRewrite, 'dist/index.js')
     } finally {
       if (original) {
-        instrumentations.ai = original
+        original.length = originalLength
       } else {
         delete instrumentations.ai
       }

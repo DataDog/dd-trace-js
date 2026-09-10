@@ -37,34 +37,11 @@ for (const nextVersion of ['15.5.0', 'latest']) {
     before(function () {
       this.timeout(300_000)
       applicationDirectory = path.join(sandboxCwd(), 'turbopack')
-      const wrapperDirectory = path.join(sandboxCwd(), 'node_modules/foreign-ai-wrapper')
-      fs.mkdirSync(wrapperDirectory)
-      fs.writeFileSync(path.join(wrapperDirectory, 'package.json'), JSON.stringify({
-        exports: './index.js',
-        name: 'foreign-ai-wrapper',
-        type: 'module',
-        version: '1.0.0',
-      }))
-      fs.writeFileSync(path.join(wrapperDirectory, 'index.js'), [
-        "import { generateText } from 'ai'",
-        'export function wrappedGenerateText (options) { return generateText(options) }',
-        '',
-      ].join('\n'))
-      const extensionlessDirectory = path.join(sandboxCwd(), 'node_modules/ioredis')
-      fs.mkdirSync(extensionlessDirectory)
-      fs.writeFileSync(path.join(extensionlessDirectory, 'package.json'), JSON.stringify({
-        main: 'runner',
-        name: 'ioredis',
-        version: '5.4.0',
-      }))
-      fs.writeFileSync(path.join(extensionlessDirectory, 'runner'), [
-        "'use strict'",
-        'module.exports = class Redis {',
-        '  constructor () { this.options = {} }',
-        '  sendCommand (command) { return command.promise }',
-        '}',
-        '',
-      ].join('\n'))
+      fs.cpSync(
+        path.join(applicationDirectory, 'fixtures/ioredis'),
+        path.join(sandboxCwd(), 'node_modules/ioredis'),
+        { recursive: true }
+      )
       execSync('npm exec -- tsc --project tsconfig.json', { cwd: applicationDirectory, stdio: 'inherit' })
       execSync('npm exec -- next build --turbopack', { cwd: applicationDirectory, stdio: 'inherit' })
     })
@@ -81,18 +58,18 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       await agent.stop()
     })
 
-    it('runs bundled CommonJS and ESM dependencies', async () => {
-      const assertCjsTrace = agent.assertMessageReceived(({ payload }) => {
+    it('runs bundled CommonJS, ESM, and extensionless dependencies', async () => {
+      const assertCommonJsTrace = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         assert.strictEqual(checkSpansForServiceName(payload, 'express.request'), true)
-        assert.strictEqual(checkSpansForServiceName(payload, 'generateText'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'redis.command'), true)
       }, 10_000, 1, true)
 
       const [response] = await Promise.all([
         axios.get(`${proc.url}/api/cjs`),
-        assertCjsTrace,
+        assertCommonJsTrace,
       ])
-      assert.deepStrictEqual(response.data, { dependency: 'express', text: 'ok' })
+      assert.deepStrictEqual(response.data, { value: 'extensionless' })
 
       const assertEsmTrace = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
@@ -103,20 +80,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
         axios.get(`${proc.url}/api/esm`),
         assertEsmTrace,
       ])
-      assert.deepStrictEqual(esmResponse.data, { dependency: 'foreign-ai-wrapper', text: 'ok' })
-    })
-
-    it('runs instrumentation from an extensionless CommonJS target', async () => {
-      const assertTrace = agent.assertMessageReceived(({ payload }) => {
-        assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
-        assert.strictEqual(checkSpansForServiceName(payload, 'redis.command'), true)
-      }, 10_000, 1, true)
-
-      const [response] = await Promise.all([
-        axios.get(`${proc.url}/api/extensionless`),
-        assertTrace,
-      ])
-      assert.deepStrictEqual(response.data, { value: 'extensionless' })
+      assert.deepStrictEqual(esmResponse.data, { text: 'ok' })
     })
   })
 }

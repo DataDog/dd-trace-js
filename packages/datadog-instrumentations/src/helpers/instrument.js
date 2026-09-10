@@ -5,6 +5,8 @@ const dc = /** @type {typeof import('node:diagnostics_channel')} */ (require('dc
 const instrumentations = require('./instrumentations')
 const rewriterInstrumentations = require('./rewriter/instrumentations')
 
+const sourceRewritePaths = new WeakMap()
+
 /**
  * @typedef {import('node:diagnostics_channel').Channel} Channel
  * @typedef {import('node:diagnostics_channel').TracingChannel} TracingChannel
@@ -80,12 +82,11 @@ exports.getHooks = function getHooks (names) {
   return rewriterInstrumentations
     .map(inst => inst.module)
     .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => ({
-      file: filePath,
-      name,
-      sourceRewrite: filePath,
-      versions: [versionRange],
-    }))
+    .map(({ name, versionRange, filePath }) => {
+      const hook = { file: filePath, name, versions: [versionRange] }
+      sourceRewritePaths.set(hook, filePath)
+      return hook
+    })
 }
 
 /**
@@ -95,15 +96,16 @@ exports.getHooks = function getHooks (names) {
  * @param {string} [args.file] path to file within package to instrument. Defaults to 'index.js'.
  * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param {boolean} [args.patchDefault] whether to patch the default export. Defaults to true.
- * @param {string} [args.sourceRewrite] original source-rewrite target path
  * @param {(moduleExports: unknown, version: string, isIitm?: boolean, hookMeta?: object) => unknown} [hook]
  * Patches module exports
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault, sourceRewrite }, hook) {
+exports.addHook = function addHook (args, hook) {
+  const { name, versions, file, filePattern, patchDefault } = args
   if (!instrumentations[name]) {
     instrumentations[name] = []
   }
 
+  const sourceRewrite = sourceRewritePaths.get(args)
   instrumentations[name].push({ versions, file, filePattern, hook, patchDefault, sourceRewrite })
 }
 

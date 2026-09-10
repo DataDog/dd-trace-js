@@ -5,7 +5,6 @@ const Module = require('node:module')
 const path = require('node:path')
 
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
-const rewriteTargets = require('../datadog-instrumentations/src/helpers/rewriter/targets.json')
 const { SYNTHETIC_EXTENSION } = require('./src/constants')
 
 const BUILTIN_MODULES = new Set(Module.builtinModules)
@@ -25,17 +24,30 @@ const PACKAGE_PATH_PATTERN = createPackagePathPattern()
 function withDatadogTurbopack (nextConfig = {}) {
   const nextMajor = getNextMajor()
 
-  return async function datadogNextConfig (...args) {
+  return function datadogNextConfig (...args) {
     const config = typeof nextConfig === 'function'
-      ? await nextConfig.apply(this, args)
-      : await nextConfig
-    const normalized = normalizeConfig(config)
-    if (args[0] === PHASE_PRODUCTION_SERVER || hasDatadogLoader(normalized.turbopack?.rules)) return normalized
-
-    const turbopack = normalized.turbopack ?? {}
-    const configured = nextMajor === 15 ? addLegacyRule(turbopack) : addModernRules(turbopack)
-    return { ...normalized, turbopack: configured }
+      ? nextConfig.apply(this, args)
+      : nextConfig
+    if (config && typeof config.then === 'function') {
+      return config.then(config => configureTurbopack(config, args[0], nextMajor))
+    }
+    return configureTurbopack(config, args[0], nextMajor)
   }
+}
+
+/**
+ * @param {object|undefined} config
+ * @param {unknown} phase
+ * @param {number} nextMajor
+ * @returns {object}
+ */
+function configureTurbopack (config, phase, nextMajor) {
+  const normalized = normalizeConfig(config)
+  if (phase === PHASE_PRODUCTION_SERVER || hasDatadogLoader(normalized.turbopack?.rules)) return normalized
+
+  const turbopack = normalized.turbopack ?? {}
+  const configured = nextMajor === 15 ? addLegacyRule(turbopack) : addModernRules(turbopack)
+  return { ...normalized, turbopack: configured }
 }
 
 /**
@@ -146,9 +158,8 @@ function hasDatadogLoader (value) {
  * @returns {RegExp}
  */
 function createPackagePathPattern () {
-  const packages = new Set([...Object.keys(hooks), ...Object.values(rewriteTargets)])
   const names = []
-  for (const name of packages) {
+  for (const name of Object.keys(hooks)) {
     if (!name.startsWith('.') && !BUILTIN_MODULES.has(name)) names.push(escapeRegExp(name))
   }
   names.sort()

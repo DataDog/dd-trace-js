@@ -28,9 +28,8 @@ describe('withDatadogTurbopack', () => {
     const transformerPath = require.resolve('../../../vendor/dist/@apm-js-collab/code-transformer')
     const script = `
       const { withDatadogTurbopack } = require(${JSON.stringify(entryPath)})
-      withDatadogTurbopack({})('phase-production-build').then(() => {
-        process.stdout.write(String(require.cache[${JSON.stringify(transformerPath)}] !== undefined))
-      })
+      withDatadogTurbopack({})('phase-production-build')
+      process.stdout.write(String(require.cache[${JSON.stringify(transformerPath)}] !== undefined))
     `
     const result = spawnSync(process.execPath, ['-e', script], { cwd: projectDir, encoding: 'utf8' })
 
@@ -66,6 +65,7 @@ describe('withDatadogTurbopack', () => {
     assert.deepStrictEqual(sourceRule.condition.all.slice(0, 2), ['node', 'foreign'])
     assert.equal(packagePath.test('/app/node_modules/express/index.js'), true)
     assert.equal(packagePath.test('/app/node_modules/.pnpm/ai@6.0.0/node_modules/ai/dist/index.mjs'), true)
+    assert.equal(packagePath.test('/app/node_modules/webdriver/build/index.js'), false)
     assert.equal(packagePath.test('/app/node_modules/unrelated/index.js'), false)
     assert.equal(extensionlessPath.test('/app/node_modules/ioredis/runner'), true)
     assert.equal(extensionlessPath.test('/app/node_modules/ioredis/runner.js'), false)
@@ -113,40 +113,68 @@ describe('withDatadogTurbopack', () => {
     assert.strictEqual(repeated, configured)
 
     const legacyProject = createProject('15.5.0')
-    await assert.rejects(
-      applyConfig(legacyProject, { turbopack: { conditions: { '#dd-trace/modules': {} } } }),
+    assert.throws(
+      () => applyConfig(legacyProject, { turbopack: { conditions: { '#dd-trace/modules': {} } } }),
       /already uses the reserved condition #dd-trace\/modules/
     )
   })
 
-  it('supports object, promise, and function configs without changing the server phase', async () => {
+  it('preserves synchronous and promised configuration results without changing the server phase', async () => {
     const projectDir = createProject('16.2.0')
+    const objectInput = { object: true }
     const promisedInput = { promised: true }
     const receiver = { calls: 0 }
-    const [promised, functional, undefinedConfig] = withProjectDirectory(projectDir, () => [
-      withDatadogTurbopack(Promise.resolve(promisedInput)),
-      withDatadogTurbopack(function (phase) {
-        this.calls++
-        assert.equal(phase, 'phase-production-build')
-        return { functional: true }
-      }),
-      withDatadogTurbopack(() => undefined),
-    ])
+    const [objectConfig, promised, functional, undefinedConfig, promisedUndefinedConfig] = withProjectDirectory(
+      projectDir,
+      () => [
+        withDatadogTurbopack(objectInput),
+        withDatadogTurbopack(Promise.resolve(promisedInput)),
+        withDatadogTurbopack(function (phase) {
+          this.calls++
+          assert.equal(phase, 'phase-production-build')
+          return { functional: true }
+        }),
+        withDatadogTurbopack(() => undefined),
+        withDatadogTurbopack(Promise.resolve(undefined)),
+      ]
+    )
 
-    const [promisedResult, functionalResult, undefinedResult] = await Promise.all([
-      promised('phase-production-build'),
-      functional.call(receiver, 'phase-production-build'),
-      undefinedConfig('phase-production-build'),
-    ])
+    const objectResult = objectConfig('phase-production-build')
+    const functionalResult = functional.call(receiver, 'phase-production-build')
+    const undefinedResult = undefinedConfig('phase-production-build')
+    const promisedResult = promised('phase-production-build')
+    const promisedUndefinedResult = promisedUndefinedConfig('phase-production-build')
+
+    assert.equal(typeof objectResult.then, 'undefined')
+    assert.equal(objectResult.object, true)
+    assert.ok(objectResult.turbopack.rules['*.js'])
+    assert.equal(typeof functionalResult.then, 'undefined')
+    assert.equal(receiver.calls, 1)
+    assert.equal(functionalResult.functional, true)
+    assert.equal(typeof undefinedResult.then, 'undefined')
+    assert.ok(undefinedResult.turbopack.rules['*.js'])
+    assert.equal(typeof promisedResult.then, 'function')
+    assert.equal(typeof promisedUndefinedResult.then, 'function')
+
+    const [resolvedPromised, resolvedUndefined] = await Promise.all([promisedResult, promisedUndefinedResult])
+    assert.equal(resolvedPromised.promised, true)
+    assert.ok(resolvedPromised.turbopack.rules['*.js'])
+    assert.ok(resolvedUndefined.turbopack.rules['*.js'])
+
     const serverInput = { server: true }
     const serverConfig = withProjectDirectory(projectDir, () => withDatadogTurbopack(serverInput))
 
-    assert.equal(promisedResult.promised, true)
-    assert.ok(promisedResult.turbopack.rules['*.js'])
-    assert.equal(receiver.calls, 1)
-    assert.equal(functionalResult.functional, true)
-    assert.ok(undefinedResult.turbopack.rules['*.js'])
-    assert.strictEqual(await serverConfig('phase-production-server'), serverInput)
+    assert.strictEqual(serverConfig('phase-production-server'), serverInput)
+  })
+
+  it('preserves synchronous configuration errors', () => {
+    const projectDir = createProject('16.2.0')
+    const error = new Error('config failed')
+    const wrapped = withProjectDirectory(projectDir, () => withDatadogTurbopack(() => {
+      throw error
+    }))
+
+    assert.throws(() => wrapped('phase-production-build'), error)
   })
 
   it('validates config shapes and the supported Next.js boundary', async () => {
@@ -160,13 +188,30 @@ describe('withDatadogTurbopack', () => {
     ]
 
     for (const value of invalid) {
-      await assert.rejects(applyConfig(projectDir, value), TypeError)
+      assert.throws(() => applyConfig(projectDir, value), TypeError)
     }
+    await assert.rejects(applyConfig(projectDir, Promise.resolve(false)), TypeError)
 
     const unsupportedProject = createProject('15.4.9')
     assert.throws(
       () => withProjectDirectory(unsupportedProject, () => withDatadogTurbopack({})),
       /requires Next\.js 15\.5 or newer; found 15\.4\.9/
+    )
+  })
+
+  it('reports missing and malformed Next.js installations', () => {
+    const missingProject = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-turbopack-'))
+    directories.push(missingProject)
+
+    assert.throws(
+      () => withProjectDirectory(missingProject, () => withDatadogTurbopack({})),
+      /could not resolve the active Next\.js installation/
+    )
+
+    const malformedProject = createProject('canary')
+    assert.throws(
+      () => withProjectDirectory(malformedProject, () => withDatadogTurbopack({})),
+      /could not parse Next\.js version canary/
     )
   })
 
@@ -197,7 +242,7 @@ function createProject (version) {
 /**
  * @param {string} projectDir
  * @param {unknown} input
- * @returns {Promise<object>}
+ * @returns {object|Promise<object>}
  */
 function applyConfig (projectDir, input) {
   const wrapped = withProjectDirectory(projectDir, () => withDatadogTurbopack(input))

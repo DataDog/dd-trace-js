@@ -214,6 +214,51 @@ describe('Turbopack loader', () => {
     sinon.assert.calledOnceWithExactly(hook)
   })
 
+  it('resolves a package root when its exports map hides the package entrypoint', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'hidden-entrypoint-package', {
+      exports: {},
+      main: 'index.js',
+      version: '1.0.0',
+    })
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'index.js', source)
+    const instrumentations = {}
+    const hook = sinon.stub().callsFake(() => {
+      instrumentations['hidden-entrypoint-package'] = [{ hook: sinon.stub(), versions: ['1'] }]
+    })
+    const { loader } = loadLoader({ hooks: { 'hidden-entrypoint-package': hook }, instrumentations })
+
+    const result = runLoader(loader, resourcePath, source)
+
+    assert.match(result.code, /package: "hidden-entrypoint-package"/)
+    assert.match(result.code, /path: "hidden-entrypoint-package"/)
+    sinon.assert.calledOnceWithExactly(hook)
+  })
+
+  it('prefixes diagnostic-channel imports resolved below the instrumented module', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'relative-import-package', {
+      main: 'index.js',
+      version: '1.0.0',
+    })
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'index.js', source)
+    const instrumentations = {}
+    const hook = sinon.stub().callsFake(() => {
+      instrumentations['relative-import-package'] = [{ hook: sinon.stub(), versions: ['1'] }]
+    })
+    const { loader } = loadLoader({
+      hooks: { 'relative-import-package': hook },
+      instrumentations,
+      relativePath: 'dependencies/dc-polyfill.js',
+    })
+
+    const result = runLoader(loader, resourcePath, source)
+
+    assert.match(result.code, /require\("\.\/dependencies\/dc-polyfill\.js"\)/)
+  })
+
   it('uses the innermost package for nested dependencies', () => {
     const projectDir = createProject()
     const outerPackageDir = createPackage(projectDir, 'outer-package', { version: '1.0.0' })
@@ -260,10 +305,14 @@ describe('Turbopack loader', () => {
     )
     const javascript = runLoader(loader, javascriptPath, fs.readFileSync(javascriptPath, 'utf8'))
     const marked = runLoader(loader, markedPath, fs.readFileSync(markedPath, 'utf8'))
-    const error = runFailedLoader(
+    const emitWarning = sinon.spy()
+    const missingSource = 'module.exports = false\n'
+    const missing = runLoader(
       loader,
       path.join(packageDir, 'missing.__dd_trace_turbopack.js'),
-      'module.exports = false\n'
+      missingSource,
+      undefined,
+      emitWarning
     )
 
     assert.match(result.code, /package: "extensionless-package"/)
@@ -271,7 +320,55 @@ describe('Turbopack loader', () => {
     assert.match(result.code, /version: "3\.0\.0"/)
     assert.equal(javascript.code, 'module.exports = true\n')
     assert.equal(marked.code, 'module.exports = "marked"\n')
-    assert.equal(error.code, 'ENOENT')
+    assert.equal(missing.code, missingSource)
+    assert.equal(missing.sourceMap, undefined)
+    sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.has('code', 'ENOENT'))
+  })
+
+  it('ignores rewrite targets without an activation hook', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'rewrite-only-package', { version: '1.0.0' })
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'index.js', source)
+    const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: undefined })
+    const rewriteTarget = { filePath: 'index.js', moduleName: 'rewrite-only-package' }
+    const { loader, rewriteFactory } = loadLoader({
+      hooks: {},
+      instrumentations: {},
+      rewrite,
+      rewriteTarget: () => rewriteTarget,
+    })
+
+    const result = runLoader(loader, resourcePath, source)
+
+    assert.equal(result.code, source)
+    sinon.assert.notCalled(rewrite)
+    sinon.assert.notCalled(rewriteFactory)
+  })
+
+  it('fails open when a supported rewrite target has no package metadata', () => {
+    const projectDir = createProject()
+    const packageDir = path.join(projectDir, 'node_modules/metadata-less-package')
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'index.js', source)
+    const sourceMap = { mappings: 'AAAA', version: 3 }
+    const rewrite = sinon.stub()
+    const emitWarning = sinon.spy()
+    const rewriteTarget = { filePath: 'index.js', moduleName: 'metadata-less-package' }
+    const { loader, rewriteFactory } = loadLoader({
+      hooks: { 'metadata-less-package': sinon.stub() },
+      instrumentations: {},
+      rewrite,
+      rewriteTarget: () => rewriteTarget,
+    })
+
+    const result = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
+
+    assert.equal(result.code, source)
+    assert.strictEqual(result.sourceMap, sourceMap)
+    sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.has('code', 'ENOENT'))
+    sinon.assert.notCalled(rewrite)
+    sinon.assert.notCalled(rewriteFactory)
   })
 
   it('rewrites an ESM target and appends subscriber-gated activation', async () => {
@@ -295,7 +392,6 @@ describe('Turbopack loader', () => {
       instrumentations: {},
       rewrite,
       rewriteTarget: path => path === normalizedResourcePath ? rewriteTarget : undefined,
-      rewriteTargets: { 'rewrite-package/dist/index.mjs': 'rewrite-package' },
     })
 
     const result = runLoader(loader, resourcePath, fs.readFileSync(resourcePath, 'utf8'), sourceMap)
@@ -333,7 +429,6 @@ describe('Turbopack loader', () => {
       instrumentations: {},
       rewrite,
       rewriteTarget: () => rewriteTarget,
-      rewriteTargets: { 'rewrite-package/index.js': 'rewrite-package' },
     })
 
     const result = runLoader(loader, resourcePath, fs.readFileSync(resourcePath, 'utf8'))
@@ -365,7 +460,6 @@ describe('Turbopack loader', () => {
       instrumentations: publishedInstrumentations,
       rewrite: publishedRewrite,
       rewriteTarget: () => publishedTarget,
-      rewriteTargets: { 'published-rewrite-package/dist/index.js': 'published-rewrite-package' },
     })
 
     const published = runLoader(publishedLoader, publishedPath, fs.readFileSync(publishedPath, 'utf8'))
@@ -398,7 +492,6 @@ describe('Turbopack loader', () => {
       instrumentations: {},
       rewrite,
       rewriteTarget: () => rewriteTarget,
-      rewriteTargets: { 'unsafe-rewrite-package/index.js': 'unsafe-rewrite-package' },
     })
 
     const result = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
@@ -419,7 +512,7 @@ describe('Turbopack loader', () => {
     )
   })
 
-  it('preserves irrelevant resources and fails builds for known target errors', () => {
+  it('preserves irrelevant resources and fails open for package metadata errors', () => {
     const projectDir = createProject()
     const unrelatedDir = createPackage(projectDir, 'unrelated', { version: '1.0.0' })
     const unrelatedPath = write(unrelatedDir, 'index.js', 'module.exports = true\n')
@@ -432,14 +525,43 @@ describe('Turbopack loader', () => {
       hooks: { 'broken-package': hook },
       instrumentations: {},
     })
+    const emitWarning = sinon.spy()
 
     const unrelated = runLoader(loader, unrelatedPath, fs.readFileSync(unrelatedPath, 'utf8'), sourceMap)
-    const error = runFailedLoader(loader, brokenPath, fs.readFileSync(brokenPath, 'utf8'), sourceMap)
+    const brokenSource = fs.readFileSync(brokenPath, 'utf8')
+    const broken = runLoader(loader, brokenPath, brokenSource, sourceMap, emitWarning)
 
     assert.equal(unrelated.code, 'module.exports = true\n')
     assert.strictEqual(unrelated.sourceMap, sourceMap)
-    assert.equal(error instanceof SyntaxError, true)
+    assert.equal(broken.code, brokenSource)
+    assert.strictEqual(broken.sourceMap, sourceMap)
+    sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.instanceOf(SyntaxError))
     sinon.assert.notCalled(hook)
+    sinon.assert.notCalled(rewriteFactory)
+  })
+
+  it('normalizes non-Error activation failures and fails open', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'broken-hook-package', { version: '1.0.0' })
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'index.js', source)
+    const sourceMap = { mappings: 'AAAA', version: 3 }
+    const hook = sinon.stub().callsFake(() => throwValue('hook failed'))
+    const emitWarning = sinon.spy()
+    const { loader, rewriteFactory } = loadLoader({
+      hooks: { 'broken-hook-package': hook },
+      instrumentations: {},
+    })
+
+    const result = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
+
+    assert.equal(result.code, source)
+    assert.strictEqual(result.sourceMap, sourceMap)
+    sinon.assert.calledOnceWithExactly(
+      emitWarning,
+      sinon.match(value => value instanceof Error && value.message === 'hook failed')
+    )
+    sinon.assert.calledOnceWithExactly(hook)
     sinon.assert.notCalled(rewriteFactory)
   })
 })
@@ -448,18 +570,18 @@ describe('Turbopack loader', () => {
  * @param {{
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, object[]>,
+ *   relativePath?: string,
  *   rewrite?: Function,
- *   rewriteTarget?: (path: string) => object|undefined,
- *   rewriteTargets?: Record<string, string>
+ *   rewriteTarget?: (path: string) => object|undefined
  * }} options
  * @returns {{ loader: Function, rewriteFactory: import('sinon').SinonStub }}
  */
 function loadLoader ({
   hooks,
   instrumentations,
+  relativePath,
   rewrite = sinon.stub().callsFake((source, _path, _format, _target, map) => ({ code: source, map })),
   rewriteTarget = () => undefined,
-  rewriteTargets = {},
 }) {
   const originalRequire = Module.prototype.require
   const rewriteFactory = sinon.stub().returns(rewrite)
@@ -470,7 +592,7 @@ function loadLoader ({
         '../../datadog-instrumentations/src/helpers/instrumentations': instrumentations,
         '../../datadog-instrumentations/src/helpers/rewriter': { createBundlerRewriter: rewriteFactory },
         '../../datadog-instrumentations/src/helpers/rewriter/targets': { getRewriteTarget: rewriteTarget },
-        '../../datadog-instrumentations/src/helpers/rewriter/targets.json': rewriteTargets,
+        'node:path': relativePath ? { ...path, relative: () => relativePath } : path,
       }
       if (stubs[request]) return stubs[request]
     }
@@ -499,18 +621,10 @@ function runLoader (loader, resourcePath, source, sourceMap, emitWarning) {
 }
 
 /**
- * @param {Function} loader
- * @param {string} resourcePath
- * @param {string} source
- * @param {object} [sourceMap]
- * @returns {Error}
+ * @param {unknown} value
  */
-function runFailedLoader (loader, resourcePath, source, sourceMap) {
-  const callback = sinon.spy()
-  loader.call({ callback, resourcePath }, source, sourceMap)
-  sinon.assert.calledOnce(callback)
-  sinon.assert.calledWithExactly(callback, sinon.match.instanceOf(Error))
-  return callback.firstCall.args[0]
+function throwValue (value) {
+  throw value
 }
 
 /**
