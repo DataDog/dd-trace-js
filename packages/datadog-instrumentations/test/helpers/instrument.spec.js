@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const { storage } = require('../../../datadog-core')
 const { addHook, AsyncResource, channel, createErrorPublisher, getHooks } = require('../../src/helpers/instrument')
 const instrumentations = require('../../src/helpers/instrumentations')
+const rewriterInstrumentations = require('../../src/helpers/rewriter/instrumentations')
 
 describe('helpers/instrument', () => {
   it('marks source-rewrite hooks with their original file path', () => {
@@ -31,6 +32,75 @@ describe('helpers/instrument', () => {
         delete instrumentations.ai
       }
     }
+  })
+
+  describe('getHooks', () => {
+    it('returns one hook per distinct module, not per rewriter transform', () => {
+      // mercurius is instrumented by three transforms that all share one
+      // module definition, so only one hook may come back.
+      const hooks = getHooks('mercurius')
+
+      assert.deepStrictEqual(hooks, [{ name: 'mercurius', versions: ['>=13'], file: 'index.js' }])
+    })
+
+    it('never repeats a hook across the whole rewriter instrumentation list', () => {
+      const moduleNames = new Set(rewriterInstrumentations.map(inst => inst.module.name))
+
+      for (const name of moduleNames) {
+        const seen = new Set()
+        for (const { versions, file } of getHooks(name)) {
+          const key = `${file}|${versions.join(',')}`
+          assert.ok(!seen.has(key), `duplicate hook for ${name}: ${key}`)
+          seen.add(key)
+        }
+      }
+    })
+
+    it('keeps distinct version ranges and files of the same module apart', () => {
+      // graphql is targeted through many files; each distinct (version range,
+      // file) pair stays a separate hook even after deduplication.
+      const pairs = new Set(getHooks('graphql').map(({ versions, file }) => `${versions.join(',')}|${file}`))
+      const expectedPairs = new Set(
+        rewriterInstrumentations
+          .filter(({ module }) => module.name === 'graphql')
+          .map(({ module: { versionRange, filePath } }) => `${versionRange}|${filePath}`)
+      )
+
+      assert.strictEqual(pairs.size, expectedPairs.size)
+      assert.strictEqual(pairs.size, getHooks('graphql').length)
+    })
+
+    it('hands out fresh hook objects so caller mutations cannot leak between calls', () => {
+      // the ai, claude-agent-sdk and aws-durable-execution-sdk-js plugins set
+      // `hook.file = null` before registering; the hooks (and their versions
+      // arrays) must not be shared cached objects or such a mutation would
+      // corrupt every later getHooks call in the same process.
+      const pristine = getHooks('ai')
+      const mutated = getHooks('ai')
+      for (const hook of mutated) {
+        hook.file = null
+        hook.versions.push('mutated')
+      }
+
+      assert.deepStrictEqual(getHooks('ai'), pristine)
+      assert.notStrictEqual(getHooks('ai')[0], mutated[0])
+      assert.notStrictEqual(getHooks('ai')[0].versions, mutated[0].versions)
+    })
+
+    it('combines names, ignores repeats, and answers unknown names with an empty list', () => {
+      const mercurius = getHooks('mercurius')
+      const bullmq = getHooks('bullmq')
+
+      // Combined results keep the rewriter list order (as on master) rather
+      // than request order, and contain exactly the single-name results.
+      const combined = getHooks(['mercurius', 'bullmq'])
+      const key = ({ name, versions, file }) => `${name}|${versions.join(',')}|${file}`
+      assert.deepStrictEqual(combined, getHooks(['bullmq', 'mercurius']))
+      assert.deepStrictEqual(combined.map(key).sort(), [...mercurius, ...bullmq].map(key).sort())
+      assert.deepStrictEqual(getHooks(['mercurius', 'mercurius']), mercurius)
+      assert.deepStrictEqual(getHooks('nope-not-a-module'), [])
+      assert.deepStrictEqual(getHooks([]), [])
+    })
   })
 
   describe('createErrorPublisher', () => {

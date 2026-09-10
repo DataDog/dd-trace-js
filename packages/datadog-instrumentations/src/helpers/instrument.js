@@ -76,17 +76,36 @@ exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
   }
 }
 
+// The rewriter instrumentation list holds one entry per *transform*, so a
+// module with several transforms repeats its module definition several times
+// (mercurius defines 3, graphql 26). A hook only cares about the module, not
+// the transform, so duplicates would push the same (versionRange, filePath)
+// registration through `addHook` once per transform and have shimmer patch the
+// same file several times. `getHooks` therefore deduplicates on the way out,
+// in the single pass it already makes over the list.
+//
+// Callers hit this helper once per module name, lazily, from the integration
+// files that `helpers/register.js` only runs when the user's package actually
+// loads - so there is no hot loop to optimize and no eager index to build; the
+// dedupe must simply be free where the work already happens.
 exports.getHooks = function getHooks (names) {
-  names = [names].flat()
-
-  return rewriterInstrumentations
-    .map(inst => inst.module)
-    .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => {
-      const hook = { file: filePath, name, versions: [versionRange] }
-      sourceRewritePaths.set(hook, filePath)
-      return hook
-    })
+  const requested = new Set([names].flat())
+  const seen = new Set()
+  const hooks = []
+  for (const { module } of rewriterInstrumentations) {
+    if (!requested.has(module.name)) continue
+    const key = `${module.versionRange}|${module.filePath}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    // Fresh objects, including the versions array: callers may adjust a hook
+    // for their own registration (the ai, claude-agent-sdk and
+    // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
+    // not leak into any other call.
+    const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
+    sourceRewritePaths.set(hook, module.filePath)
+    hooks.push(hook)
+  }
+  return hooks
 }
 
 /**
