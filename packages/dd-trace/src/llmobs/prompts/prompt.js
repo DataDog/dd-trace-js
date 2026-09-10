@@ -3,11 +3,11 @@
 const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
 
 function isMessage (value) {
-  return value && typeof value === 'object' && typeof value.role === 'string' && typeof value.content === 'string'
+  return typeof value?.role === 'string' && typeof value?.content === 'string'
 }
 
 function isPlaceholder (value) {
-  return value && typeof value === 'object' && value.type === 'placeholder' && typeof value.name === 'string'
+  return value?.type === 'placeholder' && typeof value?.name === 'string'
 }
 
 function render (template, variables) {
