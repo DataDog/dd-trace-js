@@ -9,14 +9,14 @@
     "scan": {
       "env": {
         "SCAN": "1",
-        "CALLS": "1000000",
-        "OPERATIONS": "1000000"
+        "STARTUPS": "20000",
+        "OPERATIONS": "20000"
       }
     },
     "indexed": {
       "env": {
-        "CALLS": "1000000",
-        "OPERATIONS": "1000000"
+        "STARTUPS": "20000",
+        "OPERATIONS": "20000"
       }
     }
   }
