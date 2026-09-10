@@ -3,16 +3,14 @@
 const assert = require('node:assert/strict')
 
 const guard = require('../startup-guard')
+const { QUERIES, scanGetHooks, dedupedGetHooks } = require('./get-hooks')
 
 // Cost-of-correctness benchmark for `getHooks` in
 // packages/datadog-instrumentations/src/helpers/instrument.js, quantifying the
-// fix that dedupes rewriter hooks by (versionRange, filePath). Both
-// implementations are kept here verbatim so the bench runs standalone:
-// - scan: the pre-fix implementation - map -> filter -> map over the rewriter
-//   list, returning one hook per transform (duplicates included).
-// - deduped: the fixed implementation - one pass over the list that skips
-//   transforms whose (versionRange, filePath) was already emitted and answers
-//   the requested names through a Set instead of a per-entry includes scan.
+// fix that dedupes rewriter hooks by (versionRange, filePath). The two
+// implementations live in ./get-hooks.js (see its header), and ./validate.js
+// runs as a sirun `setup` command that gates their equivalence outside the
+// measured process.
 //
 // The workload models what production actually does. `getHooks` is called
 // once per module name, lazily, from integration files that
@@ -22,6 +20,15 @@ const guard = require('../startup-guard')
 // optimize and no startup cost to charge against lookup savings: the
 // question this bench answers is how much the dedupe costs (or saves) per
 // startup, at the real query count.
+//
+// Production call sites never stop at the hook count either - each one
+// registers every returned hook through `addHook` (for example
+// azure-cosmos.js: `for (const hook of getHooks('@azure/cosmos'))
+// addHook(hook, exports => exports)`). The registration pass is modeled
+// here on purpose: the scan variant resolves 144 hooks per startup where
+// the deduped variant resolves 66, so the per-hook registration work is a
+// real part of what the dedupe saves in production, and leaving it out would
+// bias the comparison toward the scan variant.
 //
 // Variants (see meta.json):
 // - *-cold: one simulated startup through the measured window per process -
@@ -34,58 +41,25 @@ const guard = require('../startup-guard')
 const STARTUPS = Number(process.env.STARTUPS) || 20000
 const SCAN = Number(process.env.SCAN)
 
-const rewriterInstrumentations =
-  require('../../../packages/datadog-instrumentations/src/helpers/rewriter/instrumentations')
-
-// The 13 queries that exist in the repo, one per getHooks call site:
-// ai.js, langchain.js, mercurius.js, bullmq.js, modelcontextprotocol-sdk.js,
-// openai-agents.js, langgraph.js, aws-durable-execution-sdk-js.js,
-// azure-cosmos.js, claude-agent-sdk.js and the three from graphql.js.
-const QUERIES = [
-  'ai',
-  '@langchain/core',
-  'mercurius',
-  'bullmq',
-  '@modelcontextprotocol/sdk',
-  '@openai/agents-openai',
-  '@langchain/langgraph',
-  '@aws/durable-execution-sdk-js',
-  '@azure/cosmos',
-  '@anthropic-ai/claude-agent-sdk',
-  'graphql',
-  '@graphql-tools/executor',
-  'graphql-jit',
-]
-
-function scanGetHooks (names) {
-  names = [names].flat()
-
-  return rewriterInstrumentations
-    .map(inst => inst.module)
-    .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
-}
-
-function dedupedGetHooks (names) {
-  const requested = new Set([names].flat())
-  const seen = new Set()
-  const hooks = []
-  for (const { module } of rewriterInstrumentations) {
-    if (!requested.has(module.name)) continue
-    const key = `${module.versionRange}|${module.filePath}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    hooks.push({ name: module.name, versions: [module.versionRange], file: module.filePath })
-  }
-  return hooks
-}
-
 // One simulated startup: resolve the hooks every lazy integration resolves
-// when its user package loads.
+// when its user package loads, and register each one - an addHook-style
+// push of { versions, file, hook } into a per-startup instrumentations map,
+// one closure per hook, as every integration file does.
 function resolveStartup () {
   const getHooks = SCAN ? scanGetHooks : dedupedGetHooks
+  const instrumentations = new Map()
   let hooks = 0
-  for (const name of QUERIES) hooks += getHooks(name).length
+  for (const name of QUERIES) {
+    for (const { versions, file } of getHooks(name)) {
+      hooks++
+      let byName = instrumentations.get(name)
+      if (!byName) {
+        byName = []
+        instrumentations.set(name, byName)
+      }
+      byName.push({ versions, file, hook: exports => exports })
+    }
+  }
   return hooks
 }
 
@@ -100,21 +74,3 @@ for (let i = 0; i < STARTUPS; i++) {
 guard.done(STARTUPS > 1 ? 0.15 : 1)
 
 assert.ok(sink > 0, 'benchmark did no work')
-
-// The deduped variant must answer exactly the distinct hooks of the scan
-// variant, or the two are not measuring the same workload. The counts differ
-// on purpose: the scan variant resolves 144 hook objects per startup (one
-// per transform), the deduped variant 66 (one per distinct
-// (versionRange, filePath) pair).
-//
-// This validates AFTER the measured window, on purpose: the cold variants
-// must put a genuinely first execution of both implementations through the
-// window, and pre-flight assertions would warm the functions and the
-// instrumentation data in every fresh process - turning the "cold" pass into
-// each function's fourteenth invocation. A mismatch still fails the process.
-for (const name of QUERIES) {
-  const scanned = scanGetHooks(name)
-  const byKey = new Map(scanned.map(hook => [`${hook.versions[0]}|${hook.file}`, hook]))
-  const uniqueScanned = [...byKey.values()].map(({ name, versions, file }) => ({ name, versions, file }))
-  assert.deepStrictEqual(uniqueScanned, dedupedGetHooks(name))
-}
