@@ -110,6 +110,7 @@ const ENV_NAMES = [
   'RUNFILES_DIR',
   'RUNFILES_MANIFEST_FILE',
   'TEST_SRCDIR',
+  'DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE',
 ]
 
 function writeCacheLayout (root, options = {}) {
@@ -134,6 +135,14 @@ function writeHttpCacheFile (root, fileName, payload) {
   const filePath = path.join(root, '.testoptimization', 'cache', 'http', fileName)
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(filePath, typeof payload === 'string' ? payload : JSON.stringify(payload))
+  return filePath
+}
+
+function writePreSkippedSuitesArtifact (root, payload) {
+  const filePath = path.join(root, '.testoptimization', 'runner', 'tia-skipped-test-suites', 'runner-0.json')
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, typeof payload === 'string' ? payload : JSON.stringify(payload))
+  process.env.DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE = filePath
   return filePath
 }
 
@@ -306,6 +315,30 @@ describe('test-optimization-http-cache', () => {
     assert.strictEqual(cache.readKnownTests(), CACHE_MISS)
     assert.strictEqual(cache.readSkippableSuites(), CACHE_MISS)
     assert.strictEqual(cache.readTestManagementTests(), CACHE_MISS)
+  })
+
+  it('reads and deduplicates pre-skipped suites without requiring an HTTP cache', () => {
+    writePreSkippedSuitesArtifact(tmpRoot, {
+      version: 1,
+      test_suites: ['suite1.spec.js', 'suite2.spec.js', 'suite1.spec.js'],
+    })
+
+    const cache = new TestOptimizationHttpCache()
+
+    assert.deepStrictEqual(cache.readPreSkippedSuites(), ['suite1.spec.js', 'suite2.spec.js'])
+  })
+
+  it('returns cache miss for missing or malformed pre-skipped suite artifacts', () => {
+    const cacheWithoutArtifact = new TestOptimizationHttpCache()
+    assert.strictEqual(cacheWithoutArtifact.readPreSkippedSuites(), CACHE_MISS)
+
+    writePreSkippedSuitesArtifact(tmpRoot, { version: 2, test_suites: ['suite1.spec.js'] })
+    const cacheWithWrongVersion = new TestOptimizationHttpCache()
+    assert.strictEqual(cacheWithWrongVersion.readPreSkippedSuites(), CACHE_MISS)
+
+    writePreSkippedSuitesArtifact(tmpRoot, { version: 1, test_suites: [42] })
+    const cacheWithInvalidSuite = new TestOptimizationHttpCache()
+    assert.strictEqual(cacheWithInvalidSuite.readPreSkippedSuites(), CACHE_MISS)
   })
 
   it('returns cache miss for invalid cache files', () => {

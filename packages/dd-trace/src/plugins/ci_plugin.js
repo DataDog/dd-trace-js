@@ -261,7 +261,7 @@ module.exports = class CiPlugin extends Plugin {
           isCoverageReportUploadEnabled: this.libraryConfig?.isCoverageReportUploadEnabled,
           isLineCoverageSupported: this.constructor.id !== 'vitest',
         },
-        (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage) => {
+        (err, skippableSuites, itrCorrelationId, skippableSuitesCoverage, preSkippedSuites) => {
           if (err) {
             log.error('Skippable suites could not be fetched. %s', err.message)
             this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, err)
@@ -269,7 +269,7 @@ module.exports = class CiPlugin extends Plugin {
             this.itrCorrelationId = itrCorrelationId
             this.skippableSuitesCoverage = skippableSuitesCoverage
           }
-          onDone({ err, skippableSuites, itrCorrelationId, skippableSuitesCoverage })
+          onDone({ err, skippableSuites, itrCorrelationId, skippableSuitesCoverage, preSkippedSuites })
         }
       )
     })

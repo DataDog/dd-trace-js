@@ -751,6 +751,77 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('reports suites pre-skipped by ddtest without loading them in Jest', (done) => {
+      const skippedSuite = 'ci-visibility/test/ci-visibility-test.js'
+      const runnableSuite = 'ci-visibility/test/ci-visibility-test-2.js'
+      const itrCorrelationId = 'ddtest-correlation-id'
+      const artifactPath = path.join(
+        cwd,
+        '.testoptimization',
+        'runner',
+        'tia-skipped-test-suites',
+        'runner-0.json'
+      )
+      fs.mkdirSync(path.dirname(artifactPath), { recursive: true })
+      fs.writeFileSync(artifactPath, JSON.stringify({
+        version: 1,
+        test_suites: [skippedSuite],
+      }))
+
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: false,
+        tests_skipping: true,
+      })
+      receiver.setItrCorrelationId(itrCorrelationId)
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: { suite: skippedSuite },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuites = events
+            .filter(event => event.type === 'test_suite_end')
+            .map(event => event.content)
+          const skippedTestSuite = testSuites.find(
+            testSuite => testSuite.resource === `test_suite.${skippedSuite}`
+          )
+          const runnableTestSuite = testSuites.find(
+            testSuite => testSuite.resource === `test_suite.${runnableSuite}`
+          )
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testsFromPreSkippedSuite = events
+            .filter(event => event.type === 'test')
+            .filter(event => event.content.meta[TEST_SUITE] === skippedSuite)
+
+          assert.ok(skippedTestSuite)
+          assert.ok(runnableTestSuite)
+          assert.strictEqual(skippedTestSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTestSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+          assert.strictEqual(skippedTestSuite.itr_correlation_id, itrCorrelationId)
+          assert.strictEqual(testsFromPreSkippedSuite.length, 0)
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        }, 25000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE: artifactPath,
+            TESTS_TO_RUN: 'ci-visibility/test/ci-visibility-test-2.js',
+          },
+        }
+      )
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => done()).catch(done)
+      })
+    })
+
     it('works with multi project setup and test skipping', async () => {
       const projects = ['standard', 'node'].map(displayName => ({
         displayName,

@@ -302,6 +302,10 @@ class CiVisibilityExporter extends BufferingExporter {
       return callback(null, [])
     }
     const requestConfiguration = this.getRequestConfiguration(testConfiguration)
+    const cachedPreSkippedSuites = this._testOptimizationHttpCache.readPreSkippedSuites?.()
+    const preSkippedSuites = cachedPreSkippedSuites === CACHE_MISS || cachedPreSkippedSuites === undefined
+      ? []
+      : cachedPreSkippedSuites
     const cachedSkippableSuites = this._testOptimizationHttpCache.readSkippableSuites({
       testLevel: requestConfiguration.testLevel,
       isCoverageReportUploadEnabled: requestConfiguration.isCoverageReportUploadEnabled,
@@ -309,7 +313,7 @@ class CiVisibilityExporter extends BufferingExporter {
     })
     if (cachedSkippableSuites !== CACHE_MISS) {
       const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
-      return callback(null, skippableSuites, correlationId, coverage)
+      return callback(null, skippableSuites, correlationId, coverage, preSkippedSuites)
     }
     if (this._isTestOptimizationCacheOnly) {
       return callback(this._getCacheOnlyError('skippable tests'), [])
@@ -319,7 +323,9 @@ class CiVisibilityExporter extends BufferingExporter {
       if (gitUploadError) {
         return callback(gitUploadError, [])
       }
-      getSkippableSuitesRequest(requestConfiguration, callback)
+      getSkippableSuitesRequest(requestConfiguration, (err, skippableSuites, correlationId, coverage) => {
+        callback(err, skippableSuites, correlationId, coverage, preSkippedSuites)
+      })
     })
   }
 

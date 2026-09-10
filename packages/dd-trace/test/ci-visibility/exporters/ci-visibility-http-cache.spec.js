@@ -135,6 +135,13 @@ function writeCacheLayout (root, options = {}) {
   }
 }
 
+function writePreSkippedSuitesArtifact (root, testSuites) {
+  const filePath = path.join(root, '.testoptimization', 'runner', 'tia-skipped-test-suites', 'runner-0.json')
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.writeFileSync(filePath, JSON.stringify({ version: 1, test_suites: testSuites }))
+  process.env.DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE = filePath
+}
+
 function loadCiVisibilityExporterWithGitUpload (sendGitMetadata) {
   const Exporter = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
     './git/git_metadata': {
@@ -149,16 +156,19 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
   let previousCwd
   let previousSettingsCachePath
+  let previousPreSkippedSuitesFile
   let tmpRoot
 
   beforeEach(() => {
     previousCwd = process.cwd()
     previousSettingsCachePath = process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
+    previousPreSkippedSuitesFile = process.env.DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-js-exporter-http-cache-'))
     writeCacheLayout(tmpRoot)
     process.chdir(tmpRoot)
     delete process.env.DD_API_KEY
     delete process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
+    delete process.env.DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE
     getConfig().DD_API_KEY = undefined
     nock.cleanAll()
   })
@@ -171,6 +181,11 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       delete process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
     } else {
       process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = previousSettingsCachePath
+    }
+    if (previousPreSkippedSuitesFile === undefined) {
+      delete process.env.DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE
+    } else {
+      process.env.DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE = previousPreSkippedSuitesFile
     }
     getConfig().DD_API_KEY = '1'
     nock.cleanAll()
@@ -434,6 +449,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
   })
 
   it('uses cached skippable tests without waiting on git upload', (done) => {
+    writePreSkippedSuitesArtifact(tmpRoot, ['suite1.spec.js'])
     const skippableScope = nock(url)
       .post('/api/v2/ci/tests/skippable')
       .reply(200, {})
@@ -442,11 +458,12 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
     ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
 
-    ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage) => {
+    ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage, preSkippedSuites) => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')
       assert.deepStrictEqual(coverage, { 'src/file.js': 'gA==' })
+      assert.deepStrictEqual(preSkippedSuites, ['suite1.spec.js'])
       assert.strictEqual(skippableScope.isDone(), false)
       done()
     })

@@ -41,11 +41,13 @@ const ENV_MANIFEST_FILE_ALIAS = 'DD_TEST_OPTIMIZATION_MANIFEST_FILE'
 const ENV_RUNFILES_DIR = 'RUNFILES_DIR'
 const ENV_RUNFILES_MANIFEST_FILE = 'RUNFILES_MANIFEST_FILE'
 const ENV_TEST_SRCDIR = 'TEST_SRCDIR'
+const ENV_TIA_SKIPPED_TEST_SUITES_FILE = 'DD_TEST_OPTIMIZATION_TIA_SKIPPED_TEST_SUITES_FILE'
 
 const SETTINGS_FILE_NAME = 'settings.json'
 const KNOWN_TESTS_FILE_NAME = 'known_tests.json'
 const SKIPPABLE_TESTS_FILE_NAME = 'skippable_tests.json'
 const TEST_MANAGEMENT_FILE_NAME = 'test_management.json'
+const TIA_SKIPPED_TEST_SUITES_ARTIFACT_VERSION = 1
 
 const RUNFILES_MANIFEST_SEPARATOR = ' '
 const DEFAULT_VALIDATION_MAX_FILE_BYTES = 1024 * 1024
@@ -162,6 +164,41 @@ class TestOptimizationHttpCache {
       return result
     } catch (err) {
       this._logInvalidCacheFile(SKIPPABLE_TESTS_FILE_NAME, err)
+      return CACHE_MISS
+    }
+  }
+
+  readPreSkippedSuites () {
+    const configuredPath = this._env[ENV_TIA_SKIPPED_TEST_SUITES_FILE]
+    if (!configuredPath) return CACHE_MISS
+
+    const artifactPath = path.resolve(this._cwd, this._resolveRunfilePath(configuredPath))
+    try {
+      this._assertValidationFixtureFile(artifactPath)
+      const stat = fs.statSync(artifactPath)
+      if (!stat.isFile() || stat.size > this._maxFileBytes) {
+        throw new Error('artifact must be a bounded regular file')
+      }
+
+      const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'))
+      if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact) ||
+        artifact.version !== TIA_SKIPPED_TEST_SUITES_ARTIFACT_VERSION ||
+        !Array.isArray(artifact.test_suites) ||
+        artifact.test_suites.length > DEFAULT_VALIDATION_MAX_ENTRIES) {
+        throw new Error('artifact has an invalid schema')
+      }
+
+      const uniqueSuites = new Set()
+      for (const testSuite of artifact.test_suites) {
+        if (typeof testSuite !== 'string' || testSuite.length === 0 ||
+          Buffer.byteLength(testSuite) > DEFAULT_VALIDATION_MAX_STRING_BYTES) {
+          throw new Error('artifact contains an invalid test suite')
+        }
+        uniqueSuites.add(testSuite)
+      }
+      return [...uniqueSuites]
+    } catch (err) {
+      log.debug('TIA-skipped test suites artifact %s could not be read: %s', artifactPath, err.message)
       return CACHE_MISS
     }
   }

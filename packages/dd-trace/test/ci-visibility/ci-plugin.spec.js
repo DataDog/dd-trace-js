@@ -164,6 +164,31 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnce(onDone)
   })
 
+  it('passes pre-skipped suites from the exporter to the instrumentation', () => {
+    const getSkippableSuites = sinon.stub().callsArgWith(
+      1,
+      null,
+      ['suite.js'],
+      'correlation-id',
+      undefined,
+      ['pre-skipped.js']
+    )
+    const onDone = sinon.stub()
+    const plugin = createPlugin('vitest_worker', true)
+    plugin.tracer._exporter.getSkippableSuites = getSkippableSuites
+
+    dc.channel('ci:vitest:test-suite:skippable').publish({ onDone })
+    plugin.configure(false)
+
+    sinon.assert.calledWith(onDone, {
+      err: null,
+      skippableSuites: ['suite.js'],
+      itrCorrelationId: 'correlation-id',
+      skippableSuitesCoverage: undefined,
+      preSkippedSuites: ['pre-skipped.js'],
+    })
+  })
+
   it('replaces frozen policy snapshots when dependent requests fail', () => {
     const plugin = createPlugin('vitest_worker', true)
     plugin.libraryConfig = Object.freeze({

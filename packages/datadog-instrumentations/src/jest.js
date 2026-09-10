@@ -114,6 +114,7 @@ const jestSessionState = (globalThis[JEST_SESSION_STATE] ||= {})
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
+let preSkippedSuites = []
 let skippableSuitesCoverage
 let skippedSuitesCoverage = {}
 let knownTests = {}
@@ -2587,6 +2588,7 @@ function getCoverageBackfillContexts (contexts) {
 function resetSuiteSkippingRunState () {
   isSuitesSkipped = false
   numSkippedSuites = 0
+  preSkippedSuites = []
   hasUnskippableSuites = false
   hasForcedToRunSuites = false
   hasFilteredSkippableSuites = false
@@ -3026,12 +3028,16 @@ function getCliWrapper (isNewJestVersion) {
             err,
             skippableSuites: receivedSkippableSuites,
             skippableSuitesCoverage: receivedSkippableSuitesCoverage,
+            preSkippedSuites: receivedPreSkippedSuites,
           } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
           if (err) {
             skippableSuitesCoverage = undefined
           } else {
             skippableSuites = receivedSkippableSuites
             skippableSuitesCoverage = receivedSkippableSuitesCoverage
+            const skippableSuiteSet = new Set(skippableSuites)
+            preSkippedSuites = [...new Set(receivedPreSkippedSuites || [])]
+              .filter(testSuite => skippableSuiteSet.has(testSuite))
           }
           skippedSuitesCoverage = {}
         } catch (err) {
@@ -3071,6 +3077,13 @@ function getCliWrapper (isNewJestVersion) {
         command: `jest ${processArgv}`,
         frameworkVersion: jestVersion,
       })
+
+      if (preSkippedSuites.length > 0) {
+        isSuitesSkipped = true
+        numSkippedSuites += preSkippedSuites.length
+        skippedSuitesCoverage = skippableSuitesCoverage || {}
+        itrSkippedSuitesCh.publish({ skippedSuites: preSkippedSuites, frameworkVersion: jestVersion })
+      }
 
       let result
       try {
