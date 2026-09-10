@@ -43,14 +43,11 @@ presets:
       - dd-trace-js-public-config-surfaces-013
       - dd-trace-js-production-promises-014
       - js-perf-lens-ungated-publish
-      - js-perf-pipeline-full-review
-      - js-full-skill-simple-review
       - js-coherence-comment-contradicts-code
       - js-correctness-inverted-condition
       - js-security-secret-into-log
       - js-design-bypasses-config-registration
       - js-maintainability-silent-catch
-      - js-conventions-async-in-production-path
       - js-cross-sdk-new-env-var-not-verified
     runs: 3 # 6 pairwise comparisons per selected case.
   minimum: # Cheapest AGENTS.md content check.

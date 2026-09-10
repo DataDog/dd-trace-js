@@ -22,8 +22,7 @@ file changed, and uses this directory's `default_level` (`gate`) unless `LLMVAL_
 | Path | Role |
 |---|---|
 | [`config.yaml`](./config.yaml) | Monitored instruction files, model, `--level` presets, gate policy |
-| [`suites/dd-trace-js-agent-v0.1.yaml`](./suites/dd-trace-js-agent-v0.1.yaml) | `AGENTS.md` cases (auto-discovered; do not pass this path to the CLI) |
-| [`suites/dd-apm-sdk-review.yaml`](./suites/dd-apm-sdk-review.yaml) | `dd-apm-sdk-review` skill cases (same) |
+| [`suites/dd-trace-js-agent-v0.1.yaml`](./suites/dd-trace-js-agent-v0.1.yaml) | All cases (`AGENTS.md` + skill). One file: the CLI errors if `suites/` has more than one YAML. |
 
 ## Prerequisites
 
@@ -59,11 +58,11 @@ docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
   --repo /repo --base-sha master --level full --runs 1
 
-# CI-shaped set (10 cases)
+# CI-shaped set (14 cases)
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
   --repo /repo --base-sha master --level gate --runs 1
 
-# One named case (id from suites/dd-apm-sdk-review.yaml)
+# One named case (id from suites/dd-trace-js-agent-v0.1.yaml)
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
   --repo /repo --base-sha master --case js-security-secret-into-log --runs 1
 ```
@@ -113,9 +112,9 @@ that level already selected.
 
 | Level | Cases | Default runs | Use |
 |---|---|---|---|
-| `minimum` | **1** (`js-perf-lens-ungated-publish`) | 3 | First smoke |
-| `gate` (default) | **10** listed in `config.yaml` | 5 | CI-shaped |
-| `full` | **every** case in `suites/` | 3 | Broader pass |
+| `minimum` | **1** (`dd-trace-js-package-manager-001`) | 3 | First smoke |
+| `gate` (default) | **14** listed in `config.yaml` | 3 | CI-shaped |
+| `full` | **every** case in `suites/` (20) | 3 | Broader pass |
 
 So this command runs **one** case once, not the whole suite:
 
@@ -128,7 +127,7 @@ To run every case once, use `--level full`. To run the CI set once, use `--level
 
 ### One specific case
 
-`--case` takes the `id` from [`suites/dd-apm-sdk-review.yaml`](./suites/dd-apm-sdk-review.yaml)
+`--case` takes the `id` from [`suites/dd-trace-js-agent-v0.1.yaml`](./suites/dd-trace-js-agent-v0.1.yaml)
 (e.g. `js-perf-lens-ungated-publish`, `js-security-secret-into-log`). It overrides
 the preset’s case list; `--level` still supplies default `--runs` unless you pass `--runs`.
 
