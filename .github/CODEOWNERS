@@ -385,6 +385,7 @@
 /.github/workflows/release-proposal.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/release-validate.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/stale.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
+/.github/workflows/team-freeze-guard.yml @Datadog/lang-platform-js
 /.github/workflows/update-3rdparty-licenses.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 
 /.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
