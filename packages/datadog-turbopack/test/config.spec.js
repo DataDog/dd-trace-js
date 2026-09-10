@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const fs = require('node:fs')
 const fsPromises = require('node:fs/promises')
@@ -34,6 +35,12 @@ describe('withDatadogTurbopack', () => {
     const namespace = await import(pathToFileURL(require.resolve('../../../next')).href)
 
     assert.strictEqual(namespace.withDatadogTurbopack, withDatadogTurbopack)
+  })
+
+  it('discovers TypeScript exports without native Node.js stripping', () => {
+    const runner = path.join(__dirname, 'resources/check-typescript-target-without-native-strip.js')
+
+    execFileSync(process.execPath, [runner])
   })
 
   it('uses Next 16 rule conditions and preserves existing configuration', async () => {
@@ -504,13 +511,43 @@ describe('withDatadogTurbopack', () => {
       const wrapper = proxyquire('../', { './src/targets': targets })
       const wrapped = withProjectDirectory(projectDir, () => wrapper.withDatadogTurbopack({ marker: true }))
 
-      assert.deepEqual(await wrapped('phase-production-build'), { marker: true })
+      const config = await wrapped('phase-production-build')
+      assert.equal(config.marker, true)
+      assert.ok(config.turbopack.rules['*.js'])
     }
 
     assert.deepEqual(emitWarning.args, cleanupFailures.map(({ message }) => [
       `Could not close the Turbopack instrumentation resolver: ${message}`,
       { code: 'DD_TRACE_TURBOPACK' },
     ]))
+  })
+
+  it('contains non-miss CommonJS fallback failures', async () => {
+    const projectDir = createProject()
+    const emitWarning = sinon.stub(process, 'emitWarning')
+    const resolutionMiss = Object.assign(new Error('not found'), { code: 'MODULE_NOT_FOUND' })
+    let requireResolutions = 0
+    const targets = proxyquire('../src/targets', {
+      '../../datadog-esbuild/src/resolver': {
+        createEsmResolver: () => ({
+          close: () => Promise.resolve(),
+          resolve: () => Promise.reject(resolutionMiss),
+        }),
+      },
+      'node:module': {
+        createRequire: () => ({
+          resolve: () => {
+            if (requireResolutions++ === 0) throw resolutionMiss
+            throw new Error('require fallback failed')
+          },
+        }),
+      },
+    })
+    const wrapper = proxyquire('../', { './src/targets': targets })
+    const wrapped = withProjectDirectory(projectDir, () => wrapper.withDatadogTurbopack({}))
+
+    assert.deepEqual(await wrapped('phase-production-build'), {})
+    sinon.assert.calledWithMatch(emitWarning, sinon.match(/require fallback failed/))
   })
 
   it('bounds package entry-point resolution without discarding successful targets', async () => {
@@ -778,7 +815,7 @@ describe('withDatadogTurbopack', () => {
     assert.equal(plan.targets[fs.realpathSync(differentTarget).replaceAll('\\', '/')], undefined)
   })
 
-  it('uses native import and require conditions without executing package or preload code', async () => {
+  it('uses native import and require conditions without executing package code', async () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'ioredis', {
       exports: {
@@ -788,7 +825,6 @@ describe('withDatadogTurbopack', () => {
       version: '5.0.0',
     })
     const marker = path.join(projectDir, 'executed')
-    const preload = write(projectDir, 'preload.js', `require('node:fs').writeFileSync(${JSON.stringify(marker)}, '')`)
     const importTarget = write(
       packageDir,
       'import.mjs',
@@ -799,16 +835,7 @@ describe('withDatadogTurbopack', () => {
       'require.cjs',
       `require('node:fs').writeFileSync(${JSON.stringify(marker)}, ''); module.exports = class Redis {}`
     )
-    const previousNodeOptions = process.env.NODE_OPTIONS
-    process.env.NODE_OPTIONS = `--require=${preload}`
-
-    let config
-    try {
-      config = await applyDatadogTurbopack({}, { projectDir })
-    } finally {
-      if (previousNodeOptions === undefined) delete process.env.NODE_OPTIONS
-      else process.env.NODE_OPTIONS = previousNodeOptions
-    }
+    const config = await applyDatadogTurbopack({}, { projectDir })
 
     const planPath = findDatadogLoaders(config)[0].options.manifestPath
     const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))

@@ -42,7 +42,7 @@ const warnedErrors = new Set()
 
 /**
  * @typedef {object} BuildPlan
- * @property {{ generator: string, parser: string, traverse: string }} compiler
+ * @property {{ generator: string, parser: string, transform: string, traverse: string }} compiler
  * @property {Record<string, string>} components
  * @property {string} dcPolyfill
  * @property {Array<{ path: string, sourceHash: string }>} graphDependencies
@@ -120,16 +120,6 @@ async function load (source, inputSourceMap) {
     return finishLoad(source, inputSourceMap, resourcePath, match, esm, buildContext)
   }
 
-  const changedGraphPath = findChangedDependency(plan.graphDependencies)
-  if (changedGraphPath) {
-    warnOnce(
-      this,
-      `changed:${changedGraphPath}`,
-      `Skipped changed dependency ${changedGraphPath}`
-    )
-    return finishLoad(source, inputSourceMap, resourcePath, match, esm, buildContext)
-  }
-
   const rewritten = await rewriteModuleEdges(
     source,
     inputSourceMap,
@@ -160,7 +150,8 @@ function getBuildContext (manifestPath) {
 
   const plan = /** @type {BuildPlan} */ (JSON.parse(serialized))
   if (plan?.version !== PLAN_VERSION || typeof plan.compiler?.generator !== 'string' ||
-    typeof plan.compiler.parser !== 'string' || typeof plan.compiler.traverse !== 'string' ||
+    typeof plan.compiler.parser !== 'string' || typeof plan.compiler.transform !== 'string' ||
+    typeof plan.compiler.traverse !== 'string' ||
     !plan.components || typeof plan.components !== 'object' || Array.isArray(plan.components) ||
     typeof plan.dcPolyfill !== 'string' ||
     !Array.isArray(plan.graphDependencies) ||
@@ -250,12 +241,29 @@ async function rewriteModuleEdges (
     }))
   }
   const resolvedEdges = await Promise.all(resolutions)
+  let hasResolvedTarget = false
+  for (let index = 0; index < resolvedEdges.length; index++) {
+    const resolved = resolvedEdges[index]
+    resolvedEdges[index] = resolved
+      ? findResolvedTarget(resolved, resourcePath, components, targets)
+      : undefined
+    if (resolvedEdges[index]) hasResolvedTarget = true
+  }
+
+  if (!hasResolvedTarget) return { code: source, map: inputSourceMap }
+
+  const changedGraphPath = findChangedDependency(plan.graphDependencies)
+  if (changedGraphPath) {
+    warnOnce(loaderContext, `changed:${changedGraphPath}`, `Skipped changed dependency ${changedGraphPath}`)
+    return { code: source, map: inputSourceMap }
+  }
+
   let rewritten = false
   let index = 0
   for (const edge of state.edges.values()) {
-    const resolved = resolvedEdges[index++]
-    if (resolved) {
-      rewritten = rewriteResolvedEdge(edge, resolved, resourcePath, components, targets, loaderContext) || rewritten
+    const resolvedTarget = resolvedEdges[index++]
+    if (resolvedTarget) {
+      rewritten = rewriteResolvedEdge(edge, resolvedTarget, resourcePath, loaderContext) || rewritten
     }
   }
   if (!rewritten) return { code: source, map: inputSourceMap }
@@ -367,21 +375,31 @@ const IMPORT_VISITORS = {
 }
 
 /**
- * @param {ModuleEdge} edge
  * @param {string} resolved
  * @param {string} resourcePath
  * @param {Record<string, string>} components
  * @param {Record<string, PlanTarget>} targets
+ * @returns {{ path: string, target: PlanTarget }|void}
+ */
+function findResolvedTarget (resolved, resourcePath, components, targets) {
+  const plainPath = getPlainResolvedPath(resolved)
+  if (!plainPath) return
+  const resolvedPath = fs.realpathSync(plainPath).replaceAll('\\', '/')
+  const target = targets[resolvedPath]
+  if (!target?.esm || !target.proxyPath) return
+  if (components?.[resourcePath] !== undefined && components[resourcePath] === components[resolvedPath]) return
+  return { path: resolvedPath, target }
+}
+
+/**
+ * @param {ModuleEdge} edge
+ * @param {{ path: string, target: PlanTarget }} resolvedTarget
+ * @param {string} resourcePath
  * @param {{ emitWarning?: (warning: Error) => void }} loaderContext
  * @returns {boolean}
  */
-function rewriteResolvedEdge (edge, resolved, resourcePath, components, targets, loaderContext) {
-  const plainPath = getPlainResolvedPath(resolved)
-  if (!plainPath) return false
-  const resolvedPath = fs.realpathSync(plainPath).replaceAll('\\', '/')
-  const target = targets[resolvedPath]
-  if (!target?.esm || !target.proxyPath) return false
-  if (components?.[resourcePath] !== undefined && components[resourcePath] === components[resolvedPath]) return false
+function rewriteResolvedEdge (edge, resolvedTarget, resourcePath, loaderContext) {
+  const { path: resolvedPath, target } = resolvedTarget
   const changedPath = findChangedSource(resolvedPath, target)
   if (changedPath) {
     warnOnce(loaderContext, `changed:${changedPath}`, `Skipped changed dependency ${changedPath}`)

@@ -35,7 +35,11 @@ function withDatadogTurbopack (nextConfig = {}) {
 /**
  * @param {object} nextConfig
  * @param {string} projectDir
- * @param {{ compiler: { generator: string, parser: string, traverse: string }, major: number, root: string }} nextInfo
+ * @param {{
+ *   compiler: { generator: string, parser: string, transform: string, traverse: string },
+ *   major: number,
+ *   root: string
+ * }} nextInfo
  * @returns {Promise<object>}
  */
 async function addDatadogConfig (nextConfig, projectDir, nextInfo) {
@@ -298,7 +302,11 @@ function hasDatadogLoader (value) {
 
 /**
  * @param {string} projectDir
- * @returns {{ compiler: { generator: string, parser: string, traverse: string }, major: number, root: string }}
+ * @returns {{
+ *   compiler: { generator: string, parser: string, transform: string, traverse: string },
+ *   major: number,
+ *   root: string
+ * }}
  */
 function getNextInfo (projectDir) {
   let version
@@ -329,6 +337,7 @@ function getNextInfo (projectDir) {
       compiler: {
         generator: appRequire.resolve('next/dist/compiled/babel/generator'),
         parser: appRequire.resolve('next/dist/compiled/babel/parser'),
+        transform: appRequire.resolve('next/dist/build/swc'),
         traverse: appRequire.resolve('next/dist/compiled/babel/traverse'),
       },
       major,

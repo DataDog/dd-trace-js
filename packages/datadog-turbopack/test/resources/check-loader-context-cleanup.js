@@ -49,7 +49,7 @@ async function main () {
         version: '5.0.0',
       }))
       const plan = {
-        compiler: { generator: '', parser: '', traverse: '' },
+        compiler: { generator: '', parser: '', transform: '', traverse: '' },
         components: {},
         dcPolyfill: require.resolve('dc-polyfill'),
         graphDependencies: [],

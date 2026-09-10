@@ -55,6 +55,19 @@ function createProject (nextVersion = '16.0.0') {
     const modulePath = require.resolve(`@babel/${name}`)
     write(next, `dist/compiled/babel/${name}.js`, `module.exports = require(${JSON.stringify(modulePath)})\n`)
   }
+  const typescriptPath = require.resolve('typescript')
+  write(next, 'dist/build/swc/index.js', [
+    `const typescript = require(${JSON.stringify(typescriptPath)})`,
+    'exports.transformSync = source => ({',
+    '  code: typescript.transpileModule(source, {',
+    '    compilerOptions: {',
+    '      module: typescript.ModuleKind.ESNext,',
+    '      target: typescript.ScriptTarget.ES2022,',
+    '    },',
+    '  }).outputText,',
+    '})',
+    '',
+  ].join('\n'))
   return directory
 }
 

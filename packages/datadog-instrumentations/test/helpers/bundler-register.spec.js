@@ -44,6 +44,7 @@ describe('bundler register', () => {
     sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-commonjs-export' })
     assert.equal(payload.module, Patched)
   })
+
   it('honors patchDefault when applying an ESM proxy update', () => {
     const Original = class Original {}
     const Patched = class Patched {}
@@ -86,6 +87,7 @@ describe('bundler register', () => {
     })
     const payload = {
       module: { Original },
+      moduleName: 'test-commonjs-export/index.js',
       package: 'test-commonjs-export',
       path: 'test-commonjs-export/index.js',
       version: '1.0.0',
@@ -126,6 +128,33 @@ describe('bundler register', () => {
     sinon.assert.notCalled(integrationHook)
   })
 
+  it('deduplicates prefixed and unprefixed built-in modules', () => {
+    const hook = sinon.stub()
+    const integrationHook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { 'node:test-node-module': hook },
+      instrumentations: {
+        'node:test-node-module': [{ hook: integrationHook }],
+      },
+    })
+
+    publish({
+      module: {},
+      package: 'test-node-module',
+      path: 'test-node-module',
+      version: '1.0.0',
+    })
+    publish({
+      module: {},
+      package: 'node:test-node-module',
+      path: 'node:test-node-module',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnce(hook)
+    sinon.assert.calledOnce(integrationHook)
+  })
+
   it('rejects unmatched paths and incompatible versions', () => {
     const integrationHook = sinon.stub()
     const { publish } = loadBundlerRegister({
@@ -162,6 +191,7 @@ describe('bundler register', () => {
 
     publish({
       module: {},
+      moduleName: 'test-pattern-hook/dist/cli-123.js',
       package: 'test-pattern-hook',
       path: 'test-pattern-hook/dist/cli-123.js',
       version: '1.0.0',
@@ -187,6 +217,7 @@ describe('bundler register', () => {
     publish({
       integration: '@prisma/client',
       module: {},
+      moduleName: name,
       package: name,
       path: name,
       version: '6.1.0',
@@ -197,6 +228,32 @@ describe('bundler register', () => {
       moduleName: './runtime/library.js',
     })
     sinon.assert.calledOnce(hook)
+  })
+
+  it('does not deduplicate relative modules as built-ins', () => {
+    const name = './runtime/library.js'
+    const hook = sinon.stub()
+    const integrationHook = sinon.stub()
+    const { publish } = loadBundlerRegister({
+      hooks: { '@prisma/client': hook },
+      instrumentations: {
+        [name]: [{ file: 'runtime/library.js', hook: integrationHook }],
+      },
+    })
+    const payload = {
+      integration: '@prisma/client',
+      module: {},
+      moduleName: name,
+      package: name,
+      path: name,
+      version: '6.1.0',
+    }
+
+    publish(payload)
+    publish(payload)
+
+    sinon.assert.calledTwice(hook)
+    sinon.assert.calledTwice(integrationHook)
   })
 
   it('disables relative hooks through their owning integration', () => {
@@ -254,51 +311,6 @@ describe('bundler register', () => {
 
     sinon.assert.notCalled(skippedHook)
     sinon.assert.calledOnce(selectedHook)
-  })
-
-  it('rejects unmatched paths and incompatible versions', () => {
-    const integrationHook = sinon.stub()
-    const { publish } = loadBundlerRegister({
-      hooks: { 'test-stale-plan': sinon.stub() },
-      instrumentations: {
-        'test-stale-plan': [{ file: 'index.js', hook: integrationHook, versions: ['>=2'] }],
-      },
-    })
-
-    publish({
-      module: {},
-      package: 'test-stale-plan',
-      path: 'test-stale-plan/other.js',
-      version: '2.0.0',
-    })
-    publish({
-      module: {},
-      package: 'test-stale-plan',
-      path: 'test-stale-plan/index.js',
-      version: '1.0.0',
-    })
-    sinon.assert.notCalled(integrationHook)
-  })
-
-  it('contains non-Error loader and instrumentation failures', () => {
-    const loadHook = sinon.stub().callsFake(() => throwValue('load failed'))
-    const integrationHook = sinon.stub().callsFake(() => throwValue('patch failed'))
-    const { log, publish } = loadBundlerRegister({
-      hooks: { 'test-hook-errors': loadHook },
-      instrumentations: {
-        'test-hook-errors': [{ hook: integrationHook }],
-      },
-    })
-
-    publish({
-      module: {},
-      package: 'test-hook-errors',
-      path: 'test-hook-errors',
-      version: '1.0.0',
-    })
-
-    sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'load failed')
-    sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
   })
 
   it('does not apply an ESM hook without the export shape it expects', () => {

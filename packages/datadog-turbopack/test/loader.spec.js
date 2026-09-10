@@ -638,6 +638,15 @@ describe('datadog-turbopack loader', () => {
     )
   })
 
+  it('rejects parsing failures for matched ESM targets', async () => {
+    const fixture = await createAiFixture()
+
+    await assert.rejects(
+      runLoader(fixture.targetPath, 'import {', fixture.packageOptions),
+      { name: 'SyntaxError' }
+    )
+  })
+
   it('accepts CommonJS wrapper returns with legacy parser options', async () => {
     const fixture = await createAiFixture()
     const appPath = write(fixture.projectDir, 'app/optional.js', '')
@@ -729,6 +738,24 @@ describe('datadog-turbopack loader', () => {
 
     assert.equal(result, source)
     assert.deepEqual(requests.sort(), [relativeTarget, 'ai'].sort())
+  })
+
+  it('does not scan graph dependencies for edges without a planned proxy', async () => {
+    const fixture = await createAiFixture()
+    const appPath = write(fixture.projectDir, 'app/unplanned-edge.js', '')
+    const unplannedPath = write(fixture.projectDir, 'app/unplanned-target.js', 'export const value = true\n')
+    const plan = JSON.parse(fs.readFileSync(fixture.importOptions.manifestPath, 'utf8'))
+    const statSync = sinon.spy(fs, 'statSync')
+    const source = "import { value } from './unplanned-target.js'\n"
+
+    const result = await runLoader(appPath, source, fixture.importOptions, {
+      getResolve: () => (_directory, _request, callback) => callback(undefined, unplannedPath),
+    })
+
+    assert.equal(result, source)
+    for (const dependency of plan.graphDependencies) {
+      assert.equal(statSync.withArgs(dependency.path).callCount, 0)
+    }
   })
 
   it('rejects invalid successful resolver paths', async () => {

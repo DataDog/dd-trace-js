@@ -53,7 +53,7 @@ async function main () {
       }
     }
     const serialized = JSON.stringify({
-      compiler: { generator: '', parser: '', traverse: '' },
+      compiler: { generator: '', parser: '', transform: '', traverse: '' },
       components: {},
       dcPolyfill: require.resolve('dc-polyfill'),
       graphDependencies: [],

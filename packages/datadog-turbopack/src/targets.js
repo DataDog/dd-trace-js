@@ -3,6 +3,7 @@
 const { createHash, randomUUID } = require('node:crypto')
 const fsSync = require('node:fs')
 const fs = require('node:fs/promises')
+const { createRequire } = require('node:module')
 const path = require('node:path')
 const { fileURLToPath, pathToFileURL } = require('node:url')
 
@@ -82,7 +83,7 @@ const emittedWarnings = new Set()
  *
  * @param {string} projectDir
  * @param {{
- *   compiler: { generator: string, parser: string, traverse: string },
+ *   compiler: { generator: string, parser: string, transform: string, traverse: string },
  *   discoveryRoot: string
  * }} settings
  * @returns {Promise<{
@@ -106,6 +107,7 @@ async function createBuildPlan (projectDir, settings) {
   let includesEsmTarget = false
   let moduleGraph
   const resolver = createEsmResolver()
+  const transform = createTypeScriptTransform(settings.compiler.transform)
 
   try {
     const targets = await getTargets(discoveryRoots, resolver)
@@ -136,6 +138,7 @@ async function createBuildPlan (projectDir, settings) {
             excludeDefault: false,
             moduleSources,
             resolver,
+            transform,
           })
           // eslint-disable-next-line no-await-in-loop
           target.liveExports = await findLiveExports(
@@ -232,6 +235,30 @@ async function createBuildPlan (projectDir, settings) {
     path: planPath,
     relativePathPattern: createRelativePathPattern(relativeTargets),
     targetPathPattern: createTargetPathPattern(compiledTargets),
+  }
+}
+
+/**
+ * Uses the compiler shipped with the application's Next.js installation so
+ * export discovery behaves consistently on Node.js versions without native
+ * TypeScript stripping.
+ *
+ * @param {string} transformPath
+ * @returns {(source: string, options: { loader: 'ts' }) => { code: string }}
+ */
+function createTypeScriptTransform (transformPath) {
+  let transformSync
+
+  return function transformTypeScript (source) {
+    transformSync ??= require(transformPath).transformSync
+    return transformSync(source, {
+      jsc: {
+        parser: { syntax: 'typescript' },
+        target: 'es2022',
+      },
+      module: { type: 'es6' },
+      sourceMaps: false,
+    })
   }
 }
 
@@ -800,10 +827,14 @@ async function resolvePackageEntrypoints (requests, resolver) {
  */
 async function resolvePackageEntryPoints ({ directory, name }, resolver) {
   const parentURL = pathToFileURL(path.resolve(directory, 'package.json'))
-  const results = await Promise.allSettled([
-    resolver.resolve(name, parentURL),
-    resolver.resolve(name, parentURL, 'require'),
-  ])
+  let requireResult
+  try {
+    requireResult = { status: 'fulfilled', value: resolveRequire(name, parentURL) }
+  } catch (reason) {
+    requireResult = { status: 'rejected', reason }
+  }
+  const [importResult] = await Promise.allSettled([resolver.resolve(name, parentURL)])
+  const results = [importResult, requireResult]
   const entrypoints = new Set()
   for (const result of results) {
     if (result.status === 'rejected') {
@@ -816,13 +847,23 @@ async function resolvePackageEntryPoints ({ directory, name }, resolver) {
   if (entrypoints.size > 0) return [...entrypoints]
 
   try {
-    const resolved = await resolver.resolve('./', parentURL, 'require')
+    const resolved = resolveRequire('./', parentURL)
     if (resolved.startsWith('file:')) entrypoints.add(fileURLToPath(resolved))
   } catch (error) {
     if (!isResolutionMiss(error)) throw error
     // An unresolved optional instrumentation target is not installed.
   }
   return [...entrypoints]
+}
+
+/**
+ * @param {string} specifier
+ * @param {URL} parentURL
+ * @returns {string}
+ */
+function resolveRequire (specifier, parentURL) {
+  const resolved = createRequire(parentURL).resolve(specifier)
+  return pathToFileURL(resolved).href
 }
 
 /**

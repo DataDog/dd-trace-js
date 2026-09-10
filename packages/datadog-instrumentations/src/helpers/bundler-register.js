@@ -89,11 +89,22 @@ function doHook (name) {
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
+
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
   const integration = payload.integration ?? name
   if (disabledInstrumentations.has(integration)) return
+
+  const isPrefixedWithNode = name.startsWith('node:')
+  const isNodeModule = isPrefixedWithNode || !hooks[integration]
+
+  if (isNodeModule) {
+    const nodeName = isPrefixedWithNode ? name.slice(5) : name
+    // Used for node: prefixed modules to prevent double instrumentation.
+    if (instrumentedNodeModules.has(nodeName)) return
+    instrumentedNodeModules.add(nodeName)
+  }
 
   doHook(integration)
 
@@ -121,10 +132,12 @@ dc.subscribe(CHANNEL, (message) => {
           continue
         }
       }
-      exports = hook(exports, payload.version, false, {
-        moduleBaseDir: payload.moduleBaseDir,
-        moduleName: payload.moduleName ?? payload.path,
-      }) ?? exports
+      exports = payload.moduleName === undefined
+        ? hook(exports, payload.version) ?? exports
+        : hook(exports, payload.version, false, {
+          moduleBaseDir: payload.moduleBaseDir,
+          moduleName: payload.moduleName,
+        }) ?? exports
       payload.module = exports
       payload.apply?.(exports, patchDefault)
     } catch (error) {

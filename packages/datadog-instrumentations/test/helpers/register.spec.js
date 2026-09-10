@@ -261,6 +261,7 @@ describe('register', () => {
       moduleName: 'different/path.js',
     })
   })
+
   it('should not treat an empty file pattern as a wildcard', () => {
     const patch = sinon.stub()
     hooksMock.example = { fn: sinon.stub() }
