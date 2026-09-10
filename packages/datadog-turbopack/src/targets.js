@@ -11,6 +11,7 @@ const { createEsmResolver } = require('../../datadog-esbuild/src/resolver')
 const { isESMFile, processModule } = require('../../datadog-esbuild/src/utils')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
+const rewriteTargets = require('../../datadog-instrumentations/src/helpers/rewriter/targets.json')
 const {
   filename,
   matchVersion,
@@ -60,6 +61,7 @@ const emittedWarnings = new Set()
  * @property {{ moduleName: string, filePath: string }} rewriteTarget
  * @property {Set<string>} ruleRoots
  * @property {Set<string>} rulePaths
+ * @property {boolean} [skipProxy]
  * @property {string} sourceHash
  * @property {string[]} [setters]
  * @property {string[]} [liveExports]
@@ -84,9 +86,11 @@ const emittedWarnings = new Set()
  * @param {string} projectDir
  * @param {{
  *   compiler: { generator: string, parser: string, transform: string, traverse: string },
- *   discoveryRoot: string
+ *   discoveryRoot: string,
+ *   resolveAlias?: object
  * }} settings
  * @returns {Promise<{
+ *   extensionlessTargetPathPattern?: RegExp,
  *   foreignPathPattern?: RegExp,
  *   foreignModuleSyntaxPattern?: RegExp,
  *   moduleSyntaxPattern?: RegExp,
@@ -108,6 +112,7 @@ async function createBuildPlan (projectDir, settings) {
   let moduleGraph
   const resolver = createEsmResolver()
   const transform = createTypeScriptTransform(settings.compiler.transform)
+  const aliases = getServerAliases(settings.resolveAlias)
 
   try {
     const targets = await getTargets(discoveryRoots, resolver)
@@ -117,7 +122,7 @@ async function createBuildPlan (projectDir, settings) {
         const sourceText = source.toString()
         target.sourceHash = hash(source)
         let parsed
-        if (target.esm) {
+        if (target.esm && target.payloads.length > 0) {
           parsed = parseSource(sourceText, target.path, settings.compiler)
         } else if (SOURCE_MODULE_PATH_PATTERN.test(target.path) && MODULE_SYNTAX_PATTERN.test(sourceText)) {
           try {
@@ -127,7 +132,31 @@ async function createBuildPlan (projectDir, settings) {
             // Keep the package-derived format when source syntax does not prove ESM.
           }
         }
-        if (target.esm) {
+        if (target.esm && target.payloads.length > 0 &&
+          (target.payloads.some(payload => matchesAlias(payload.path, aliases)) ||
+          collectStaticSpecifiers(parsed).some(specifier => matchesAlias(specifier, aliases)))) {
+          target.skipProxy = true
+          warnOnce(
+            `module-graph:${target.path}`,
+            `Skipped the ESM instrumentation proxy for ${target.path}: configured alias`
+          )
+        }
+        if (target.esm && target.payloads.length > 0 && !target.skipProxy && aliases.size > 0) {
+          // eslint-disable-next-line no-await-in-loop
+          target.skipProxy = await hasAliasedStaticGraph(
+            target.path,
+            settings.compiler,
+            resolver,
+            aliases
+          )
+          if (target.skipProxy) {
+            warnOnce(
+              `module-graph:${target.path}`,
+              `Skipped the ESM instrumentation proxy for ${target.path}: configured alias`
+            )
+          }
+        }
+        if (target.esm && target.payloads.length > 0 && !target.skipProxy) {
           // Export discovery is asynchronous in import-in-the-middle and belongs at build time.
           const moduleSources = new Map([[fileURLToPath(pathToFileURL(target.path)), sourceText]])
           // eslint-disable-next-line no-await-in-loop
@@ -160,7 +189,11 @@ async function createBuildPlan (projectDir, settings) {
         warnOnce(`target:${target.path}`, `Could not instrument ${target.path}: ${String(error?.message ?? error)}`)
       }
     }
-    moduleGraph = await createModuleGraph(compiledTargets, settings.compiler, resolver)
+    moduleGraph = await createModuleGraph(
+      compiledTargets.filter(target => target.payloads.length > 0 && !target.skipProxy),
+      settings.compiler,
+      resolver
+    )
   } finally {
     try {
       await resolver.close()
@@ -196,7 +229,8 @@ async function createBuildPlan (projectDir, settings) {
       sourceHash: target.sourceHash,
     }
 
-    if (target.esm && !moduleGraph.skippedTargets.has(target.path)) {
+    if (target.esm && target.payloads.length > 0 && !target.skipProxy &&
+      !moduleGraph.skippedTargets.has(target.path)) {
       const proxy = createEsmProxy(
         /** @type {Target & { setters: string[] }} */ (target),
         path.join(realArtifactDirectory, 'proxy.mjs'),
@@ -227,6 +261,7 @@ async function createBuildPlan (projectDir, settings) {
   await writeArtifact(planPath, plan)
 
   return {
+    extensionlessTargetPathPattern: createExtensionlessTargetPathPattern(compiledTargets),
     foreignPathPattern: createForeignPathPattern(compiledTargets),
     foreignModuleSyntaxPattern: esmSpecifiers.size === 0
       ? undefined
@@ -309,7 +344,6 @@ async function createModuleGraph (targets, compiler, resolver) {
         graphFailed = true
         break
       }
-
       graph.set(resourcePath, node.edges)
       for (const dependency of node.edges) pending.push(dependency)
     }
@@ -354,9 +388,10 @@ async function createModuleGraph (targets, compiler, resolver) {
  * @param {string} resourcePath
  * @param {{ parser: string, traverse: string }} compiler
  * @param {EsmResolver} resolver
- * @returns {Promise<{ edges: string[], sourceHash: string }>}
+ * @param {Set<string>} [aliases]
+ * @returns {Promise<{ edges: string[], sourceHash: string, specifiers: string[] }>}
  */
-async function analyzeGraphNode (resourcePath, compiler, resolver) {
+async function analyzeGraphNode (resourcePath, compiler, resolver, aliases) {
   const source = fsSync.readFileSync(resourcePath, 'utf8')
   const parsed = parseSource(source, resourcePath, compiler)
   const specifiers = collectStaticSpecifiers(parsed)
@@ -364,6 +399,7 @@ async function analyzeGraphNode (resourcePath, compiler, resolver) {
   const parentURL = pathToFileURL(resourcePath)
 
   for (const specifier of specifiers) {
+    if (aliases && matchesAlias(specifier, aliases)) continue
     const request = specifier.startsWith('.') ? new URL(specifier, parentURL).href : specifier
     // eslint-disable-next-line no-await-in-loop
     const url = await resolver.resolve(request, parentURL)
@@ -372,7 +408,72 @@ async function analyzeGraphNode (resourcePath, compiler, resolver) {
     if (MODULE_SOURCE_PATH_PATTERN.test(dependencyPath)) edges.push(dependencyPath)
   }
 
-  return { edges: [...new Set(edges)].sort(), sourceHash: hash(source) }
+  return { edges: [...new Set(edges)].sort(), sourceHash: hash(source), specifiers }
+}
+
+/**
+ * @param {string} resourcePath
+ * @param {{ parser: string, traverse: string }} compiler
+ * @param {EsmResolver} resolver
+ * @param {Set<string>} aliases
+ * @returns {Promise<boolean>}
+ */
+async function hasAliasedStaticGraph (resourcePath, compiler, resolver, aliases) {
+  const pending = [resourcePath]
+  const visited = new Set()
+  while (pending.length > 0) {
+    const current = /** @type {string} */ (pending.pop())
+    if (visited.has(current)) continue
+    visited.add(current)
+    // eslint-disable-next-line no-await-in-loop
+    const node = await analyzeGraphNode(current, compiler, resolver, aliases)
+    if (node.specifiers.some(specifier => matchesAlias(specifier, aliases))) return true
+    for (const dependency of node.edges) pending.push(dependency)
+  }
+  return false
+}
+
+/**
+ * @param {string} specifier
+ * @param {Set<string>} aliases
+ * @returns {boolean}
+ */
+function matchesAlias (specifier, aliases) {
+  for (const alias of aliases) {
+    if (alias.endsWith('/')) {
+      if (specifier.startsWith(alias)) return true
+    } else if (alias.includes('*')) {
+      const index = alias.indexOf('*')
+      if (specifier.startsWith(alias.slice(0, index)) && specifier.endsWith(alias.slice(index + 1))) return true
+    } else if (specifier === alias) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {object|undefined} resolveAlias
+ * @returns {Set<string>}
+ */
+function getServerAliases (resolveAlias) {
+  const aliases = new Set()
+  if (!resolveAlias) return aliases
+  for (const [alias, value] of Object.entries(resolveAlias)) {
+    if (hasDefaultAlias(value)) aliases.add(alias)
+  }
+  return aliases
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function hasDefaultAlias (value) {
+  if (typeof value === 'string') return true
+  if (Array.isArray(value)) return value.some(hasDefaultAlias)
+  return Boolean(value) && typeof value === 'object' &&
+    Object.hasOwn(value, 'default') && hasDefaultAlias(value.default)
 }
 
 /**
@@ -493,23 +594,37 @@ function loadInstrumentations () {
 async function getTargets (discoveryRoots, resolver) {
   const targets = new Map()
   const packageNames = new Set()
+  const rewriteFilesByName = new Map()
 
   for (const name of Object.keys(instrumentations)) {
     if (!name.startsWith('node:') && !name.startsWith('.')) packageNames.add(name)
   }
+  for (const [request, name] of Object.entries(rewriteTargets)) {
+    packageNames.add(name)
+    const files = rewriteFilesByName.get(name) ?? []
+    files.push(request.slice(name.length + 1))
+    rewriteFilesByName.set(name, files)
+  }
 
   const packageRootsByName = findPackageRoots(discoveryRoots, packageNames)
   const requests = []
+  const requestedNames = new Set()
   for (const [name, entries] of Object.entries(instrumentations)) {
     if (name.startsWith('node:') || name.startsWith('.')) continue
 
     const packageRoots = [...(packageRootsByName.get(name) ?? [])]
+    requestedNames.add(name)
     if (packageRoots.length === 0) {
       requests.push({ directory: discoveryRoots[0], entries, name })
       continue
     }
 
     for (const packageRoot of packageRoots) requests.push({ directory: packageRoot, entries, name, packageRoot })
+  }
+  for (const name of rewriteFilesByName.keys()) {
+    if (!requestedNames.has(name) && !packageRootsByName.has(name)) {
+      requests.push({ directory: discoveryRoots[0], entries: [], name, rewriteOnly: true })
+    }
   }
 
   const result = await resolvePackageEntrypoints(requests, resolver)
@@ -520,7 +635,7 @@ async function getTargets (discoveryRoots, resolver) {
   }
 
   for (let index = 0; index < requests.length; index++) {
-    const { entries, name, packageRoot } = requests[index]
+    const { entries, name, packageRoot, rewriteOnly } = requests[index]
     if (packageRoot) {
       addTargets(targets, packageRoot, name, entries, resolutions[index])
       continue
@@ -536,11 +651,39 @@ async function getTargets (discoveryRoots, resolver) {
       entrypointsByRoot.set(resolvedPackageRoot, entrypoints)
     }
     for (const [resolvedPackageRoot, entrypoints] of entrypointsByRoot) {
-      addTargets(targets, resolvedPackageRoot, name, entries, entrypoints)
+      const roots = packageRootsByName.get(name) ?? new Set()
+      roots.add(resolvedPackageRoot)
+      packageRootsByName.set(name, roots)
+      if (!rewriteOnly) addTargets(targets, resolvedPackageRoot, name, entries, entrypoints)
+    }
+  }
+
+  for (const [name, files] of rewriteFilesByName) {
+    const packageRoots = packageRootsByName.get(name)
+    if (!packageRoots) continue
+    for (const packageRoot of packageRoots) {
+      addRewriteTargets(targets, packageRoot, name, files)
     }
   }
 
   return [...targets.values()]
+}
+
+/**
+ * @param {Map<string, Target>} targets
+ * @param {string} packageRoot
+ * @param {string} name
+ * @param {string[]} files
+ */
+function addRewriteTargets (targets, packageRoot, name, files) {
+  let packageJson
+  try {
+    packageJson = JSON.parse(fsSync.readFileSync(path.join(packageRoot, 'package.json'), 'utf8'))
+  } catch {
+    return
+  }
+
+  for (const file of files) addTarget(targets, packageRoot, name, path.join(packageRoot, file), packageJson)
 }
 
 /**
@@ -625,31 +768,12 @@ function addTargets (targets, packageRoot, name, entries, entrypoints) {
     }
 
     for (const file of files) {
-      if (!fsSync.existsSync(file)) continue
+      const target = addTarget(targets, packageRoot, name, file, packageJson)
+      if (!target) continue
 
-      const targetPath = normalizePath(file)
       const relativePath = path.relative(packageRoot, file).replaceAll('\\', '/')
       const modulePath = entry.file || (entry.filePattern && relativePath)
       const moduleName = filename(name, modulePath)
-      let target = targets.get(targetPath)
-      if (!target) {
-        target = {
-          esm: isESMFile(file, path.join(packageRoot, 'package.json'), packageJson),
-          matches: [],
-          path: targetPath,
-          payloads: [],
-          rewriteTarget: { filePath: relativePath, moduleName: name },
-          ruleRoots: new Set(),
-          rulePaths: new Set(),
-          sourceHash: '',
-        }
-        targets.set(targetPath, target)
-      }
-      target.ruleRoots.add(normalizePath(packageRoot))
-      target.ruleRoots.add(name)
-      target.ruleRoots.add(path.basename(packageRoot))
-      target.rulePaths.add(`${name}/${relativePath}`)
-      target.rulePaths.add(`${path.basename(packageRoot)}/${relativePath}`)
 
       let payload
       for (const candidate of target.payloads) {
@@ -671,6 +795,41 @@ function addTargets (targets, packageRoot, name, entries, entrypoints) {
       target.matches.push({ hook: entry.hook, payload, version: packageJson.version })
     }
   }
+}
+
+/**
+ * @param {Map<string, Target>} targets
+ * @param {string} packageRoot
+ * @param {string} name
+ * @param {string} file
+ * @param {object} packageJson
+ * @returns {Target|undefined}
+ */
+function addTarget (targets, packageRoot, name, file, packageJson) {
+  if (!fsSync.existsSync(file)) return
+
+  const targetPath = normalizePath(file)
+  const relativePath = path.relative(packageRoot, file).replaceAll('\\', '/')
+  let target = targets.get(targetPath)
+  if (!target) {
+    target = {
+      esm: isESMFile(file, path.join(packageRoot, 'package.json'), packageJson),
+      matches: [],
+      path: targetPath,
+      payloads: [],
+      rewriteTarget: { filePath: relativePath, moduleName: name },
+      ruleRoots: new Set(),
+      rulePaths: new Set(),
+      sourceHash: '',
+    }
+    targets.set(targetPath, target)
+  }
+  target.ruleRoots.add(normalizePath(packageRoot))
+  target.ruleRoots.add(name)
+  target.ruleRoots.add(path.basename(packageRoot))
+  target.rulePaths.add(`${name}/${relativePath}`)
+  target.rulePaths.add(`${path.basename(packageRoot)}/${relativePath}`)
+  return target
 }
 
 // Visit package boundaries only: this reaches nested dependency copies without
@@ -1195,7 +1354,7 @@ function createRelativePathPattern (relativeTargets) {
 function createForeignPathPattern (targets) {
   const roots = new Set()
   for (const target of targets) {
-    if (!target.esm) continue
+    if (!target.esm || target.payloads.length === 0) continue
     for (const ruleRoot of target.ruleRoots) roots.add(ruleRoot)
   }
   if (roots.size === 0) return
@@ -1212,6 +1371,22 @@ function createTargetPathPattern (targets) {
     paths.add(target.path)
     for (const rulePath of target.rulePaths) paths.add(rulePath)
   }
+  return new RegExp(`(?:^|/)(?:${createAlternation(paths)})$`)
+}
+
+/**
+ * @param {Target[]} targets
+ * @returns {RegExp|undefined}
+ */
+function createExtensionlessTargetPathPattern (targets) {
+  const paths = new Set()
+  for (const target of targets) {
+    if (path.extname(target.path) === '') paths.add(target.path)
+    for (const rulePath of target.rulePaths) {
+      if (path.posix.extname(rulePath) === '') paths.add(rulePath)
+    }
+  }
+  if (paths.size === 0) return
   return new RegExp(`(?:^|/)(?:${createAlternation(paths)})$`)
 }
 

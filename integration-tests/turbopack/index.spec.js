@@ -50,6 +50,21 @@ for (const nextVersion of ['15.5.0', 'latest']) {
         'export function wrappedGenerateText (options) { return generateText(options) }',
         '',
       ].join('\n'))
+      const extensionlessDirectory = path.join(sandboxCwd(), 'node_modules/ioredis')
+      fs.mkdirSync(extensionlessDirectory)
+      fs.writeFileSync(path.join(extensionlessDirectory, 'package.json'), JSON.stringify({
+        main: 'runner',
+        name: 'ioredis',
+        version: '5.4.0',
+      }))
+      fs.writeFileSync(path.join(extensionlessDirectory, 'runner'), [
+        "'use strict'",
+        'module.exports = class Redis {',
+        '  constructor () { this.options = {} }',
+        '  sendCommand (command) { return command.promise }',
+        '}',
+        '',
+      ].join('\n'))
       execSync('npm exec -- tsc --project tsconfig.json', { cwd: applicationDirectory, stdio: 'inherit' })
       execSync('npm exec -- next build --turbopack', { cwd: applicationDirectory, stdio: 'inherit' })
     })
@@ -89,6 +104,19 @@ for (const nextVersion of ['15.5.0', 'latest']) {
         assertEsmTrace,
       ])
       assert.deepStrictEqual(esmResponse.data, { dependency: 'foreign-ai-wrapper', text: 'ok' })
+    })
+
+    it('runs instrumentation from an extensionless CommonJS target', async () => {
+      const assertTrace = agent.assertMessageReceived(({ payload }) => {
+        assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
+        assert.strictEqual(checkSpansForServiceName(payload, 'redis.command'), true)
+      }, 10_000, 1, true)
+
+      const [response] = await Promise.all([
+        axios.get(`${proc.url}/api/extensionless`),
+        assertTrace,
+      ])
+      assert.deepStrictEqual(response.data, { value: 'extensionless' })
     })
   })
 }

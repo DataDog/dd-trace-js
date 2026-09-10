@@ -50,6 +50,7 @@ async function addDatadogConfig (nextConfig, projectDir, nextInfo) {
   const plan = await createBuildPlan(projectDir, {
     compiler: nextInfo.compiler,
     discoveryRoot,
+    resolveAlias: turbopack.resolveAlias,
   })
   if (!plan.targetPathPattern || !plan.path) return nextConfig
 
@@ -107,9 +108,6 @@ function addModernRules (turbopack, plan) {
   const rules = { ...turbopack.rules }
 
   for (const extension of SOURCE_EXTENSIONS) {
-    const existing = rules[extension]
-    if (hasDatadogLoader(existing)) continue
-
     const additions = [createModernRule(
       plan,
       [{ path: plan.targetPathPattern }],
@@ -148,14 +146,36 @@ function addModernRules (turbopack, plan) {
         { targetScope: 'relative' }
       ))
     }
-    if (existing === undefined) {
-      rules[extension] = additions.length === 1 ? additions[0] : additions
-    } else {
-      rules[extension] = Array.isArray(existing) ? [...existing, ...additions] : [existing, ...additions]
-    }
+    appendModernRules(rules, extension, additions)
+  }
+
+  if (plan.extensionlessTargetPathPattern) {
+    appendModernRules(rules, '*', [{
+      ...createModernRule(
+        plan,
+        [{ path: plan.extensionlessTargetPathPattern }, { not: { path: SOURCE_PATH_PATTERN } }],
+        { rewriteEdges: true, targetScope: 'direct' }
+      ),
+      as: '*.js',
+    }])
   }
 
   return { ...turbopack, rules }
+}
+
+/**
+ * @param {Record<string, object>} rules
+ * @param {string} name
+ * @param {object[]} additions
+ */
+function appendModernRules (rules, name, additions) {
+  const existing = rules[name]
+  if (hasDatadogLoader(existing)) return
+  if (existing === undefined) {
+    rules[name] = additions.length === 1 ? additions[0] : additions
+  } else {
+    rules[name] = Array.isArray(existing) ? [...existing, ...additions] : [existing, ...additions]
+  }
 }
 
 /**

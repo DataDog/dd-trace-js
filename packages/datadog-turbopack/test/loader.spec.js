@@ -318,13 +318,16 @@ describe('datadog-turbopack loader', () => {
       turbopack: { resolveAlias: { ai: './replacement.js' } },
     }, { projectDir })
     const options = findDatadogLoaders(config)
-      .find(item => item.options.rewriteEdges && !item.options.targetScope).options
+      .find(item => item.options.targetScope === 'direct').options
     const appPath = write(projectDir, 'app/route.js', '')
     const source = "import { generateText } from 'ai'\nimport value from 'ai/subpath'\n"
-    const replacement = write(projectDir, 'replacement.js', 'export default true\n')
+    const replacement = write(projectDir, 'replacement.js', 'export const newExport = true\n')
     const getResolve = () => (_directory, _request, callback) => callback(undefined, replacement)
+    const plan = JSON.parse(fs.readFileSync(options.manifestPath, 'utf8'))
+    const targetPath = fs.realpathSync(path.join(packageDir, 'index.mjs'))
 
     assert.equal(await runLoader(appPath, source, options, { getResolve }), source)
+    assert.equal(plan.targets[targetPath].proxyPath, undefined)
   })
 
   it('rewrites alias keys that resolve to a planned target', async () => {
@@ -586,7 +589,7 @@ describe('datadog-turbopack loader', () => {
     assert.match(warnings[0].message, /state\.mjs/)
   })
 
-  it('rejects a cycle plan after a non-exported graph dependency changes', async () => {
+  it('revalidates a cycle plan in a later compilation', async () => {
     const cycleSource = "import './index.mjs'\nexport const value = true\n"
     const fixture = await createLinkedAiProject({
       exports: './dist/index.mjs',
@@ -620,6 +623,43 @@ describe('datadog-turbopack loader', () => {
     assert.match(restored, new RegExp(path.basename(plan.targets[targetPath].proxyPath)))
     assert.equal(warnings.length, 1)
     assert.match(warnings[0].message, /cycle\.mjs/)
+  })
+
+  it('validates each build-context graph once and resets validation for a replacement plan', async () => {
+    const cycleSource = "import './index.mjs'\nexport const value = true\n"
+    const fixture = await createLinkedAiProject({
+      exports: './dist/index.mjs',
+      type: 'module',
+      version: '6.1.0',
+    }, {
+      'dist/cycle.mjs': cycleSource,
+      'dist/index.mjs': "import './cycle.mjs'\nexport function generateText () {}\n",
+    })
+    const options = findDatadogLoaders(fixture.config)
+      .find(item => item.options.rewriteEdges && !item.options.targetScope).options
+    const cyclePath = fs.realpathSync(fixture.files['dist/cycle.mjs'])
+    const source = "import { generateText } from 'ai'\n"
+    const firstPath = write(fixture.projectDir, 'first.mjs', source)
+    const secondPath = write(fixture.projectDir, 'second.mjs', source)
+    fs.rmSync(cyclePath)
+    const existsSync = sinon.spy(fs, 'existsSync')
+    const statSync = sinon.spy(fs, 'statSync')
+
+    assert.equal(await runLoader(firstPath, source, options), source)
+    const filesystemChecks = existsSync.callCount + statSync.callCount
+    assert.equal(await runLoader(secondPath, source, options), source)
+    assert.equal(existsSync.callCount + statSync.callCount, filesystemChecks)
+    assert.equal(statSync.withArgs(cyclePath).callCount, 1)
+
+    fs.writeFileSync(cyclePath, cycleSource)
+    fs.appendFileSync(fixture.files['dist/index.mjs'], '\n')
+    const replacementConfig = await applyDatadogTurbopack({}, { projectDir: fixture.projectDir })
+    const replacementOptions = findDatadogLoaders(replacementConfig)
+      .find(item => item.options.rewriteEdges && !item.options.targetScope).options
+    const replaced = await runLoader(firstPath, source, replacementOptions)
+
+    assert.notEqual(replacementOptions.manifestPath, options.manifestPath)
+    assert.match(replaced, /[a-f\d]{64}\.mjs/)
   })
 
   it('does not instrument a direct target through the relative-copy rule', async () => {
@@ -829,6 +869,10 @@ describe('datadog-turbopack loader', () => {
     const source = [
       "'use strict'",
       "require('node:fs')",
+      'function local (require, module) { return [require, module] }',
+      'function localArgs () { return arguments[0] }',
+      'local(() => {}, {})',
+      'localArgs(true)',
       "function nested () { return 'nested' }",
       'try {',
       '  module.exports = { original: nested() }',
@@ -884,6 +928,72 @@ describe('datadog-turbopack loader', () => {
     assert.equal(publications[0].package, 'ioredis')
     assert.equal(publications[0].moduleName, 'ioredis')
     assert.equal(Object.hasOwn(publications[0], 'instrumentationIndexes'), false)
+  })
+
+  it('publishes sloppy CommonJS targets with locally bound arguments', async () => {
+    const source = 'const local = arguments => arguments[0]\nmodule.exports = { value: local([true]) }\n'
+    const { projectDir, resourcePath } = createIoredisProject({ source })
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+    const transformed = await runLoader(resourcePath, source, options)
+    const channel = {
+      hasSubscribers: true,
+      publish: payload => { payload.module = { patched: true } },
+    }
+
+    assert.equal(executeCommonJs(transformed, channel).patched, true)
+  })
+
+  it('fails open for shadowed or mutated CommonJS wrapper bindings', async () => {
+    const sources = [
+      'function require () { return true }\nmodule.exports = { value: require() }\n',
+      'module.exports = { before: typeof require }\nvar require = () => false\n',
+      'const original = module\nrequire = () => false\noriginal.exports = { value: true }\n',
+      '({ require } = { require: () => false })\nmodule.exports = { value: true }\n',
+      'for (require of [() => false]) {}\nmodule.exports = { value: true }\n',
+      'for (require in { value: true }) {}\nmodule.exports = { value: true }\n',
+      'require++\nmodule.exports = { value: true }\n',
+      "eval('require = () => false')\nmodule.exports = { value: true }\n",
+      'arguments[1] = () => false\nmodule.exports = { value: true }\n',
+      'const mutate = () => { arguments[1] = () => false }\nmutate()\nmodule.exports = { value: true }\n',
+      'const args = arguments\nargs[1] = () => false\nmodule.exports = { value: true }\n',
+      'var module = { exports: { value: true } }\n',
+    ]
+
+    for (const source of sources) {
+      const { projectDir, resourcePath } = createIoredisProject({ source })
+      const config = await applyDatadogTurbopack({}, { projectDir })
+      const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+      const warnings = []
+      const sourceMap = { mappings: 'AAAA', sources: ['input.js'], version: 3 }
+      const result = await runLoaderResult(resourcePath, source, options, {
+        emitWarning: warning => warnings.push(warning),
+        sourceMap,
+      })
+
+      assert.equal(result.code, source)
+      assert.strictEqual(result.map, sourceMap)
+      assert.equal(warnings.length, 1)
+      assert.match(warnings[0].message, /unsafe wrapper bindings/)
+    }
+  })
+
+  it('rewrites payloadless Orchestrion targets without CommonJS publication', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, '@wdio/runner', {
+      exports: './build/index.js',
+      type: 'module',
+      version: '9.1.0',
+    })
+    const source = 'export class Runner { async run () { return true } }\n'
+    const resourcePath = write(packageDir, 'build/index.js', source)
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const options = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct').options
+
+    const result = await runLoader(resourcePath, source, options)
+
+    assert.match(result, /orchestrion:@wdio\/runner:Runner_run/)
+    assert.doesNotMatch(result, /dd-trace:bundler:load/)
   })
 
   it('lints generated dependencies from their runtime location', async () => {

@@ -98,6 +98,148 @@ describe('withDatadogTurbopack', () => {
     assert.equal(foreignPathPattern.test('/app/node_modules/unrelated/internal/barrel.mjs'), false)
   })
 
+  it('plans generated rewrite-only targets without creating ESM proxies', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, '@wdio/runner', {
+      exports: './build/index.js',
+      type: 'module',
+      version: '9.1.0',
+    })
+    const targetPath = write(packageDir, 'build/index.js', [
+      'export class Runner {',
+      '  async run () { return true }',
+      '}',
+      '',
+    ].join('\n'))
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const loader = findDatadogLoaders(config).find(item => item.options.targetScope === 'direct')
+    const plan = JSON.parse(fs.readFileSync(loader.options.manifestPath, 'utf8'))
+    const target = plan.targets[fs.realpathSync(targetPath)]
+
+    assert.deepEqual(target.payloads, [])
+    assert.deepEqual(target.rewriteTarget, { filePath: 'build/index.js', moduleName: '@wdio/runner' })
+    assert.equal(target.proxyPath, undefined)
+  })
+
+  it('adds rewrite targets after resolver-only package discovery', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, 'ai', {
+      exports: './index.mjs',
+      type: 'module',
+      version: '7.0.0',
+    })
+    const entryPath = write(packageDir, 'index.mjs', 'export function generateText () {}\n')
+    const rewritePath = write(packageDir, 'dist/index.mjs', 'export const generated = true\n')
+    const readdirSync = fs.readdirSync.bind(fs)
+    sinon.stub(fs, 'readdirSync').callsFake((directory, options) =>
+      path.resolve(directory) === path.join(projectDir, 'node_modules') ? [] : readdirSync(directory, options))
+
+    const config = await applyDatadogTurbopack({}, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.ok(plan.targets[fs.realpathSync(entryPath)])
+    assert.deepEqual(plan.targets[fs.realpathSync(rewritePath)].rewriteTarget, {
+      filePath: 'dist/index.mjs',
+      moduleName: 'ai',
+    })
+  })
+
+  it('limits proxy suppression to exact, subpath, and wildcard aliases', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    const targetPath = write(packageDir, 'index.mjs', 'export function generateText () {}\n')
+    const helperDir = createPackage(projectDir, 'ai-helper', {
+      exports: { './subpath': './subpath.mjs' },
+      type: 'module',
+      version: '1.0.0',
+    })
+    write(helperDir, 'subpath.mjs', 'export const value = true\n')
+    fs.writeFileSync(targetPath, "export { value as generateText } from 'ai-helper/subpath'\n")
+    const browserOnly = await applyDatadogTurbopack({
+      turbopack: { resolveAlias: { 'ai-helper*': { browser: './replacement.js' } } },
+    }, { projectDir })
+    const browserPlanPath = findDatadogLoaders(browserOnly)[0].options.manifestPath
+    const browserPlan = JSON.parse(fs.readFileSync(browserPlanPath, 'utf8'))
+
+    assert.equal(typeof browserPlan.targets[fs.realpathSync(targetPath)].proxyPath, 'string')
+
+    const exact = await applyDatadogTurbopack({
+      turbopack: { resolveAlias: { 'ai-helper': './replacement.js' } },
+    }, { projectDir })
+    const exactPlanPath = findDatadogLoaders(exact)[0].options.manifestPath
+    const exactPlan = JSON.parse(fs.readFileSync(exactPlanPath, 'utf8'))
+
+    assert.equal(typeof exactPlan.targets[fs.realpathSync(targetPath)].proxyPath, 'string')
+
+    const folder = await applyDatadogTurbopack({
+      turbopack: { resolveAlias: { 'ai-helper/': './replacement.js' } },
+    }, { projectDir })
+    const folderPlanPath = findDatadogLoaders(folder)[0].options.manifestPath
+    const folderPlan = JSON.parse(fs.readFileSync(folderPlanPath, 'utf8'))
+
+    assert.equal(folderPlan.targets[fs.realpathSync(targetPath)].proxyPath, undefined)
+
+    const wildcard = await applyDatadogTurbopack({
+      turbopack: { resolveAlias: { 'ai-helper*': [{ default: './replacement.js' }] } },
+    }, { projectDir })
+    const wildcardPlanPath = findDatadogLoaders(wildcard)[0].options.manifestPath
+    const wildcardPlan = JSON.parse(fs.readFileSync(wildcardPlanPath, 'utf8'))
+
+    assert.equal(wildcardPlan.targets[fs.realpathSync(targetPath)].proxyPath, undefined)
+  })
+
+  it('suppresses a proxy when an alias occurs in its static dependency graph', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    const targetPath = write(packageDir, 'index.mjs', "export { generateText } from './child.mjs'\n")
+    write(packageDir, 'child.mjs', "export { value as generateText } from 'ai-helper/subpath'\n")
+    const config = await applyDatadogTurbopack({
+      turbopack: { resolveAlias: { 'ai-helper*': './replacement.js' } },
+    }, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.equal(plan.targets[fs.realpathSync(targetPath)].proxyPath, undefined)
+  })
+
+  it('terminates cyclic alias analysis when no static edge is aliased', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
+    const targetPath = write(packageDir, 'index.mjs', [
+      "export { child } from './child.mjs'",
+      'export function generateText () {}',
+      '',
+    ].join('\n'))
+    write(packageDir, 'child.mjs', "export { generateText as child } from './index.mjs'\n")
+    const config = await applyDatadogTurbopack({
+      turbopack: { resolveAlias: { unrelated: './replacement.js' } },
+    }, { projectDir })
+    const planPath = findDatadogLoaders(config)[0].options.manifestPath
+    const plan = JSON.parse(fs.readFileSync(planPath, 'utf8'))
+
+    assert.equal(typeof plan.targets[fs.realpathSync(targetPath)].proxyPath, 'string')
+  })
+
+  it('merges one direct extensionless target rule into the user catch-all', async () => {
+    const projectDir = createProject('16.2.0')
+    const packageDir = createPackage(projectDir, 'ioredis', { main: 'runner', version: '5.4.0' })
+    const targetPath = write(packageDir, 'runner', 'module.exports = class Redis {}\n')
+    const input = { turbopack: { rules: { '*': { loaders: ['user-loader'] } } } }
+
+    const config = await applyDatadogTurbopack(input, { projectDir })
+    const catchAll = config.turbopack.rules['*']
+    const rule = catchAll.find(item => item.loaders?.[0]?.options?.targetScope === 'direct')
+    const repeated = await applyDatadogTurbopack(config, { projectDir })
+
+    assert.deepEqual(catchAll[0], { loaders: ['user-loader'] })
+    assert.equal(rule.as, '*.js')
+    assert.equal(rule.condition.all[1].path.test(targetPath), true)
+    assert.equal(rule.condition.all[1].path.test(`${targetPath}.js`), false)
+    assert.equal(findDatadogLoaders(repeated).length, findDatadogLoaders(config).length)
+  })
+
   it('uses named conditions and nested built-ins for Next 15', async () => {
     const { projectDir } = createIoredisProject({ nextVersion: '15.5.0' })
     const aiDirectory = createPackage(projectDir, 'ai', { main: 'index.mjs', type: 'module', version: '7.0.0' })
@@ -947,6 +1089,13 @@ describe('withDatadogTurbopack', () => {
     const validProject = createProject()
     const validPackage = createPackage(validProject, 'ioredis', { main: 'index.js', version: '5.0.0' })
     write(validPackage, 'index.js', 'module.exports = {}')
+    const invalidRewritePackage = createPackage(validProject, '@wdio/runner', {
+      exports: './build/index.js',
+      type: 'module',
+      version: '9.1.0',
+    })
+    write(invalidRewritePackage, 'build/index.js', 'export class Runner {}\n')
+    write(invalidRewritePackage, 'package.json', '{')
     const hook = /** @type {Function|{ fn: Function }} */ (hooks.ioredis)
     const load = typeof hook === 'function' ? hook : hook.fn
     load()

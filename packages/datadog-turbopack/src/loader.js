@@ -55,6 +55,8 @@ const warnedErrors = new Set()
  * @typedef {object} BuildContext
  * @property {BuildPlan} plan
  * @property {Map<string, BundlerRewriter>} rewriters
+ * @property {string|null|undefined} graphValidation
+ * @property {Set<string>} validatedResources
  *
  * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
  *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
@@ -110,13 +112,16 @@ async function load (source, inputSourceMap) {
   const buildContext = getBuildContext(options.manifestPath)
   const { plan } = buildContext
   const resourcePath = fs.realpathSync(this.resourcePath).replaceAll('\\', '/')
+  beginBuildContextLoad(buildContext, resourcePath)
   const match = findTarget(resourcePath, plan, options.targetScope, this)
   const esm = match?.esm ?? false
   const sourceType = match ? (esm ? 'module' : 'commonjs') : 'unambiguous'
+  const analyzeCommonJs = Boolean(match && !esm && match.payloads.length > 0)
+  const rewriteEdges = Boolean(options.rewriteEdges && MODULE_SYNTAX_PATTERN.test(source))
 
   if (path.dirname(resourcePath) === path.dirname(options.manifestPath) &&
     PROXY_FILENAME_PATTERN.test(path.basename(resourcePath)) ||
-    !options.rewriteEdges || !MODULE_SYNTAX_PATTERN.test(source)) {
+    !rewriteEdges && !analyzeCommonJs) {
     return finishLoad(source, inputSourceMap, resourcePath, match, esm, buildContext)
   }
 
@@ -124,10 +129,13 @@ async function load (source, inputSourceMap) {
     source,
     inputSourceMap,
     resourcePath,
-    plan,
+    buildContext,
     this,
-    sourceType
+    sourceType,
+    rewriteEdges,
+    analyzeCommonJs
   )
+  if (rewritten.unsafeCommonJs) return { code: source, map: inputSourceMap }
   return finishLoad(rewritten.code, rewritten.map, resourcePath, match, esm, buildContext)
 }
 
@@ -162,10 +170,28 @@ function getBuildContext (manifestPath) {
 
   cachedManifestPath = manifestPath
   cachedBuildContext = {
+    graphValidation: undefined,
     plan,
     rewriters: new Map(),
+    validatedResources: new Set(),
   }
   return cachedBuildContext
+}
+
+/**
+ * Turbopack can reuse a loader process across incremental compilations without
+ * exposing a compilation identifier. A repeated resource marks the boundary
+ * at which the content-addressed graph must be validated again.
+ *
+ * @param {BuildContext} buildContext
+ * @param {string} resourcePath
+ */
+function beginBuildContextLoad (buildContext, resourcePath) {
+  if (buildContext.validatedResources.has(resourcePath)) {
+    buildContext.graphValidation = undefined
+    buildContext.validatedResources.clear()
+  }
+  buildContext.validatedResources.add(resourcePath)
 }
 
 /**
@@ -199,19 +225,24 @@ function findTarget (resourcePath, plan, targetScope, loaderContext) {
  * @param {string} source
  * @param {object|undefined} inputSourceMap
  * @param {string} resourcePath
- * @param {BuildPlan} plan
+ * @param {BuildContext} buildContext
  * @param {{ emitWarning?: (warning: Error) => void, getResolve: Function }} loaderContext
  * @param {'commonjs'|'module'|'unambiguous'} sourceType
- * @returns {Promise<{ code: string, map?: object }>}
+ * @param {boolean} rewriteEdges
+ * @param {boolean} analyzeCommonJs
+ * @returns {Promise<{ code: string, map?: object, unsafeCommonJs?: boolean }>}
  */
 async function rewriteModuleEdges (
   source,
   inputSourceMap,
   resourcePath,
-  plan,
+  buildContext,
   loaderContext,
-  sourceType
+  sourceType,
+  rewriteEdges,
+  analyzeCommonJs
 ) {
+  const { plan } = buildContext
   const { compiler, components, targets } = plan
   const directory = path.dirname(resourcePath)
   const state = { edges: new Map() }
@@ -224,7 +255,15 @@ async function rewriteModuleEdges (
   }
   const { ast, traverse } = parsed
   const generate = require(compiler.generator).default
-  traverse(ast, IMPORT_VISITORS, undefined, state)
+  if (analyzeCommonJs && hasUnsafeCommonJsBindings(ast, traverse)) {
+    warnOnce(
+      loaderContext,
+      `shadowed:${resourcePath}`,
+      `Skipped CommonJS publication for unsafe wrapper bindings in ${resourcePath}`
+    )
+    return { code: source, map: inputSourceMap, unsafeCommonJs: true }
+  }
+  if (rewriteEdges) traverse(ast, IMPORT_VISITORS, undefined, state)
 
   if (state.edges.size === 0) return { code: source, map: inputSourceMap }
 
@@ -252,7 +291,7 @@ async function rewriteModuleEdges (
 
   if (!hasResolvedTarget) return { code: source, map: inputSourceMap }
 
-  const changedGraphPath = findChangedDependency(plan.graphDependencies)
+  const changedGraphPath = findChangedGraphDependency(buildContext)
   if (changedGraphPath) {
     warnOnce(loaderContext, `changed:${changedGraphPath}`, `Skipped changed dependency ${changedGraphPath}`)
     return { code: source, map: inputSourceMap }
@@ -268,6 +307,105 @@ async function rewriteModuleEdges (
   }
   if (!rewritten) return { code: source, map: inputSourceMap }
 
+  return generateSource(ast, generate, source, inputSourceMap, resourcePath)
+}
+
+/**
+ * A content-addressed build plan is immutable for its build context. Cache both
+ * valid and invalid graph results so each dependency set is inspected once.
+ *
+ * @param {BuildContext} buildContext
+ * @returns {string|undefined}
+ */
+function findChangedGraphDependency (buildContext) {
+  if (buildContext.graphValidation !== undefined) return buildContext.graphValidation ?? undefined
+  const changedPath = findChangedDependency(buildContext.plan.graphDependencies)
+  buildContext.graphValidation = changedPath ?? null
+  return changedPath
+}
+
+/**
+ * @param {object} ast
+ * @param {Function} traverse
+ * @returns {boolean}
+ */
+function hasUnsafeCommonJsBindings (ast, traverse) {
+  let unsafe = false
+  traverse(ast, {
+    Program (programPath) {
+      unsafe = programPath.scope.hasOwnBinding('module') || programPath.scope.hasOwnBinding('require')
+      if (unsafe) programPath.stop()
+    },
+    AssignmentExpression (assignmentPath) {
+      if (mutatesCommonJsBinding(assignmentPath.node.left, assignmentPath.scope)) {
+        unsafe = true
+        assignmentPath.stop()
+      }
+    },
+    ForOfStatement (statementPath) {
+      if (mutatesCommonJsBinding(statementPath.node.left, statementPath.scope)) unsafe = true
+    },
+    ForInStatement (statementPath) {
+      if (mutatesCommonJsBinding(statementPath.node.left, statementPath.scope)) unsafe = true
+    },
+    CallExpression (callPath) {
+      if (callPath.node.callee.type === 'Identifier' && callPath.node.callee.name === 'eval' &&
+        !callPath.scope.hasBinding('eval', true)) {
+        unsafe = true
+        callPath.stop()
+      }
+    },
+    UpdateExpression (expressionPath) {
+      if (mutatesCommonJsBinding(expressionPath.node.argument, expressionPath.scope)) unsafe = true
+    },
+    ReferencedIdentifier (identifierPath) {
+      if (identifierPath.node.name === 'arguments' && referencesCommonJsArguments(identifierPath)) {
+        unsafe = true
+        identifierPath.stop()
+      }
+    },
+  })
+  return unsafe
+}
+
+/**
+ * @param {object} node
+ * @param {{ hasBinding: Function }} scope
+ * @returns {boolean}
+ */
+function mutatesCommonJsBinding (node, scope) {
+  if (node.type === 'Identifier') {
+    return (node.name === 'module' || node.name === 'require') && !scope.hasBinding(node.name, true)
+  }
+  for (const key of ['argument', 'elements', 'left', 'properties', 'value']) {
+    const value = node[key]
+    if (Array.isArray(value)) {
+      if (value.some(item => item && mutatesCommonJsBinding(item, scope))) return true
+    } else if (value && typeof value === 'object' && mutatesCommonJsBinding(value, scope)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {{ findParent: Function, scope: { hasBinding: Function } }} identifierPath
+ * @returns {boolean}
+ */
+function referencesCommonJsArguments (identifierPath) {
+  return !identifierPath.scope.hasBinding('arguments', true) &&
+    !identifierPath.findParent(parent => parent.isFunction() && !parent.isArrowFunctionExpression())
+}
+
+/**
+ * @param {object} ast
+ * @param {Function} generate
+ * @param {string} source
+ * @param {object|undefined} inputSourceMap
+ * @param {string} resourcePath
+ * @returns {{ code: string, map?: object }}
+ */
+function generateSource (ast, generate, source, inputSourceMap, resourcePath) {
   const { code, map } = generate(ast, {
     inputSourceMap,
     retainLines: true,
@@ -502,7 +640,9 @@ function finishLoad (source, sourceMap, resourcePath, match, esm, buildContext) 
       sourceMap
     ))
   }
-  const code = esm ? rewritten.code : appendCommonJsPublications(rewritten.code, match, dcModule)
+  const code = esm || match.payloads.length === 0
+    ? rewritten.code
+    : appendCommonJsPublications(rewritten.code, match, dcModule)
   return { code, map: rewritten.map }
 }
 
