@@ -126,12 +126,14 @@ describe('Payload tagger', () => {
     })
 
     it('should truncate long strings and buffers', () => {
-      const value = 'x'.repeat(5001)
-      const tags = tagsFromObject({ string: value, buffer: Buffer.from(value) }, defaultOpts)
-      assert.deepStrictEqual(tags, {
-        'http.payload.string': 'x'.repeat(5000),
-        'http.payload.buffer': 'x'.repeat(5000),
-      })
+      for (const length of [5000, 5001, 10_000, 10_001]) {
+        const value = 'x'.repeat(length)
+        const tags = tagsFromObject({ string: value, buffer: Buffer.from(value) }, defaultOpts)
+        assert.deepStrictEqual(tags, {
+          'http.payload.string': 'x'.repeat(5000),
+          'http.payload.buffer': 'x'.repeat(5000),
+        })
+      }
     })
 
     it('should provide tags from simple JSON objects, casting to strings where necessary', () => {
