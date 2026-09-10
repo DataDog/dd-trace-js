@@ -244,7 +244,7 @@ describe('undici instrumentation', () => {
           const throwingRequest = new Request(throwingHandler, controller)
           assert.throws(
             () => throwingRequest[methodName](101, headers, socket),
-            error => error === expectedError
+            thrownError => thrownError === expectedError
           )
           assert.deepStrictEqual(messages.at(-1), {
             error: expectedError,
