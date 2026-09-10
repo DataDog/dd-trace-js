@@ -353,6 +353,18 @@ describe('OTel TracerProvider', () => {
       })
     })
 
+    it('preserves a single aggregate span processor failure', async () => {
+      const processorError = new AggregateError([new Error('processor failed')], 'processor aggregate')
+      const processor = new NoopSpanProcessor()
+      processor.forceFlush = sinon.stub().rejects(processorError)
+      const provider = new TracerProvider({ spanProcessors: [processor] })
+
+      await assert.rejects(provider.forceFlush(), error => {
+        assert.strictEqual(error, processorError)
+        return true
+      })
+    })
+
     it('rejects when Datadog delivery fails', async () => {
       const requestReceived = waitForTraceRequest()
       const provider = new TracerProvider()

@@ -19,16 +19,12 @@ function collectReason (reason, reasons) {
  * @returns {unknown}
  */
 function getFlushError (flushReasons) {
-  let flushError
-  if (flushReasons.length > 0) {
-    const reasons = []
-    for (const reason of flushReasons) collectReason(reason, reasons)
+  if (flushReasons.length < 2) return flushReasons[0]
 
-    flushError = reasons.length === 1
-      ? reasons[0]
-      : new AggregateError(reasons, 'Multiple errors occurred while flushing')
-  }
-  return flushError
+  const reasons = []
+  for (const reason of flushReasons) collectReason(reason, reasons)
+
+  return new AggregateError(reasons, 'Multiple errors occurred while flushing')
 }
 
 module.exports = getFlushError
