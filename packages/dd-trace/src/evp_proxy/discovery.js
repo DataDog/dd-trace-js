@@ -2,8 +2,7 @@
 
 const { fetchAgentInfo } = require('../agent/info')
 const log = require('../log')
-
-const TRAILING_SLASHES = /\/+$/
+const { stripTrailingSlashes } = require('./path')
 
 /**
  * Receiver discovery contract
@@ -81,14 +80,14 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
   const advertisedPaths = new Set()
   for (const endpoint of agentInfo.endpoints) {
     if (typeof endpoint === 'string') {
-      advertisedPaths.add(endpoint.replace(TRAILING_SLASHES, ''))
+      advertisedPaths.add(stripTrailingSlashes(endpoint))
     }
   }
 
   for (const supportedPath of supportedPaths) {
     if (typeof supportedPath !== 'string') continue
 
-    const normalizedPath = supportedPath.replace(TRAILING_SLASHES, '')
+    const normalizedPath = stripTrailingSlashes(supportedPath)
     if (advertisedPaths.has(normalizedPath)) {
       return normalizedPath
     }
