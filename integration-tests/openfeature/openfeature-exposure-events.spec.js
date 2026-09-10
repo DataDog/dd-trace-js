@@ -56,10 +56,12 @@ function addRemoteConfigAndWaitForAcknowledgment (agent, config) {
 }
 
 /**
+ * The action returns bounds from the process that creates the exposure timestamps.
+ *
  * @param {FakeAgent} agent
  * @param {import('node:child_process').ChildProcess} proc
  * @param {number} expectedCount
- * @param {() => Promise<void>} action
+ * @param {() => Promise<{ earliestTimestamp: number, latestTimestamp: number }>} action
  * @returns {Promise<{
  *   requests: Array<{ payload: { exposures?: Array<object> }, headers: object, path: string }>,
  *   earliestTimestamp: number,
@@ -67,7 +69,6 @@ function addRemoteConfigAndWaitForAcknowledgment (agent, config) {
  * }>}
  */
 async function captureExposureRequestsUntilExit (agent, proc, expectedCount, action) {
-  const earliestTimestamp = Date.now()
   const requests = []
   let exposureCount = 0
   let resolveExpected
@@ -88,9 +89,8 @@ async function captureExposureRequestsUntilExit (agent, proc, expectedCount, act
 
   agent.on('exposures', handleExposures)
   try {
-    await Promise.all([action(), expectedExposuresReceived])
+    const [{ earliestTimestamp, latestTimestamp }] = await Promise.all([action(), expectedExposuresReceived])
     await delay(EXPOSURE_QUIET_PERIOD_MS)
-    const latestTimestamp = Date.now()
     await stopProc(proc)
     return { requests, earliestTimestamp, latestTimestamp }
   } finally {
@@ -201,6 +201,10 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
             const flushResponse = await fetch(`${proc.url}/flush`)
             assert.strictEqual(flushResponse.status, 200)
+            return {
+              earliestTimestamp: data.evaluationStartedAt,
+              latestTimestamp: data.evaluationFinishedAt,
+            }
           })
         const exposureEvents = []
 
@@ -271,6 +275,10 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
             assert.strictEqual(response.status, 200)
             const data = await response.json()
             assert.strictEqual(data.evaluationsCompleted, 6)
+            return {
+              earliestTimestamp: data.evaluationStartedAt,
+              latestTimestamp: data.evaluationFinishedAt,
+            }
           })
         const exposureEvents = []
 
