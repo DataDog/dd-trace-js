@@ -104,6 +104,9 @@ module.exports = withDatadogTurbopack({})
 Preload `dd-trace/init` before the application loads. The wrapper instruments CommonJS dependencies and supported
 source-rewrite targets in Node.js bundles.
 
+The wrapper does not instrument client or edge bundles. It also excludes generic ESM export replacement, linked
+workspaces, Prisma clients outside `node_modules`, and Yarn Plug'n'Play packages.
+
 ## Security Vulnerabilities
 
 Please refer to the [SECURITY.md](https://github.com/DataDog/dd-trace-js/blob/master/SECURITY.md) document if you have found a security issue.

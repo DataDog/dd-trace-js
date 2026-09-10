@@ -26,6 +26,7 @@ const rewriters = new Map()
 /**
  * @typedef {object} LoaderContext
  * @property {(error: Error|undefined, code?: string, sourceMap?: string|object) => void} callback
+ * @property {(warning: Error) => void} [emitWarning]
  * @property {string} resourcePath
  */
 
@@ -66,6 +67,11 @@ module.exports = function loader (source, inputSourceMap) {
     const esm = packageInfo?.esm ?? isESMFile(nativeResourcePath)
     const publications = !esm && packageInfo ? getPublications(resourcePath, packageInfo) : []
     if (!rewriteTarget && publications.length === 0) {
+      this.callback(undefined, source, inputSourceMap)
+      return
+    }
+    if (publications.length > 0 && hasUnsafeCommonJsBindings(source)) {
+      this.emitWarning?.(new Error(`Skipped CommonJS publication for unsafe wrapper bindings in ${resourcePath}`))
       this.callback(undefined, source, inputSourceMap)
       return
     }
@@ -208,6 +214,117 @@ function getRewriter (dcModule) {
   const rewrite = createBundlerRewriter(dcModule)
   rewriters.set(dcModule, rewrite)
   return rewrite
+}
+
+/**
+ * @param {string} source
+ * @returns {boolean}
+ */
+function hasUnsafeCommonJsBindings (source) {
+  try {
+    const { parse } = require('../../datadog-instrumentations/src/helpers/rewriter/compiler')
+    if (source.startsWith('#!')) source = `//${source.slice(2)}`
+    const program = parse(Module.wrap(source))
+    const wrapper = program.body[0]?.expression
+    return wrapper?.type !== 'FunctionExpression' || hasUnsafeNode(wrapper.body, 0, true)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * @param {object} node
+ * @param {number} functionDepth
+ * @param {boolean} commonJsArguments
+ * @param {object} [parent]
+ * @param {string} [parentKey]
+ * @returns {boolean}
+ */
+function hasUnsafeNode (node, functionDepth, commonJsArguments, parent, parentKey) {
+  if (functionDepth === 0 && hasCommonJsDeclaration(node)) return true
+  if (node.type === 'AssignmentExpression' && mutatesCommonJsBinding(node.left)) return true
+  if (node.type === 'UpdateExpression' && mutatesCommonJsBinding(node.argument)) return true
+  if ((node.type === 'ForInStatement' || node.type === 'ForOfStatement') &&
+    mutatesCommonJsBinding(node.left)) return true
+  if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'eval') return true
+  if (commonJsArguments && node.type === 'Identifier' && node.name === 'arguments' &&
+    isReferencedIdentifier(parent, parentKey)) return true
+
+  const nestedFunction = node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression'
+  if (nestedFunction) {
+    functionDepth++
+    commonJsArguments = node.type === 'ArrowFunctionExpression' &&
+      !node.params.some(param => bindsName(param, 'arguments')) && commonJsArguments
+  }
+
+  for (const key of Object.keys(node)) {
+    if ((node.type === 'VariableDeclarator' && key === 'id') ||
+      (node.type === 'CatchClause' && key === 'param')) continue
+    const value = node[key]
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        if (child?.type && hasUnsafeNode(child, functionDepth, commonJsArguments, node, key)) return true
+      }
+    } else if (value?.type && hasUnsafeNode(value, functionDepth, commonJsArguments, node, key)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {object} node
+ * @returns {boolean}
+ */
+function hasCommonJsDeclaration (node) {
+  if (node.type === 'VariableDeclarator') {
+    return bindsName(node.id, 'module') || bindsName(node.id, 'require')
+  }
+  if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') {
+    return node.id?.name === 'module' || node.id?.name === 'require'
+  }
+  return false
+}
+
+/**
+ * @param {object} node
+ * @returns {boolean}
+ */
+function mutatesCommonJsBinding (node) {
+  return bindsName(node, 'module') || bindsName(node, 'require')
+}
+
+/**
+ * @param {object} node
+ * @param {string} name
+ * @returns {boolean}
+ */
+function bindsName (node, name) {
+  if (node.type === 'Identifier') return node.name === name
+  if (node.type === 'AssignmentPattern') return bindsName(node.left, name)
+  if (node.type === 'RestElement') return bindsName(node.argument, name)
+  if (node.type === 'ArrayPattern') return node.elements.some(element => element && bindsName(element, name))
+  if (node.type === 'ObjectPattern') {
+    return node.properties.some(property => {
+      return bindsName(property.type === 'RestElement' ? property.argument : property.value, name)
+    })
+  }
+  return false
+}
+
+/**
+ * @param {object} parent
+ * @param {string} parentKey
+ * @returns {boolean}
+ */
+function isReferencedIdentifier (parent, parentKey) {
+  if (parent.type === 'MemberExpression' && parentKey === 'property' && !parent.computed) return false
+  if ((parent.type === 'Property' || parent.type === 'MethodDefinition' || parent.type === 'PropertyDefinition') &&
+    parentKey === 'key' && !parent.computed) {
+    return parent.type === 'Property' && parent.shorthand
+  }
+  return parentKey !== 'label'
 }
 
 /**
