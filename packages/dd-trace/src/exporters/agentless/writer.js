@@ -45,9 +45,10 @@ class AgentlessWriter extends BaseWriter {
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site] - The Datadog site
    * @param {object} [options.metadata] - Metadata to pass to the data pipeline
+   * @param {import('../../serverless/telemetry-delivery-tracker')} [options.deliveryTracker]
    */
-  constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
-    super({ url })
+  constructor ({ url, site = 'datadoghq.com', metadata = {}, deliveryTracker }) {
+    super({ url, deliveryTracker })
     this.#metadata = metadata
     this._encoder = new AgentEncoder(this)
 

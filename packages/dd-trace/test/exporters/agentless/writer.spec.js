@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire').noCallThru()
 require('../../setup/core')
 
 const { storage } = require('../../../../datadog-core')
+const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 
 describe('AgentlessWriter', () => {
   let AgentlessWriter
@@ -133,6 +134,23 @@ describe('AgentlessWriter', () => {
     done()
     await flush
     assert.strictEqual(flushed, true)
+  })
+
+  it('registers data-pipeline requests with the delivery tracker', () => {
+    const deliveryTracker = new TelemetryDeliveryTracker()
+    exporter.sendV04.resetBehavior()
+    writer = new AgentlessWriter({
+      url: new URL('https://intake.example'),
+      deliveryTracker,
+    })
+    const done = sinon.spy()
+
+    writer.flush()
+    deliveryTracker.waitForIdle(done)
+
+    sinon.assert.notCalled(done)
+    exporter.sendV04.firstCall.args[1]()
+    sinon.assert.calledOnceWithExactly(done, undefined)
   })
 
   it('does not report data-pipeline failures by default', async () => {
