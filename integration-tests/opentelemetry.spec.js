@@ -97,7 +97,7 @@ describe('OpenTelemetry API version compatibility', function () {
         await agent?.stop()
       })
 
-      it('preserves span and propagation behavior through the vendored Core package', async () => {
+      it('preserves user API span and propagation behavior', async () => {
         const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
         assert.strictEqual(installedApiVersion, apiVersion)
 

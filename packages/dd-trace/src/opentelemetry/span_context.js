@@ -1,10 +1,21 @@
 'use strict'
 
+const { createTraceState: createUserTraceState } = require('@opentelemetry/api')
+
 const { TraceState } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
+
+/**
+ * @param {string} traceState
+ */
+function createVendorTraceState (traceState) {
+  return new TraceState(traceState)
+}
+
+const createTraceState = createUserTraceState ?? createVendorTraceState
 
 function newContext () {
   const spanId = id()
@@ -39,7 +50,7 @@ class SpanContext {
 
   get traceState () {
     const ts = this._ddContext._tracestate
-    return new TraceState(ts ? ts.toString() : '')
+    return createTraceState(ts ? ts.toString() : '')
   }
 }
 

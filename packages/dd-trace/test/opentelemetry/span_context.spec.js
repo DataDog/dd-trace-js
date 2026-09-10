@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 require('../setup/core')
 const SpanContext = require('../../src/opentelemetry/span_context')
@@ -95,5 +96,44 @@ describe('OTel Span Context', () => {
     const context = new SpanContext()
 
     assert.strictEqual(context.traceState.serialize(), '')
+  })
+
+  it('should use the user trace state factory when available', () => {
+    const expectedTraceState = {}
+    let actualTraceState
+    /** @param {string} traceState */
+    const createTraceState = (traceState) => {
+      actualTraceState = traceState
+      return expectedTraceState
+    }
+    const UserSpanContext = proxyquire('../../src/opentelemetry/span_context', {
+      '@opentelemetry/api': { createTraceState },
+      '../../../../vendor/dist/@opentelemetry/core': {
+        TraceState: class UnexpectedTraceState {},
+      },
+    })
+
+    const context = new UserSpanContext()
+
+    assert.strictEqual(context.traceState, expectedTraceState)
+    assert.strictEqual(actualTraceState, '')
+  })
+
+  it('should fall back to the vendored trace state for API 1.0', () => {
+    class VendorTraceState {
+      /** @param {string} traceState */
+      constructor (traceState) {
+        this.traceState = traceState
+      }
+    }
+    const LegacySpanContext = proxyquire('../../src/opentelemetry/span_context', {
+      '@opentelemetry/api': {},
+      '../../../../vendor/dist/@opentelemetry/core': { TraceState: VendorTraceState },
+    })
+
+    const traceState = new LegacySpanContext().traceState
+
+    assert.ok(traceState instanceof VendorTraceState)
+    assert.strictEqual(traceState.traceState, '')
   })
 })
