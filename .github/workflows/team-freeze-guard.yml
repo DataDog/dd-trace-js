@@ -31,9 +31,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: DataDog/team-freeze-guard@29e92069c40f38088e636f27df70d10c24e647b6  # v0.0.2
+      - uses: DataDog/team-freeze-guard@e4ff51a72cac229b238e5a302af0d3d955ae5b54 # v0.0.4
         with:
           bypass-labels: |
             dev/testing
             github_actions
-          frozen-teams: ""
+          frozen-teams: |
+            @DataDog/dd-trace-js
+            @DataDog/apm-idm-js
+            @DataDog/ml-observability
+            @DataDog/lang-platform-js
