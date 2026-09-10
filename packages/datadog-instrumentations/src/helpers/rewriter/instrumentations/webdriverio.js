@@ -428,9 +428,9 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression TryStatement',
+    astQuery: 'VariableDeclarator[id.name="testFrameworkFnWrapper"] > FunctionExpression',
     channelName: 'testFrameworkFnWrapper',
-    transform: 'awaitContextCallbackAtFunctionStart',
+    transform: 'awaitContextCallback',
     transformOptions: {
       callbackName: 'rumCleanupCallback',
     },
@@ -453,12 +453,11 @@ module.exports = [
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
     },
-    astQuery: 'FunctionDeclaration[id.name="executeAsync"] CatchClause ' +
-      'IfStatement[test.operator=">"][test.left.object.name="retries"]' +
-      '[test.left.property.name="limit"][test.right.object.name="retries"]' +
-      '[test.right.property.name="attempts"]',
+    astQuery: 'TryStatement:has(CatchClause IfStatement[test.operator=">"]' +
+      '[test.left.object.name="retries"][test.left.property.name="limit"]' +
+      '[test.right.object.name="retries"][test.right.property.name="attempts"]) > BlockStatement',
     channelName: 'executeAsync',
-    transform: 'awaitContextCallbackAtTryStart',
+    transform: 'awaitContextCallback',
     transformOptions: {
       callbackName: 'rumStartCallback',
     },
