@@ -5,7 +5,7 @@ const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
-const { getEnvironmentVariable, hasRequiredConfigurations } = require('./config/helper')
+const { getEnvironmentVariable } = require('./config/helper')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
@@ -429,8 +429,9 @@ class Tracer extends NoopProxy {
    */
   #updateTracing (config) {
     if (config.DD_TRACE_ENABLED !== false) {
-      const aiguardEnabled = config.experimental?.aiguard?.enabled &&
-        hasRequiredConfigurations(config)
+      const aiguardEnabled = config.experimental?.aiguard?.enabled === true &&
+        config.DD_API_KEY !== undefined &&
+        config.DD_APP_KEY !== undefined
       if (config.experimental?.aiguard?.enabled && !aiguardEnabled && !this.#aiguardConfigurationErrorLogged) {
         log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
         this.#aiguardConfigurationErrorLogged = true

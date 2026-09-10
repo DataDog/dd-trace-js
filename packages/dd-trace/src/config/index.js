@@ -29,7 +29,6 @@ const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
   getEnvironmentVariables,
-  getConfigurationValue,
   getStableConfigSources,
   getValueFromEnvSources,
 } = require('./helper')
@@ -127,6 +126,22 @@ function undo (config, source) {
   }
 }
 
+function get (object, path) {
+  // Fast path for simple property access.
+  if (object[path] !== undefined) {
+    return object[path]
+  }
+  let index = 0
+  while (true) {
+    const nextIndex = path.indexOf('.', index)
+    if (nextIndex === -1) {
+      return object[path.slice(index)]
+    }
+    object = object[path.slice(index, nextIndex)]
+    index = nextIndex + 1
+  }
+}
+
 /**
  * @param {Config} config
  * @template {ConfigPath} TPath
@@ -146,7 +161,7 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
       return
     }
   } else if (source === 'calculated' || source === 'remote_config') {
-    if (source === 'calculated' && value === getConfigurationValue(config, name)) {
+    if (source === 'calculated' && value === get(config, name)) {
       return
     }
     changeTracker[source].add(name)

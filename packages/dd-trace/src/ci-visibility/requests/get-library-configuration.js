@@ -1,8 +1,6 @@
 'use strict'
 
 const getConfig = require('../../config')
-const { EVP_SUBDOMAIN_HEADER_NAME } = require('../../evp_proxy/constants')
-const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const id = require('../../id')
 const log = require('../../log')
 const { EARLY_FLAKE_DETECTION_RETRY_BUCKETS, createEfdRetryPolicy } = require('../efd-retry-policy')
@@ -16,6 +14,7 @@ const {
 } = require('../telemetry')
 const { MAX_RETRIES, validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
+const { createApiRequestRoute } = require('./route')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = Object.freeze({
   '5s': 10,
@@ -228,24 +227,20 @@ function getLibraryConfiguration ({
   tag,
 }, done) {
   const config = getConfig()
-  const options = {
-    path: '/api/v2/libraries/tests/services/setting',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    url,
-    timeout: 20_000,
+  const path = '/api/v2/libraries/tests/services/setting'
+  const route = createApiRequestRoute(config, { url, path, isEvpProxy, evpProxyPrefix })
+  if (!route) {
+    return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
   }
 
-  if (isEvpProxy) {
-    options.path = joinEVPProxyPath(evpProxyPrefix, '/api/v2/libraries/tests/services/setting')
-    options.headers[EVP_SUBDOMAIN_HEADER_NAME] = 'api'
-  } else {
-    if (!config.DD_API_KEY) {
-      return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
-    }
-    options.headers['dd-api-key'] = config.DD_API_KEY
+  const options = {
+    ...route,
+    method: 'POST',
+    headers: {
+      ...route.headers,
+      'Content-Type': 'application/json',
+    },
+    timeout: 20_000,
   }
 
   const data = JSON.stringify({

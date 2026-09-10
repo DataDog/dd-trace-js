@@ -185,32 +185,6 @@ describe('Config', () => {
       })
     }
 
-    it('validates every schema requirement against Config property paths', () => {
-      const loadSupportedConfigurations = proxyquire.noPreserveCache()
-      const fresh = loadSupportedConfigurations('../../src/config/supported-configurations.json', {})
-      fresh.supportedConfigurations.DD_AI_GUARD_ENDPOINT[0].required = true
-      const loadHelper = proxyquire.noPreserveCache()
-      const helper = loadHelper('../../src/config/helper', {
-        './supported-configurations.json': fresh,
-      })
-      const config = getConfig()
-
-      assert.strictEqual(helper.hasRequiredConfigurations(config), false)
-
-      config.DD_API_KEY = 'api-key'
-      config.DD_APP_KEY = 'app-key'
-
-      assert.strictEqual(helper.hasRequiredConfigurations({
-        DD_API_KEY: 'api-key',
-        DD_APP_KEY: 'app-key',
-      }), false)
-      assert.strictEqual(helper.hasRequiredConfigurations(config), false)
-
-      config.experimental.aiguard.endpoint = 'https://example.com'
-
-      assert.strictEqual(helper.hasRequiredConfigurations(config), true)
-    })
-
     itV6Filter('drops the deprecated DD_PROFILING_EXPERIMENTAL_* aliases without rewriting them', () => {
       const helper = loadFreshHelper()
       const envs = helper.getEnvironmentVariables({
@@ -2554,7 +2528,7 @@ describe('Config', () => {
     assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
-  it('should reject an empty required configuration', () => {
+  it('should reject an empty API key', () => {
     process.env.DD_API_KEY = ''
 
     const config = getConfig()
@@ -2566,7 +2540,19 @@ describe('Config', () => {
     )
   })
 
-  it('should redact an invalid sensitive required configuration', () => {
+  it('should reject an empty app key', () => {
+    process.env.DD_APP_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_APP_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_APP_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should redact an invalid API key', () => {
     process.env.DD_API_KEY = 'api-key\n'
 
     const config = getConfig()

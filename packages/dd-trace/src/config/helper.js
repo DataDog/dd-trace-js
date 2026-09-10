@@ -13,7 +13,6 @@
  * @property {string} [namespace] Nests the canonical env name under this property path (e.g. `telemetry`).
  * @property {string} [transform]
  * @property {string} [allowed]
- * @property {boolean} [required] Whether shared required-configuration validation includes this configuration.
  * @property {string} [description]
  * @property {string|boolean} [deprecated]
  * @property {boolean} [sensitive] Excludes the configuration value from configuration telemetry.
@@ -46,14 +45,8 @@ applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 const aliases = {}
 const deprecations = {}
 
-/** @type {Set<string>} */
-const requiredConfigurations = new Set()
-
 for (const [canonical, configuration] of Object.entries(supportedConfigurations)) {
   for (const implementation of configuration) {
-    if (implementation.required) {
-      requiredConfigurations.add(canonical)
-    }
     if (implementation.deprecated) {
       deprecations[canonical] = implementation.deprecated
       // Deprecated entries with an alias may not be listed in the supported configurations map
@@ -174,40 +167,6 @@ function loadConfigurationsTable () {
 }
 
 /**
- * @param {object} config
- * @param {string} path
- * @returns {unknown}
- */
-function getConfigurationValue (config, path) {
-  let object = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (config))
-  if (object[path] !== undefined) return object[path]
-
-  let index = 0
-  while (true) {
-    const nextIndex = path.indexOf('.', index)
-    if (nextIndex === -1) return object[path.slice(index)]
-
-    const value = object[path.slice(index, nextIndex)]
-    if (value === null || typeof value !== 'object') return
-
-    object = /** @type {Record<string, unknown>} */ (value)
-    index = nextIndex + 1
-  }
-}
-
-/**
- * @param {import('./config-base')} config
- */
-function hasRequiredConfigurations (config) {
-  loadConfigurationsTable()
-  for (const name of requiredConfigurations) {
-    const path = configurationsTable[name].property ?? name
-    if (getConfigurationValue(config, path) === undefined) return false
-  }
-  return true
-}
-
-/**
  * Parses and transforms a raw environment value with the same parser and
  * transformer Config applies when it reads environment sources, so callers
  * receive the typed value instead of the raw string.
@@ -324,9 +283,6 @@ function getValueFromEnvSources (name, skipDefault) {
 }
 
 module.exports = {
-  getConfigurationValue,
-  hasRequiredConfigurations,
-
   getValueFromEnvSources,
 
   /**
