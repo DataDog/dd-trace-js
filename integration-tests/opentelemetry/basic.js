@@ -34,9 +34,7 @@ otelTracer.startActiveSpan('otel-sub', {
 
   assert.ok(carrier.traceparent)
   assert.strictEqual(activeTraceState.serialize(), '')
-  if (ot.createTraceState) {
-    assert.strictEqual(Object.getPrototypeOf(activeTraceState), Object.getPrototypeOf(ot.createTraceState()))
-  }
+  assert.strictEqual(Object.getPrototypeOf(activeTraceState), Object.getPrototypeOf(ot.createTraceState()))
   assert.ok(extractedSpanContext)
   assert.strictEqual(extractedSpanContext.traceId, activeSpanContext.traceId)
   assert.strictEqual(extractedSpanContext.spanId, activeSpanContext.spanId)

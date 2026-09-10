@@ -8,7 +8,7 @@ const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client
 const latestVersions = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
-const OTEL_API_VERSIONS = ['1.0.0', '1.5.0', latestVersions['@opentelemetry/api']]
+const OTEL_API_VERSIONS = ['1.4.1', '1.8.0', latestVersions['@opentelemetry/api']]
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
