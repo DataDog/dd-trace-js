@@ -97,6 +97,7 @@
 /benchmark/sirun/plugin-redis-traced/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /benchmark/sirun/plugin-ws/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/benchmark/sirun/instrument-get-hooks/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 /index.electron.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/dd-trace-js @DataDog/apm-idm-js
