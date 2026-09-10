@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const BaseWriter = require('../../../src/exporters/common/writer')
 
 require('../../setup/core')
 
@@ -288,8 +289,56 @@ describe('AgentlessExporter', () => {
 
       exporter.flush(done, { reportErrors: true })
 
-      sinon.assert.calledOnceWithExactly(writer.flush, done, { reportErrors: true })
+      sinon.assert.calledOnceWithExactly(writer.flush, sinon.match.func, { reportErrors: true })
       sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('waits for an active delivery before reporting a boundary failure', () => {
+      let completeDelivery
+      let failPayload = false
+      const boundaryError = new Error('boundary failed')
+      class ControlledWriter extends BaseWriter {
+        /** @param {object} options */
+        constructor (options) {
+          super(options)
+          let count = 0
+          this._encoder = {
+            count: () => count,
+            encode: () => { count++ },
+            makePayload: () => {
+              if (failPayload) throw boundaryError
+              count = 0
+              return Buffer.from('payload')
+            },
+            reset: () => { count = 0 },
+          }
+        }
+
+        /**
+         * @param {Buffer} data
+         * @param {number} count
+         * @param {(error?: Error) => void} done
+         */
+        _sendPayload (data, count, done) {
+          completeDelivery = done
+        }
+      }
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': ControlledWriter,
+      })
+      exporter = new Exporter({ flushInterval: 1 })
+      const done = sinon.spy()
+
+      exporter.export([{ name: 'active' }])
+      clock.tick(1)
+      exporter.export([{ name: 'boundary' }])
+      failPayload = true
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.notCalled(done)
+      assert.strictEqual(typeof completeDelivery, 'function')
+      completeDelivery()
+      sinon.assert.calledOnceWithExactly(done, boundaryError)
     })
 
     it('reports synchronous writer failures when requested', () => {
