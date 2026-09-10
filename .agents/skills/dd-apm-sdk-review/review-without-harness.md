@@ -4,15 +4,8 @@ Use this file when you cannot invoke `.agents/skills/` (GitHub Codex, or any
 pull-request review bot). Do not run `dd-apm-sdk-review` and do not execute
 `SKILL.md` Step 1. This file is the review contract, not a product lens.
 
-TEMPORARY experiment (delete before merging this stacked PR): every review
-comment MUST start with `[APMSDKREVIEW][<rule-file>] ` where `<rule-file>` is
-the basename of the reviewer file that justifies the finding
-(`correctness.md`, `security.md`, `coherence.md`, `_common.md`,
-`performance.md`, `design.md`, `maintainability.md`, `conventions.md`,
-`cross-sdk.md`, or this file). Example:
-`[APMSDKREVIEW][correctness.md] inverted shouldSample early-return skips
-recording while under budget.` If no lens applies, cite `AGENTS.md` and say
-why.
+Paths below are relative to the tracer repository root after this file is
+mirrored to `.agents/skills/dd-apm-sdk-review/`.
 
 When you are reviewing a pull request or a diff, use these files as the
 review spec — the checks and the P0/P1/P2 bar only:
@@ -27,8 +20,7 @@ review spec — the checks and the P0/P1/P2 bar only:
 - `.agents/skills/dd-apm-sdk-review/reviewers/conventions.md`
 - `.agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md`
 - the matching file under `.agents/dd-apm-sdk-review-overrides/reviewers/`
-  when it exists (additive; read both). Skip this file itself — it is not a
-  lens override.
+  when it exists (additive; read both)
 - `.agents/dd-apm-sdk-review-overrides/repo-context.md` (cite related
   skills; do not invoke them)
 

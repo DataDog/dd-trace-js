@@ -164,7 +164,7 @@ Exception: security findings route through [SECURITY.md](SECURITY.md) instead. A
 public forum, so posting one there is an improper disclosure.
 
 **Reviewer without a skill harness** (for example, GitHub Codex): read and follow
-`.agents/dd-apm-sdk-review-overrides/reviewers/no-harness-review.md`. Do not load `SKILL.md`
+`.agents/skills/dd-apm-sdk-review/review-without-harness.md`. Do not load `SKILL.md`
 or `reviewers/report-template.md`.
 
 ### Commit Messages
