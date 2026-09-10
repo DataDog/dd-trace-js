@@ -15,6 +15,8 @@ require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
+const SpanContext = require('../../src/opentelemetry/span_context')
+const NoopSpan = require('../../src/noop/span')
 const NoopTracer = require('../../src/noop/tracer')
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
@@ -96,6 +98,36 @@ describe('OTel Tracer', () => {
       tracer._tracer = originalTracer
       tracer._tracingInitialized = originalInitialized
     }
+  })
+
+  it('returns a non-recording span under a non-recording Datadog parent', () => {
+    const otelTracer = new Tracer({}, {}, new TracerProvider())
+    const parent = new NoopSpan(tracer._tracer)
+    const parentSpan = api.trace.wrapSpanContext(new SpanContext(parent.context()))
+    const context = api.trace.setSpan(api.context.active(), parentSpan)
+    const span = otelTracer.startSpan('name', {}, context)
+
+    assert.strictEqual(span instanceof Span, false)
+    assert.strictEqual(span.isRecording(), false)
+    assert.strictEqual(span.spanContext().traceId, parent.context().toTraceId(true))
+    span.end()
+  })
+
+  it('creates an explicit OTel root under a non-recording Datadog parent', () => {
+    const tracerProvider = new TracerProvider()
+    tracerProvider.register()
+    const otelTracer = new Tracer({}, {}, tracerProvider)
+    const parent = new NoopSpan(tracer._tracer)
+
+    tracer.scope().activate(parent, () => {
+      const span = otelTracer.startSpan('name', { root: true })
+
+      try {
+        assert.ok(span instanceof Span)
+      } finally {
+        span.end()
+      }
+    })
   })
 
   it('should pass through span kind', () => {

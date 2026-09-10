@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -328,39 +329,148 @@ describe('Plugin', () => {
       })
 
       describe('with disabled OPTIONS request tracing', () => {
-        beforeEach(async () => {
+        beforeEach(() => {
           process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
-          await agent.load('http', { client: false })
-          http = require(pluginToBeLoaded)
-        })
-
-        beforeEach(done => {
-          appListener = new http.Server(listener).listen(0, 'localhost', () => {
-            port = appListener.address().port
-            done()
-          })
         })
 
         afterEach(() => {
           delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
+          delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+          delete process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED
         })
 
-        it('should drop OPTIONS request traces', async () => {
-          await Promise.all([
-            agent.assertNoTraces(() => {
-              assert.fail('OPTIONS requests should not be traced')
-            }, { timeoutMs: 100 }),
-            axios.options(`http://localhost:${port}/user`),
-          ])
+        function useServer () {
+          beforeEach(async () => {
+            tracer = await agent.load('http', { client: false })
+            http = require(pluginToBeLoaded)
+          })
+
+          beforeEach(done => {
+            appListener = new http.Server(listener).listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
+          })
+        }
+
+        /**
+         * @param {Record<string, string>} [headers]
+         * @returns {Promise<Record<string, string>>}
+         */
+        async function injectFromOptionsRequest (headers) {
+          const spanStart = sinon.spy()
+          const spanStartChannel = channel('dd-trace:span:start')
+          let requestHandled = false
+          let carrier
+
+          spanStartChannel.subscribe(spanStart)
+          app = () => {
+            requestHandled = true
+            tracer.trace('options.child', span => {
+              carrier = {}
+              tracer.inject(span, 'http_headers', carrier)
+            })
+          }
+
+          try {
+            await Promise.all([
+              agent.assertNoTraces(() => {
+                assert.fail('OPTIONS requests should not be traced')
+              }, { timeoutMs: 100 }),
+              axios.options(`http://localhost:${port}/user`, { headers }),
+            ])
+
+            sinon.assert.notCalled(spanStart)
+            assert.strictEqual(requestHandled, true)
+          } finally {
+            spanStartChannel.unsubscribe(spanStart)
+          }
+
+          return carrier
+        }
+
+        describe('with continued propagation', () => {
+          useServer()
+
+          it('should propagate context without creating traces for OPTIONS requests', async () => {
+            const carrier = await injectFromOptionsRequest({
+              'x-datadog-trace-id': '123',
+              'x-datadog-parent-id': '456',
+              'x-datadog-sampling-priority': '1',
+              'x-datadog-origin': 'synthetics',
+              'x-datadog-tags': '_dd.p.foo=bar',
+            })
+
+            assert.strictEqual(carrier['x-datadog-trace-id'], '123')
+            assert.notStrictEqual(carrier['x-datadog-parent-id'], '456')
+            assert.strictEqual(carrier['x-datadog-sampling-priority'], '-1')
+            assert.strictEqual(carrier['x-datadog-origin'], 'synthetics')
+            assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.foo=bar')
+          })
+
+          it('should continue to trace other request methods', async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+              }),
+              axios.get(`http://localhost:${port}/user`),
+            ])
+          })
         })
 
-        it('should continue to trace other request methods', async () => {
-          await Promise.all([
-            agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-            }),
-            axios.get(`http://localhost:${port}/user`),
-          ])
+        describe('with restarted propagation', () => {
+          beforeEach(() => {
+            process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
+          })
+
+          useServer()
+
+          it('should start a new trace and preserve baggage', async () => {
+            const carrier = await injectFromOptionsRequest({
+              'x-datadog-trace-id': '123',
+              'x-datadog-parent-id': '456',
+              baggage: 'key=value',
+            })
+
+            assert.notStrictEqual(carrier['x-datadog-trace-id'], '123')
+            assert.strictEqual(carrier.baggage, 'key=value')
+          })
+        })
+
+        describe('with ignored propagation', () => {
+          beforeEach(() => {
+            process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+          })
+
+          useServer()
+
+          it('should start a new trace and discard baggage', async () => {
+            const carrier = await injectFromOptionsRequest({
+              'x-datadog-trace-id': '123',
+              'x-datadog-parent-id': '456',
+              baggage: 'key=value',
+            })
+
+            assert.notStrictEqual(carrier['x-datadog-trace-id'], '123')
+            assert.strictEqual(carrier.baggage, undefined)
+          })
+        })
+
+        describe('with 128-bit trace ID generation', () => {
+          beforeEach(() => {
+            process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+          })
+
+          useServer()
+
+          it('should generate a 128-bit trace ID without a parent', async () => {
+            const carrier = await injectFromOptionsRequest()
+            const traceId = carrier.traceparent.split('-')[1]
+
+            assert.match(traceId, /^[0-9a-f]{32}$/)
+            assert.notStrictEqual(traceId.slice(0, 16), '0000000000000000')
+            assert.match(carrier['x-datadog-tags'], /(?:^|,)_dd\.p\.tid=[0-9a-f]{16}(?:,|$)/)
+          })
         })
       })
 

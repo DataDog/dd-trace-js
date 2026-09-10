@@ -56,5 +56,19 @@ describe('NoopTracer', () => {
       assert.strictEqual(typeof span.context().toSpanId, 'function')
       assert.match(span.context().toSpanId(), /^\d+$/)
     })
+
+    it('should provide the internal span interfaces used by tracing plugins', () => {
+      const span = tracer.startSpan()
+
+      assert.strictEqual(span._spanContext, span.context())
+      span._spanContext.setTag('service.name', 'test')
+      span._processor.sample(span)
+    })
+
+    it('should ignore span events', () => {
+      const span = tracer.startSpan()
+
+      assert.strictEqual(span.addEvent('test'), span)
+    })
   })
 })

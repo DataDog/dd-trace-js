@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const Tracer = require('../src/tracer')
+const NoopSpan = require('../src/noop/span')
 const Span = require('../src/opentracing/span')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
@@ -248,6 +249,17 @@ describe('Tracer', () => {
       tracer.scope().activate(root, () => {
         tracer.trace('name', { childOf }, span => {
           assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+        })
+      })
+    })
+
+    it('should allow creating an explicit root under a non-recording span', () => {
+      const parent = new NoopSpan(tracer)
+
+      tracer.scope().activate(parent, () => {
+        tracer.trace('name', { childOf: null }, span => {
+          assert.ok(span instanceof Span)
+          assert.strictEqual(span.context()._parentId, null)
         })
       })
     })

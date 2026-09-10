@@ -23,6 +23,7 @@ describe('Inferred Proxy Spans with AppSec', () => {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RULES: path.join(cwd, 'appsec/inferred-proxy-spans/rules.json'),
+        DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: 'false',
         DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED: 'true',
       },
     })
@@ -52,6 +53,16 @@ describe('Inferred Proxy Spans with AppSec', () => {
     'x-dd-proxy-domain-name': 'example.com',
     'x-dd-proxy-stage': 'dev',
   }
+
+  it('should run AppSec for disabled OPTIONS requests', async () => {
+    const blockedResponse = await fetch(new URL('/blockattack', proc.url), {
+      method: 'OPTIONS',
+      headers: inferredHeaders,
+    })
+    await blockedResponse.arrayBuffer()
+
+    assert.strictEqual(blockedResponse.status, 403)
+  })
 
   it('should add _dd.appsec.enabled to inferred proxy span', async () => {
     await request('/', { headers: inferredHeaders })

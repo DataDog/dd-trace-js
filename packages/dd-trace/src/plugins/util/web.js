@@ -8,6 +8,7 @@ const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
 const { ERROR_MESSAGE } = require('../../constants')
+const NoopSpan = require('../../noop/span')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
@@ -50,11 +51,6 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
   }
 
   return web.plugin.startSpan(name, { ...options, tracer, config }, traceCtx)
-}
-
-function dropTrace (span) {
-  span.setTag(MANUAL_DROP, true)
-  span.context()._trace.isRecording = false
 }
 
 const web = {
@@ -106,7 +102,10 @@ const web = {
 
     context.config = config
 
-    if (!config.filter(req.url)) dropTrace(span)
+    if (!config.filter(req.url)) {
+      span.setTag(MANUAL_DROP, true)
+      span.context()._trace.isRecording = false
+    }
 
     if (config.service) {
       web.plugin.setServiceName(span, config.service)
@@ -181,6 +180,7 @@ const web = {
       middleware: [],
       beforeEnd: [],
       config: {},
+      requestTagsAdded: false,
     }
 
     contexts.set(req, context)
@@ -216,6 +216,14 @@ const web = {
     return context.middleware.at(-1)
   },
 
+  /**
+   * @param {import('../../opentracing/tracer')} tracer
+   * @param {ReturnType<typeof web.normalizeConfig>} config
+   * @param {string} name
+   * @param {import('node:http').IncomingMessage | import('node:http2').Http2ServerRequest} req
+   * @param {object} [traceCtx]
+   * @returns {import('../../opentracing/span') | NoopSpan}
+   */
   startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
@@ -224,21 +232,17 @@ const web = {
 
     let childOf = pubsubSpan || this.extractIncomingServerContext(tracer, headers)
 
+    if (req.method === 'OPTIONS' && config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED === false) {
+      childOf = new NoopSpan(tracer, childOf?.context?.() ?? childOf)
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
-    if (tracer._config?.inferredProxyServicesEnabled) {
+    } else if (tracer._config?.inferredProxyServicesEnabled) {
       const proxySpan = createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper)
       if (proxySpan) {
         childOf = proxySpan
       }
     }
 
-    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
-
-    if (req.method === 'OPTIONS' && config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED === false) {
-      dropTrace(span)
-    }
-
-    return span
+    return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
   },
 
   extractIncomingServerContext (tracer, headers) {
@@ -407,17 +411,16 @@ function splitHeader (str) {
   return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
 }
 
+/**
+ * @param {ReturnType<typeof web.patch>} context
+ * @param {string} [spanType]
+ */
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
   const spanContext = span.context()
 
-  // Idempotency guard. `addRequestTags` runs in `web.startSpan` for the
-  // normal HTTP path and again in `web.finishSpan`; without this guard the
-  // second call would re-extract the URL, re-obfuscate the query string,
-  // and re-publish five `tagsUpdateCh` events with the same values. The
-  // serverless path skips `startSpan` and lands here first, in which case
-  // HTTP_URL is unset and the work runs normally.
-  if (spanContext.hasTag(HTTP_URL)) return
+  if (context.requestTagsAdded) return
+  context.requestTagsAdded = true
 
   const url = extractURL(req)
   const type = spanType ?? WEB

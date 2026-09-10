@@ -440,27 +440,89 @@ describe('Plugin', () => {
           http2 = require(pluginToBeLoaded)
         })
 
-        beforeEach(done => {
-          appListener = http2.createServer(listener).listen(0, 'localhost', () => {
-            port = appListener.address().port
-            done()
+        /** @param {import('node:http2').Http2Server} server */
+        function listen (server) {
+          appListener = server
+          return new Promise(resolve => {
+            server.listen(0, 'localhost', () => {
+              port = server.address().port
+              resolve()
+            })
           })
-        })
+        }
+
+        /**
+         * @param {import('node:http2').Http2Server} server
+         * @param {() => boolean} wasHandled
+         */
+        async function assertOptionsSuppressed (server, wasHandled) {
+          const spanStart = sinon.spy()
+          const spanStartChannel = channel('dd-trace:span:start')
+
+          await listen(server)
+          spanStartChannel.subscribe(spanStart)
+          try {
+            await Promise.all([
+              agent.assertNoTraces(() => {
+                assert.fail('OPTIONS requests should not be traced')
+              }, { timeoutMs: 100 }),
+              request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
+            ])
+
+            sinon.assert.notCalled(spanStart)
+            assert.strictEqual(wasHandled(), true)
+          } finally {
+            spanStartChannel.unsubscribe(spanStart)
+          }
+        }
 
         afterEach(() => {
           delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
         })
 
-        it('should drop OPTIONS request traces', async () => {
-          await Promise.all([
-            agent.assertNoTraces(() => {
-              assert.fail('OPTIONS requests should not be traced')
-            }, { timeoutMs: 100 }),
-            request(http2, `http://localhost:${port}/user`, { method: 'OPTIONS' }),
-          ])
+        it('should not create traces for compatibility requests', async () => {
+          let handled = false
+          const server = http2.createServer((req, res) => {
+            handled = true
+            tracer.trace('options.child', () => {})
+            res.end()
+          })
+
+          await assertOptionsSuppressed(server, () => handled)
+        })
+
+        it('should not create traces for core streams', async () => {
+          let handled = false
+          const server = http2.createServer()
+          server.on('stream', stream => {
+            handled = true
+            tracer.trace('options.child', () => {})
+            stream.respond({ ':status': 200 })
+            stream.end()
+          })
+
+          await assertOptionsSuppressed(server, () => handled)
+        })
+
+        it('should not create traces for mixed servers', async () => {
+          let requestHandled = false
+          let streamHandled = false
+          const server = http2.createServer((req, res) => {
+            requestHandled = true
+            res.end()
+          })
+          server.on('stream', () => {
+            streamHandled = true
+            tracer.trace('options.child', () => {})
+          })
+
+          await assertOptionsSuppressed(server, () => requestHandled && streamHandled)
         })
 
         it('should continue to trace other request methods', async () => {
+          const server = http2.createServer(listener)
+          await listen(server)
+
           await Promise.all([
             agent.assertSomeTraces(traces => {
               const serverTrace = traces.find(trace => trace[0]?.name === 'web.request')

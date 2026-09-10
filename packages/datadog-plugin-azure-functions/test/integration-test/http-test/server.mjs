@@ -1,10 +1,16 @@
+import { channel } from 'node:diagnostics_channel'
+
 import 'dd-trace/init.js'
 import { app } from '@azure/functions'
+
+let spansStarted = 0
+channel('dd-trace:span:start').subscribe(() => { spansStarted++ })
 
 async function handlerFunction (request, context) {
   return {
     status: 200,
     body: 'Hello Datadog!',
+    headers: { 'x-test-spans-started': String(spansStarted) },
   }
 }
 

@@ -68,9 +68,13 @@ describe('esm', () => {
       const messagePromise = once(agent, 'message')
       const url = 'http://127.0.0.1:7071/api/httptest'
 
-      await fetch(url, { method: 'OPTIONS' })
-      await fetch(url)
+      const getResponse = await fetch(url)
+      const optionsResponse = await fetch(url, { method: 'OPTIONS' })
 
+      assert.strictEqual(
+        optionsResponse.headers.get('x-test-spans-started'),
+        getResponse.headers.get('x-test-spans-started')
+      )
       const [{ payload }] = await messagePromise
       assert.strictEqual(payload.length, 1)
       assert.strictEqual(payload[0].length, 1)
