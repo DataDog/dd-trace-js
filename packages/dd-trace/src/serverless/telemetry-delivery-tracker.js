@@ -17,12 +17,14 @@ class TelemetryDeliveryTracker {
    * @param {((error?: Error) => void)|undefined} done
    */
   track (deliver, done) {
-    const delivery = { callbacks: done ? [done] : [] }
+    const delivery = { callbacks: done ? [done] : undefined }
     this.#deliveries.add(delivery)
 
     const complete = (error) => {
       if (!this.#deliveries.delete(delivery)) return
-      for (const callback of delivery.callbacks) callback(error)
+      if (delivery.callbacks) {
+        for (const callback of delivery.callbacks) callback(error)
+      }
     }
 
     try {
@@ -52,7 +54,10 @@ class TelemetryDeliveryTracker {
       if (error) errors.push(error)
       if (--pending === 0) finish()
     }
-    for (const delivery of this.#deliveries) delivery.callbacks.push(complete)
+    for (const delivery of this.#deliveries) {
+      delivery.callbacks ??= []
+      delivery.callbacks.push(complete)
+    }
   }
 }
 

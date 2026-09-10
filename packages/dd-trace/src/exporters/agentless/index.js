@@ -112,16 +112,19 @@ class AgentlessExporter {
 
   /**
    * Flushes any pending traces immediately. Clears the batch timer.
-   * @param {Function} [done] - Callback when flush is complete
+   * @param {(error?: Error) => void} [done] - Callback when flush is complete
+   * @param {{ reportErrors?: boolean }} [options]
    */
-  flush (done = () => {}) {
+  flush (done = () => {}, options) {
     clearTimeout(this.#timer)
     this.#timer = undefined
     try {
-      this._writer.flush(done)
-    } catch (err) {
-      log.error('Failed to flush traces: %s', err.message)
-      done()
+      this._writer.flush(done, options)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const flushError = error instanceof Error ? error : new Error(message)
+      log.error('Failed to flush traces: %s', message)
+      done(options?.reportErrors ? flushError : undefined)
     }
   }
 }

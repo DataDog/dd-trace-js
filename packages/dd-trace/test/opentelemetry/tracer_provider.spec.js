@@ -232,29 +232,39 @@ describe('OTel TracerProvider', () => {
       assert.deepStrictEqual(events, ['agent-received', 'agent-responded', 'forceFlush-resolved'])
     })
 
-    it('serializes overlapping flush generations', async () => {
+    it('starts every overlapping flush boundary immediately', async () => {
+      const firstSignal = new EventEmitter()
+      const secondSignal = new EventEmitter()
+      const processor = new NoopSpanProcessor()
+      processor.forceFlush = sinon.stub()
+      processor.forceFlush.onFirstCall().returns(once(firstSignal, 'done'))
+      processor.forceFlush.onSecondCall().returns(once(secondSignal, 'done'))
+      const provider = new TracerProvider({ spanProcessors: [processor] })
+
+      const firstFlush = provider.forceFlush()
+      const secondFlush = provider.forceFlush()
+
+      sinon.assert.calledTwice(processor.forceFlush)
+      firstSignal.emit('done')
+      secondSignal.emit('done')
+      await Promise.all([firstFlush, secondFlush])
+    })
+
+    it('reports a delivery failure to every overlapping flush boundary', async () => {
       const provider = new TracerProvider()
-      const firstRequest = waitForTraceRequest()
-      provider.getTracer().startSpan('otel.force_flush.first_generation').end()
-      let firstSettled = false
-      const firstFlush = provider.forceFlush().finally(() => { firstSettled = true })
-      const firstResponse = await firstRequest
+      const requestReceived = waitForTraceRequest()
+      provider.getTracer().startSpan('otel.force_flush.overlapping_failure').end()
 
-      provider.getTracer().startSpan('otel.force_flush.second_generation').end()
-      let secondSettled = false
-      const secondFlush = provider.forceFlush().finally(() => { secondSettled = true })
-      assert.strictEqual(firstSettled, false)
-      assert.strictEqual(secondSettled, false)
+      const firstFlush = provider.forceFlush()
+      const response = await requestReceived
+      const secondFlush = provider.forceFlush()
+      const firstRejected = assert.rejects(firstFlush, isAgentFailure)
+      const secondRejected = assert.rejects(secondFlush, isAgentFailure)
 
-      const secondRequest = waitForTraceRequest()
-      firstResponse.end(agentResponse)
-      await firstFlush
-      const secondResponse = await secondRequest
-      assert.strictEqual(secondSettled, false)
+      response.statusCode = 500
+      response.end('agent failed')
 
-      secondResponse.end(agentResponse)
-      await secondFlush
-      assert.strictEqual(secondSettled, true)
+      await Promise.all([firstRejected, secondRejected])
     })
 
     it('resolves without sending when the Datadog buffer is empty', async () => {
@@ -365,6 +375,23 @@ describe('OTel TracerProvider', () => {
       await provider.forceFlush()
 
       sinon.assert.calledOnce(processor.forceFlush)
+    })
+
+    it('prefers an exporter-specific force flush boundary', async () => {
+      const datadogTracer = require('../../index')._tracer
+      const originalExporter = datadogTracer._exporter
+      const flush = sinon.stub()
+      const forceFlush = sinon.stub().callsArg(0)
+      datadogTracer._exporter = { export: sinon.stub(), flush, forceFlush }
+
+      try {
+        await new TracerProvider().forceFlush()
+      } finally {
+        datadogTracer._exporter = originalExporter
+      }
+
+      sinon.assert.calledOnce(forceFlush)
+      sinon.assert.notCalled(flush)
     })
 
     it('still flushes processors when the exporter has no flush method', async () => {
