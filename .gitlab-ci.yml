@@ -53,6 +53,9 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
+  # Test the OpenTelemetry Operator-compatible Node.js image jobs from one-pipeline.
+  OTEL_OPERATOR_IMAGES_ENABLED: "true"
+  OTEL_OPERATOR_LANGUAGE: nodejs
   # One pipeline injection package size ratchet
   OCI_PACKAGE_MAX_SIZE_BYTES: 30_000_000
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
