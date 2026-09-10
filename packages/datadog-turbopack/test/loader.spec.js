@@ -179,7 +179,8 @@ describe('Turbopack loader', () => {
 
   it('rewrites source targets independently of build-process disablement', () => {
     const runner = path.join(__dirname, 'resources/run-loader-with-build-config.js')
-    const { disabled, enabled } = JSON.parse(execFileSync(process.execPath, [runner], { encoding: 'utf8' }))
+    const enabled = JSON.parse(execFileSync(process.execPath, [runner], { encoding: 'utf8' }))
+    const disabled = JSON.parse(execFileSync(process.execPath, [runner, 'disabled'], { encoding: 'utf8' }))
 
     for (let index = 0; index < enabled.length; index++) {
       assert.match(enabled[index], /tr_ch_apm_tracingChannel/)
@@ -379,6 +380,43 @@ describe('Turbopack loader', () => {
       version: '2.0.0',
     }])
     assert.equal(exports.original, true)
+  })
+
+  it('fails open when a rewritten CommonJS target has unsafe wrapper bindings', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'unsafe-rewrite-package', { version: '1.0.0' })
+    const source = 'function require () { return true }\nmodule.exports = true\n'
+    const resourcePath = write(packageDir, 'index.js', source)
+    const normalizedResourcePath = fs.realpathSync(resourcePath).replaceAll('\\', '/')
+    const sourceMap = { mappings: 'AAAA', sources: ['input.js'], version: 3 }
+    const outputMap = { mappings: 'BBBB', sources: ['output.js'], version: 3 }
+    const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: outputMap })
+    const emitWarning = sinon.spy()
+    const rewriteTarget = { filePath: 'index.js', moduleName: 'unsafe-rewrite-package' }
+    const { loader } = loadLoader({
+      hooks: { 'unsafe-rewrite-package': sinon.stub() },
+      instrumentations: {},
+      rewrite,
+      rewriteTarget: () => rewriteTarget,
+      rewriteTargets: { 'unsafe-rewrite-package/index.js': 'unsafe-rewrite-package' },
+    })
+
+    const result = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
+
+    assert.equal(result.code, source)
+    assert.strictEqual(result.sourceMap, sourceMap)
+    sinon.assert.calledOnceWithExactly(
+      emitWarning,
+      sinon.match.has('message', sinon.match(/unsafe wrapper bindings/))
+    )
+    sinon.assert.calledOnceWithExactly(
+      rewrite,
+      source,
+      normalizedResourcePath,
+      'commonjs',
+      rewriteTarget,
+      sourceMap
+    )
   })
 
   it('preserves irrelevant resources and fails builds for known target errors', () => {

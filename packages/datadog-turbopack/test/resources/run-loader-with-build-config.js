@@ -4,13 +4,12 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const loader = require('../../src/loader')
-
 /**
  * @param {string} resourcePath
  * @returns {string}
  */
 function run (resourcePath) {
+  const loader = require('../../src/loader')
   const source = fs.readFileSync(resourcePath, 'utf8')
   let result
   loader.call({
@@ -24,6 +23,11 @@ function run (resourcePath) {
 }
 
 function main () {
+  delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+  if (process.argv[2] === 'disabled') {
+    process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'ai'
+    require('../../../datadog-instrumentations/src/helpers/register')
+  }
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-turbopack-disablement-'))
   try {
     const packageDir = path.join(directory, 'node_modules', 'ai')
@@ -48,11 +52,7 @@ function main () {
       resourcePaths.push(resourcePath)
     }
 
-    const enabled = resourcePaths.map(run)
-    process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'ai'
-    require('../../../datadog-instrumentations/src/helpers/register')
-    const disabled = resourcePaths.map(run)
-    process.stdout.write(JSON.stringify({ disabled, enabled }))
+    process.stdout.write(JSON.stringify(resourcePaths.map(run)))
   } finally {
     fs.rmSync(directory, { force: true, recursive: true })
   }
