@@ -442,7 +442,7 @@ function hasUnavailableRemoteCiCommand (ci) {
   })) return true
 
   return evidence.some(item => {
-    const reference = /^\s*uses:\s*["']?([^"'\s]+)["']?\s*$/im.exec(item)?.[1]
+    const reference = /^[ \t]*uses:[ \t]*["']?([^"'\s]+)["']?[ \t]*$/im.exec(item)?.[1]
     return reference && !reference.startsWith('./')
   })
 }
