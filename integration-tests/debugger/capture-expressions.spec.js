@@ -3,24 +3,63 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 
-const { assertObjectContains } = require('../helpers')
+const { assertObjectContains, stopProc } = require('../helpers')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('captureExpressions', function () {
     const t = setup({ testApp: 'target-app/snapshot.js', dependencies: ['fastify'] })
 
-    beforeEach(() => { t.triggerBreakpoint() })
-
+    /**
+     * @param {object[]} captureExpressions
+     * @param {object} [additionalConfig]
+     * @returns {Promise<object>}
+     */
     async function captureExpressionsSnapshot (captureExpressions, additionalConfig = {}) {
+      const breakpointTriggered = t.triggerBreakpoint()
+      const snapshotReceived = once(t.agent, 'debugger-input')
+
       t.agent.addRemoteConfig(t.generateRemoteConfig({
         captureExpressions,
         ...additionalConfig,
       }))
 
-      const [{ payload: [{ debugger: { snapshot } }] }] = await once(t.agent, 'debugger-input')
+      const [, [{ payload: [{ debugger: { snapshot } }] }]] = await Promise.all([
+        breakpointTriggered,
+        snapshotReceived,
+      ])
 
       return snapshot
+    }
+
+    /**
+     * @param {object} overrides
+     * @returns {Promise<{ errorDiagnostic: object, statuses: string[] }>}
+     */
+    async function captureExpressionError (overrides) {
+      const rcConfig = t.generateRemoteConfig(overrides)
+      const statuses = []
+
+      /** @param {{ payload: Array<{ debugger: { diagnostics: { probeId: string, status: string } } }> }} event */
+      function recordStatuses ({ payload }) {
+        for (const { debugger: { diagnostics } } of payload) {
+          if (diagnostics.probeId === rcConfig.config.id) statuses.push(diagnostics.status)
+        }
+      }
+
+      const errorReceived = t.waitForProbeStatus([rcConfig.config.id], 'ERROR')
+      t.agent.on('debugger-diagnostics', recordStatuses)
+      try {
+        t.agent.addRemoteConfig(rcConfig)
+        const diagnosticsByProbeId = await errorReceived
+        await stopProc(t.proc)
+        return {
+          errorDiagnostic: diagnosticsByProbeId.get(rcConfig.config.id),
+          statuses,
+        }
+      } finally {
+        t.agent.removeListener('debugger-diagnostics', recordStatuses)
+      }
     }
 
     it('should capture a simple variable expression', async function () {
@@ -99,54 +138,35 @@ describe('Dynamic Instrumentation', function () {
       })
 
       it('should report error when both captureSnapshot and captureExpressions are set', async function () {
-        t.agent.addRemoteConfig(t.generateRemoteConfig({
+        const { errorDiagnostic, statuses } = await captureExpressionError({
           captureSnapshot: true,
           captureExpressions: [
             { name: 'num', expr: { dsl: 'num', json: { ref: 'num' } } },
           ],
-        }))
+        })
 
-        const [{ payload }] = await once(t.agent, 'debugger-diagnostics')
-
-        const errorDiagnostic = payload.find(({ debugger: { diagnostics } }) => diagnostics.status === 'ERROR')
         assert.ok(errorDiagnostic, 'Should receive ERROR diagnostic')
-        const errorMessage = errorDiagnostic.debugger.diagnostics.exception.message
+        const errorMessage = errorDiagnostic.exception.message
         assert.ok(
           errorMessage.includes('Cannot set both captureSnapshot and captureExpressions'),
           `Expected error message about mutual exclusivity, got: ${errorMessage}`
         )
-
-        const installedDiagnostic = payload.find(({ debugger: { diagnostics } }) => diagnostics.status === 'INSTALLED')
-        assert.ok(
-          !installedDiagnostic,
-          'Probe should not be installed when both captureSnapshot and captureExpressions are set'
-        )
+        assert.ok(!statuses.includes('INSTALLED'), 'Probe should not be installed with conflicting capture options')
       })
 
-      it('should report error when capture expression cannot be compiled', function (done) {
-        const rcConfig = t.generateRemoteConfig({
+      it('should report error when capture expression cannot be compiled', async function () {
+        const { errorDiagnostic, statuses } = await captureExpressionError({
           captureExpressions: [
             { name: 'invalid expr', expr: { dsl: 'this is not valid', json: { ref: 'this is not valid' } } },
           ],
         })
 
-        t.agent.on('debugger-diagnostics', ({ payload }) => {
-          const errorDiagnostic = payload.find(({ debugger: { diagnostics } }) => diagnostics.status === 'ERROR')
-          if (errorDiagnostic) {
-            assert.ok(
-              errorDiagnostic.debugger.diagnostics.exception.message.includes('Cannot compile capture expression'),
-              `Expected compile error, got: ${errorDiagnostic.debugger.diagnostics.exception.message}`
-            )
-
-            const installedDiagnostic = payload.find(({ debugger: { diagnostics } }) => {
-              return diagnostics.status === 'INSTALLED'
-            })
-            assert.ok(!installedDiagnostic, 'Probe should not be installed when expression cannot be compiled')
-            done()
-          }
-        })
-
-        t.agent.addRemoteConfig(rcConfig)
+        assert.ok(errorDiagnostic, 'Should receive ERROR diagnostic')
+        assert.ok(
+          errorDiagnostic.exception.message.includes('Cannot compile capture expression'),
+          `Expected compile error, got: ${errorDiagnostic.exception.message}`
+        )
+        assert.ok(!statuses.includes('INSTALLED'), 'Probe should not be installed when expression compilation fails')
       })
     })
 
