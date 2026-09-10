@@ -97,7 +97,7 @@ describe('OpenTelemetry API version compatibility', function () {
         await agent?.stop()
       })
 
-      it('exports spans through the vendored Core package', async () => {
+      it('preserves span and propagation behavior through the vendored Core package', async () => {
         const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
         assert.strictEqual(installedApiVersion, apiVersion)
 
@@ -111,6 +111,8 @@ describe('OpenTelemetry API version compatibility', function () {
         await check(agent, proc, timeout, ({ payload }) => {
           const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
           assert.ok(trace)
+          assert.strictEqual(trace[0].meta['test.attribute'], 'value')
+          assert.strictEqual(trace[0].duration, 50_000_000)
         })
       })
     })

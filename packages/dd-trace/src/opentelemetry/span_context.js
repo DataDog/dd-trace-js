@@ -1,6 +1,7 @@
 'use strict'
 
-const api = require('@opentelemetry/api')
+const { TraceState } = require('../../../../vendor/dist/@opentelemetry/core')
+
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
@@ -38,7 +39,7 @@ class SpanContext {
 
   get traceState () {
     const ts = this._ddContext._tracestate
-    return api.createTraceState(ts ? ts.toString() : '')
+    return new TraceState(ts ? ts.toString() : '')
   }
 }
 
