@@ -20,6 +20,19 @@ const pollInterval = 0.1
  */
 
 /**
+ * @typedef {object} DebuggerDiagnostics
+ * @property {string} probeId
+ * @property {string} status
+ * @property {{ message: string }} [exception]
+ */
+
+/**
+ * @typedef {object} DebuggerSnapshot
+ * @property {{ id: string }} probe
+ * @property {number} timestamp
+ */
+
+/**
  * @typedef {typeof import('../../packages/dd-trace/test/debugger/devtools_client/utils').generateProbeConfig}
  *   GenerateProbeConfigFn
  */
@@ -73,6 +86,10 @@ const pollInterval = 0.1
  * @property {(overrides?: object) => object} generateRemoteConfig - Generates RC for the primary breakpoint.
  * @property {BoundGenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
  * @property {() => Promise<object>} snapshotReceived - Waits for a snapshot to be received from the test app.
+ * @property {(probeIds: Iterable<string>, status: string) => Promise<Map<string, DebuggerDiagnostics>>}
+ *   waitForProbeStatus - Waits until every probe reports the requested status.
+ * @property {(expectedCount: number, action: () => Promise<void>) => Promise<DebuggerSnapshot[]>}
+ *   captureSnapshotsUntilExit - Records snapshots until the test app exits.
  */
 
 module.exports = {
@@ -139,9 +156,12 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     generateRemoteConfig: generateRemoteConfig.bind(null, breakpoints[0]),
     generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0]),
 
+    waitForProbeStatus,
+    captureSnapshotsUntilExit,
+
     snapshotReceived () {
       return new Promise((/** @type {(value: object) => void} */ resolve) => {
-        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+        t.agent.once('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
           resolve(snapshot)
         })
       })
@@ -200,6 +220,64 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
       product: 'LIVE_DEBUGGING',
       id: `logProbe_${overrides.id}`,
       config: generateProbeConfig(breakpoint, overrides),
+    }
+  }
+
+  /**
+   * @param {Iterable<string>} probeIds
+   * @param {string} status
+   * @returns {Promise<Map<string, DebuggerDiagnostics>>}
+   */
+  function waitForProbeStatus (probeIds, status) {
+    const pendingProbeIds = new Set(probeIds)
+    const diagnosticsByProbeId = new Map()
+
+    return new Promise((resolve) => {
+      t.agent.on('debugger-diagnostics', diagnosticsReceived)
+
+      /** @param {{ payload: Array<{ debugger: { diagnostics: DebuggerDiagnostics } }> }} event */
+      function diagnosticsReceived ({ payload }) {
+        for (const { debugger: { diagnostics } } of payload) {
+          if (diagnostics.status !== status || !pendingProbeIds.delete(diagnostics.probeId)) continue
+          diagnosticsByProbeId.set(diagnostics.probeId, diagnostics)
+        }
+
+        if (pendingProbeIds.size !== 0) return
+        t.agent.removeListener('debugger-diagnostics', diagnosticsReceived)
+        resolve(diagnosticsByProbeId)
+      }
+    })
+  }
+
+  /**
+   * @param {number} expectedCount
+   * @param {() => Promise<void>} action
+   * @returns {Promise<DebuggerSnapshot[]>}
+   */
+  async function captureSnapshotsUntilExit (expectedCount, action) {
+    /** @type {DebuggerSnapshot[]} */
+    const snapshots = []
+    let resolveExpectedSnapshots
+    const expectedSnapshotsReceived = new Promise((resolve) => {
+      resolveExpectedSnapshots = resolve
+      if (expectedCount === 0) resolve()
+    })
+
+    /** @param {{ payload: Array<{ debugger: { snapshot: DebuggerSnapshot } }> }} event */
+    function inputReceived ({ payload }) {
+      for (const { debugger: { snapshot } } of payload) {
+        snapshots.push(snapshot)
+      }
+      if (snapshots.length >= expectedCount) resolveExpectedSnapshots()
+    }
+
+    t.agent.on('debugger-input', inputReceived)
+    try {
+      await Promise.all([action(), expectedSnapshotsReceived])
+      await stopProc(t.proc)
+      return snapshots
+    } finally {
+      t.agent.removeListener('debugger-input', inputReceived)
     }
   }
 
