@@ -45,7 +45,7 @@ describe('withDatadogTurbopack', () => {
       turbopack: {
         resolveAlias: { existing: './existing.js' },
         rules: {
-          '*': { loaders: ['catch-all-loader'] },
+          '*': [{ loaders: ['catch-all-loader'] }],
           '*.js': { loaders: ['javascript-loader'] },
         },
       },
