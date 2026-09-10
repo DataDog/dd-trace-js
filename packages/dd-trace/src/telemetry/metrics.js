@@ -2,7 +2,7 @@
 
 const { sendData } = require('./send-data')
 
-let LogCollapsingLowestDenseDDSketch
+let DDSketch
 
 function getId (type, namespace, name, tags) {
   return `${type}:${namespace}.${name}:${tagArray(tags).sort().join(',')}`
@@ -40,10 +40,10 @@ function hasPoints (metric) {
 }
 
 function createSketch () {
-  if (LogCollapsingLowestDenseDDSketch === undefined) {
-    ({ LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js'))
+  if (DDSketch === undefined) {
+    ({ DDSketch } = require('@datadog/libdatadog'))
   }
-  return new LogCollapsingLowestDenseDDSketch()
+  return new DDSketch()
 }
 
 class Metric {
@@ -141,13 +141,14 @@ class DistributionMetric extends Metric {
    * @returns {void}
    */
   track (value = 1) {
-    if (typeof value !== 'number' || !Number.isFinite(value)) return
+    // libdatadog's DDSketch.add throws on negative or non-finite input.
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return
 
     if (this.sketch === undefined) {
       this.sketch = createSketch()
     }
 
-    this.sketch.accept(value)
+    this.sketch.add(value)
     this.pointCount++
   }
 
@@ -158,7 +159,7 @@ class DistributionMetric extends Metric {
     const { metric, tags, common } = this
     return {
       metric,
-      sketch_b64: Buffer.from(this.sketch.toProto()).toString('base64'),
+      sketch_b64: Buffer.from(this.sketch.encode()).toString('base64'),
       common,
       tags,
     }
