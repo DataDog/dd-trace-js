@@ -13,11 +13,13 @@ const MAX_FLAG_LENGTH = 45
  * @returns {string}
  */
 function flagOf (workflowName) {
-  return workflowName
+  const normalizedName = workflowName
     .toLowerCase()
     .replaceAll(/[^\w.-]+/g, '-')
-    .replaceAll(/^-+|-+$/g, '')
-    .slice(0, MAX_FLAG_LENGTH)
+    .replace(/^-+/, '')
+  let end = normalizedName.length
+  while (end > 0 && normalizedName[end - 1] === '-') end--
+  return normalizedName.slice(0, Math.min(end, MAX_FLAG_LENGTH))
 }
 
 /**

@@ -1135,7 +1135,10 @@ function getCodeOwnersPatternRegex (pattern) {
   }
 
   const directoryOnly = pattern.endsWith('/')
-  const normalizedPattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '')
+  let normalizedPattern = pattern.replace(/^\/+/, '')
+  let normalizedPatternEnd = normalizedPattern.length
+  while (normalizedPatternEnd > 0 && normalizedPattern[normalizedPatternEnd - 1] === '/') normalizedPatternEnd--
+  normalizedPattern = normalizedPattern.slice(0, normalizedPatternEnd)
   const anchored = pattern.startsWith('/') || normalizedPattern.includes('/')
 
   if (!normalizedPattern) {
