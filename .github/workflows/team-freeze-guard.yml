@@ -17,8 +17,7 @@ on:
       - opened
       - reopened
       - synchronize
-      - labeled
-      - unlabeled
+      - edited
       - ready_for_review
 
 permissions:
@@ -31,11 +30,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: DataDog/team-freeze-guard@e4ff51a72cac229b238e5a302af0d3d955ae5b54 # v0.0.4
+      - uses: DataDog/team-freeze-guard@d28a2e357903b426122feaae225629bd63fcd2c5 # v0.0.5
         with:
-          bypass-labels: |
-            dev/testing
-            github_actions
+          # subset of pattern defined here:
+          # .github/workflows/pr-title.yml#L22C85-L23C128
+          bypass-title-pattern: '^(revert(!)?: .+|(fix|test|ci)(\(([^)]+)\))?(!)?: .+)'
           frozen-teams: |
             @DataDog/apm-idm-js
             @DataDog/ml-observability
