@@ -1,6 +1,7 @@
 'use strict'
 
 const BASE_PARSER_PLUGINS = [
+  'decoratorAutoAccessors',
   'decorators-legacy',
   'explicitResourceManagement',
   'importAttributes',

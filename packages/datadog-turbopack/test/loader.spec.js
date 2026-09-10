@@ -232,6 +232,20 @@ describe('datadog-turbopack loader', () => {
     assert.match(result, new RegExp(path.basename(fixture.proxyPath)))
   })
 
+  it('parses TypeScript auto-accessors while rewriting imports', async () => {
+    const fixture = await createAiFixture()
+    const appPath = write(fixture.projectDir, 'app/state.ts', '')
+    const source = [
+      "import { generateText } from 'ai'",
+      'export class State { accessor value = generateText }',
+      '',
+    ].join('\n')
+
+    const result = await runLoader(appPath, source, fixture.importOptions)
+
+    assert.match(result, new RegExp(path.basename(fixture.proxyPath)))
+  })
+
   it('does not rewrite a require that is shadowed in its own scope', async () => {
     const fixture = await createAiFixture()
     const appPath = write(fixture.projectDir, 'app/route.js', '')
