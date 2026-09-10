@@ -44,7 +44,12 @@ Variants (`meta.json`):
   Each sirun iteration is a fresh process, so the window is paid cold, where
   production pays it. The startup-guard share ceiling is vacuous here by
   design (load+setup legitimately dominates a single pass) — the guard's
-  rot protection is carried by the warm variants instead.
+  rot protection is carried by the warm variants instead. Cold variants
+  deliberately set no `OPERATIONS`: the ops-gauge emission runs after the
+  loop but before process exit — inside sirun's measured window — and
+  requires the tracer's statsd client plus a UDP socket, a fixed cost that
+  would dwarf a single ~0.4 ms sample. Cold samples are read from sirun's
+  `wall.time`/`instructions`, which stay clean.
 - `*-warm` — 20 000 simulated startups per process, for steady-state signal
   over the same workload.
 

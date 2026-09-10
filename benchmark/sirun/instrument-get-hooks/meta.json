@@ -10,14 +10,12 @@
     "scan-cold": {
       "env": {
         "SCAN": "1",
-        "STARTUPS": "1",
-        "OPERATIONS": "1"
+        "STARTUPS": "1"
       }
     },
     "deduped-cold": {
       "env": {
-        "STARTUPS": "1",
-        "OPERATIONS": "1"
+        "STARTUPS": "1"
       }
     },
     "scan-warm": {
