@@ -1,7 +1,12 @@
-model: claude-opus-4-8
+# LLM Validation Platform — dd-trace-js config
+model: claude-sonnet-5
 runs: 3
 
+# The instruction files this repo monitors (candidate = the PR's copy, baseline = master's). Repo-relative.
+# This is the single source of truth for validation and the CI trigger.
+# `files:` targeting on each case narrows the gate to the instruction files that changed.
 instruction_files:
+  - AGENTS.md
   - .agents/skills/dd-apm-sdk-review/SKILL.md
   - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
   - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
@@ -20,10 +25,23 @@ instruction_files:
   - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
   - .agents/dd-apm-sdk-review-overrides/repo-context.md
 
+# Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
+# Production default: `gate` — a curated, high-signal set where the monitored instructions are the source of the
+# right answer and every monitored file is covered. Gate cost scales as cases × runs;
+# `files:` targeting narrows it to the instruction files that changed. Use `full` for an on-demand sweep of the
+# whole suite; `minimum` is the cheapest development preset.
+# Keep `runs: 3` so the Node.js CI stays in the 5–7 minute band.
 default_level: gate
 presets:
-  gate:
+  gate: # Curated per-PR gate: AGENTS.md cases + dd-apm-sdk-review skill cases.
     cases:
+      - dd-trace-js-package-manager-001
+      - dd-trace-js-real-path-tests-007
+      - dd-trace-js-hung-ci-009
+      - dd-trace-js-new-configuration-010
+      - dd-trace-js-production-async-012
+      - dd-trace-js-public-config-surfaces-013
+      - dd-trace-js-production-promises-014
       - js-perf-lens-ungated-publish
       - js-perf-pipeline-full-review
       - js-full-skill-simple-review
@@ -34,18 +52,18 @@ presets:
       - js-maintainability-silent-catch
       - js-conventions-async-in-production-path
       - js-cross-sdk-new-env-var-not-verified
-    runs: 5
-  minimum:
-    cases: ["js-perf-lens-ungated-publish"]
-    runs: 3
-  full:
+    runs: 3 # 6 pairwise comparisons per selected case.
+  minimum: # Cheapest AGENTS.md content check.
+    cases:
+      - dd-trace-js-package-manager-001
+    runs: 3 # 6 pairwise comparisons.
+  full: # Whole suite.
     runs: 3
 
+# A case blocks on a confident regression by default; mark it `only_warn: true` to make it advisory.
 policy:
   noise_threshold: 1.0
-  pairwise_win_floor: 0.45
-  blocking_fail_floor: 0.45
-  blocking_fail_ci_upper: 0.55
-
-# Do not add a structural reference-integrity checker: the file list already
-# lives in SKILL.md's roster table.
+  pairwise_win_floor: 0.45     # A candidate pairwise majority loss is a regression.
+  blocking_fail_floor: 0.45    # Any majority loss can fail when it is sufficiently confident.
+  blocking_fail_ci_upper: 0.55 # Wide-confidence-interval losses warn instead of blocking.
+  confirm_runs: 4              # Recheck a would-be failure without adding the platform default of eight runs.

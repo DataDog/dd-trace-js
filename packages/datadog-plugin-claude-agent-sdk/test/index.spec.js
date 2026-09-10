@@ -123,6 +123,7 @@ describe('Plugin', () => {
           prompt: PROMPT,
           options: {
             model: 'claude-sonnet-4-6',
+            title: 'Claude Agent SDK test',
             mcpServers: { local: localToolsServer },
             tools: ['Agent'],
             allowedTools: ['mcp__local__fetch_weather'],

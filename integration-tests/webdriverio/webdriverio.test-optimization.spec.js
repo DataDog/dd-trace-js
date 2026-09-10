@@ -214,15 +214,17 @@ for (const version of versions) {
     let testOutput = ''
     let webDriver
 
-    useSandbox([
+    const dependencies = [
       `@wdio/cli@${version}`,
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
-      'bunyan',
-      'pino',
-      'winston',
-    ], true, [
+    ]
+    if (version === 'latest') {
+      dependencies.push('bunyan', 'pino', 'winston')
+    }
+
+    useSandbox(dependencies, true, [
       './integration-tests/webdriverio/fixtures/*',
       './integration-tests/ci-visibility/dynamic-instrumentation/dependency.js',
     ])
@@ -293,6 +295,7 @@ for (const version of versions) {
           ...extraEnvironment,
         },
       })
+      const childClosed = once(childProcess, 'close')
       childProcess.stdout?.on('data', chunk => {
         testOutput += chunk.toString()
       })
@@ -307,16 +310,20 @@ for (const version of versions) {
           payloads,
           webDriver.getRequests().slice(initialWebDriverRequestCount)
         ),
-        { hardTimeout: 60_000 }
+        // WebdriverIO worker and coordinator shutdown wait for pending exports.
+        { gracePeriod: 0, hardTimeout: 60_000 }
       )
 
       let exitCode
       try {
         [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
+          childClosed,
           payloadsPromise,
         ])
       } catch (error) {
+        if (childProcess.exitCode !== null || childProcess.signalCode != null) {
+          await childClosed.catch(() => {})
+        }
         error.message += `\n${testOutput}`
         throw error
       }
@@ -368,107 +375,112 @@ for (const version of versions) {
               pino: { level: 30, messageKey: 'msg' },
               winston: { level: 'info', messageKey: 'message' },
             }
+            const loggerNames = Object.keys(loggers)
 
-            for (const [loggerName, { level: expectedLevel, messageKey }] of Object.entries(loggers)) {
-              describe(`with ${loggerName}`, () => {
-                it('submits correlated logs', async () => {
-                  await runScenario('automaticLogSubmission', 1, payloads => {
-                    const logRequests = getLogRequests(payloads)
-
-                    assert.ok(logRequests.length > 0)
-                    for (const logRequest of logRequests) {
-                      assert.strictEqual(logRequest.headers['dd-api-key'], '1')
-                      assert.strictEqual(logRequest.headers['content-type'], 'application/json')
-                      assert.strictEqual(
-                        logRequest.url,
-                        `/api/v2/logs?ddsource=${loggerName}&service=my-service`
-                      )
-                    }
-
-                    const logMessages = logRequests.flatMap(({ logMessage }) => logMessage)
-                    assert.strictEqual(logMessages.length, 2)
-
-                    const logMessage = logMessages.find(
-                      logMessage => logMessage[messageKey] === 'Hello from WebdriverIO!'
-                    )
-                    const afterHookLogMessage = logMessages.find(
-                      logMessage => logMessage[messageKey] === 'Hello from WebdriverIO after hook!'
-                    )
-                    const test = getEvents(payloads).find(event => event.type === 'test').content
-
-                    assert.ok(logMessage)
-                    assert.strictEqual(logMessage.level, expectedLevel)
-                    assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
-                    assert.strictEqual(logMessage.dd.service, 'my-service')
-                    assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
-                    assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
-                    assert.ok(afterHookLogMessage)
-                    assert.strictEqual(afterHookLogMessage.level, expectedLevel)
-                  }, {
-                    DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                    DD_SERVICE: 'my-service',
-                    TEST_LOGGER: loggerName,
-                  })
-
-                  assert.match(testOutput, /Hello from WebdriverIO!/)
-                })
-
-                it('does not submit logs when automatic submission is disabled', async () => {
-                  await runScenario('automaticLogSubmission', 1, payloads => {
-                    assert.strictEqual(getLogRequests(payloads).length, 0)
-                  }, {
-                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                    DD_SERVICE: 'my-service',
-                    TEST_LOGGER: loggerName,
-                  })
-
-                  assert.match(testOutput, /Hello from WebdriverIO!/)
-                  assert.match(testOutput, /span_id/)
-                })
-
-                it('does not submit logs when the API key is missing', async () => {
-                  await runScenario('automaticLogSubmission', 1, payloads => {
-                    assert.strictEqual(getLogRequests(payloads).length, 0)
-                  }, {
-                    ...getCiVisEvpProxyConfig(receiver.port),
-                    DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
-                    DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
-                    DD_API_KEY: '',
-                    DD_SERVICE: 'my-service',
-                    NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
-                    TEST_LOGGER: loggerName,
-                  })
-
-                  assert.match(testOutput, /Hello from WebdriverIO!/)
-                  assert.match(testOutput, /span_id/)
-                })
-              })
+            /**
+             * @param {boolean} [includesTraceIds]
+             * @returns {void}
+             */
+            function assertLoggerOutput (includesTraceIds = false) {
+              const lines = testOutput.split('\n')
+              for (const loggerName of loggerNames) {
+                const line = lines.find(line => line.includes(`Hello from WebdriverIO ${loggerName}!`))
+                assert.ok(line)
+                if (includesTraceIds) {
+                  assert.match(line, /span_id/)
+                }
+              }
             }
+
+            it('submits correlated logs from supported loggers', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                const logRequests = getLogRequests(payloads)
+                const test = getEvents(payloads).find(event => event.type === 'test').content
+                const expectedUrls = new Set(loggerNames.map(loggerName =>
+                  `/api/v2/logs?ddsource=${loggerName}&service=my-service`))
+
+                assert.ok(logRequests.length > 0)
+                for (const logRequest of logRequests) {
+                  assert.ok(expectedUrls.has(logRequest.url))
+                  assert.strictEqual(logRequest.headers['dd-api-key'], '1')
+                  assert.strictEqual(logRequest.headers['content-type'], 'application/json')
+                }
+                for (const [loggerName, { level: expectedLevel, messageKey }] of Object.entries(loggers)) {
+                  const loggerRequests = logRequests.filter(({ url }) =>
+                    url === `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
+
+                  assert.ok(loggerRequests.length > 0)
+                  const logMessages = loggerRequests.flatMap(({ logMessage }) => logMessage)
+                  assert.strictEqual(logMessages.length, 2)
+
+                  const logMessage = logMessages.find(
+                    logMessage => logMessage[messageKey] === `Hello from WebdriverIO ${loggerName}!`
+                  )
+                  const afterHookLogMessage = logMessages.find(
+                    logMessage => logMessage[messageKey] === `Hello from WebdriverIO ${loggerName} after hook!`
+                  )
+
+                  assert.ok(logMessage)
+                  assert.strictEqual(logMessage.level, expectedLevel)
+                  assert.deepStrictEqual(Object.keys(logMessage.dd).sort(), ['service', 'span_id', 'trace_id'])
+                  assert.strictEqual(logMessage.dd.service, 'my-service')
+                  assert.strictEqual(logMessage.dd.span_id, test.span_id.toString())
+                  assert.strictEqual(logMessage.dd.trace_id, test.trace_id.toString())
+                  assert.ok(afterHookLogMessage)
+                  assert.strictEqual(afterHookLogMessage.level, expectedLevel)
+                }
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+
+              assertLoggerOutput()
+            })
+
+            it('does not submit logs when automatic submission is disabled', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                assert.strictEqual(getLogRequests(payloads).length, 0)
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+
+              assertLoggerOutput(true)
+            })
+
+            it('does not submit logs when the API key is missing', async () => {
+              await runScenario('automaticLogSubmission', 1, payloads => {
+                assert.strictEqual(getLogRequests(payloads).length, 0)
+              }, {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_API_KEY: '',
+                DD_SERVICE: 'my-service',
+                NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
+              })
+
+              assertLoggerOutput(true)
+            })
           })
         }
 
-        it('does not correlate classic WebDriver tests with RUM sessions', async () => {
+        it('does not correlate or retain classic WebDriver tests with RUM sessions', async () => {
           await runScenario('rum', 1, (payloads, requests) => {
-            const test = getEvents(payloads).find(event => event.type === 'test').content
-            assert.strictEqual(test.meta[TEST_IS_RUM_ACTIVE], undefined)
-            assert.strictEqual(test.meta[TEST_BROWSER_NAME], 'chrome')
-            assert.strictEqual(test.meta[TEST_BROWSER_VERSION], 'test')
-            assert.ok(requests.some(({ url }) => url?.endsWith('/refresh')))
-            assert.strictEqual(requests.some(({ url }) => url?.includes('/cookie')), false)
-            assert.strictEqual(requests.some(({ url }) => url?.endsWith('/chromium/send_command')), false)
-          })
-        })
-
-        it('does not retain classic RUM state between tests without afterEach hooks', async () => {
-          await runScenario('rumNoAfterEach', 1, (payloads, requests) => {
             const tests = getEvents(payloads)
               .filter(event => event.type === 'test')
               .map(event => event.content)
+            const navigatedTest = tests.find(test =>
+              test.meta[TEST_NAME].endsWith('correlates the RUM session with the test execution'))
 
-            assert.ok(tests.length > 0)
+            assert.strictEqual(tests.length, 3)
             assert.ok(tests.every(test => test.meta[TEST_IS_RUM_ACTIVE] === undefined))
+            assert.strictEqual(navigatedTest.meta[TEST_BROWSER_NAME], 'chrome')
+            assert.strictEqual(navigatedTest.meta[TEST_BROWSER_VERSION], 'test')
+            assert.ok(requests.some(({ url }) => url?.endsWith('/refresh')))
             assert.strictEqual(requests.some(({ url }) => url?.includes('/cookie')), false)
+            assert.strictEqual(requests.some(({ url }) => url?.endsWith('/chromium/send_command')), false)
           })
         })
 

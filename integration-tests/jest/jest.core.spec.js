@@ -67,8 +67,9 @@ const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
-const esmIt = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28 ? it : it.skip
-const shouldInstallJestEnvironmentJsdom = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const isJest28OrNewer = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const esmIt = isJest28OrNewer ? it : it.skip
+const shouldInstallJestEnvironmentJsdom = isJest28OrNewer
 
 describe(`jest@${JEST_VERSION} commonJS`, () => {
   let receiver
@@ -1658,7 +1659,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       for (const resolutionType of ['moduleNameMapper', 'custom resolver']) {
         it(`respects Jest ${resolutionType} for ${loggerName}`, async () => {
           let testOutput = ''
-          // Ensure the native bypass still defers to Jest when its resolution is customized.
+          // Ensure instrumentation still defers to Jest when its resolution is customized.
           const resolutionConfig = resolutionType === 'moduleNameMapper'
             ? {
                 CONFIG_MODULE_NAME_MAPPER: JSON.stringify({
@@ -1695,7 +1696,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
 
-      it(`instruments ${loggerName} after another suite mocks it`, async () => {
+      // Modern Pino releases use node: specifiers, which Jest <28 cannot resolve.
+      const mockIsolationIt = loggerName === 'pino' && !isJest28OrNewer ? it.skip : it
+      mockIsolationIt(`instruments ${loggerName} after another suite mocks it`, async () => {
         let testOutput = ''
         const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
@@ -2440,5 +2443,54 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     assert.strictEqual(exitCode, 0, outputWithTracer)
     assert.doesNotMatch(outputWithTracer, /testEnvironmentOptions prototype was lost/)
+  })
+})
+
+describe(`jest@${JEST_VERSION} with pino@7.6.4`, () => {
+  let receiver
+  let childProcess
+  let cwd
+
+  useSandbox([
+    `jest@${JEST_VERSION}`,
+    JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
+    // Pino 7 uses instanceof Error in its serializer, exposing errors loaded from a different realm.
+    'pino@7.6.4',
+  ].filter(Boolean), true)
+
+  before(function () {
+    cwd = sandboxCwd()
+  })
+
+  beforeEach(async function () {
+    receiver = await new FakeCiVisIntake().start()
+  })
+
+  afterEach(async () => {
+    childProcess.kill()
+    await receiver.stop()
+  })
+
+  it('keeps Pino in the Jest realm', async () => {
+    let testOutput = ''
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-mock-bypass-require/pino-error-serialization-test',
+        },
+      }
+    )
+    childProcess.stdout.on('data', chunk => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr.on('data', chunk => {
+      testOutput += chunk.toString()
+    })
+
+    const [code] = await once(childProcess, 'exit')
+    assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}: ${testOutput}`)
   })
 })

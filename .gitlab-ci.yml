@@ -58,10 +58,20 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
-
   # One pipeline injection package size ratchet
   OCI_PACKAGE_MAX_SIZE_BYTES: 30_000_000
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
+
+llm validation definitions:
+  extends: llm validation
+  variables:
+    LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
+    LLMVAL_LEVEL: "minimum"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .llm-validation/config.yaml
+        - .llm-validation/suites/**/*
 
 configure_system_tests:
   variables:

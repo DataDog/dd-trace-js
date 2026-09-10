@@ -4,10 +4,13 @@ This directory is a [LLM Validation Platform](https://github.com/ddoghq/llm-vali
 suite. It is **not** a Jest / Mocha test. The cases live here; the runner lives in the
 internal platform repo (`ddoghq/llm-validation-platform`).
 
-It answers: *did an edit to `dd-apm-sdk-review` (SKILL.md, a reviewer, or an override)
-make the agent better or worse?* — by comparing **baseline** (those files at
-`--base-sha`, usually `master`) against **candidate** (this working tree) under the same
-model, judge, and case set.
+It answers two questions, by comparing **baseline** (those files at `--base-sha`,
+usually `master`) against **candidate** (this working tree) under the same model,
+judge, and case set:
+
+- *did an edit to `AGENTS.md` make the agent better or worse?*
+- *did an edit to `dd-apm-sdk-review` (SKILL.md, a reviewer, or an override) make
+  the agent better or worse?*
 
 Same gate as [`DataDog/dd-trace-dotnet#8845`](https://github.com/DataDog/dd-trace-dotnet/pull/8845).
 CI includes the reusable `"llm validation"` job from the platform repo (see the top-level
@@ -19,7 +22,8 @@ file changed, and uses this directory's `default_level` (`gate`) unless `LLMVAL_
 | Path | Role |
 |---|---|
 | [`config.yaml`](./config.yaml) | Monitored instruction files, model, `--level` presets, gate policy |
-| [`suites/dd-apm-sdk-review.yaml`](./suites/dd-apm-sdk-review.yaml) | Cases (auto-discovered; do not pass this path to the CLI) |
+| [`suites/dd-trace-js-agent-v0.1.yaml`](./suites/dd-trace-js-agent-v0.1.yaml) | `AGENTS.md` cases (auto-discovered; do not pass this path to the CLI) |
+| [`suites/dd-apm-sdk-review.yaml`](./suites/dd-apm-sdk-review.yaml) | `dd-apm-sdk-review` skill cases (same) |
 
 ## Prerequisites
 

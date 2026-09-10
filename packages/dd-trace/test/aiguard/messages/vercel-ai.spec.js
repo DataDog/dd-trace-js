@@ -9,6 +9,7 @@ const {
   buildOutputMessages,
   buildTextOutputMessages,
   buildToolCallOutputMessages,
+  getStreamedContent,
 } = require('../../../src/aiguard/messages/vercel-ai')
 
 describe('aiguard/messages/vercel-ai', () => {
@@ -514,6 +515,38 @@ describe('aiguard/messages/vercel-ai', () => {
     it('should return empty array for content with no text or tool-calls', () => {
       const content = [{ type: 'image', data: '...' }]
       assert.deepStrictEqual(buildOutputMessages(input, content), [])
+    })
+  })
+
+  describe('getStreamedContent', () => {
+    it('accumulates text from the AI SDK 6 `delta` field', () => {
+      const chunks = [
+        { type: 'text-delta', id: '1', delta: 'Hello' },
+        { type: 'text-delta', id: '1', delta: ' there' },
+      ]
+      assert.deepStrictEqual(getStreamedContent(chunks), [{ type: 'text', text: 'Hello there' }])
+    })
+
+    it('accumulates text from the pre-6 `textDelta` field', () => {
+      const chunks = [
+        { type: 'text-delta', textDelta: 'Hello' },
+        { type: 'text-delta', textDelta: ' there' },
+      ]
+      assert.deepStrictEqual(getStreamedContent(chunks), [{ type: 'text', text: 'Hello there' }])
+    })
+
+    it('contributes nothing for a delta-less chunk', () => {
+      assert.deepStrictEqual(getStreamedContent([{ type: 'text-delta', id: '1' }]), [])
+    })
+
+    it('prefers tool calls over accumulated text', () => {
+      const toolCall = { type: 'tool-call', toolCallId: 'c1', toolName: 'search', args: {} }
+      const chunks = [{ type: 'text-delta', delta: 'ignored' }, toolCall]
+      assert.deepStrictEqual(getStreamedContent(chunks), [toolCall])
+    })
+
+    it('returns nothing for chunks with no evaluable content', () => {
+      assert.deepStrictEqual(getStreamedContent([{ type: 'finish', usage: {} }]), [])
     })
   })
 })
