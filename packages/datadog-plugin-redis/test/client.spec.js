@@ -100,15 +100,28 @@ describe('Plugin', () => {
           await Promise.all([client.set('multi-arg-key', 'multi-arg-value'), promise])
         })
 
-        it('trims a string arg longer than 100 chars', async () => {
-          const longValue = 'x'.repeat(150)
+        it('trims string args at the retention threshold boundaries', async () => {
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
-            assert.strictEqual(rawCommand, `SET long-key ${'x'.repeat(97)}...`)
-            assert.strictEqual(rawCommand.length, 'SET long-key '.length + 100)
-          }, { spanResourceMatch: /^SET$/ })
+            assert.strictEqual(rawCommand, [
+              'MSET',
+              'at-limit', 'a'.repeat(100),
+              'first-truncated', `${'b'.repeat(97)}...`,
+              'last-sliced', `${'c'.repeat(97)}...`,
+              'first-copied', `${'d'.repeat(97)}...`,
+            ].join(' '))
+          }, { spanResourceMatch: /^MSET$/ })
 
-          await Promise.all([client.set('long-key', longValue), promise])
+          await Promise.all([
+            client.sendCommand([
+              'MSET',
+              'at-limit', 'a'.repeat(100),
+              'first-truncated', 'b'.repeat(101),
+              'last-sliced', 'c'.repeat(256),
+              'first-copied', 'd'.repeat(257),
+            ]),
+            promise,
+          ])
         })
 
         it('redacts the AUTH password from the raw command', async () => {
