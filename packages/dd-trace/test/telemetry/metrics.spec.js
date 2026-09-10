@@ -73,6 +73,34 @@ describe('metrics', () => {
       sinon.assert.calledTwice(Sketch)
     })
 
+    it('should not crash when the optional sketch encoder is unavailable', () => {
+      const notFound = Object.assign(new Error("Cannot find module '@datadog/libdatadog'"), {
+        code: 'MODULE_NOT_FOUND',
+      })
+      const sketchModule = { '@noCallThru': true }
+      Object.defineProperty(sketchModule, 'DDSketch', {
+        get () { throw notFound },
+      })
+
+      const loadMetrics = proxyquire.noPreserveCache()
+      const localMetrics = loadMetrics('../../src/telemetry/metrics', {
+        './send-data': {
+          sendData,
+        },
+        '@datadog/libdatadog': sketchModule,
+      })
+      proxyquire.preserveCache()
+
+      const metric = localMetrics.manager.namespace('test').distribution('duration')
+
+      metric.track(42)
+      metric.track(43)
+
+      assert.strictEqual(metric.pointCount, 0)
+      assert.strictEqual(metric.hasPoints(), false)
+      assert.strictEqual(metric.sketch, undefined)
+    })
+
     it('should make namespaces', () => {
       const manager = new metrics.NamespaceManager()
       const ns = manager.namespace('test')

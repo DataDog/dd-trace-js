@@ -1,8 +1,10 @@
 'use strict'
 
+const log = require('../log')
 const { sendData } = require('./send-data')
 
 let DDSketch
+let sketchLoadAttempted = false
 
 function getId (type, namespace, name, tags) {
   return `${type}:${namespace}.${name}:${tagArray(tags).sort().join(',')}`
@@ -40,10 +42,15 @@ function hasPoints (metric) {
 }
 
 function createSketch () {
-  if (DDSketch === undefined) {
-    ({ DDSketch } = require('@datadog/libdatadog'))
+  if (!sketchLoadAttempted) {
+    sketchLoadAttempted = true
+    try {
+      ({ DDSketch } = require('@datadog/libdatadog'))
+    } catch (e) {
+      log.warn('Telemetry distribution metrics disabled: @datadog/libdatadog could not be loaded', e)
+    }
   }
-  return new DDSketch()
+  return DDSketch && new DDSketch()
 }
 
 class Metric {
@@ -146,6 +153,7 @@ class DistributionMetric extends Metric {
 
     if (this.sketch === undefined) {
       this.sketch = createSketch()
+      if (this.sketch === undefined) return
     }
 
     this.sketch.add(value)
