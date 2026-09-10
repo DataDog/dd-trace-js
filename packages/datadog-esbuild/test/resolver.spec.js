@@ -78,6 +78,71 @@ describe('ESM resolver', () => {
     }
   })
 
+  it('preserves CLI conditions in the child', () => {
+    const runner = require.resolve('./resources/resolve-from-cli.cjs')
+    const resolved = childProcess.execFileSync(process.execPath, [
+      '--conditions=development',
+      runner,
+      'graphql',
+    ], { encoding: 'utf8' })
+
+    assert.match(resolved, /\/graphql\/__dev__\/index\.mjs$/)
+  })
+
+  it('preserves CLI loaders in the child', () => {
+    const runner = require.resolve('./resources/resolve-from-cli.cjs')
+    const hookURL = pathToFileURL(require.resolve('./resources/resolution-hook.mjs'))
+    hookURL.searchParams.set('target', parentURL.href)
+    const resolved = childProcess.execFileSync(process.execPath, [
+      '--no-warnings',
+      `--loader=${hookURL.href}`,
+      runner,
+      'resolver-hook',
+    ], { encoding: 'utf8' })
+
+    assert.equal(resolved, parentURL.href)
+  })
+
+  it('forwards only resolution-affecting CLI options to the child', async () => {
+    const originalExecArgv = process.execArgv
+    const resolutionExecArgv = [
+      '--conditions',
+      'development',
+      '-C=test',
+      '--loader=file:///loader.mjs',
+      '--experimental-loader',
+      'file:///experimental-loader.mjs',
+      '--import=file:///import.mjs',
+      '--require',
+      './preload.cjs',
+      '-r./short-preload.cjs',
+      '--preserve-symlinks',
+      '--preserve-symlinks-main',
+    ]
+    process.execArgv = [
+      '--inspect=0',
+      ...resolutionExecArgv,
+      '--test',
+    ]
+    const child = createChild()
+    const resolver = createStubbedResolver(child)
+    const resolved = resolver.resolve('first', parentURL)
+    let args
+
+    try {
+      args = spawn.firstCall.args[1]
+      child.stdio[4].write(`${JSON.stringify({ id: 0, url: 'file:///first.mjs' })}\n`)
+      assert.equal(await resolved, 'file:///first.mjs')
+    } finally {
+      const closed = resolver.close()
+      child.emit('close', 0, null)
+      await closed
+      process.execArgv = originalExecArgv
+    }
+
+    assert.deepEqual(args.slice(0, -5), resolutionExecArgv)
+  })
+
   it('isolates resolver responses from inherited standard output', async () => {
     const originalNodeOptions = process.env.NODE_OPTIONS
     const preloadPath = require.resolve('./resources/resolver-stdout.cjs')

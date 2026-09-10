@@ -8,7 +8,9 @@ const { fileURLToPath, pathToFileURL } = require('node:url')
 const { createEsmResolver, driveGetExportsGenerator } = require('./resolver')
 
 /** @typedef {ReturnType<typeof createEsmResolver>} EsmResolver */
+/** @typedef {{ code: string, origin: string, star: boolean } | { ambiguous: true, star: true }} SetterEntry */
 
+const COMMONJS_FORMATS = new Set(['commonjs', 'commonjs-typescript'])
 const getExportsImporting = (url) => import(url).then(Object.keys)
 let getExportsModulePromise
 
@@ -129,11 +131,16 @@ async function processModule (
   const ownsResolver = resolver === undefined
   resolver ??= createEsmResolver()
   try {
-    return await processModuleWithResolver(
+    const entries = await processModuleWithResolver(
       { path, internal, context, excludeDefault, moduleSources, transform },
       activeModules,
       resolver
     )
+    const setters = new Map()
+    for (const [name, entry] of entries) {
+      if (!entry.ambiguous) setters.set(name, entry.code)
+    }
+    return setters
   } finally {
     if (ownsResolver) await resolver.close()
   }
@@ -149,7 +156,7 @@ async function processModule (
  * @param {(source: string, options: { loader: 'ts' }) => { code: string }} [moduleData.transform]
  * @param {Set<string>} [activeModules]
  * @param {EsmResolver} resolver
- * @returns {Promise<Map>}
+ * @returns {Promise<Map<string, SetterEntry>>}
  */
 async function processModuleWithResolver (
   { path, internal, context, excludeDefault, moduleSources, transform },
@@ -184,43 +191,25 @@ async function processModuleWithResolver (
     moduleExports = await getExports(srcUrl, context, loadSource, resolver)
   }
 
-  const starExports = new Set()
   const setters = new Map()
 
-  const addSetter = (name, setter, isStarExport = false) => {
-    if (setters.has(name)) {
-      if (isStarExport) {
-        // If there's already a matching star export, delete it
-        if (starExports.has(name)) {
-          setters.delete(name)
-        }
-        // and return so this is excluded
-        return
-      }
-
-      // if we already have this export but it is from a * export, overwrite it
-      if (starExports.has(name)) {
-        starExports.delete(name)
-        setters.set(name, setter)
-      }
-    } else {
-      // Store export * exports so we know they can be overridden by explicit
-      // named exports
-      if (isStarExport) {
-        starExports.add(name)
-      }
-
-      setters.set(name, setter)
+  const addSetter = (name, code, origin, star = false) => {
+    const existing = setters.get(name)
+    if (!star || existing === undefined) {
+      setters.set(name, { code, origin, star })
+    } else if (!existing.ambiguous && existing.star && existing.origin !== origin) {
+      setters.set(name, { ambiguous: true, star: true })
     }
   }
 
   let starReexports = moduleExports.starReexports
   for (const n of moduleExports.exportNames) {
-    const isDefault = n === 'default' || (
-      n === 'module.exports' &&
-      moduleExports.hasModuleExportsCJSDefault &&
-      (context.format === 'commonjs' || context.format === 'commonjs-typescript')
-    )
+    let isDefault = n === 'default'
+    if (n === 'module.exports') {
+      isDefault = moduleExports.hasModuleExportsCJSDefault
+        ? COMMONJS_FORMATS.has(context.format)
+        : false
+    }
     if (isDefault && excludeDefault) continue
 
     if (isStarExportLine(n)) {
@@ -246,7 +235,7 @@ async function processModuleWithResolver (
         return true
       }
       get[${objectKey}] = () => ${variableName}
-      `)
+      `, srcUrl?.href ?? path)
   }
 
   if (starReexports) {
@@ -272,8 +261,8 @@ async function processModuleWithResolver (
       }, activeModules, resolver)
       activeModules.delete(result.url.href)
 
-      for (const [name, setter] of subSetters.entries()) {
-        addSetter(name, setter, true)
+      for (const [name, entry] of subSetters.entries()) {
+        if (!entry.ambiguous) addSetter(name, entry.code, entry.origin, true)
       }
     }
   }

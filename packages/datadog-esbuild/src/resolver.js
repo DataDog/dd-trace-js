@@ -9,6 +9,20 @@ const MAX_PENDING_REQUESTS = 1024
 const MAX_STDERR_LENGTH = 16 * 1024
 const LOAD_OPERATION = 0
 const RESOLVE_OPERATION = 1
+const RESOLUTION_BOOLEAN_OPTIONS = new Set([
+  '--preserve-symlinks',
+  '--preserve-symlinks-main',
+])
+const RESOLUTION_VALUE_OPTIONS = new Set([
+  '--conditions',
+  '--experimental-loader',
+  '--experimental-specifier-resolution',
+  '--import',
+  '--loader',
+  '--require',
+  '-C',
+  '-r',
+])
 const RESOLVER_SOURCE = String.raw`
 import { createReadStream, createWriteStream } from 'node:fs'
 import readline from 'node:readline'
@@ -35,6 +49,24 @@ for await (const line of lines) {
 }
 responses.end()
 `
+
+function getResolutionExecArgv () {
+  const args = []
+  for (let i = 0; i < process.execArgv.length; i++) {
+    const arg = process.execArgv[i]
+    const separator = arg.indexOf('=')
+    const name = separator === -1 ? arg : arg.slice(0, separator)
+    if (RESOLUTION_BOOLEAN_OPTIONS.has(name) || (separator !== -1 && RESOLUTION_VALUE_OPTIONS.has(name))) {
+      args.push(arg)
+    } else if (RESOLUTION_VALUE_OPTIONS.has(arg)) {
+      args.push(arg)
+      if (i + 1 < process.execArgv.length) args.push(process.execArgv[++i])
+    } else if ((arg.startsWith('-C') || arg.startsWith('-r')) && arg.length > 2) {
+      args.push(arg)
+    }
+  }
+  return args
+}
 
 /** @typedef {{ specifier: string, parentURL: string }} StarReexport */
 
@@ -128,6 +160,7 @@ class EsmResolver {
     env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
     env.DD_TRACE_ENABLED = 'false'
     this.#child = childProcess.spawn(process.execPath, [
+      ...getResolutionExecArgv(),
       '--no-warnings',
       '--experimental-import-meta-resolve',
       '--input-type=module',

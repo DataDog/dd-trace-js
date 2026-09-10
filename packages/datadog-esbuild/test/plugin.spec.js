@@ -138,6 +138,25 @@ describe('datadog-esbuild plugin', () => {
       assert.match(result.contents, /set\["fromB"\]/)
     })
 
+    it('generates setters only for unambiguous star exports', async () => {
+      const onLoad = captureOnLoad()
+      const modulePath = path.join(__dirname, 'resources/export-star-identity-root.mjs')
+
+      const result = await onLoad({
+        path: `${modulePath}._dd_esbuild_intercepted`,
+        pluginData: {
+          internal: false,
+          isESM: true,
+          pkg: 'fixture',
+          pkgOfInterest: true,
+          raw: 'fixture',
+        },
+      })
+
+      assert.match(result.contents, /set\["diamond"\]/)
+      assert.doesNotMatch(result.contents, /set\["collision"\]/)
+    })
+
     it('generates setters for TypeScript module exports', async () => {
       const onLoad = captureOnLoad()
       const modulePath = path.join(__dirname, 'resources/typescript-export.mts')

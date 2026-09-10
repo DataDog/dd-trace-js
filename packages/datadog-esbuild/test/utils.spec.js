@@ -122,6 +122,15 @@ describe('esbuild utils', () => {
       assert.deepStrictEqual([...setters.keys()].sort(), ['fromA', 'fromB'])
     })
 
+    it('should preserve same-origin star exports and exclude ambiguous origins', async () => {
+      const setters = await processModule({
+        path: path.join(__dirname, 'resources', 'export-star-identity-root.mjs'),
+        context: { format: 'module' },
+      })
+
+      assert.deepStrictEqual([...setters.keys()], ['diamond'])
+    })
+
     it('should set TypeScript star exports', async () => {
       let transforms = 0
       const setters = await processModule({
@@ -144,6 +153,29 @@ describe('esbuild utils', () => {
       })
 
       assert.deepStrictEqual([...setters.keys()], ['module.exports'])
+    })
+
+    it('should exclude every CommonJS default export spelling', async () => {
+      const commonJsPath = path.join(__dirname, 'resources', 'export-commonjs.cjs')
+      const typeScriptPath = path.join(__dirname, 'resources', 'export-commonjs.cts')
+      const [commonJsSetters, typeScriptSetters] = await Promise.all([
+        processModule({
+          path: commonJsPath,
+          context: { format: 'commonjs' },
+          excludeDefault: true,
+          moduleSources: new Map([[commonJsPath, 'module.exports = { value: true }']]),
+        }),
+        processModule({
+          path: typeScriptPath,
+          context: { format: 'commonjs' },
+          excludeDefault: true,
+          moduleSources: new Map([[typeScriptPath, 'const value: number = 1\nmodule.exports = { value }']]),
+          transform: transformTypeScript,
+        }),
+      ])
+
+      assert.deepStrictEqual([...commonJsSetters.keys()], ['value'])
+      assert.deepStrictEqual([...typeScriptSetters.keys()], ['value'])
     })
 
     it('should set the native module exports', async () => {
