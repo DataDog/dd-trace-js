@@ -15,7 +15,6 @@ const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
-
   withVersions('pg', 'express', expressVersion => {
     withVersions('pg', 'pg', pgVersion => {
       describe('sql injection with pg', () => {

@@ -597,8 +597,7 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    // Track finished spans for the retention assertion in `close()`. Idempotent
-    // and inert without `--expose-gc`, so it is safe to arm on every load.
+    // The detector is inert unless the test process exposes GC.
     spanLeakDetector.arm()
 
     const tracerConfigJson = JSON.stringify(tracerConfig)

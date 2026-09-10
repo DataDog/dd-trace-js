@@ -385,8 +385,11 @@ function withVersions (plugin, modules, range, cb) {
 
       describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
         let nodePath
+        let spanLeakScope
 
         before(() => {
+          spanLeakScope = spanLeakDetector.enterScope(`${moduleName}@${testCase.resolvedVersion}`)
+
           // set plugin name and version to later report to test agent regarding tested integrations and their tested
           // range of versions
           const testedPlugins = getAgent().testedPlugins
@@ -407,9 +410,13 @@ function withVersions (plugin, modules, range, cb) {
         cb(testCase.versionKey, moduleName, testCase.resolvedVersion)
 
         after(() => {
-          process.env.NODE_PATH = nodePath
-          // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
-          require('module').Module._initPaths()
+          try {
+            process.env.NODE_PATH = nodePath
+            // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
+            require('module').Module._initPaths()
+          } finally {
+            spanLeakDetector.leaveScope(spanLeakScope)
+          }
         })
       })
     }
@@ -485,14 +492,6 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
-// Reuse the span-leak detector's finish counter to detect per-test span activity
-// (see the afterEach sinon reset). Subscribing to `dd-trace:span:finish` here
-// directly would flip the channel's `hasSubscribers`, which some unit tests
-// assert stays false after teardown; the detector already subscribes (only while
-// armed, i.e. an agent is loaded), so read its count instead of adding a second
-// subscriber.
-let spanCountAtTestStart = 0
-
 // The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
 // hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
 // and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
@@ -508,7 +507,6 @@ exports.mochaHooks = {
   afterAll () {
     process.exit = ORIGINAL_PROCESS_EXIT
 
-    // Arm the watchdog after restoring process.exit so it can call it.
     const watchdog = setTimeout(() => {
       // eslint-disable-next-line no-console
       console.error(
@@ -522,36 +520,26 @@ exports.mochaHooks = {
     // Unref so a clean run (no leak) always exits without waiting for the timer.
     watchdog.unref()
   },
-  beforeEach () {
-    spanCountAtTestStart = spanLeakDetector.trackedCount()
-  },
   afterEach () {
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
-    // LLMObs keeps its own async-context store (see src/llmobs/storage.js). Like
-    // `legacy`, its last-entered `{ ...parent, span }` frame pins a finished span
-    // until overwritten, so clear it per test too — otherwise the retention rides
-    // into the next test / teardown and the span-leak detector flags it.
+    // LLMObs has a separate async-context store that can pin the last finished span.
     storage('llmobs').enterWith(undefined)
-    // Sinon records a `new Error()` per stubbed call in its `errorsWithCallStack`
-    // history. Each captured stack pins the async-context frame live at call time
-    // — including the traced callback's scope, which binds the finished span — so
-    // any suite that stubs a function called inside a span keeps every such span
-    // reachable until the stub is restored. Restoring happens in each suite's own
-    // hooks, but the history (and its retained frames) outlives individual `it`s;
-    // clearing it per test releases the spans without disturbing stub behavior
-    // (`resetHistory` keeps fakes' configured behavior, unlike `reset`/`restore`).
-    // Only reset when a span actually finished this test: `resetHistory()` also
-    // wipes call args / counts, which breaks suites that record in a `before` hook
-    // and assert `secondCall` / `thirdCall` across sibling `it`s. Those suites
-    // finish no span, so the history cannot pin one and the reset is unnecessary.
-    if (spanLeakDetector.trackedCount() !== spanCountAtTestStart) {
-      sinon.resetHistory()
-    }
     extraServices.clear()
     // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
     // ordering keeps that throw from skipping the unconditional cleanup above.
     if (_agent) _agent.reset()
   },
+}
+
+exports.mochaGlobalTeardown = async function () {
+  try {
+    await spanLeakDetector.assertNoRetainedSpans()
+  } catch (error) {
+    // Mocha skips its exit handler when a global teardown rejects, which can turn the assertion into a zero exit code.
+    // eslint-disable-next-line no-console
+    console.error(error)
+    ORIGINAL_PROCESS_EXIT(1)
+  }
 }

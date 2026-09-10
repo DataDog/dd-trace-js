@@ -4,9 +4,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const log = require('../../dd-trace/src/log')
 const reconstructPubSubRequestContext = require('./pubsub-request-context')
 
-// Track each request's push-receive span and the store it was entered into, so
-// the store's `span` can be nulled at request finish (a captured async-context
-// frame would otherwise pin the finished span).
+// WeakMap to track push receive spans by request
 const pushReceiveSpans = new WeakMap()
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
@@ -36,13 +34,10 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   #finishPushReceiveSpan (req) {
-    const entry = pushReceiveSpans.get(req)
-    if (entry && !entry.span._duration) {
-      entry.span.finish()
+    const pushReceiveSpan = pushReceiveSpans.get(req)
+    if (pushReceiveSpan && !pushReceiveSpan._duration) {
+      pushReceiveSpan.finish()
       pushReceiveSpans.delete(req)
-      // The request is done; null the span on the store entered for it so a
-      // captured async-context frame stops retaining the finished span.
-      entry.store.span = null
     }
   }
 
@@ -94,8 +89,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return
     }
 
-    const store = this.enter(pushReceiveSpan, { req, res })
-    pushReceiveSpans.set(req, { span: pushReceiveSpan, store })
+    this.enter(pushReceiveSpan, { req, res })
+    pushReceiveSpans.set(req, pushReceiveSpan)
   }
 
   #parseMessage (req) {
