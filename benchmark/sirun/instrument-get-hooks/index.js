@@ -89,18 +89,6 @@ function resolveStartup () {
   return hooks
 }
 
-// The deduped variant must answer exactly the distinct hooks of the scan
-// variant, or the two are not measuring the same workload. The counts differ
-// on purpose: the scan variant resolves 144 hook objects per startup (one
-// per transform), the deduped variant 66 (one per distinct
-// (versionRange, filePath) pair).
-for (const name of QUERIES) {
-  const scanned = scanGetHooks(name)
-  const byKey = new Map(scanned.map(hook => [`${hook.versions[0]}|${hook.file}`, hook]))
-  const uniqueScanned = [...byKey.values()].map(({ name, versions, file }) => ({ name, versions, file }))
-  assert.deepStrictEqual(uniqueScanned, dedupedGetHooks(name))
-}
-
 let sink = 0
 
 guard.loopStart()
@@ -112,3 +100,21 @@ for (let i = 0; i < STARTUPS; i++) {
 guard.done(STARTUPS > 1 ? 0.15 : 1)
 
 assert.ok(sink > 0, 'benchmark did no work')
+
+// The deduped variant must answer exactly the distinct hooks of the scan
+// variant, or the two are not measuring the same workload. The counts differ
+// on purpose: the scan variant resolves 144 hook objects per startup (one
+// per transform), the deduped variant 66 (one per distinct
+// (versionRange, filePath) pair).
+//
+// This validates AFTER the measured window, on purpose: the cold variants
+// must put a genuinely first execution of both implementations through the
+// window, and pre-flight assertions would warm the functions and the
+// instrumentation data in every fresh process - turning the "cold" pass into
+// each function's fourteenth invocation. A mismatch still fails the process.
+for (const name of QUERIES) {
+  const scanned = scanGetHooks(name)
+  const byKey = new Map(scanned.map(hook => [`${hook.versions[0]}|${hook.file}`, hook]))
+  const uniqueScanned = [...byKey.values()].map(({ name, versions, file }) => ({ name, versions, file }))
+  assert.deepStrictEqual(uniqueScanned, dedupedGetHooks(name))
+}
