@@ -1052,10 +1052,8 @@ export default [
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/consistent-structure': 'off',
-      'mocha/handle-done-callback': 'off',
       'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
-      'mocha/no-async-in-sync-tests': 'off',
       'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
       'mocha/no-pending-tests': 'off',
@@ -1145,6 +1143,22 @@ export default [
     },
     rules: {
       'sonarjs/stable-tests': 'off',
+    },
+  },
+  {
+    // This fixture loads a module after Jest has finished the test to exercise the resulting test-suite error.
+    name: 'dd-trace/tests/jest-off-timing-import-fixture',
+    files: ['integration-tests/ci-visibility/jest-bad-import/jest-bad-import-test.js'],
+    rules: {
+      'mocha/no-async-in-sync-tests': ['error', { allowedAsyncMethods: ['setTimeout'] }],
+    },
+  },
+  {
+    name: 'dd-trace/datadog-esbuild/cyclic-star-fixtures',
+    files: ['packages/datadog-esbuild/test/resources/export-cycle-*.mjs'],
+    rules: {
+      'import/export': 'off',
+      'import/no-cycle': 'off',
     },
   },
   {

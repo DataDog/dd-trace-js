@@ -280,7 +280,7 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
-    assert.match(rewrittenSource, /__apm\$ctx\.rumStartCallback/)
+    assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
   })
 
