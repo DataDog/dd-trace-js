@@ -1,16 +1,11 @@
 'use strict'
 
-const { getConfig: getBaseConfig } = require('../wdio.conf')
+const { config } = require('../wdio.conf')
 
-function getConfig () {
-  return {
-    ...getBaseConfig(),
-    specs: [[
-      './nested-impacted.e2e.js',
-      './nested-first.e2e.js',
-    ]],
-  }
+exports.config = {
+  ...config,
+  specs: [[
+    './nested-impacted.e2e.js',
+    './nested-first.e2e.js',
+  ]],
 }
-
-exports.getConfig = getConfig
-exports.config = getConfig()

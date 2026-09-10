@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execFileSync } = require('node:child_process')
+const { exec, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
 const fs = require('node:fs')
 const http = require('node:http')
@@ -43,8 +43,6 @@ const {
   TEST_STATUS,
   TEST_SUITE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const PersistentWdioRunner = require('./persistent-runner')
-
 const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
 const versions = requestedVersion
@@ -212,7 +210,6 @@ for (const version of versions) {
     let childProcess
     let cwd
     let receiver
-    const runners = new Map()
     let testOutput = ''
     let webDriver
 
@@ -233,7 +230,6 @@ for (const version of versions) {
 
     before(async function () {
       cwd = sandboxCwd()
-      receiver = await new FakeCiVisIntake().start()
       webDriver = await startWebDriverServer()
 
       execFileSync('git', ['switch', '-c', 'feature-branch'], { cwd })
@@ -247,20 +243,17 @@ for (const version of versions) {
     })
 
     after(async function () {
-      for (const runner of runners.values()) {
-        await runner.stop()
-      }
-      await receiver?.stop()
       await stopServer(webDriver?.server)
     })
 
-    beforeEach(function () {
-      receiver.reset()
+    beforeEach(async function () {
+      receiver = await new FakeCiVisIntake().start()
     })
 
-    afterEach(function () {
+    afterEach(async function () {
       childProcess?.kill()
       testOutput = ''
+      await receiver.stop()
     })
 
     /**
@@ -286,11 +279,10 @@ for (const version of versions) {
     ) {
       const initialWebDriverSessionCount = webDriver.getSessionCount()
       const initialWebDriverRequestCount = webDriver.getRequests().length
-      const environmentKey = JSON.stringify(Object.entries(extraEnvironment).sort())
-      let runner = runners.get(environmentKey)
-      if (!runner) {
-        runner = new PersistentWdioRunner(cwd, {
-          ...process.env,
+      const executable = path.join(cwd, 'node_modules', '.bin', 'wdio')
+      childProcess = exec(`"${executable}" run ./wdio.conf.js`, {
+        cwd: workingDirectory,
+        env: {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: 'false',
           NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
@@ -300,15 +292,15 @@ for (const version of versions) {
           WEBDRIVERIO_SCENARIO: scenario,
           WEBDRIVER_PORT: String(webDriver.port),
           ...extraEnvironment,
-        })
-        runners.set(environmentKey, runner)
-      }
-      childProcess = await runner.run(workingDirectory, {
-        WEBDRIVERIO_FRAMEWORK: framework,
-        WEBDRIVERIO_SCENARIO: scenario,
-        WEBDRIVER_PORT: String(webDriver.port),
+        },
       })
       const childClosed = once(childProcess, 'close')
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
 
       const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
         childProcess,
@@ -327,10 +319,7 @@ for (const version of versions) {
           childClosed,
           payloadsPromise,
         ])
-        testOutput = childProcess.output
-        if (childProcess.error) throw childProcess.error
       } catch (error) {
-        testOutput = childProcess.output
         if (childProcess.exitCode !== null || childProcess.signalCode != null) {
           await childClosed.catch(() => {})
         }

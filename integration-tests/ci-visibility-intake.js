@@ -480,12 +480,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#knownTestsPageIndex = 0
   }
 
-  /**
-   * Restores response state while keeping the intake server available.
-   *
-   * @returns {void}
-   */
-  reset () {
+  stop () {
     this.#settings = DEFAULT_SETTINGS
     this.#settingsResponses = []
     this.#settingsResponseDelayMs = 0
@@ -508,10 +503,6 @@ class FakeCiVisIntake extends FakeAgent {
       clearTimeout(this.waitingTimeoutId)
     }
     this.#waitingTime = 0
-  }
-
-  stop () {
-    this.reset()
     return super.stop()
   }
 

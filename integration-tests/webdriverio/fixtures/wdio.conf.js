@@ -1,7 +1,9 @@
 'use strict'
 
+const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
+const framework = process.env.WEBDRIVERIO_FRAMEWORK || 'mocha'
+
 const baseConfig = {
-  after: [],
   runner: 'local',
   specs: [
     './first.e2e.js',
@@ -17,12 +19,8 @@ const baseConfig = {
   path: '/',
   connectionRetryCount: 0,
   services: [],
-  framework: 'mocha',
-  injectGlobals: true,
+  framework,
   reporters: [],
-  runnerEnv: {},
-  specFileRetries: 0,
-  specFileRetriesDelay: 0,
   jasmineOpts: {
     defaultTimeoutInterval: 10_000,
     random: false,
@@ -35,12 +33,12 @@ const baseConfig = {
 
 const scenarioConfig = {
   automaticLogSubmission: {
-    after: [function () {
+    after () {
       const loggers = require('./automatic-log-submission-logger')
       for (const [loggerName, logger] of Object.entries(loggers)) {
         logger.info(`Hello from WebdriverIO ${loggerName} after hook!`)
       }
-    }],
+    },
     maxInstances: 1,
     specs: ['./automatic-log-submission.e2e.js'],
   },
@@ -305,27 +303,20 @@ const scenarioConfig = {
   },
 }
 
-function getConfig () {
-  const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
-  const selectedScenario = scenarioConfig[scenario]
-  if (!selectedScenario) {
-    throw new Error(`Unknown WebdriverIO integration scenario: ${scenario}`)
-  }
-
-  return {
-    ...baseConfig,
-    ...selectedScenario,
-    framework: process.env.WEBDRIVERIO_FRAMEWORK || 'mocha',
-    jasmineOpts: {
-      ...baseConfig.jasmineOpts,
-      ...selectedScenario.jasmineOpts,
-    },
-    mochaOpts: {
-      ...baseConfig.mochaOpts,
-      ...selectedScenario.mochaOpts,
-    },
-  }
+const selectedScenario = scenarioConfig[scenario]
+if (!selectedScenario) {
+  throw new Error(`Unknown WebdriverIO integration scenario: ${scenario}`)
 }
 
-exports.getConfig = getConfig
-exports.config = getConfig()
+exports.config = {
+  ...baseConfig,
+  ...selectedScenario,
+  jasmineOpts: {
+    ...baseConfig.jasmineOpts,
+    ...selectedScenario.jasmineOpts,
+  },
+  mochaOpts: {
+    ...baseConfig.mochaOpts,
+    ...selectedScenario.mochaOpts,
+  },
+}
