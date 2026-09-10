@@ -68,6 +68,59 @@ describe('bundler register', () => {
     sinon.assert.notCalled(integrationHook)
   })
 
+  it('activates a source-rewritten integration without patching exports', () => {
+    const hook = sinon.stub()
+    const integrationHook = sinon.stub()
+    const duplicateHook = sinon.stub()
+    const ordinaryHook = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      hooks: { 'test-rewritten-integration': hook },
+      instrumentations: {
+        'test-rewritten-integration': [
+          { file: 'dist/index.js', hook: ordinaryHook },
+          { hook: integrationHook, sourceRewrite: 'dist/index.js', versions: ['>=1'] },
+          { hook: duplicateHook, sourceRewrite: 'dist/index.js', versions: ['>=1'] },
+        ],
+      },
+    })
+    const payload = {
+      activate: true,
+      package: 'test-rewritten-integration',
+      path: 'test-rewritten-integration/dist/index.js',
+      version: '1.0.0',
+    }
+
+    publish(payload)
+
+    sinon.assert.calledOnceWithExactly(hook)
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-rewritten-integration' })
+    sinon.assert.calledOnceWithExactly(integrationHook, undefined, '1.0.0')
+    sinon.assert.notCalled(duplicateHook)
+    sinon.assert.notCalled(ordinaryHook)
+    assert.equal(Object.hasOwn(payload, 'module'), false)
+  })
+
+  it('patches file-pattern publications', () => {
+    const integrationHook = sinon.stub().returns({ patched: true })
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-pattern': sinon.stub() },
+      instrumentations: {
+        'test-pattern': [{ filePattern: String.raw`lib/chunk-.*\.js`, hook: integrationHook }],
+      },
+    })
+    const payload = {
+      module: {},
+      package: 'test-pattern',
+      path: 'test-pattern/lib/chunk-one.js',
+      version: '1.0.0',
+    }
+
+    publish(payload)
+
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0')
+    assert.deepStrictEqual(payload.module, { patched: true })
+  })
+
   it('rejects unmatched paths and incompatible versions', () => {
     const integrationHook = sinon.stub()
     const { publish } = loadBundlerRegister({

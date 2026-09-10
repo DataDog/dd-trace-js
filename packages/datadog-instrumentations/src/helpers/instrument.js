@@ -80,7 +80,12 @@ exports.getHooks = function getHooks (names) {
   return rewriterInstrumentations
     .map(inst => inst.module)
     .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
+    .map(({ name, versionRange, filePath }) => ({
+      file: filePath,
+      name,
+      sourceRewrite: filePath,
+      versions: [versionRange],
+    }))
 }
 
 /**
@@ -90,15 +95,16 @@ exports.getHooks = function getHooks (names) {
  * @param {string} [args.file] path to file within package to instrument. Defaults to 'index.js'.
  * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param {boolean} [args.patchDefault] whether to patch the default export. Defaults to true.
+ * @param {string} [args.sourceRewrite] original source-rewrite target path
  * @param {(moduleExports: unknown, version: string, isIitm?: boolean, hookMeta?: object) => unknown} [hook]
  * Patches module exports
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
+exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault, sourceRewrite }, hook) {
   if (!instrumentations[name]) {
     instrumentations[name] = []
   }
 
-  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault })
+  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault, sourceRewrite })
 }
 
 exports.AsyncResource = AsyncResource

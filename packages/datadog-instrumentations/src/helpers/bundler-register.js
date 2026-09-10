@@ -9,6 +9,7 @@ const {
   filename,
   getDisabledInstrumentations,
   matchVersion,
+  matchesInstrumentation,
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -76,7 +77,14 @@ function doHook (name) {
   }
 }
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
+/**
+ * @typedef {object} Payload
+ * @property {boolean} [activate]
+ * @property {string} package
+ * @property {unknown} [module]
+ * @property {string} [version]
+ * @property {string} [path]
+ */
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
@@ -107,12 +115,28 @@ dc.subscribe(CHANNEL, (message) => {
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) continue
+  if (payload.activate) {
+    for (const { sourceRewrite, versions, hook } of instrumentation) {
+      if (!sourceRewrite || payload.path !== filename(name, sourceRewrite) ||
+        !matchVersion(payload.version, versions)) continue
+
+      try {
+        loadChannel.publish({ name })
+        hook(undefined, payload.version)
+      } catch (error) {
+        log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
+      }
+      return
+    }
+    return
+  }
+
+  for (const entry of instrumentation) {
+    if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
 
     try {
       loadChannel.publish({ name })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
+      payload.module = entry.hook(payload.module, payload.version) ?? payload.module
     } catch (error) {
       log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
     }

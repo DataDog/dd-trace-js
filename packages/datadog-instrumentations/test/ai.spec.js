@@ -8,19 +8,43 @@ const sinon = require('sinon')
 const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
 const resolveLanguageModelChannel = tracingChannel('orchestrion:ai:resolveLanguageModel')
 
-// Same approach as openai.spec.js: stub `addHook` to capture the module callback, then
-// run it so the instrumentation registers its orchestrion subscriptions without loading `ai`.
+// Same approach as openai.spec.js: stub `addHook` to capture the module callbacks, then
+// activate every rewrite hook so the instrumentation proves its subscriptions are idempotent.
 function loadAiInstrumentation () {
   const instrumentPath = require.resolve('../src/helpers/instrument')
   const realInstrument = require(instrumentPath)
   const hookCallbacks = []
   const cache = require.cache[instrumentPath]
   const previousExports = cache.exports
+  const dcPath = require.resolve('dc-polyfill')
+  const dcCache = require.cache[dcPath]
+  const dcExports = dcCache.exports
+  const channelNames = [
+    'orchestrion:ai:getTracer',
+    'orchestrion:ai:selectTelemetryAttributes',
+    'orchestrion:ai:resolveLanguageModel',
+  ]
+  const subscriptionCounts = new Map(channelNames.map(name => [name, 0]))
 
   cache.exports = {
     ...realInstrument,
     addHook (spec, callback) {
       hookCallbacks.push({ spec, callback })
+    },
+  }
+  dcCache.exports = {
+    ...dcExports,
+    tracingChannel (name) {
+      const tracingChannel = dcExports.tracingChannel(name)
+      if (!subscriptionCounts.has(name)) return tracingChannel
+
+      return {
+        ...tracingChannel,
+        subscribe (handlers) {
+          subscriptionCounts.set(name, subscriptionCounts.get(name) + 1)
+          return tracingChannel.subscribe(handlers)
+        },
+      }
     },
   }
 
@@ -29,11 +53,17 @@ function loadAiInstrumentation () {
     require('../src/ai')
   } finally {
     cache.exports = previousExports
+    dcCache.exports = dcExports
     delete require.cache[require.resolve('../src/ai')]
   }
 
   if (hookCallbacks.length === 0) throw new Error('ai instrumentation registered no hooks')
-  hookCallbacks[0].callback({})
+
+  for (const { spec, callback } of hookCallbacks) {
+    if (spec.sourceRewrite) callback()
+  }
+
+  return channelNames.map(name => subscriptionCounts.get(name))
 }
 
 /**
@@ -60,9 +90,10 @@ function subscribeIntercept (onIntercept = () => {}) {
 describe('vercel ai model interception', () => {
   let model
   let doGenerate
+  let subscriptionCounts
 
   before(() => {
-    loadAiInstrumentation()
+    subscriptionCounts = loadAiInstrumentation()
   })
 
   beforeEach(() => {
@@ -72,6 +103,10 @@ describe('vercel ai model interception', () => {
 
   afterEach(() => {
     sinon.restore()
+  })
+
+  it('subscribes once when multiple rewrite hooks activate', () => {
+    assert.deepStrictEqual(subscriptionCounts, [1, 1, 1])
   })
 
   it('calls the original directly when nothing is subscribed', () => {
