@@ -3060,7 +3060,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             eventsPromise,
           ])
 
-          assert.doesNotMatch(output, /\d+ skipped/)
+          assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         })
       }
 
@@ -3327,7 +3327,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         assert.doesNotMatch(output, /I am running concurrent hooks/)
-        assert.doesNotMatch(output, /\d+ skipped/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         assert.strictEqual(exitCode, 0)
       })
 
@@ -3404,7 +3404,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         // Discarded retries must leave the test tree, not surface as skipped tests.
-        assert.doesNotMatch(output, /\d+ skipped/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         // Retries must not run the *Each hooks Jest skips for their concurrent original.
         assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.strictEqual(exitCode, 0)
