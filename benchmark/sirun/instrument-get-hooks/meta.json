@@ -6,14 +6,27 @@
   "instructions": true,
   "iterations": 10,
   "variants": {
-    "scan": {
+    "scan-cold": {
+      "env": {
+        "SCAN": "1",
+        "STARTUPS": "1",
+        "OPERATIONS": "1"
+      }
+    },
+    "deduped-cold": {
+      "env": {
+        "STARTUPS": "1",
+        "OPERATIONS": "1"
+      }
+    },
+    "scan-warm": {
       "env": {
         "SCAN": "1",
         "STARTUPS": "20000",
         "OPERATIONS": "20000"
       }
     },
-    "indexed": {
+    "deduped-warm": {
       "env": {
         "STARTUPS": "20000",
         "OPERATIONS": "20000"

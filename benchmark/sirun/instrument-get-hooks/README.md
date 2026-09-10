@@ -1,53 +1,56 @@
 # instrument-get-hooks
 
-Measures the end-to-end hook-resolution cost of one tracer startup for
-`getHooks` in `packages/datadog-instrumentations/src/helpers/instrument.js`:
-every rewriter-based integration calls it once at require time, one call per
-rewriter-instrumented module (23 calls per traced process).
+Quantifies the cost of the dedupe fix in `getHooks`
+(`packages/datadog-instrumentations/src/helpers/instrument.js`). The rewriter
+instrumentation list holds one entry per transform, so `getHooks` returned one
+hook per transform and integrations registered the same (versionRange,
+filePath) several times (144 hooks for the real query set before the fix, 66
+after).
 
-Each loop iteration simulates one complete startup, inside the measured window:
-the `indexed` variant (re)builds the startup index and then resolves hooks for
-every rewriter-instrumented module once — matching the production lookup count
-— while the `scan` variant resolves the same names with the pre-index
-implementation, which has no startup cost of its own. Keeping the index
-construction in the measurement matters: production never calls `getHooks` in
-a hot loop, so a synthetic per-call loop would amortize the index build away
-and misrepresent the trade.
+The workload models what production actually does: `getHooks` is called once
+per module name, **lazily**, from integration files that
+`helpers/register.js` only runs when the user's package loads. A traced
+process performs **zero** of these calls at tracer init, and all 13 only when
+every instrumented package family is used. The 13 queries are the complete set
+of call sites in the repo (`ai.js`, `langchain.js`, `mercurius.js`,
+`bullmq.js`, `modelcontextprotocol-sdk.js`, `openai-agents.js`,
+`langgraph.js`, `aws-durable-execution-sdk-js.js`, `azure-cosmos.js`,
+`claude-agent-sdk.js`, and the three in `graphql.js`). There is no hot loop
+to optimize and no fixed startup cost to charge against lookup savings, so
+the bench measures one simulated lazy load pass per iteration.
 
-- `scan` — the pre-index implementation, kept verbatim as the baseline. Full
-  map → filter → map over the rewriter list per call, with a nested
-  `names.includes`.
-- `indexed` — the name-indexed implementation, also verbatim: one startup pass
-  dedupes the hooks by (versionRange, filePath) into a `Map`, then each call is
-  a lookup plus a defensive copy of the cached hooks.
+- `scan` — the pre-fix implementation, verbatim: map → filter → map, one
+  hook per transform (duplicates included).
+- `deduped` — the fixed implementation, verbatim: one pass, skipping
+  transforms whose (versionRange, filePath) was already emitted, with a Set
+  for the requested names.
 
-Both implementations are frozen references over the real rewriter
-instrumentation list: the setup assertions prove their outputs are equivalent
-(up to the dedupe the index introduces) before anything is measured.
+Variants (`meta.json`):
 
-Measured (Node v26.2.0, warm, 20 000 simulated startups):
+- `*-cold` — one simulated startup through the measured window per process.
+  Each sirun iteration is a fresh process, so the window is paid cold, where
+  production pays it. The startup-guard share ceiling is vacuous here by
+  design (load+setup legitimately dominates a single pass) — the guard's
+  rot protection is carried by the warm variants instead.
+- `*-warm` — 20 000 simulated startups per process, for steady-state signal
+  over the same workload.
 
-| | per startup |
-|---|---|
-| `scan` | ~65 µs (resolves 193 hook objects) |
-| `indexed` | ~13 µs (resolves 81 hook objects, index build included) |
+Measured (Node v26.2.0, median of fresh processes / warm loops):
 
-The one-time cold cost of the index build (paid once at require, before the
-JIT warms up) is on the order of ~0.1–0.3 ms; it is part of the measured
-per-startup figure above in its warm form.
+| variant | per startup (13 queries) | hooks resolved |
+|---|---|---|
+| `scan-cold` | ~175 µs | 144 |
+| `deduped-cold` | ~195 µs | 66 |
+| `scan-warm` | ~34 µs | 144 |
+| `deduped-warm` | ~29 µs | 66 |
 
-The optimization that ships the indexed implementation in
-`helpers/instrument.js` is stacked on this branch. The benchmark deliberately
-stays self-contained rather than requiring the shipped helper: the shipped
-implementation builds its index at require time, outside any in-process
-measured window, so requiring it would reintroduce exactly the
-measurement-boundary problem this design exists to avoid.
+Zero-lookup startups (the common case) run no `getHooks` code in either
+variant: the fix adds no fixed cost anywhere — nothing is built at require
+time.
 
-The `startup-guard` ceiling is relaxed to 30% for the `indexed` variant: its
-loop is shorter by the size of the win itself (~5× fewer instructions per
-startup), and the guard's purpose (catching a bench that rots into measuring
-startup) is still enforced by the setup assertions plus the identical
-`STARTUPS` per variant.
+Read: the correctness fix costs ~10% cold on a process that loads *all* 13
+integration families (~20 µs, only paid as the packages load), and wins
+~15% warm. A zero-lookup process pays nothing either way.
 
 Run with:
 
