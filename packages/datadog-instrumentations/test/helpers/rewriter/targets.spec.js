@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 
 const { generateRewriterTargets, OUTPUT_PATH } = require('../../../../../scripts/generate-rewriter-targets')
+const hooks = require('../../../src/helpers/hooks')
 const { getRewriteTarget } = require('../../../src/helpers/rewriter/targets')
 const targets = require('../../../src/helpers/rewriter/targets.json')
 const { getUnusedPackageName } = require('../get-unused-package-name')
@@ -16,6 +17,12 @@ describe('rewriter targets', () => {
       readFileSync(OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n'),
       generateRewriterTargets()
     )
+  })
+
+  it('has an activation hook for every rewrite target package', () => {
+    for (const name of new Set(Object.values(targets))) {
+      assert.equal(typeof (hooks[name]?.fn ?? hooks[name]), 'function', name)
+    }
   })
 
   it('finds nested rewrite targets', () => {
