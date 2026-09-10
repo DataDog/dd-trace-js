@@ -28,10 +28,15 @@ otelTracer.startActiveSpan('otel-sub', {
   ot.propagation.inject(ot.context.active(), carrier)
 
   const activeSpanContext = otelSpan.spanContext()
+  const activeTraceState = activeSpanContext.traceState
   const extractedContext = ot.propagation.extract(ot.ROOT_CONTEXT, carrier)
   const extractedSpanContext = ot.trace.getSpanContext(extractedContext)
 
   assert.ok(carrier.traceparent)
+  assert.strictEqual(activeTraceState.serialize(), '')
+  if (ot.createTraceState) {
+    assert.strictEqual(Object.getPrototypeOf(activeTraceState), Object.getPrototypeOf(ot.createTraceState()))
+  }
   assert.ok(extractedSpanContext)
   assert.strictEqual(extractedSpanContext.traceId, activeSpanContext.traceId)
   assert.strictEqual(extractedSpanContext.spanId, activeSpanContext.spanId)
