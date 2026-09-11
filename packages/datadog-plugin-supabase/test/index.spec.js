@@ -80,16 +80,14 @@ async function runServerlessContract ({
   }, operationTraceOptions)
 
   try {
-    try {
-      if (serverlessClassification === 'serverless-child') {
-        returned = await tracer.trace(serverlessRootName, async () => run())
-      } else {
-        returned = await run()
-      }
-    } catch (error) {
-      thrown = error
-    }
+    returned = await (serverlessClassification === 'serverless-child'
+      ? tracer.trace(serverlessRootName, async () => run())
+      : run())
+  } catch (error) {
+    thrown = error
+  }
 
+  try {
     await Promise.all([rootTraceAssertion, operationTraceAssertion])
   } finally {
     agent.unsubscribe(collectTraces)

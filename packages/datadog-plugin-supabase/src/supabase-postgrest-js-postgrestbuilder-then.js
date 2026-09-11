@@ -115,8 +115,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
    */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
-    if (ctx[spanFinished]) return
-    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
+    if (ctx[spanFinished] || !ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 
     const error = normalizeError(ctx.result?.error, 'PostgrestError')
     if (error) {
