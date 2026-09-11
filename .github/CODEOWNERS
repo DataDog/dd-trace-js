@@ -12,6 +12,7 @@
 /.agents/skills/dd-apm-sdk-review/ @DataDog/lang-platform-js
 /.claude/skills/dd-apm-sdk-review @DataDog/lang-platform-js
 /.cursor/skills/dd-apm-sdk-review @DataDog/lang-platform-js
+/.agents/dd-apm-sdk-review-overrides/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /scripts/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /vendor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 

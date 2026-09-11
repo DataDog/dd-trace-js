@@ -12,7 +12,7 @@ const CONVENTIONAL_PATTERN = new RegExp(
   '^(?:(revert)(!)?: )?' +
     String.raw`(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(?:\(([^)]+)\))?(!)?: (.+)$`
 )
-const PULL_REQUEST_PATTERN = /([ \t])\(#([0-9]+)\)$/
+const PULL_REQUEST_PATTERN = /\s+\(#([0-9]+)\)$/
 const REFERENCE_PATTERN = /#([0-9]+)/g
 const GITHUB_URL = 'https://github.com'
 const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
@@ -20,15 +20,18 @@ const UNCATEGORIZED_PRODUCT = 'Other'
 const DEPENDENCY_PRODUCT = 'Dependencies'
 const INTERNAL_PATH_PATTERNS = [
   /^\.agents\//,
+  /^\.claude\//,
+  /^\.cursor\//,
   /^\.github\//,
   /^\.gitlab(?:-ci\.yml|\/)/,
+  /^\.llm-validation\//,
   /^benchmark\//,
   /^integration-tests\//,
   /^scripts\//,
   /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
   /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
-  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
+  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json|\.gitignore)$/,
 ]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and
 // `deps` for production ones, but the `deps` manifests under test/benchmark/docs
@@ -342,12 +345,9 @@ function parsePullRequest (subject) {
     return { subject, pr: '' }
   }
 
-  let subjectEnd = match.index
-  while (subjectEnd > 0 && (subject[subjectEnd - 1] === ' ' || subject[subjectEnd - 1] === '\t')) subjectEnd--
-
   return {
-    subject: subject.slice(0, subjectEnd),
-    pr: match[2],
+    subject: subject.slice(0, match.index),
+    pr: match[1],
   }
 }
 

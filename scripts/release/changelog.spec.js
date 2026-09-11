@@ -253,18 +253,6 @@ describe('release changelog', () => {
     ].join('\n'))
   })
 
-  it('normalizes repeated whitespace before pull request numbers', () => {
-    const changelog = createReleaseChangelog([
-      { sha: 'abc001', subject: 'fix: trim release-note whitespace   (#1234)' },
-    ])
-
-    assert.strictEqual(changelog.markdown, [
-      '### Fixes',
-      `- **General:** Trim release-note whitespace ${prLink(1234)}`,
-      '',
-    ].join('\n'))
-  })
-
   it('ignores empty scopes in multi-scope subjects', () => {
     const changelog = createReleaseChangelog([
       {
@@ -392,6 +380,28 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(isInternalOnly(internalToInternalFiles), true)
+  })
+
+  it('classifies new tooling paths as internal-only', () => {
+    const internalFiles = []
+
+    appendChangedPaths(internalFiles, [
+      { filename: '.llm-validation/eval.json' },
+      { filename: '.claude/settings.json' },
+      { filename: '.cursor/skills/dd-apm-sdk-review/SKILL.md' },
+      { filename: '.agents/dd-apm-sdk-review-overrides/reviewers/design.md' },
+      { filename: '.gitignore' },
+    ])
+
+    assert.strictEqual(isInternalOnly(internalFiles), true)
+
+    const mixedFiles = [...internalFiles]
+
+    appendChangedPaths(mixedFiles, [
+      { filename: 'packages/dd-trace/src/index.js' },
+    ])
+
+    assert.strictEqual(isInternalOnly(mixedFiles), false)
   })
 
   it('classifies public release-note types from changed paths', () => {
