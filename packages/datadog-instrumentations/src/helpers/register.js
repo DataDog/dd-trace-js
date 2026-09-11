@@ -51,6 +51,42 @@ const instrumentedNodeModules = new Map()
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
+/** @type {Map<string, Function>} */
+const instrumentationHooks = new Map()
+
+/**
+ * @param {unknown} error
+ * @param {string} name
+ * @param {string|undefined} moduleVersion
+ */
+function reportInstrumentationError (error, name, moduleVersion) {
+  const errorType = error instanceof Error ? error.constructor.name : typeof error
+  const errorMessage = error instanceof Error ? error.message : errorType
+  log.info('Error during ddtrace instrumentation of application, aborting: %s', errorMessage, error)
+  telemetry('error', [
+    `error_type:${errorType}`,
+    `integration:${name}`,
+    `integration_version:${moduleVersion}`,
+  ], {
+    result: 'error',
+    result_class: 'internal_error',
+    result_reason: `Error during instrumentation of ${name}@${moduleVersion}: ${errorMessage}`,
+  })
+}
+
+/**
+ * @param {unknown} moduleExports
+ * @param {string} name
+ * @param {string} moduleName
+ * @param {string} moduleBaseDir
+ * @param {string|undefined} moduleVersion
+ * @returns {unknown}
+ */
+function instrumentModule (moduleExports, name, moduleName, moduleBaseDir, moduleVersion) {
+  const hook = instrumentationHooks.get(name)
+  if (!hook) return moduleExports
+  return hook(moduleExports, moduleName, moduleBaseDir, moduleVersion)
+}
 
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
@@ -66,14 +102,30 @@ for (const name of names) {
     hook = hook.fn
   }
 
-  Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  /**
+   * @param {unknown} moduleExports
+   * @param {string} moduleName
+   * @param {string|undefined} moduleBaseDir
+   * @param {string|undefined} moduleVersion
+   * @param {boolean|undefined} isIitm
+   * @param {string|undefined} integration
+   */
+  const onrequire = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm, integration) => {
+    if (integration !== undefined && disabledInstrumentations.has(integration)) return moduleExports
+
     // All loaded versions are first expected to fail instrumentation.
     if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
       instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)
     }
 
     // This executes the integration file thus adding its entries to `instrumentations`
-    hook()
+    try {
+      hook()
+    } catch (error) {
+      instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
+      reportInstrumentationError(error, name, moduleVersion)
+      return moduleExports
+    }
 
     if (!instrumentations[name] || moduleExports === instrumentedNodeModules.get(name)) {
       return moduleExports
@@ -106,22 +158,16 @@ for (const name of names) {
 
           moduleExports = hook(moduleExports, moduleVersion, isIitm, { moduleBaseDir, moduleName }) ?? moduleExports
         } catch (error) {
-          log.info('Error during ddtrace instrumentation of application, aborting.', error)
-          telemetry('error', [
-            `error_type:${error.constructor.name}`,
-            `integration:${name}`,
-            `integration_version:${moduleVersion}`,
-          ], {
-            result: 'error',
-            result_class: 'internal_error',
-            result_reason: `Error during instrumentation of ${name}@${moduleVersion}: ${error.message}`,
-          })
+          reportInstrumentationError(error, name, moduleVersion)
         }
       }
     }
 
     return moduleExports
-  })
+  }
+
+  instrumentationHooks.set(name, onrequire)
+  Hook([name], hookOptions, onrequire)
 }
 
 globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers.add(logAbortedIntegrations)
@@ -153,6 +199,7 @@ function logAbortedIntegrations () {
 
 module.exports = {
   filename,
+  instrumentModule,
   pathSepExpr,
   loadChannel,
 }

@@ -64,7 +64,6 @@ const { addHook, channel } = require('./helpers/instrument')
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
 const codeCoverageReportCh = channel('ci:jest:coverage-report')
-const bundlerLoadCh = channel('dd-trace:bundler:load')
 
 const testSessionConfigurationCh = channel('ci:jest:session:configuration')
 
@@ -4011,7 +4010,7 @@ function resolveJestModulePath (runtime, from, moduleName) {
  * @param {object} runtime
  * @param {string} from
  * @param {string} moduleName
- * @returns {{ name: string, path: string, version: string } | undefined}
+ * @returns {{ name: string, packageRoot: string, path: string, version: string } | undefined}
  */
 function getJestLoggingPackage (runtime, from, moduleName) {
   if (typeof from !== 'string' || typeof moduleName !== 'string') return
@@ -4055,14 +4054,14 @@ function getJestLoggingPackage (runtime, from, moduleName) {
         jestLoggingPackagesByRuntime.set(runtime, runtimePackages)
       }
       runtimePackages.set(packageRoot, { name: directModuleName, version })
-      return { name: directModuleName, path: directModuleName, version }
+      return { name: directModuleName, packageRoot, path: directModuleName, version }
     }
 
     const { packageRoot, name, version } = containingPackage
     if (!normalizedModulePath.startsWith(`${packageRoot}/`)) return
 
     const modulePathWithinPackage = normalizedModulePath.slice(packageRoot.length + 1)
-    return { name, path: `${name}/${modulePathWithinPackage}`, version }
+    return { name, packageRoot, path: `${name}/${modulePathWithinPackage}`, version }
   } catch {
     // Let Jest load unresolved, resolver-only, or virtual modules without instrumentation.
   }
@@ -4070,7 +4069,7 @@ function getJestLoggingPackage (runtime, from, moduleName) {
 
 /**
  * @param {unknown} moduleExports
- * @param {{ name: string, path: string, version: string } | undefined} loggingPackage
+ * @param {{ name: string, packageRoot: string, path: string, version: string } | undefined} loggingPackage
  * @returns {unknown}
  */
 function instrumentJestLoggingModule (moduleExports, loggingPackage) {
@@ -4082,19 +4081,20 @@ function instrumentJestLoggingModule (moduleExports, loggingPackage) {
   const instrumentedModule = instrumentedJestLoggingModules.get(moduleExports)
   if (instrumentedModule) return instrumentedModule
 
-  const payload = {
-    module: moduleExports,
-    package: loggingPackage.name,
-    path: loggingPackage.path,
-    version: loggingPackage.version,
-  }
   // Apply the regular instrumentation after Jest has evaluated the module so its built-ins stay in Jest's realm.
-  bundlerLoadCh.publish(payload)
-  instrumentedJestLoggingModules.set(moduleExports, payload.module)
-  if (payload.module && (typeof payload.module === 'object' || typeof payload.module === 'function')) {
-    instrumentedJestLoggingModules.set(payload.module, payload.module)
+  const { instrumentModule } = require('./helpers/register')
+  const result = instrumentModule(
+    moduleExports,
+    loggingPackage.name,
+    loggingPackage.path,
+    loggingPackage.packageRoot,
+    loggingPackage.version
+  )
+  instrumentedJestLoggingModules.set(moduleExports, result)
+  if (result && (typeof result === 'object' || typeof result === 'function')) {
+    instrumentedJestLoggingModules.set(result, result)
   }
-  return payload.module
+  return result
 }
 
 function formatDefaultStackTrace (error, structuredStackTrace) {

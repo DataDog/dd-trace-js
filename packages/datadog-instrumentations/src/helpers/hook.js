@@ -6,7 +6,7 @@ const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 const log = require('../../../dd-trace/src/log')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
-const { isNodeBuiltinModuleName } = require('./shared-utils')
+const { isNodeBuiltinModuleName, normalizeModuleName } = require('./shared-utils')
 
 /**
  * @param {string} moduleBaseDir
@@ -56,8 +56,9 @@ function Hook (modules, hookOptions, onrequire) {
    * @param {string|undefined} moduleBaseDir
    * @param {string|undefined} moduleVersion
    * @param {boolean|undefined} isIitm
+   * @param {string|undefined} integration
    */
-  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+  const safeHook = (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm, integration) => {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
@@ -91,7 +92,7 @@ function Hook (modules, hookOptions, onrequire) {
       (typeof defaultExport === 'object' ||
       typeof defaultExport === 'function')
     ) {
-      defaultWrapResult = wrappedOnrequire(defaultExport, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = wrappedOnrequire(defaultExport, moduleName, moduleBaseDir, moduleVersion, isIitm, integration)
       if (defaultWrapResult && defaultWrapResult !== defaultExport) {
         defaultExportAliases = []
         for (const exportName of Object.keys(moduleExports)) {
@@ -117,7 +118,7 @@ function Hook (modules, hookOptions, onrequire) {
       }
       newExports = moduleExports
     } else {
-      newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm, integration)
     }
 
     if (defaultWrapResult && defaultExportAliases) {
@@ -133,9 +134,25 @@ function Hook (modules, hookOptions, onrequire) {
   }
 
   this._ritmHook = ritm(modules, {}, safeHook)
-  this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
-    return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
-  })
+  /**
+   * @param {unknown} moduleExports
+   * @param {string} moduleName
+   * @param {string|undefined} moduleBaseDir
+   * @param {{ integration?: string, moduleName?: string, version?: string }|undefined} data
+   * @param {'module'|'commonjs'|undefined} format
+   */
+  const hookImport = (moduleExports, moduleName, moduleBaseDir, data, format) => {
+    return safeHook(
+      moduleExports,
+      normalizeModuleName(data?.moduleName ?? moduleName),
+      moduleBaseDir,
+      data?.version,
+      format !== 'commonjs',
+      data?.integration
+    )
+  }
+
+  this._iitmHook = iitm(modules, hookOptions, hookImport)
 }
 
 module.exports = Hook
