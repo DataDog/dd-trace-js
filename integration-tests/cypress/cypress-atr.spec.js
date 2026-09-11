@@ -289,6 +289,48 @@ moduleTypes.forEach(({
         ])
       })
 
+      it('uses the cached dynamic budget instead of a conflicting flat count', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: { enabled: false },
+        })
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            const neverPassingTest = tests.filter(test =>
+              test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+            )
+            assert.strictEqual(neverPassingTest.length, 2, 'one initial execution plus the first dynamic bucket')
+            assert.ok(neverPassingTest.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.strictEqual(neverPassingTest[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          }, { hardTimeout: 30000 }
+        )
+      })
+
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async () => {
         receiver.setSettings({
           itr_enabled: false,

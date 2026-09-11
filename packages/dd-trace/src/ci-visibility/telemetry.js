@@ -82,7 +82,7 @@ function distributionMetric (name, tags, measure) {
  * @returns {void}
  */
 function recordDynamicAtrRetries (hasCustomBuckets) {
-  const tags = hasCustomBuckets ? { hasCustomBuckets: true } : {}
+  const tags = hasCustomBuckets ? { has_custom_buckets: 'true' } : {}
   incrementCountMetric(TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED, tags)
 }
 

@@ -14,6 +14,7 @@ const {
   hasEfdRetries,
   shouldSkipEfdRetry,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const {
   parseAnnotations,
   getTestSuitePath,
@@ -133,6 +134,7 @@ const efdRetryTestsById = new Map()
 const efdScheduledOriginalTestKeys = new Set()
 const efdStartedOriginalTestKeys = new Set()
 const efdSlowAbortedTests = new Set()
+const dynamicAtrRetryCountByTestKey = new Map()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
 const disabledTestIds = new Set()
@@ -907,6 +909,7 @@ function testEndHandler ({
   }
 
   const testEfdKey = getTestEfdKey(test)
+  const dynamicAtrTestKey = getTestFullyQualifiedName(test)
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime
@@ -918,6 +921,19 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+  if (
+    isDynamicAtrEnabled &&
+    isFlakyTestRetriesEnabled &&
+    !testProperties.attemptToFix &&
+    !test._ddIsEfdRetry &&
+    !isEfdManagedTest &&
+    !dynamicAtrRetryCountByTestKey.has(dynamicAtrTestKey)
+  ) {
+    const duration = results.at(-1)?.duration ?? 0
+    const retryCount = getDynamicAtrRetryCount(duration, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets)
+    dynamicAtrRetryCountByTestKey.set(dynamicAtrTestKey, retryCount)
+    test.retries = retryCount
+  }
   const hasRecordedTestOptimizationExecution = recordedTestOptimizationExecutions.has(test)
 
   if (!hasRecordedTestOptimizationExecution) {
@@ -971,10 +987,13 @@ function testEndHandler ({
   }
 
   // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  const atrRetryCount = isDynamicAtrEnabled
+    ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey)
+    : flakyTestRetriesCount
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
-    flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
-    testStatuses.length === flakyTestRetriesCount + 1 &&
+    atrRetryCount != null && atrRetryCount > 0 &&
+    testStatuses.length === atrRetryCount + 1 &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }
@@ -1090,6 +1109,7 @@ function deferEfdRetryGroups (testGroups) {
 }
 
 function prepareDispatcherRun (dispatcher, args) {
+  dynamicAtrRetryCountByTestKey.clear()
   let testGroups = args[0]
 
   // Filter out disabled tests from testGroups before they get scheduled,
@@ -1451,11 +1471,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // ATR and `--retries` are now compatible with Test Management.
     // Test Management tests have their retries set to 0 at the test level,
     // preventing them from being retried by ATR or `--retries`.
-    const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    const shouldSetATRRetries = isFlakyTestRetriesEnabled &&
+      (isDynamicAtrEnabled || flakyTestRetriesCount > 0)
     if (shouldSetATRRetries) {
-      // When dynamic ATR is enabled, use the max bucket value as the initial count.
+      // Dynamic ATR starts at the maximum budget, then narrows each test after
+      // its initial duration is known.
+      const maximumDynamicAtrRetries = dynamicAtrBuckets
+        ? Math.max(...dynamicAtrBuckets)
+        : earlyFlakeDetectionRetryPolicy.schedulingRetryCount
       const atrRetries = isDynamicAtrEnabled
-        ? (dynamicAtrBuckets ? Math.max(...dynamicAtrBuckets) : earlyFlakeDetectionRetryPolicy.schedulingRetryCount)
+        ? Math.max(1, maximumDynamicAtrRetries)
         : flakyTestRetriesCount
       for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user

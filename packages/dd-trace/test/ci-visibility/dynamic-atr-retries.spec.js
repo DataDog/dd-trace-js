@@ -71,10 +71,12 @@ describe('dynamic-atr-retries', () => {
       assert.equal(getDynamicAtrBuckets(), null)
     })
 
-    it('returns null for non-integer', () => {
-      process.env[DYNAMIC_ATR_BUCKETS_ENV] = 'invalid'
-      assert.equal(getDynamicAtrBuckets(), null)
-    })
+    for (const value of ['1x,2,3,4,5', '1.5,2,3,4,5', '1,,3,4,5', 'invalid']) {
+      it(`returns null for malformed integer field ${JSON.stringify(value)}`, () => {
+        process.env[DYNAMIC_ATR_BUCKETS_ENV] = value
+        assert.equal(getDynamicAtrBuckets(), null)
+      })
+    }
   })
 
   describe('getDynamicAtrRetryCount', () => {
@@ -87,6 +89,7 @@ describe('dynamic-atr-retries', () => {
 
     for (const [durationMs, expected] of [
       [1000, 10], // <= 5s -> bucket 0
+      [5000, 10], // exact 5s boundary remains in bucket 0
       [6000, 2], // <= 10s -> bucket 1
       [31000, 4], // <= 5m -> bucket 3
       [301000, 1], // > 5m -> bucket 4, EFD returns 0, clamped to 1
@@ -101,6 +104,7 @@ describe('dynamic-atr-retries', () => {
 
     for (const [durationMs, expected] of [
       [1000, 4], // <= 5s -> bucket 0
+      [5000, 4], // exact 5s boundary remains in bucket 0
       [6000, 1], // <= 10s -> bucket 1
       [31000, 1], // <= 30s -> bucket 2
       [301000, 1], // <= 5m -> bucket 3
@@ -136,13 +140,13 @@ describe('efd-retry-policy dedup helpers', () => {
     for (const [durationMs, expected] of [
       [0, 0],
       [4999, 0],
-      [5000, 1],
+      [5000, 0],
       [9999, 1],
-      [10000, 2],
+      [10000, 1],
       [29999, 2],
-      [30000, 3],
+      [30000, 2],
       [299999, 3],
-      [300000, 4],
+      [300000, 3],
       [600000, 4],
     ]) {
       it(`returns ${expected} for ${durationMs}ms`, () => {
@@ -161,6 +165,7 @@ describe('efd-retry-policy dedup helpers', () => {
 
     for (const [durationMs, expected] of [
       [1000, 5],
+      [5000, 5],
       [6000, 3],
       [31000, 1], // 31s falls in the 5m bucket (index 3)
       [301000, 0], // 301s is > 5m, no retries

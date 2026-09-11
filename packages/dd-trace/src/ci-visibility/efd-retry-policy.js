@@ -32,14 +32,14 @@ const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
  * Returns the zero-based retry-bucket index for a test duration.
  *
  * Bucket boundaries (ms): 5 000, 10 000, 30 000, 300 000.
- * Durations at or above a boundary fall into the next bucket.
+ * Durations at a boundary remain in that bucket.
  *
  * @param {number} durationMs
  * @returns {number}
  */
 function retryBucketIndexForDuration (durationMs) {
   for (let index = 0; index < EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS.length; index++) {
-    if (durationMs < EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS[index].limitMs) {
+    if (durationMs <= EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS[index].limitMs) {
       return index
     }
   }

@@ -1049,14 +1049,20 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
-  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return
+  if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
+  const maximumDynamicAtrRetries = dynamicAtrBuckets
+    ? Math.max(...dynamicAtrBuckets)
+    : earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+  const retryCount = isDynamicAtrEnabled
+    ? Math.max(1, maximumDynamicAtrRetries)
+    : flakyTestRetriesCount
   let configured = false
   let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry) {
-      config.retry = flakyTestRetriesCount
+      config.retry = retryCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)

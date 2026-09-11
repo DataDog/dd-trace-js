@@ -522,5 +522,11 @@ afterEach(function () {
     suppressedTestFailures.delete(testName)
   }
 
-  cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport })
+  cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport }).then((taskResult) => {
+    // Cypress decides whether to retry after afterEach completes. Narrow the
+    // initial maximum to the budget cached from this test's first attempt.
+    if (taskResult && Number.isSafeInteger(taskResult.dynamicAtrRetryCount)) {
+      currentTest._retries = taskResult.dynamicAtrRetryCount
+    }
+  })
 })

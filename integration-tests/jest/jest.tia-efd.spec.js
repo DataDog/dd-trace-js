@@ -4358,6 +4358,43 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
+    it('uses the cached dynamic budget instead of a conflicting flat count', (done) => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        flaky_test_retries_count: 0,
+        early_flake_detection: { enabled: false },
+      })
+
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          const neverPassingTest = tests.filter(test => test.resource ===
+            'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests')
+          assert.strictEqual(neverPassingTest.length, 2, 'one initial execution plus the first dynamic bucket')
+          assert.ok(neverPassingTest.every(test => test.meta[TEST_STATUS] === 'fail'))
+          assert.strictEqual(neverPassingTest[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+        }
+      )
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-flaky/flaky-',
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+        },
+      })
+
+      Promise.all([once(childProcess, 'exit'), eventsPromise]).then(() => done(), done)
+    })
+
     it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
       receiver.setSettings({
         itr_enabled: false,

@@ -53,7 +53,15 @@ function getDynamicAtrBuckets () {
 
   const buckets = []
   for (const part of parts) {
-    const value = Number.parseInt(part.trim(), 10)
+    const trimmedPart = part.trim()
+    if (!/^\d+$/.test(trimmedPart)) {
+      log.warn(
+        'Invalid %s value %o; expected five comma-separated integers in [1, %d]',
+        DYNAMIC_ATR_BUCKETS_ENV, raw, MAX_RETRIES_PER_BUCKET
+      )
+      return null
+    }
+    const value = Number(trimmedPart)
     if (!Number.isSafeInteger(value) || value < 1 || value > MAX_RETRIES_PER_BUCKET) {
       log.warn(
         'Invalid %s value %o; expected five comma-separated integers in [1, %d]',

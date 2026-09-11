@@ -212,6 +212,9 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
+    this._dynamicAtrEnabled = isDynamicAtrEnabled()
+    this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets() ?? undefined : undefined
+    this._hasRecordedDynamicAtrTelemetry = false
     this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
     this._isTestOptimizationCacheOnly = options.cacheOnly === true
     const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
@@ -541,9 +544,6 @@ class CiVisibilityExporter extends BufferingExporter {
       DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
     } = testOptimization
 
-    // Parse dynamic ATR env vars once. When disabled, ATR stays on its existing flat-limit path.
-    const dynamicAtrEnabled = isDynamicAtrEnabled()
-    const dynamicAtrBuckets = dynamicAtrEnabled ? getDynamicAtrBuckets() : undefined
     const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
       ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
       : createEfdRetryPolicy({
@@ -555,6 +555,11 @@ class CiVisibilityExporter extends BufferingExporter {
     const testManagementAttemptToFixRetries =
       remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
 
+    const isFlakyTestRetriesEnabled =
+      remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true
+    // Dynamic ATR only replaces the flat ATR policy when backend ATR is enabled.
+    const isDynamicAtrEnabled = isFlakyTestRetriesEnabled && this._dynamicAtrEnabled
+
     return Object.freeze({
       isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
       isSuitesSkippingEnabled: remoteConfiguration.isSuitesSkippingEnabled === true,
@@ -564,11 +569,10 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
       earlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
-      isFlakyTestRetriesEnabled:
-        remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,
+      isFlakyTestRetriesEnabled,
       flakyTestRetriesCount,
-      isDynamicAtrEnabled: dynamicAtrEnabled,
-      dynamicAtrBuckets,
+      isDynamicAtrEnabled,
+      dynamicAtrBuckets: isDynamicAtrEnabled ? this._dynamicAtrBuckets : undefined,
       isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
       isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
       isTestManagementEnabled:
@@ -581,7 +585,8 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   _recordDynamicAtrTelemetry () {
-    if (this._libraryConfig?.isDynamicAtrEnabled) {
+    if (!this._hasRecordedDynamicAtrTelemetry && this._libraryConfig?.isDynamicAtrEnabled) {
+      this._hasRecordedDynamicAtrTelemetry = true
       recordDynamicAtrRetries(this._libraryConfig.dynamicAtrBuckets !== undefined)
     }
   }

@@ -174,8 +174,12 @@ const efdExpectedExecutions = new Map()
 const efdSlowAbortedTests = new Set()
 // Tests whose first execution determines the duration-based EFD retry count.
 const efdCandidates = new Set()
-// Per-test: dynamic ATR retry count determined after the first attempt.
-const dynamicAtrRetryCountByTestName = new Map()
+// Per-suite/test: dynamic ATR retry count determined after the first attempt.
+const dynamicAtrRetryCountByTestKey = new Map()
+// Jest only accepts a suite-wide retry ceiling. Terminal dynamic failures are
+// temporarily cleared to keep that ceiling from scheduling another retry, then
+// restored before Jest reports the suite result.
+const dynamicAtrFinalErrorsByTest = new Map()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
@@ -1898,6 +1902,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         await super.handleTestEvent(event, state)
       }
 
+      if (event.name === 'run_describe_finish' && dynamicAtrFinalErrorsByTest.size > 0) {
+        for (const [test, errors] of dynamicAtrFinalErrorsByTest) {
+          test.errors = errors
+        }
+        dynamicAtrFinalErrorsByTest.clear()
+      }
+
       if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
         this.bindTestEach(this.global.test)
@@ -2149,6 +2160,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let failedAllTests = false
         let isAttemptToFix = false
         const testName = getJestTestName(event.test)
+        const dynamicAtrTestKey = `${this.testSuite}\0${testName}`
         if (this.isTestManagementTestsEnabled) {
           isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
@@ -2209,20 +2221,24 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (
             this.isDynamicAtrEnabled &&
             event.test?.invocations === 1 &&
-            !dynamicAtrRetryCountByTestName.has(testName)
+            !dynamicAtrRetryCountByTestKey.has(dynamicAtrTestKey)
           ) {
             const dynamicCount = getDynamicAtrRetryCount(
               event.test.duration ?? 0,
               this.#earlyFlakeDetectionRetryPolicy,
               this.dynamicAtrBuckets
             )
-            dynamicAtrRetryCountByTestName.set(testName, dynamicCount)
+            dynamicAtrRetryCountByTestKey.set(dynamicAtrTestKey, dynamicCount)
           }
-          const maxRetries = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTestName.has(testName)
-            ? dynamicAtrRetryCountByTestName.get(testName)
+          const maxRetries = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTestKey.has(dynamicAtrTestKey)
+            ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey)
             : (Number(this.global[RETRY_TIMES]) || 0)
           if (event.test?.invocations === maxRetries + 1 && status === 'fail') {
             failedAllTests = true
+            if (this.isDynamicAtrEnabled && event.test.errors?.length) {
+              dynamicAtrFinalErrorsByTest.set(event.test, event.test.errors)
+              event.test.errors = []
+            }
           }
         }
 
@@ -2230,8 +2246,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
         // Dynamic ATR: use the per-test duration-based count instead of the global flat limit.
-        const dynamicAtrCount = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTestName.has(testName)
-          ? dynamicAtrRetryCountByTestName.get(testName)
+        const dynamicAtrCount = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTestKey.has(dynamicAtrTestKey)
+          ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey)
           : undefined
         const effectiveMaxRetries = dynamicAtrCount === undefined ? numRetries : dynamicAtrCount
         const willBeRetriedByAutoTestRetry = effectiveMaxRetries > 0 && numTestExecutions - 1 < effectiveMaxRetries
@@ -2400,14 +2416,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return { isEfdEnabled, isEfdActive, isFinalEfdTestExecution, finalStatus }
     }
 
-    getAtrResult ({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations }) {
+    getAtrResult ({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations, dynamicAtrRetryCount }) {
+      const maxRetries = dynamicAtrRetryCount ?? Number(this.global[RETRY_TIMES])
       const isAtrEnabled =
         this.isFlakyTestRetriesEnabled &&
         !isEfdRetry &&
         !isAttemptToFix &&
-        Number.isFinite(this.global[RETRY_TIMES])
+        Number.isFinite(maxRetries)
       const isLastAtrRetry =
-        status === 'pass' || numberOfTestInvocations >= (Number(this.global[RETRY_TIMES]) + 1)
+        status === 'pass' || numberOfTestInvocations >= (maxRetries + 1)
       const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
 
       // For ATR: The last execution's status is what the framework reports
@@ -2448,7 +2465,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         isNewTest,
         isModifiedTest,
       })
-      const atrResult = this.getAtrResult({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations })
+      const dynamicAtrRetryCount = dynamicAtrRetryCountByTestKey.get(`${this.testSuite}\0${testName}`)
+      const atrResult = this.getAtrResult({
+        status,
+        isEfdRetry,
+        isAttemptToFix,
+        numberOfTestInvocations,
+        dynamicAtrRetryCount,
+      })
       const attemptToFixResult = this.getAttemptToFixResult({
         testName,
         isAttemptToFix,

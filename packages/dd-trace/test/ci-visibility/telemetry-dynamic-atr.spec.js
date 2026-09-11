@@ -1,50 +1,46 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
+const metricCalls = []
 const {
   recordDynamicAtrRetries,
-  incrementCountMetric,
   TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
-} = require('../../src/ci-visibility/telemetry')
-
-describe('telemetry - dynamic ATR retries', () => {
-  let sandbox
-  let countStub
-
-  beforeEach(() => {
-    sandbox = sinon.createSandbox()
-    countStub = sandbox.stub()
-    // Replace the incrementCountMetric function's internal call
-    sandbox.replace(require('../../src/telemetry/metrics'), 'manager', {
+} = proxyquire('../../src/ci-visibility/telemetry', {
+  '../telemetry/metrics': {
+    manager: {
       namespace: () => ({
-        count: () => ({
-          inc: countStub,
+        count: (name, tags) => ({
+          inc: (value) => metricCalls.push({ name, tags, value }),
         }),
       }),
-    })
+    },
+  },
+})
+
+describe('telemetry - dynamic ATR retries', () => {
+  beforeEach(() => {
+    metricCalls.length = 0
   })
 
-  afterEach(() => {
-    sandbox.restore()
+  it('records one count metric with the accepted custom-buckets tag', () => {
+    recordDynamicAtrRetries(true)
+
+    assert.deepStrictEqual(metricCalls, [{
+      name: TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
+      tags: ['has_custom_buckets:true'],
+      value: 1,
+    }])
   })
 
-  it('records metric with hasCustomBuckets=true', () => {
-    // We test the exported function directly
-    // Since incrementCountMetric uses the module-level namespace, we test via the constant
-    assert.equal(TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED, 'dynamic_atr_retries.enabled')
-  })
+  it('records one untagged count metric when EFD settings supply the buckets', () => {
+    recordDynamicAtrRetries(false)
 
-  it('exports the correct metric name constant', () => {
-    assert.equal(TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED, 'dynamic_atr_retries.enabled')
-  })
-
-  it('recordDynamicAtrRetries is a function', () => {
-    assert.equal(typeof recordDynamicAtrRetries, 'function')
-  })
-
-  it('incrementCountMetric is a function', () => {
-    assert.equal(typeof incrementCountMetric, 'function')
+    assert.deepStrictEqual(metricCalls, [{
+      name: TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
+      tags: [],
+      value: 1,
+    }])
   })
 })
