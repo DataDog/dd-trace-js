@@ -156,9 +156,7 @@ function sampledFlagCleared (traceparent) {
 // tracestate. Returns undefined when there is no datadog tracestate or no valid
 // `s` value, so callers can distinguish "no propagated decision" from a drop.
 function propagatedSamplingPriority (tracestate) {
-  if (typeof tracestate !== 'string' || !tracestate) return
-
-  return TraceState.fromString(tracestate).forVendor('dd', state => {
+  return tracestate?.forVendor('dd', state => {
     const priority = Number(state.get('s'))
     return Number.isInteger(priority) ? priority : undefined
   })
