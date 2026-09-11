@@ -8,10 +8,11 @@ const sinon = require('sinon')
 const { storage } = require('../../../datadog-core')
 const { addHook, AsyncResource, channel, createErrorPublisher, getHooks } = require('../../src/helpers/instrument')
 const instrumentations = require('../../src/helpers/instrumentations')
+const rewriterInstrumentations = require('../../src/helpers/rewriter/instrumentations')
 
 describe('helpers/instrument', () => {
   it('marks source-rewrite hooks with their original file path', () => {
-    const hooks = getHooks(['ai'])
+    const hooks = [...getHooks(['ai']).values()]
     const instrumentation = hooks.find(({ file }) => file === 'dist/index.js')
     const original = instrumentations.ai
     const originalLength = original?.length ?? 0
@@ -31,6 +32,103 @@ describe('helpers/instrument', () => {
         delete instrumentations.ai
       }
     }
+  })
+
+  describe('getHooks', () => {
+    it('returns one hook per distinct module, not per rewriter transform', () => {
+      // mercurius is instrumented by three transforms that all share one
+      // module definition, so only one hook may come back. The result is the
+      // dedupe Map itself: iterating it (like every `for...of` receiver)
+      // yields the hook objects.
+      const hooks = getHooks('mercurius')
+
+      assert.ok(hooks instanceof Map)
+      assert.deepStrictEqual([...hooks.values()], [{ name: 'mercurius', versions: ['>=13'], file: 'index.js' }])
+    })
+
+    it('never repeats a hook across the whole rewriter instrumentation list', () => {
+      const moduleNames = new Set(rewriterInstrumentations.map(inst => inst.module.name))
+
+      for (const name of moduleNames) {
+        const seen = new Set()
+        for (const { versions, file } of getHooks(name).values()) {
+          const key = `${file}|${versions.join(',')}`
+          assert.ok(!seen.has(key), `duplicate hook for ${name}: ${key}`)
+          seen.add(key)
+        }
+      }
+    })
+
+    it('keeps same-file hooks of different packages apart when names are combined', () => {
+      // Every @wdio/* module targets '>=9.0.0' with build/index.js, so
+      // (versionRange, filePath) collide across packages. They are distinct
+      // hooks: deduplication must only collapse same-package transform
+      // repeats, never a different package with the same target file.
+      const combined = [...getHooks(['@wdio/cli', '@wdio/local-runner', '@wdio/runner']).values()]
+
+      assert.deepStrictEqual(
+        combined.map(({ name }) => name).sort(),
+        ['@wdio/cli', '@wdio/local-runner', '@wdio/runner']
+      )
+      assert.deepStrictEqual(
+        combined,
+        [
+          ...getHooks('@wdio/cli').values(),
+          ...getHooks('@wdio/local-runner').values(),
+          ...getHooks('@wdio/runner').values(),
+        ]
+      )
+    })
+
+    it('keeps distinct version ranges and files of the same module apart', () => {
+      // graphql is targeted through many files; each distinct (version range,
+      // file) pair stays a separate hook even after deduplication.
+      const pairs = new Set(
+        [...getHooks('graphql').values()].map(({ versions, file }) => `${versions.join(',')}|${file}`)
+      )
+      const expectedPairs = new Set(
+        rewriterInstrumentations
+          .filter(({ module }) => module.name === 'graphql')
+          .map(({ module: { versionRange, filePath } }) => `${versionRange}|${filePath}`)
+      )
+
+      assert.strictEqual(pairs.size, expectedPairs.size)
+      assert.strictEqual(pairs.size, getHooks('graphql').size)
+    })
+
+    it('hands out fresh hook objects so caller mutations cannot leak between calls', () => {
+      // the ai, claude-agent-sdk and aws-durable-execution-sdk-js plugins set
+      // `hook.file = null` before registering; the hooks (and their versions
+      // arrays) must not be shared cached objects or such a mutation would
+      // corrupt every later getHooks call in the same process.
+      const pristine = getHooks('ai')
+      const mutated = getHooks('ai')
+      for (const hook of mutated.values()) {
+        hook.file = null
+        hook.versions.push('mutated')
+      }
+
+      assert.deepStrictEqual(getHooks('ai'), pristine)
+      const fresh = [...getHooks('ai').values()]
+      const spoiled = [...mutated.values()]
+      assert.notStrictEqual(fresh[0], spoiled[0])
+      assert.notStrictEqual(fresh[0].versions, spoiled[0].versions)
+    })
+
+    it('combines names, ignores repeats, and answers unknown names with an empty map', () => {
+      const mercurius = getHooks('mercurius')
+      const bullmq = getHooks('bullmq')
+
+      // Combined results keep the rewriter list order (as on master) rather
+      // than request order, and contain exactly the single-name results.
+      const combined = [...getHooks(['mercurius', 'bullmq']).values()]
+      const key = ({ name, versions, file }) => `${name}|${versions.join(',')}|${file}`
+      assert.deepStrictEqual(combined, [...getHooks(['bullmq', 'mercurius']).values()])
+      assert.deepStrictEqual(combined.map(key).sort(), [...mercurius.values(), ...bullmq.values()].map(key).sort())
+      assert.deepStrictEqual(getHooks(['mercurius', 'mercurius']), mercurius)
+      assert.strictEqual(getHooks('nope-not-a-module').size, 0)
+      assert.strictEqual(getHooks([]).size, 0)
+    })
   })
 
   describe('createErrorPublisher', () => {
