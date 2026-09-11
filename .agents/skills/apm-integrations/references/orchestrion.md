@@ -60,7 +60,7 @@ Hooks file (`src/<name>.js`):
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('<npm-package>')) {
+for (const hook of getHooks('<npm-package>').values()) {
   addHook(hook, exports => exports)
 }
 ```

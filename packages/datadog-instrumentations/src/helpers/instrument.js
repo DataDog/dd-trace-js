@@ -76,17 +76,26 @@ exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
   }
 }
 
+// The rewriter instrumentation list holds one entry per *transform*, so a
+// module with several transforms repeats its module definition several times
+// (mercurius defines 3, graphql 26). A hook only cares about the module, not
+// the transform, so duplicates would push the same (versionRange, filePath)
+// registration through `addHook` once per transform and have shimmer patch the
+// same file several times.
 exports.getHooks = function getHooks (names) {
-  names = [names].flat()
-
-  return rewriterInstrumentations
-    .map(inst => inst.module)
-    .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => {
-      const hook = { file: filePath, name, versions: [versionRange] }
-      sourceRewritePaths.set(hook, filePath)
-      return hook
-    })
+  const requested = new Set([names].flat())
+  const hooks = new Map()
+  for (const { module } of rewriterInstrumentations) {
+    if (!requested.has(module.name)) continue
+    // Fresh objects, including the versions array: callers may adjust a hook
+    // for their own registration (the ai, claude-agent-sdk and
+    // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
+    // not leak into any other call.
+    const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
+    sourceRewritePaths.set(hook, module.filePath)
+    hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)
+  }
+  return hooks
 }
 
 /**
