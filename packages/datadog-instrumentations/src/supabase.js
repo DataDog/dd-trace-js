@@ -10,6 +10,6 @@ for (const hook of getHooks([
   '@supabase/realtime-js',
   '@supabase/functions-js',
   '@supabase/postgrest-js',
-])) {
+]).values()) {
   addHook(hook, exports => exports)
 }

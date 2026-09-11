@@ -112,6 +112,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@graphql-tools/executor",
+    "integration": "graphql",
+    "minimum_tracer_supported": "0.0.14",
+    "max_tracer_supported": "2.0.1",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@grpc/grpc-js",
     "integration": "grpc",
     "minimum_tracer_supported": "1.0.3",
@@ -290,7 +297,7 @@
     "dependency": "@wdio/local-runner",
     "integration": "mocha",
     "minimum_tracer_supported": "9.0.0",
-    "max_tracer_supported": "9.31.6",
+    "max_tracer_supported": "9.31.7",
     "auto-instrumented": "True"
   },
   {
@@ -389,6 +396,13 @@
     "integration": "cypress",
     "minimum_tracer_supported": "12.0.0",
     "max_tracer_supported": "16.0.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "dd-trace-api",
+    "integration": "dd-trace-api",
+    "minimum_tracer_supported": "1.0.1",
+    "max_tracer_supported": "1.0.1",
     "auto-instrumented": "True"
   },
   {
@@ -801,7 +815,7 @@
     "dependency": "sharedb",
     "integration": "sharedb",
     "minimum_tracer_supported": "1.0.0",
-    "max_tracer_supported": "6.0.2",
+    "max_tracer_supported": "6.0.3",
     "auto-instrumented": "True"
   },
   {

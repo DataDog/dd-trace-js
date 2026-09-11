@@ -15,6 +15,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @google-cloud/pubsub,google-cloud-pubsub,1.2.0,6.0.1,True
 @google-cloud/vertexai,google-cloud-vertexai,1.0.0,1.12.0,True
 @google/genai,google-genai,1.19.0,2.21.0,True
+@graphql-tools/executor,graphql,0.0.14,2.0.1,True
 @grpc/grpc-js,grpc,1.0.3,1.14.4,True
 @hapi/hapi,hapi,17.9.0,21.4.10,True
 @happy-dom/jest-environment,jest,10.0.0,20.14.0,True
@@ -40,7 +41,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @supabase/realtime-js,supabase,2.112.2,2.112.4,True
 @supabase/storage-js,supabase,2.112.2,2.112.4,True
 @supabase/supabase-js,supabase,2.112.2,2.112.4,True
-@wdio/local-runner,mocha,9.0.0,9.31.6,True
+@wdio/local-runner,mocha,9.0.0,9.31.7,True
 aerospike,aerospike,4.0.0,6.7.1,True
 ai,ai,4.0.0,7.0.93,True
 amqp10,amqp10,3.0.0,3.6.0,True
@@ -55,6 +56,7 @@ child_process,child_process,22.0.0,26.8.2,True
 connect,connect,2.2.2,3.7.0,True
 couchbase,couchbase,3.0.7,4.7.1,True
 cypress,cypress,12.0.0,16.0.0,True
+dd-trace-api,dd-trace-api,1.0.1,1.0.1,True
 dns,dns,22.0.0,26.8.2,True
 durable-functions,azure-durable-functions,3.0.0,3.5.0,True
 elasticsearch,elasticsearch,10.0.0,16.7.3,True
@@ -113,7 +115,7 @@ restify,restify,3.0.0,12.0.0,True
 rhea,rhea,1.0.0,3.0.5,True
 router,router,1.0.0,2.2.0,True
 selenium-webdriver,selenium,4.11.0,4.48.0,True
-sharedb,sharedb,1.0.0,6.0.2,True
+sharedb,sharedb,1.0.0,6.0.3,True
 tedious,tedious,1.0.0,20.0.0,True
 tinypool,vitest,0.8.0,2.1.2,True
 undici,undici,4.4.1,8.10.2,True
