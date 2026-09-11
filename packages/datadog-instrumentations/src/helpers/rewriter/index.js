@@ -143,6 +143,7 @@ function createMatcher (dcModule) {
     configureGraphqlJitExecute,
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
+    publishDurableOrchestrationFailure,
     waitForAsyncEnd,
   } = require('./transforms')
 
@@ -156,6 +157,7 @@ function createMatcher (dcModule) {
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
 
   return matcher
 }
