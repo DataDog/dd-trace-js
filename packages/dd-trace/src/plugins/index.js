@@ -10,6 +10,7 @@ const plugins = {
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
   get '@modelcontextprotocol/sdk' () { return require('../../../datadog-plugin-modelcontextprotocol-sdk/src') },
   get '@aws/durable-execution-sdk-js' () { return require('../../../datadog-plugin-aws-durable-execution-sdk-js/src') },
+  get dataloader () { return require('../../../datadog-plugin-dataloader/src') },
   get 'durable-functions' () { return require('../../../datadog-plugin-azure-durable-functions/src') },
   get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },

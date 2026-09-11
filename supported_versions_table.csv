@@ -49,6 +49,7 @@ child_process,child_process,22.0.0,26.4.0,True
 connect,connect,2.2.2,3.7.0,True
 couchbase,couchbase,3.0.7,4.7.1,True
 cypress,cypress,12.0.0,16.0.0,True
+dataloader,dataloader,2.0.0,2.2.3,True
 dns,dns,22.0.0,26.4.0,True
 durable-functions,azure-durable-functions,3.0.0,3.5.0,True
 elasticsearch,elasticsearch,10.0.0,16.7.3,True

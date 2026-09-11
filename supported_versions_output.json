@@ -350,6 +350,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "dataloader",
+    "integration": "dataloader",
+    "minimum_tracer_supported": "2.0.0",
+    "max_tracer_supported": "2.2.3",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "dns",
     "integration": "dns",
     "minimum_tracer_supported": "22.0.0",
