@@ -152,6 +152,23 @@ never weaken or delete assertions to make them pass.
 
 ## Pull Requests and CI
 
+### Review Guidelines
+
+**Local agent with a skill harness:** Before pushing code or creating a pull request, you must run
+the [dd-apm-sdk-review](./.agents/skills/dd-apm-sdk-review/) skill on your unpushed changes. If any
+`P0` issues are reported, you must either fix them or get explicit authorization from the human you
+are working with and record the unresolved finding verbatim in the PR description. `P1` and `P2`
+findings should be fixed before pushing, but can be dismissed by the human.
+
+Exception: security findings route through [SECURITY.md](SECURITY.md) instead. A PR description is a
+public forum, so posting one there is an improper disclosure.
+
+**Reviewer without a skill harness** (for example, GitHub Codex): read and follow
+`.agents/skills/dd-apm-sdk-review/review-without-harness.md`. Do not load `SKILL.md`
+or `reviewers/report-template.md`.
+
+### Commit Messages
+
 - Commit format: `type(scope): description`.
 - Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
@@ -167,6 +184,7 @@ Load the relevant repository skill when the task matches:
 - [LLMObs integrations](.agents/skills/llmobs-integration/SKILL.md)
 - [LLMObs tests and VCR cassettes](.agents/skills/llmobs-testing/SKILL.md)
 - [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
+- [Pre-push code review](.agents/skills/dd-apm-sdk-review/SKILL.md)
 
 New instrumentations belong in `packages/datadog-instrumentations/` and communicate with plugins through diagnostic
 channels. Validate new plugin structure with

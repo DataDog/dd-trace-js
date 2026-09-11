@@ -4,17 +4,37 @@ runs: 3
 
 # The instruction files this repo monitors (candidate = the PR's copy, baseline = master's). Repo-relative.
 # This is the single source of truth for validation and the CI trigger.
+# `files:` targeting on each case narrows the gate to the instruction files that changed.
 instruction_files:
   - AGENTS.md
+  - .agents/skills/dd-apm-sdk-review/SKILL.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/security.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/design.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/conventions.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
+  - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
+  - .agents/skills/dd-apm-sdk-review/review-without-harness.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
+  - .agents/dd-apm-sdk-review-overrides/reviewers/conventions.md
+  - .agents/dd-apm-sdk-review-overrides/repo-context.md
 
 # Testing-level presets (pick one via --level / LLMVAL_LEVEL). Explicit --case/--max-cases/--runs override.
 # Production default: `gate` — a curated, high-signal set where the monitored instructions are the source of the
 # right answer and every monitored file is covered. Gate cost scales as cases × runs;
 # `files:` targeting narrows it to the instruction files that changed. Use `full` for an on-demand sweep of the
 # whole suite; `minimum` is the cheapest development preset.
+# Keep `runs: 3` so the Node.js CI stays in the 5–7 minute band.
 default_level: gate
 presets:
-  gate: # Curated per-PR gate: highest-signal, instruction-specific content cases.
+  gate: # Curated per-PR gate: AGENTS.md cases + dd-apm-sdk-review skill cases.
     cases:
       - dd-trace-js-package-manager-001
       - dd-trace-js-real-path-tests-007
@@ -23,6 +43,13 @@ presets:
       - dd-trace-js-production-async-012
       - dd-trace-js-public-config-surfaces-013
       - dd-trace-js-production-promises-014
+      - js-perf-lens-ungated-publish
+      - js-coherence-comment-contradicts-code
+      - js-correctness-inverted-condition
+      - js-security-secret-into-log
+      - js-design-bypasses-config-registration
+      - js-maintainability-silent-catch
+      - js-cross-sdk-new-env-var-not-verified
     runs: 3 # 6 pairwise comparisons per selected case.
   minimum: # Cheapest AGENTS.md content check.
     cases:
