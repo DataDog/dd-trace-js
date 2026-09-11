@@ -90,7 +90,9 @@ exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
 // dedupe must simply be free where the work already happens.
 exports.getHooks = function getHooks (names) {
   const requested = new Set([names].flat())
-  // The map is both the dedupe and the result. The key is every field that
+  // The map is both the dedupe and the result: it is returned as-is and the
+  // receivers iterate `.values()`, so no result array is ever materialized.
+  // The key is every field that
   // determines a hook: the module name must be part of it, because distinct
   // packages can target the same version range and file (every @wdio/* module
   // resolves '>=9.0.0' with build/index.js) - those are different hooks, and
@@ -106,7 +108,7 @@ exports.getHooks = function getHooks (names) {
     sourceRewritePaths.set(hook, module.filePath)
     hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)
   }
-  return [...hooks.values()]
+  return hooks
 }
 
 /**
