@@ -156,11 +156,12 @@ describe('CI duration report', () => {
       actions: {
         listWorkflowRuns: options => {
           assert.strictEqual(options.per_page, 1)
-          assert.strictEqual(options.workflow_id, '.github/workflows/all-green.yml')
+          assert.strictEqual(options.workflow_id, 'all-green.yml')
           return Promise.resolve({ data: { workflow_runs: [anchor] } })
         },
         listWorkflowRunsForRepo: options => {
           assert.strictEqual(options.head_sha, anchor.head_sha)
+          assert.strictEqual(options.branch, 'master')
           return Promise.resolve({ data: { workflow_runs: [anchor, systemTests, appsec] } })
         },
         listJobsForWorkflowRunAttempt: options => {
@@ -206,12 +207,13 @@ describe('CI duration report', () => {
     const slack = createSlackReport(snapshot, 'https://example.com/report')
     const markdown = createMarkdownReport(snapshot)
 
-    assert.match(slack, /1 workflow exceeded 7m; 1 reached the 9m hard limit/)
-    assert.match(slack, /Slowest scenarios across the matrix/)
+    assert.match(slack, /1 over 7m \(1 ≥9m\)/)
+    assert.match(slack, /↳ scenarios:/)
     assert.match(slack, /FEATURE_FLAGS/)
-    assert.match(slack, /View the full GitHub report/)
+    assert.match(slack, /full report/)
     assert.doesNotMatch(slack, /multiple teams/)
-    assert.ok(slack.length < 3000)
+    assert.strictEqual(slack.split(String.raw`\n`).length, 3)
+    assert.ok(slack.length < 1000)
     assert.match(markdown, /Workflow durations/)
     assert.match(markdown, /Slowest unique scenarios across the matrix/)
     assert.match(markdown, /76%/)

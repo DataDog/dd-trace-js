@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const OWNER = 'DataDog'
 const REPO = 'dd-trace-js'
 const ALL_GREEN_WORKFLOW = '.github/workflows/all-green.yml'
+const ALL_GREEN_WORKFLOW_ID = 'all-green.yml'
 const SYSTEM_TESTS_WORKFLOW = '.github/workflows/system-tests.yml'
 const REPORT_WORKFLOW = '.github/workflows/flakiness.yml'
 const PAGE_SIZE = 100
@@ -267,7 +268,7 @@ async function getLatestGreenRun (api) {
   const response = await api.actions.listWorkflowRuns({
     owner: OWNER,
     repo: REPO,
-    workflow_id: ALL_GREEN_WORKFLOW,
+    workflow_id: ALL_GREEN_WORKFLOW_ID,
     branch: 'master',
     event: 'push',
     status: 'success',
@@ -287,6 +288,7 @@ async function getRunsForCommit (api, sha, page = 1) {
   const response = await api.actions.listWorkflowRunsForRepo({
     owner: OWNER,
     repo: REPO,
+    branch: 'master',
     head_sha: sha,
     event: 'push',
     page,
@@ -469,44 +471,44 @@ export function createSlackReport (snapshot, reportUrl) {
     return status === 'warning' || status === 'hard'
   })
   const hardLimitCount = offenders.filter(workflow => classifyDuration(workflow.durationMs) === 'hard').length
-  const lines = [`*CI duration — master \`${anchor.head_sha.slice(0, 7)}\`*`]
+  const heading = `*CI duration — master \`${anchor.head_sha.slice(0, 7)}\`*`
+  const lines = []
 
   if (stale) lines.push(`⚠️ Latest green commit is more than ${MAX_GREEN_AGE_DAYS} days old.`)
 
   if (offenders.length === 0) {
-    lines.push('✅ All workflows completed within 7m.')
+    lines.unshift(`${heading}: ✅ all workflows ≤7m · <${reportUrl}|full report>`)
   } else {
-    const noun = offenders.length === 1 ? 'workflow' : 'workflows'
-    lines.push(`${offenders.length} ${noun} exceeded 7m; ${hardLimitCount} reached the 9m hard limit.`)
+    lines.unshift(`${heading}: ${offenders.length} over 7m (${hardLimitCount} ≥9m) · ` +
+      `<${reportUrl}|full report>`)
 
     for (const workflow of offenders.slice(0, SLACK_WORKFLOW_LIMIT)) {
       const workflowPath = normalizeWorkflowPath(workflow.path)
       const icon = statusIcon(workflow.durationMs)
-      const team = workflowPath === SYSTEM_TESTS_WORKFLOW ? '' : ` — ${slackText(workflow.team)}`
-      lines.push('', `${icon} *${slackText(workflow.name)}* — ${formatDuration(workflow.durationMs)}${team}`)
+      const team = workflowPath === SYSTEM_TESTS_WORKFLOW ? '' : ` · ${slackText(workflow.team)}`
+      let line = `${icon} *${slackText(workflow.name)}* ${formatDuration(workflow.durationMs)}${team}`
 
       const slowestJob = workflow.analysis?.jobs[0]
       if (slowestJob) {
-        lines.push(`  Slowest job: <${slowestJob.html_url}|${slackText(truncate(slowestJob.name, 70))}> — ` +
-          formatDuration(slowestJob.durationMs))
+        line += ` · job <${slowestJob.html_url}|${slackText(truncate(slowestJob.name, 50))}> ` +
+          formatDuration(slowestJob.durationMs)
       }
+      lines.push(line)
 
       if (workflowPath === SYSTEM_TESTS_WORKFLOW && workflow.analysis?.scenarios.length) {
-        lines.push('  Slowest scenarios across the matrix:')
-        workflow.analysis.scenarios.slice(0, SLACK_DETAIL_LIMIT).forEach((scenario, index) => {
-          const share = Math.round(scenario.durationMs / scenario.jobDurationMs * 100)
-          lines.push(`  ${index + 1}. <${scenario.jobUrl}|${slackText(truncate(scenario.name, 62))}> — ` +
-            `${formatDuration(scenario.durationMs)} (${share}% of job)`)
+        const scenarios = workflow.analysis.scenarios.slice(0, SLACK_DETAIL_LIMIT).map(scenario => {
+          return `<${scenario.jobUrl}|${slackText(truncate(scenario.name, 42))}> ` +
+            formatDuration(scenario.durationMs)
         })
+        lines.push(`↳ scenarios: ${scenarios.join(' · ')}`)
       }
     }
 
     if (offenders.length > SLACK_WORKFLOW_LIMIT) {
-      lines.push('', `…and ${offenders.length - SLACK_WORKFLOW_LIMIT} more.`)
+      lines.push(`…and ${offenders.length - SLACK_WORKFLOW_LIMIT} more in the report.`)
     }
   }
 
-  lines.push('', `<${reportUrl}|View the full GitHub report>.`)
   return lines.join(String.raw`\n`)
 }
 
