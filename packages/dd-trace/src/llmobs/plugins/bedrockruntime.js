@@ -58,6 +58,20 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (modelName.includes('embed')) return
 
       const span = ctx.currentStore?.span
+      if (!span) return
+
+      if (!this._llmobsEnabled) {
+        // no LLMObs payload to build, so token usage comes from the response headers rather than
+        // from parsing the response body
+        this._setGenAiApmTags(span, {
+          spanKind: 'llm',
+          modelName: request.params.modelId.toLowerCase(),
+          modelProvider: 'amazon_bedrock',
+          metrics: extractTokens({ tokensFromHeaders, usage: {} }),
+        })
+        return
+      }
+
       this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     })
 
@@ -79,7 +93,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       })
     })
 
+    // the accumulated chunks are only used to build the LLMObs payload
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
+      if (!this._llmobsEnabled) return
+
       if (!ctx.chunks) ctx.chunks = []
 
       if (chunk) ctx.chunks.push(chunk)

@@ -21,7 +21,10 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   constructor () {
     super(...arguments)
 
+    // the aggregated response is only used to build the LLMObs payload
     this.addSub('apm:anthropic:request:chunk', ({ ctx, chunk, done }) => {
+      if (!this._llmobsEnabled) return
+
       ctx.chunks ??= []
       const chunks = ctx.chunks
       if (chunk) chunks.push(chunk)
@@ -140,6 +143,13 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     return UNKNOWN_MODEL_PROVIDER
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmUsageMetrics (ctx) {
+    return extractUsage(ctx.result)
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -213,38 +223,45 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   }
 
   #tagAnthropicUsage (span, result) {
-    if (!result) return
-
-    const { usage } = result
-    if (!usage) return
-
-    const inputTokens = usage.input_tokens
-    const outputTokens = usage.output_tokens
-    const cacheWriteTokens = usage.cache_creation_input_tokens
-    const cacheReadTokens = usage.cache_read_input_tokens
-
-    const metrics = {
-      inputTokens: (inputTokens ?? 0) + (cacheWriteTokens ?? 0) + (cacheReadTokens ?? 0),
-    }
-
-    if (outputTokens) metrics.outputTokens = outputTokens
-    const totalTokens = metrics.inputTokens + (outputTokens ?? 0)
-    if (totalTokens) metrics.totalTokens = totalTokens
-
-    if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
-    if (cacheReadTokens != null) metrics.cacheReadTokens = cacheReadTokens
-
-    const cacheCreation = usage.cache_creation
-    if (cacheCreation) {
-      metrics.cacheWrite5mTokens = cacheCreation.ephemeral_5m_input_tokens ?? 0
-      metrics.cacheWrite1hTokens = cacheCreation.ephemeral_1h_input_tokens ?? 0
-    } else if (cacheWriteTokens != null) {
-      metrics.cacheWrite5mTokens = cacheWriteTokens
-      metrics.cacheWrite1hTokens = 0
-    }
-
-    this._tagger.tagMetrics(span, metrics)
+    const metrics = extractUsage(result)
+    if (metrics) this._tagger.tagMetrics(span, metrics)
   }
+}
+
+/**
+ * @param {object} [result]
+ * @returns {Record<string, number> | undefined}
+ */
+function extractUsage (result) {
+  const usage = result?.usage
+  if (!usage) return
+
+  const inputTokens = usage.input_tokens
+  const outputTokens = usage.output_tokens
+  const cacheWriteTokens = usage.cache_creation_input_tokens
+  const cacheReadTokens = usage.cache_read_input_tokens
+
+  const metrics = {
+    inputTokens: (inputTokens ?? 0) + (cacheWriteTokens ?? 0) + (cacheReadTokens ?? 0),
+  }
+
+  if (outputTokens) metrics.outputTokens = outputTokens
+  const totalTokens = metrics.inputTokens + (outputTokens ?? 0)
+  if (totalTokens) metrics.totalTokens = totalTokens
+
+  if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
+  if (cacheReadTokens != null) metrics.cacheReadTokens = cacheReadTokens
+
+  const cacheCreation = usage.cache_creation
+  if (cacheCreation) {
+    metrics.cacheWrite5mTokens = cacheCreation.ephemeral_5m_input_tokens ?? 0
+    metrics.cacheWrite1hTokens = cacheCreation.ephemeral_1h_input_tokens ?? 0
+  } else if (cacheWriteTokens != null) {
+    metrics.cacheWrite5mTokens = cacheWriteTokens
+    metrics.cacheWrite1hTokens = 0
+  }
+
+  return metrics
 }
 
 module.exports = AnthropicLLMObsPlugin
