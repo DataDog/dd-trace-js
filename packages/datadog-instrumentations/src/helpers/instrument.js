@@ -81,22 +81,9 @@ exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
 // (mercurius defines 3, graphql 26). A hook only cares about the module, not
 // the transform, so duplicates would push the same (versionRange, filePath)
 // registration through `addHook` once per transform and have shimmer patch the
-// same file several times. `getHooks` therefore deduplicates on the way out,
-// in the single pass it already makes over the list.
-//
-// Callers hit this helper once per module name, lazily, from the integration
-// files that `helpers/register.js` only runs when the user's package actually
-// loads - so there is no hot loop to optimize and no eager index to build; the
-// dedupe must simply be free where the work already happens.
+// same file several times.
 exports.getHooks = function getHooks (names) {
   const requested = new Set([names].flat())
-  // The map is both the dedupe and the result: it is returned as-is and the
-  // receivers iterate `.values()`, so no result array is ever materialized.
-  // The key is every field that
-  // determines a hook: the module name must be part of it, because distinct
-  // packages can target the same version range and file (every @wdio/* module
-  // resolves '>=9.0.0' with build/index.js) - those are different hooks, and
-  // only same-package transform repeats may collapse.
   const hooks = new Map()
   for (const { module } of rewriterInstrumentations) {
     if (!requested.has(module.name)) continue
