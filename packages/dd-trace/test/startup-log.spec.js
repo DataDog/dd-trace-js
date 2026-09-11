@@ -25,7 +25,7 @@ const configWithStartupLogs = {
   logInjection: true,
   runtimeMetrics: true,
   startupLogs: true,
-  appsec: { enabled: true },
+  appsec: { DD_APPSEC_ENABLED: true },
   profiling: { DD_PROFILING_ENABLED: false },
   dsmEnabled: true,
 }

@@ -150,7 +150,7 @@ function getIntegrations () {
 function getProducts (config) {
   return {
     appsec: {
-      enabled: config.appsec.enabled,
+      enabled: config.appsec.DD_APPSEC_ENABLED,
     },
     profiler: {
       version: tracerVersion,

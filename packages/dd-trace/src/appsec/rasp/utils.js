@@ -45,7 +45,11 @@ class DatadogRaspAbortError extends Error {
 function handleResult (result, req, res, abortController, config, raspRule) {
   const generateStackTraceAction = result?.actions?.generate_stack
 
-  const { enabled, maxDepth, maxStackTraces } = config.appsec.stackTrace
+  const {
+    DD_APPSEC_STACK_TRACE_ENABLED: enabled,
+    DD_APPSEC_MAX_STACK_TRACE_DEPTH: maxDepth,
+    DD_APPSEC_MAX_STACK_TRACES: maxStackTraces,
+  } = config.appsec
 
   const rootSpan = web.root(req)
 

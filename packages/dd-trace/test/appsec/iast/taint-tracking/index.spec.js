@@ -8,7 +8,7 @@ describe('IAST TaintTracking', () => {
   let taintTracking
   const config = {
     iast: {
-      maxConcurrentRequests: 2,
+      DD_IAST_MAX_CONCURRENT_REQUESTS: 2,
     },
   }
 
@@ -36,7 +36,10 @@ describe('IAST TaintTracking', () => {
     taintTracking.enableTaintTracking(config.iast)
     sinon.assert.calledOnce(taintTrackingOperations.enableTaintOperations)
     sinon.assert.calledOnce(taintTrackingPlugin.enable)
-    sinon.assert.calledOnceWithExactly(taintTrackingOperations.setMaxTransactions, config.iast.maxConcurrentRequests)
+    sinon.assert.calledOnceWithExactly(
+      taintTrackingOperations.setMaxTransactions,
+      config.iast.DD_IAST_MAX_CONCURRENT_REQUESTS
+    )
   })
 
   it('Should disable both rewriter, taint tracking operations, plugin', () => {
