@@ -3,7 +3,12 @@
 const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
 
 function isMessage (value) {
-  return typeof value?.role === 'string' && typeof value?.content === 'string'
+  return typeof value?.role === 'string' &&
+    value?.type !== 'placeholder' &&
+    (value?.content == null || typeof value.content === 'string') &&
+    (typeof value?.content === 'string' ||
+      (Array.isArray(value?.tool_calls) && value.tool_calls.length > 0) ||
+      (Array.isArray(value?.tool_results) && value.tool_results.length > 0))
 }
 
 function isPlaceholder (value) {

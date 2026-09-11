@@ -80,15 +80,35 @@ describe('ManagedPrompt', () => {
         { type: 'placeholder', name: 'empty' },
       ],
     })
-    const history = [{ role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' }]
+    const history = [
+      { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+      },
+      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+    ]
     const variables = { plan: 'pro', question: 'Why?', history, empty: [] }
 
     const rendered = prompt.format(variables)
     assert.deepStrictEqual(rendered, [
       { role: 'system', content: 'Plan: pro' },
       { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+      },
+      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
       { role: 'user', content: 'Why?' },
       { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+      },
+      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
     ])
     history[0].content = 'changed'
     assert.strictEqual(rendered[1].content, '{{ opaque }}')
@@ -107,7 +127,16 @@ describe('ManagedPrompt', () => {
     assert.throws(() => prompt.format({ plan: 'pro', question: 'Why?', empty: [] }), {
       message: "Missing message placeholder variable 'history'",
     })
-    for (const malformed of [null, 'history', {}, [{ role: 'user' }], [{ type: 'placeholder', name: 'nested' }]]) {
+    for (const malformed of [
+      null,
+      'history',
+      {},
+      [{ role: 'user' }],
+      [{ role: 'assistant', content: null }],
+      [{ role: 'assistant', tool_calls: [] }],
+      [{ role: 'assistant', content: [{ type: 'image' }], tool_calls: [{}] }],
+      [{ type: 'placeholder', name: 'nested', role: 'user', content: 'x' }],
+    ]) {
       assert.throws(() => prompt.format({ history: malformed, empty: [] }), {
         message: "Invalid message placeholder variable 'history': expected an array of messages",
       })
