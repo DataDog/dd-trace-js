@@ -36,7 +36,6 @@ const {
   TEST_SUITE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-
 const OLDEST_WEBDRIVERIO_VERSION = '9.0.0'
 const requestedVersion = process.env.WEBDRIVERIO_VERSION
 const versions = requestedVersion
@@ -458,27 +457,32 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('reports grouped Jasmine specs, including an empty spec, from one worker', async () => {
-      await runScenario('groupedEmpty', 1, ({ session, suites, tests }) => {
+    it('reports grouped passing Jasmine behaviors from one worker', async () => {
+      await runScenario('jasminePassing', 1, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suites.length, 3)
+        assert.strictEqual(suites.length, 5)
         assert.deepStrictEqual(
           suites.map(suite => [suite.meta[TEST_SUITE], suite.meta[TEST_STATUS]]).sort(),
           [
             ['empty.e2e.js', 'skip'],
             ['first.e2e.js', 'pass'],
+            ['jasmine-hooks.e2e.js', 'pass'],
+            ['runner-env.e2e.js', 'pass'],
             ['second.e2e.js', 'pass'],
           ]
         )
-        assert.strictEqual(tests.length, 2)
+        assert.strictEqual(tests.length, 4)
         assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'))
         const nonEmptySuites = suites.filter(suite => suite.meta[TEST_STATUS] !== 'skip')
         assertOneTestPerSuiteExecution(nonEmptySuites, tests)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
         assert.deepStrictEqual(
-          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
-          ['first', 'second']
+          tests.map(test => test.meta['test.webdriverio.worker']).filter(Boolean).sort(),
+          ['first', 'runner-env-node-options', 'second']
         )
+        const hookTest = tests.find(test => test.meta[TEST_SUITE] === 'jasmine-hooks.e2e.js')
+        assert.strictEqual(hookTest.meta['test.webdriverio.jasmine.before-each'], 'active')
+        assert.strictEqual(hookTest.meta['test.webdriverio.jasmine.after-each'], 'active')
       }, 0, { framework: 'jasmine' })
     })
 
@@ -543,26 +547,6 @@ for (const version of versions) {
       }, 0, { framework: 'jasmine' })
     })
 
-    it('keeps the Jasmine test span active in per-test hooks', async () => {
-      await runScenario('jasmineHooks', 1, ({ session, suites, tests }) => {
-        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(suites[0].meta[TEST_STATUS], 'pass')
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
-        assert.strictEqual(tests[0].meta['test.webdriverio.jasmine.before-each'], 'active')
-        assert.strictEqual(tests[0].meta['test.webdriverio.jasmine.after-each'], 'active')
-      }, 0, { framework: 'jasmine' })
-    })
-
-    it('preserves tracer preload for Jasmine with runnerEnv.NODE_OPTIONS', async () => {
-      await runScenario('runnerEnvNodeOptions', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'runner-env-node-options')
-      }, 0, { framework: 'jasmine' })
-    })
-
     it('reports Jasmine whole-spec retries in one session', async () => {
       await runScenario('specFileRetries', 2, ({ session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
@@ -622,11 +606,17 @@ for (const version of versions) {
       })
     })
 
-    it('reports grouped specs from one worker', async () => {
-      await runScenario('grouped', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 2)
-        assert.strictEqual(tests.length, 2)
+    it('reports grouped passing Mocha behaviors from one worker', async () => {
+      await runScenario('mochaPassing', 1, ({ session, suites, tests }) => {
+        assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+        assert.strictEqual(suites.length, 4)
+        assert.strictEqual(tests.length, 4)
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 1)
+        assertOneTestPerSuiteExecution(suites, tests)
+        assert.deepStrictEqual(
+          tests.map(test => test.meta['test.webdriverio.worker']).sort(),
+          ['delay', 'first', 'runner-env-node-options', 'second']
+        )
       })
     })
 
@@ -674,14 +664,6 @@ for (const version of versions) {
       }, 1)
     })
 
-    it('coordinates mochaOpts.delay with configuration loading', async () => {
-      await runScenario('delay', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'delay')
-      })
-    })
-
     it('reports native Mocha retries and captures only the failed attempt', async () => {
       await runScenario('retries', 1, ({ media, session, suites, tests }) => {
         assert.strictEqual(session.meta[TEST_STATUS], 'pass')
@@ -694,14 +676,6 @@ for (const version of versions) {
       }, 0, {
         env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true' },
         expectedScreenshots: 1,
-      })
-    })
-
-    it('preserves tracer preload with runnerEnv.NODE_OPTIONS', async () => {
-      await runScenario('runnerEnvNodeOptions', 1, ({ suites, tests }) => {
-        assert.strictEqual(suites.length, 1)
-        assert.strictEqual(tests.length, 1)
-        assert.strictEqual(tests[0].meta['test.webdriverio.worker'], 'runner-env-node-options')
       })
     })
 
