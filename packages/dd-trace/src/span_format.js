@@ -243,7 +243,7 @@ function extractTags (formattedSpan, span) {
         // HACK: remove when implemented in the backend
         if (context._name === 'fs.operation') break
         // otel.recordException should not influence trace.error
-        if (!tags[IGNORE_OTEL_ERROR]) {
+        if (!tags[IGNORE_OTEL_ERROR] && tags.error !== false) {
           formattedSpan.error = 1
         }
         if (value != null) writeErrorMeta(meta, tag, value)
