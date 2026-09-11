@@ -137,7 +137,8 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   let url = config.url
 
   const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
-  const isApmTracingAgentlessMode = config.experimental?.exporter === 'agentless'
+  const isApmTracingAgentlessMode =
+    config.experimental?.DD_TRACE_EXPERIMENTAL_EXPORTER === 'agentless'
   const isAgentlessMode = isCiVisibilityAgentlessMode || isApmTracingAgentlessMode
 
   if (isCiVisibility && getTestOptimizationAgent === undefined) {

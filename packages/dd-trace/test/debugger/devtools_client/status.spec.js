@@ -48,7 +48,7 @@ describe('diagnostic message http requests', function () {
         runtimeId,
         maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1,
+          DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
         },
         '@noCallThru': true,
       },
@@ -162,7 +162,7 @@ describe('diagnostic message http requests', function () {
         url: new URL('https://debugger-intake.us3.datadoghq.com'),
         maxTotalPayloadSize: 5 * 1024 * 1024,
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1,
+          DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
         },
         '@noCallThru': true,
       },

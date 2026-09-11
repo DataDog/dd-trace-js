@@ -2,8 +2,10 @@
 
 const config = require('../config')
 
-const excludedIdentifiers = new Set(config.dynamicInstrumentation.redactionExcludedIdentifiers
-  .map((name) => normalizeName(name)))
+const excludedIdentifiers = new Set(
+  config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
+    .map((name) => normalizeName(name))
+)
 
 const REDACTED_IDENTIFIERS = new Set(
   [
@@ -95,7 +97,7 @@ const REDACTED_IDENTIFIERS = new Set(
     'x_forwarded_for',
     'x_real_ip',
     'XSRF-TOKEN',
-    ...config.dynamicInstrumentation.redactedIdentifiers,
+    ...config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
   ]
     .map(normalizeIdentifier)
     .filter(isIncludedIdentifier)

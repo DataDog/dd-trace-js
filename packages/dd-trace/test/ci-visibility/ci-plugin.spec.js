@@ -131,7 +131,7 @@ describe('CiPlugin', () => {
     plugin.configure({
       enabled: true,
       experimental: {
-        exporter: 'jest_worker',
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker',
       },
     })
 
@@ -213,7 +213,7 @@ describe('CiPlugin', () => {
     plugin.configure({
       enabled: true,
       experimental: {
-        exporter: 'jest_worker',
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker',
       },
     })
 
@@ -255,7 +255,7 @@ describe('CiPlugin', () => {
     plugin.configure({
       enabled: true,
       experimental: {
-        exporter: 'mocha',
+        DD_TRACE_EXPERIMENTAL_EXPORTER: 'mocha',
       },
     })
 
@@ -774,7 +774,7 @@ describe('CiPlugin', () => {
     plugin.configure({
       enabled,
       experimental: {
-        exporter,
+        DD_TRACE_EXPERIMENTAL_EXPORTER: exporter,
       },
     })
     return plugin

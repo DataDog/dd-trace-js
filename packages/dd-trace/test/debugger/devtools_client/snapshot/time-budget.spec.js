@@ -14,8 +14,8 @@ describe('Debugger snapshot time budget', () => {
     const redactionWithStub = loadRedaction('../../../../src/debugger/devtools_client/snapshot/redaction', {
       '../config': {
         dynamicInstrumentation: {
-          redactedIdentifiers: [],
-          redactionExcludedIdentifiers: [],
+          DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+          DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
         },
       },
     })
