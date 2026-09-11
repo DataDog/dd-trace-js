@@ -38,42 +38,31 @@ describe('Tracing Remote Config', () => {
     it('should register all APM tracing capabilities', () => {
       enable(rc, config, onConfigUpdated)
 
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_CUSTOM_TAGS, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_HTTP_HEADER_TAGS, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_LOGS_INJECTION, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RATE, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_ENABLED, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_SAMPLE_RULES, true)
       sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.APM_TRACING_MULTICONFIG, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities,
-        RemoteConfigCapabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities,
-        RemoteConfigCapabilities.APM_TRACING_ENABLE_LIVE_DEBUGGING, true)
-      sinon.assert.calledWithExactly(rc.updateCapabilities,
-        RemoteConfigCapabilities.APM_TRACING_ENABLE_CODE_ORIGIN, true)
+      sinon.assert.calledWithExactly(rc.updateCapabilities, RemoteConfigCapabilities.SDK_CONFIGURATION, true)
     })
 
-    it('should register APM_TRACING batch handler', () => {
+    it('should register a single APM_TRACING batch handler', () => {
       enable(rc, config, onConfigUpdated)
 
       sinon.assert.calledOnceWithExactly(rc.subscribeProducts, 'APM_TRACING')
       sinon.assert.calledOnceWithExactly(rc.setBatchHandler, ['APM_TRACING'], sinon.match.func)
     })
 
-    describe('APM_TRACING handler', () => {
+    describe('SDK_CONFIGURATION handler', () => {
       it('should configure tracer on apply action', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
-        const libConfig = { service: 'test-service' }
+        const sdkConfig = { DD_TRACE_SAMPLE_RATE: '0.5' }
 
         const transaction = createTransaction([
-          { id: 'config-1', file: { lib_config: libConfig } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload(sdkConfig) } },
         ])
 
         handler(transaction)
 
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, libConfig)
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, sdkConfig)
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
@@ -84,7 +73,7 @@ describe('Tracing Remote Config', () => {
 
         // First apply a config
         let transaction = createTransaction([
-          { id: 'config-1', file: { lib_config: { service: 'test' } } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload({ DD_TRACE_ENABLED: 'true' }) } },
         ])
         handler(transaction)
 
@@ -93,7 +82,7 @@ describe('Tracing Remote Config', () => {
 
         // Then unapply it
         transaction = createTransaction([], [], [
-          { id: 'config-1', file: {} },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload({ DD_TRACE_ENABLED: 'true' }) } },
         ])
         handler(transaction)
 
@@ -109,9 +98,9 @@ describe('Tracing Remote Config', () => {
 
         // Apply multiple configs in a single batch
         const transaction = createTransaction([
-          { id: 'config-1', file: { lib_config: { tracing_sampling_rate: 0.5 } } },
-          { id: 'config-2', file: { lib_config: { log_injection_enabled: true } } },
-          { id: 'config-3', file: { lib_config: { tracing_enabled: true } } },
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }) } },
+          { id: 'config-2', file: { sdk_config: sdkConfigPayload({ DD_LOGS_INJECTION: 'true' }) } },
+          { id: 'config-3', file: { sdk_config: sdkConfigPayload({ DD_TRACE_ENABLED: 'true' }) } },
         ])
 
         handler(transaction)
@@ -120,10 +109,117 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnce(config.setRemoteConfig)
         sinon.assert.calledOnce(onConfigUpdated)
       })
+
+      it('should ignore items with no sdk_config field', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          { id: 'config-1', file: { some_other_shape: { foo: 'bar' } } },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
+        sinon.assert.calledOnce(onConfigUpdated)
+      })
+
+      it('should filter out unsupported keys without affecting allowlisted ones', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+        const sdkConfig = buildPayloadWithKeyCount(1000)
+
+        const transaction = createTransaction([
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload(sdkConfig) } },
+        ])
+
+        handler(transaction)
+
+        // A large number of unsupported keys must not crowd out an allowlisted one
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
+      })
+
+      it('should drop non-string allowlisted values instead of forwarding them', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: sdkConfigPayload({
+                DD_TRACE_ENABLED: null,
+                DD_TRACE_SAMPLE_RATE: '0.5',
+              }),
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
+      })
+
+      it('should accept the legacy array-shape sdk_config.config', () => {
+        // Configs stored before dd-go#14029 changed the wire shape from an array of
+        // { key, value } entries to a flat object keep delivering the array shape until
+        // they're next updated, so both must be supported indefinitely.
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: {
+                config: [
+                  { key: 'DD_TRACE_ENABLED', value: 'true' },
+                  { key: 'DD_TRACE_SAMPLE_RATE', value: '0.5' },
+                ],
+              },
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
+          DD_TRACE_ENABLED: 'true',
+          DD_TRACE_SAMPLE_RATE: '0.5',
+        })
+      })
+
+      it('should ignore malformed entries in the legacy sdk_config array', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+
+        const transaction = createTransaction([
+          {
+            id: 'config-1',
+            file: {
+              sdk_config: {
+                config: [
+                  null,
+                  { key: 'DD_TRACE_ENABLED', value: 'true' },
+                ],
+              },
+            },
+          },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
+      })
     })
   })
 
-  describe('APM_TRACING multiconfig', () => {
+  describe('SDK_CONFIGURATION multiconfig', () => {
     it('should merge multiple configs by priority', () => {
       enable(rc, config, onConfigUpdated)
       const handler = batchHandlers.get('APM_TRACING')
@@ -134,14 +230,14 @@ describe('Tracing Remote Config', () => {
           id: 'config-org',
           file: {
             service_target: { service: '*', env: '*' },
-            lib_config: { tracing_sampling_rate: 0.5 },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }),
           },
         },
         {
           id: 'config-service',
           file: {
             service_target: { service: 'test-service', env: '*' },
-            lib_config: { tracing_sampling_rate: 0.8 },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.8' }),
           },
         },
       ])
@@ -149,8 +245,7 @@ describe('Tracing Remote Config', () => {
       handler(transaction)
 
       // Service config should win
-      const lastCall = config.setRemoteConfig.lastCall
-      sinon.assert.match(lastCall.args[0], { sampleRate: 0.8 })
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.8' })
     })
 
     it('should handle config removal', () => {
@@ -162,26 +257,33 @@ describe('Tracing Remote Config', () => {
         id: 'config-1',
         file: {
           service_target: { service: '*', env: '*' },
-          lib_config: { tracing_sampling_rate: 0.5 },
+          sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.5' }),
         },
       }, {
         id: 'config-2',
         file: {
           service_target: { service: 'test-service', env: '*' },
-          lib_config: { tracing_sampling_rate: 0.8 },
+          sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.8' }),
         },
       }])
       handler(transaction)
 
+      config.setRemoteConfig.resetHistory()
+
       // Remove higher priority config
       transaction = createTransaction([], [], [
-        { id: 'config-2', file: {} },
+        {
+          id: 'config-2',
+          file: {
+            service_target: { service: 'test-service', env: '*' },
+            sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.8' }),
+          },
+        },
       ])
       handler(transaction)
 
       // Lower priority should now apply
-      const lastCall = config.setRemoteConfig.lastCall
-      sinon.assert.match(lastCall.args[0], { sampleRate: 0.5 })
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
     })
 
     it('should filter configs by service/env', () => {
@@ -193,14 +295,35 @@ describe('Tracing Remote Config', () => {
         id: 'config-other',
         file: {
           service_target: { service: 'other-service', env: '*' },
-          lib_config: { tracing_sampling_rate: 0.9 },
+          sdk_config: sdkConfigPayload({ DD_TRACE_SAMPLE_RATE: '0.9' }),
         },
       }])
 
       handler(transaction)
 
       // Should be ignored, so null is passed to reset all RC fields
-      sinon.assert.calledWith(config.setRemoteConfig, null)
+      sinon.assert.calledWithExactly(config.setRemoteConfig, null)
+    })
+
+    it('should return null when configs have no sdk_config field', () => {
+      enable(rc, config, onConfigUpdated)
+      const handler = batchHandlers.get('APM_TRACING')
+
+      // Apply a config that has sdk_config set to null
+      const transaction = createTransaction([
+        {
+          id: 'config-1',
+          file: {
+            service_target: { service: 'test-service', env: '*' },
+            sdk_config: null,
+          },
+        },
+      ])
+
+      handler(transaction)
+
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, null)
+      sinon.assert.calledOnce(onConfigUpdated)
     })
 
     it('should merge fields from multiple configs', () => {
@@ -212,48 +335,44 @@ describe('Tracing Remote Config', () => {
         id: 'config-org',
         file: {
           service_target: { service: '*', env: '*' },
-          lib_config: {
-            tracing_sampling_rate: 0.5,
-            log_injection_enabled: true,
-          },
+          sdk_config: sdkConfigPayload({
+            DD_TRACE_SAMPLE_RATE: '0.5',
+            DD_LOGS_INJECTION: 'true',
+          }),
         },
       }, {
         id: 'config-service',
         file: {
           service_target: { service: 'test-service', env: '*' },
-          lib_config: {
-            tracing_sampling_rate: 0.8,
-          },
+          sdk_config: sdkConfigPayload({
+            DD_TRACE_SAMPLE_RATE: '0.8',
+          }),
         },
       }])
 
       handler(transaction)
 
-      // Service config sampling rate should win, but log_injection should come from org
-      const lastCall = config.setRemoteConfig.lastCall
-      sinon.assert.match(lastCall.args[0], {
-        sampleRate: 0.8,
-        logInjection: true,
+      // Service config sample rate should win, but logs injection should come from org
+      sinon.assert.calledOnceWithExactly(config.setRemoteConfig, {
+        DD_TRACE_SAMPLE_RATE: '0.8',
+        DD_LOGS_INJECTION: 'true',
       })
-    })
-
-    it('should return null when configs have no lib_config field', () => {
-      enable(rc, config, onConfigUpdated)
-      const handler = batchHandlers.get('APM_TRACING')
-
-      // Apply a config that has lib_config set to null
-      const transaction = createTransaction([
-        { id: 'config-1', file: { service_target: { service: 'test-service', env: '*' }, lib_config: null } },
-      ])
-
-      handler(transaction)
-
-      // Should pass null because no lib_config was found
-      sinon.assert.calledWithExactly(config.setRemoteConfig, null)
-      sinon.assert.calledOnce(onConfigUpdated)
     })
   })
 })
+
+function buildPayloadWithKeyCount (keyCount) {
+  const payload = { DD_TRACE_ENABLED: 'true' }
+  for (let i = 1; i < keyCount; i++) {
+    payload[`KEY_${i}`] = 'value'
+  }
+  return payload
+}
+
+// Mirrors the wire shape RC actually delivers: { service_name, env, config: { KEY: value, ... } }
+function sdkConfigPayload (values) {
+  return { config: values }
+}
 
 function createTransaction (toApply = [], toModify = [], toUnapply = []) {
   const addDefaults = (item) => ({
