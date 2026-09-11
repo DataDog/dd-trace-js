@@ -681,6 +681,12 @@ describe('profiler', () => {
         DD_PROFILING_ENABLED: '1',
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
+        // @datadog/pprof's OOM export path doesn't populate allocation stats on the heap
+        // profile it hands to convertProfile, so allocation-mode heap profiling combined
+        // with OOM export crashes with "Allocation profile is missing inuseObjects." on
+        // Node.js >= 26 (where allocation profiling is enabled by default). Force it off
+        // here until that's fixed upstream.
+        DD_PROFILING_ALLOCATION_ENABLED: '0',
       }
     })
 
