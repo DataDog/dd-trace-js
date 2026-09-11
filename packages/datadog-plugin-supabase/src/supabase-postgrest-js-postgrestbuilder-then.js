@@ -17,6 +17,17 @@ const operationByMethod = {
   POST: 'INSERT',
 }
 
+/**
+ * @typedef {{
+ *   arguments: { [index: number]: unknown, length: number, 0?: Function, 1?: Function },
+ *   self: { method: string, url: URL, schema?: string },
+ *   currentStore?: { span: import('../../..').Span },
+ *   parentStore: import('../../datadog-core/src/storage').Store<unknown>,
+ *   result?: { error?: Error | { message?: string } | null },
+ *   error?: unknown
+ * } & Record<symbol, boolean | undefined>} PostgrestContext
+ */
+
 function finishSafely (plugin, ctx, hasError = false) {
   try {
     if (hasError) plugin.error(ctx)
@@ -32,12 +43,7 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/postgrest-js:PostgrestBuilder_then'
 
-  /**
-   * Starts a database span and wraps the PostgREST consumer callbacks.
-   *
-   * @param {object} ctx Orchestrion context for PostgrestBuilder.then().
-   * @returns {object|undefined} Span store.
-   */
+  /** @param {PostgrestContext} ctx */
   bindStart (ctx) {
     const method = ctx.self?.method
     const requestUrl = ctx.self?.url
@@ -85,34 +91,19 @@ class SupabasePostgrestBuilderThenPlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
-  /**
-   * Finishes an asynchronously consumed PostgREST query.
-   *
-   * @param {object} ctx Completed Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {PostgrestContext} ctx */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
-  /**
-   * Records a PostgREST rejection unless its span already finished.
-   *
-   * @param {object} ctx Rejected Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {PostgrestContext} ctx */
   error (ctx) {
     if (ctx[spanFinished]) return
     super.error(ctx)
   }
 
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
-  /**
-   * Records the PostgREST result and finishes its database span once.
-   *
-   * @param {object} ctx Completed Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {PostgrestContext} ctx */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (ctx[spanFinished] || !ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return

@@ -6,16 +6,21 @@ const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const normalizeError = require('./error')
 const getHostname = require('./url')
 
+/**
+ * @typedef {{
+ *   arguments: { [index: number]: unknown, length: number, 0?: string, 1?: { method?: string } },
+ *   self: { url: string },
+ *   currentStore?: { span: import('../../..').Span },
+ *   result?: { error?: Error | { message?: string } | null, response?: { status?: number } },
+ *   error?: unknown
+ * }} FunctionsContext
+ */
+
 class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/functions-js:FunctionsClient_invoke'
 
-  /**
-   * Starts an HTTP client span for an Edge Function invocation.
-   *
-   * @param {object} ctx Orchestrion context for FunctionsClient.invoke().
-   * @returns {object|undefined} Span store.
-   */
+  /** @param {FunctionsContext} ctx */
   bindStart (ctx) {
     const functionName = ctx.arguments?.[0]
     const method = String(ctx.arguments?.[1]?.method || 'POST').toUpperCase()
@@ -38,23 +43,13 @@ class SupabaseFunctionsClientInvokePlugin extends ClientPlugin {
     return ctx.currentStore
   }
 
-  /**
-   * Finishes an asynchronous Edge Function invocation.
-   *
-   * @param {object} ctx Completed Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {FunctionsContext} ctx */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
-  /**
-   * Records the Functions result and finishes its HTTP client span.
-   *
-   * @param {object} ctx Completed Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {FunctionsContext} ctx */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return

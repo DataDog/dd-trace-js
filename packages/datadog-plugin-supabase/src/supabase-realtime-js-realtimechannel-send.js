@@ -3,17 +3,21 @@
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const normalizeError = require('./error')
 
+/**
+ * @typedef {{
+ *   self: { subTopic: string },
+ *   currentStore?: { span: import('../../..').Span },
+ *   result?: 'ok' | 'error' | 'timed out',
+ *   error?: unknown
+ * }} RealtimeContext
+ */
+
 class SupabaseRealtimeChannelSendPlugin extends ProducerPlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/realtime-js:RealtimeChannel_send'
   static peerServicePrecursors = ['messaging.destination.name']
 
-  /**
-   * Starts a producer span for a Supabase Realtime broadcast.
-   *
-   * @param {object} ctx Orchestrion context for RealtimeChannel.send().
-   * @returns {object|undefined} Span store.
-   */
+  /** @param {RealtimeContext} ctx */
   bindStart (ctx) {
     const destination = ctx.self?.subTopic
 
@@ -34,28 +38,17 @@ class SupabaseRealtimeChannelSendPlugin extends ProducerPlugin {
     return ctx.currentStore
   }
 
-  /** @returns {string} Supabase Realtime producer operation name. */
   operationName () {
     return 'supabase.messaging.send'
   }
 
-  /**
-   * Finishes an asynchronous Supabase Realtime broadcast.
-   *
-   * @param {object} ctx Completed Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {RealtimeContext} ctx */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
   // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
-  /**
-   * Records the Realtime send result and finishes its producer span.
-   *
-   * @param {object} ctx Completed Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {RealtimeContext} ctx */
   finish (ctx) {
     // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return

@@ -5,6 +5,15 @@ const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const getHostname = require('./url')
 
+/**
+ * @typedef {{
+ *   arguments: { [index: number]: unknown, length: number, 1: string, 2: string | URL },
+ *   currentStore?: { span: import('../../..').Span },
+ *   result?: unknown,
+ *   error?: Error & { status?: number }
+ * }} StorageContext
+ */
+
 const storageRoutes = [
   'object/upload/sign',
   'object/list-v2',
@@ -42,12 +51,7 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
   static id = 'supabase'
   static prefix = 'tracing:orchestrion:@supabase/storage-js:handleRequest'
 
-  /**
-   * Starts a storage request span.
-   *
-   * @param {object} ctx Orchestrion context.
-   * @returns {object} Span store.
-   */
+  /** @param {StorageContext} ctx */
   bindStart (ctx) {
     const method = String(ctx.arguments?.[1] || 'GET').toUpperCase()
     const url = ctx.arguments?.[2]
@@ -68,34 +72,19 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
     return ctx.currentStore
   }
 
-  /**
-   * Records a normalized storage request error.
-   *
-   * @param {object} ctx Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {StorageContext} ctx */
   error (ctx) {
     const status = ctx.error?.status
     if (status) ctx.currentStore?.span.setTag('http.status_code', status)
     super.error(ctx)
   }
 
-  /**
-   * Finishes an asynchronous storage request.
-   *
-   * @param {object} ctx Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {StorageContext} ctx */
   asyncEnd (ctx) {
     this.finish(ctx)
   }
 
-  /**
-   * Finishes the span after the request has completed.
-   *
-   * @param {object} ctx Orchestrion context.
-   * @returns {void}
-   */
+  /** @param {StorageContext} ctx */
   finish (ctx) {
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
     super.finish(ctx)
