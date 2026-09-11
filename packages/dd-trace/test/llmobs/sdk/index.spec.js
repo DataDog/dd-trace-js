@@ -2404,6 +2404,112 @@ describe('sdk', () => {
     })
   })
 
+  describe('gen_ai APM attributes', () => {
+    const ALL_TOKEN_METRICS = {
+      input_tokens: 10,
+      output_tokens: 20,
+      total_tokens: 30,
+      cache_read_input_tokens: 4,
+      cache_write_input_tokens: 5,
+      reasoning_output_tokens: 6,
+    }
+
+    function apmTags (span) {
+      return span.context().getTags()
+    }
+
+    it('emits every scalar on an llm span', () => {
+      let span
+      llmobs.trace(
+        { kind: 'llm', name: 'myLLM', modelName: 'gpt-4', modelProvider: 'OpenAI', sessionId: 'sess-1' },
+        _span => {
+          span = _span
+          llmobs.annotate(span, { metrics: ALL_TOKEN_METRICS })
+        }
+      )
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'gpt-4',
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.application.name': 'mlApp',
+        'gen_ai.conversation.id': 'sess-1',
+        'gen_ai.usage.input_tokens': 10,
+        'gen_ai.usage.output_tokens': 20,
+        'gen_ai.usage.total_tokens': 30,
+        'gen_ai.usage.cache_read_input_tokens': 4,
+        'gen_ai.usage.cache_write_input_tokens': 5,
+        'gen_ai.usage.reasoning_output_tokens': 6,
+      })
+    })
+
+    it('falls back to the custom model and provider on an llm span without them', () => {
+      let span
+      llmobs.trace({ kind: 'llm', name: 'myLLM' }, _span => {
+        span = _span
+      })
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.request.model': 'custom',
+        'gen_ai.provider.name': 'custom',
+      })
+    })
+
+    it('keeps annotated model fields on a non-model-backed kind', () => {
+      let span
+      llmobs.trace({ kind: 'agent', name: 'myAgent', modelName: 'gpt-4o', modelProvider: 'OpenAI' }, _span => {
+        span = _span
+      })
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'agent',
+        'gen_ai.request.model': 'gpt-4o',
+        'gen_ai.provider.name': 'openai',
+      })
+    })
+
+    it('omits token usage and model on a workflow span', () => {
+      let span
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _span => {
+        span = _span
+        llmobs.annotate(span, { metrics: ALL_TOKEN_METRICS })
+      })
+
+      const tags = apmTags(span)
+      assert.strictEqual(tags['gen_ai.operation.name'], 'workflow')
+      assert.strictEqual(tags['gen_ai.request.model'], undefined)
+      assert.strictEqual(tags['gen_ai.provider.name'], undefined)
+      for (const key of Object.keys(ALL_TOKEN_METRICS)) {
+        assert.strictEqual(tags[`gen_ai.usage.${key}`], undefined)
+      }
+    })
+
+    it('keeps the attributes when the user span processor drops the LLMObs event', () => {
+      let span
+      llmobs.registerProcessor(() => null)
+      try {
+        llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4', modelProvider: 'OpenAI' }, _span => {
+          span = _span
+        })
+      } finally {
+        llmobs.deregisterProcessor()
+      }
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'gpt-4',
+        'gen_ai.provider.name': 'openai',
+      })
+    })
+
+    it('does not emit anything for a span that is not an LLMObs span', () => {
+      const span = tracer.startSpan('apm.only')
+      span.finish()
+
+      assert.strictEqual(apmTags(span)['gen_ai.operation.name'], undefined)
+    })
+  })
+
   describe('distributed', () => {
     it('adds the current llmobs span id and sampling decision to the injection context', () => {
       const carrier = { 'x-datadog-tags': '' }
