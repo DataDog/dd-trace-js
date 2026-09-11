@@ -13,7 +13,7 @@ const {
  */
 const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
 
-for (const hook of getHooks('durable-functions')) {
+for (const hook of getHooks('durable-functions').values()) {
   addHook(hook, exports => exports)
 }
 

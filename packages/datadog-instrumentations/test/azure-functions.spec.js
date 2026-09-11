@@ -9,6 +9,21 @@ const sinon = require('sinon')
 
 const azureDurableFunctionsChannel = dc.tracingChannel('datadog:azure:durable-functions:invoke')
 
+describe('azure-durable-functions rewriter instrumentation (unit)', () => {
+  it('registers the orchestration executor hook', () => {
+    const realInstrument = require('../src/helpers/instrument')
+    const addHookSpy = sinon.spy()
+
+    proxyquire('../src/azure-durable-functions', {
+      './helpers/instrument': { ...realInstrument, addHook: addHookSpy },
+    })
+
+    const hook = addHookSpy.firstCall.args[0]
+    assert.strictEqual(hook.name, 'durable-functions')
+    assert.strictEqual(hook.file, 'lib/src/orchestrations/TaskOrchestrationExecutor.js')
+  })
+})
+
 describe('azure-functions orchestration instrumentation (unit)', () => {
   let azureFunctionsHook
   const subscriptions = []
