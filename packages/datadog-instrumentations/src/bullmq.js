@@ -6,6 +6,6 @@
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('bullmq')) {
+for (const hook of getHooks('bullmq').values()) {
   addHook(hook, exports => exports)
 }
