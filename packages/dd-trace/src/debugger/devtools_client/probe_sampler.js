@@ -8,6 +8,19 @@ const SAMPLER_EXPRESSION = `globalThis[Symbol.for(${JSON.stringify(DD_TRACE_SYMB
 module.exports = {
   compileBreakpointCondition,
   getRemoveProbeExpression,
+  isSnapshotProducingProbe,
+}
+
+/**
+ * Determine whether a probe produces snapshots. Probes that capture the full local state and probes that only capture
+ * specific expressions both emit snapshot payloads, so they share the snapshot sampling defaults and count towards the
+ * global snapshot rate limit.
+ *
+ * @param {{ captureSnapshot?: boolean, compiledCaptureExpressions?: object[] }} probe - The probe to inspect.
+ * @returns {boolean}
+ */
+function isSnapshotProducingProbe (probe) {
+  return probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined
 }
 
 /**
@@ -66,7 +79,7 @@ function compileBreakpointCondition (probes) {
  */
 function compileProbeCondition (probe) {
   const sample = `$dd_sampler.makeSampleDecision(${probe.samplingIndex}, ${JSON.stringify(probe.id)}, ` +
-    `${probe.nsBetweenSampling}n, ${probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined})`
+    `${probe.nsBetweenSampling}n, ${isSnapshotProducingProbe(probe)})`
 
   if (probe.condition === undefined) {
     return `$dd_sampled = ${sample} || $dd_sampled`
