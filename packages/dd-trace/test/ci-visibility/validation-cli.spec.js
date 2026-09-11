@@ -736,6 +736,7 @@ function isPublishedValidationPath (filename) {
     filename === 'version.js' ||
     filename.startsWith('ci/') ||
     filename.startsWith('ext/') ||
+    filename.startsWith('packages/datadog-instrumentations/src/') ||
     filename.startsWith('packages/dd-trace/') ||
     filename.startsWith('vendor/dist/')
 }

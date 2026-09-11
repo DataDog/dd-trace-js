@@ -7,6 +7,7 @@ const { pathToFileURL } = require('node:url')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
+const fullSyncLoaderSymbol = Symbol.for('dd-trace.loader.full-sync')
 let isSyncLoaderRegistered = false
 
 if (shouldRegisterSyncLoaderHooks()) {
@@ -16,6 +17,9 @@ if (shouldRegisterSyncLoaderHooks()) {
     ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
     if (registerSyncLoaderHooks) {
       isSyncLoaderRegistered = registerSyncLoaderHooks()
+      // Capability checks alone are insufficient: the entrypoint's load hook can
+      // only stand down after the full synchronous hooks are actually installed.
+      if (isSyncLoaderRegistered) globalThis[fullSyncLoaderSymbol] = true
     }
   } catch (error) {
     syncRegistrationError = error
@@ -30,8 +34,13 @@ if (!isSyncLoaderRegistered) {
   register('./loader-hook.mjs', parentURL)
 }
 
+// Unsupported loader paths install the CommonJS compiler fallback. The full
+// synchronous loader rewrites CommonJS directly and leaves _compile untouched.
+require('./packages/datadog-instrumentations/src/helpers/rewriter/loader.js')
+
 function shouldRegisterSyncLoaderHooks () {
-  if (!isSyncLoaderHookVersionSupported()) {
+  const supportsRegisterHooks = require('./packages/dd-trace/src/supports-register-hooks')
+  if (!isSyncLoaderHookVersionSupported() || !supportsRegisterHooks()) {
     return false
   }
 

@@ -120,29 +120,9 @@ function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
-  if (isCommonJSLoad(context)) {
-    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
-  }
-
   return rewriterLoader.loadSync(url, context, (url, context) => {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   })
-}
-
-function isCommonJSLoad (context) {
-  if (context.format) return context.format === 'commonjs'
-
-  // Sync hooks report CommonJS require() dependency loads with a `require`
-  // condition but no format. If a format is present, trust it instead: ESM
-  // loaded through require() reports `format: 'module'` and still needs rewrite.
-  const conditions = context.conditions
-  if (!conditions) return false
-
-  for (let i = 0; i < conditions.length; i++) {
-    if (conditions[i] === 'require') return true
-  }
-
-  return false
 }
 
 function getSyncImportInTheMiddleHook () {
@@ -181,9 +161,11 @@ function registerSyncLoaderHooks (data = {}) {
   // Node built-ins are instrumented under the synchronous loader as well: iitm
   // reads a built-in's exports through process.getBuiltinModule(), which
   // bypasses the registered hooks and therefore cannot re-enter them. The
-  // synchronous and asynchronous loaders share the same option preparation so
-  // that `import http from 'node:http'` is wrapped on both paths.
-  syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
+  // synchronous loader keeps CJS source available for the rewriter; the
+  // asynchronous loader leaves source stripping to iitm.
+  const syncOptions = prepareImportInTheMiddleOptions(data)
+  syncOptions.disableCjsSourceStripping = true
+  syncHook.applyOptions(syncOptions)
   Module.registerHooks({
     resolve: syncHook.resolveSync,
     load: loadSync,

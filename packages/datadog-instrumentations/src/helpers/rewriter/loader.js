@@ -1,9 +1,9 @@
 'use strict'
 
-const Module = require('module')
-const shimmer = require('../../../../datadog-shimmer')
-const { rewrite } = require('./')
+const { ensureCompileShim } = require('./compile-shim.js')
 
-shimmer.wrap(Module.prototype, '_compile', compile => function (content, filename, format) {
-  return compile.call(this, rewrite(content, filename, format), filename, format)
-})
+require('./register-hook.js')
+
+const fullSyncLoaderSymbol = Symbol.for('dd-trace.loader.full-sync')
+
+if (!globalThis[fullSyncLoaderSymbol]) ensureCompileShim()

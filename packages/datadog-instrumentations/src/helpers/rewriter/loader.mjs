@@ -1,45 +1,17 @@
-import * as Module from 'module'
+import * as Module from 'node:module'
 
 const require = Module.createRequire(import.meta.url)
-const { getRewriteTarget } = require('./targets.js')
-let rewriter
+const { getFormat, loadSync, rewriteResult } = require('./hooks.js')
 
 async function load (url, context, nextLoad) {
   const result = await nextLoad(url, context)
+  const format = getFormat(result, context)
 
-  return rewriteResult(result, url, context)
-}
-
-function loadSync (url, context, nextLoad) {
-  const result = nextLoad(url, context)
-
-  return rewriteResult(result, url, context)
-}
-
-/**
- * @param {{ format?: string, source?: unknown }} result
- * @param {string} url
- * @param {{ format?: string }} context
- */
-function rewriteResult (result, url, context) {
-  const format = result.format || context.format
-
-  // CommonJS source is rewritten by Module._compile. Rewriting it here too
-  // double-instruments CommonJS entrypoints loaded through sync hooks.
+  // The asynchronous loader cannot supply CommonJS source, so CommonJS keeps
+  // being rewritten by the hook the tracer entrypoint installs.
   if (format === 'commonjs') return result
 
-  if (result.source) {
-    const target = getRewriteTarget(url)
-    if (target) {
-      if (!rewriter) {
-        rewriter = require('./index.js')
-      }
-
-      result.source = rewriter.rewrite(result.source, url, format, target)
-    }
-  }
-
-  return result
+  return rewriteResult(result, url, format)
 }
 
 export { load, loadSync }

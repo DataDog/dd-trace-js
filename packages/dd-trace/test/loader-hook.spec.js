@@ -39,6 +39,7 @@ describe('loader hook', () => {
       await initialize(data)
 
       console.log(JSON.stringify({
+        cjsSourceStrippingDisabled: data.disableCjsSourceStripping === true,
         loadedConfigDefaults: require.cache[${JSON.stringify(configDefaultsPath)}] !== undefined,
         includesSecurityControl: data.shouldInclude(${JSON.stringify(sanitizerUrl)}, './sanitizer/index.js'),
       }))
@@ -60,6 +61,7 @@ describe('loader hook', () => {
 
   it('does not load the configuration defaults when no security controls are configured', () => {
     assert.deepStrictEqual(initializeLoaderHook(), {
+      cjsSourceStrippingDisabled: false,
       loadedConfigDefaults: false,
       includesSecurityControl: false,
     })
