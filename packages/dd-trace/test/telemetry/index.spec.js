@@ -138,6 +138,7 @@ describe('telemetry', () => {
       circularObject,
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: 'true' },
+      dynamicInstrumentation: { enabled: true },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2',
@@ -159,6 +160,7 @@ describe('telemetry', () => {
       assert.deepStrictEqual(payload.products, {
         appsec: { enabled: true },
         profiler: { version: tracerVersion, enabled: true },
+        dynamic_instrumentation: { enabled: true },
       })
       assert.deepStrictEqual(payload.install_signature, {
         install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
@@ -286,6 +288,7 @@ describe('telemetry', () => {
       },
       appsec: { enabled: false, DD_APPSEC_SCA_ENABLED: undefined },
       profiling: { DD_PROFILING_ENABLED: false },
+      dynamicInstrumentation: { enabled: false },
     }, {
       _pluginsByName: pluginsByName,
     })
@@ -342,6 +345,7 @@ describe('telemetry app-heartbeat', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -410,6 +414,7 @@ describe('Telemetry extended heartbeat', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -455,6 +460,7 @@ describe('Telemetry extended heartbeat', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -562,6 +568,7 @@ describe('Telemetry extended heartbeat', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -658,6 +665,7 @@ describe('Telemetry retry', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -751,6 +759,7 @@ describe('Telemetry retry', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -826,6 +835,7 @@ describe('Telemetry retry', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -892,6 +902,7 @@ describe('Telemetry retry', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -980,6 +991,7 @@ describe('Telemetry retry', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -1083,6 +1095,7 @@ describe('AVM OSS', () => {
             },
             appsec: { enabled: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
             profiling: { DD_PROFILING_ENABLED: false },
+            dynamicInstrumentation: { enabled: false },
           }
         })
 

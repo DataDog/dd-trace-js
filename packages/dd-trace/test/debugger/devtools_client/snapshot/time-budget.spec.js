@@ -2,12 +2,23 @@
 
 const assert = require('node:assert/strict')
 const proxyquire = require('proxyquire')
+const { INCOMPLETE_REASON } = require('../../../../src/debugger/guardrail-metrics')
 const { timeBudgetSym } = require('../../../../src/debugger/devtools_client/snapshot/symbols')
 
 const MAX_LENGTH = 255
 
 describe('Debugger snapshot time budget', () => {
   let processRawState
+  /** @type {import('../../../../src/debugger/devtools_client/snapshot/processor').IncompleteCapture} */
+  let incomplete
+
+  beforeEach(() => {
+    incomplete = { reasons: 0 }
+  })
+
+  afterEach(() => {
+    assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.TIMEOUT, 'should record the timeout as incomplete reason')
+  })
 
   before(() => {
     const loadRedaction = proxyquire.noCallThru()
@@ -38,7 +49,7 @@ describe('Debugger snapshot time budget', () => {
       },
     }]
 
-    const out = processRawState(raw, MAX_LENGTH)
+    const out = processRawState(raw, MAX_LENGTH, incomplete)
     assert.deepStrictEqual(out.fn, {
       type: 'Function',
       notCapturedReason: 'timeout',
@@ -55,7 +66,7 @@ describe('Debugger snapshot time budget', () => {
       },
     }]
 
-    const out = processRawState(raw, MAX_LENGTH)
+    const out = processRawState(raw, MAX_LENGTH, incomplete)
     assert.deepStrictEqual(out.obj, {
       type: 'Object',
       notCapturedReason: 'timeout',
@@ -73,7 +84,7 @@ describe('Debugger snapshot time budget', () => {
       },
     }]
 
-    const out = processRawState(raw, MAX_LENGTH)
+    const out = processRawState(raw, MAX_LENGTH, incomplete)
     assert.deepStrictEqual(out.arr, {
       type: 'Array',
       notCapturedReason: 'timeout',
@@ -101,7 +112,7 @@ describe('Debugger snapshot time budget', () => {
       },
     }]
 
-    const out = processRawState(raw, MAX_LENGTH)
+    const out = processRawState(raw, MAX_LENGTH, incomplete)
     assert.deepStrictEqual(out.map, {
       type: 'Map',
       notCapturedReason: 'timeout',
@@ -129,7 +140,7 @@ describe('Debugger snapshot time budget', () => {
       },
     }]
 
-    const out = processRawState(raw, MAX_LENGTH)
+    const out = processRawState(raw, MAX_LENGTH, incomplete)
     assert.deepStrictEqual(out.set, {
       type: 'Set',
       notCapturedReason: 'timeout',

@@ -6,6 +6,7 @@ const assert = require('node:assert')
 const { inspect } = require('node:util')
 const sinon = require('sinon')
 
+const { INCOMPLETE_REASON } = require('../../../../src/debugger/guardrail-metrics')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions, DEFAULT_CAPTURE_LIMITS, session } = require('./utils')
 
 describe('debugger -> devtools client -> snapshot', function () {
@@ -29,12 +30,13 @@ describe('debugger -> devtools client -> snapshot', function () {
         sessionPostStub = sinon.stub(session, 'post')
         sessionPostStub.withArgs('Runtime.getProperties').rejects(new Error('Protocol error'))
 
-        const { fatalErrors, processLocalState } = await getLocalStateForCallFrame(
+        const { fatalErrors, incomplete, processLocalState } = await getLocalStateForCallFrame(
           mockCallFrame,
           DEFAULT_CAPTURE_LIMITS
         )
 
         assert.strictEqual(fatalErrors.length, 1)
+        assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.RUNTIME_ERROR)
 
         for (const error of fatalErrors) {
           assert.ok(error instanceof Error)
@@ -72,6 +74,7 @@ describe('debugger -> devtools client -> snapshot', function () {
 
         assert.strictEqual(result.fatalErrors.length, 1)
         assert.strictEqual(result.evaluationErrors.length, 0)
+        assert.strictEqual(result.incomplete.reasons, INCOMPLETE_REASON.RUNTIME_ERROR)
 
         const error = result.fatalErrors[0]
         assert.ok(error instanceof Error)
@@ -170,6 +173,9 @@ describe('debugger -> devtools client -> snapshot', function () {
           'Error capturing expression "protocolError". ' +
           'Capture expressions for this probe will be skipped until the probe is re-applied'
         )
+
+        // Both count as a runtime error once
+        assert.strictEqual(result.incomplete.reasons, INCOMPLETE_REASON.RUNTIME_ERROR)
       })
     })
   })
