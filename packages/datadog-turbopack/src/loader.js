@@ -16,6 +16,10 @@ const { isESMFile } = require('../../datadog-esbuild/src/utils')
 const { SYNTHETIC_EXTENSION } = require('./constants')
 
 const CHANNEL = 'dd-trace:bundler:load'
+const ARGUMENTS_BINDING = 1
+const MODULE_BINDING = 2
+const REQUIRE_BINDING = 4
+const COMMONJS_BINDINGS = MODULE_BINDING | REQUIRE_BINDING
 const targetPackages = new Set(Object.keys(hooks))
 const entrypoints = new Map()
 const loadedHooks = new Set()
@@ -204,10 +208,10 @@ function getCommonJsEntrypoint (name, packageJsonPath) {
  */
 function loadPackageHook (name) {
   if (loadedHooks.has(name)) return
-  loadedHooks.add(name)
   const hook = hooks[name]
   const load = hook?.fn ?? hook
   if (typeof load === 'function') load()
+  loadedHooks.add(name)
 }
 
 /**
@@ -232,7 +236,7 @@ function hasUnsafeCommonJsBindings (source) {
     if (source.startsWith('#!')) source = `//${source.slice(2)}`
     const program = parse(Module.wrap(source))
     const wrapper = program.body[0]?.expression
-    return wrapper?.type !== 'FunctionExpression' || hasUnsafeNode(wrapper.body, 0, true)
+    return wrapper?.type !== 'FunctionExpression' || hasUnsafeNode(wrapper.body, 0, 0)
   } catch {
     return true
   }
@@ -241,28 +245,28 @@ function hasUnsafeCommonJsBindings (source) {
 /**
  * @param {object} node
  * @param {number} functionDepth
- * @param {boolean} commonJsArguments
+ * @param {number} shadowedBindings
  * @param {object} [parent]
  * @param {string} [parentKey]
  * @returns {boolean}
  */
-function hasUnsafeNode (node, functionDepth, commonJsArguments, parent, parentKey) {
-  if (functionDepth === 0 && hasCommonJsDeclaration(node)) return true
-  if (node.type === 'AssignmentExpression' && mutatesCommonJsBinding(node.left)) return true
-  if (node.type === 'UpdateExpression' && mutatesCommonJsBinding(node.argument)) return true
+function hasUnsafeNode (node, functionDepth, shadowedBindings, parent, parentKey) {
+  if (functionDepth === 0 && hasCommonJsDeclaration(node, parent)) return true
+  if (node.type === 'AssignmentExpression' && mutatesCommonJsBinding(node.left, shadowedBindings)) return true
+  if (node.type === 'UpdateExpression' && mutatesCommonJsBinding(node.argument, shadowedBindings)) return true
   if ((node.type === 'ForInStatement' || node.type === 'ForOfStatement') &&
-    mutatesCommonJsBinding(node.left)) return true
+    mutatesCommonJsBinding(node.left, shadowedBindings)) return true
   if (node.type === 'CallExpression' && node.callee?.type === 'Identifier' && node.callee.name === 'eval') return true
-  if (commonJsArguments && node.type === 'Identifier' && node.name === 'arguments' &&
+  if (!(shadowedBindings & ARGUMENTS_BINDING) && node.type === 'Identifier' && node.name === 'arguments' &&
     isReferencedIdentifier(parent, parentKey)) return true
 
   const nestedFunction = node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration' ||
     node.type === 'FunctionExpression'
   if (nestedFunction) {
     functionDepth++
-    commonJsArguments = node.type === 'ArrowFunctionExpression' &&
-      !node.params.some(param => bindsName(param, 'arguments')) && commonJsArguments
+    shadowedBindings |= getFunctionBindings(node)
   }
+  shadowedBindings |= getLexicalBindings(node)
 
   for (const key of Object.keys(node)) {
     if ((node.type === 'VariableDeclarator' && key === 'id') ||
@@ -270,9 +274,9 @@ function hasUnsafeNode (node, functionDepth, commonJsArguments, parent, parentKe
     const value = node[key]
     if (Array.isArray(value)) {
       for (const child of value) {
-        if (child?.type && hasUnsafeNode(child, functionDepth, commonJsArguments, node, key)) return true
+        if (child?.type && hasUnsafeNode(child, functionDepth, shadowedBindings, node, key)) return true
       }
-    } else if (value?.type && hasUnsafeNode(value, functionDepth, commonJsArguments, node, key)) {
+    } else if (value?.type && hasUnsafeNode(value, functionDepth, shadowedBindings, node, key)) {
       return true
     }
   }
@@ -281,42 +285,135 @@ function hasUnsafeNode (node, functionDepth, commonJsArguments, parent, parentKe
 
 /**
  * @param {object} node
+ * @param {object} [parent]
  * @returns {boolean}
  */
-function hasCommonJsDeclaration (node) {
+function hasCommonJsDeclaration (node, parent) {
   if (node.type === 'VariableDeclarator') {
-    return bindsName(node.id, 'module') || bindsName(node.id, 'require')
+    return parent?.kind === 'var' && Boolean(getBindingMask(node.id) & COMMONJS_BINDINGS)
   }
-  if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') {
-    return node.id?.name === 'module' || node.id?.name === 'require'
+  if (node.type === 'FunctionDeclaration') {
+    return Boolean(getBindingMask(node.id) & COMMONJS_BINDINGS)
   }
   return false
 }
 
 /**
  * @param {object} node
+ * @param {number} shadowedBindings
  * @returns {boolean}
  */
-function mutatesCommonJsBinding (node) {
-  return bindsName(node, 'module') || bindsName(node, 'require')
+function mutatesCommonJsBinding (node, shadowedBindings) {
+  return Boolean(getBindingMask(node) & COMMONJS_BINDINGS & ~shadowedBindings)
 }
 
 /**
  * @param {object} node
- * @param {string} name
- * @returns {boolean}
+ * @returns {number}
  */
-function bindsName (node, name) {
-  if (node.type === 'Identifier') return node.name === name
-  if (node.type === 'AssignmentPattern') return bindsName(node.left, name)
-  if (node.type === 'RestElement') return bindsName(node.argument, name)
-  if (node.type === 'ArrayPattern') return node.elements.some(element => element && bindsName(element, name))
+function getBindingMask (node) {
+  if (!node) return 0
+  if (node.type === 'Identifier') {
+    if (node.name === 'arguments') return ARGUMENTS_BINDING
+    if (node.name === 'module') return MODULE_BINDING
+    return node.name === 'require' ? REQUIRE_BINDING : 0
+  }
+  if (node.type === 'AssignmentPattern') return getBindingMask(node.left)
+  if (node.type === 'RestElement') return getBindingMask(node.argument)
+  if (node.type === 'ArrayPattern') {
+    let bindings = 0
+    for (const element of node.elements) bindings |= getBindingMask(element)
+    return bindings
+  }
   if (node.type === 'ObjectPattern') {
-    return node.properties.some(property => {
-      return bindsName(property.type === 'RestElement' ? property.argument : property.value, name)
-    })
+    let bindings = 0
+    for (const property of node.properties) {
+      bindings |= getBindingMask(property.type === 'RestElement' ? property.argument : property.value)
+    }
+    return bindings
   }
-  return false
+  return 0
+}
+
+/**
+ * @param {object} node
+ * @returns {number}
+ */
+function getFunctionBindings (node) {
+  let bindings = node.type === 'ArrowFunctionExpression' ? 0 : ARGUMENTS_BINDING
+  bindings |= getBindingMask(node.id)
+  for (const param of node.params) bindings |= getBindingMask(param)
+  return bindings | getVarBindings(node.body)
+}
+
+/**
+ * @param {object} node
+ * @returns {number}
+ */
+function getVarBindings (node) {
+  if (node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' || node.type === 'ClassDeclaration' || node.type === 'ClassExpression') return 0
+
+  let bindings = 0
+  if (node.type === 'VariableDeclaration' && node.kind === 'var') {
+    for (const declaration of node.declarations) bindings |= getBindingMask(declaration.id)
+  }
+  for (const key of Object.keys(node)) {
+    const value = node[key]
+    if (Array.isArray(value)) {
+      for (const child of value) {
+        if (child?.type) bindings |= getVarBindings(child)
+      }
+    } else if (value?.type) {
+      bindings |= getVarBindings(value)
+    }
+  }
+  return bindings
+}
+
+/**
+ * @param {object} node
+ * @returns {number}
+ */
+function getLexicalBindings (node) {
+  let bindings = 0
+  if (node.type === 'BlockStatement') {
+    for (const statement of node.body) bindings |= getStatementBindings(statement)
+  } else if (node.type === 'SwitchStatement') {
+    for (const switchCase of node.cases) {
+      for (const statement of switchCase.consequent) bindings |= getStatementBindings(statement)
+    }
+  } else if (node.type === 'CatchClause') {
+    bindings = getBindingMask(node.param)
+  } else if (node.type === 'ForStatement') {
+    bindings = getLexicalDeclarationBindings(node.init)
+  } else if (node.type === 'ForInStatement' || node.type === 'ForOfStatement') {
+    bindings = getLexicalDeclarationBindings(node.left)
+  } else if (node.type === 'ClassExpression') {
+    bindings = getBindingMask(node.id)
+  }
+  return bindings
+}
+
+/**
+ * @param {object} node
+ * @returns {number}
+ */
+function getStatementBindings (node) {
+  if (node.type === 'VariableDeclaration') return getLexicalDeclarationBindings(node)
+  if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') return getBindingMask(node.id)
+  return 0
+}
+
+/**
+ * @param {object} [node]
+ * @returns {number}
+ */
+function getLexicalDeclarationBindings (node) {
+  if (node?.type !== 'VariableDeclaration' || node.kind === 'var') return 0
+  let bindings = 0
+  for (const declaration of node.declarations) bindings |= getBindingMask(declaration.id)
+  return bindings
 }
 
 /**

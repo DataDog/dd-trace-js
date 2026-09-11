@@ -98,7 +98,9 @@ Next.js 15.5 or newer applications that use Turbopack can wrap their existing co
 ```javascript
 const { withDatadogTurbopack } = require('dd-trace/next')
 
-module.exports = withDatadogTurbopack({})
+const nextConfig = { reactStrictMode: true }
+
+module.exports = withDatadogTurbopack(nextConfig)
 ```
 
 Preload `dd-trace/init` before the application loads. The wrapper instruments CommonJS dependencies and supported

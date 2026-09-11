@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
 
+const satisfies = require('../../vendor/dist/semifies')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { SYNTHETIC_EXTENSION } = require('./src/constants')
 
@@ -199,14 +200,13 @@ function getNextMajor () {
     })
   }
 
-  const match = /^(\d+)\.(\d+)\./.exec(version)
-  if (!match) throw new Error(`withDatadogTurbopack could not parse Next.js version ${version}`)
-  const major = Number(match[1])
-  const minor = Number(match[2])
-  if (major < 15 || (major === 15 && minor < 5)) {
+  if (!satisfies(version, '>=0')) {
+    throw new Error(`withDatadogTurbopack could not parse Next.js version ${version}`)
+  }
+  if (!satisfies(version, '>=15.5.0')) {
     throw new RangeError(`withDatadogTurbopack requires Next.js 15.5 or newer; found ${version}`)
   }
-  return major
+  return Number.parseInt(version, 10)
 }
 
 module.exports = { withDatadogTurbopack }

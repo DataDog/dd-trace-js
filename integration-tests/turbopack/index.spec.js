@@ -35,7 +35,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
     let proc
 
     before(function () {
-      this.timeout(300_000)
+      this.timeout(60_000)
       applicationDirectory = path.join(sandboxCwd(), 'turbopack')
       fs.cpSync(
         path.join(applicationDirectory, 'fixtures/ioredis'),
@@ -58,7 +58,7 @@ for (const nextVersion of ['15.5.0', 'latest']) {
       await agent.stop()
     })
 
-    it('runs bundled CommonJS, ESM, and extensionless dependencies', async () => {
+    it('instruments bundled CommonJS, ESM, and extensionless dependencies', async () => {
       const assertCommonJsTrace = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(checkSpansForServiceName(payload, 'next.request'), true)
         assert.strictEqual(checkSpansForServiceName(payload, 'express.request'), true)

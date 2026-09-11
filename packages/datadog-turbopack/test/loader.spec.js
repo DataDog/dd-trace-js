@@ -177,6 +177,40 @@ describe('Turbopack loader', () => {
     }
   })
 
+  it('publishes modules with mutations to shadowed CommonJS bindings', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, 'shadowed-package', {
+      main: 'index.js',
+      version: '1.0.0',
+    })
+    const resourcePath = write(packageDir, 'index.js', 'module.exports = true\n')
+    const instrumentations = {}
+    const hook = sinon.stub().callsFake(() => {
+      instrumentations['shadowed-package'] = [{ hook: sinon.stub(), versions: ['1'] }]
+    })
+    const { loader } = loadLoader({ hooks: { 'shadowed-package': hook }, instrumentations })
+    const sources = [
+      'function configure(require) { require = () => false }\nmodule.exports = configure\n',
+      'function configure() { var module; module = { exports: false } }\nmodule.exports = configure\n',
+      '{ let require; require = () => false }\nmodule.exports = true\n',
+      'try {} catch (module) { module = true }\nmodule.exports = true\n',
+      'switch (0) { case 0: let require; require = () => false }\nmodule.exports = true\n',
+      'for (let require = false; require; require = false) {}\nmodule.exports = true\n',
+      'for (let module of []) { module = false }\nmodule.exports = true\n',
+      'const value = class module { static configure() { module = false } }\nmodule.exports = value\n',
+    ]
+
+    for (const source of sources) {
+      const publications = []
+      const result = runLoader(loader, resourcePath, source)
+      const exports = executeCommonJs(result.code, payload => publications.push(payload))
+
+      assert.notEqual(result.code, source)
+      assert.ok(exports)
+      assert.equal(publications.length, 1)
+    }
+  })
+
   it('rewrites source targets independently of build-process disablement', () => {
     const runner = path.join(__dirname, 'resources/run-loader-with-build-config.js')
     const enabled = JSON.parse(execFileSync(process.execPath, [runner], { encoding: 'utf8' }))
@@ -540,28 +574,40 @@ describe('Turbopack loader', () => {
     sinon.assert.notCalled(rewriteFactory)
   })
 
-  it('normalizes non-Error activation failures and fails open', () => {
+  it('normalizes non-Error activation failures and retries hook loading', () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'broken-hook-package', { version: '1.0.0' })
     const source = 'module.exports = true\n'
     const resourcePath = write(packageDir, 'index.js', source)
     const sourceMap = { mappings: 'AAAA', version: 3 }
-    const hook = sinon.stub().callsFake(() => throwValue('hook failed'))
+    const failure = 'hook failed'
+    const instrumentations = {}
+    const hook = sinon.stub()
+    hook.onFirstCall().callsFake(() => {
+      throw failure
+    })
+    hook.onSecondCall().callsFake(() => {
+      instrumentations['broken-hook-package'] = [{ hook: sinon.stub(), versions: ['1'] }]
+    })
     const emitWarning = sinon.spy()
     const { loader, rewriteFactory } = loadLoader({
       hooks: { 'broken-hook-package': hook },
-      instrumentations: {},
+      instrumentations,
     })
 
-    const result = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
+    const failed = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
+    const recovered = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
+    const repeated = runLoader(loader, resourcePath, source, sourceMap, emitWarning)
 
-    assert.equal(result.code, source)
-    assert.strictEqual(result.sourceMap, sourceMap)
+    assert.equal(failed.code, source)
+    assert.strictEqual(failed.sourceMap, sourceMap)
+    assert.notEqual(recovered.code, source)
+    assert.notEqual(repeated.code, source)
     sinon.assert.calledOnceWithExactly(
       emitWarning,
       sinon.match(value => value instanceof Error && value.message === 'hook failed')
     )
-    sinon.assert.calledOnceWithExactly(hook)
+    sinon.assert.calledTwice(hook)
     sinon.assert.notCalled(rewriteFactory)
   })
 })
@@ -618,13 +664,6 @@ function runLoader (loader, resourcePath, source, sourceMap, emitWarning) {
   sinon.assert.calledOnce(callback)
   assert.equal(callback.firstCall.args[0], undefined)
   return { code: callback.firstCall.args[1], sourceMap: callback.firstCall.args[2] }
-}
-
-/**
- * @param {unknown} value
- */
-function throwValue (value) {
-  throw value
 }
 
 /**
