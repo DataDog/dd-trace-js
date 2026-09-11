@@ -483,7 +483,7 @@ class CypressPlugin {
   flakyTestRetriesCount = 0
   isDynamicAtrEnabled = false
   dynamicAtrBuckets = undefined
-  dynamicAtrRetryCountByTest = {}
+  dynamicAtrRetryCountByTest = new Map()
   isEarlyFlakeDetectionEnabled = false
   isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
@@ -577,7 +577,7 @@ class CypressPlugin {
     this.flakyTestRetriesCount = 0
     this.isDynamicAtrEnabled = false
     this.dynamicAtrBuckets = undefined
-    this.dynamicAtrRetryCountByTest = {}
+    this.dynamicAtrRetryCountByTest = new Map()
     this.isEarlyFlakeDetectionEnabled = false
     this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
@@ -1018,17 +1018,19 @@ class CypressPlugin {
    */
   setDynamicAtrRetryCountForTest (testSuite, testName, duration) {
     if (!this.dynamicAtrRetryCountByTest) {
-      this.dynamicAtrRetryCountByTest = {}
+      this.dynamicAtrRetryCountByTest = new Map()
     }
-    if (!this.dynamicAtrRetryCountByTest[testSuite]) {
-      this.dynamicAtrRetryCountByTest[testSuite] = {}
+    let retryCountByTestName = this.dynamicAtrRetryCountByTest.get(testSuite)
+    if (!retryCountByTestName) {
+      retryCountByTestName = new Map()
+      this.dynamicAtrRetryCountByTest.set(testSuite, retryCountByTestName)
     }
     const retryCount = getDynamicAtrRetryCount(
       duration ?? 0,
       this.earlyFlakeDetectionRetryPolicy,
       this.dynamicAtrBuckets
     )
-    this.dynamicAtrRetryCountByTest[testSuite][testName] = retryCount
+    retryCountByTestName.set(testName, retryCount)
     return retryCount
   }
 
@@ -1046,7 +1048,7 @@ class CypressPlugin {
   }
 
   getDynamicAtrRetryCountForTest (testSuite, testName) {
-    return this.dynamicAtrRetryCountByTest[testSuite]?.[testName]
+    return this.dynamicAtrRetryCountByTest.get(testSuite)?.get(testName)
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -2129,7 +2131,7 @@ class CypressPlugin {
           !isAttemptToFix &&
           !isEfdRetry &&
           !isEfdManagedTest &&
-          this.dynamicAtrRetryCountByTest[testSuite]?.[testName] === undefined
+          this.getDynamicAtrRetryCountForTest(testSuite, testName) === undefined
         ) {
           this.setDynamicAtrRetryCountForTest(testSuite, testName, duration)
         }
