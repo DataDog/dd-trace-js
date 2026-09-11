@@ -3,6 +3,7 @@
 module.exports = [
   ...require('./ai'),
   ...require('./azure-cosmos'),
+  ...require('./azure-durable-functions'),
   ...require('./bullmq'),
   ...require('./claude-agent-sdk'),
   ...require('./graphql'),
