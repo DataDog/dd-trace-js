@@ -16,6 +16,7 @@ require('./core')
 const { engines, nodeMaxMajor } = require('../../../../package.json')
 
 const externals = require('../plugins/externals')
+const spanLeakDetector = require('../plugins/span-leak-detector')
 const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
@@ -384,8 +385,11 @@ function withVersions (plugin, modules, range, cb) {
 
       describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
         let nodePath
+        let spanLeakScope
 
         before(() => {
+          spanLeakScope = spanLeakDetector.enterScope(`${moduleName}@${testCase.resolvedVersion}`)
+
           // set plugin name and version to later report to test agent regarding tested integrations and their tested
           // range of versions
           const testedPlugins = getAgent().testedPlugins
@@ -406,9 +410,13 @@ function withVersions (plugin, modules, range, cb) {
         cb(testCase.versionKey, moduleName, testCase.resolvedVersion)
 
         after(() => {
-          process.env.NODE_PATH = nodePath
-          // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
-          require('module').Module._initPaths()
+          try {
+            process.env.NODE_PATH = nodePath
+            // @ts-expect-error - Module._initPaths is not typed due to being an internal API.
+            require('module').Module._initPaths()
+          } finally {
+            spanLeakDetector.leaveScope(spanLeakScope)
+          }
         })
       })
     }
@@ -499,7 +507,6 @@ exports.mochaHooks = {
   afterAll () {
     process.exit = ORIGINAL_PROCESS_EXIT
 
-    // Arm the watchdog after restoring process.exit so it can call it.
     const watchdog = setTimeout(() => {
       // eslint-disable-next-line no-console
       console.error(
@@ -517,9 +524,22 @@ exports.mochaHooks = {
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
+    // LLMObs has a separate async-context store that can pin the last finished span.
+    storage('llmobs').enterWith(undefined)
     extraServices.clear()
     // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
     // ordering keeps that throw from skipping the unconditional cleanup above.
     if (_agent) _agent.reset()
   },
+}
+
+exports.mochaGlobalTeardown = async function () {
+  try {
+    await spanLeakDetector.assertNoRetainedSpans()
+  } catch (error) {
+    // Mocha skips its exit handler when a global teardown rejects, which can turn the assertion into a zero exit code.
+    // eslint-disable-next-line no-console
+    console.error(error)
+    ORIGINAL_PROCESS_EXIT(1)
+  }
 }

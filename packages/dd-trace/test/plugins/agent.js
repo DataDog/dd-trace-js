@@ -14,6 +14,7 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 const { httpAgent } = require('../../src/exporters/common/agents')
+const spanLeakDetector = require('./span-leak-detector')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -595,6 +596,9 @@ module.exports = {
     }
 
     currentIntegrationName = getCurrentIntegrationName()
+
+    // The detector is inert unless the test process exposes GC.
+    spanLeakDetector.arm()
 
     const tracerConfigJson = JSON.stringify(tracerConfig)
     if (
