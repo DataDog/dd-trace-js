@@ -2,7 +2,6 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { AUTO_KEEP } = require('../../../ext/priority')
-const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
 const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrier')
 
 const ORCHESTRATION_FAILURE_END_CHANNEL =
