@@ -19,12 +19,17 @@ describe('AgentlessExporter', () => {
   let writer
   let initialHandlersSize
   let clock
+  let deliveryTrackingEnabled
 
   beforeEach(() => {
+    const ddTrace = globalThis[Symbol.for('dd-trace')]
+    deliveryTrackingEnabled = ddTrace.telemetryDeliveryTrackingEnabled
+    ddTrace.telemetryDeliveryTrackingEnabled = false
     clock = sinon.useFakeTimers()
 
     writer = {
       append: sinon.stub(),
+      enableDeliveryTracking: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
     }
@@ -44,10 +49,57 @@ describe('AgentlessExporter', () => {
   afterEach(() => {
     clock.restore()
     sinon.restore()
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.clear()
+    const ddTrace = globalThis[Symbol.for('dd-trace')]
+    ddTrace.beforeExitHandlers.clear()
+    if (deliveryTrackingEnabled === undefined) {
+      delete ddTrace.telemetryDeliveryTrackingEnabled
+    } else {
+      ddTrace.telemetryDeliveryTrackingEnabled = deliveryTrackingEnabled
+    }
   })
 
   describe('constructor', () => {
+    it('does not enable delivery tracking without an OTel TracerProvider', () => {
+      const writerOptions = {}
+      /** @param {object} options */
+      const Writer = function (options) {
+        Object.assign(writerOptions, options)
+        return writer
+      }
+      Exporter = proxyquire('../../../src/exporters/agentless', { './writer': Writer })
+
+      exporter = new Exporter({})
+
+      assert.strictEqual(writerOptions.deliveryTracker, undefined)
+    })
+
+    it('enables delivery tracking after construction', () => {
+      exporter = new Exporter({})
+
+      exporter.enableDeliveryTracking()
+      exporter.enableDeliveryTracking()
+
+      sinon.assert.calledOnceWithExactly(writer.enableDeliveryTracking, sinon.match.object)
+    })
+
+    it('keeps serverless delivery tracking without an OTel TracerProvider', () => {
+      const deliveryTracker = {}
+      const writerOptions = {}
+      /** @param {object} options */
+      const Writer = function (options) {
+        Object.assign(writerOptions, options)
+        return writer
+      }
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        '../../serverless': { createServerlessDeliveryTracker: () => deliveryTracker },
+        './writer': Writer,
+      })
+
+      exporter = new Exporter({})
+
+      assert.strictEqual(writerOptions.deliveryTracker, deliveryTracker)
+    })
+
     it('should construct intake URL from site', () => {
       exporter = new Exporter({ site: 'datadoghq.eu' })
 
@@ -326,6 +378,7 @@ describe('AgentlessExporter', () => {
       Exporter = proxyquire('../../../src/exporters/agentless', {
         './writer': ControlledWriter,
       })
+      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ flushInterval: 1 })
       const done = sinon.spy()
 

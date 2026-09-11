@@ -3,14 +3,19 @@
 const { URL } = require('url')
 const getFlushError = require('../../flush-error')
 const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
 const Writer = require('./writer')
 
 class AgentExporter {
-  #deliveryTracker = new TelemetryDeliveryTracker()
+  #deliveryTracker
   #timer
 
   constructor (config, prioritySampler) {
+    this.#deliveryTracker = createServerlessDeliveryTracker()
+    if (!this.#deliveryTracker && TelemetryDeliveryTracker.isProcessTrackingEnabled()) {
+      this.#deliveryTracker = new TelemetryDeliveryTracker()
+    }
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled, flushInterval } = config
     this._url = config.url
@@ -31,6 +36,13 @@ class AgentExporter {
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
+  }
+
+  enableDeliveryTracking () {
+    if (this.#deliveryTracker) return
+
+    this.#deliveryTracker = new TelemetryDeliveryTracker()
+    this._writer.enableDeliveryTracking(this.#deliveryTracker)
   }
 
   setUrl (url) {
@@ -66,6 +78,16 @@ class AgentExporter {
   flush (done, options) {
     clearTimeout(this.#timer)
     this.#timer = undefined
+
+    if (!this.#deliveryTracker) {
+      try {
+        this._writer.flush(done, options)
+      } catch (error) {
+        log.error('Failed to flush traces: %s', error.message)
+        done?.(options?.reportErrors ? error : undefined)
+      }
+      return
+    }
 
     let boundaryError
     let waiting = false

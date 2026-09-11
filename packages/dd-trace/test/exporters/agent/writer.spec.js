@@ -169,6 +169,21 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('enables delivery tracking after construction', (done) => {
+      const deliveryTracker = { track: sinon.spy((flush, callback) => flush(callback)) }
+      writer = new Writer({ url, prioritySampler, protocolVersion })
+      writer.enableDeliveryTracking(deliveryTracker)
+
+      writer.flush(() => {
+        try {
+          sinon.assert.calledOnce(deliveryTracker.track)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
     it('should flush its traces to the agent, and call callback', (done) => {
       const expectedData = Buffer.from('prefixed')
 
