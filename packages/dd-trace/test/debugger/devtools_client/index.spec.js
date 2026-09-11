@@ -85,8 +85,8 @@ describe('onPause', function () {
       parentThreadId,
       dynamicInstrumentation: {
         captureTimeoutNs: 15_000_000n, // Default value is 15ms
-        redactedIdentifiers: [],
-        redactionExcludedIdentifiers: [],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
       },
       propagateProcessTags: { enabled: false },
       '@noCallThru': true,

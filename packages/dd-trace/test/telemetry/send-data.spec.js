@@ -270,7 +270,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        experimental: { exporter: 'agentless' },
+        experimental: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -290,7 +290,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        experimental: { exporter: 'agentless' },
+        experimental: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datad0g.com',
       },
@@ -308,7 +308,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        experimental: { exporter: 'agentless' },
+        experimental: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.com@evil.example',
       },
@@ -326,7 +326,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        experimental: { exporter: 'agentless' },
+        experimental: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },

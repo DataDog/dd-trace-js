@@ -23,5 +23,6 @@ function updateConfig (updates) {
   // The worker receives a serialized config (see ../config.js) where `url` is a string, so it is
   // reconstructed into a URL here rather than read directly off a Config instance.
   config.url = new URL(updates.url)
-  config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
+  config.dynamicInstrumentation.captureTimeoutNs =
+    BigInt(updates.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS) * 1_000_000n
 }
