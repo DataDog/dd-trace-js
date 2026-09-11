@@ -6,7 +6,7 @@ Override for `reviewers/conventions.md` (in the core skill folder) — read that
 
 Convention docs:
 
-- `AGENTS.md` (repo root) — authoritative: setup/package-manager policy, testing instructions, code style, import ordering, ECMAScript/Node target, event handlers, performance & memory rules, logging, error handling, architecture-decision scoring, backportability, public TS types, config-option checklist, instrumentation/plugin creation, debugging failures, PR/CI rules, flaky-test policy, vendoring.
+- `AGENTS.md` (repo root) — authoritative: setup/package-manager policy, testing instructions, code style, import ordering, ECMAScript/Node target, event handlers, performance & memory rules, logging, error handling, backportability, public TS types, config-option checklist, instrumentation/plugin creation, debugging failures, PR/CI rules, flaky-test policy, vendoring. Architecture-decision scoring lives in `.agents/skills/architecture-review/SKILL.md`, not in `AGENTS.md`.
 - `CLAUDE.md` (root) — one line, `See @AGENTS.md`.
 - `CONTRIBUTING.md` — small PRs, be descriptive, avoid large refactors, test everything, benchmarks, backportability + `DD_MAJOR` guard example, semver label definitions, `only-land-on-next`, all-green policy.
 - `.agents/skills/apm-integrations/SKILL.md` (+ `references/`) — instrumentation/plugin architecture and rules.
