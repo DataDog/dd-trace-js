@@ -23,6 +23,13 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     // Subscribe to streaming chunk events
     this.addSub('apm:google:genai:request:chunk', ({ ctx, chunk, done }) => {
+      if (!this._llmobsEnabled) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics. The aggregated
+        // response is left alone: it feeds the LLMObs payload and `google_genai.response.model`.
+        if (chunk?.usageMetadata) ctx.streamedUsageMetadata = chunk.usageMetadata
+        return
+      }
+
       ctx.isStreaming = true
       ctx.chunks ||= []
 
@@ -47,6 +54,13 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       kind: operation,
       name: 'google_genai.request',
     }
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractMetrics(ctx.result ?? { usageMetadata: ctx.streamedUsageMetadata }) }
   }
 
   setLLMObsTags (ctx) {

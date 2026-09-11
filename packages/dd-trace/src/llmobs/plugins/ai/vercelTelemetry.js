@@ -151,7 +151,10 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   constructor () {
     super(...arguments)
 
+    // the aggregated response is only used to build the LLMObs payload
     this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
+      if (!this._llmobsEnabled) return
+
       ctx.chunks ??= []
       const chunks = ctx.chunks
       if (chunk) chunks.push(chunk)

@@ -1,5 +1,14 @@
 'use strict'
 
+const INPUT_TOKENS_METRIC_KEY = 'input_tokens'
+const OUTPUT_TOKENS_METRIC_KEY = 'output_tokens'
+const TOTAL_TOKENS_METRIC_KEY = 'total_tokens'
+const CACHE_READ_INPUT_TOKENS_METRIC_KEY = 'cache_read_input_tokens'
+const CACHE_WRITE_INPUT_TOKENS_METRIC_KEY = 'cache_write_input_tokens'
+const CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_5m_input_tokens'
+const CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_1h_input_tokens'
+const REASONING_OUTPUT_TOKENS_METRIC_KEY = 'reasoning_output_tokens'
+
 module.exports = {
   SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval', 'experiment'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
@@ -42,6 +51,7 @@ module.exports = {
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
   UNKNOWN_MODEL_PROVIDER: 'unknown',
+  DEFAULT_MODEL: 'custom',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
@@ -52,14 +62,26 @@ module.exports = {
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
   OUTPUT_VALUE: '_ml_obs.meta.output.value',
 
-  INPUT_TOKENS_METRIC_KEY: 'input_tokens',
-  OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
-  TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'cache_read_input_tokens',
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'cache_write_input_tokens',
-  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY: 'ephemeral_5m_input_tokens',
-  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY: 'ephemeral_1h_input_tokens',
-  REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
+  INPUT_TOKENS_METRIC_KEY,
+  OUTPUT_TOKENS_METRIC_KEY,
+  TOTAL_TOKENS_METRIC_KEY,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+  REASONING_OUTPUT_TOKENS_METRIC_KEY,
+
+  // integrations build metric objects with these camelCase spellings
+  METRIC_KEY_ALIASES: {
+    inputTokens: INPUT_TOKENS_METRIC_KEY,
+    outputTokens: OUTPUT_TOKENS_METRIC_KEY,
+    totalTokens: TOTAL_TOKENS_METRIC_KEY,
+    cacheReadTokens: CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+    cacheWriteTokens: CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite5mTokens: CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite1hTokens: CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+    reasoningOutputTokens: REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  },
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
 

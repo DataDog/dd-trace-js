@@ -85,6 +85,13 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
     super.asyncEnd(ctx)
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { sessionId: ctx.session_id }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -243,6 +250,13 @@ class ToolLlmObsPlugin extends LLMObsPlugin {
   end (ctx) {
     super.end(ctx)
     super.asyncEnd(ctx)
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return subagentToolIds.delete(ctx.id) ? { spanKind: 'agent' } : {}
   }
 
   setLLMObsTags (ctx) {
