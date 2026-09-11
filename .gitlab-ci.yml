@@ -30,7 +30,7 @@ include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
   - project: "ddoghq/llm-validation-platform"
-    ref: &llmval_platform_sha "d59e4af6d6666092f65740b9a4d1bf3651a64321"
+    ref: &llmval_platform_sha "c331696647a78672101002ba48ccebbd41b0fae8" # v0.1.3
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
@@ -64,11 +64,6 @@ variables:
   variables:
     LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
     LLMVAL_PLATFORM_REF: *llmval_platform_sha
-    # Pin off the moving :newest tag. That tag drifted (rebuilt 2025-09-09) and
-    # broke run.sh's runtime node install. This digest is the last-known-good
-    # pre-drift snapshot (tag latest_20250820_1050). Temporary quick fix to
-    # verify the pin works; the durable fix belongs in the platform template.
-    LLMVAL_IMAGE: "registry.ddbuild.io/images/benchmarking-platform-tools-ubuntu@sha256:f7da05d166e46a70b93cee8cb8028354402a443313c41530aea0b9f8e52b5811"
 
 llm validation definitions:
   extends: llm validation

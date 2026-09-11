@@ -23,7 +23,7 @@ do not modify unrelated behavior.
 - `integration-tests/` — end-to-end and process-level tests
 - `benchmark/` — performance benchmarks
 - `scripts/` — repository and release tooling
-- `vendor/` — bundled dependencies.
+- `vendor/` — bundled dependencies
 
 Packages generally contain `src/` and `test/`; unit tests use the `*.spec.js` suffix.
 
@@ -94,9 +94,9 @@ See `CONTRIBUTING.md#testing` for detailed test conventions and service setup.
 
 Group imports with blank lines and sort within each group:
 
-1. Node.js core modules using the `node:` prefix
-2. Third-party modules
-3. Internal modules, furthest path first
+1. Node.js core modules using the `node:` prefix.
+2. Third-party modules.
+3. Internal modules, furthest path first.
 
 For new methods, add TypeScript-compatible JSDoc with specific parameter and return types. Reuse existing typedefs,
 never use `any`, and do not add runtime work solely to satisfy static typing. Do not rewrite unrelated code only to
