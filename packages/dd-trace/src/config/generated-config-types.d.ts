@@ -4,6 +4,16 @@
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
+  aiguard: {
+    DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
+    DD_AI_GUARD_BLOCK: boolean;
+    DD_AI_GUARD_ENABLED: boolean;
+    DD_AI_GUARD_ENDPOINT: string | undefined;
+    DD_AI_GUARD_MAX_CONTENT_SIZE: number;
+    DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+    DD_AI_GUARD_REDACTION_ENABLED: boolean;
+    DD_AI_GUARD_TIMEOUT: number;
+  };
   apmTracingEnabled: boolean;
   appsec: {
     DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
@@ -61,7 +71,6 @@ export interface GeneratedConfig {
   DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
-  DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_API_KEY: string | undefined;
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
@@ -408,15 +417,6 @@ export interface GeneratedConfig {
   };
   env: string | undefined;
   experimental: {
-    aiguard: {
-      block: boolean;
-      enabled: boolean;
-      endpoint: string | undefined;
-      maxContentSize: number;
-      maxMessagesLength: number;
-      redactionEnabled: boolean;
-      timeout: number;
-    };
     b3: boolean;
     enableGetRumData: boolean;
     exporter: string;
@@ -460,19 +460,19 @@ export interface GeneratedConfig {
   };
   legacyBaggageEnabled: boolean;
   llmobs: {
-    agentlessEnabled: boolean | undefined;
+    DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
-    mlApp: string | undefined;
-    projectName: string | undefined;
-    sampleRate: number;
+    DD_LLMOBS_ML_APP: string | undefined;
+    DD_LLMOBS_PROJECT_NAME: string | undefined;
+    DD_LLMOBS_SAMPLE_RATE: number;
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   middlewareTracingEnabled: boolean;
   openai: {
+    DD_OPENAI_LOGS_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
-  openAiLogsEnabled: boolean;
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
   OTEL_BSP_MAX_QUEUE_SIZE: number;
   OTEL_BSP_SCHEDULE_DELAY: number;

@@ -62,7 +62,7 @@ describe('tagger', () => {
 
   describe('without softFail', () => {
     beforeEach(() => {
-      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app' } })
+      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-default-ml-app' } })
     })
 
     describe('registerLLMObsSpan', () => {
@@ -246,7 +246,13 @@ describe('tagger', () => {
         })
 
         it('records a DROPPED decision on a root span when sampleRate is 0', () => {
-          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 0 } })
+          tagger = new Tagger({
+            llmobs: {
+              DD_LLMOBS_ENABLED: true,
+              DD_LLMOBS_ML_APP: 'my-default-ml-app',
+              DD_LLMOBS_SAMPLE_RATE: 0,
+            },
+          })
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(span)
@@ -256,7 +262,13 @@ describe('tagger', () => {
 
         it('truncates a longer rate to at most 6 decimals', () => {
           // 1/3 = 0.3333... which must be capped at 6 decimal places.
-          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 1 / 3 } })
+          tagger = new Tagger({
+            llmobs: {
+              DD_LLMOBS_ENABLED: true,
+              DD_LLMOBS_ML_APP: 'my-default-ml-app',
+              DD_LLMOBS_SAMPLE_RATE: 1 / 3,
+            },
+          })
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.333333')
@@ -264,7 +276,13 @@ describe('tagger', () => {
 
         it('strips trailing zeros from a fractional rate', () => {
           // 0.25 -> "0.250000" via toFixed(6), which must be stripped back to "0.25".
-          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 0.25 } })
+          tagger = new Tagger({
+            llmobs: {
+              DD_LLMOBS_ENABLED: true,
+              DD_LLMOBS_ML_APP: 'my-default-ml-app',
+              DD_LLMOBS_SAMPLE_RATE: 0.25,
+            },
+          })
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.25')
@@ -303,13 +321,19 @@ describe('tagger', () => {
           // The tagger reads sampleRate from config on each root decision, so a
           // mutation (such as a future remote config update) takes effect without
           // re-instantiating the tagger.
-          const config = { llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 1 } }
+          const config = {
+            llmobs: {
+              DD_LLMOBS_ENABLED: true,
+              DD_LLMOBS_ML_APP: 'my-default-ml-app',
+              DD_LLMOBS_SAMPLE_RATE: 1,
+            },
+          }
           tagger = new Tagger(config)
 
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
           assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
 
-          config.llmobs.sampleRate = 0
+          config.llmobs.DD_LLMOBS_SAMPLE_RATE = 0
           const nextSpan = { context () { return spanContext } }
           tagger.registerLLMObsSpan(nextSpan, { kind: 'llm' })
 
@@ -464,7 +488,7 @@ describe('tagger', () => {
                 normalizeLlmObsTraceId,
               },
             })
-            realTagger = new RealTagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test-app' } })
+            realTagger = new RealTagger({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'test-app' } })
           })
 
           it('detects a real gen_ai.* ancestor, suppresses llmobs_parent_id, and uses ancestor as event parent', () => {
@@ -1520,7 +1544,7 @@ describe('tagger', () => {
 
   describe('with softFail', () => {
     beforeEach(() => {
-      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app' } }, true)
+      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-default-ml-app' } }, true)
     })
 
     it('logs a warning when an unexpected value is encountered for text tagging', () => {

@@ -35,7 +35,7 @@ const enabledConfig = (overrides = {}) => ({
   site: 'datadoghq.com',
   DD_API_KEY: 'k',
   DD_APP_KEY: 'a',
-  llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-app' },
+  llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app' },
   ...overrides,
 })
 
@@ -159,7 +159,7 @@ describe('LLMObs Experiments facade', () => {
       })
 
       const exp = createWithProjectCapture(enabledConfig({
-        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'ml-app', projectName: 'configured-project' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'ml-app', DD_LLMOBS_PROJECT_NAME: 'configured-project' },
       }))
       exp.createDataset('default')
       exp.createDataset('override', { projectName: 'override-project' })
@@ -180,7 +180,7 @@ describe('LLMObs Experiments facade', () => {
       })
 
       const exp = createWithProjectCapture(enabledConfig({
-        llmobs: { DD_LLMOBS_ENABLED: true, projectName: 'default-project' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_PROJECT_NAME: 'default-project' },
       }))
       const dataset = exp.createDataset('dataset', { projectName: 'dataset-project' })
       exp.experiment({ name: 'dataset-exp', dataset, task: input => input })
@@ -211,7 +211,7 @@ describe('LLMObs Experiments facade', () => {
     it('does not use mlApp or service as the experiment project fallback', () => {
       const withMlApp = createExperiments(enabledConfig({
         service: 'my-service',
-        llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-app' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app' },
       }))
       assert.equal(withMlApp.createDataset('with-ml-app').projectName(), 'default-project')
 

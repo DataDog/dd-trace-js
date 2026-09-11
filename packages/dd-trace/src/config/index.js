@@ -541,9 +541,9 @@ class Config extends ConfigBase {
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
-        (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp') ||
-        trackedConfigOrigins.has('llmobs.projectName'))) {
+        (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -659,7 +659,7 @@ class Config extends ConfigBase {
         setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
       }
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
-      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
       if (this.DD_API_KEY === undefined) {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
