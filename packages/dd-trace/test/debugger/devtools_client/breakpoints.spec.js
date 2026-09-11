@@ -179,12 +179,7 @@ describe('breakpoints', function () {
     it('should set the probe sampling interval', async function () {
       await addProbe({ sampling: { snapshotsPerSecond: 0.5 } })
 
-      // Verify the probe was stored in the breakpointToProbes map
-      const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-      assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-      const probe = probesAtLocation.get('probe-1')
-      assert(probe, 'Probe should be stored in map')
+      const probe = getInstalledProbe()
 
       // Verify nsBetweenSampling is calculated correctly
       assert.strictEqual(
@@ -257,11 +252,7 @@ describe('breakpoints', function () {
       it('should set default capture limits when captureSnapshot is true', async function () {
         await addProbe({ captureSnapshot: true })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.deepStrictEqual(probe.capture, {
           maxReferenceDepth: 3,
@@ -279,11 +270,7 @@ describe('breakpoints', function () {
           },
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.deepStrictEqual(probe.capture, {
           maxReferenceDepth: 5,
@@ -301,11 +288,7 @@ describe('breakpoints', function () {
           },
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.deepStrictEqual(probe.capture, {
           maxReferenceDepth: 3,
@@ -323,11 +306,7 @@ describe('breakpoints', function () {
           },
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.deepStrictEqual(probe.capture, {
           maxReferenceDepth: 3,
@@ -345,11 +324,7 @@ describe('breakpoints', function () {
           },
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.deepStrictEqual(probe.capture, {
           maxReferenceDepth: 3,
@@ -362,11 +337,7 @@ describe('breakpoints', function () {
       it('should not set capture limits when captureSnapshot is false', async function () {
         await addProbe({ captureSnapshot: false })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.strictEqual(probe.capture, undefined)
       })
@@ -374,11 +345,7 @@ describe('breakpoints', function () {
       it('should not set capture limits when captureSnapshot is undefined', async function () {
         await addProbe()
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert(probe, 'Probe should be stored in map')
+        const probe = getInstalledProbe()
 
         assert.strictEqual(probe.capture, undefined)
       })
@@ -625,13 +592,8 @@ describe('breakpoints', function () {
           ],
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        const probe = getInstalledProbe()
 
-        assert.ok(probesAtLocation, 'could not find probes at location')
-
-        const probe = probesAtLocation.get('probe-1')
-
-        assert.ok(probe, 'could not find probe')
         assert.ok(probe.compiledCaptureExpressions, 'compiledCaptureExpressions should be present')
 
         assert.strictEqual(probe.compiledCaptureExpressions.length, 2)
@@ -663,13 +625,8 @@ describe('breakpoints', function () {
           ],
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        const probe = getInstalledProbe()
 
-        assert.ok(probesAtLocation, 'could not find probes at location')
-
-        const probe = probesAtLocation.get('probe-1')
-
-        assert.ok(probe, 'could not find probe')
         assert.deepStrictEqual(probe.compiledCaptureExpressions, [
           {
             name: 'a',
@@ -750,11 +707,7 @@ describe('breakpoints', function () {
           captureExpressions: [],
         })
 
-        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
-        assert.ok(probesAtLocation, 'could not find probes at location')
-
-        const probe = probesAtLocation.get('probe-1')
-        assert.ok(probe, 'could not find probe')
+        const probe = getInstalledProbe()
 
         assert.strictEqual(probe.compiledCaptureExpressions, undefined)
       })
