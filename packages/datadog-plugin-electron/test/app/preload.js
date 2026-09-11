@@ -19,6 +19,10 @@ ipcRenderer.on('datadog:test:send', () => {
   setImmediate(() => ipcRenderer.send('set-title', 'Test'))
 })
 
+ipcRenderer.on('datadog:test:send-untraced', () => {
+  setImmediate(() => ipcRenderer.postMessage('set-title-untraced', undefined))
+})
+
 ipcRenderer.on('datadog:test:invoke', () => {
   setImmediate(() => ipcRenderer.invoke('get-data'))
 })
