@@ -450,6 +450,7 @@ cases:
 
   - id: js-maintainability-silent-catch
     files:
+      - AGENTS.md
       - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
