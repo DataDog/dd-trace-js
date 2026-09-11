@@ -168,10 +168,11 @@ cases:
       Answer in at most 3 bullets and mention every stated exception.
     expected_criteria:
       - Rejects adding a promise-returning helper to ordinary shipped production code.
+      - Treats a Promise-returning helper as the same ban as async/await; "no async keyword" is not permission.
       - Notes that promises are allowed in tests.
       - Notes that promises are allowed in worker threads.
     bad_signals:
-      - Accepts adding a promise-returning helper to ordinary shipped production code.
+      - Says yes, or otherwise allows a promise-returning helper in shipped production code. Listing the tests / worker-thread exceptions is not this signal.
       - Claims promises are forbidden in tests.
       - Claims promises are forbidden in worker threads.
 
