@@ -1140,7 +1140,6 @@ describe('Config', () => {
       env: undefined,
       experimental: {
         aiguard: {
-          analyzeStreamResponsesEnabled: false,
           block: true,
           enabled: false,
           endpoint: undefined,
@@ -1626,7 +1625,6 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         aiguard: {
-          analyzeStreamResponsesEnabled: true,
           block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
@@ -2136,7 +2134,6 @@ describe('Config', () => {
       experimental: {
         b3: true,
         aiguard: {
-          analyzeStreamResponsesEnabled: true,
           block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
@@ -2244,7 +2241,6 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         aiguard: {
-          analyzeStreamResponsesEnabled: true,
           block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
@@ -2391,7 +2387,6 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'code' },
       { name: 'DD_ENV', value: 'test', origin: 'code' },
-      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: true, origin: 'code' },
       { name: 'DD_AI_GUARD_ENABLED', value: true, origin: 'code' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'code' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
@@ -2806,7 +2801,6 @@ describe('Config', () => {
       env: 'development',
       experimental: {
         aiguard: {
-          analyzeStreamResponsesEnabled: true,
           block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
@@ -2922,7 +2916,6 @@ describe('Config', () => {
       env: 'development',
       experimental: {
         aiguard: {
-          analyzeStreamResponsesEnabled: true,
           block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
