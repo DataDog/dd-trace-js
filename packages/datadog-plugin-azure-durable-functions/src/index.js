@@ -6,7 +6,6 @@ const { writeTraceparent, writeTracestate } = require('../../dd-trace/src/carrie
 
 const ORCHESTRATION_FAILURE_END_CHANNEL =
   'tracing:orchestrion:durable-functions:TaskOrchestrationExecutor_failure:end'
-const ORCHESTRATOR_STARTED_EVENT_TYPE = 12
 const ORCHESTRATOR_COMPLETED_EVENT_TYPE = 13
 
 class AzureDurableFunctionsPlugin extends TracingPlugin {
@@ -108,20 +107,9 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     const history = args[1]
     if (!Array.isArray(history)) return
 
-    let hasPreviousActivation = false
-    let startTime
-
-    for (let i = history.length - 1; i >= 0; i--) {
-      const event = history[i]
-      if (event?.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE) {
-        hasPreviousActivation = true
-      } else if (startTime === undefined && event?.EventType === ORCHESTRATOR_STARTED_EVENT_TYPE) {
-        const timestamp = Date.parse(event.Timestamp)
-        if (Number.isFinite(timestamp)) startTime = timestamp
-      }
-
-      if (hasPreviousActivation && startTime !== undefined) break
-    }
+    const hasPreviousActivation = history.some(
+      event => event?.EventType === ORCHESTRATOR_COMPLETED_EVENT_TYPE
+    )
 
     if (!hasPreviousActivation) {
       this.addError(executorCtx.error)
@@ -134,7 +122,6 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
       functionName: invocationContext?.functionName,
       traceparent: traceContext?.traceParent,
       tracestate: traceContext?.traceState,
-      startTime,
       error: executorCtx.error,
     }
 

@@ -338,7 +338,7 @@ describe('azure-durable-functions plugin', () => {
       startSpan,
       'azure.functions.invoke',
       sinon.match({
-        startTime: Date.parse('2026-09-04T12:34:56.789Z'),
+        startTime: undefined,
         tags: sinon.match({
           'aas.function.name': 'PizzaOrderOrchestration',
           'aas.function.trigger': 'Orchestration',
