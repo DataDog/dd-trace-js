@@ -23,7 +23,7 @@ do not modify unrelated behavior.
 - `integration-tests/` — end-to-end and process-level tests
 - `benchmark/` — performance benchmarks
 - `scripts/` — repository and release tooling
-- `vendor/` — bundled dependencies
+- `vendor/` — bundled dependencies.
 
 Packages generally contain `src/` and `test/`; unit tests use the `*.spec.js` suffix.
 
