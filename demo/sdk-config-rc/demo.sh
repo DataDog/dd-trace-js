@@ -21,10 +21,12 @@ AGENT_ENV="$CRED_DIR/agent.env"
 AGENT_NAME=dd-agent-rc-demo
 AGENT_PORT="${AGENT_PORT:-18226}"
 APP_PORT="${APP_PORT:-18080}"
-SERVICE=sdk-config-demo
-ENVIRONMENT=demo
+SERVICE="${RC_DEMO_SERVICE:-sdk-config-demo}"
+ENVIRONMENT="${RC_DEMO_ENV:-demo}"
 STATE_FILE=/tmp/rc-demo-config-id
 APP_LOG=/tmp/rc-demo-app.log
+CANONICAL_PAYLOAD=/tmp/rc-demo-profiling-enable.json
+JSONAPI_PAYLOAD=/tmp/rc-demo-jsonapi-profiling-enable.json
 SITE="$(sed -n 's/^DD_SITE=//p' "$AGENT_ENV" 2>/dev/null || echo datadoghq.com)"
 BASE="https://api.${SITE}/api/unstable/remote_config/products/apm_tracing"
 
@@ -34,6 +36,28 @@ bad()  { printf '  \033[31m✗\033[0m %s\n' "$*"; }
 info() { printf '    %s\n' "$*"; }
 
 state_json() { curl -sS -m 5 "http://127.0.0.1:${APP_PORT}/state" 2>/dev/null; }
+
+render_payloads() {
+  python3 - "$SERVICE" "$ENVIRONMENT" "$CANONICAL_PAYLOAD" "$JSONAPI_PAYLOAD" <<'PY'
+import json, sys
+
+service, env, canonical_path, jsonapi_path = sys.argv[1:]
+attributes = {
+    "action": "enable",
+    "lib_config": {"service_name": service, "env": env},
+    "service_target": {"service": service, "env": env},
+    "sdk_config": {
+        "service_name": service,
+        "env": env,
+        "config": {"DD_PROFILING_ENABLED": "true"},
+    },
+}
+with open(canonical_path, "w", encoding="utf-8") as stream:
+    json.dump(attributes, stream, indent=2)
+with open(jsonapi_path, "w", encoding="utf-8") as stream:
+    json.dump({"data": {"type": "apm_tracing_config", "attributes": attributes}}, stream, indent=2)
+PY
+}
 
 show_state() {
   # Avoid quote-escaping inside the embedded snippet: %-formatting only, no f-strings.
@@ -107,11 +131,12 @@ setup)
   ;;
 
 payload)
+  render_payloads
   bold "The payload"
   info "product: APM_TRACING   ·   field: sdk_config.config (env-var-keyed string map)"
-  python3 -m json.tool payloads/jsonapi-profiling-enable.json | sed 's/^/    /'
+  python3 -m json.tool "$JSONAPI_PAYLOAD" | sed 's/^/    /'
   bold "Validated against REAL dd-go backend code (not an assumption about the format)"
-  ./preflight.sh payloads/profiling-enable.json 2>&1 \
+  ./preflight.sh "$CANONICAL_PAYLOAD" 2>&1 \
     | grep -E 'PASS:|FAIL:|preflight OK|preflight FAILED|dd-go @' | sed 's/^/    /'
   bold "And the same validator rejects what the backend rejects"
   ./preflight.sh payloads/rejected-example.json 2>&1 \
@@ -120,10 +145,11 @@ payload)
 
 publish)
   require_creds
+  render_payloads
   bold "Publishing to real rc-api"
   info "POST ${BASE}/configs"
   RESP=$(curl -sS --config "$CURLRC" -X POST "${BASE}/configs" \
-           -d @payloads/jsonapi-profiling-enable.json -w '\n%{http_code}' 2>&1)
+           -d @"$JSONAPI_PAYLOAD" -w '\n%{http_code}' 2>&1)
   CODE=$(printf '%s' "$RESP" | tail -1)
   BODY=$(printf '%s' "$RESP" | sed '$d')
   if [ "$CODE" != "201" ]; then bad "HTTP $CODE"; printf '    %s\n' "$BODY"; exit 1; fi
@@ -201,6 +227,7 @@ teardown)
   else
     ok "no demo config left in the org"
   fi
+  rm -f "$CANONICAL_PAYLOAD" "$JSONAPI_PAYLOAD"
   docker ps --format '    {{.Names}}  {{.Status}}' | sed 1d >/dev/null 2>&1
   info "your own containers:"; docker ps --format '      {{.Names}}  {{.Status}}'
   ;;
