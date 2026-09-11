@@ -672,25 +672,6 @@ describe('OpenTelemetry Meter Provider', () => {
       callback()
     }
 
-    it('exposes callback shutdown on the meter provider', () => {
-      const callbacks = {}
-      const reader = {
-        shutdown: done => { callbacks.shutdown = done },
-      }
-      const provider = new MeterProvider({ reader })
-      const shutdownDone = sinon.spy()
-
-      assert.strictEqual(provider.shutdown(shutdownDone), undefined)
-      sinon.assert.notCalled(shutdownDone)
-      callbacks.shutdown(null)
-      sinon.assert.calledOnceWithExactly(shutdownDone, null)
-
-      const emptyProvider = new MeterProvider()
-      const emptyShutdownDone = sinon.spy()
-      emptyProvider.shutdown(emptyShutdownDone)
-      sinon.assert.calledOnceWithExactly(emptyShutdownDone, null)
-    })
-
     it('serializes forceFlush exports', async () => {
       const exports = []
       const flushes = []
@@ -759,7 +740,7 @@ describe('OpenTelemetry Meter Provider', () => {
       provider.getMeter('test').createCounter('requests').add(1)
       reader.forceFlush(forceFlushDone)
       provider.getMeter('test').createCounter('final').add(1)
-      assert.strictEqual(provider.shutdown(done), undefined)
+      reader.shutdown(done)
       reader.forceFlush(shutdownFlushDone)
 
       assert.strictEqual(exports.length, 1)
@@ -800,14 +781,11 @@ describe('OpenTelemetry Meter Provider', () => {
       sinon.assert.calledOnce(shutdownDone)
     })
 
-    it('handles shutdown gracefully', (done) => {
+    it('keeps lifecycle methods private', () => {
       setupMetrics()
       const provider = metrics.getMeterProvider()
       assert.strictEqual(provider.forceFlush, undefined)
-      provider.shutdown(error => {
-        assert.ifError(error)
-        provider.shutdown(done)
-      })
+      assert.strictEqual(provider.shutdown, undefined)
     })
 
     it('handles internal force flush', (done) => {
