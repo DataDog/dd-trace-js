@@ -260,7 +260,7 @@ class BaseFFEWriter {
   }
 
   /**
-   * Sends an encoded batch and retries it through direct intake after a local route failure.
+   * Sends an encoded batch and switches to direct intake after supported local route failures.
    *
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
@@ -285,14 +285,14 @@ class BaseFFEWriter {
 
       if (fallbackRoute && isAmbiguousNetworkFailure(error)) {
         log.debug(
-          '%s retrying through direct intake and switching future batches from %s%s after ambiguous failure',
+          '%s switching future batches from %s%s to direct intake after ambiguous failure without replaying the batch',
           this.constructor.name,
           route.url.href,
           route.endpoint
         )
         this.#activateRoute(fallbackRoute)
         this._fallbackRoute = undefined
-        this.#sendRequest(payload, eventCount, fallbackRoute)
+        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
         return
       }
 
