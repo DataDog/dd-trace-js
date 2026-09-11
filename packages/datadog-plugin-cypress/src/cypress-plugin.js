@@ -1599,15 +1599,19 @@ class CypressPlugin {
     // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
     let latestError
 
-    const finishedTestsByTestName = finishedTests.reduce((acc, finishedTest) => {
-      if (!acc[finishedTest.testName]) {
-        acc[finishedTest.testName] = []
+    // Test titles are user-defined. Use a Map so names such as "constructor"
+    // cannot collide with Object.prototype while grouping completed attempts.
+    const finishedTestsByTestName = new Map()
+    for (const finishedTest of finishedTests) {
+      let finishedTestAttempts = finishedTestsByTestName.get(finishedTest.testName)
+      if (!finishedTestAttempts) {
+        finishedTestAttempts = []
+        finishedTestsByTestName.set(finishedTest.testName, finishedTestAttempts)
       }
-      acc[finishedTest.testName].push(finishedTest)
-      return acc
-    }, {})
+      finishedTestAttempts.push(finishedTest)
+    }
 
-    for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
+    for (const [testName, finishedTestAttempts] of finishedTestsByTestName) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
