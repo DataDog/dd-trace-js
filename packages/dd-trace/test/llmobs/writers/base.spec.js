@@ -210,6 +210,31 @@ describe('BaseLLMObsWriter', () => {
     })
   })
 
+  describe('when the Lambda extension is present', () => {
+    beforeEach(() => {
+      BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
+        '../../exporters/common/request': request,
+        '../../log': logger,
+        '../../serverless': { isLambdaExtensionPresent: () => true },
+        './util': proxyquire('../../../src/llmobs/writers/util', {
+          '../../log': logger,
+        }),
+      })
+    })
+
+    it('flushes synchronously on append instead of using a periodic timer', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' })
+
+      assert.strictEqual(writer._periodic, undefined)
+      assert.strictEqual(writer._buffer.events.length, 0)
+      sinon.assert.calledOnce(request)
+    })
+  })
+
   describe('flush', () => {
     it('flushes a buffer in agentless mode', () => {
       writer = new BaseLLMObsWriter(options)

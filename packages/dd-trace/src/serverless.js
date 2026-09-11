@@ -1,6 +1,8 @@
 'use strict'
 
+const fs = require('node:fs')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+const { DATADOG_LAMBDA_EXTENSION_PATH, DATADOG_MINI_AGENT_PATH } = require('./constants')
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -32,6 +34,17 @@ function getIsAzureFunction () {
 
 function getIsFlexConsumptionAzureFunction () {
   return getIsAzureFunction() && getEnvironmentVariable('WEBSITE_SKU') === 'FlexConsumption'
+}
+
+/**
+ * Whether the Datadog Lambda Extension (or mini agent) is running alongside the function,
+ * i.e. traces/events can be handed off to a local sidecar instead of an external intake.
+ */
+function isLambdaExtensionPresent () {
+  return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined && (
+    fs.existsSync(DATADOG_LAMBDA_EXTENSION_PATH) ||
+    fs.existsSync(DATADOG_MINI_AGENT_PATH)
+  )
 }
 
 function isInServerlessEnvironment () {
@@ -84,5 +97,6 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  isLambdaExtensionPresent,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

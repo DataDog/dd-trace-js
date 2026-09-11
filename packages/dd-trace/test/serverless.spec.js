@@ -3,11 +3,49 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
 const { getServerlessPlatformTags, enableGCPPubSubPushSubscription } = require('../src/serverless')
 const agent = require('./plugins/agent')
+
+describe('isLambdaExtensionPresent', () => {
+  const originalFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
+
+  afterEach(() => {
+    if (originalFunctionName === undefined) delete process.env.AWS_LAMBDA_FUNCTION_NAME
+    else process.env.AWS_LAMBDA_FUNCTION_NAME = originalFunctionName
+  })
+
+  function isLambdaExtensionPresentWithFs (existsSync) {
+    return proxyquire('../src/serverless', {
+      'node:fs': { existsSync },
+    }).isLambdaExtensionPresent
+  }
+
+  it('is false outside of Lambda', () => {
+    delete process.env.AWS_LAMBDA_FUNCTION_NAME
+    assert.strictEqual(isLambdaExtensionPresentWithFs(() => true)(), false)
+  })
+
+  it('is false in Lambda when neither the extension nor the mini agent is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-function'
+    assert.strictEqual(isLambdaExtensionPresentWithFs(() => false)(), false)
+  })
+
+  it('is true in Lambda when the extension is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-function'
+    const existsSync = (path) => path === '/opt/extensions/datadog-agent'
+    assert.strictEqual(isLambdaExtensionPresentWithFs(existsSync)(), true)
+  })
+
+  it('is true in Lambda when the mini agent is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-function'
+    const existsSync = (path) => path === '/tmp/datadog/mini_agent_ready'
+    assert.strictEqual(isLambdaExtensionPresentWithFs(existsSync)(), true)
+  })
+})
 
 describe('enableGCPPubSubPushSubscription', () => {
   const originalKService = process.env.K_SERVICE

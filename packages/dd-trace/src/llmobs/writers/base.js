@@ -4,6 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
+const { isLambdaExtensionPresent } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -33,10 +34,12 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
-  // In Lambda, `config.flushInterval` is forced to 0 (see config/index.js) because the execution
-  // environment can freeze between invocations, so a buffered flush (interval timer or process
-  // 'beforeExit', which only ever fires once per container) may never run before the next event
-  // is dropped. Evaluated once here rather than re-read on every append().
+  // In Lambda, the execution environment can freeze between invocations, so a buffered flush
+  // (interval timer or process 'beforeExit', which only ever fires once per container) may never
+  // run before the next event is dropped. `config.flushInterval` is forced to 0 (see config/index.js)
+  // when there's no extension to hand events off to, and when the extension IS present, flushing on
+  // append is cheap (a local call to a co-located sidecar) so it's worth doing eagerly there too.
+  // Evaluated once here rather than re-read on every append().
   #flushOnAppend
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
@@ -58,7 +61,7 @@ class BaseLLMObsWriter {
     this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
 
-    this.#flushOnAppend = config.flushInterval === 0
+    this.#flushOnAppend = config.flushInterval === 0 || isLambdaExtensionPresent()
 
     if (!this.#flushOnAppend) {
       this._periodic = setInterval(() => {
