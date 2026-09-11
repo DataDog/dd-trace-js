@@ -1,13 +1,13 @@
 'use strict'
 
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
+const { AUDIO_FALLBACK } = require('../../constants/audio')
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart } = require('../../util')
 const {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
-  AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
 } = require('./constants')
 
@@ -186,11 +186,25 @@ function getOpenAIModelProvider (baseUrl = '') {
   return UNKNOWN_MODEL_PROVIDER
 }
 
+/**
+ * Pair an OpenAI-compatible base URL's model provider with the client label used in span names.
+ *
+ * @param {string} [baseUrl]
+ * @returns {{ modelProvider: string, client: string }}
+ */
+function getModelProviderAndClient (baseUrl = '') {
+  const modelProvider = getOpenAIModelProvider(baseUrl)
+  if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
+  if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
+  return { modelProvider, client: 'OpenAI' }
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
+  getModelProviderAndClient,
   getOpenAIModelProvider,
 }

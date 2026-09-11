@@ -1441,6 +1441,14 @@
         ]
       }
     ],
+    "DD_OPENAI_REALTIME_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
+      }
+    ],
     "DD_OPENAI_SPAN_CHAR_LIMIT": [
       {
         "implementation": "A",

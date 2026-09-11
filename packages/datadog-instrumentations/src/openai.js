@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
+const { patchRealtimeEmitter, patchRealtimeTransport, realtimeEnabled } = require('./openai-realtime')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
@@ -357,6 +358,40 @@ for (const extension of extensions) {
       }
       return exports
     })
+  }
+}
+
+// The Realtime API is a bidirectional WebSocket event stream, not request/response, so it can't
+// reuse the resource shims above. Every server event funnels through the emitter's `_emit`, and
+// every client event through the transport's `send`.
+//
+// Realtime ships at two paths: the current `realtime/*` (openai >=5.17.0) and the older
+// `beta/realtime/*`, which is a fully duplicated implementation with its own emitter and transport
+// classes — not a re-export — and still ships alongside it. Both are hooked, so an app that has not
+// moved off the beta import path is still instrumented. `addHook` on a file a given version doesn't
+// have is a no-op, so the ranges only need to be loose enough.
+const REALTIME_SHIMS = [
+  { file: 'realtime/internal-base', targetClass: 'OpenAIRealtimeEmitter', versions: ['>=5.17.0'] },
+  { file: 'realtime/ws', targetClass: 'OpenAIRealtimeWS', versions: ['>=5.17.0'] },
+  { file: 'realtime/websocket', targetClass: 'OpenAIRealtimeWebSocket', versions: ['>=5.17.0'] },
+  { file: 'beta/realtime/internal-base', targetClass: 'OpenAIRealtimeEmitter', versions: ['>=4'] },
+  { file: 'beta/realtime/ws', targetClass: 'OpenAIRealtimeWS', versions: ['>=4'] },
+  { file: 'beta/realtime/websocket', targetClass: 'OpenAIRealtimeWebSocket', versions: ['>=4'] },
+]
+
+if (realtimeEnabled()) {
+  for (const extension of extensions) {
+    for (const { file, targetClass, versions } of REALTIME_SHIMS) {
+      addHook({ name: 'openai', file: file + extension, versions }, exports => {
+        const prototype = exports[targetClass]?.prototype
+        if (targetClass === 'OpenAIRealtimeEmitter') {
+          patchRealtimeEmitter(prototype)
+        } else {
+          patchRealtimeTransport(prototype)
+        }
+        return exports
+      })
+    }
   }
 }
 
