@@ -63,7 +63,7 @@ See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery 
 
 Create `packages/datadog-instrumentations/src/<name>.js`. Always add a comment explaining why orchestrion is not viable!!!
 
-**When using shimmer, prefer `tracingChannel` over manual channels.** `tracingChannel` (from `dc-polyfill` or `diagnostics_channel`) automatically provides `start`, `end`, `asyncStart`, `asyncEnd`, and `error` events — less boilerplate and consistent with how orchestrion works internally.
+**When using shimmer, prefer `tracingChannel` over manual channels.** `tracingChannel` from `dc-polyfill` automatically provides `start`, `end`, `asyncStart`, `asyncEnd`, and `error` events — less boilerplate and consistent with how orchestrion works internally.
 
 **Streaming example** (the main case where shimmer is needed — intercepting emitted events on returned stream objects):
 

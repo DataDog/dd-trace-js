@@ -29,6 +29,9 @@ update_central_configurations_version_range_v2:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
+  - project: "ddoghq/llm-validation-platform"
+    ref: &llmval_platform_sha "d59e4af6d6666092f65740b9a4d1bf3651a64321"
+    file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
     ref: "main"
@@ -50,10 +53,28 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
-
+  # Test the OpenTelemetry Operator-compatible Node.js image jobs from one-pipeline.
+  OTEL_OPERATOR_IMAGES_ENABLED: "true"
+  OTEL_OPERATOR_LANGUAGE: nodejs
   # One pipeline injection package size ratchet
   OCI_PACKAGE_MAX_SIZE_BYTES: 30_000_000
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
+
+"llm validation":
+  variables:
+    LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
+    LLMVAL_PLATFORM_REF: *llmval_platform_sha
+
+llm validation definitions:
+  extends: llm validation
+  variables:
+    LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
+    LLMVAL_LEVEL: "minimum"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - .llm-validation/config.yaml
+        - .llm-validation/suites/**/*
 
 configure_system_tests:
   variables:

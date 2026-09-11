@@ -128,7 +128,9 @@ describe('test optimization validation manifest scaffold', () => {
       script: 'cucumber-js --require features/cucumber.js --profile ci',
     }, fixture => {
       fs.writeFileSync(path.join(fixture.root, 'cucumber.js'), [
-        'module.exports = {',
+        'module',
+        '  . exports',
+        '  = {',
         "  ci: 'features/**/*.feature -r features/steps.js -i features/steps.mjs',",
         "  description: \"old config: { ci: '-r legacy/stale.js' }\",",
         "  // old config: { ci: '-r legacy/stale.js' },",
@@ -203,6 +205,35 @@ describe('test optimization validation manifest scaffold', () => {
       ])
     })
   })
+
+  for (const [description, lineBoundary] of [
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['CR', '\r'],
+    ['line separator', '\u2028'],
+    ['paragraph separator', '\u2029'],
+    ['vertical tab before LF', '\v\n'],
+    ['form feed before LF', '\f\n'],
+    ['non-breaking space before LF', '\u00a0\n'],
+    ['byte order mark before LF', '\ufeff\n'],
+  ]) {
+    it(`expands a JavaScript Cucumber profile after ${description}`, () => {
+      withRepositoryFixture({
+        framework: 'cucumber',
+        script: 'cucumber-js --profile default',
+      }, fixture => {
+        fs.writeFileSync(
+          path.join(fixture.root, 'cucumber.js'),
+          `'use strict';${lineBoundary}module.exports = { default: '--strict' }\n`
+        )
+
+        const framework = scaffoldFramework(fixture, 'cucumber')
+
+        assert.strictEqual(framework.status, 'runnable')
+        assert.deepStrictEqual(framework.validation.runnerArgs, ['--strict'])
+      })
+    })
+  }
 
   for (const [description, requireValue] of [
     ['nested object', "{ path: 'features/steps.js' }"],
