@@ -6,9 +6,33 @@ const { describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { storage } = require('../../../datadog-core')
-const { AsyncResource, channel, createErrorPublisher } = require('../../src/helpers/instrument')
+const { addHook, AsyncResource, channel, createErrorPublisher, getHooks } = require('../../src/helpers/instrument')
+const instrumentations = require('../../src/helpers/instrumentations')
 
 describe('helpers/instrument', () => {
+  it('marks source-rewrite hooks with their original file path', () => {
+    const hooks = getHooks(['ai'])
+    const instrumentation = hooks.find(({ file }) => file === 'dist/index.js')
+    const original = instrumentations.ai
+    const originalLength = original?.length ?? 0
+
+    assert.ok(instrumentation)
+    assert.equal(Object.hasOwn(instrumentation, 'sourceRewrite'), false)
+    instrumentation.file = null
+
+    try {
+      addHook(instrumentation, () => {})
+      assert.equal(instrumentations.ai.at(-1).file, null)
+      assert.equal(instrumentations.ai.at(-1).sourceRewrite, 'dist/index.js')
+    } finally {
+      if (original) {
+        original.length = originalLength
+      } else {
+        delete instrumentations.ai
+      }
+    }
+  })
+
   describe('createErrorPublisher', () => {
     it('drops a re-entrant publish through the same publisher', () => {
       const errorChannel = channel('apm:test:publish-error:same')
