@@ -62,7 +62,7 @@ class GraphQLToolsResolveErrorPlugin extends TracingPlugin {
  */
 function recordResolveErrorForPath (error, path, fieldNodes) {
   const rootCtx = legacyStorage.getStore()?.graphqlRootCtx
-  if (!rootCtx?.config.collapse || !rootCtx.fields) return
+  if (!rootCtx?.config?.collapse || !rootCtx.fields) return
 
   const field = findResolveField(rootCtx.fields, getPathString(path), fieldNodes?.[0])
   if (field) recordResolveError(field, error)
