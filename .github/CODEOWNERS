@@ -8,10 +8,6 @@
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.vscode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-# Verbatim mirror of DataDog/dd-apm-sdk-review-core. Review the source there, not this copy.
-/.agents/skills/dd-apm-sdk-review/ @DataDog/lang-platform-js
-/.claude/skills/dd-apm-sdk-review @DataDog/lang-platform-js
-/.cursor/skills/dd-apm-sdk-review @DataDog/lang-platform-js
 /.agents/dd-apm-sdk-review-overrides/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /scripts/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /vendor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -585,3 +581,9 @@
 /.github/playwright/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /.github/selenium/Dockerfile @DataDog/dd-trace-js @DataDog/ci-app-libraries @dd-octo-sts
 /benchmark/sirun/Dockerfile* @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
+
+# Last match wins: keep this after `/*` so the mirror is lang-platform-js only.
+# Verbatim copy of DataDog/dd-apm-sdk-review-core. Review the source there, not this copy.
+/.agents/skills/dd-apm-sdk-review/ @DataDog/lang-platform-js
+/.claude/skills/dd-apm-sdk-review @DataDog/lang-platform-js
+/.cursor/skills/dd-apm-sdk-review @DataDog/lang-platform-js
