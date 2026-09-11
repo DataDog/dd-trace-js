@@ -23,6 +23,13 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmUsageMetrics (ctx) {
+    return extractMetrics(ctx.result)
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return

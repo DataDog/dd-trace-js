@@ -115,6 +115,65 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
   })
 
+  describe('with LLM Observability disabled', () => {
+    let apmTags
+
+    beforeEach(() => {
+      // the enabled plugin from the outer scope would consume the cached headers first
+      plugin.configure({ enabled: false })
+
+      plugin = new BedrockRuntimePlugin({}, {
+        llmobs: { DD_LLMOBS_ENABLED: false },
+        service: 'test',
+      })
+      plugin._tagger = { tagMetrics: tagMetricsSpy }
+      plugin.configure({ enabled: true })
+
+      apmTags = {}
+    })
+
+    it('tags the APM span with gen_ai attributes from the header token counts', () => {
+      publishDeserialize('req-disabled', { input: 5, output: 3, cacheRead: 2, cacheWrite: 1 })
+      completeCh.publish({
+        ...buildLlmComplete('req-disabled', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+        'gen_ai.usage.input_tokens': 8,
+        'gen_ai.usage.output_tokens': 3,
+        'gen_ai.usage.total_tokens': 11,
+        'gen_ai.usage.cache_read_input_tokens': 2,
+        'gen_ai.usage.cache_write_input_tokens': 1,
+      })
+      sinon.assert.notCalled(tagMetricsSpy)
+    })
+
+    it('emits nothing for an embedding model', () => {
+      publishDeserialize('req-embed', { input: 5 })
+      completeCh.publish({
+        ...buildLlmComplete('req-embed', 'amazon.embed-text'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {})
+    })
+
+    function buildSpan () {
+      const spanContext = {
+        _trace: { tags: {} },
+        setTag (key, value) {
+          apmTags[key] = value
+        },
+      }
+      return { context: () => spanContext }
+    }
+  })
+
   function publishDeserialize (requestId, { input, output, cacheRead, cacheWrite } = {}) {
     const headers = { 'x-amzn-requestid': requestId }
     if (input != null) headers['x-amzn-bedrock-input-token-count'] = String(input)

@@ -22,7 +22,10 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     super(...arguments)
 
     // Subscribe to streaming chunk events
+    // the aggregated response is only used to build the LLMObs payload
     this.addSub('apm:google:genai:request:chunk', ({ ctx, chunk, done }) => {
+      if (!this._llmobsEnabled) return
+
       ctx.isStreaming = true
       ctx.chunks ||= []
 
@@ -47,6 +50,13 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       kind: operation,
       name: 'google_genai.request',
     }
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmUsageMetrics (ctx) {
+    if (ctx.result) return extractMetrics(ctx.result)
   }
 
   setLLMObsTags (ctx) {

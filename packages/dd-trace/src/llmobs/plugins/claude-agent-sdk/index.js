@@ -111,7 +111,8 @@ class StepLlmObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:apm:claude-agent-sdk:step'
 
   getLLMObsSpanRegisterOptions (ctx) {
-    if (ctx.parentToolUseId) subagentToolIds.add(ctx.parentToolUseId)
+    // the tool plugin only drains this while the LLMObs payload is being built
+    if (this._llmobsEnabled && ctx.parentToolUseId) subagentToolIds.add(ctx.parentToolUseId)
     return { kind: 'step', name: `step-${ctx.stepIndex}`, sessionId: ctx.sessionId }
   }
 
