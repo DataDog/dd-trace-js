@@ -16,18 +16,21 @@ const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
 let isEnabled = false
 let aiguard
 let opts
+let analyzeStreamResponses
 
 /**
  * Subscribes AI Guard to the Vercel AI model call channel.
  *
  * @param {object} aiguardInstance
  * @param {boolean} block
+ * @param {boolean} analyzeStreams
  */
-function enable (aiguardInstance, block) {
+function enable (aiguardInstance, block, analyzeStreams) {
   if (isEnabled) return
 
   aiguard = aiguardInstance
   opts = { block, source: SOURCE_AUTO, integration: 'ai' }
+  analyzeStreamResponses = analyzeStreams
 
   modelInterceptChannel.subscribe(onModelIntercept)
 
@@ -41,6 +44,7 @@ function disable () {
 
   aiguard = undefined
   opts = undefined
+  analyzeStreamResponses = undefined
   isEnabled = false
 }
 
@@ -53,6 +57,8 @@ function onModelIntercept (ctx) {
     if (!isEnabled) return
     return evaluate(ctx, aiguard, [inputMessages], opts)
   }
+
+  if (ctx.method === 'doStream' && !analyzeStreamResponses) return
 
   ctx.onResult = ctx.method === 'doStream'
     ? result => {
