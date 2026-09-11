@@ -20,6 +20,9 @@ let hasWarnedMissingBeforeEachTaskResult = false
 let hasWarnedMissingBeforeEachRetryResult = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
+// Dynamic ATR computes the selected budget after the first attempt. Keep that result
+// in browser state and apply it when Cypress starts the retry runnable.
+const dynamicAtrRetryCountByTest = new Map()
 // Track test errors suppressed by test management so we can still report them to Datadog.
 const suppressedTestFailures = new Map()
 
@@ -362,16 +365,28 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   return oldRunTests.apply(this, [suite, fn])
 }
 
-Cypress.on('test:before:run', (attributes, test) => {
+function getDynamicAtrTestKey (test) {
+  return `${Cypress.mocha.getRootSuite().file}\0${test.fullTitle()}`
+}
+
+function configureTestRetries (test) {
   if (shouldDisableFrameworkRetries(test)) {
     disableFrameworkRetries(test)
+    return
   }
+
+  const dynamicAtrRetryCount = dynamicAtrRetryCountByTest.get(getDynamicAtrTestKey(test))
+  if (Number.isSafeInteger(dynamicAtrRetryCount)) {
+    test.retries(dynamicAtrRetryCount)
+  }
+}
+
+Cypress.on('test:before:run', (attributes, test) => {
+  configureTestRetries(test)
 })
 
 Cypress.on('test:before:run:async', (attributes, test) => {
-  if (shouldDisableFrameworkRetries(test)) {
-    disableFrameworkRetries(test)
-  }
+  configureTestRetries(test)
 })
 
 beforeEach(function () {
@@ -448,6 +463,7 @@ before(function () {
 })
 
 after(() => {
+  dynamicAtrRetryCountByTest.clear()
   try {
     if (safeGetRum(originalWindow)) {
       originalWindow.dispatchEvent(new Event('beforeunload'))
@@ -523,10 +539,10 @@ afterEach(function () {
   }
 
   cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport }).then((taskResult) => {
-    // Cypress decides whether to retry after afterEach completes. Narrow the
-    // initial maximum through Mocha's retry API before Cypress makes that decision.
+    // Preserve the first-attempt result until Cypress starts the retry runnable.
+    // Changing the completed test here is too late for Cypress's retry lifecycle.
     if (taskResult && Number.isSafeInteger(taskResult.dynamicAtrRetryCount)) {
-      currentTest.retries(taskResult.dynamicAtrRetryCount)
+      dynamicAtrRetryCountByTest.set(getDynamicAtrTestKey(currentTest), taskResult.dynamicAtrRetryCount)
     }
   })
 })
