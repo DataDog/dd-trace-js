@@ -29,6 +29,10 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
   // CosmosDB triggers
   shimmer.wrap(app, 'cosmosDB', wrapHandler)
 
+  if (require('./helpers/otel-azure-enabled').isOtelAzureInstrumentationEnabled()) {
+    require('./otel-azure-functions').patchApp(app)
+  }
+
   return azureFunction
 })
 

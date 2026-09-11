@@ -18,6 +18,10 @@ addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (
   shimmer.wrap(app, 'entity', entityWrapper)
   shimmer.wrap(app, 'activity', activityHandler)
 
+  if (require('./helpers/otel-azure-enabled').isOtelAzureInstrumentationEnabled()) {
+    require('./otel-azure-durable-functions').patchApp(app)
+  }
+
   return df
 })
 
