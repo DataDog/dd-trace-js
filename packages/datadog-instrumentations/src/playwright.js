@@ -112,6 +112,8 @@ let isEarlyFlakeDetectionFaulty = false
 let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
+let isDynamicAtrEnabled = false
+let dynamicAtrBuckets
 let knownTests = {}
 let isTestManagementTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
@@ -1361,6 +1363,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+        isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
+        dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
@@ -1449,9 +1453,13 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // preventing them from being retried by ATR or `--retries`.
     const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
     if (shouldSetATRRetries) {
+      // When dynamic ATR is enabled, use the max bucket value as the initial count.
+      const atrRetries = isDynamicAtrEnabled
+        ? (dynamicAtrBuckets ? Math.max(...dynamicAtrBuckets) : earlyFlakeDetectionRetryPolicy.schedulingRetryCount)
+        : flakyTestRetriesCount
       for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
-          project.retries = flakyTestRetriesCount
+          project.retries = atrRetries
         }
       }
     }

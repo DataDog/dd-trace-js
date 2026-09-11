@@ -531,6 +531,22 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
       {
         "implementation": "B",

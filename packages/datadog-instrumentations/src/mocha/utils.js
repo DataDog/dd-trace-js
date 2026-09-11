@@ -9,6 +9,9 @@ const {
   shouldSkipEfdRetry,
 } = require('../../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
+  getDynamicAtrRetryCount,
+} = require('../../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
   getFailedTestReplayPromise,
@@ -51,6 +54,7 @@ const testsQuarantined = new Set()
 const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
+const dynamicAtrRetryCountByTestFullName = new Map()
 const attemptToFixExecutions = new Map()
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
@@ -347,6 +351,7 @@ function resetRunState (rootSuite) {
   testsStatuses.clear()
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
+  dynamicAtrRetryCountByTestFullName.clear()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
 
@@ -534,7 +539,22 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
         }
       }
     } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
-      this.retries(libraryConfig.flakyTestRetriesCount)
+      if (libraryConfig.isDynamicAtrEnabled) {
+        // Dynamic ATR: set the max possible retries initially.
+        // The actual duration-based count is computed after the first attempt.
+        const testName = getTestFullName(test)
+        const dynamicCount = dynamicAtrRetryCountByTestFullName.get(testName)
+        if (dynamicCount === undefined) {
+          const maxRetries = libraryConfig.dynamicAtrBuckets
+            ? Math.max(...libraryConfig.dynamicAtrBuckets)
+            : libraryConfig.earlyFlakeDetectionRetryPolicy?.schedulingRetryCount ?? 0
+          this.retries(maxRetries)
+        } else {
+          this.retries(dynamicCount)
+        }
+      } else {
+        this.retries(libraryConfig.flakyTestRetriesCount)
+      }
     }
 
     if (isTestHook || this.type === 'test') {
@@ -702,6 +722,24 @@ function getTestFinishInfo (test, status, config, error) {
   ) {
     const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
     setEfdRetryCountForTest(test, duration, config.earlyFlakeDetectionRetryPolicy)
+  }
+
+  // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+  if (
+    config.isDynamicAtrEnabled &&
+    config.isFlakyTestRetriesEnabled &&
+    !test._ddIsAttemptToFix &&
+    !test._ddIsEfdRetry &&
+    !dynamicAtrRetryCountByTestFullName.has(testName) &&
+    test._currentRetry === 0
+  ) {
+    const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
+    const dynamicCount = getDynamicAtrRetryCount(
+      duration,
+      config.earlyFlakeDetectionRetryPolicy,
+      config.dynamicAtrBuckets
+    )
+    dynamicAtrRetryCountByTestFullName.set(testName, dynamicCount)
   }
 
   if (testsStatuses.get(testName)) {

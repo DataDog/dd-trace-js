@@ -18,6 +18,9 @@ const {
   getEfdRetryCountForDuration,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
+  getDynamicAtrRetryCount,
+} = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { FINAL_FLUSH_FALLBACK_DELAY, FINAL_FLUSH_TIMEOUT } =
   require('../../dd-trace/src/ci-visibility/final-flush')
 const {
@@ -171,6 +174,8 @@ const efdExpectedExecutions = new Map()
 const efdSlowAbortedTests = new Set()
 // Tests whose first execution determines the duration-based EFD retry count.
 const efdCandidates = new Set()
+// Per-test: dynamic ATR retry count determined after the first attempt.
+const dynamicAtrRetryCountByTestName = new Map()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
@@ -642,6 +647,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
+      this.isDynamicAtrEnabled = this.testEnvironmentOptions._ddIsDynamicAtrEnabled
+      this.dynamicAtrBuckets = this.testEnvironmentOptions._ddDynamicAtrBuckets
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
@@ -678,7 +685,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
-          this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+          // When dynamic ATR is enabled, use the max bucket value as the initial count.
+          // The actual duration-based count is computed per test after the first attempt.
+          if (this.isDynamicAtrEnabled) {
+            this.global[RETRY_TIMES] = this.dynamicAtrBuckets
+              ? Math.max(...this.dynamicAtrBuckets)
+              : this.#earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+          } else {
+            this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+          }
         }
       }
 
@@ -2190,7 +2205,22 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         // ATR: set failedAllTests when all auto test retries were exhausted and every attempt failed
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
-          const maxRetries = Number(this.global[RETRY_TIMES]) || 0
+          // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+          if (
+            this.isDynamicAtrEnabled &&
+            event.test?.invocations === 1 &&
+            !dynamicAtrRetryCountByTestName.has(testName)
+          ) {
+            const dynamicCount = getDynamicAtrRetryCount(
+              event.test.duration ?? 0,
+              this.#earlyFlakeDetectionRetryPolicy,
+              this.dynamicAtrBuckets
+            )
+            dynamicAtrRetryCountByTestName.set(testName, dynamicCount)
+          }
+          const maxRetries = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTestName.has(testName)
+            ? dynamicAtrRetryCountByTestName.get(testName)
+            : (Number(this.global[RETRY_TIMES]) || 0)
           if (event.test?.invocations === maxRetries + 1 && status === 'fail') {
             failedAllTests = true
           }
@@ -2199,7 +2229,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
-        const willBeRetriedByAutoTestRetry = numRetries > 0 && numTestExecutions - 1 < numRetries
+        // Dynamic ATR: use the per-test duration-based count instead of the global flat limit.
+        const dynamicAtrCount = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTestName.has(testName)
+          ? dynamicAtrRetryCountByTestName.get(testName)
+          : undefined
+        const effectiveMaxRetries = dynamicAtrCount === undefined ? numRetries : dynamicAtrCount
+        const willBeRetriedByAutoTestRetry = effectiveMaxRetries > 0 && numTestExecutions - 1 < effectiveMaxRetries
         const isFailedTestReplayAllowed = !this.hasConcurrentTests
         const willBeRetriedByFailedTestReplay = isFailedTestReplayAllowed && willBeRetriedByAutoTestRetry
         const mightHitBreakpoint = this.isDiEnabled && isFailedTestReplayAllowed && numTestExecutions >= 2

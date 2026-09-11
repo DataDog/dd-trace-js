@@ -592,6 +592,16 @@ Early Flake Detection retries in every supported test-duration bucket. A value o
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
 
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=true` to enable dynamic Auto Test Retries budgets based on test
+duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
+determined by the duration of its initial attempt, using the same duration buckets as Early Flake Detection.
+Requires Auto Test Retries to be enabled by the backend.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
+overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets
+respectively). When unset or empty, the Early Flake Detection retry settings from the backend are used.
+Only takes effect when `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED` is enabled.
+
 Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
 are disabled, quarantined, or run in Attempt to Fix mode.

@@ -75,6 +75,17 @@ function distributionMetric (name, tags, measure) {
   ciVisibilityMetrics.distribution(name, formatMetricTags(tags)).track(measure)
 }
 
+/**
+ * Records that dynamic, duration-based ATR retries are enabled for this session.
+ *
+ * @param {boolean} hasCustomBuckets
+ * @returns {void}
+ */
+function recordDynamicAtrRetries (hasCustomBuckets) {
+  const tags = hasCustomBuckets ? { hasCustomBuckets: true } : {}
+  incrementCountMetric(TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED, tags)
+}
+
 // CI Visibility telemetry events
 const TELEMETRY_TEST_SESSION = 'test_session'
 const TELEMETRY_EVENT_CREATED = 'event_created'
@@ -134,6 +145,7 @@ const TELEMETRY_TEST_MANAGEMENT_TESTS_MS = 'test_management_tests.request_ms'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_errors'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
+const TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED = 'dynamic_atr_retries.enabled'
 
 function getErrorTypeFromStatusCode (statusCode) {
   if (typeof statusCode !== 'number') return 'network'
@@ -149,6 +161,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  recordDynamicAtrRetries,
   TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
@@ -204,4 +217,5 @@ module.exports = {
   TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
+  TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
 }
