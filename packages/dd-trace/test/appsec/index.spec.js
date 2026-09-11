@@ -74,24 +74,23 @@ describe('AppSec Index', function () {
   beforeEach(() => {
     config = {
       inferredProxyServicesEnabled: false,
+      tracing: {
+        DD_APM_TRACING_ENABLED: true,
+      },
       appsec: {
-        enabled: true,
-        rules: './path/rules.json',
-        rateLimit: 42,
-        wafTimeout: 42,
-        obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*',
-        blockedTemplateHtml: blockedTemplate.html,
-        blockedTemplateJson: blockedTemplate.json,
-        eventTracking: {
-          mode: 'anon',
-        },
+        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_RULES: './path/rules.json',
+        DD_APPSEC_TRACE_RATE_LIMIT: 42,
+        DD_APPSEC_WAF_TIMEOUT: 42,
+        DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
+        DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: blockedTemplate.html,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: blockedTemplate.json,
+        DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'anon',
         DD_API_SECURITY_ENABLED: false,
         DD_API_SECURITY_SAMPLE_DELAY: 10,
-        rasp: {
-          enabled: true,
-          bodyCollection: true,
-        },
+        DD_APPSEC_RASP_ENABLED: true,
+        rasp: { bodyCollection: true },
         extendedHeadersCollection: {
           enabled: true,
           redaction: false,
@@ -260,7 +259,7 @@ describe('AppSec Index', function () {
     })
 
     it('should still subscribe to passportVerify if eventTracking is disabled', () => {
-      config.appsec.eventTracking.mode = 'disabled'
+      config.appsec.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE = 'disabled'
 
       AppSec.disable()
       AppSec.enable(config)
@@ -285,7 +284,7 @@ describe('AppSec Index', function () {
     })
 
     it('should not call rasp enable when rasp is disabled', () => {
-      config.appsec.rasp.enabled = false
+      config.appsec.DD_APPSEC_RASP_ENABLED = false
       AppSec.enable(config)
 
       sinon.assert.notCalled(rasp.enable)

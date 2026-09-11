@@ -3,6 +3,16 @@ import type { GeneratedConfig } from './generated-config-types'
 type PayloadTaggingRules = ReturnType<typeof import('../payload-tagging/config').appendRules> | []
 
 export interface ConfigProperties extends GeneratedConfig {
+  appsec: GeneratedConfig['appsec'] & {
+    extendedHeadersCollection: {
+      enabled: boolean
+      maxHeaders: number
+      redaction: boolean
+    }
+    rasp: {
+      bodyCollection: boolean
+    }
+  }
   cloudPayloadTagging: GeneratedConfig['cloudPayloadTagging'] & {
     requestsEnabled: boolean
     responsesEnabled: boolean
