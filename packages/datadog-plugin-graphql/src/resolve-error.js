@@ -61,28 +61,50 @@ class GraphQLToolsResolveErrorPlugin extends TracingPlugin {
  * @param {readonly object[]} [fieldNodes]
  */
 function recordResolveErrorForPath (error, path, fieldNodes) {
-  const fieldNode = fieldNodes?.[0]
   const rootCtx = legacyStorage.getStore()?.graphqlRootCtx
-  for (let field = rootCtx?.resolveFields; field; field = field.nextResolveField) {
-    if ((!fieldNode || field.fieldNode === fieldNode) && matchesPath(field.pathString, path)) {
-      recordResolveError(field, error)
-      return
-    }
-  }
+  if (!rootCtx?.config.collapse || !rootCtx.fields) return
+
+  const field = findResolveField(rootCtx.fields, getPathString(path), fieldNodes?.[0])
+  if (field) recordResolveError(field, error)
 }
 
 /**
- * @param {string} fieldPath
  * @param {(string | number)[]} path
- * @returns {boolean}
+ * @returns {string}
  */
-function matchesPath (fieldPath, path) {
+function getPathString (path) {
   let pathString = ''
   for (let index = 0; index < path.length; index++) {
     if (index !== 0) pathString += '.'
     pathString += typeof path[index] === 'number' ? '*' : path[index]
   }
-  return pathString === fieldPath
+  return pathString
+}
+
+/**
+ * @param {Map<unknown, object>} fields
+ * @param {string} pathString
+ * @param {object} [fieldNode]
+ * @returns {object | undefined}
+ */
+function findResolveField (fields, pathString, fieldNode) {
+  const field = fields.get(pathString)
+  if (field === undefined) return
+
+  const parentTypeFields = field.parentTypeFields
+  if (parentTypeFields === undefined) {
+    return fieldNode === undefined || field.fieldNode === fieldNode ? field : undefined
+  }
+  if (parentTypeFields.parentTypeName !== undefined) {
+    if (fieldNode === undefined || parentTypeFields.fieldNode === fieldNode) return parentTypeFields
+    return field.fieldNode === fieldNode ? field : undefined
+  }
+
+  let matchingField
+  for (const candidate of parentTypeFields.values()) {
+    if (fieldNode === undefined || candidate.fieldNode === fieldNode) matchingField = candidate
+  }
+  return matchingField
 }
 
 /**
