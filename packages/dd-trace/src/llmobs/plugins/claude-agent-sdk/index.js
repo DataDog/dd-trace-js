@@ -85,6 +85,13 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
     super.asyncEnd(ctx)
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return { sessionId: ctx.session_id }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
@@ -111,8 +118,7 @@ class StepLlmObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:apm:claude-agent-sdk:step'
 
   getLLMObsSpanRegisterOptions (ctx) {
-    // the tool plugin only drains this while the LLMObs payload is being built
-    if (this._llmobsEnabled && ctx.parentToolUseId) subagentToolIds.add(ctx.parentToolUseId)
+    if (ctx.parentToolUseId) subagentToolIds.add(ctx.parentToolUseId)
     return { kind: 'step', name: `step-${ctx.stepIndex}`, sessionId: ctx.sessionId }
   }
 
@@ -244,6 +250,13 @@ class ToolLlmObsPlugin extends LLMObsPlugin {
   end (ctx) {
     super.end(ctx)
     super.asyncEnd(ctx)
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    return subagentToolIds.delete(ctx.id) ? { spanKind: 'agent' } : {}
   }
 
   setLLMObsTags (ctx) {

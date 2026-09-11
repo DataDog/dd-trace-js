@@ -52,19 +52,27 @@ const GEN_AI_USAGE_METRIC_KEYS = {
  * @param {GenAiApmTags} tags
  * @returns {void}
  */
-function setGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, sessionId, metrics }) {
+function setGenAiApmTags (span, tags) {
+  // mirrors the LLMObs span event: a model-backed span always reports a model and provider
+  updateGenAiApmTags(span, MODEL_BACKED_SPAN_KINDS.has(tags.spanKind)
+    ? { ...tags, modelName: tags.modelName || DEFAULT_MODEL, modelProvider: tags.modelProvider || DEFAULT_MODEL }
+    : tags)
+}
+
+/**
+ * Writes only the `gen_ai.*` attributes present in `tags`, for values an integration resolves
+ * after the span started. Absent fields keep whatever the span already carries.
+ *
+ * @param {import('../opentracing/span')} span
+ * @param {GenAiApmTags} tags
+ * @returns {void}
+ */
+function updateGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, sessionId, metrics }) {
   const spanContext = span.context()
 
   if (spanKind) spanContext.setTag(GEN_AI_OPERATION_NAME, spanKind)
-
-  if (MODEL_BACKED_SPAN_KINDS.has(spanKind)) {
-    spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName || DEFAULT_MODEL)
-    spanContext.setTag(GEN_AI_PROVIDER_NAME, (modelProvider || DEFAULT_MODEL).toLowerCase())
-  } else {
-    if (modelName) spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName)
-    if (modelProvider) spanContext.setTag(GEN_AI_PROVIDER_NAME, modelProvider.toLowerCase())
-  }
-
+  if (modelName) spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName)
+  if (modelProvider) spanContext.setTag(GEN_AI_PROVIDER_NAME, modelProvider.toLowerCase())
   if (mlApp) spanContext.setTag(GEN_AI_APPLICATION_NAME, mlApp)
   if (sessionId) spanContext.setTag(GEN_AI_CONVERSATION_ID, sessionId)
   if (metrics) setGenAiApmUsageMetrics(span, spanKind, metrics)
@@ -96,4 +104,5 @@ module.exports = {
   MODEL_BACKED_SPAN_KINDS,
   setGenAiApmTags,
   setGenAiApmUsageMetrics,
+  updateGenAiApmTags,
 }

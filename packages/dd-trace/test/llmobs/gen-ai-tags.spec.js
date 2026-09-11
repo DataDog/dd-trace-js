@@ -5,7 +5,7 @@ require('../setup/core')
 const assert = require('node:assert')
 const { describe, it, beforeEach } = require('mocha')
 
-const { setGenAiApmTags, setGenAiApmUsageMetrics } = require('../../src/llmobs/gen-ai-tags')
+const { setGenAiApmTags, setGenAiApmUsageMetrics, updateGenAiApmTags } = require('../../src/llmobs/gen-ai-tags')
 
 describe('gen_ai APM tags', () => {
   let span
@@ -72,6 +72,15 @@ describe('gen_ai APM tags', () => {
     setGenAiApmTags(span, { spanKind: 'workflow', metrics: { input_tokens: 10 } })
 
     assert.deepStrictEqual(tags, { 'gen_ai.operation.name': 'workflow' })
+  })
+
+  it('writes only the fields an update carries, without defaulting the model', () => {
+    updateGenAiApmTags(span, { spanKind: 'llm', sessionId: 'sess-1' })
+
+    assert.deepStrictEqual(tags, {
+      'gen_ai.operation.name': 'llm',
+      'gen_ai.conversation.id': 'sess-1',
+    })
   })
 
   it('accepts the camelCase metric spelling integrations extract', () => {

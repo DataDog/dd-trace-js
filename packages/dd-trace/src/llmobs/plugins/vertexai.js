@@ -26,8 +26,8 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
   /**
    * @override
    */
-  getGenAiApmUsageMetrics (ctx) {
-    return extractMetrics(ctx.result)
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractMetrics(ctx.result) }
   }
 
   setLLMObsTags (ctx) {

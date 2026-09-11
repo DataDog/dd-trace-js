@@ -60,7 +60,7 @@ describe('Plugin', () => {
         assert.equal(meta['_dd.llmobs.submitted'], undefined)
       })
 
-      it('tags a streamed request without consuming the stream for LLMObs', async () => {
+      it('tags a streamed request, including the usage the chunks carry', async () => {
         const stream = await client.messages.create({
           model: 'claude-3-7-sonnet-20250219',
           messages: [{ role: 'user', content: 'Hello, world!' }],
@@ -74,11 +74,18 @@ describe('Plugin', () => {
         }
 
         const { apmSpans } = await getEvents(0)
-        const { meta } = apmSpans[0]
+        const { meta, metrics } = apmSpans[0]
 
         assert.equal(meta['gen_ai.operation.name'], 'llm')
         assert.equal(meta['gen_ai.request.model'], 'claude-3-7-sonnet-20250219')
         assert.equal(meta['gen_ai.provider.name'], 'anthropic')
+
+        assert.equal(typeof metrics['gen_ai.usage.input_tokens'], 'number')
+        assert.equal(typeof metrics['gen_ai.usage.output_tokens'], 'number')
+        assert.equal(typeof metrics['gen_ai.usage.total_tokens'], 'number')
+
+        // the message bodies are never aggregated, so nothing reaches `ctx.result`
+        assert.equal(meta['_ml_obs.meta.output.messages'], undefined)
       })
     })
   })
