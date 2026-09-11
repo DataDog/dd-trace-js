@@ -142,7 +142,14 @@ describe('CI duration report', () => {
   it('fetches jobs only for workflows over the warning threshold', async () => {
     const anchor = {
       ...run({ id: 1, name: 'All Green', path: '.github/workflows/all-green.yml', duration: 60 }),
+      created_at: '2026-09-10T12:00:00.000Z',
       updated_at: '2026-09-10T12:00:00.000Z',
+    }
+    const olderAnchor = {
+      ...anchor,
+      id: 0,
+      head_sha: 'older1234567890',
+      created_at: '2026-09-09T12:00:00.000Z',
     }
     const systemTests = run({
       id: 2,
@@ -155,9 +162,10 @@ describe('CI duration report', () => {
     const api = {
       actions: {
         listWorkflowRuns: options => {
-          assert.strictEqual(options.per_page, 1)
+          assert.strictEqual(options.per_page, 10)
           assert.strictEqual(options.workflow_id, 'all-green.yml')
-          return Promise.resolve({ data: { workflow_runs: [anchor] } })
+          assert.deepStrictEqual(options.headers, { 'cache-control': 'no-cache' })
+          return Promise.resolve({ data: { workflow_runs: [olderAnchor, anchor] } })
         },
         listWorkflowRunsForRepo: options => {
           assert.strictEqual(options.head_sha, anchor.head_sha)
@@ -177,6 +185,25 @@ describe('CI duration report', () => {
     assert.deepStrictEqual(snapshot.workflows.map(workflow => workflow.name), ['System Tests', 'AppSec'])
     assert.strictEqual(snapshot.workflows[0].team, 'multiple teams')
     assert.strictEqual(snapshot.workflows[1].team, 'asm-js')
+  })
+
+  it('uses the original run creation time for the stale warning', async () => {
+    const anchor = {
+      ...run({ id: 1, name: 'All Green', path: '.github/workflows/all-green.yml', duration: 60 }),
+      created_at: '2026-09-01T12:00:00.000Z',
+      updated_at: '2026-09-08T11:59:00.000Z',
+    }
+    const api = {
+      actions: {
+        listWorkflowRuns: () => Promise.resolve({ data: { workflow_runs: [anchor] } }),
+        listWorkflowRunsForRepo: () => Promise.resolve({ data: { workflow_runs: [anchor] } }),
+      },
+    }
+    const boundary = await collectSnapshot(api, '', new Date('2026-09-08T12:00:00.000Z'))
+    const stale = await collectSnapshot(api, '', new Date('2026-09-08T12:00:00.001Z'))
+
+    assert.strictEqual(boundary.stale, false)
+    assert.strictEqual(stale.stale, true)
   })
 
   it('keeps Slack compact and puts full detail in Markdown', () => {
@@ -207,13 +234,14 @@ describe('CI duration report', () => {
     const slack = createSlackReport(snapshot, 'https://example.com/report')
     const markdown = createMarkdownReport(snapshot)
 
-    assert.match(slack, /1 over 7m \(1 ≥9m\)/)
-    assert.match(slack, /↳ scenarios:/)
+    assert.match(slack, /1 workflow over 7m · 1 reached 9m/)
+    assert.match(slack, /Slowest job:/)
+    assert.match(slack, /Slowest scenarios:/)
     assert.match(slack, /FEATURE_FLAGS/)
     assert.match(slack, /full report/)
     assert.doesNotMatch(slack, /multiple teams/)
-    assert.strictEqual(slack.split(String.raw`\n`).length, 3)
-    assert.ok(slack.length < 1000)
+    assert.strictEqual(slack.split(String.raw`\n`).length, 7)
+    assert.ok(slack.length < 1200)
     assert.match(markdown, /Workflow durations/)
     assert.match(markdown, /Slowest unique scenarios across the matrix/)
     assert.match(markdown, /76%/)

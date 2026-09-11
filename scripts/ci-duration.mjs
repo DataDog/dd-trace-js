@@ -272,10 +272,21 @@ async function getLatestGreenRun (api) {
     branch: 'master',
     event: 'push',
     status: 'success',
-    per_page: 1,
+    per_page: 10,
+    headers: { 'cache-control': 'no-cache' },
   })
 
-  return response.data.workflow_runs[0]
+  let latest
+  for (const run of response.data.workflow_runs) {
+    if (!latest) {
+      latest = run
+      continue
+    }
+    const createdAt = Date.parse(run.created_at ?? '')
+    const latestCreatedAt = Date.parse(latest.created_at ?? '')
+    if (createdAt > latestCreatedAt) latest = run
+  }
+  return latest
 }
 
 /**
@@ -377,7 +388,7 @@ export async function collectSnapshot (api, codeowners, now = new Date()) {
 
   workflows.sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1))
 
-  const anchorDate = Date.parse(anchor.updated_at ?? anchor.created_at ?? '')
+  const anchorDate = Date.parse(anchor.created_at ?? '')
   const maxAgeMs = MAX_GREEN_AGE_DAYS * 24 * 60 * 60 * 1000
   const stale = Number.isFinite(anchorDate) && now.getTime() - anchorDate > maxAgeMs
 
@@ -471,36 +482,35 @@ export function createSlackReport (snapshot, reportUrl) {
     return status === 'warning' || status === 'hard'
   })
   const hardLimitCount = offenders.filter(workflow => classifyDuration(workflow.durationMs) === 'hard').length
-  const heading = `*CI duration — master \`${anchor.head_sha.slice(0, 7)}\`*`
-  const lines = []
+  const lines = [`*CI duration — master \`${anchor.head_sha.slice(0, 7)}\`*`]
 
   if (stale) lines.push(`⚠️ Latest green commit is more than ${MAX_GREEN_AGE_DAYS} days old.`)
 
   if (offenders.length === 0) {
-    lines.unshift(`${heading}: ✅ all workflows ≤7m · <${reportUrl}|full report>`)
+    lines.push(`✅ All workflows completed within 7m · <${reportUrl}|full report>`)
   } else {
-    lines.unshift(`${heading}: ${offenders.length} over 7m (${hardLimitCount} ≥9m) · ` +
+    const noun = offenders.length === 1 ? 'workflow' : 'workflows'
+    lines.push(`${offenders.length} ${noun} over 7m · ${hardLimitCount} reached 9m · ` +
       `<${reportUrl}|full report>`)
 
     for (const workflow of offenders.slice(0, SLACK_WORKFLOW_LIMIT)) {
       const workflowPath = normalizeWorkflowPath(workflow.path)
       const icon = statusIcon(workflow.durationMs)
-      const team = workflowPath === SYSTEM_TESTS_WORKFLOW ? '' : ` · ${slackText(workflow.team)}`
-      let line = `${icon} *${slackText(workflow.name)}* ${formatDuration(workflow.durationMs)}${team}`
+      const team = workflowPath === SYSTEM_TESTS_WORKFLOW ? '' : ` — ${slackText(workflow.team)}`
+      lines.push('', `${icon} *${slackText(workflow.name)}* — ${formatDuration(workflow.durationMs)}${team}`)
 
       const slowestJob = workflow.analysis?.jobs[0]
       if (slowestJob) {
-        line += ` · job <${slowestJob.html_url}|${slackText(truncate(slowestJob.name, 50))}> ` +
-          formatDuration(slowestJob.durationMs)
+        lines.push(`• Slowest job: <${slowestJob.html_url}|${slackText(truncate(slowestJob.name, 55))}> — ` +
+          formatDuration(slowestJob.durationMs))
       }
-      lines.push(line)
 
       if (workflowPath === SYSTEM_TESTS_WORKFLOW && workflow.analysis?.scenarios.length) {
-        const scenarios = workflow.analysis.scenarios.slice(0, SLACK_DETAIL_LIMIT).map(scenario => {
-          return `<${scenario.jobUrl}|${slackText(truncate(scenario.name, 42))}> ` +
+        const scenarios = workflow.analysis.scenarios.slice(0, SLACK_DETAIL_LIMIT).map((scenario, index) => {
+          return `${index + 1}. <${scenario.jobUrl}|${slackText(truncate(scenario.name, 42))}> — ` +
             formatDuration(scenario.durationMs)
         })
-        lines.push(`↳ scenarios: ${scenarios.join(' · ')}`)
+        lines.push('• Slowest scenarios:', scenarios.join(' · '))
       }
     }
 
