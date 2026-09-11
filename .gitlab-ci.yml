@@ -64,6 +64,11 @@ variables:
   variables:
     LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
     LLMVAL_PLATFORM_REF: *llmval_platform_sha
+    # Pin off the moving :newest tag. That tag drifted (rebuilt 2025-09-09) and
+    # broke run.sh's runtime node install. This digest is the last-known-good
+    # pre-drift snapshot (tag latest_20250820_1050). Temporary quick fix to
+    # verify the pin works; the durable fix belongs in the platform template.
+    LLMVAL_IMAGE: "registry.ddbuild.io/images/benchmarking-platform-tools-ubuntu@sha256:f7da05d166e46a70b93cee8cb8028354402a443313c41530aea0b9f8e52b5811"
 
 llm validation definitions:
   extends: llm validation
