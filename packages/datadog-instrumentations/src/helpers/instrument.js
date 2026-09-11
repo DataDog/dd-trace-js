@@ -5,6 +5,8 @@ const dc = /** @type {typeof import('node:diagnostics_channel')} */ (require('dc
 const instrumentations = require('./instrumentations')
 const rewriterInstrumentations = require('./rewriter/instrumentations')
 
+const sourceRewritePaths = new WeakMap()
+
 /**
  * @typedef {import('node:diagnostics_channel').Channel} Channel
  * @typedef {import('node:diagnostics_channel').TracingChannel} TracingChannel
@@ -80,7 +82,11 @@ exports.getHooks = function getHooks (names) {
   return rewriterInstrumentations
     .map(inst => inst.module)
     .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
+    .map(({ name, versionRange, filePath }) => {
+      const hook = { file: filePath, name, versions: [versionRange] }
+      sourceRewritePaths.set(hook, filePath)
+      return hook
+    })
 }
 
 /**
@@ -93,12 +99,14 @@ exports.getHooks = function getHooks (names) {
  * @param {(moduleExports: unknown, version: string, isIitm?: boolean, hookMeta?: object) => unknown} [hook]
  * Patches module exports
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
+exports.addHook = function addHook (args, hook) {
+  const { name, versions, file, filePattern, patchDefault } = args
   if (!instrumentations[name]) {
     instrumentations[name] = []
   }
 
-  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault })
+  const sourceRewrite = sourceRewritePaths.get(args)
+  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault, sourceRewrite })
 }
 
 exports.AsyncResource = AsyncResource
