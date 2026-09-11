@@ -33,7 +33,7 @@ The following are NOT in that section - they are derived from repo code, with th
 ## Additional checks specific to this repo
 
 - **Regex use** on hot paths: is it precompiled, anchored, and free of catastrophic backtracking?
-- **Data-volume growth.** More tags/metrics/spans per request increases payload size, serialization cost, and customer bill. Adding a high-cardinality tag is at least P1.
+- **Data-volume growth.** More tags/metrics/spans per request increases payload size, serialization cost, and customer bill. High cardinality is at least P1 when the value is a metric dimension, cache key, or resource name, or when the tag value is unbounded in size. A fixed-size correlation tag on a span (e.g. a request/trace id) is not automatically P1 just because values vary.
 
 ## Evidence
 

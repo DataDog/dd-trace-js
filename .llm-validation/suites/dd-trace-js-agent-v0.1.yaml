@@ -278,12 +278,11 @@ cases:
       --- a/packages/datadog-instrumentations/src/example-lib.js
       +++ b/packages/datadog-instrumentations/src/example-lib.js
       @@ -10,6 +10,11 @@ addHook({ name: 'example-lib', versions: ['>=1'] }, (exampleLib) => {
+      +  const sessions = new Map()
       -    return handle.apply(this, arguments)
       +    sessions.set(req.headers['x-request-id'], req)
       +    channel.publish({ req })
       +    return handle.apply(this, arguments)
-      +
-      +  const sessions = new Map()
       ```
     expected_criteria:
       - The report's Mode line states pasted diff / no git (e.g. "pasted diff, no git").
@@ -424,6 +423,7 @@ cases:
       - .agents/skills/dd-apm-sdk-review/reviewers/design.md
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
+      - AGENTS.md
     input: |
       Apply this repo's design-review criteria (reviewers/design.md, its
       .agents/dd-apm-sdk-review-overrides/reviewers/design.md override, and _common.md) to the
