@@ -60,9 +60,9 @@ class AIGuardClient {
       'DD-AI-GUARD-SOURCE': 'SDK',
       'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
-    const endpoint = config.experimental.aiguard.endpoint || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
+    const endpoint = config.aiguard.DD_AI_GUARD_ENDPOINT || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
-    this.#timeout = config.experimental.aiguard.timeout
+    this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT
   }
 
   /**

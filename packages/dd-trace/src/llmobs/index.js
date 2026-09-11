@@ -183,7 +183,7 @@ function handleLLMObsInjection (injection) {
   const mlApp =
     mlObsSpanTags?.[ML_APP] ||
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
-    globalTracerConfig.llmobs.mlApp
+    globalTracerConfig.llmobs.DD_LLMOBS_ML_APP
 
   const sampleRate =
     mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]

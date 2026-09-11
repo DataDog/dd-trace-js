@@ -11,8 +11,10 @@ const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completion
 
 describe('AIGuard integration wiring', () => {
   const config = {
-    DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: true,
-    experimental: { aiguard: { block: true } },
+    aiguard: {
+      DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: true,
+      DD_AI_GUARD_BLOCK: true,
+    },
   }
   let AIGuard
   let evaluate

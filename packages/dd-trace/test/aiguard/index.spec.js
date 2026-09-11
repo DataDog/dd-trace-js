@@ -40,15 +40,13 @@ describe('AIGuard SDK', () => {
     DD_API_KEY: 'API_KEY',
     DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
-    experimental: {
-      aiguard: {
-        enabled: true,
-        endpoint: 'https://aiguard.com',
-        maxMessagesLength: 16,
-        maxContentSize: 512 * 1024,
-        redactionEnabled: true,
-        timeout: 10_000,
-      },
+    aiguard: {
+      DD_AI_GUARD_ENABLED: true,
+      DD_AI_GUARD_ENDPOINT: 'https://aiguard.com',
+      DD_AI_GUARD_MAX_MESSAGES_LENGTH: 16,
+      DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
+      DD_AI_GUARD_REDACTION_ENABLED: true,
+      DD_AI_GUARD_TIMEOUT: 10_000,
     },
   }
   let tracer
@@ -132,7 +130,7 @@ describe('AIGuard SDK', () => {
       { data: { attributes: { messages, meta: { service: config.service, env: config.env } } } }
     )
     sinon.assert.calledOnceWithExactly(global.fetch,
-      url ?? `${config.experimental.aiguard.endpoint}/evaluate`,
+      url ?? `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`,
       {
         method: 'POST',
         headers: {
@@ -408,9 +406,9 @@ describe('AIGuard SDK', () => {
     const atLimit = 'A'.repeat(maxContentSize)
     const limited = new AIGuard(tracer, {
       ...config,
-      experimental: {
-        ...config.experimental,
-        aiguard: { ...config.experimental.aiguard, maxContentSize },
+      aiguard: {
+        ...config.aiguard,
+        DD_AI_GUARD_MAX_CONTENT_SIZE: maxContentSize,
       },
     })
     const messages = [{
@@ -641,9 +639,9 @@ describe('AIGuard SDK', () => {
   it('keeps originals and omits redaction tags when the kill-switch is off', async () => {
     const disabled = new AIGuard(tracer, {
       ...config,
-      experimental: {
-        ...config.experimental,
-        aiguard: { ...config.experimental.aiguard, redactionEnabled: false },
+      aiguard: {
+        ...config.aiguard,
+        DD_AI_GUARD_REDACTION_ENABLED: false,
       },
     })
     const messages = [{ role: 'user', content: 'My SSN is 123-45-6789' }]
@@ -841,7 +839,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test message length truncation', async () => {
-    const maxMessages = config.experimental.aiguard.maxMessagesLength
+    const maxMessages = config.aiguard.DD_AI_GUARD_MAX_MESSAGES_LENGTH
     const messages = Array.from({ length: maxMessages + 1 }, (_, i) => ({
       role: 'user',
       content: `This is a prompt: ${i}`,
@@ -861,7 +859,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test message content truncation', async () => {
-    const maxContent = config.experimental.aiguard.maxContentSize
+    const maxContent = config.aiguard.DD_AI_GUARD_MAX_CONTENT_SIZE
     const content = Array(maxContent + 1).fill('A').join('')
     const messages = [{ role: 'user', content }]
     mockFetch({
@@ -903,7 +901,7 @@ describe('AIGuard SDK', () => {
   })
 
   it('test missing required fields uses noop as default', async () => {
-    const client = new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
+    const client = new AIGuard(tracer, { aiguard: { DD_AI_GUARD_ENDPOINT: 'http://aiguard' } })
     const result = await client.evaluate(toolCall)
     assert.strictEqual(result.action, 'ALLOW')
     assert.strictEqual(result.reason, 'AI Guard is not enabled')
@@ -978,8 +976,8 @@ describe('AIGuard SDK', () => {
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const { endpoint: _discardedEndpoint, ...aiguard } = config.experimental.aiguard
-      const newConfig = { ...config, site, experimental: { ...config.experimental, aiguard } }
+      const { DD_AI_GUARD_ENDPOINT: _discardedEndpoint, ...aiguard } = config.aiguard
+      const newConfig = { ...config, site, aiguard }
       const client = new AIGuard(tracer, newConfig)
       mockFetch({
         body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
