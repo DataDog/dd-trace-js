@@ -487,11 +487,10 @@ export function createSlackReport (snapshot, reportUrl) {
   if (stale) lines.push(`⚠️ Latest green commit is more than ${MAX_GREEN_AGE_DAYS} days old.`)
 
   if (offenders.length === 0) {
-    lines.push(`✅ All workflows completed within 7m · <${reportUrl}|full report>`)
+    lines.push('✅ All workflows completed within 7m.')
   } else {
     const noun = offenders.length === 1 ? 'workflow' : 'workflows'
-    lines.push(`${offenders.length} ${noun} over 7m · ${hardLimitCount} reached 9m · ` +
-      `<${reportUrl}|full report>`)
+    lines.push(`${offenders.length} ${noun} exceeded 7m; ${hardLimitCount} reached the 9m hard limit.`)
 
     for (const workflow of offenders.slice(0, SLACK_WORKFLOW_LIMIT)) {
       const workflowPath = normalizeWorkflowPath(workflow.path)
@@ -501,24 +500,26 @@ export function createSlackReport (snapshot, reportUrl) {
 
       const slowestJob = workflow.analysis?.jobs[0]
       if (slowestJob) {
-        lines.push(`• Slowest job: <${slowestJob.html_url}|${slackText(truncate(slowestJob.name, 55))}> — ` +
+        lines.push(`  Slowest job: <${slowestJob.html_url}|${slackText(truncate(slowestJob.name, 70))}> — ` +
           formatDuration(slowestJob.durationMs))
       }
 
       if (workflowPath === SYSTEM_TESTS_WORKFLOW && workflow.analysis?.scenarios.length) {
-        const scenarios = workflow.analysis.scenarios.slice(0, SLACK_DETAIL_LIMIT).map((scenario, index) => {
-          return `${index + 1}. <${scenario.jobUrl}|${slackText(truncate(scenario.name, 42))}> — ` +
-            formatDuration(scenario.durationMs)
+        lines.push('  Slowest scenarios across the matrix:')
+        workflow.analysis.scenarios.slice(0, SLACK_DETAIL_LIMIT).forEach((scenario, index) => {
+          const share = Math.round(scenario.durationMs / scenario.jobDurationMs * 100)
+          lines.push(`  ${index + 1}. <${scenario.jobUrl}|${slackText(truncate(scenario.name, 62))}> — ` +
+            `${formatDuration(scenario.durationMs)} (${share}% of job)`)
         })
-        lines.push('• Slowest scenarios:', scenarios.join(' · '))
       }
     }
 
     if (offenders.length > SLACK_WORKFLOW_LIMIT) {
-      lines.push(`…and ${offenders.length - SLACK_WORKFLOW_LIMIT} more in the report.`)
+      lines.push('', `…and ${offenders.length - SLACK_WORKFLOW_LIMIT} more.`)
     }
   }
 
+  lines.push('', `<${reportUrl}|View the full GitHub report>.`)
   return lines.join(String.raw`\n`)
 }
 
