@@ -3,6 +3,7 @@
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
 const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
+const getHostname = require('./url')
 
 const storageRoutes = [
   'object/upload/sign',
@@ -60,6 +61,7 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
         'span.kind': 'client',
         'http.method': method,
         'http.url': stripQueryAndFragment(String(url)),
+        'out.host': getHostname(url),
       },
     }, ctx)
 

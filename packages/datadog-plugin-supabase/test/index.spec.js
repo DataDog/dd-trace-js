@@ -7,6 +7,8 @@ const sinon = require('sinon')
 const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
 const log = require('../../dd-trace/src/log')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
+const { withPeerService } = require('../../dd-trace/test/setup/mocha')
+const getHostname = require('../src/url')
 const TestSetup = require('./test-setup')
 
 const serverlessClassification = 'serverless-child'
@@ -162,6 +164,13 @@ describe('serverless return behavior evidence', () => {
   })
 })
 
+describe('getHostname', () => {
+  it('extracts valid hostnames without throwing for malformed URLs', () => {
+    assert.strictEqual(getHostname('https://project.supabase.co/auth/v1/user'), 'project.supabase.co')
+    assert.strictEqual(getHostname('not a URL'), undefined)
+  })
+})
+
 const testSetup = new TestSetup()
 
 createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
@@ -176,6 +185,21 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
   after(async () => {
     await testSetup.teardown()
   })
+
+  for (const [desc, resource, run] of [
+    ['Storage', 'POST object/list', () => testSetup.storageFileList()],
+    ['Auth', 'GET /auth/v1/user', () => testSetup.goTrueClientGetUser()],
+    ['Functions', 'POST /functions/v1/hello', () => testSetup.functionsClientInvoke()],
+  ]) {
+    withPeerService(
+      () => meta.tracer,
+      'supabase',
+      run,
+      'project.supabase.co',
+      'out.host',
+      { resource, desc: `for ${desc} requests` }
+    )
+  }
 
   describe('storage file requests - supabase.storage.request', () => {
     it('should satisfy the serverless ownership contract (happy path)', async () => {
