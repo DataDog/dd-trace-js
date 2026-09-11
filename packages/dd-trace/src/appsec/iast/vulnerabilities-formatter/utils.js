@@ -13,7 +13,10 @@ const REGEX_FOR_STRINGIFY_SENSITIVE_NOT_STRING = new RegExp(String.raw`"${STRING
 const REGEX_FOR_STRINGIFY_SENSITIVE = new RegExp(String.raw`${STRINGIFY_SENSITIVE_KEY}_\d+_(\d+)_`)
 const REGEX_FOR_STRINGIFY_RANGE = new RegExp(String.raw`(${STRINGIFY_RANGE_KEY}_\d+_)`)
 
-const sensitiveValueRegex = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
+const sensitiveValueRegex = new RegExp(
+  /** @type {string} */ (defaults['iast.DD_IAST_REDACTION_VALUE_PATTERN']),
+  'gmi'
+)
 
 function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
   for (const key of Object.keys(target)) {

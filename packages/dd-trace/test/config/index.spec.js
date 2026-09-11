@@ -540,7 +540,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.apmTracingEnabled, false)
-    assert.strictEqual(config.appsec.enabled, true)
+    assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
@@ -1090,31 +1090,29 @@ describe('Config', () => {
         DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
         DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
         DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
-        blockedTemplateHtml: undefined,
-        blockedTemplateJson: undefined,
-        blockedTemplateGraphql: undefined,
-        enabled: undefined,
-        eventTracking: {
-          mode: 'identification',
-        },
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: undefined,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: undefined,
+        DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: undefined,
+        DD_APPSEC_ENABLED: undefined,
+        DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'identification',
+        DD_APPSEC_COLLECT_ALL_HEADERS: false,
+        DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: true,
+        DD_APPSEC_MAX_COLLECTED_HEADERS: 50,
+        DD_APPSEC_RASP_COLLECT_REQUEST_BODY: false,
         extendedHeadersCollection: {
           enabled: false,
           maxHeaders: 50,
           redaction: true,
         },
-        rules: undefined,
-        rasp: {
-          bodyCollection: false,
-          enabled: true,
-        },
-        rateLimit: 100,
+        DD_APPSEC_RULES: undefined,
+        rasp: { bodyCollection: false },
+        DD_APPSEC_RASP_ENABLED: true,
+        DD_APPSEC_TRACE_RATE_LIMIT: 100,
         DD_APPSEC_SCA_ENABLED: undefined,
-        stackTrace: {
-          enabled: true,
-          maxDepth: 32,
-          maxStackTraces: 2,
-        },
-        wafTimeout: 5e3,
+        DD_APPSEC_STACK_TRACE_ENABLED: true,
+        DD_APPSEC_MAX_STACK_TRACE_DEPTH: 32,
+        DD_APPSEC_MAX_STACK_TRACES: 2,
+        DD_APPSEC_WAF_TIMEOUT: 5e3,
       },
       clientIpEnabled: false,
       clientIpHeader: undefined,
@@ -1157,14 +1155,12 @@ describe('Config', () => {
       DD_HEAP_SNAPSHOT_DESTINATION: '',
       DD_HEAP_SNAPSHOT_INTERVAL: 3600,
       iast: {
-        enabled: false,
-        redactionEnabled: true,
-        redactionNamePattern: defaults['iast.redactionNamePattern'],
-        redactionValuePattern: defaults['iast.redactionValuePattern'],
-        telemetryVerbosity: 'INFORMATION',
-        stackTrace: {
-          enabled: true,
-        },
+        DD_IAST_ENABLED: false,
+        DD_IAST_REDACTION_ENABLED: true,
+        DD_IAST_REDACTION_NAME_PATTERN: defaults['iast.DD_IAST_REDACTION_NAME_PATTERN'],
+        DD_IAST_REDACTION_VALUE_PATTERN: defaults['iast.DD_IAST_REDACTION_VALUE_PATTERN'],
+        DD_IAST_STACK_TRACE_ENABLED: true,
+        DD_IAST_TELEMETRY_VERBOSITY: 'INFORMATION',
       },
       DD_INJECT_FORCE: false,
       DD_INSTRUMENTATION_INSTALL_ID: undefined,
@@ -1215,8 +1211,8 @@ describe('Config', () => {
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
     assert.strictEqual(config.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP.length, 626)
-    assert.strictEqual(config.appsec.obfuscatorKeyRegex.length, 190)
-    assert.strictEqual(config.appsec.obfuscatorValueRegex.length, 578)
+    assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP.length, 190)
+    assert.strictEqual(config.appsec.DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP.length, 578)
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -1296,8 +1292,16 @@ describe('Config', () => {
       { name: 'DD_IAST_MAX_CONCURRENT_REQUESTS', value: 2, origin: 'default' },
       { name: 'DD_IAST_MAX_CONTEXT_OPERATIONS', value: 2, origin: 'default' },
       { name: 'DD_IAST_REDACTION_ENABLED', value: true, origin: 'default' },
-      { name: 'DD_IAST_REDACTION_NAME_PATTERN', value: defaults['iast.redactionNamePattern'], origin: 'default' },
-      { name: 'DD_IAST_REDACTION_VALUE_PATTERN', value: defaults['iast.redactionValuePattern'], origin: 'default' },
+      {
+        name: 'DD_IAST_REDACTION_NAME_PATTERN',
+        value: defaults['iast.DD_IAST_REDACTION_NAME_PATTERN'],
+        origin: 'default',
+      },
+      {
+        name: 'DD_IAST_REDACTION_VALUE_PATTERN',
+        value: defaults['iast.DD_IAST_REDACTION_VALUE_PATTERN'],
+        origin: 'default',
+      },
       { name: 'DD_IAST_REQUEST_SAMPLING', value: 30, origin: 'default' },
       { name: 'DD_IAST_SECURITY_CONTROLS_CONFIGURATION', value: null, origin: 'default' },
       { name: 'DD_IAST_STACK_TRACE_ENABLED', value: true, origin: 'default' },
@@ -1571,33 +1575,31 @@ describe('Config', () => {
         DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.75,
         DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 2,
         DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 2048,
-        blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
-        blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
-        blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
-        enabled: true,
-        eventTracking: {
-          mode: 'extended',
-        },
+        DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_GRAPHQL,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: BLOCKED_TEMPLATE_HTML,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_JSON,
+        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'extended',
+        DD_APPSEC_COLLECT_ALL_HEADERS: true,
+        DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: false,
+        DD_APPSEC_MAX_COLLECTED_HEADERS: 42,
+        DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
         extendedHeadersCollection: {
           enabled: true,
           maxHeaders: 42,
           redaction: false,
         },
-        obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*',
-        rasp: {
-          bodyCollection: true,
-          enabled: false,
-        },
-        rateLimit: 42,
-        rules: RULES_JSON_PATH,
+        DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
+        DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
+        rasp: { bodyCollection: true },
+        DD_APPSEC_RASP_ENABLED: false,
+        DD_APPSEC_TRACE_RATE_LIMIT: 42,
+        DD_APPSEC_RULES: RULES_JSON_PATH,
         DD_APPSEC_SCA_ENABLED: true,
-        stackTrace: {
-          enabled: false,
-          maxDepth: 42,
-          maxStackTraces: 5,
-        },
-        wafTimeout: 42,
+        DD_APPSEC_STACK_TRACE_ENABLED: false,
+        DD_APPSEC_MAX_STACK_TRACE_DEPTH: 42,
+        DD_APPSEC_MAX_STACK_TRACES: 5,
+        DD_APPSEC_WAF_TIMEOUT: 42,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -1641,20 +1643,18 @@ describe('Config', () => {
       DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
       DD_HEAP_SNAPSHOT_INTERVAL: 1800,
       iast: {
-        dbRowsToTaint: 2,
-        deduplicationEnabled: false,
-        enabled: true,
-        maxConcurrentRequests: 3,
-        maxContextOperations: 4,
-        redactionEnabled: false,
-        redactionNamePattern: 'REDACTION_NAME_PATTERN',
-        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        requestSampling: 40,
+        DD_IAST_DB_ROWS_TO_TAINT: 2,
+        DD_IAST_DEDUPLICATION_ENABLED: false,
+        DD_IAST_ENABLED: true,
+        DD_IAST_MAX_CONCURRENT_REQUESTS: 3,
+        DD_IAST_MAX_CONTEXT_OPERATIONS: 4,
+        DD_IAST_REDACTION_ENABLED: false,
+        DD_IAST_REDACTION_NAME_PATTERN: 'REDACTION_NAME_PATTERN',
+        DD_IAST_REDACTION_VALUE_PATTERN: 'REDACTION_VALUE_PATTERN',
+        DD_IAST_REQUEST_SAMPLING: 40,
         DD_IAST_SECURITY_CONTROLS_CONFIGURATION: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
-        stackTrace: {
-          enabled: false,
-        },
-        telemetryVerbosity: 'DEBUG',
+        DD_IAST_STACK_TRACE_ENABLED: false,
+        DD_IAST_TELEMETRY_VERBOSITY: 'DEBUG',
       },
       DD_INSTRUMENTATION_CONFIG_ID: 'abcdef123',
       llmobs: {
@@ -2082,7 +2082,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.eventTracking.mode, 'anonymous')
+    assert.strictEqual(config.appsec.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE, 'anonymous')
   })
 
   it('should initialize from the options', () => {
@@ -2217,7 +2217,7 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       appsec: {
-        enabled: false,
+        DD_APPSEC_ENABLED: false,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -2256,19 +2256,17 @@ describe('Config', () => {
       flushMinSpans: 500,
       hostname: 'agent',
       iast: {
-        dbRowsToTaint: 2,
-        deduplicationEnabled: false,
-        enabled: true,
-        maxConcurrentRequests: 4,
-        maxContextOperations: 5,
-        redactionEnabled: false,
-        redactionNamePattern: 'REDACTION_NAME_PATTERN',
-        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        requestSampling: 50,
-        stackTrace: {
-          enabled: false,
-        },
-        telemetryVerbosity: 'DEBUG',
+        DD_IAST_DB_ROWS_TO_TAINT: 2,
+        DD_IAST_DEDUPLICATION_ENABLED: false,
+        DD_IAST_ENABLED: true,
+        DD_IAST_MAX_CONCURRENT_REQUESTS: 4,
+        DD_IAST_MAX_CONTEXT_OPERATIONS: 5,
+        DD_IAST_REDACTION_ENABLED: false,
+        DD_IAST_REDACTION_NAME_PATTERN: 'REDACTION_NAME_PATTERN',
+        DD_IAST_REDACTION_VALUE_PATTERN: 'REDACTION_VALUE_PATTERN',
+        DD_IAST_REQUEST_SAMPLING: 50,
+        DD_IAST_STACK_TRACE_ENABLED: false,
+        DD_IAST_TELEMETRY_VERBOSITY: 'DEBUG',
       },
       llmobs: {
         agentlessEnabled: true,
@@ -2308,6 +2306,8 @@ describe('Config', () => {
     })
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, ['foo', 'bar'])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, ['a', 'b', 'c'])
+    assert.strictEqual(config.appsec.enabled, undefined)
+    assert.strictEqual(config.appsec.stackTrace, undefined)
     if (DD_MAJOR < 6) {
       assert.strictEqual(
         config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
@@ -2865,32 +2865,26 @@ describe('Config', () => {
         DD_API_SECURITY_ENABLED: true,
         DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
         DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 150,
-        blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
-        blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
-        blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
-        rules: RULES_JSON_PATH,
-        enabled: true,
-        eventTracking: {
-          mode: 'anonymous',
-        },
+        DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_GRAPHQL,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: BLOCKED_TEMPLATE_HTML,
+        DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_JSON,
+        DD_APPSEC_RULES: RULES_JSON_PATH,
+        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'anonymous',
         extendedHeadersCollection: {
           enabled: true,
           maxHeaders: 42,
           redaction: true,
         },
-        obfuscatorKeyRegex: '.*',
-        obfuscatorValueRegex: '.*',
-        rasp: {
-          bodyCollection: true,
-          enabled: false,
-        },
-        rateLimit: 42,
-        stackTrace: {
-          enabled: false,
-          maxDepth: 42,
-          maxStackTraces: 5,
-        },
-        wafTimeout: 42,
+        DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
+        DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
+        rasp: { bodyCollection: true },
+        DD_APPSEC_RASP_ENABLED: false,
+        DD_APPSEC_TRACE_RATE_LIMIT: 42,
+        DD_APPSEC_STACK_TRACE_ENABLED: false,
+        DD_APPSEC_MAX_STACK_TRACE_DEPTH: 42,
+        DD_APPSEC_MAX_STACK_TRACES: 5,
+        DD_APPSEC_WAF_TIMEOUT: 42,
       },
       clientIpEnabled: true,
       clientIpHeader: 'x-true-client-ip',
@@ -2930,20 +2924,18 @@ describe('Config', () => {
       flushMinSpans: 500,
       flushInterval: 500,
       iast: {
-        dbRowsToTaint: 3,
-        deduplicationEnabled: true,
-        enabled: true,
-        maxConcurrentRequests: 2,
-        maxContextOperations: 2,
-        redactionEnabled: true,
-        redactionNamePattern: 'REDACTION_NAME_PATTERN',
-        redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        requestSampling: 30,
+        DD_IAST_DB_ROWS_TO_TAINT: 3,
+        DD_IAST_DEDUPLICATION_ENABLED: true,
+        DD_IAST_ENABLED: true,
+        DD_IAST_MAX_CONCURRENT_REQUESTS: 2,
+        DD_IAST_MAX_CONTEXT_OPERATIONS: 2,
+        DD_IAST_REDACTION_ENABLED: true,
+        DD_IAST_REDACTION_NAME_PATTERN: 'REDACTION_NAME_PATTERN',
+        DD_IAST_REDACTION_VALUE_PATTERN: 'REDACTION_VALUE_PATTERN',
+        DD_IAST_REQUEST_SAMPLING: 30,
         DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
           'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
-        stackTrace: {
-          enabled: false,
-        },
+        DD_IAST_STACK_TRACE_ENABLED: false,
       },
       llmobs: {
         agentlessEnabled: false,
@@ -3083,51 +3075,43 @@ describe('Config', () => {
       DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
       DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
       DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
-      blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
-      blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
-      blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
-      enabled: true,
-      eventTracking: {
-        mode: 'disabled',
-      },
+      DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_GRAPHQL,
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: BLOCKED_TEMPLATE_HTML,
+      DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_JSON,
+      DD_APPSEC_ENABLED: true,
+      DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'disabled',
       extendedHeadersCollection: {
         enabled: true,
         redaction: true,
         maxHeaders: 42,
       },
-      obfuscatorKeyRegex: '.*',
-      obfuscatorValueRegex: '.*',
-      rasp: {
-        enabled: false,
-        bodyCollection: true,
-      },
-      rateLimit: 42,
-      rules: RULES_JSON_PATH,
+      DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
+      DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
+      rasp: { bodyCollection: true },
+      DD_APPSEC_RASP_ENABLED: false,
+      DD_APPSEC_TRACE_RATE_LIMIT: 42,
+      DD_APPSEC_RULES: RULES_JSON_PATH,
       DD_APPSEC_AGENTIC_ONBOARDING: '',
       DD_APPSEC_SCA_ENABLED: undefined,
-      stackTrace: {
-        enabled: true,
-        maxStackTraces: 2,
-        maxDepth: 32,
-      },
-      wafTimeout: 42,
+      DD_APPSEC_STACK_TRACE_ENABLED: true,
+      DD_APPSEC_MAX_STACK_TRACES: 2,
+      DD_APPSEC_MAX_STACK_TRACE_DEPTH: 32,
+      DD_APPSEC_WAF_TIMEOUT: 42,
     })
 
     assert.deepStrictEqual(config.iast, {
-      dbRowsToTaint: 3,
-      deduplicationEnabled: false,
-      enabled: true,
-      maxConcurrentRequests: 3,
-      maxContextOperations: 4,
-      redactionEnabled: false,
-      redactionNamePattern: 'REDACTION_NAME_PATTERN',
-      redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-      requestSampling: 15,
+      DD_IAST_DB_ROWS_TO_TAINT: 3,
+      DD_IAST_DEDUPLICATION_ENABLED: false,
+      DD_IAST_ENABLED: true,
+      DD_IAST_MAX_CONCURRENT_REQUESTS: 3,
+      DD_IAST_MAX_CONTEXT_OPERATIONS: 4,
+      DD_IAST_REDACTION_ENABLED: false,
+      DD_IAST_REDACTION_NAME_PATTERN: 'REDACTION_NAME_PATTERN',
+      DD_IAST_REDACTION_VALUE_PATTERN: 'REDACTION_VALUE_PATTERN',
+      DD_IAST_REQUEST_SAMPLING: 15,
       DD_IAST_SECURITY_CONTROLS_CONFIGURATION: undefined,
-      stackTrace: {
-        enabled: false,
-      },
-      telemetryVerbosity: 'DEBUG',
+      DD_IAST_STACK_TRACE_ENABLED: false,
+      DD_IAST_TELEMETRY_VERBOSITY: 'DEBUG',
     })
   })
 
@@ -3145,9 +3129,9 @@ describe('Config', () => {
         },
       })
 
-      assert.strictEqual(config.appsec.enabled, undefined)
-      assert.strictEqual(config.appsec.rateLimit, 100)
-      assert.strictEqual(config.appsec.rules, undefined)
+      assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, undefined)
+      assert.strictEqual(config.appsec.DD_APPSEC_TRACE_RATE_LIMIT, 100)
+      assert.strictEqual(config.appsec.DD_APPSEC_RULES, undefined)
       assert.strictEqual(config.apmTracingEnabled, true)
 
       sinon.assert.calledWith(
@@ -3164,7 +3148,7 @@ describe('Config', () => {
       experimental: { appsec: true },
     })
 
-    assert.strictEqual(config.appsec.enabled, undefined)
+    assert.strictEqual(config.appsec.DD_APPSEC_ENABLED, undefined)
     sinon.assert.calledWith(log.warn, 'Unknown option %s with value %o', 'experimental.appsec', true)
   })
 
@@ -3602,17 +3586,61 @@ describe('Config', () => {
         requestSampling: 105,
       },
     })
-    assert.strictEqual(config.iast.requestSampling, 30)
+    assert.strictEqual(config.iast.DD_IAST_REQUEST_SAMPLING, 30)
+  })
+
+  it('should use canonical IAST names internally', () => {
+    const config = getConfig()
+
+    assert.strictEqual(config.iast.DD_IAST_DB_ROWS_TO_TAINT, 1)
+    assert.strictEqual(config.iast.DD_IAST_DEDUPLICATION_ENABLED, true)
+    assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+    assert.strictEqual(config.iast.DD_IAST_MAX_CONCURRENT_REQUESTS, 2)
+    assert.strictEqual(config.iast.DD_IAST_MAX_CONTEXT_OPERATIONS, 2)
+    assert.strictEqual(config.iast.DD_IAST_REDACTION_ENABLED, true)
+    assert.strictEqual(
+      config.iast.DD_IAST_REDACTION_NAME_PATTERN,
+      defaults['iast.DD_IAST_REDACTION_NAME_PATTERN']
+    )
+    assert.strictEqual(
+      config.iast.DD_IAST_REDACTION_VALUE_PATTERN,
+      defaults['iast.DD_IAST_REDACTION_VALUE_PATTERN']
+    )
+    assert.strictEqual(config.iast.DD_IAST_REQUEST_SAMPLING, 30)
+    assert.strictEqual(config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION, undefined)
+    assert.strictEqual(config.iast.DD_IAST_STACK_TRACE_ENABLED, true)
+    assert.strictEqual(config.iast.DD_IAST_TELEMETRY_VERBOSITY, 'INFORMATION')
+
+    for (const name of [
+      'dbRowsToTaint',
+      'deduplicationEnabled',
+      'enabled',
+      'maxConcurrentRequests',
+      'maxContextOperations',
+      'redactionEnabled',
+      'redactionNamePattern',
+      'redactionValuePattern',
+      'requestSampling',
+      'stackTrace',
+      'telemetryVerbosity',
+    ]) {
+      assert.strictEqual(Object.hasOwn(config.iast, name), false)
+    }
   })
 
   describe('experimental.iast alias gate', () => {
     // v5 keeps the `experimental.iast.*` aliases for backports; v6 strips both
     // bare and nested forms so user-supplied objects do not leak into
-    // `iast.enabled` via the bare alias.
+    // `iast.DD_IAST_ENABLED` via the bare alias.
     for (const { name, iast, v5Field, v5Value } of [
-      { name: 'bare alias as boolean', iast: true, v5Field: 'enabled', v5Value: true },
-      { name: '.enabled nested key', iast: { enabled: false }, v5Field: 'enabled', v5Value: false },
-      { name: '.requestSampling nested key', iast: { requestSampling: 50 }, v5Field: 'requestSampling', v5Value: 50 },
+      { name: 'bare alias as boolean', iast: true, v5Field: 'DD_IAST_ENABLED', v5Value: true },
+      { name: '.enabled nested key', iast: { enabled: false }, v5Field: 'DD_IAST_ENABLED', v5Value: false },
+      {
+        name: '.requestSampling nested key',
+        iast: { requestSampling: 50 },
+        v5Field: 'DD_IAST_REQUEST_SAMPLING',
+        v5Value: 50,
+      },
     ]) {
       it(`v5 keeps experimental.iast (${name})`, () => {
         const config = getConfig({ experimental: { iast } }, { ddMajor: 5 })
@@ -3622,8 +3650,8 @@ describe('Config', () => {
 
       it(`v6 rejects experimental.iast (${name}) as Unknown option`, () => {
         const config = getConfig({ experimental: { iast } }, { ddMajor: 6 })
-        assert.strictEqual(config.iast.enabled, false)
-        assert.strictEqual(config.iast.requestSampling, 30)
+        assert.strictEqual(config.iast.DD_IAST_ENABLED, false)
+        assert.strictEqual(config.iast.DD_IAST_REQUEST_SAMPLING, 30)
         sinon.assert.calledOnce(log.warn)
         sinon.assert.calledWithExactly(
           log.warn,
@@ -3725,13 +3753,13 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       appsec: {
-        enabled: true,
-        rules: 'path/to/rules.json',
+        DD_APPSEC_ENABLED: true,
+        DD_APPSEC_RULES: 'path/to/rules.json',
       },
     })
-    assert.strictEqual(config.appsec.blockedTemplateHtml, undefined)
-    assert.strictEqual(config.appsec.blockedTemplateJson, undefined)
-    assert.strictEqual(config.appsec.blockedTemplateGraphql, undefined)
+    assert.strictEqual(config.appsec.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML, undefined)
+    assert.strictEqual(config.appsec.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON, undefined)
+    assert.strictEqual(config.appsec.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON, undefined)
   })
 
   it('should enable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
@@ -4627,15 +4655,13 @@ apm_configuration_default:
       // Appsec
       assertObjectContains(config, {
         appsec: {
-          rateLimit: 100,
-          stackTrace: {
-            maxStackTraces: 2,
-          },
-          obfuscatorKeyRegex: 'password|token',
+          DD_APPSEC_TRACE_RATE_LIMIT: 100,
+          DD_APPSEC_MAX_STACK_TRACES: 2,
+          DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: 'password|token',
         },
         iast: {
-          requestSampling: 50,
-          maxConcurrentRequests: 10,
+          DD_IAST_REQUEST_SAMPLING: 50,
+          DD_IAST_MAX_CONCURRENT_REQUESTS: 10,
         },
         telemetry: {
           DD_TELEMETRY_HEARTBEAT_INTERVAL: 42000,
@@ -5053,7 +5079,7 @@ rules:
     it('should return default value', () => {
       const config = getConfig()
 
-      assert.strictEqual(config.getOrigin('appsec.enabled'), 'default')
+      assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_ENABLED'), 'default')
     })
 
     it('should return env_var', () => {
@@ -5061,7 +5087,7 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.getOrigin('appsec.enabled'), 'env_var')
+      assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_ENABLED'), 'env_var')
     })
 
     it('should return code', () => {
@@ -5069,7 +5095,7 @@ rules:
         appsec: true,
       })
 
-      assert.strictEqual(config.getOrigin('appsec.enabled'), 'code')
+      assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_ENABLED'), 'code')
     })
   })
 
@@ -5086,6 +5112,38 @@ rules:
       assert.strictEqual(config.codeOriginForSpans.enabled, true)
       config.setRemoteConfig({ 'codeOriginForSpans.enabled': false })
       assert.strictEqual(config.codeOriginForSpans.enabled, false)
+    })
+
+    it('should derive deprecated AppSec objects from canonical Remote Config fields', () => {
+      const config = getConfig()
+
+      updateConfig.resetHistory()
+      config.setRemoteConfig({ appsec: { extendedHeadersCollection: { enabled: true } } })
+
+      assert.strictEqual(config.appsec.DD_APPSEC_COLLECT_ALL_HEADERS, true)
+      assert.strictEqual(config.appsec.extendedHeadersCollection.enabled, true)
+      assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_COLLECT_ALL_HEADERS'), 'remote_config')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_APPSEC_COLLECT_ALL_HEADERS', value: true, origin: 'remote_config' },
+      ])
+
+      updateConfig.resetHistory()
+      config.setRemoteConfig({ appsec: { extendedHeadersCollection: { enabled: false } } })
+
+      assert.strictEqual(config.appsec.DD_APPSEC_COLLECT_ALL_HEADERS, false)
+      assert.strictEqual(config.appsec.extendedHeadersCollection.enabled, false)
+      assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_COLLECT_ALL_HEADERS'), 'remote_config')
+
+      config.setRemoteConfig({ appsec: { extendedHeadersCollection: { enabled: true } } })
+      updateConfig.resetHistory()
+      config.setRemoteConfig(null)
+
+      assert.strictEqual(config.appsec.DD_APPSEC_COLLECT_ALL_HEADERS, false)
+      assert.strictEqual(config.appsec.extendedHeadersCollection.enabled, false)
+      assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_COLLECT_ALL_HEADERS'), 'default')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_APPSEC_COLLECT_ALL_HEADERS', value: false, origin: 'default' },
+      ])
     })
 
     it('should map tracing_sampling_rate to sampleRate', () => {

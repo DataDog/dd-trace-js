@@ -368,6 +368,17 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
+    // These public options predate the canonical AppSec names. Keep the grouped
+    // objects as derived runtime state without using the aliases as source fields.
+    this.appsec.extendedHeadersCollection = {
+      enabled: this.appsec.DD_APPSEC_COLLECT_ALL_HEADERS,
+      maxHeaders: this.appsec.DD_APPSEC_MAX_COLLECTED_HEADERS,
+      redaction: this.appsec.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED,
+    }
+    this.appsec.rasp = {
+      bodyCollection: this.appsec.DD_APPSEC_RASP_COLLECT_REQUEST_BODY,
+    }
+
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('experimental.flaggingProvider.enabled')) {
@@ -439,7 +450,7 @@ class Config extends ConfigBase {
     // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
     if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
-      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -475,8 +486,8 @@ class Config extends ConfigBase {
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
-        trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
-      setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
+        trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
+      setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     }
 
     if (this.cloudPayloadTagging?.request || this.cloudPayloadTagging?.response) {

@@ -43,7 +43,7 @@ function enable (rcInstance, config, appsec) {
           setCollectionMode(rcConfig.auto_user_instrum.mode)
           autoUserInstrumModeId = configId
         } else if (configId === autoUserInstrumModeId) {
-          setCollectionMode(config.appsec.eventTracking.mode)
+          setCollectionMode(config.appsec.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE)
           autoUserInstrumModeId = null
         }
       }
@@ -68,7 +68,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
     const isRemoteConfigControlling = action === 'apply' || action === 'modify'
     const shouldEnable = isRemoteConfigControlling
       ? rcConfig.asm.enabled // take control
-      : config.appsec.enabled // give back control to local config
+      : config.appsec.DD_APPSEC_ENABLED // give back control to local config
 
     if (shouldEnable) {
       appsec.enable(config)
@@ -79,8 +79,10 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
     // TODO: Use configWithOrigin /generateTelemetry instead of manually constructing the change.
     updateConfig([
       {
-        name: 'appsec.enabled',
-        origin: isRemoteConfigControlling ? 'remote_config' : config.getOrigin('appsec.enabled'),
+        name: 'DD_APPSEC_ENABLED',
+        origin: isRemoteConfigControlling
+          ? 'remote_config'
+          : config.getOrigin('appsec.DD_APPSEC_ENABLED'),
         value: shouldEnable,
       },
     ], config)
@@ -93,7 +95,7 @@ function enableOrDisableAppsec (action, rcConfig, config, appsec) {
  * @param {object} appsecConfig - Appsec config
  */
 function enableWafUpdate (appsecConfig) {
-  if (rc && appsecConfig && !appsecConfig.rules) {
+  if (rc && appsecConfig && !appsecConfig.DD_APPSEC_RULES) {
     // dirty require to make startup faster for serverless
     const { ASM_WAF_PRODUCTS } = require('./rc-products')
     const RuleManager = require('./rule_manager')
@@ -119,7 +121,7 @@ function enableWafUpdate (appsecConfig) {
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_TRACE_TAGGING_RULES, true)
     rc.updateCapabilities(RemoteConfigCapabilities.ASM_EXTENDED_DATA_COLLECTION, true)
 
-    if (appsecConfig.rasp?.enabled) {
+    if (appsecConfig.DD_APPSEC_RASP_ENABLED) {
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SQLI, true)
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_SSRF, true)
       rc.updateCapabilities(RemoteConfigCapabilities.ASM_RASP_LFI, true)

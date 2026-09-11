@@ -6,9 +6,6 @@ export interface GeneratedConfig {
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   apmTracingEnabled: boolean;
   appsec: {
-    blockedTemplateGraphql: string | undefined;
-    blockedTemplateHtml: string | undefined;
-    blockedTemplateJson: string | undefined;
     DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
     DD_API_SECURITY_ENABLED: boolean;
     DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: boolean;
@@ -17,30 +14,26 @@ export interface GeneratedConfig {
     DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
     DD_API_SECURITY_SAMPLE_DELAY: number;
     DD_APPSEC_AGENTIC_ONBOARDING: string;
+    DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: string;
+    DD_APPSEC_COLLECT_ALL_HEADERS: boolean;
+    DD_APPSEC_ENABLED: boolean | undefined;
+    DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: string | undefined;
+    DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: boolean;
+    DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: string | undefined;
+    DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: string | undefined;
+    DD_APPSEC_MAX_COLLECTED_HEADERS: number;
+    DD_APPSEC_MAX_STACK_TRACE_DEPTH: number;
+    DD_APPSEC_MAX_STACK_TRACES: number;
+    DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: string;
+    DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: string;
+    DD_APPSEC_RASP_COLLECT_REQUEST_BODY: boolean;
+    DD_APPSEC_RASP_ENABLED: boolean;
+    DD_APPSEC_RULES: string | undefined;
     DD_APPSEC_SCA_ENABLED: boolean | undefined;
-    enabled: boolean | undefined;
-    eventTracking: {
-      mode: string;
-    };
-    extendedHeadersCollection: {
-      enabled: boolean;
-      maxHeaders: number;
-      redaction: boolean;
-    };
-    obfuscatorKeyRegex: string;
-    obfuscatorValueRegex: string;
-    rasp: {
-      bodyCollection: boolean;
-      enabled: boolean;
-    };
-    rateLimit: number;
-    rules: string | undefined;
-    stackTrace: {
-      enabled: boolean;
-      maxDepth: number;
-      maxStackTraces: number;
-    };
-    wafTimeout: number;
+    DD_APPSEC_STACK_TRACE_ENABLED: boolean;
+    DD_APPSEC_TRACE_RATE_LIMIT: number;
+    DD_APPSEC_WAF_TIMEOUT: number;
+    DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: boolean;
   };
   baggageMaxBytes: number;
   baggageMaxItems: number;
@@ -424,11 +417,6 @@ export interface GeneratedConfig {
       redactionEnabled: boolean;
       timeout: number;
     };
-    appsec: {
-      standalone: {
-        enabled: boolean;
-      };
-    };
     b3: boolean;
     enableGetRumData: boolean;
     exporter: string;
@@ -452,20 +440,18 @@ export interface GeneratedConfig {
   headerTags: string[];
   hostname: string;
   iast: {
-    dbRowsToTaint: number;
+    DD_IAST_DB_ROWS_TO_TAINT: number;
+    DD_IAST_DEDUPLICATION_ENABLED: boolean;
+    DD_IAST_ENABLED: boolean;
+    DD_IAST_MAX_CONCURRENT_REQUESTS: number;
+    DD_IAST_MAX_CONTEXT_OPERATIONS: number;
+    DD_IAST_REDACTION_ENABLED: boolean;
+    DD_IAST_REDACTION_NAME_PATTERN: string;
+    DD_IAST_REDACTION_VALUE_PATTERN: string;
+    DD_IAST_REQUEST_SAMPLING: number;
     DD_IAST_SECURITY_CONTROLS_CONFIGURATION: string | undefined;
-    deduplicationEnabled: boolean;
-    enabled: boolean;
-    maxConcurrentRequests: number;
-    maxContextOperations: number;
-    redactionEnabled: boolean;
-    redactionNamePattern: string;
-    redactionValuePattern: string;
-    requestSampling: number;
-    stackTrace: {
-      enabled: boolean;
-    };
-    telemetryVerbosity: string;
+    DD_IAST_STACK_TRACE_ENABLED: boolean;
+    DD_IAST_TELEMETRY_VERBOSITY: string;
   };
   inferredProxyServicesEnabled: boolean;
   langchain: {
