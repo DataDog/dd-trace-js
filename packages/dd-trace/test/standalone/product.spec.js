@@ -36,7 +36,7 @@ describe('Disabled APM Tracing or Standalone - Product', () => {
     })
 
     it('should return a drop all traces rateLimiter when only AI Guard is enabled', () => {
-      const rateLimiter = getProductRateLimiter({ experimental: { aiguard: { enabled: true } } })
+      const rateLimiter = getProductRateLimiter({ aiguard: { DD_AI_GUARD_ENABLED: true } })
       assert.strictEqual(rateLimiter.limit, 0)
       assert.strictEqual(rateLimiter.interval, 'second')
     })
