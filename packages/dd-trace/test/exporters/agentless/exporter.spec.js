@@ -424,6 +424,28 @@ describe('AgentlessExporter', () => {
       assert.ok(done.firstCall.firstArg instanceof Error)
       assert.strictEqual(done.firstCall.firstArg.message, 'writer failed')
     })
+
+    it('supports a tracked flush without a completion callback after a non-error failure', () => {
+      const error = { toString: () => 'writer failed' }
+      writer.flush.callsFake(() => { throw error })
+      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
+      exporter = new Exporter({ flushInterval: 1000 })
+
+      exporter.flush()
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('suppresses tracked synchronous writer failures by default', () => {
+      writer.flush.throws(new Error('writer failed'))
+      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
+      exporter = new Exporter({ flushInterval: 1000 })
+      const done = sinon.spy()
+
+      exporter.flush(done)
+
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    })
   })
 
   describe('setUrl', () => {

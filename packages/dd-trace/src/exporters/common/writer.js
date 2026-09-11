@@ -36,11 +36,11 @@ class Writer {
    * @param {{ deadline?: number, reportErrors?: boolean }} [options]
    */
   flush (done, options) {
+    const callback = options?.reportErrors || options?.deadline !== undefined || !done ? done : () => done()
     if (this.#deliveryTracker) {
-      const callback = options?.reportErrors || options?.deadline !== undefined || !done ? done : () => done()
       return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), callback)
     }
-    this.flushDirect(done, options)
+    this.flushDirect(callback, options)
   }
 
   /**

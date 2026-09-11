@@ -82,7 +82,7 @@ describe('common Writer', () => {
     writer.flush(done)
 
     sinon.assert.notCalled(encoder.reset)
-    sinon.assert.calledOnceWithExactly(writer._sendPayload, payload, 2, done)
+    sinon.assert.calledOnceWithExactly(writer._sendPayload, payload, 2, sinon.match.func)
   })
 
   it('routes automatic flushes through the configured delivery tracker', () => {
@@ -156,7 +156,7 @@ describe('common Writer', () => {
     writer.flush(done)
 
     sinon.assert.notCalled(encoder.reset)
-    sinon.assert.calledOnceWithExactly(writer._sendPayload, Buffer.from('payload'), 2, done)
+    sinon.assert.calledOnceWithExactly(writer._sendPayload, Buffer.from('payload'), 2, sinon.match.func)
   })
 
   it('sends a bounded final payload when the request buffer is full', () => {

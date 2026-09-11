@@ -276,6 +276,15 @@ describe('Exporter', () => {
       sinon.assert.calledOnce(writer.flush)
     })
 
+    it('supports a tracked flush without a completion callback', () => {
+      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+
+      exporter.flush()
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
     it('aggregates a synchronous boundary failure with an in-flight failure', () => {
       const inFlightError = new Error('in-flight request failed')
       const boundaryError = new Error('boundary flush failed')

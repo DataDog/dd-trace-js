@@ -250,6 +250,15 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('should suppress request errors by default', async () => {
+      request.yieldsAsync(new Error('agent unavailable'))
+      encoder.count.returns(1)
+
+      const flushError = await new Promise(resolve => writer.flush(resolve))
+
+      assert.strictEqual(flushError, undefined)
+    })
+
     it('should report request errors when requested', (done) => {
       const error = new Error('agent unavailable')
       request.yieldsAsync(error)
