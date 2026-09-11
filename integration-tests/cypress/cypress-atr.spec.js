@@ -331,7 +331,11 @@ moduleTypes.forEach(({
         )
       })
 
-      it('enforces unequal dynamic ATR budgets after each test duration is known', async () => {
+      it('enforces unequal dynamic ATR budgets after each test duration is known', async function () {
+        // Cypress restarts the browser between retries. Four attempts of the slow
+        // fixture can exceed this suite's default timeout on CI runners.
+        this.timeout(240_000)
+
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -378,7 +382,7 @@ moduleTypes.forEach(({
             assert.strictEqual(constructorTest[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
             assert.strictEqual(longTest[3].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
           },
-          { hardTimeout: 60_000 }
+          { hardTimeout: 180_000 }
         )
       })
 
