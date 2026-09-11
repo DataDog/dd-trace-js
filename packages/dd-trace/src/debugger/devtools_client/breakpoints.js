@@ -6,7 +6,11 @@ const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
-const { compileBreakpointCondition, getRemoveProbeExpression } = require('./probe_sampler')
+const {
+  compileBreakpointCondition,
+  getRemoveProbeExpression,
+  isSnapshotProducingProbe,
+} = require('./probe_sampler')
 const {
   DEFAULT_MAX_REFERENCE_DEPTH,
   DEFAULT_MAX_COLLECTION_SIZE,
@@ -75,12 +79,6 @@ async function addBreakpoint (probe) {
     probe.template = compileSegments(probe.segments)
   }
   delete probe.segments
-
-  // Optimize for fast calculations when probe is hit
-  const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot
-    ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
-    : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
-  probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
 
   // Warning: The code below relies on undocumented behavior of the inspector!
   // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
@@ -155,6 +153,15 @@ async function addBreakpoint (probe) {
       })
     }
   }
+
+  // Must be calculated after `compiledCaptureExpressions` has been resolved, since capture-expression probes produce
+  // snapshots and therefore default to the snapshot rate.
+  //
+  // Optimize for fast calculations when probe is hit
+  const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (isSnapshotProducingProbe(probe)
+    ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
+    : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
+  probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
 
   const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
   const breakpoint = locationToBreakpoint.get(locationKey)

@@ -194,6 +194,20 @@ describe('breakpoints', function () {
       )
     })
 
+    it('should default to the non-snapshot sampling rate for probes that produce no snapshot', async function () {
+      await addProbe()
+
+      // 5000 snapshots/second is the non-snapshot default
+      assert.strictEqual(getInstalledProbe().nsBetweenSampling, 200_000n)
+    })
+
+    it('should default to the snapshot sampling rate for snapshot probes', async function () {
+      await addProbe({ captureSnapshot: true })
+
+      // 1 snapshot/second is the snapshot default
+      assert.strictEqual(getInstalledProbe().nsBetweenSampling, 1_000_000_000n)
+    })
+
     it('should translate source-mapped locations before setting the breakpoint', async function () {
       stateMock.findScriptFromPartialPath.returns({
         url: 'file:///path/to/test.js',
@@ -696,6 +710,41 @@ describe('breakpoints', function () {
         )
       })
 
+      it('should default to the snapshot sampling rate', async function () {
+        // Capture-expression probes produce snapshots, but set `captureSnapshot: false`. They must still get the
+        // snapshot default rate, or they will burst up to the global snapshot limit.
+        await addProbe({
+          captureSnapshot: false,
+          captureExpressions: [{ name: 'myVar', expr: { dsl: 'myVar', json: { ref: 'myVar' } } }],
+        })
+
+        // 1 snapshot/second is the snapshot default
+        assert.strictEqual(getInstalledProbe().nsBetweenSampling, 1_000_000_000n)
+        // The breakpoint condition must agree that the probe produces snapshots, so the runtime sampler also applies
+        // the global snapshot limit to it.
+        assert.match(
+          /** @type {string} */ (sessionMock.post.secondCall.args[1].condition),
+          /makeSampleDecision\(0, "probe-1", 1000000000n, true\)/
+        )
+      })
+
+      it('should respect an explicit sampling rate', async function () {
+        await addProbe({
+          captureSnapshot: false,
+          sampling: { snapshotsPerSecond: 0.5 },
+          captureExpressions: [{ name: 'myVar', expr: { dsl: 'myVar', json: { ref: 'myVar' } } }],
+        })
+
+        assert.strictEqual(getInstalledProbe().nsBetweenSampling, 2_000_000_000n)
+      })
+
+      it('should default to the non-snapshot sampling rate if captureExpressions is empty', async function () {
+        await addProbe({ captureSnapshot: false, captureExpressions: [] })
+
+        // 5000 snapshots/second is the non-snapshot default
+        assert.strictEqual(getInstalledProbe().nsBetweenSampling, 200_000n)
+      })
+
       it('should not set compiledCaptureExpressions if captureExpressions is empty', async function () {
         await addProbe({
           captureExpressions: [],
@@ -1171,6 +1220,21 @@ describe('breakpoints', function () {
    */
   async function addProbe (probe) {
     await breakpoints.addBreakpoint(genProbeConfig(probe))
+  }
+
+  /**
+   * Get a probe stored at the default breakpoint location.
+   *
+   * @param {string} [id] - The probe id. Defaults to `probe-1`.
+   */
+  function getInstalledProbe (id = 'probe-1') {
+    const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+    assert.ok(probesAtLocation, `could not find probes at location ${breakpointId}`)
+
+    const probe = probesAtLocation.get(id)
+    assert.ok(probe, `could not find probe ${id}`)
+
+    return probe
   }
 })
 
