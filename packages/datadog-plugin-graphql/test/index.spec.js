@@ -13,10 +13,13 @@ const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../version')
+const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+const legacyStorage = storage('legacy')
 
 function noop () {}
 
@@ -485,6 +488,82 @@ describe('Plugin', () => {
           assert.ok(await graphql.execute(args), 'execute returned a result')
           assert.ok(!Object.hasOwn(args, 'fieldResolver'),
             'instrumentation must not add fieldResolver to caller args')
+        })
+
+        it('should attribute aliased resolver errors without rescanning earlier fields', async () => {
+          const aliasCount = 16
+          let nextResolveFieldReads = 0
+          let rootCtx
+
+          /** @type {Array<{ error: Error, reject: (reason?: unknown) => void }>} */
+          const pendingResolvers = []
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'AliasedResolverErrorsQuery',
+              fields: {
+                failure: {
+                  type: graphql.GraphQLString,
+                  resolve () {
+                    rootCtx = legacyStorage.getStore()?.graphqlRootCtx
+                    const error = new Error('aliased failure')
+                    return new Promise(
+                      /**
+                       * @param {(value: never) => void} _resolve
+                       * @param {(reason?: unknown) => void} reject
+                       */
+                      (_resolve, reject) => pendingResolvers.push({ error, reject })
+                    )
+                  },
+                },
+              },
+            }),
+          })
+          const aliases = []
+          for (let index = 0; index < aliasCount; index++) {
+            aliases.push(`a${index}: failure`)
+          }
+          const document = graphql.parse(`query AliasedResolverErrors { ${aliases.join(' ')} }`)
+          const assertion = agent.assertSomeTraces(
+            /** @param {Array<Array<object>>} traces */
+            traces => {
+              let errorSpans = 0
+              for (const span of traces[0]) {
+                if (span.name === 'graphql.resolve' && span.error === 1) errorSpans++
+              }
+              assert.strictEqual(errorSpans, aliasCount)
+            },
+            { spanResourceMatch: /AliasedResolverErrors/ }
+          )
+
+          const execution = graphql.execute({ schema: localSchema, document })
+          assert.strictEqual(pendingResolvers.length, aliasCount)
+          assert.ok(rootCtx, 'expected resolver root context')
+
+          const resolveFields = []
+          for (let field = rootCtx.resolveFields; field; field = field.nextResolveField) {
+            resolveFields.push(field)
+          }
+          for (const field of resolveFields) {
+            const nextResolveField = field.nextResolveField
+            Object.defineProperty(field, 'nextResolveField', {
+              configurable: true,
+              get () {
+                nextResolveFieldReads++
+                return nextResolveField
+              },
+            })
+          }
+
+          for (const { error, reject } of pendingResolvers) {
+            reject(error)
+          }
+          const [result] = await Promise.all([execution, assertion])
+
+          assert.ok(
+            nextResolveFieldReads <= aliasCount * 2,
+            `expected at most ${aliasCount * 2} resolver-field link reads, got ${nextResolveFieldReads}`
+          )
+          assert.strictEqual(result.errors.length, aliasCount)
         })
 
         it('should release operation inputs retained through resolver timers', async function () {
@@ -1222,6 +1301,245 @@ describe('Plugin', () => {
             assertion,
             graphql.graphql({ schema: abstractSchema, source: '{ results { name profile { value } } }' }),
           ])
+        })
+
+        it('attributes errors to the matching collapsed abstract field variant', async function () {
+          if (semver.lt(graphqlVersion, '15.0.0')) this.skip()
+
+          function createDeferredRejection () {
+            let rejectPromise
+            const value = new Promise(
+              /**
+               * @param {(value: never) => void} _resolve
+               * @param {(reason?: unknown) => void} reject
+               */
+              (_resolve, reject) => {
+                rejectPromise = reject
+              }
+            )
+            return { value, reject: rejectPromise }
+          }
+
+          const first = createDeferredRejection()
+          const second = createDeferredRejection()
+          const foreign = createDeferredRejection()
+          const firstFailure = new Error('first failure')
+          const secondFailure = new Error('second failure')
+          const foreignFailure = Object.assign(new Error('foreign failure'), { path: ['results', 0, 'value'] })
+
+          /** @param {{ __typename: string }} value */
+          function resolveType (value) {
+            return value.__typename
+          }
+
+          const FirstResult = new graphql.GraphQLObjectType({
+            name: 'FirstForeignErrorResult',
+            fields: {
+              value: {
+                type: graphql.GraphQLString,
+                /** @param {{ value: string | Promise<never> }} source */
+                resolve (source) {
+                  return source.value
+                },
+              },
+            },
+          })
+          const SecondResult = new graphql.GraphQLObjectType({
+            name: 'SecondForeignErrorResult',
+            fields: {
+              value: {
+                type: graphql.GraphQLString,
+                /** @param {{ value: string | Promise<never> }} source */
+                resolve (source) {
+                  return source.value
+                },
+              },
+            },
+          })
+          const Result = new graphql.GraphQLUnionType({
+            name: 'ForeignErrorResult',
+            types: [FirstResult, SecondResult],
+            resolveType,
+          })
+          const abstractSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'ForeignAbstractErrorQuery',
+              fields: {
+                results: {
+                  type: new graphql.GraphQLList(Result),
+                  resolve: () => [
+                    { __typename: 'FirstForeignErrorResult', value: 'first' },
+                    { __typename: 'SecondForeignErrorResult', value: 'second' },
+                    { __typename: 'FirstForeignErrorResult', value: first.value },
+                    { __typename: 'SecondForeignErrorResult', value: second.value },
+                  ],
+                },
+                foreign: {
+                  type: graphql.GraphQLString,
+                  resolve: () => foreign.value,
+                },
+              },
+            }),
+            types: [FirstResult, SecondResult],
+          })
+          const document = graphql.parse(`
+            query ForeignAbstractError {
+              results {
+                ... on FirstForeignErrorResult { value }
+                ... on SecondForeignErrorResult { value }
+              }
+              foreign
+            }
+          `)
+
+          /** @param {Array<Array<object>>} traces */
+          function assertTrace (traces) {
+            let firstSpan
+            let secondSpan
+            for (const span of traces[0]) {
+              const coordinates = span.meta?.['graphql.field.coordinates']
+              if (coordinates === 'FirstForeignErrorResult.value') firstSpan = span
+              if (coordinates === 'SecondForeignErrorResult.value') secondSpan = span
+            }
+
+            assert.ok(firstSpan)
+            assert.ok(secondSpan)
+            assert.strictEqual(firstSpan.error, 1)
+            assert.strictEqual(firstSpan.meta[ERROR_MESSAGE], firstFailure.message)
+            assert.strictEqual(secondSpan.error, 1)
+            assert.strictEqual(secondSpan.meta[ERROR_MESSAGE], secondFailure.message)
+          }
+
+          const assertion = agent.assertSomeTraces(assertTrace, { spanResourceMatch: /ForeignAbstractError/ })
+          const execution = graphql.execute({ schema: abstractSchema, document })
+          first.reject(firstFailure)
+          second.reject(secondFailure)
+          foreign.reject(foreignFailure)
+          const [result] = await Promise.all([execution, assertion])
+
+          const errorsByMessage = new Map(result.errors.map(error => [error.message, error]))
+          assert.strictEqual(result.errors.length, 3)
+          assert.deepStrictEqual(errorsByMessage.get(firstFailure.message).path, ['results', 2, 'value'])
+          assert.deepStrictEqual(errorsByMessage.get(secondFailure.message).path, ['results', 3, 'value'])
+          assert.deepStrictEqual(errorsByMessage.get(foreignFailure.message).path, ['results', 0, 'value'])
+          assert.strictEqual(result.data.results[0].value, 'first')
+          assert.strictEqual(result.data.results[1].value, 'second')
+          assert.strictEqual(result.data.results[2].value, null)
+          assert.strictEqual(result.data.results[3].value, null)
+          assert.strictEqual(result.data.foreign, null)
+        })
+
+        it('attributes a deferred reused error to the first collapsed abstract field variant', async function () {
+          if (semver.lt(graphqlVersion, '15.0.0')) this.skip()
+
+          let rejectFirst
+          const firstFailure = new Error('first failure')
+          const firstValue = new Promise(
+            /**
+             * @param {(value: never) => void} _resolve
+             * @param {(reason?: unknown) => void} reject
+             */
+            (_resolve, reject) => {
+              rejectFirst = reject
+            }
+          )
+
+          /** @param {{ __typename: string }} value */
+          function resolveType (value) {
+            return value.__typename
+          }
+
+          const Result = new graphql.GraphQLInterfaceType({
+            name: 'DeferredErrorResult',
+            fields: {
+              value: { type: graphql.GraphQLString },
+            },
+            resolveType,
+          })
+          const FirstResult = new graphql.GraphQLObjectType({
+            name: 'FirstDeferredErrorResult',
+            interfaces: [Result],
+            fields: {
+              value: {
+                type: graphql.GraphQLString,
+                /** @param {{ value: string | Promise<never> }} source */
+                resolve (source) {
+                  return source.value
+                },
+              },
+            },
+          })
+          const SecondResult = new graphql.GraphQLObjectType({
+            name: 'SecondDeferredErrorResult',
+            interfaces: [Result],
+            fields: {
+              value: { type: graphql.GraphQLString, resolve: () => 'second' },
+            },
+          })
+          const ThirdResult = new graphql.GraphQLObjectType({
+            name: 'ThirdDeferredErrorResult',
+            interfaces: [Result],
+            fields: {
+              value: { type: graphql.GraphQLString, resolve: () => 'third' },
+            },
+          })
+          const abstractSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'DeferredAbstractErrorQuery',
+              fields: {
+                results: {
+                  type: new graphql.GraphQLList(Result),
+                  resolve: () => [
+                    { __typename: 'FirstDeferredErrorResult', value: 'first' },
+                    { __typename: 'SecondDeferredErrorResult' },
+                    { __typename: 'ThirdDeferredErrorResult' },
+                    { __typename: 'FirstDeferredErrorResult', value: firstValue },
+                  ],
+                },
+              },
+            }),
+            types: [FirstResult, SecondResult, ThirdResult],
+          })
+          const document = graphql.parse(`
+            query DeferredAbstractError {
+              results {
+                ... on FirstDeferredErrorResult { value }
+                ... on SecondDeferredErrorResult { value }
+                ... on ThirdDeferredErrorResult { value }
+              }
+            }
+          `)
+
+          /** @param {Array<Array<object>>} traces */
+          function assertTrace (traces) {
+            let firstSpan
+            let secondSpan
+            let thirdSpan
+            for (const span of traces[0]) {
+              const coordinates = span.meta?.['graphql.field.coordinates']
+              if (coordinates === 'FirstDeferredErrorResult.value') firstSpan = span
+              if (coordinates === 'SecondDeferredErrorResult.value') secondSpan = span
+              if (coordinates === 'ThirdDeferredErrorResult.value') thirdSpan = span
+            }
+
+            assert.ok(firstSpan)
+            assert.ok(secondSpan)
+            assert.ok(thirdSpan)
+            assert.strictEqual(firstSpan.error, 1)
+            assert.strictEqual(secondSpan.error, 0)
+            assert.strictEqual(thirdSpan.error, 0)
+          }
+
+          const assertion = agent.assertSomeTraces(assertTrace, { spanResourceMatch: /DeferredAbstractError/ })
+          const execution = graphql.execute({ schema: abstractSchema, document })
+          rejectFirst(firstFailure)
+          const [result] = await Promise.all([execution, assertion])
+
+          assert.strictEqual(result.errors.length, 1)
+          assert.strictEqual(result.data.results[0].value, 'first')
+          assert.strictEqual(result.data.results[1].value, 'second')
+          assert.strictEqual(result.data.results[2].value, 'third')
+          assert.strictEqual(result.data.results[3].value, null)
         })
 
         it('caches path strings across nested list-of-lists items', async () => {
@@ -2767,6 +3085,42 @@ describe('Plugin', () => {
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
+        it('should record resolver errors without the collapsed-field index', async () => {
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'UncollapsedResolverErrorQuery',
+              fields: {
+                failure: {
+                  type: graphql.GraphQLString,
+                  resolve: () => Promise.reject(new Error('uncollapsed failure')),
+                },
+              },
+            }),
+          })
+
+          /** @param {Array<Array<object>>} traces */
+          function assertTrace (traces) {
+            let resolveSpan
+            for (const span of traces[0]) {
+              if (span.name === 'graphql.resolve') {
+                resolveSpan = span
+                break
+              }
+            }
+
+            assert.ok(resolveSpan)
+            assert.strictEqual(resolveSpan.error, 1)
+            assert.strictEqual(resolveSpan.meta[ERROR_MESSAGE], 'uncollapsed failure')
+          }
+
+          const [result] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: 'query UncollapsedError { failure }' }),
+            agent.assertSomeTraces(assertTrace, { spanResourceMatch: /UncollapsedError/ }),
+          ])
+
+          assert.strictEqual(result.errors.length, 1)
+        })
+
         it('should trace aliased __proto__ fields when collapsing is disabled', async () => {
           const source = '{ __proto__: hello(name: "alias") }'
 
@@ -3380,7 +3734,8 @@ describe('Plugin', () => {
         }
 
         it('should not record a pre-located foreign error on a reused resolver span', async () => {
-          const error = Object.assign(new Error('foreign failure'), { path: ['foreign'] })
+          const missingError = Object.assign(new Error('missing path failure'), { path: ['foreign'] })
+          const mismatchedError = Object.assign(new Error('mismatched path failure'), { path: ['items'] })
           const Item = new graphql.GraphQLObjectType({
             name: 'PreLocatedResolverErrorItem',
             fields: {
@@ -3400,7 +3755,7 @@ describe('Plugin', () => {
               fields: {
                 items: {
                   type: new graphql.GraphQLList(Item),
-                  resolve: () => [{ value: 'first' }, { error }],
+                  resolve: () => [{ value: 'first' }, { error: missingError }, { error: mismatchedError }],
                 },
               },
             }),
@@ -3417,7 +3772,11 @@ describe('Plugin', () => {
             }, { spanResourceMatch: /items:\[PreLocatedResolverErrorItem\]/ }),
           ])
 
-          assert.deepStrictEqual(result.errors[0].path, ['foreign'])
+          const errorPaths = []
+          for (const error of result.errors) {
+            errorPaths.push(error.path)
+          }
+          assert.deepStrictEqual(errorPaths, [['foreign'], ['items']])
         })
 
         it('should finish spans when hooks throw', async () => {
