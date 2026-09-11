@@ -56,6 +56,23 @@ describe('helpers/instrument', () => {
       }
     })
 
+    it('keeps same-file hooks of different packages apart when names are combined', () => {
+      // Every @wdio/* module targets '>=9.0.0' with build/index.js, so
+      // (versionRange, filePath) collide across packages. They are distinct
+      // hooks: deduplication must only collapse same-package transform
+      // repeats, never a different package with the same target file.
+      const combined = getHooks(['@wdio/cli', '@wdio/local-runner', '@wdio/runner'])
+
+      assert.deepStrictEqual(
+        combined.map(({ name }) => name).sort(),
+        ['@wdio/cli', '@wdio/local-runner', '@wdio/runner']
+      )
+      assert.deepStrictEqual(
+        combined,
+        getHooks('@wdio/cli').concat(getHooks('@wdio/local-runner'), getHooks('@wdio/runner'))
+      )
+    })
+
     it('keeps distinct version ranges and files of the same module apart', () => {
       // graphql is targeted through many files; each distinct (version range,
       // file) pair stays a separate hook even after deduplication.

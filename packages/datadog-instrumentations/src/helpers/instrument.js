@@ -90,22 +90,23 @@ exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
 // dedupe must simply be free where the work already happens.
 exports.getHooks = function getHooks (names) {
   const requested = new Set([names].flat())
-  const seen = new Set()
-  const hooks = []
+  // The map is both the dedupe and the result. The key is every field that
+  // determines a hook: the module name must be part of it, because distinct
+  // packages can target the same version range and file (every @wdio/* module
+  // resolves '>=9.0.0' with build/index.js) - those are different hooks, and
+  // only same-package transform repeats may collapse.
+  const hooks = new Map()
   for (const { module } of rewriterInstrumentations) {
     if (!requested.has(module.name)) continue
-    const key = `${module.versionRange}|${module.filePath}`
-    if (seen.has(key)) continue
-    seen.add(key)
     // Fresh objects, including the versions array: callers may adjust a hook
     // for their own registration (the ai, claude-agent-sdk and
     // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
     // not leak into any other call.
     const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
     sourceRewritePaths.set(hook, module.filePath)
-    hooks.push(hook)
+    hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)
   }
-  return hooks
+  return [...hooks.values()]
 }
 
 /**
