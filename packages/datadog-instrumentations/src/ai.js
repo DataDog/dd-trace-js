@@ -147,7 +147,7 @@ function wrapTracer (tracer) {
 
 let orchestrionSubscribed = false
 
-for (const hook of getHooks('ai')) {
+for (const hook of getHooks('ai').values()) {
   if (hook.file === 'dist/index.js') {
     // if not removed, the below hook will never match correctly
     // however, it is still needed in the orchestrion definition

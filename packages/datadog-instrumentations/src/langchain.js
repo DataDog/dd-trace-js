@@ -2,6 +2,6 @@
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('@langchain/core')) {
+for (const hook of getHooks('@langchain/core').values()) {
   addHook(hook, exports => exports)
 }

@@ -105,7 +105,7 @@ function observeDurablePromise (dp, onSettle) {
   dp[ON_SETTLE] = onSettle
 }
 
-for (const hook of getHooks('@aws/durable-execution-sdk-js')) {
+for (const hook of getHooks('@aws/durable-execution-sdk-js').values()) {
   hook.file = null
   addHook(hook, exports => exports)
 }
