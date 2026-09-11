@@ -714,6 +714,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "postgres",
+    "integration": "postgres",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.4.9",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "protobufjs",
     "integration": "protobufjs",
     "minimum_tracer_supported": "6.8.0",
