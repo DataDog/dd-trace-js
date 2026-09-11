@@ -6,10 +6,15 @@ const log = require('../log')
 const { isEmpty } = require('../util')
 const addresses = require('./addresses')
 const apiSecurity = require('./api_security')
+const { extractMimeType } = require('./downstream_requests')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
 const activeInvocations = new WeakMap()
+
+const MAX_RESPONSE_BODY_SIZE = 16 * 1024 * 1024
+
+const JSON_MIME_TYPES = new Set(['application/json', 'text/json'])
 
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
@@ -86,11 +91,12 @@ function onLambdaStartInvocation (data) {
  * WAF pass, disposes the WAF context, and finishes the request report.
  *
  * @param {{ span: object, statusCode: string | undefined,
- *           responseHeaders: Record<string, string> | undefined }} data
+ *           responseHeaders: Record<string, string> | undefined,
+ *           responseBody: unknown, isBase64Encoded: boolean | undefined }} data
  */
 function onLambdaEndInvocation (data) {
   try {
-    const { span, statusCode, responseHeaders } = data
+    const { span, statusCode, responseHeaders, responseBody, isBase64Encoded } = data
 
     if (!span) {
       log.warn('[ASM] No span provided in Lambda end invocation')
@@ -127,6 +133,11 @@ function onLambdaEndInvocation (data) {
 
       if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
         persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+
+        const parsedBody = parseResponseBody(responseBody, responseHeaders, isBase64Encoded)
+        if (parsedBody !== undefined) {
+          persistent[addresses.HTTP_INCOMING_RESPONSE_BODY] = parsedBody
+        }
       }
 
       let wafResult
@@ -145,6 +156,58 @@ function onLambdaEndInvocation (data) {
   } catch (err) {
     log.error('[ASM] Error in Lambda end-invocation handler', err)
   }
+}
+
+/**
+ * Turns the raw response body published by the Lambda layer into the object the WAF expects
+ *
+ * @param {unknown} rawBody
+ * @param {Record<string, string> | undefined} headers Already lowercased by the Lambda layer
+ * @param {boolean | undefined} isBase64Encoded
+ * @returns {object | undefined} The parsed body, or `undefined` when it cannot be used
+ */
+function parseResponseBody (rawBody, headers, isBase64Encoded) {
+  if (!rawBody) return
+
+  // A handler that answered with the payload itself needs no parsing, and no content type either.
+  if (typeof rawBody === 'object') return rawBody
+
+  if (typeof rawBody !== 'string') return
+
+  const mime = extractMimeType(headers?.['content-type'])
+  if (!mime || !(JSON_MIME_TYPES.has(mime) || mime.endsWith('+json'))) return
+
+  if (isOverSizeCap(rawBody, isBase64Encoded)) {
+    log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',
+      MAX_RESPONSE_BODY_SIZE)
+    return
+  }
+
+  try {
+    const parsed = JSON.parse(isBase64Encoded ? Buffer.from(rawBody, 'base64').toString('utf8') : rawBody)
+
+    // A JSON scalar carries no schema worth extracting.
+    if (parsed === null || typeof parsed !== 'object') return
+
+    return parsed
+  } catch (err) {
+    log.debug('[ASM] Failed to parse Lambda response body', err)
+  }
+}
+
+/**
+ * Tells whether a raw body exceeds the size cap, without decoding or measuring it when avoidable
+ *
+ * @param {string} rawBody
+ * @param {boolean | undefined} isBase64Encoded
+ * @returns {boolean}
+ */
+function isOverSizeCap (rawBody, isBase64Encoded) {
+  if (isBase64Encoded) return Math.floor(rawBody.length * 3 / 4) >= MAX_RESPONSE_BODY_SIZE
+  if (rawBody.length >= MAX_RESPONSE_BODY_SIZE) return true
+  if (rawBody.length * 3 < MAX_RESPONSE_BODY_SIZE) return false
+
+  return Buffer.byteLength(rawBody, 'utf8') >= MAX_RESPONSE_BODY_SIZE
 }
 
 module.exports = {

@@ -507,6 +507,177 @@ describe('AppSec Lambda handler', () => {
       })
       assert.deepStrictEqual(persistent[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
     })
+
+    describe('response body', () => {
+      const invokeWithBody = (data, options = {}) => {
+        const span = options.span ?? fakeSpan()
+        lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/', route: '/api/{id}' })
+        waf.run.resetHistory()
+
+        lambda.onLambdaEndInvocation({
+          span,
+          statusCode: '200',
+          responseHeaders: { 'content-type': 'application/json' },
+          ...data,
+        })
+
+        return waf.run.firstCall?.args[0].persistent
+      }
+
+      it('should parse a JSON body published as a string', () => {
+        const persistent = invokeWithBody({ responseBody: '{"payload":{"a":"b"}}' })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: { a: 'b' } })
+      })
+
+      it('should pass through a body that is already an object', () => {
+        const persistent = invokeWithBody({ responseBody: { payload: 1 }, responseHeaders: undefined })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should decode a base64 encoded body', () => {
+        const responseBody = Buffer.from('{"payload":[1,2]}').toString('base64')
+
+        const persistent = invokeWithBody({ responseBody, isBase64Encoded: true })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: [1, 2] })
+      })
+
+      it('should accept a differently cased media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'Application/JSON' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a media type with parameters', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json; charset=utf-8' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a structured JSON suffix media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/problem+json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept text/json', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should reject a subtype that merely contains json', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/notjson' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should reject a JSON sequence, which is not a single document', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json-seq' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should not be fooled by json appearing in a media type parameter', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain; filename=data.json' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should not parse the body when the content type is not JSON', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should not parse a string body when there are no response headers', () => {
+        const persistent = invokeWithBody({ responseBody: '{"payload":1}', responseHeaders: undefined })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should swallow a malformed JSON body', () => {
+        const persistent = invokeWithBody({ responseBody: '{not json' })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.notCalled(log.error)
+      })
+
+      it('should ignore a JSON scalar, which carries no schema', () => {
+        const persistent = invokeWithBody({ responseBody: '"just a string"' })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should ignore a body over the 16MB cap', () => {
+        const responseBody = `{"payload":"${'a'.repeat(16 * 1024 * 1024)}"}`
+
+        const persistent = invokeWithBody({ responseBody })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should measure the cap in bytes, not in code units', () => {
+        const responseBody = `{"payload":"${'デ'.repeat(6 * 1024 * 1024)}"}`
+        assert.ok(responseBody.length < 16 * 1024 * 1024)
+
+        const persistent = invokeWithBody({ responseBody })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/larger than/))
+      })
+
+      it('should reject an oversized base64 body from its encoded length alone', () => {
+        const persistent = invokeWithBody({
+          responseBody: 'A'.repeat(Math.ceil(16 * 1024 * 1024 * 4 / 3)),
+          isBase64Encoded: true,
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/larger than/))
+      })
+
+      it('should ignore an empty body', () => {
+        const persistent = invokeWithBody({ responseBody: '' })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should not set the body when the invocation is not sampled', () => {
+        // The first invocation takes the TTL slot, so the second one is skipped.
+        invokeWithBody({ responseBody: '{"payload":1}' })
+        const persistent = invokeWithBody({ responseBody: '{"payload":1}' })
+
+        assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+    })
   })
 })
 
