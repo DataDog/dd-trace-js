@@ -402,6 +402,7 @@ describe('release changelog', () => {
       { filename: '.claude/settings.json' },
       { filename: '.cursor/skills/dd-apm-sdk-review/SKILL.md' },
       { filename: '.agents/dd-apm-sdk-review-overrides/reviewers/design.md' },
+      { filename: 'CLAUDE.md' },
       { filename: '.gitignore' },
     ])
 

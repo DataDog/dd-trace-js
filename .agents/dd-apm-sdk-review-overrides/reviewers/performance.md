@@ -15,7 +15,7 @@ Per-span / per-request:
 - AppSec per-request: `packages/dd-trace/src/appsec/index.js`, `waf/`, `store.js`, `reporter.js`, `rasp/`; IAST rewriting in `packages/datadog-instrumentations/src/helpers/rewriter`.
 
 Startup / require-time:
-- `packages/dd-trace/src/index.js`, `proxy.js`, `bootstrap.js`, `packages/dd-trace/src/guardrails/index.js` (runs before anything, must stay dependency-free), `ritm.js`/`iitm.js` (require hooks — run for every `require()` in the app), `packages/datadog-instrumentations/src/helpers/hooks.js` (lazy hook table; adding eager `require`s here inflates startup), `packages/dd-trace/src/config/index.js`, `startup-log.js`.
+- `packages/dd-trace/src/index.js`, `proxy.js`, `bootstrap.js`, `packages/dd-trace/src/guardrails/index.js` (runs before anything; do not pull plugins, instrumentations, or the rest of the tracer), `ritm.js`/`iitm.js` (require hooks — run for every `require()` in the app), `packages/datadog-instrumentations/src/helpers/hooks.js` (lazy hook table; adding eager `require`s here inflates startup), `packages/dd-trace/src/config/index.js`, `startup-log.js`.
 
 Anything added to these files pays cost on every span/request/require — measure it. A slow function on a genuinely irrelevant one-time path (e.g. a rarely-hit error branch, not in the lists above) is a non-issue; the same function in startup/require-time (the list above) or on span start is customer-visible cold-start/hot-path cost and a top-severity finding.
 

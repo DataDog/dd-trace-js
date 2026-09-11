@@ -31,7 +31,7 @@ const INTERNAL_PATH_PATTERNS = [
   /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
   /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
-  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json|\.gitignore)$/,
+  /^(?:AGENTS\.md|CLAUDE\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json|\.gitignore)$/,
 ]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and
 // `deps` for production ones, but the `deps` manifests under test/benchmark/docs
