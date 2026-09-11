@@ -485,6 +485,7 @@ export interface GeneratedConfig {
   logLevel: "debug" | "info" | "warn" | "error";
   middlewareTracingEnabled: boolean;
   openai: {
+    DD_OPENAI_REALTIME_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
   openAiLogsEnabled: boolean;
@@ -776,6 +777,7 @@ export interface GeneratedEnvVarConfig {
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
+  DD_OPENAI_REALTIME_ENABLED: boolean;
   DD_OPENAI_SPAN_CHAR_LIMIT: number;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
