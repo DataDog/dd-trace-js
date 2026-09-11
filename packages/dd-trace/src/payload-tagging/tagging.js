@@ -1,12 +1,25 @@
 'use strict'
 
 const { PAYLOAD_TAGGING_MAX_TAGS } = require('../constants')
+const { truncateString } = require('../util')
 
 const redactedKeys = new Set([
   'authorization', 'x-authorization', 'password', 'token',
 ])
 const truncated = 'truncated'
 const redacted = 'redacted'
+const maxValueLength = 5000
+const maxRetainedValueLength = maxValueLength * 2
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function truncateValue (value) {
+  return value.length > maxRetainedValueLength
+    ? truncateString(value, maxValueLength)
+    : value.slice(0, maxValueLength)
+}
 
 /**
  * Escapes dots in keys to preserve hierarchy in flattened tag names.
@@ -67,13 +80,14 @@ function tagsFromObject (object, opts) {
 
     if (['number', 'boolean'].includes(typeof object) || Buffer.isBuffer(object)) {
       tagCount += 1
-      result[prefix] = object.toString().slice(0, 5000)
+      const value = object.toString()
+      result[prefix] = value.length > maxValueLength ? truncateValue(value) : value
       return
     }
 
     if (typeof object === 'string') {
       tagCount += 1
-      result[prefix] = object.slice(0, 5000)
+      result[prefix] = object.length > maxValueLength ? truncateValue(object) : object
     }
 
     if (typeof object === 'object') {
