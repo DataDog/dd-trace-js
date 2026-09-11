@@ -2528,6 +2528,41 @@ describe('Config', () => {
     assert.strictEqual(config.spanAttributeSchema, 'v0')
   })
 
+  it('should reject an empty API key', () => {
+    process.env.DD_API_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_API_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should reject an empty app key', () => {
+    process.env.DD_APP_KEY = ''
+
+    const config = getConfig()
+
+    assert.strictEqual(config.DD_APP_KEY, undefined)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      "Invalid value: '<redacted>' for DD_APP_KEY (source: env_var), picked default",
+    )
+  })
+
+  it('should redact an invalid API key', () => {
+    process.env.DD_API_KEY = 'api-key\n'
+
+    const config = getConfig()
+    const message = log.warn.firstCall.args[0]
+
+    assert.doesNotMatch(message, /api-key/)
+    assert.strictEqual(message, "Invalid value: '<redacted>' for DD_API_KEY (source: env_var), picked default")
+    assert.strictEqual(config.DD_API_KEY, undefined)
+  })
+
   it('should accept valid port boundaries', () => {
     process.env.DD_DOGSTATSD_PORT = '1'
     process.env.DD_TRACE_AGENT_PORT = '1'

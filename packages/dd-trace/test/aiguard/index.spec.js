@@ -902,13 +902,6 @@ describe('AIGuard SDK', () => {
     })
   })
 
-  it('test missing required fields uses noop as default', async () => {
-    const client = new AIGuard(tracer, { aiguard: { endpoint: 'http://aiguard' } })
-    const result = await client.evaluate(toolCall)
-    assert.strictEqual(result.action, 'ALLOW')
-    assert.strictEqual(result.reason, 'AI Guard is not enabled')
-  })
-
   it('test ai_guard.event tag on root span', async () => {
     mockFetch({
       body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },

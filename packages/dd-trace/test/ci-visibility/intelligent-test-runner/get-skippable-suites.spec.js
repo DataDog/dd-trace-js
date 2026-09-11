@@ -168,6 +168,18 @@ describe('get-skippable-suites', () => {
     })
   })
 
+  it('does not fetch skippable suites without an API key', (done) => {
+    getConfig().DD_API_KEY = undefined
+
+    getSkippableSuites(DEFAULT_PARAMS, (error) => {
+      assert.strictEqual(
+        error.message,
+        'Skippable suites were not fetched because Datadog API key is not defined.'
+      )
+      done()
+    })
+  })
+
   it('should return a request error for malformed skippable suites', (done) => {
     nock(BASE_URL)
       .post('/api/v2/ci/tests/skippable')

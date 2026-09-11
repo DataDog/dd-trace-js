@@ -112,6 +112,7 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
+  #aiguardConfigurationErrorLogged = false
   #openfeatureState = OPENFEATURE_STATE_NOOP
 
   constructor () {
@@ -428,6 +429,13 @@ class Tracer extends NoopProxy {
    */
   #updateTracing (config) {
     if (config.DD_TRACE_ENABLED !== false) {
+      const aiguardEnabled = config.experimental?.aiguard?.enabled === true &&
+        config.DD_API_KEY !== undefined &&
+        config.DD_APP_KEY !== undefined
+      if (config.experimental?.aiguard?.enabled && !aiguardEnabled && !this.#aiguardConfigurationErrorLogged) {
+        log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
+        this.#aiguardConfigurationErrorLogged = true
+      }
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
@@ -443,12 +451,12 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
 
-        if (config.experimental?.aiguard?.enabled) {
+        if (aiguardEnabled) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
-      if (config.experimental?.aiguard?.enabled) {
+      if (aiguardEnabled) {
         this._modules.aiguard.enable(this._tracer, config)
       }
       if (config.iast.enabled) {
