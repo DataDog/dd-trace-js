@@ -12,7 +12,10 @@ require('../../setup/mocha')
 const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../src/debugger/devtools_client/snapshot/constants')
 const { EVENT_TYPE, GuardrailMetrics, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
-const { MAX_SAMPLED_PROBES_PER_PAUSE } = require('../../../src/debugger/probe_sampler_constants')
+const {
+  CONDITION_ERROR_FLAG,
+  MAX_SAMPLED_PROBES_PER_PAUSE,
+} = require('../../../src/debugger/probe_sampler_constants')
 
 const breakpoint = { file: 'file.js', line: 1 }
 const breakpointId = 'breakpoint-id'
@@ -139,12 +142,13 @@ describe('onPause', function () {
    * Attach a probe to the hit breakpoint and mark it as sampled for the next pause.
    *
    * @param {ReturnType<typeof genProcessedProbe>} probe - The probe to sample.
+   * @param {number} [flags] - Flags to set on the sampled probe index.
    */
-  function sampleProbe (probe) {
+  function sampleProbe (probe, flags = 0) {
     state.breakpointToProbes.set(breakpointId, new Map([[probe.id, probe]]))
     state.samplingIndexToProbe.set(1, probe)
     Atomics.store(sampledProbeIndexes, 0, 1)
-    Atomics.store(sampledProbeIndexes, 2, 1)
+    Atomics.store(sampledProbeIndexes, 2, 1 | flags)
   }
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
@@ -448,6 +452,100 @@ describe('onPause', function () {
       assert.strictEqual(probe.compiledCaptureExpressions, undefined, 'should disable future captures for the probe')
       sinon.assert.calledOnceWithExactly(refreshBreakpoint, probe)
     })
+
+  describe('condition errors', function () {
+    const takeConditionErrorExpression = 'globalThis[Symbol.for("dd-trace")]?.' +
+      '[Symbol.for("dd-trace.debugger.probeSampler")]?.takeConditionError("probe-1")'
+
+    it('should report the condition error instead of a probe result', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.captureSnapshot = true
+      probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+      probe.when = { dsl: 'foo.bar == 42', json: {} }
+      probe.condition = 'foo.bar === 42'
+      sampleProbe(probe, CONDITION_ERROR_FLAG)
+
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          assert.strictEqual(params.expression.slice(-takeConditionErrorExpression.length - 2),
+            `,${takeConditionErrorExpression}]`)
+          return Promise.resolve({ result: { value: [{}, 'TypeError: boom'] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledWith(session.post.secondCall, 'Debugger.resume')
+      sinon.assert.neverCalledWith(session.post, 'Runtime.getProperties')
+      sinon.assert.calledOnceWithExactly(ackEmitting, probe)
+      sinon.assert.calledOnce(send)
+      const [message, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+      assert.strictEqual(message, 'TypeError: boom')
+      assert.deepStrictEqual(snapshot.evaluationErrors, [{ expr: 'foo.bar == 42', message: 'TypeError: boom' }])
+      assert.strictEqual(snapshot.captures, undefined)
+      assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+      assert.strictEqual(incompleteReasons, 0)
+    })
+
+    it('should report a generic message if the recorded error is no longer available', async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.when = { dsl: 'foo.bar == 42', json: {} }
+      probe.condition = 'foo.bar === 42'
+      sampleProbe(probe, CONDITION_ERROR_FLAG)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}, undefined] } })
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      const [message, , , snapshot, , eventType] = send.firstCall.args
+      assert.strictEqual(message, 'Unknown evaluation error')
+      assert.deepStrictEqual(snapshot.evaluationErrors, [
+        { expr: 'foo.bar == 42', message: 'Unknown evaluation error' },
+      ])
+      assert.strictEqual(eventType, EVENT_TYPE.LOG)
+    })
+
+    it('should report condition errors alongside results of other probes at the same location', async function () {
+      const erroring = genProcessedProbe('probe-1')
+      erroring.when = { dsl: 'foo.bar == 42', json: {} }
+      erroring.condition = 'foo.bar === 42'
+      const templated = genProcessedProbe('probe-2')
+      templated.templateRequiresEvaluation = true
+      templated.template = '["hello ", foo]'
+
+      state.breakpointToProbes.set(breakpointId, new Map([[erroring.id, erroring], [templated.id, templated]]))
+      state.samplingIndexToProbe.set(1, erroring)
+      state.samplingIndexToProbe.set(2, templated)
+      Atomics.store(sampledProbeIndexes, 0, 2)
+      Atomics.store(sampledProbeIndexes, 2, 2)
+      Atomics.store(sampledProbeIndexes, 3, 1 | CONDITION_ERROR_FLAG)
+
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          // Frame expressions are evaluated in sampling order: the template first, then the condition error
+          const expectedSuffix = `,${templated.template},${takeConditionErrorExpression}]`
+          assert.strictEqual(params.expression.slice(-expectedSuffix.length), expectedSuffix)
+          return Promise.resolve({ result: { value: [{}, ['hello ', 'world'], 'TypeError: boom'] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledTwice(send)
+      assert.strictEqual(send.firstCall.args[0], 'hello world')
+      assert.strictEqual(send.firstCall.args[3].evaluationErrors, undefined)
+      assert.strictEqual(send.secondCall.args[0], 'TypeError: boom')
+      assert.deepStrictEqual(send.secondCall.args[3].evaluationErrors, [
+        { expr: 'foo.bar == 42', message: 'TypeError: boom' },
+      ])
+    })
+  })
 
   it('should log sampler overflow', async function () {
     state.breakpointToProbes.set(breakpointId, new Map())
