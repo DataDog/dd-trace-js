@@ -5,8 +5,8 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { createServerlessDeliveryTracker } = require('../../serverless')
 const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
+const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { version: tracerVersion } = require('../../../../../package.json')
 
@@ -22,8 +22,8 @@ const legacyStorage = storage('legacy')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  #deliveryTracker = new TelemetryDeliveryTracker()
   #transport = https
-  #serverlessDeliveryTracker
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -36,7 +36,6 @@ class OtlpHttpExporterBase {
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
   constructor (url, headers, timeout, protocol, signalType) {
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
@@ -87,10 +86,7 @@ class OtlpHttpExporterBase {
    * @protected
    */
   sendPayload (payload, resultCallback) {
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
-    }
-    this.#sendPayload(payload, resultCallback)
+    this.#deliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
   }
 
   #sendPayload (payload, resultCallback, done) {
@@ -107,7 +103,7 @@ class OtlpHttpExporterBase {
       if (completed) return
       completed = true
       resultCallback(result)
-      done?.()
+      done?.(result.error)
     }
 
     try {
@@ -155,12 +151,12 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Calls back once Vercel-tracked requests active at the flush boundary complete.
-   * @param {Function} [done]
+   * Calls back once requests active at the flush boundary complete.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ reportErrors?: boolean }} [options]
    */
-  flush (done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
-    done?.()
+  flush (done, options) {
+    this.#deliveryTracker.waitForIdle(done, options)
   }
 
   /**
