@@ -15,7 +15,7 @@ Package roles are covered by the bullets above and **AGENTS.md § "Repository Ma
 
 - Layering rule: `datadog-core` ← `dd-trace` ← `datadog-plugin-*`; `datadog-instrumentations` sits beside plugins and communicates only via diagnostic channels (decoupled by design — see `.agents/skills/apm-integrations/SKILL.md`).
 - Tests: unit `*.spec.js` beside each package (`packages/*/test/`), E2E in `integration-tests/`, benchmarks in `benchmark/` (`benchmark/sirun/` for tracked ones).
-- New instrumentation goes in `packages/datadog-instrumentations/` and must be listed in `packages/datadog-instrumentations/src/helpers/hooks.js`. A new plugin must be registered in `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`. Validate the wiring with `./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
+- New instrumentation goes in `packages/datadog-instrumentations/` and must be listed in `packages/datadog-instrumentations/src/helpers/hooks.js`. A new plugin must be registered in `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `index.d.v5.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`. Validate the wiring with `./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
 
 ## Configuration surface — the registration path
 

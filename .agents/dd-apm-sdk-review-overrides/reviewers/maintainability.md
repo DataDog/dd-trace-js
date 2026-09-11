@@ -4,7 +4,7 @@ Override for `reviewers/maintainability.md` (in the core skill folder) — read 
 
 ## Release notes / changelog policy
 
-No changelog file and no release-notes directory exist; release notes are generated from PR titles and labels. So there is nothing to write - instead audit the PR title and the semver label against **AGENTS.md § "Commit Messages"**, and check whether `only-land-on-next` is needed per CONTRIBUTING.md ("Indicate intended release targets"). `feat`/`fix`/`perf` are reserved for production code shipped in the npm package.
+No changelog file and no release-notes directory exist; release notes are generated from PR titles and labels. So there is nothing to write - instead audit the PR title against **AGENTS.md § "Commit Messages"** (format, template, all-green) and `.github/workflows/pr-title.yml` (enforced types), and the semver / `only-land-on-next` labels against **CONTRIBUTING.md**. `feat`/`fix`/`perf` are reserved for production code shipped in the npm package.
 
 ## Public API and compatibility
 

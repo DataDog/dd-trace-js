@@ -52,7 +52,7 @@ Only the parts AGENTS.md does not state:
 
 ## Commit and PR hygiene
 
-Read **AGENTS.md § "Pull Requests and CI" → "Commit Messages"** for the title format, allowed types, PR template usage, and all-green policy; **§ "Debugging Failures"** for the flaky-test handling policy; and **§ "Backportability and Runtime Support"** for Node.js compatibility rules. The `DD_MAJOR` guard example lives in `CONTRIBUTING.md`, not `AGENTS.md`.
+Read **AGENTS.md § "Pull Requests and CI" → "Commit Messages"** for the title format, PR template usage, and all-green policy; **CONTRIBUTING.md** for semver label definitions; **§ "Debugging Failures"** for the flaky-test handling policy; and **§ "Backportability and Runtime Support"** for Node.js compatibility rules. The `DD_MAJOR` guard example lives in `CONTRIBUTING.md`, not `AGENTS.md`. The enforced type set is `.github/workflows/pr-title.yml`, not AGENTS.md.
 
 Only the parts not stated there:
 - `.github/workflows/pr-title.yml` (`PR_TITLE_PATTERN`) is what actually gates the title, and it auto-syncs the type/scope/semver labels - so a wrong title produces a wrong release label. Its accepted set is wider than the list in AGENTS.md (it also allows `style` and `build`). Treat the workflow as the enforced gate and AGENTS.md as the house preference: a title the workflow accepts is not a finding. Do not flag that standing AGENTS.md vs workflow mismatch unless this diff itself changes `AGENTS.md` or `.github/workflows/pr-title.yml`.

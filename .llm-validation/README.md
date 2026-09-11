@@ -151,9 +151,12 @@ This is an A/B comparison, not an absolute score of the suite:
 
 - **Candidate** = the working tree (`File.ReadAllText`). Uncommitted edits count; you do
   not need a commit.
-- **Baseline** = `git show <base-sha>:<file>`. If a file is not on `master` yet, the CLI
-  prints `note: <file> not found at master — treated as added in the PR` and compares
-  *no skill vs this skill*. That is a smoke test, not “does this rubric catch the bug?”
+- **Baseline** = `git show <base-sha>:<file>`. A file missing at the base SHA is
+  empty on the baseline side (`note: <file> not found at master — treated as
+  added in the PR`); other files in the case still come from the base SHA. That
+  is incremental (skill without the new file vs skill with it). Call it *no
+  skill vs this skill* only when every file in the case is missing at the base.
+  Either way it is a smoke test, not “does this rubric catch the bug?”
 
 The gate fails only on a **confident regression** (a new safety / bad signal, or a tight
 pairwise loss). Noisy or marginal changes WARN and do not block.
