@@ -73,6 +73,26 @@ describe('util', () => {
     it('should encode only unicode characters in a string', () => {
       assert.strictEqual(encodeUnicode('test 😀'), 'test \\ud83d\\ude00')
     })
+
+    it('returns an all-ascii string unchanged', () => {
+      assert.strictEqual(encodeUnicode('plain ascii prompt 123'), 'plain ascii prompt 123')
+    })
+
+    it('returns an empty string when called without an argument', () => {
+      assert.strictEqual(encodeUnicode(), '')
+    })
+
+    it('leaves a literal backslash-u sequence untouched', () => {
+      assert.strictEqual(encodeUnicode(String.raw`print("\u0041")`), String.raw`print("\u0041")`)
+    })
+
+    it('escapes non-ascii characters in the middle and at both ends', () => {
+      assert.strictEqual(encodeUnicode('é café é'), '\\u00e9 caf\\u00e9 \\u00e9')
+    })
+
+    it('escapes a mix of bmp and astral characters', () => {
+      assert.strictEqual(encodeUnicode('café 😀 ok'), 'caf\\u00e9 \\ud83d\\ude00 ok')
+    })
   })
 
   describe('agentNameWireSafe', () => {

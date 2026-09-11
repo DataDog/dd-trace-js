@@ -294,12 +294,8 @@ class BaseLLMObsWriter {
   }
 
   _encode (payload) {
-    return JSON.stringify(payload, (key, value) => {
-      if (typeof value === 'string') {
-        return encodeUnicode(value) // serialize unicode characters
-      }
-      return value
-    }).replaceAll(String.raw`\\u`, String.raw`\u`) // remove double escaping
+    // Escape non-ASCII characters in a single pass over the serialized payload
+    return encodeUnicode(JSON.stringify(payload))
   }
 }
 
