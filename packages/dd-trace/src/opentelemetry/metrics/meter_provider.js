@@ -49,15 +49,6 @@ class MeterProvider {
     }
     return meter
   }
-
-  /**
-   * @param {(error: Error | null) => void} [done] Called after shutdown completes
-   * @returns {void}
-   */
-  shutdown (done) {
-    if (this.reader) this.reader.shutdown(done)
-    else done?.(null)
-  }
 }
 
 module.exports = MeterProvider
