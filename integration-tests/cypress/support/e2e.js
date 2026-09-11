@@ -62,4 +62,9 @@ if (getTestEnvironment('RUM_LOG_FAILURE')) {
     return log(options)
   }
 }
+if (getTestEnvironment('DYNAMIC_ATR_DURATION_MS')) {
+  afterEach(function () {
+    this.currentTest.duration = Number(getTestEnvironment('DYNAMIC_ATR_DURATION_MS'))
+  })
+}
 require('dd-trace/ci/cypress/support')

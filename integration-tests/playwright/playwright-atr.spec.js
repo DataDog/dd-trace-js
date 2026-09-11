@@ -117,6 +117,45 @@ versions.forEach((version) => {
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
+      it('uses the cached dynamic budget instead of a conflicting flat count', async (receiver, run) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: { enabled: false },
+        })
+
+        const receiverPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          (payloads) => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 2, 'one initial execution plus the first dynamic bucket')
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          }, 30000)
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            },
+          }
+        )
+
+        await Promise.all([once(proc, 'exit'), receiverPromise])
+      })
+
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,

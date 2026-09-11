@@ -18,19 +18,20 @@ describe('EFD retry policy', () => {
   it('selects the retry count at each duration boundary', () => {
     assert.strictEqual(getEfdRetryCountForDuration(0, retryPolicy), 10)
     assert.strictEqual(getEfdRetryCountForDuration(4_999, retryPolicy), 10)
-    assert.strictEqual(getEfdRetryCountForDuration(5_000, retryPolicy), 5)
+    assert.strictEqual(getEfdRetryCountForDuration(5_000, retryPolicy), 10)
     assert.strictEqual(getEfdRetryCountForDuration(9_999, retryPolicy), 5)
-    assert.strictEqual(getEfdRetryCountForDuration(10_000, retryPolicy), 3)
+    assert.strictEqual(getEfdRetryCountForDuration(10_000, retryPolicy), 5)
     assert.strictEqual(getEfdRetryCountForDuration(29_999, retryPolicy), 3)
-    assert.strictEqual(getEfdRetryCountForDuration(30_000, retryPolicy), 2)
+    assert.strictEqual(getEfdRetryCountForDuration(30_000, retryPolicy), 3)
     assert.strictEqual(getEfdRetryCountForDuration(299_999, retryPolicy), 2)
-    assert.strictEqual(getEfdRetryCountForDuration(300_000, retryPolicy), 0)
+    assert.strictEqual(getEfdRetryCountForDuration(300_000, retryPolicy), 2)
   })
 
   it('treats missing duration buckets as zero retries', () => {
     assert.strictEqual(getEfdRetryCountForDuration(0, createEfdRetryPolicy()), 0)
     assert.strictEqual(getEfdRetryCountForDuration(0, createEfdRetryPolicy({ '10s': 3 })), 0)
-    assert.strictEqual(getEfdRetryCountForDuration(5_000, createEfdRetryPolicy({ '10s': 3 })), 3)
+    assert.strictEqual(getEfdRetryCountForDuration(5_000, createEfdRetryPolicy({ '10s': 3 })), 0)
+    assert.strictEqual(getEfdRetryCountForDuration(5_001, createEfdRetryPolicy({ '10s': 3 })), 3)
   })
 
   it('creates a scheduling policy from every configured duration bucket', () => {

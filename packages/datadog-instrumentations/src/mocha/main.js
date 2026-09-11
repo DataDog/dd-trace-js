@@ -1796,6 +1796,8 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+      newWorkerArgs._ddIsDynamicAtrEnabled = config.isDynamicAtrEnabled
+      newWorkerArgs._ddDynamicAtrBuckets = config.dynamicAtrBuckets
     }
 
     if (isFailedTestReplayEnabled()) {

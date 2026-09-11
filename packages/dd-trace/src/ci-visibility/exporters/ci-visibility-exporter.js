@@ -6,6 +6,10 @@ const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
+const {
+  getDynamicAtrBuckets,
+  isDynamicAtrEnabled,
+} = require('../dynamic-atr-retries')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
@@ -31,7 +35,7 @@ const {
   FINAL_FLUSH_FALLBACK_DELAY,
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
-const { incrementCountMetric, TELEMETRY_ENDPOINT_PAYLOAD_DROPPED } = require('../telemetry')
+const { incrementCountMetric, recordDynamicAtrRetries, TELEMETRY_ENDPOINT_PAYLOAD_DROPPED } = require('../telemetry')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const buildSettingsCacheKey = require('./settings-cache-key')
 
@@ -208,6 +212,9 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
+    this._dynamicAtrEnabled = isDynamicAtrEnabled()
+    this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets() ?? undefined : undefined
+    this._hasRecordedDynamicAtrTelemetry = false
     this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
     this._isTestOptimizationCacheOnly = options.cacheOnly === true
     const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
@@ -410,6 +417,7 @@ class CiVisibilityExporter extends BufferingExporter {
           // `_gitUploadPromise` itself. Do not call `_resolveGit()`.
           writeSettingsToCache(libraryConfig)
           this._libraryConfig = this.filterConfiguration(libraryConfig)
+          this._recordDynamicAtrTelemetry()
           return callback(null, this._libraryConfig)
         }
         // Filesystem cache hit: no git upload was started in this process.
@@ -449,6 +457,7 @@ class CiVisibilityExporter extends BufferingExporter {
   _applyCachedSettings (settings, configuration, repositoryUrl, isFilesystemCache, callback) {
     writeSettingsToCache(settings)
     this._libraryConfig = this.filterConfiguration(settings)
+    this._recordDynamicAtrTelemetry()
     const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
       this._testOptimizationHttpCache.hasValidSkippableSuites({
         testLevel: configuration.testLevel,
@@ -480,6 +489,7 @@ class CiVisibilityExporter extends BufferingExporter {
       // before the git upload resolves, so `shouldRequestSkippableSuites()` and the
       // skippable path's `_gitUploadPromise` await behave identically to the uncached flow.
       this._libraryConfig = this.filterConfiguration(libraryConfig)
+      this._recordDynamicAtrTelemetry()
       if (err) {
         return done(err, libraryConfig)
       }
@@ -495,6 +505,7 @@ class CiVisibilityExporter extends BufferingExporter {
               // (failed) response so stale phase-1 feature flags don't stay installed.
               // On error `finalLibraryConfig` is undefined, so this resolves to empty settings.
               this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
+              this._recordDynamicAtrTelemetry()
               return done(finalErr, finalLibraryConfig)
             }
             writeToCache(cacheKey, finalLibraryConfig)
@@ -532,6 +543,7 @@ class CiVisibilityExporter extends BufferingExporter {
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: configuredAttemptToFixRetries = 0,
       DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
     } = testOptimization
+
     const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
       ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
       : createEfdRetryPolicy({
@@ -543,6 +555,11 @@ class CiVisibilityExporter extends BufferingExporter {
     const testManagementAttemptToFixRetries =
       remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
 
+    const isFlakyTestRetriesEnabled =
+      remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true
+    // Dynamic ATR only replaces the flat ATR policy when backend ATR is enabled.
+    const isDynamicAtrEnabled = isFlakyTestRetriesEnabled && this._dynamicAtrEnabled
+
     return Object.freeze({
       isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
       isSuitesSkippingEnabled: remoteConfiguration.isSuitesSkippingEnabled === true,
@@ -552,9 +569,10 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
       earlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
-      isFlakyTestRetriesEnabled:
-        remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,
+      isFlakyTestRetriesEnabled,
       flakyTestRetriesCount,
+      isDynamicAtrEnabled,
+      dynamicAtrBuckets: isDynamicAtrEnabled ? this._dynamicAtrBuckets : undefined,
       isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
       isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
       isTestManagementEnabled:
@@ -564,6 +582,13 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isImpactedTestsEnabled === true && isImpactedTestsAllowed === true,
       isCoverageReportUploadEnabled: remoteConfiguration.isCoverageReportUploadEnabled === true,
     })
+  }
+
+  _recordDynamicAtrTelemetry () {
+    if (!this._hasRecordedDynamicAtrTelemetry && this._libraryConfig?.isDynamicAtrEnabled) {
+      this._hasRecordedDynamicAtrTelemetry = true
+      recordDynamicAtrRetries(this._libraryConfig.dynamicAtrBuckets !== undefined)
+    }
   }
 
   sendGitMetadata (repositoryUrl) {

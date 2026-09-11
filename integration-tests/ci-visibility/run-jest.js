@@ -135,10 +135,8 @@ if (process.env.USE_JEST_RUN) {
     console.error(error)
   })
 } else {
-  jest.runCLI(
-    options,
-    options.projects
-  ).then((results) => {
+  const runJest = () => jest.runCLI(options, options.projects)
+  const handleResults = (results) => {
     if (process.send) {
       process.send('finished')
     }
@@ -146,5 +144,17 @@ if (process.env.USE_JEST_RUN) {
       const exitCode = results.results.success ? 0 : 1
       process.exit(exitCode)
     }
-  })
+  }
+
+  let runPromise = runJest()
+  if (process.env.RUN_JEST_TWICE) {
+    runPromise = runPromise.then(() => {
+      process.env.JEST_RUN_INDEX = '2'
+      if (process.env.DYNAMIC_ATR_SECOND_BUCKETS) {
+        process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = process.env.DYNAMIC_ATR_SECOND_BUCKETS
+      }
+      return runJest()
+    })
+  }
+  runPromise.then(handleResults)
 }
