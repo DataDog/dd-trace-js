@@ -44,6 +44,7 @@ describe('BaseLLMObsWriter', () => {
         site: 'site.com',
         url: new URL('http://localhost:8126'),
         DD_API_KEY: 'test',
+        flushInterval: 1000,
       },
     }
   })
@@ -176,9 +177,9 @@ describe('BaseLLMObsWriter', () => {
     sinon.assert.calledWith(logger.warn, 'BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
   })
 
-  describe('in a Lambda environment', () => {
-    useEnv({
-      AWS_LAMBDA_FUNCTION_NAME: 'my-function',
+  describe('when flushInterval is 0 (e.g. in a Lambda environment)', () => {
+    beforeEach(() => {
+      options.config.flushInterval = 0
     })
 
     it('flushes synchronously on append instead of using a periodic timer', () => {

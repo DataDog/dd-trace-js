@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('node:fs')
 const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
@@ -15,16 +14,7 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
   EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
-const { DATADOG_MINI_AGENT_PATH } = require('../../constants')
 const { parseResponseAndLog } = require('./util')
-
-// In Lambda, the execution environment can freeze between invocations, so a buffered
-// flush (interval timer or process 'beforeExit', which only ever fires once per
-// container) may never run before the next event is dropped. Mirrors the same check
-// used to force synchronous flushing of APM traces in config/index.js.
-function isRunningInLambda () {
-  return Boolean(getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')) && !fs.existsSync(DATADOG_MINI_AGENT_PATH)
-}
 
 class LLMObsBuffer {
   constructor ({ events, size, routing = {}, isDefault = false, limit = 1000 }) {
@@ -43,12 +33,19 @@ class LLMObsBuffer {
 
 class BaseLLMObsWriter {
   #destroyer
+  // In Lambda, `config.flushInterval` is forced to 0 (see config/index.js) because the execution
+  // environment can freeze between invocations, so a buffered flush (interval timer or process
+  // 'beforeExit', which only ever fires once per container) may never run before the next event
+  // is dropped. Evaluated once here rather than re-read on every append().
+  #flushOnAppend
   /** @type {Map<string, LLMObsBuffer>} */
   #multiTenantBuffers = new Map()
 
-  constructor ({ interval, timeout, eventType, config, endpoint, intake }) {
-    this._interval = interval ?? getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? 1000 // 1s
-    this._timeout = timeout ?? getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
+  constructor ({ eventType, config, endpoint, intake }) {
+    // Falls back to the tracer-wide flush interval for a consistent default across writers,
+    // but stays independently overridable so tests can flush the LLMObs writer faster than APM.
+    this._interval = getEnvironmentVariable('_DD_LLMOBS_FLUSH_INTERVAL') ?? config.flushInterval ?? 1000 // 1s
+    this._timeout = getEnvironmentVariable('_DD_LLMOBS_TIMEOUT') ?? 5000 // 5s
     this._eventType = eventType
 
     /** @type {LLMObsBuffer} */
@@ -61,9 +58,9 @@ class BaseLLMObsWriter {
     this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
 
-    this._flushOnAppend = isRunningInLambda()
+    this.#flushOnAppend = config.flushInterval === 0
 
-    if (!this._flushOnAppend) {
+    if (!this.#flushOnAppend) {
       this._periodic = setInterval(() => {
         this.flush()
       }, this._interval)
@@ -123,7 +120,7 @@ class BaseLLMObsWriter {
     buffer.size += eventSize
     buffer.events.push(event)
 
-    if (this._flushOnAppend) {
+    if (this.#flushOnAppend) {
       this.flush()
     }
 
@@ -204,7 +201,7 @@ class BaseLLMObsWriter {
       globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
       this.flush()
       this.#destroyer = undefined
-    } else if (this._flushOnAppend) {
+    } else if (this.#flushOnAppend) {
       this.flush()
     }
   }
@@ -221,7 +218,7 @@ class BaseLLMObsWriter {
     // In Lambda mode there's no periodic/beforeExit fallback, so events appended
     // before this resolves (e.g. while fetchAgentInfo() is in flight) would
     // otherwise never get flushed.
-    if (this._flushOnAppend) {
+    if (this.#flushOnAppend) {
       this.flush()
     }
   }
