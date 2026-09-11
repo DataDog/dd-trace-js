@@ -11,6 +11,14 @@ const getFlushError = require('../flush-error')
 class TelemetryDeliveryTracker {
   #deliveries = new Set()
 
+  static enableProcessTracking () {
+    globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
+  }
+
+  static isProcessTrackingEnabled () {
+    return globalThis[Symbol.for('dd-trace')]?.telemetryDeliveryTrackingEnabled === true
+  }
+
   /**
    * Tracks one asynchronous transport delivery until its callback runs.
    * @param {(done: (error?: Error) => void) => void} deliver

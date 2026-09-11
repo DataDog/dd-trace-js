@@ -4,6 +4,7 @@ const { trace, context, propagation } = require('@opentelemetry/api')
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
+const TelemetryDeliveryTracker = require('../serverless/telemetry-delivery-tracker')
 
 const ContextManager = require('./context_manager')
 const { MultiSpanProcessor, NoopSpanProcessor, settleAllFlushes } = require('./span_processor')
@@ -11,6 +12,7 @@ const Tracer = require('./tracer')
 
 /**
  * @typedef {{
+ *   enableDeliveryTracking?: () => void
  *   flush?: (done?: (error?: Error) => void, options?: { reportErrors?: boolean }) => void
  *   forceFlush?: (done?: (error?: Error) => void) => void
  * }} TraceExporter
@@ -53,6 +55,8 @@ class TracerProvider {
   #tracers = new Map()
 
   constructor (config = {}) {
+    TelemetryDeliveryTracker.enableProcessTracking()
+    tracer._tracer?._exporter?.enableDeliveryTracking?.()
     this.config = config
     this.resource = config.resource
 

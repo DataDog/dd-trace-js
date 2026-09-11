@@ -21,6 +21,13 @@ class Writer {
     this.#deliveryTracker = deliveryTracker
   }
 
+  /**
+   * @param {import('../../serverless/telemetry-delivery-tracker')} deliveryTracker
+   */
+  enableDeliveryTracking (deliveryTracker) {
+    this.#deliveryTracker = deliveryTracker
+  }
+
   #isFirstFlush = true
 
   /**

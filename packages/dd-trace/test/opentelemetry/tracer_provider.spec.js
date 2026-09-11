@@ -70,6 +70,36 @@ function isAgentFailure (error) {
 }
 
 describe('OTel TracerProvider', () => {
+  let deliveryTrackingEnabled
+
+  before(() => {
+    deliveryTrackingEnabled = globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled
+  })
+
+  after(() => {
+    const ddTrace = globalThis[Symbol.for('dd-trace')]
+    if (deliveryTrackingEnabled === undefined) {
+      delete ddTrace.telemetryDeliveryTrackingEnabled
+    } else {
+      ddTrace.telemetryDeliveryTrackingEnabled = deliveryTrackingEnabled
+    }
+  })
+
+  it('enables delivery tracking on the initialized exporter', () => {
+    const datadogTracer = require('../../index')._tracer
+    const originalExporter = datadogTracer._exporter
+    const exporter = { enableDeliveryTracking: sinon.spy() }
+    datadogTracer._exporter = exporter
+
+    try {
+      assert.ok(new TracerProvider())
+    } finally {
+      datadogTracer._exporter = originalExporter
+    }
+
+    sinon.assert.calledOnce(exporter.enableDeliveryTracking)
+  })
+
   it('should register with OTel API', () => {
     const provider = new TracerProvider()
     provider.register()
@@ -337,8 +367,9 @@ describe('OTel TracerProvider', () => {
       assert.strictEqual(settled, true)
     })
 
-    it('aggregates multiple span processor failures', async () => {
-      const firstError = new Error('first processor failed')
+    it('flattens aggregate span processor failures', async () => {
+      const firstCause = new Error('first processor failed')
+      const firstError = new AggregateError([firstCause], 'first processor aggregate')
       const secondError = new Error('second processor failed')
       const first = new NoopSpanProcessor()
       const second = new NoopSpanProcessor()
@@ -348,7 +379,7 @@ describe('OTel TracerProvider', () => {
 
       await assert.rejects(provider.forceFlush(), error => {
         assert.ok(error instanceof AggregateError)
-        assert.deepStrictEqual(error.errors, [firstError, secondError])
+        assert.deepStrictEqual(error.errors, [firstCause, secondError])
         return true
       })
     })
