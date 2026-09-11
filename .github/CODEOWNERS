@@ -8,6 +8,10 @@
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.husky/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.vscode/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+# Verbatim mirror of DataDog/dd-apm-sdk-review-core. Review the source there, not this copy.
+/.agents/skills/dd-apm-sdk-review/ @DataDog/lang-platform-js
+/.claude/skills/dd-apm-sdk-review @DataDog/lang-platform-js
+/.cursor/skills/dd-apm-sdk-review @DataDog/lang-platform-js
 /scripts/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /vendor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 
