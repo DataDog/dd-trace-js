@@ -19,9 +19,6 @@ let validateNextContext = true
 let replayValidated = false
 
 class ReplayingDDWAF {
-  /**
-   * @returns {string}
-   */
   static version () {
     return 'replay'
   }
@@ -59,9 +56,6 @@ class ReplayingDDWAF {
         return sample[callIndex++].result
       },
 
-      /**
-       * @returns {void}
-       */
       dispose () {
         if (validate) {
           assert.strictEqual(callIndex, sample.length)
@@ -73,9 +67,6 @@ class ReplayingDDWAF {
     }
   }
 
-  /**
-   * @returns {void}
-   */
   dispose () {}
 }
 

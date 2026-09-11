@@ -475,7 +475,6 @@ class LLMObs extends NoopLLMObs {
    * @param {number} [options.timestampMs] - When the feedback was generated. Defaults to now.
    * @param {'pass' | 'fail'} [options.assessment] - Assessment of the feedback.
    * @param {string} [options.reasoning] - Explanation of the feedback.
-   * @returns {void}
    */
   submitFeedback (options = {}) {
     if (!this.enabled) return

@@ -16,7 +16,6 @@ const ENTRYPOINT_PATH = require.main?.filename || ''
  * Sanitize a process tag value
  *
  * @param {string} value
- * @returns {string}
  */
 function sanitize (value) {
   return String(value)

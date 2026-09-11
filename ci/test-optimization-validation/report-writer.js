@@ -33,7 +33,6 @@ const SCENARIO_NAMES = {
  * @param {string} input.out output directory
  * @param {object} [input.staticDiagnosis] static diagnosis artifacts
  * @param {object} [input.runSummary] run summary
- * @returns {void}
  */
 function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {} }) {
   const reportPath = path.join(out, REPORT_FILENAME)
@@ -60,7 +59,6 @@ function writeReport ({ manifest, results, out, staticDiagnosis, runSummary = {}
  * @param {object} input pending report inputs
  * @param {object} input.manifest normalized manifest
  * @param {string} input.out output directory
- * @returns {void}
  */
 function writePendingReport ({ manifest, out }) {
   const reportPath = path.join(out, REPORT_FILENAME)
@@ -91,7 +89,6 @@ function writePendingReport ({ manifest, out }) {
  * @param {object[]} input.results sanitized results
  * @param {object} input.runSummary run summary
  * @param {string|undefined} input.staticDiagnosisPath static diagnosis path
- * @returns {string} Markdown
  */
 function renderReport ({ manifest, out, reportPath, results, runSummary, staticDiagnosisPath }) {
   const lines = [
@@ -190,7 +187,6 @@ function renderReport ({ manifest, out, reportPath, results, runSummary, staticD
  *
  * @param {string} out validation output directory
  * @param {string|undefined} approvedPlanSha256 approved plan digest
- * @returns {boolean} whether the current plan is safe to label as approved
  */
 function hasCurrentExecutionPlan (out, approvedPlanSha256) {
   if (!APPROVAL_DIGEST_PATTERN.test(String(approvedPlanSha256 || ''))) return false
@@ -442,7 +438,6 @@ function compactEvidence (evidence = {}) {
  * Renders JSON without allowing evidence strings to close the Markdown fence.
  *
  * @param {object} value structured evidence
- * @returns {string} fenced JSON body
  */
 function fencedJson (value) {
   return JSON.stringify(value, null, 2).replaceAll('```', String.raw`\u0060\u0060\u0060`)
@@ -454,7 +449,6 @@ function fencedJson (value) {
  * @param {object[]} results validation results
  * @param {object} runSummary run summary
  * @param {string} reportPath report path
- * @returns {string} console text
  */
 function renderConsole (results, runSummary, reportPath) {
   const lines = [
@@ -478,7 +472,6 @@ function renderConsole (results, runSummary, reportPath) {
  * Returns whether a result lacks a conclusive pass/fail.
  *
  * @param {object|undefined} result validation result
- * @returns {boolean} whether incomplete
  */
 function isIncomplete (result) {
   return Boolean(result && (
@@ -492,7 +485,6 @@ function isIncomplete (result) {
  * Returns a display status.
  *
  * @param {object} result validation result
- * @returns {string} status
  */
 function getDisplayStatus (result) {
   if (result.scenario === 'ci-wiring' && result.status === 'fail') {
@@ -520,7 +512,6 @@ function getVisibleResults (results) {
  * Returns whether detailed debugging context should be shown.
  *
  * @param {object} result validation result
- * @returns {boolean} whether details are useful
  */
 function shouldRenderDiagnostics (result) {
   return result.status === 'fail' || result.status === 'error' || isIncomplete(result)
@@ -578,7 +569,6 @@ function getArtifactDirectory (artifacts = [], out) {
  *
  * @param {string} root root path
  * @param {string} filename candidate path
- * @returns {boolean} containment
  */
 function isPathInside (root, filename) {
   const value = path.relative(root, filename)
@@ -589,7 +579,6 @@ function isPathInside (root, filename) {
  * Formats an execution status.
  *
  * @param {string|undefined} status status id
- * @returns {string} display status
  */
 function formatExecutionStatus (status) {
   return String(status || 'incomplete').replaceAll('_', ' ').toUpperCase()
@@ -628,7 +617,6 @@ function formatCleanupStatus (cleanup) {
  * Returns a display scenario name.
  *
  * @param {string} scenario scenario id
- * @returns {string} display name
  */
 function getScenarioName (scenario) {
   return SCENARIO_NAMES[scenario] || scenario
@@ -638,7 +626,6 @@ function getScenarioName (scenario) {
  * Formats a Markdown table cell.
  *
  * @param {unknown} value cell value
- * @returns {string} escaped text
  */
 function cell (value) {
   return plain(value).replaceAll('|', String.raw`\|`)
@@ -648,7 +635,6 @@ function cell (value) {
  * Formats inline code.
  *
  * @param {unknown} value code value
- * @returns {string} Markdown code
  */
 function code (value) {
   return `\`${plain(value).replaceAll('`', String.raw`\u0060`)}\``
@@ -658,7 +644,6 @@ function code (value) {
  * Sanitizes one line of report text.
  *
  * @param {unknown} value text
- * @returns {string} safe text
  */
 function plain (value) {
   return sanitizeString(String(value ?? '')).replaceAll(/\p{Cc}+/gu, ' ').trim()
@@ -669,7 +654,6 @@ function plain (value) {
  *
  * @param {string} root base directory
  * @param {string} filename file path
- * @returns {string} relative path
  */
 function relative (root, filename) {
   return path.relative(root, filename) || '.'

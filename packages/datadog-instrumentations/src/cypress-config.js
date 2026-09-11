@@ -51,7 +51,6 @@ const noopTask = {
 /**
  * @param {FileSystemError} error filesystem error
  * @param {string} fallbackPath path used when the error does not include one
- * @returns {string} concise error description
  */
 function formatFileSystemError (error, fallbackPath) {
   const code = error?.code || error?.name || 'UNKNOWN'
@@ -64,7 +63,6 @@ function formatFileSystemError (error, fallbackPath) {
  * @param {FileCreationFailure[]} failures failed directory attempts
  * @param {string} consequence effect on Cypress instrumentation
  * @param {boolean} [customerVisible] whether to report the failure without requiring debug logging
- * @returns {void}
  */
 function warnFileCreationFailures (artifact, failures, consequence, customerVisible = false) {
   let details = ''
@@ -89,7 +87,6 @@ function warnFileCreationFailures (artifact, failures, consequence, customerVisi
  *
  * @param {string} message printf-style error message
  * @param {...unknown} args message arguments
- * @returns {void}
  */
 function logBrowserInstrumentationError (message, ...args) {
   // eslint-disable-next-line no-console
@@ -98,7 +95,6 @@ function logBrowserInstrumentationError (message, ...args) {
 
 /**
  * @param {string} filePath generated file to remove
- * @returns {void}
  */
 function removeGeneratedFile (filePath) {
   try {
@@ -118,7 +114,6 @@ function removeGeneratedFile (filePath) {
  * Removes project-local support files when Cypress exits without firing
  * after:run, as happens in open mode without experimental run events.
  *
- * @returns {void}
  */
 function removeGeneratedFilesAtExit () {
   exitCleanupRegistered = false
@@ -128,7 +123,6 @@ function removeGeneratedFilesAtExit () {
 
 /**
  * @param {string[]} filePaths generated support files
- * @returns {void}
  */
 function registerGeneratedFilesForExitCleanup (filePaths) {
   for (const filePath of filePaths) generatedFilesForExitCleanup.add(filePath)
@@ -140,7 +134,6 @@ function registerGeneratedFilesForExitCleanup (filePaths) {
 
 /**
  * @param {string[]} filePaths generated support files
- * @returns {void}
  */
 function cleanupGeneratedFiles (filePaths) {
   for (const filePath of filePaths) {
@@ -160,7 +153,6 @@ function cleanupGeneratedFiles (filePaths) {
  *
  * @param {string} filePath generated file path
  * @param {string} content generated file content
- * @returns {void}
  */
 function writeExclusiveFile (filePath, content) {
   let descriptor
@@ -189,7 +181,6 @@ function writeExclusiveFile (filePath, content) {
 
 /**
  * @param {unknown} handler Cypress task registration
- * @returns {boolean}
  */
 function isDatadogTaskRegistration (handler) {
   return !!handler && typeof handler === 'object' &&
@@ -201,7 +192,6 @@ function isDatadogTaskRegistration (handler) {
 
 /**
  * @param {unknown} handler Cypress after:run handler
- * @returns {boolean} whether this is the handler registered by the manual Datadog plugin
  */
 function isDatadogAfterRunHandler (handler) {
   return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_RUN_HANDLER] === true
@@ -209,7 +199,6 @@ function isDatadogAfterRunHandler (handler) {
 
 /**
  * @param {unknown} handler Cypress after:spec handler
- * @returns {boolean} whether this is the handler registered by the manual Datadog plugin
  */
 function isDatadogAfterSpecHandler (handler) {
   return typeof handler === 'function' && handler[DD_CYPRESS_AFTER_SPEC_HANDLER] === true
@@ -217,7 +206,6 @@ function isDatadogAfterSpecHandler (handler) {
 
 /**
  * @param {object} manualPlugin manual plugin registration state
- * @returns {boolean} whether the manual plugin supports error-aware finalization
  */
 function supportsErrorAwareFinalization (manualPlugin) {
   return isDatadogAfterSpecHandler(manualPlugin.afterSpecHandler) &&
@@ -226,7 +214,6 @@ function supportsErrorAwareFinalization (manualPlugin) {
 
 /**
  * @param {unknown} handler Cypress task handler map
- * @returns {boolean} whether the current manual Datadog plugin owns the task map
  */
 function isCurrentDatadogTaskRegistration (handler) {
   return !!handler && handler[DD_CYPRESS_TASK_HANDLER] === manualPluginOwner
@@ -234,7 +221,6 @@ function isCurrentDatadogTaskRegistration (handler) {
 
 /**
  * @param {unknown} handler Cypress task handler map
- * @returns {boolean} whether the manual plugin registered only fallback tasks
  */
 function isDatadogNoopTaskRegistration (handler) {
   return !!handler && handler[DD_CYPRESS_NOOP_TASK_HANDLER] === true
@@ -242,7 +228,6 @@ function isDatadogNoopTaskRegistration (handler) {
 
 /**
  * @param {unknown} value
- * @returns {boolean}
  */
 function isPlainObject (value) {
   if (!value || typeof value !== 'object') return false
@@ -278,7 +263,6 @@ function mergeReturnedConfig (config, updatedConfig) {
 /**
  * @param {string} rootPath parent path
  * @param {string} candidatePath path that should be inside rootPath
- * @returns {boolean}
  */
 function isPathInside (rootPath, candidatePath) {
   const relativePath = path.relative(path.resolve(rootPath), path.resolve(candidatePath))
@@ -288,7 +272,6 @@ function isPathInside (rootPath, candidatePath) {
 /**
  * @param {string} fromDirectory directory containing the importing file
  * @param {string} importedFile file to import
- * @returns {string}
  */
 function getRelativeImportPath (fromDirectory, importedFile) {
   let relativePath = path.relative(fromDirectory, importedFile).split(path.sep).join('/')
@@ -420,7 +403,6 @@ function injectSupportFile (config) {
  * @param {Function} on Cypress event registration function
  * @param {Function[]} handlers collected after:screenshot handlers
  * @param {Function|undefined} datadogHandler manual Datadog screenshot handler
- * @returns {void}
  */
 function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
   const userHandlers = handlers.filter(handler => handler !== datadogHandler)
@@ -451,7 +433,6 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
  * @param {Function[]} handlers collected after:spec handlers
  * @param {Function} [datadogHandler] manual Datadog after:spec handler
  * @param {Function} [cleanup] removes generated support files after an error
- * @returns {void}
  */
 function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
   const userHandlers = datadogHandler
@@ -495,7 +476,6 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
  * sessions in interactive mode.
  *
  * @param {object} config Cypress resolved config object
- * @returns {void}
  */
 function enableInteractiveRunEvents (config) {
   if (config.isInteractive && config.experimentalInteractiveRunEvents !== true) {
@@ -740,7 +720,6 @@ function wrapConfig (config) {
  * (`.js`, `.ts`) are loaded as ESM or CJS.
  *
  * @param {string} filePath absolute path to a file under the project
- * @returns {boolean}
  */
 function isUnderEsmPackage (filePath) {
   let dir = path.dirname(filePath)
@@ -759,7 +738,6 @@ function isUnderEsmPackage (filePath) {
 /**
  * @param {string} originalConfigFile absolute path to the original config file
  * @param {string} wrapperDirectory directory for the generated wrapper
- * @returns {string} path to the generated wrapper file
  */
 function createConfigWrapper (originalConfigFile, wrapperDirectory) {
   // Match the module mode Cypress would use for the user's original config
@@ -815,7 +793,6 @@ module.exports = cypressConfig.wrapConfig(originalConfig)
 
 /**
  * @param {string} projectRoot
- * @returns {boolean}
  */
 function isTypeScript6OrNewer (projectRoot) {
   try {

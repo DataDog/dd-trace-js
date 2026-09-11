@@ -50,7 +50,6 @@ let configurationRequestId = 0
  * @param {object} message
  * @param {() => void} [onError]
  * @param {() => void} [onDone]
- * @returns {void}
  */
 function sendWebdriverioMessage (message, onError, onDone) {
   sendWebdriverioWorkerMessage(message, error => {
@@ -65,7 +64,6 @@ function sendWebdriverioMessage (message, onError, onDone) {
  * Applies configuration encoded as private Mocha options by its parallel runner.
  *
  * @param {object} options
- * @returns {void}
  */
 function applyMochaOptions (options) {
   if (options._ddIsKnownTestsEnabled) {
@@ -110,7 +108,6 @@ function applyMochaOptions (options) {
  *
  * @param {object} runner
  * @param {string[]} skippedFiles
- * @returns {void}
  */
 function filterSkippedFiles (runner, skippedFiles) {
   if (!skippedFiles.length) {
@@ -128,7 +125,6 @@ function filterSkippedFiles (runner, skippedFiles) {
  * @param {string} frameworkVersion
  * @param {string[]} files
  * @param {(response: object) => void} onDone
- * @returns {void}
  */
 function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
   const requestId = `${process.pid}-${++configurationRequestId}`
@@ -138,7 +134,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
    * Finishes the configuration request exactly once.
    *
    * @param {object} response
-   * @returns {void}
    */
   function finish (response) {
     if (finished) {
@@ -155,7 +150,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
    * Receives the matching coordinator response.
    *
    * @param {object} message
-   * @returns {void}
    */
   function onMessage (message) {
     if (message?.name === CONFIGURATION_RESPONSE && message.content?.requestId === requestId) {
@@ -166,7 +160,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
   /**
    * Releases the runner if its parent disconnects.
    *
-   * @returns {void}
    */
   function onDisconnect () {
     finish({})
@@ -190,7 +183,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
  * Reports the Mocha version as soon as WebdriverIO loads its framework adapter.
  *
  * @param {string} frameworkVersion
- * @returns {void}
  */
 function reportWebdriverioWorkerReady (frameworkVersion) {
   if (!isWebdriverioWorker) {
@@ -208,7 +200,6 @@ function reportWebdriverioWorkerReady (frameworkVersion) {
  * Checks whether Test Optimization converts a failed WebdriverIO test attempt to a passing result.
  *
  * @param {object|undefined} test
- * @returns {boolean}
  */
 function isWebdriverioFailureSuppressed (test) {
   if (!test) {
@@ -235,7 +226,6 @@ function getWebdriverioHookTest (hook) {
  * Removes managed hook failures from WebdriverIO's Mocha runner totals.
  *
  * @param {object} runner
- * @returns {void}
  */
 function adjustWebdriverioHookFailures (runner) {
   let suppressedFailures = 0
@@ -314,7 +304,6 @@ function getWebdriverioSuiteResults (runner) {
  *
  * @param {object} runner
  * @param {() => void} [onDone]
- * @returns {void}
  */
 function reportWebdriverioSuiteResults (runner, onDone) {
   if (!isWebdriverioWorker) {
@@ -336,7 +325,6 @@ function reportWebdriverioSuiteResults (runner, onDone) {
  *
  * @param {object} runner
  * @param {() => void} onDone
- * @returns {void}
  */
 function finishWebdriverioWorker (runner, onDone) {
   try {
@@ -385,7 +373,6 @@ function wrapMochaRun (Mocha, frameworkVersion) {
     /**
      * Restores the root suite method after both delayed-mode gates are open.
      *
-     * @returns {void}
      */
     function restoreRootSuiteRun () {
       if (hasOwnRootSuiteRun) {

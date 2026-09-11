@@ -191,7 +191,6 @@ function getDcPolyfillSpecifier (moduleType) {
  * Convert the source representations accepted by Node.js loader hooks to text.
  *
  * @param {string | ArrayBuffer | BufferView} source
- * @returns {string}
  */
 function getSourceText (source) {
   if (typeof source === 'string') return source

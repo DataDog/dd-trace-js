@@ -177,7 +177,6 @@ function extractContentParts (parts) {
  * client baseURL convention.
  *
  * @param {string} baseUrl
- * @returns {string}
  */
 function getOpenAIModelProvider (baseUrl = '') {
   if (baseUrl.includes('azure')) return 'azure_openai'

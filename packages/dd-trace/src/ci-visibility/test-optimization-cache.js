@@ -22,7 +22,6 @@ function getSettingsCachePath () {
 /**
  * Sets up the test optimization settings cache file path.
  * Returns the existing path if already set, otherwise creates a new one.
- * @returns {string} The cache file path.
  */
 function setupSettingsCachePath () {
   const existing = getSettingsCachePath()

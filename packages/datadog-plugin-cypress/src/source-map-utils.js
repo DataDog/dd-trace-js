@@ -15,7 +15,6 @@ const SOURCE_MAP_CACHE = new Map()
 /**
  * Whether a file path references JavaScript.
  * @param {string} absoluteFilePath
- * @returns {boolean}
  */
 function isJavaScriptFile (absoluteFilePath) {
   return absoluteFilePath.endsWith('.js') || absoluteFilePath.endsWith('.cjs') || absoluteFilePath.endsWith('.mjs')
@@ -25,7 +24,6 @@ function isJavaScriptFile (absoluteFilePath) {
  * Decide whether invocationDetails line can be trusted as final source line.
  * @param {string} absoluteFilePath
  * @param {number} testSourceLine
- * @returns {boolean}
  */
 function shouldTrustInvocationDetailsLine (absoluteFilePath, testSourceLine) {
   if (!Number.isInteger(testSourceLine) || testSourceLine < 1) return false
@@ -38,7 +36,6 @@ function shouldTrustInvocationDetailsLine (absoluteFilePath, testSourceLine) {
  * Decode one VLQ-encoded integer from `str` at `cursor.pos`, advancing the cursor in place.
  * @param {string} str
  * @param {{ pos: number }} cursor
- * @returns {number}
  */
 function decodeVLQ (str, cursor) {
   let result = 0
@@ -243,7 +240,6 @@ function templateBodyToRegExp (templateBody) {
  * Count 1-indexed line number for a character index in `content`.
  * @param {string} content
  * @param {number} endIndex
- * @returns {number}
  */
 function lineNumberForIndex (content, endIndex) {
   let line = 1

@@ -27,7 +27,6 @@ class Writer {
    * Flushes queued telemetry, retaining delivery on supported serverless platforms.
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
-   * @returns {void}
    */
   flush (done, options) {
     if (this.#deliveryTracker) {
@@ -40,7 +39,6 @@ class Writer {
    * Flushes queued telemetry without registering serverless delivery retention.
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
-   * @returns {void}
    */
   flushDirect (done = noop, options) {
     const count = this._encoder.count()

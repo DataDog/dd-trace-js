@@ -1161,9 +1161,6 @@ function useSandbox (...args) {
   })
 }
 
-/**
- * @returns {string}
- */
 function sandboxCwd () {
   return sandbox.folder
 }

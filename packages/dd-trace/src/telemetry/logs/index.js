@@ -15,7 +15,6 @@ let enabled = false
  * - DEBUG level will be possible to activate with an env var or telemetry config property
  *
  * @param {string | undefined} level
- * @returns {boolean}
  */
 function isLevelEnabled (level) {
   return isValidLevel(level)

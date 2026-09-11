@@ -40,7 +40,6 @@ const { legacyBaggagePrefix, propagationHeaders } = parseCarrierModel(carrierSou
 
 /**
  * @param {import('estree').Identifier | import('estree').Expression | import('estree').Super} node
- * @returns {boolean}
  */
 function isCarrierIdentifier (node) {
   return node.type === 'Identifier' && node.name.toLowerCase().endsWith('carrier')
@@ -48,7 +47,6 @@ function isCarrierIdentifier (node) {
 
 /**
  * @param {import('estree').Identifier | import('estree').Expression | import('estree').Super} node
- * @returns {boolean}
  */
 function isHeaderContainer (node) {
   if (isCarrierIdentifier(node)) return true
@@ -65,7 +63,6 @@ function isHeaderContainer (node) {
 
 /**
  * @param {string} name
- * @returns {boolean}
  */
 function isPropagationHeader (name) {
   return propagationHeaders.has(name) || name.startsWith(legacyBaggagePrefix)
@@ -77,7 +74,6 @@ function isPropagationHeader (name) {
  *
  * @param {string} name
  * @param {import('estree').Identifier | import('estree').Expression | import('estree').Super} target
- * @returns {boolean}
  */
 function isManagedHeaderAccess (name, target) {
   return isPropagationHeader(name) && (name.includes('-') || isHeaderContainer(target))
@@ -105,7 +101,6 @@ function getPropertyName (node, resolveString) {
 
 /**
  * @param {import('estree').Node} node
- * @returns {boolean}
  */
 function isCarrierModuleRequire (node) {
   if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || node.callee.name !== 'require') {
@@ -152,7 +147,6 @@ export default {
 
     /**
      * @param {import('estree').Node} node
-     * @returns {boolean}
      */
     function isCarrierModuleReference (node) {
       return isCarrierModuleRequire(node) ||
@@ -178,7 +172,6 @@ export default {
      * @param {import('estree').Node} node
      * @param {Set<import('eslint').Scope.Variable>} taintedVariables
      * @param {Set<import('eslint').Scope.Variable>} [seenVariables]
-     * @returns {boolean}
      */
     function isCarrierReference (node, taintedVariables, seenVariables) {
       if (isCarrierIdentifier(node)) return true
@@ -211,7 +204,6 @@ export default {
 
     /**
      * @param {CarrierEvent} event
-     * @returns {void}
      */
     function recordCodePathEvent (event) {
       const codePathFrame = codePathFrames[codePathFrames.length - 1]
@@ -228,7 +220,6 @@ export default {
     /**
      * @param {import('estree').Node} expression
      * @param {import('estree').Node} node
-     * @returns {void}
      */
     function recordCarrierCheck (expression, node) {
       if (strictCarrierIdentifiers) recordCodePathEvent({ type: 'check', expression, node })
@@ -237,7 +228,6 @@ export default {
     /**
      * @param {CarrierWrite} event
      * @param {Set<import('eslint').Scope.Variable>} taintedVariables
-     * @returns {void}
      */
     function applyCarrierWrite (event, taintedVariables) {
       const tainted = (event.preserve && taintedVariables.has(event.variable)) ||
@@ -268,7 +258,6 @@ export default {
     /**
      * @param {import('estree').CallExpression} node
      * @param {Set<import('eslint').Scope.Variable>} taintedVariables
-     * @returns {void}
      */
     function checkCarrierCall (node, taintedVariables) {
       if (node.callee.type === 'Identifier' &&
@@ -284,7 +273,6 @@ export default {
 
     /**
      * @param {CodePathFrame} frame
-     * @returns {void}
      */
     function computeCodePathOutputs (frame) {
       const { outputs } = frame
@@ -307,7 +295,6 @@ export default {
 
     /**
      * @param {CodePathFrame} frame
-     * @returns {void}
      */
     function recordCarrierReturningFunctions (frame) {
       if (carrierReturningFunctions.has(frame.node)) return
@@ -327,7 +314,6 @@ export default {
 
     /**
      * @param {CodePathFrame} frame
-     * @returns {void}
      */
     function checkCodePath (frame) {
       for (const segment of frame.segments) {
@@ -385,7 +371,6 @@ export default {
      * @param {import('estree').Identifier} callee
      * @param {Array<import('estree').Expression | import('estree').SpreadElement>} callArguments
      * @param {Set<import('eslint').Scope.Variable>} taintedVariables
-     * @returns {boolean}
      */
     function isCheckedLocalCarrierFunction (callee, callArguments, taintedVariables) {
       const localFunction = findLocalFunction(callee)
@@ -423,7 +408,6 @@ export default {
 
     /**
      * @param {import('estree').VariableDeclarator} node
-     * @returns {void}
      */
     function recordCarrierFunctions (node) {
       if (node.id.type !== 'ObjectPattern' || !node.init || !isCarrierModuleReference(node.init)) return
@@ -436,7 +420,6 @@ export default {
 
     /**
      * @param {import('estree').ObjectExpression} node
-     * @returns {boolean}
      */
     function isCarrierObject (node) {
       const parent = node.parent
@@ -484,7 +467,6 @@ export default {
     /**
      * @param {import('estree').ObjectPattern} pattern
      * @param {import('estree').Expression} target
-     * @returns {boolean}
      */
     function checkObjectPattern (pattern, target) {
       let handled = false
@@ -510,7 +492,6 @@ export default {
     /**
      * @param {import('estree').Node} node
      * @param {'useCarrierField' | 'noDirectCarrierAccess'} messageId
-     * @returns {void}
      */
     function report (node, messageId) {
       context.report({ node, messageId })
@@ -520,7 +501,6 @@ export default {
       /**
        * @param {import('eslint').CodePath} codePath
        * @param {import('estree').Node} node
-       * @returns {void}
        */
       onCodePathStart (codePath, node) {
         codePathFrames.push({
@@ -540,7 +520,6 @@ export default {
 
       /**
        * @param {import('eslint').CodePathSegment} segment
-       * @returns {void}
        */
       onCodePathSegmentStart (segment) {
         const codePathFrame = codePathFrames[codePathFrames.length - 1]
@@ -550,7 +529,6 @@ export default {
 
       /**
        * @param {import('eslint').CodePathSegment} segment
-       * @returns {void}
        */
       onCodePathSegmentEnd (segment) {
         codePathFrames[codePathFrames.length - 1].currentSegments.delete(segment)
@@ -558,7 +536,6 @@ export default {
 
       /**
        * @param {import('eslint').CodePathSegment} segment
-       * @returns {void}
        */
       onUnreachableCodePathSegmentStart (segment) {
         const codePathFrame = codePathFrames[codePathFrames.length - 1]
@@ -568,7 +545,6 @@ export default {
 
       /**
        * @param {import('eslint').CodePathSegment} segment
-       * @returns {void}
        */
       onUnreachableCodePathSegmentEnd (segment) {
         codePathFrames[codePathFrames.length - 1].currentSegments.delete(segment)
@@ -576,7 +552,6 @@ export default {
 
       /**
        * @param {import('estree').MemberExpression} node
-       * @returns {void}
        */
       'MemberExpression:exit' (node) {
         const name = getMemberName(node, resolveString)
@@ -590,7 +565,6 @@ export default {
 
       /**
        * @param {import('estree').Property} node
-       * @returns {void}
        */
       'ObjectExpression > Property' (node) {
         const name = getPropertyName(node, resolveString)
@@ -601,7 +575,6 @@ export default {
 
       /**
        * @param {import('estree').BinaryExpression} node
-       * @returns {void}
        */
       'BinaryExpression:exit' (node) {
         if (node.operator !== 'in') return
@@ -616,7 +589,6 @@ export default {
 
       /**
        * @param {import('estree').CallExpression} node
-       * @returns {void}
        */
       'CallExpression:exit' (node) {
         const callsCarrierModuleMember = node.callee.type === 'MemberExpression' &&
@@ -644,7 +616,6 @@ export default {
 
       /**
        * @param {import('estree').SpreadElement} node
-       * @returns {void}
        */
       'SpreadElement:exit' (node) {
         recordCarrierCheck(node.argument, node)
@@ -652,7 +623,6 @@ export default {
 
       /**
        * @param {import('estree').AssignmentExpression} node
-       * @returns {void}
        */
       'AssignmentExpression:exit' (node) {
         if (node.left.type === 'ObjectPattern') {
@@ -674,7 +644,6 @@ export default {
 
       /**
        * @param {import('estree').VariableDeclarator} node
-       * @returns {void}
        */
       'VariableDeclarator:exit' (node) {
         if (node.id.type === 'Identifier' && node.init && isCarrierModuleRequire(node.init)) {
@@ -710,7 +679,6 @@ export default {
 
       /**
        * @param {import('estree').ArrowFunctionExpression} node
-       * @returns {void}
        */
       'ArrowFunctionExpression:exit' (node) {
         if (node.body.type !== 'BlockStatement') {
@@ -720,7 +688,6 @@ export default {
 
       /**
        * @param {import('estree').ReturnStatement} node
-       * @returns {void}
        */
       'ReturnStatement:exit' (node) {
         if (node.argument) recordCodePathEvent({ type: 'return', expression: node.argument, node })
@@ -728,7 +695,6 @@ export default {
 
       /**
        * @param {import('estree').UpdateExpression} node
-       * @returns {void}
        */
       'UpdateExpression:exit' (node) {
         const variable = findVariable(node.argument)

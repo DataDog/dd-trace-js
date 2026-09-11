@@ -813,7 +813,6 @@ describe('test optimization validation observed test counts', () => {
  *
  * @param {string} name environment name
  * @param {string|undefined} value previous value
- * @returns {void}
  */
 function restoreEnv (name, value) {
   if (value === undefined) {

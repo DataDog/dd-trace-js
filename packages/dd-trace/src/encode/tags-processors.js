@@ -53,7 +53,6 @@ function truncateSpanTestOpt (span) {
  * the formatter no longer reshapes events, it hands the raw array through.
  *
  * @param {{ startTime: number }} event
- * @returns {number}
  */
 function eventTimeNano (event) {
   return Math.round(event.startTime * 1e6)

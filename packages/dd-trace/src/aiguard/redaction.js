@@ -49,7 +49,6 @@ function parsePath (path) {
  * Reports whether a parsed path targets an allowed message string.
  *
  * @param {Array<{ name: string, index: number|undefined }>} segments
- * @returns {boolean}
  */
 function isRedactablePath (segments) {
   const first = segments[0]

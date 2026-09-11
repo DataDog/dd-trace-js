@@ -117,9 +117,6 @@ class AgentlessWriter extends BaseWriter {
     }
   }
 
-  /**
-   * @returns {string} The full agentless intake endpoint.
-   */
   #endpoint () {
     const endpoint = new URL(this._url)
     endpoint.pathname = INTAKE_PATH

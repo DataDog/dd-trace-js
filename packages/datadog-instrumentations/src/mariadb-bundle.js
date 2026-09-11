@@ -149,7 +149,6 @@ function createPoolAcquisition (pool, options, queryCtx, mode) {
  * Queues a delayed acquisition for pool events that no longer carry its async-local context.
  *
  * @param {PoolAcquisition} acquisition
- * @returns {void}
  */
 function queuePoolAcquisition (acquisition) {
   let pending = pendingPoolAcquisitions.get(acquisition.pool)
@@ -164,7 +163,6 @@ function queuePoolAcquisition (acquisition) {
  * Reports whether an acquisition still needs a matching pool event.
  *
  * @param {PoolAcquisition} acquisition
- * @returns {boolean}
  */
 function isPoolAcquisitionPending (acquisition) {
   return !acquisition.acquired && !acquisition.finished && !acquisition.errorReported
@@ -174,7 +172,6 @@ function isPoolAcquisitionPending (acquisition) {
  * Releases a consumed acquisition and periodically compacts its queue.
  *
  * @param {PendingPoolAcquisitions} pending
- * @returns {void}
  */
 function discardPoolAcquisition (pending) {
   pending.acquisitions[pending.index++] = undefined
@@ -195,7 +192,6 @@ function discardPoolAcquisition (pending) {
  * Removes completed entries from the front of a pool's acquisition queue.
  *
  * @param {object} pool
- * @returns {void}
  */
 function prunePoolAcquisitions (pool) {
   const pending = pendingPoolAcquisitions.get(pool)
@@ -235,7 +231,6 @@ function takePoolAcquisition (pool) {
  * Records the pool wait when MariaDB announces that the calling operation acquired a connection.
  *
  * @param {object} pool
- * @returns {void}
  */
 function recordPoolAcquisition (pool) {
   let acquisition = poolAcquisitionStorage?.getStore()
@@ -263,7 +258,6 @@ function recordPoolAcquisition (pool) {
  * Starts a pooled command after MariaDB has acquired the connection that will execute it.
  *
  * @param {PoolAcquisition} acquisition
- * @returns {void}
  */
 function startPoolCommand (acquisition) {
   const queryCtx = acquisition.queryCtx
@@ -277,7 +271,6 @@ function startPoolCommand (acquisition) {
  * Starts a command lifecycle without running connector work inside its span store.
  *
  * @param {object} ctx
- * @returns {void}
  */
 function runCommandStart (ctx) {
   startCh.runStores(ctx, noop)
@@ -288,7 +281,6 @@ function runCommandStart (ctx) {
  *
  * @param {PoolAcquisition | undefined} acquisition
  * @param {unknown} error
- * @returns {void}
  */
 function reportPoolQueryAcquireError (acquisition, error) {
   if (acquisition === undefined || acquisition.acquired || acquisition.errorReported) return
@@ -346,7 +338,6 @@ function runPoolAcquisition (acquisition, method, receiver, args) {
  *
  * @param {PoolAcquisition | undefined} acquisition
  * @param {unknown} [error]
- * @returns {void}
  */
 function finishPoolCommandAcquisition (acquisition, error) {
   if (acquisition === undefined) return
@@ -375,7 +366,6 @@ function runSkippedPoolMethod (method, receiver, args) {
  *
  * @param {PoolAcquisition} acquisition
  * @param {unknown} [error]
- * @returns {void}
  */
 function finishExplicitPoolAcquisition (acquisition, error) {
   if (acquisition.finished) return
@@ -395,7 +385,6 @@ function finishExplicitPoolAcquisition (acquisition, error) {
  *
  * @param {object} pool
  * @param {Function} observer
- * @returns {void}
  */
 function restorePoolAcquisitionObserver (pool, observer) {
   const listeners = pool.listeners('acquire')
@@ -409,7 +398,6 @@ function restorePoolAcquisitionObserver (pool, observer) {
  * Observes public acquire events forwarded by a bundled pool.
  *
  * @param {object} pool
- * @returns {void}
  */
 function observePoolAcquisitions (pool) {
   const observer = () => {
@@ -428,7 +416,6 @@ function observePoolAcquisitions (pool) {
  * Marks a command as active on its owning public connection.
  *
  * @param {object | undefined} owner
- * @returns {void}
  */
 function startCommand (owner) {
   if (owner === undefined) return
@@ -439,7 +426,6 @@ function startCommand (owner) {
  * Releases one active command without clearing concurrent commands.
  *
  * @param {object | undefined} owner
- * @returns {void}
  */
 function endCommand (owner) {
   if (owner === undefined) return
@@ -458,7 +444,6 @@ function endCommand (owner) {
  * @param {object | undefined} owner
  * @param {Error} [error]
  * @param {unknown} [result]
- * @returns {void}
  */
 function finishCommandState (ctx, owner, error, result) {
   endCommand(owner)
@@ -476,7 +461,6 @@ function finishCommandState (ctx, owner, error, result) {
  * @param {object | undefined} owner
  * @param {Error} [error]
  * @param {unknown} [result]
- * @returns {void}
  */
 function finishCommand (ctx, owner, error, result) {
   finishCommandState(ctx, owner, error, result)
@@ -490,7 +474,6 @@ function finishCommand (ctx, owner, error, result) {
  * @param {number} callbackIndex
  * @param {unknown} callback
  * @param {(callback?: Function) => Function} createCallback
- * @returns {void}
  */
 function setCommandCallback (args, callbackIndex, callback, createCallback) {
   if (typeof callback === 'function') {
@@ -750,7 +733,6 @@ function createWrapStream (options, preparedSql, commandOwner) {
  *
  * @param {object} client
  * @param {(command: Function) => Function} wrapper
- * @returns {void}
  */
 function wrapClientCommands (client, wrapper) {
   if (wrappedClients.has(client)) return
@@ -769,7 +751,6 @@ function wrapClientCommands (client, wrapper) {
  * @param {(options: object, sql?: unknown, owner?: object, commandArity?: number,
  *   trackActiveCommands?: boolean, poolAcquisition?: 'measure' | 'observe') =>
  *   (command: Function) => Function} createWrapper
- * @returns {void}
  */
 function wrapPoolCommands (pool, options, createWrapper) {
   if (wrappedClients.has(pool)) return
@@ -789,7 +770,6 @@ function wrapPoolCommands (pool, options, createWrapper) {
  * @param {object} options
  * @param {(options: object, sql: string, owner?: object, commandArity?: number) =>
  *   (command: Function) => Function} createWrapper
- * @returns {void}
  */
 function wrapTransactionMethods (client, options, createWrapper) {
   for (const [method, sql] of transactionMethods) {
@@ -1115,7 +1095,6 @@ function createWrapCallbackGetConnection (options) {
  * @param {object} pool
  * @param {object} options
  * @param {(connection: object, options: object) => object} wrapConnection
- * @returns {void}
  */
 function wrapPoolConnectionEvent (pool, options, wrapConnection) {
   shimmer.wrap(pool, 'emit', emit => function (event, connection) {
@@ -1131,7 +1110,6 @@ function wrapPoolConnectionEvent (pool, options, wrapConnection) {
  * @param {object} cluster
  * @param {Function} defaultOptions
  * @param {ClusterSelectionStorage} selectionStorage
- * @returns {void}
  */
 function captureClusterOptions (cluster, defaultOptions, selectionStorage) {
   /** @type {Map<string, ClusterNodeOptions>} */
@@ -1198,7 +1176,6 @@ function captureClusterOptions (cluster, defaultOptions, selectionStorage) {
  *
  * @param {Map<string, ClusterNodeOptions>} optionsByIdentifier
  * @param {string} pattern
- * @returns {void}
  */
 function removeClusterOptions (optionsByIdentifier, pattern) {
   const regularExpression = new RegExp(pattern)
@@ -1227,7 +1204,6 @@ function runClusterGetConnection (getConnection, receiver, args) {
  * @param {ClusterSelection} selection
  * @param {number | undefined} start
  * @param {unknown} error
- * @returns {void}
  */
 function reportBundledClusterAcquireError (selection, start, error) {
   if (!acquireStartCh.hasSubscribers) return

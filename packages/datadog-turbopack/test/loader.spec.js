@@ -700,7 +700,6 @@ function createProject () {
  * @param {string} name
  * @param {object} packageJson
  * @param {boolean} [pnpm]
- * @returns {string}
  */
 function createPackage (projectDir, name, packageJson, pnpm = false) {
   const packageDir = pnpm
@@ -715,7 +714,6 @@ function createPackage (projectDir, name, packageJson, pnpm = false) {
  * @param {string} directory
  * @param {string} file
  * @param {string} source
- * @returns {string}
  */
 function write (directory, file, source) {
   const target = path.join(directory, file)
@@ -726,7 +724,6 @@ function write (directory, file, source) {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function escapeRegExp (value) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)

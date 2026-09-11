@@ -86,7 +86,6 @@ function encodePathwayContext (dataStreamsContext) {
  * @param {Buffer} dataStreamsContext.hash
  * @param {number} dataStreamsContext.pathwayStartNs
  * @param {number} dataStreamsContext.edgeStartNs
- * @returns {string}
  */
 function encodePathwayContextBase64 (dataStreamsContext) {
   const encodedPathway = encodePathwayContext(dataStreamsContext)

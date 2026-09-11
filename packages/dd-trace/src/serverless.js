@@ -69,7 +69,6 @@ function getServerlessPlatform () {
  * Whether the current platform can retain an invocation for telemetry delivery.
  *
  * Add future serverless platforms here as they gain an equivalent retention hook.
- * @returns {boolean}
  */
 function supportsServerlessTelemetryRetention () {
   return isVercelAtStartup

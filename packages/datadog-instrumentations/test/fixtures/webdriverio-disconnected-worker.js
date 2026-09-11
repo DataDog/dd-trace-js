@@ -43,7 +43,6 @@ workerConfigurationCh.subscribe(onWorkerConfiguration)
 /**
  * Exercises worker-ready and suite-finish messages.
  *
- * @returns {void}
  */
 function exerciseWorkerMessages () {
   class FakeMocha {
@@ -72,14 +71,8 @@ function exerciseWorkerMessages () {
       }
     }
 
-    /**
-     * @returns {void}
-     */
     runTests () {}
 
-    /**
-     * @returns {void}
-     */
     run () {
       this.emit('fail', { file: 'hook-fail.e2e.js', type: 'hook' })
       this.emit('end')

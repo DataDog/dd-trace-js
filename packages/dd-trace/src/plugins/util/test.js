@@ -445,7 +445,6 @@ function addTestOptimizationRequest (requestPromises, responseNames, responseNam
  *
  * @param {string} testSuite
  * @param {string|undefined} testSuiteExecutionId
- * @returns {string}
  */
 function getTestSuiteExecutionKey (testSuite, testSuiteExecutionId) {
   return testSuiteExecutionId ? `${testSuite}\0${testSuiteExecutionId}` : testSuite
@@ -868,7 +867,6 @@ function finishAllTraceSpans (span) {
  * @param {import('../../opentracing/span')} testSpan
  * @param {boolean|undefined} isRumActive
  * @param {string} [browserVersion]
- * @returns {void}
  */
 function setRumTestTags (testSpan, isRumActive, browserVersion) {
   if (isRumActive) {
@@ -942,7 +940,6 @@ function getTestCommonTags (name, suite, version, testFramework) {
  *
  * @param {string | undefined} testSuiteAbsolutePath
  * @param {string} sourceRoot
- * @returns {string}
  */
 function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
   if (!testSuiteAbsolutePath) {
@@ -1069,7 +1066,6 @@ const codeOwnersPerEntries = new WeakMap()
 
 /**
  * @param {string} character
- * @returns {string}
  */
 function escapeRegexCharacter (character) {
   return character.replaceAll(/[|\\{}()[\]^$+*?.]/g, String.raw`\$&`)
@@ -1077,7 +1073,6 @@ function escapeRegexCharacter (character) {
 
 /**
  * @param {string} pattern
- * @returns {boolean}
  */
 function hasUnescapedWildcard (pattern) {
   for (let i = 0; i < pattern.length; i++) {
@@ -1093,7 +1088,6 @@ function hasUnescapedWildcard (pattern) {
 
 /**
  * @param {string} pattern
- * @returns {string}
  */
 function codeOwnersPatternToRegexSource (pattern) {
   let source = ''
@@ -1172,7 +1166,6 @@ function setCodeOwnersPatternRegex (entry) {
  *
  * @param {RegExp|null} regex
  * @param {string} filename
- * @returns {boolean}
  */
 function isCodeOwnersPatternMatch (regex, filename) {
   if (!regex || !filename) {
@@ -1551,7 +1544,6 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
  * @param {object} coverage
  * @param {object} skippedCoverage
  * @param {string} [rootDir]
- * @returns {boolean}
  */
 function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
   const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
@@ -1616,7 +1608,6 @@ function fromCoverageMapToCoverage (coverageMap) {
 
 /**
  * @param {number} code
- * @returns {boolean}
  */
 function isAsciiDigit (code) {
   return code >= 0x30 && code <= 0x39
@@ -2042,7 +2033,6 @@ function getModifiedFilesFromDiff (diff) {
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function getTestOptimizationIdentity (testSuite, testName) {
   return JSON.stringify([testSuite, testName])
@@ -2053,7 +2043,6 @@ function getTestOptimizationIdentity (testSuite, testName) {
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function formatTestOptimizationName (testSuite, testName) {
   return testSuite ? `${testSuite} › ${testName}` : testName
@@ -2063,7 +2052,6 @@ function formatTestOptimizationName (testSuite, testName) {
  * Replaces characters that could make one test occupy multiple CI log lines.
  *
  * @param {string} value
- * @returns {string}
  */
 function sanitizeTestOptimizationName (value) {
   return stripVTControlCharacters(value)
@@ -2077,7 +2065,6 @@ function sanitizeTestOptimizationName (value) {
  *
  * @param {string} value
  * @param {number} maxLength
- * @returns {string}
  */
 function truncateTestOptimizationNameStart (value, maxLength) {
   if (value.length <= maxLength) return value
@@ -2093,7 +2080,6 @@ function truncateTestOptimizationNameStart (value, maxLength) {
  *
  * @param {string} value
  * @param {number} maxLength
- * @returns {string}
  */
 function truncateTestOptimizationNameMiddle (value, maxLength) {
   if (value.length <= maxLength) return value
@@ -2112,7 +2098,6 @@ function truncateTestOptimizationNameMiddle (value, maxLength) {
  *
  * @param {string | undefined} testSuite
  * @param {string} testName
- * @returns {string}
  */
 function formatTestOptimizationDisplayName (testSuite, testName) {
   const sanitizedSuite = testSuite ? sanitizeTestOptimizationName(testSuite) : ''
@@ -2136,7 +2121,6 @@ function formatTestOptimizationDisplayName (testSuite, testName) {
  * Renders a bounded bullet list for Test Optimization summaries.
  *
  * @param {Array<{ text: string, suffix?: string }>} items
- * @returns {string}
  */
 function formatTestOptimizationList (items) {
   const shown = items.slice(0, MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS)
@@ -2299,7 +2283,6 @@ function collectAttemptToFixExecutionFromTraceSpan (span, attemptToFixExecutions
  *
  * @param {{ meta?: Record<string, string> }} span
  * @param {TestManagementExecutions} executions
- * @returns {void}
  */
 function collectTestManagementExecutionFromTraceSpan (span, executions) {
   const meta = span.meta
@@ -2405,7 +2388,6 @@ function addAttemptToFixResultLine (lines, result) {
  *
  * @param {AttemptToFixExecutions} attemptToFixExecutions
  * @param {boolean} [includeTestNames]
- * @returns {string}
  */
 function formatAttemptToFixSummary (attemptToFixExecutions, includeTestNames = true) {
   if (attemptToFixExecutions.size === 0) return ''
@@ -2458,7 +2440,6 @@ function formatAttemptToFixSummary (attemptToFixExecutions, includeTestNames = t
  *
  * @param {TestManagementExecutions} executions
  * @param {boolean} [includeTestNames]
- * @returns {string}
  */
 function formatTestManagementSummary (executions, includeTestNames = true) {
   if (executions.size === 0) return ''
@@ -2509,7 +2490,6 @@ function formatTestManagementSummary (executions, includeTestNames = true) {
  * Formats the dynamic-name warning section of the Test Optimization summary.
  *
  * @param {Set<string>} newTestsWithDynamicNames
- * @returns {string}
  */
 function formatDynamicNamesSummary (newTestsWithDynamicNames) {
   if (newTestsWithDynamicNames.size === 0) return ''

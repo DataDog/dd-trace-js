@@ -43,7 +43,6 @@ module.exports = {
 /**
  * Check if the Debugger worker is currently running
  *
- * @returns {boolean} True if the worker is started, false otherwise
  */
 function isStarted () {
   return worker !== null

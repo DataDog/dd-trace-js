@@ -434,7 +434,6 @@ function checkDdTraceDependency (results, manifests, options = {}) {
  * Checks whether static diagnosis parsed the repository root package manifest.
  *
  * @param {Array<object>} manifests parsed package manifests
- * @returns {boolean} true when the root package.json was parsed
  */
 function hasParsedRootManifest (manifests) {
   return manifests.some(manifest => manifest.relativePath === 'package.json')
@@ -1233,7 +1232,6 @@ function getEligibleCommandMatch (framework) {
  *
  * @param {string} frameworkId framework id
  * @param {object} script package script
- * @returns {number} lower is preferred
  */
 function getFrameworkCommandPreference (frameworkId, script) {
   let score = 0
@@ -1294,7 +1292,6 @@ function getIdentityTokens (value) {
  * @param {object} left first command or dependency entry
  * @param {object} right second command or dependency entry
  * @param {Map<string, number>|undefined} scores package preference scores
- * @returns {number} sort order
  */
 function compareProjectPreference (left, right, scores) {
   return compareProjectScope(left, right, scores) ||
@@ -1307,7 +1304,6 @@ function compareProjectPreference (left, right, scores) {
  * @param {object} left first command or dependency entry
  * @param {object} right second command or dependency entry
  * @param {Map<string, number>|undefined} scores package preference scores
- * @returns {number} sort order before stable path tie-breaking
  */
 function compareProjectScope (left, right, scores) {
   const scoreDifference = (scores?.get(right.relativePath) || 0) - (scores?.get(left.relativePath) || 0)
@@ -1321,7 +1317,6 @@ function compareProjectScope (left, right, scores) {
  *
  * @param {string} frameworkId framework id
  * @param {string} command package script command
- * @returns {boolean} whether the command is ineligible
  */
 function isIneligibleFrameworkCommand (frameworkId, command) {
   if (frameworkId === 'cucumber' && !isCucumberRunnerCommand(command)) return true
@@ -1335,7 +1330,6 @@ function isIneligibleFrameworkCommand (frameworkId, command) {
  * Checks whether a package command invokes the Cucumber runner instead of merely naming a Cucumber config file.
  *
  * @param {string} command package script command
- * @returns {boolean} whether the command invokes Cucumber
  */
 function isCucumberRunnerCommand (command) {
   return CUCUMBER_RUNNER_COMMAND_RE.test(String(command || ''))
@@ -1724,7 +1718,6 @@ function getScanExclusions (root, excludePaths) {
  *
  * @param {string} relativePath repository-relative path
  * @param {Set<string>} exclusions normalized exclusions
- * @returns {boolean} whether the path must be skipped
  */
 function isScanPathExcluded (relativePath, exclusions) {
   const normalizedPath = normalizeRelativePath(relativePath)
@@ -1824,7 +1817,6 @@ function getSafeScannedFile (root, physicalRoot, relativePath) {
  *
  * @param {string} root allowed root
  * @param {string} filename candidate path
- * @returns {boolean} whether the candidate is inside the root
  */
 function isPathInside (root, filename) {
   const relative = path.relative(root, filename)
@@ -1835,7 +1827,6 @@ function isPathInside (root, filename) {
  * Checks whether a filename should be scanned as text.
  *
  * @param {string} name filename
- * @returns {boolean} true if the file is text-like
  */
 function isTextFileName (name) {
   return TEXT_FILE_NAMES.has(name) || TEXT_EXTENSIONS.has(path.extname(name))
@@ -1845,7 +1836,6 @@ function isTextFileName (name) {
  * Checks whether a file is a common CI workflow file.
  *
  * @param {string} relativePath relative path
- * @returns {boolean} true if the path is a workflow file
  */
 function isWorkflowFile (relativePath) {
   return relativePath.startsWith('.github/workflows/') ||
@@ -1867,7 +1857,6 @@ function isWorkflowFile (relativePath) {
  * Checks whether a scanned file is likely to configure test process initialization.
  *
  * @param {object} file scanned text file
- * @returns {boolean} true when plain dd-trace init should be treated as test setup evidence
  */
 function isTestSetupOrCiFile (file) {
   const relativePath = file.relativePath
@@ -1891,7 +1880,6 @@ function isTestSetupOrCiFile (file) {
  * @param {string} root repository root
  * @param {string|undefined} gitExecutable trusted git executable
  * @param {typeof process.env} env credential-free git environment
- * @returns {boolean} true if git runs
  */
 function canRunGit (execFile, root, gitExecutable, env) {
   if (!gitExecutable) return false
@@ -1912,7 +1900,6 @@ function canRunGit (execFile, root, gitExecutable, env) {
  * @param {string} gitExecutable trusted git executable
  * @param {typeof process.env} env credential-free git environment
  * @param {string[]} args git arguments
- * @returns {string} command output
  */
 function runGit (execFile, root, gitExecutable, env, args) {
   try {
@@ -2024,7 +2011,6 @@ function coerceVersion (rawVersion) {
  * Checks whether a manifest dependency range cannot be represented by one comparable version.
  *
  * @param {string} rawVersion package manifest version/range
- * @returns {boolean} true when static diagnosis should ask the user to verify the range
  */
 function isAmbiguousRange (rawVersion) {
   const version = String(rawVersion || '').trim()
@@ -2038,7 +2024,6 @@ function isAmbiguousRange (rawVersion) {
  *
  * @param {Array<object>} frameworks detected frameworks
  * @param {string} id framework id
- * @returns {boolean} true if present
  */
 function hasFramework (frameworks, id) {
   return frameworks.some(framework => framework.id === id)
@@ -2048,7 +2033,6 @@ function hasFramework (frameworks, id) {
  * Checks whether NODE_OPTIONS preloads dd-trace/ci/init.
  *
  * @param {string|undefined} nodeOptions NODE_OPTIONS value
- * @returns {boolean} true if dd-trace/ci/init is present
  */
 function hasCiInitInNodeOptions (nodeOptions) {
   return !!nodeOptions && INIT_PRELOAD_RE.test(nodeOptions)
@@ -2058,7 +2042,6 @@ function hasCiInitInNodeOptions (nodeOptions) {
  * Checks whether NODE_OPTIONS preloads dd-trace/register.js.
  *
  * @param {string|undefined} nodeOptions NODE_OPTIONS value
- * @returns {boolean} true if dd-trace/register.js is present
  */
 function hasRegisterInNodeOptions (nodeOptions) {
   return !!nodeOptions && REGISTER_PRELOAD_RE.test(nodeOptions)
@@ -2068,7 +2051,6 @@ function hasRegisterInNodeOptions (nodeOptions) {
  * Checks whether environment contains branch or tag metadata.
  *
  * @param {typeof process.env} env environment
- * @returns {boolean} true if branch metadata exists
  */
 function hasBranchMetadata (env) {
   return !!(
@@ -2092,7 +2074,6 @@ function hasBranchMetadata (env) {
  * Checks whether environment contains commit SHA metadata.
  *
  * @param {typeof process.env} env environment
- * @returns {boolean} true if SHA metadata exists
  */
 function hasShaMetadata (env) {
   return !!(
@@ -2113,7 +2094,6 @@ function hasShaMetadata (env) {
  * Checks truthy string env values.
  *
  * @param {string|undefined} value value to inspect
- * @returns {boolean} true if value is true-like
  */
 function isTrueLike (value) {
   return /^(?:1|true)$/i.test(String(value || ''))
@@ -2123,7 +2103,6 @@ function isTrueLike (value) {
  * Checks false-like string env values.
  *
  * @param {string|undefined} value value to inspect
- * @returns {boolean} true if value is false-like
  */
 function isFalseLike (value) {
   return /^(?:0|false)$/i.test(String(value || ''))
@@ -2133,7 +2112,6 @@ function isFalseLike (value) {
  * Formats a list of locations for text output.
  *
  * @param {string[]} locations relative paths
- * @returns {string} formatted locations
  */
 function formatLocations (locations) {
   const uniqueLocations = unique(locations).slice(0, 5)
@@ -2231,7 +2209,6 @@ function uniqueVersionDetections (detections) {
  * Normalizes relative paths to POSIX separators for stable output.
  *
  * @param {string} relativePath relative path
- * @returns {string} normalized path
  */
 function normalizeRelativePath (relativePath) {
   return relativePath.split(path.sep).join('/')

@@ -141,7 +141,6 @@ function getRouterMountPaths (router) {
 /**
  * @param {object} layer
  * @param {LayerMeta} meta
- * @returns {void}
  */
 function setLayerMeta (layer, meta) {
   layerMeta.set(layer, meta)

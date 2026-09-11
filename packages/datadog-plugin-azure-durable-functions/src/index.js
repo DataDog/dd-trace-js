@@ -97,7 +97,6 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
    * orchestration activations.
    *
    * @param {{ arguments?: unknown[], error?: unknown }} executorCtx
-   * @returns {void}
    */
   orchestrationFailure (executorCtx) {
     const args = executorCtx?.arguments

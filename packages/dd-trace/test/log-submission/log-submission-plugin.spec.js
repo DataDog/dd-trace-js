@@ -33,7 +33,6 @@ const LogSubmissionPlugin = proxyquire('../../src/log-submission/log-submission-
 /**
  * @param {string | Record<string, unknown>} message
  * @param {string} [source]
- * @returns {void}
  */
 function publishLog (message, source = 'bunyan') {
   logSubmissionCh.publish({ source, message })

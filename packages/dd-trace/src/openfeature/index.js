@@ -13,7 +13,6 @@ let exposuresWriter = null
 /**
  * @private
  * @param {object | Array<object>} exposureEvents - Exposure events channel subscriber
- * @returns {void}
  */
 function _handleExposureSubmit (exposureEvents) {
   if (!exposuresWriter) return
@@ -23,7 +22,6 @@ function _handleExposureSubmit (exposureEvents) {
 /**
  * Channel subscriber for manually flushing the exposures writer
  * @private
- * @returns {void}
  */
 function _handleFlush () {
   exposuresWriter?.flush()
@@ -32,7 +30,6 @@ function _handleFlush () {
 /**
  * Enables the OpenFeature module and sets up FF&E writer and channel subscribers
  * @param {import('../config')} config - Tracer configuration object
- * @returns {void}
  */
 function enable (config) {
   if (exposuresWriter) {
@@ -54,7 +51,6 @@ function enable (config) {
 
 /**
  * Disables the OpenFeature module and cleans up resources
- * @returns {void}
  */
 function disable () {
   if (!exposuresWriter) return

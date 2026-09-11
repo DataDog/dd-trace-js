@@ -237,7 +237,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {NumberDataPoint} dataPoint - The number data point to assign a value to
    * @param {number} value - The value to assign
-   * @returns {void}
    */
   #assignNumberValue (dataPoint, value) {
     if (Number.isInteger(value)) {

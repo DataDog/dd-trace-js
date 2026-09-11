@@ -120,7 +120,6 @@ module.exports = function loader (source, inputSourceMap) {
 
 /**
  * @param {LoaderContext} context
- * @returns {string}
  */
 function getResourcePath (context) {
   const { resourcePath } = context
@@ -185,7 +184,6 @@ function getPublications (resourcePath, packageInfo) {
 /**
  * @param {string} name
  * @param {string} packageJsonPath
- * @returns {string}
  */
 function getCommonJsEntrypoint (name, packageJsonPath) {
   const cached = entrypoints.get(packageJsonPath)
@@ -228,7 +226,6 @@ function getRewriter (dcModule) {
 
 /**
  * @param {string} source
- * @returns {boolean}
  */
 function hasUnsafeCommonJsBindings (source) {
   try {
@@ -248,7 +245,6 @@ function hasUnsafeCommonJsBindings (source) {
  * @param {number} shadowedBindings
  * @param {object} [parent]
  * @param {string} [parentKey]
- * @returns {boolean}
  */
 function hasUnsafeNode (node, functionDepth, shadowedBindings, parent, parentKey) {
   if (functionDepth === 0 && hasCommonJsDeclaration(node, parent)) return true
@@ -286,7 +282,6 @@ function hasUnsafeNode (node, functionDepth, shadowedBindings, parent, parentKey
 /**
  * @param {object} node
  * @param {object} [parent]
- * @returns {boolean}
  */
 function hasCommonJsDeclaration (node, parent) {
   if (node.type === 'VariableDeclarator') {
@@ -301,7 +296,6 @@ function hasCommonJsDeclaration (node, parent) {
 /**
  * @param {object} node
  * @param {number} shadowedBindings
- * @returns {boolean}
  */
 function mutatesCommonJsBinding (node, shadowedBindings) {
   return Boolean(getBindingMask(node) & COMMONJS_BINDINGS & ~shadowedBindings)
@@ -309,7 +303,6 @@ function mutatesCommonJsBinding (node, shadowedBindings) {
 
 /**
  * @param {object} node
- * @returns {number}
  */
 function getBindingMask (node) {
   if (!node) return 0
@@ -337,7 +330,6 @@ function getBindingMask (node) {
 
 /**
  * @param {object} node
- * @returns {number}
  */
 function getFunctionBindings (node) {
   let bindings = node.type === 'ArrowFunctionExpression' ? 0 : ARGUMENTS_BINDING
@@ -348,7 +340,6 @@ function getFunctionBindings (node) {
 
 /**
  * @param {object} node
- * @returns {number}
  */
 function getVarBindings (node) {
   if (node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration' ||
@@ -373,7 +364,6 @@ function getVarBindings (node) {
 
 /**
  * @param {object} node
- * @returns {number}
  */
 function getLexicalBindings (node) {
   let bindings = 0
@@ -397,7 +387,6 @@ function getLexicalBindings (node) {
 
 /**
  * @param {object} node
- * @returns {number}
  */
 function getStatementBindings (node) {
   if (node.type === 'VariableDeclaration') return getLexicalDeclarationBindings(node)
@@ -407,7 +396,6 @@ function getStatementBindings (node) {
 
 /**
  * @param {object} [node]
- * @returns {number}
  */
 function getLexicalDeclarationBindings (node) {
   if (node?.type !== 'VariableDeclaration' || node.kind === 'var') return 0
@@ -419,7 +407,6 @@ function getLexicalDeclarationBindings (node) {
 /**
  * @param {object} parent
  * @param {string} parentKey
- * @returns {boolean}
  */
 function isReferencedIdentifier (parent, parentKey) {
   if (parent.type === 'MemberExpression' && parentKey === 'property' && !parent.computed) return false
@@ -434,7 +421,6 @@ function isReferencedIdentifier (parent, parentKey) {
  * @param {string} source
  * @param {Array<{ package: string, path: string, version: string }>} payloads
  * @param {string} dcModule
- * @returns {string}
  */
 function appendCommonJsPublications (source, payloads, dcModule) {
   let publications = ''
@@ -466,7 +452,6 @@ ${publications}  }
  * @param {{ package: string, path: string, version: string }} payload
  * @param {string} dcModule
  * @param {boolean} esm
- * @returns {string}
  */
 function appendActivation (source, payload, dcModule, esm) {
   if (esm) {
@@ -491,7 +476,6 @@ import ddTraceTurbopackDc from ${JSON.stringify(dcModule)}
 /**
  * @param {string} from
  * @param {string} to
- * @returns {string}
  */
 function relativeImport (from, to) {
   let value = path.relative(from, to).replaceAll('\\', '/')

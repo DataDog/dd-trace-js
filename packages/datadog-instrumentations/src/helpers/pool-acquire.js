@@ -400,9 +400,6 @@ function getConnectionForAcquire (getConnection, pool, args, acquireCtx, start, 
   }
 }
 
-/**
- * @returns {boolean}
- */
 function isPoolQueryAcquire () {
   return currentPoolQueryAcquire !== undefined
 }
@@ -436,7 +433,6 @@ function runWithPoolQueryAcquire (acquire, method, receiver, args) {
 
 /**
  * @param {object} pool
- * @returns {boolean}
  */
 function takeDeferredPoolQueryAcquire (pool) {
   const acquire = deferredPoolQueryAcquireStorage?.getStore()
@@ -579,7 +575,6 @@ function setPoolAcquireCaptureWaitTime (capture, waitTime) {
  * @param {Record<string, unknown>} receiver
  * @param {string} acquireMethod
  * @param {unknown[]} args
- * @returns {boolean}
  */
 function dispatchesAcquireSynchronously (method, receiver, acquireMethod, args) {
   let dispatched = false
@@ -618,7 +613,6 @@ function acquireStart (pool, acquire) {
 
 /**
  * @param {number|undefined} start
- * @returns {number}
  */
 function acquireWait (start) {
   return start === undefined ? 0 : performance.now() - start

@@ -17,7 +17,6 @@ module.exports = {
  * global snapshot rate limit.
  *
  * @param {{ captureSnapshot?: boolean, compiledCaptureExpressions?: object[] }} probe - The probe to inspect.
- * @returns {boolean}
  */
 function isSnapshotProducingProbe (probe) {
   return probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined
@@ -28,7 +27,6 @@ function isSnapshotProducingProbe (probe) {
  * the debuggee.
  *
  * @param {string} id - The probe id.
- * @returns {string}
  */
 function getRemoveProbeExpression (id) {
   return `${SAMPLER_EXPRESSION}?.remove(${JSON.stringify(id)})`
@@ -46,7 +44,6 @@ function getRemoveProbeExpression (id) {
  *   captureSnapshot?: boolean,
  *   compiledCaptureExpressions?: object[]
  * }[]} probes - The probes at the breakpoint location.
- * @returns {string}
  */
 function compileBreakpointCondition (probes) {
   const probeConditions = probes.map(compileProbeCondition)
@@ -75,7 +72,6 @@ function compileBreakpointCondition (probes) {
  *   captureSnapshot?: boolean,
  *   compiledCaptureExpressions?: object[]
  * }} probe - The probe to sample.
- * @returns {string}
  */
 function compileProbeCondition (probe) {
   const sample = `$dd_sampler.makeSampleDecision(${probe.samplingIndex}, ${JSON.stringify(probe.id)}, ` +

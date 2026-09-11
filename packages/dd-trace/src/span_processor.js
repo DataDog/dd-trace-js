@@ -45,7 +45,6 @@ class SpanProcessor {
    * `PrioritySampler.keepTrace()`), so `discard` only applies while the priority is still a reject.
    *
    * @param {import('./opentracing/span_context')} spanContext
-   * @returns {boolean}
    */
   #isDiscarded (spanContext) {
     return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT

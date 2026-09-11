@@ -592,7 +592,6 @@ function readProjectSource (filename, projectFileSources) {
  *
  * @param {string} source file source
  * @param {string} value recorded value
- * @returns {boolean} literal presence
  */
 function containsLiteral (source, value) {
   const normalizedSource = source.replaceAll('\r\n', '\n')

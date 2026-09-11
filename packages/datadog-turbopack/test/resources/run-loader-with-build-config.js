@@ -6,7 +6,6 @@ const path = require('node:path')
 
 /**
  * @param {string} resourcePath
- * @returns {string}
  */
 function run (resourcePath) {
   const loader = require('../../src/loader')

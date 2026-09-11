@@ -96,7 +96,6 @@ function parseEvaluationResponse (body) {
  *
  * @param {boolean} block
  * @param {{ action: string, blockingEnabled: boolean }} evaluation
- * @returns {boolean}
  */
 function shouldBlockEvaluation (block, evaluation) {
   return block && evaluation.blockingEnabled && evaluation.action !== ALLOW
@@ -211,7 +210,6 @@ class EvaluationReporter {
    *
    * @param {EvaluationReport} report
    * @param {string} errorType
-   * @returns {void}
    */
   fail (report, errorType) {
     report.metaStruct.messages = this.#buildMessagesForMetaStruct(report.messages, report.telemetryTags)
@@ -224,7 +222,6 @@ class EvaluationReporter {
    *
    * @param {EvaluationReport} report
    * @param {EvaluationOutcome} outcome
-   * @returns {void}
    */
   finish (report, outcome) {
     const { result, redaction, shouldBlock } = outcome
@@ -299,7 +296,6 @@ class EvaluationReporter {
    * Truncates text in a cloned message to one shared content-size limit.
    *
    * @param {{ content?: string|ContentPart[] }} message
-   * @returns {boolean}
    */
   #truncateMessageContent (message) {
     const { content } = message
@@ -333,7 +329,6 @@ class EvaluationReporter {
    * Returns whether a message represents a tool call or tool output.
    *
    * @param {Message} message
-   * @returns {boolean}
    */
   #isToolCall (message) {
     return Boolean(message.tool_calls || message.tool_call_id)
@@ -370,7 +365,6 @@ class EvaluationReporter {
    * Adds missing client IP tags to the service entry span.
    *
    * @param {Span} rootSpan
-   * @returns {void}
    */
   #setRootSpanClientIpTags (rootSpan) {
     const currentTags = rootSpan.context().getTags()
@@ -411,7 +405,6 @@ class EvaluationReporter {
    *
    * @param {Span} guardSpan
    * @param {Span} rootSpan
-   * @returns {void}
    */
   #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
     const rootTags = rootSpan.context().getTags()

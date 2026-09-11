@@ -10,7 +10,6 @@ const getConfig = require('../../config')
  * applied while parsing the response.
  *
  * @param {object} configuration - Request configuration for the settings endpoint.
- * @returns {string}
  */
 function buildSettingsCacheKey (configuration) {
   const config = getConfig()

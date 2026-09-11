@@ -55,7 +55,6 @@ function groupPartsByRole (parts) {
 /**
  * Check if parts contain thought/reasoning content
  * @param {Array<{thought?: boolean}>} parts
- * @returns {boolean}
  */
 function hasThoughtParts (parts) {
   return parts.some(part => part.thought === true)
@@ -65,7 +64,6 @@ function hasThoughtParts (parts) {
  * Determine the role from a candidate and its parts
  * @param {object} candidate
  * @param {Array<{thought?: boolean}>} parts
- * @returns {string}
  */
 function determineRole (candidate, parts = []) {
   // Check parts for thought indicators
@@ -84,7 +82,6 @@ function determineRole (candidate, parts = []) {
 /**
  * Normalize role to standard values
  * @param {string} role
- * @returns {string}
  */
 function normalizeRole (role) {
   if (role === ROLES.MODEL) return ROLES.ASSISTANT
@@ -520,7 +517,6 @@ function formatOutputMessages (response, isStreaming = false) {
 /**
  * Format embedding output from response
  * @param {object} response
- * @returns {string}
  */
 function formatEmbeddingOutput (response) {
   if (!response?.embeddings?.length) {

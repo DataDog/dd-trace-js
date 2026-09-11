@@ -256,7 +256,6 @@ function getJestRepositoryRoot (readConfigsResult) {
  * Returns true if the data was sent (worker mode), false if in main process (runInBand).
  *
  * @param {string[]} testNames
- * @returns {boolean}
  */
 function sendQuarantineInfoToMainProcess (testNames) {
   const payload = [JEST_WORKER_QUARANTINE_PAYLOAD_CODE, JSON.stringify(testNames)]
@@ -342,7 +341,6 @@ function getTestStats (testStatuses) {
  *   totalCount: number,
  *   efdFailureCount: number
  * } | undefined} ignoredFailures
- * @returns {string}
  */
 function formatIgnoredFailuresSummary (ignoredFailures) {
   if (!ignoredFailures?.efdFailureCount) return ''
@@ -515,7 +513,6 @@ function getOriginalConcurrentTest (concurrentTest) {
  *
  * @param {(...args: unknown[]) => unknown} wrappedConcurrentTest
  * @param {(...args: unknown[]) => unknown} originalConcurrentTest
- * @returns {void}
  */
 function setOriginalConcurrentTest (wrappedConcurrentTest, originalConcurrentTest) {
   Object.defineProperty(wrappedConcurrentTest, DD_JEST_CONCURRENT_TEST_ORIGINAL, {
@@ -573,7 +570,6 @@ function getWrappedCustomHandleTestEvent (handleTestEvent, datadogHandleTestEven
  * @param {object} test
  * @param {boolean} hasFocusedTests
  * @param {RegExp|undefined} testNamePattern
- * @returns {boolean}
  */
 function isJestTestSkipped (test, hasFocusedTests, testNamePattern) {
   if (
@@ -733,7 +729,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * Rebuilds serial `test.each` so every generated row function keeps its parameters.
      *
      * @param {Function|undefined} test
-     * @returns {void}
      */
     bindTestEach (test) {
       if (typeof test?.each !== 'function') return
@@ -782,7 +777,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * in older Jest versions execute inside their test span context.
      *
      * @param {object} state
-     * @returns {void}
      */
     wrapConcurrentTest (state) {
       this.concurrentTestState = state
@@ -794,7 +788,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {Function|undefined} test
      * @param {object} state
-     * @returns {void}
      */
     wrapConcurrentTestGlobals (test, state) {
       if (!state) return
@@ -814,7 +807,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {object} target
      * @param {string} methodName
      * @param {object} state
-     * @returns {void}
      */
     wrapConcurrentTestFunction (target, methodName, state) {
       let concurrentTest = target?.[methodName]
@@ -860,7 +852,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {Function} concurrentTest
      * @param {boolean} needsEachError
-     * @returns {void}
      */
     bindConcurrentEach (concurrentTest, needsEachError) {
       if (typeof concurrentTest?.each !== 'function') return
@@ -1000,7 +991,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {Error|undefined} asyncError
      * @param {Function|undefined} testFn
-     * @returns {boolean}
      */
     isTestModified (asyncError, testFn) {
       if (!this.isImpactedTestsEnabled || !asyncError || typeof testFn !== 'function') return false
@@ -1038,7 +1028,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {string} testName
      * @param {object} ctx
-     * @returns {void}
      */
     removeConcurrentTestContext (testName, ctx) {
       const contexts = this.concurrentTestContexts.get(testName)
@@ -1058,7 +1047,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {string} name
      * @param {unknown[]} params
-     * @returns {void}
      */
     setNameToParams (name, params) {
       this.nameToParams[name] = [...params]
@@ -1069,7 +1057,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {string} name
      * @param {unknown[]|object} params
-     * @returns {void}
      */
     appendNameToParams (name, params) {
       if (this.nameToParams[name]) {
@@ -1082,7 +1069,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     /**
      * @param {object} concurrentTestState
      * @param {number|undefined} startedAt
-     * @returns {void}
      */
     completePre30ConcurrentTest (concurrentTestState, startedAt) {
       if (!concurrentTestState.trackEfdCompletion) return
@@ -1123,12 +1109,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     enqueueDetachedEfdRetry (retryGate, ctx, run) {
       /**
        * @param {() => void} resolve
-       * @returns {void}
        */
       const enqueue = (resolve) => {
         /**
          * @param {boolean} shouldRun
-         * @returns {void}
          */
         const onDecision = (shouldRun) => {
           if (!shouldRun) {
@@ -1147,7 +1131,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const retry = { ctx, resolve, start }
           /**
            * @param {unknown} error
-           * @returns {void}
            */
           const onRejected = (error) => {
             retry.ctx.detachedEfdRetryError = error
@@ -1206,9 +1189,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       })
     }
 
-    /**
-     * @returns {void}
-     */
     drainDetachedEfdRetries () {
       const queue = this.#detachedEfdRetryQueue
       if (!queue) return
@@ -1225,7 +1205,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
     /**
      * @param {DetachedEfdRetry} retry
-     * @returns {void}
      */
     finishDetachedEfdRetry (retry) {
       this.#activeDetachedEfdRetries--
@@ -1238,7 +1217,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {() => unknown} run
      * @param {(error?: Error) => void} done
-     * @returns {void}
      */
     runCallbackEfdRetry (run, done) {
       let result
@@ -1324,7 +1302,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * `handleTestEvent` without calling `super.handleTestEvent`.
      *
      * @param {(event: object, state: object) => Promise<void>|void} datadogHandleTestEvent
-     * @returns {void}
      */
     wrapCustomHandleTestEvent (datadogHandleTestEvent) {
       const descriptor = Object.getOwnPropertyDescriptor(this, 'handleTestEvent')
@@ -1471,7 +1448,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * Registers retry tests while Jest still accepts additions to the test tree.
      *
      * @param {JestRetryOptions} options
-     * @returns {number}
      */
     retryTest ({
       concurrentTestState: registeredConcurrentTestState,
@@ -1557,7 +1533,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * `add_test` dispatch, where Jest would report it as a test file error.
      *
      * @param {JestRetryOptions} retryOptions
-     * @returns {boolean}
      */
     registerRetryTests (retryOptions) {
       // Jest turns later additions into "Cannot add a test after tests have started running".
@@ -1606,7 +1581,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {string} testName
      * @param {object} executedTest The Jest test node that selected the retry count.
      * @param {number} [retryCount] Retries to keep. Every retry is dropped when omitted.
-     * @returns {number} Retries left to run.
      */
     discardEfdRetries (testName, executedTest, retryCount = 0) {
       const siblings = getTestEntries(executedTest.parent)
@@ -1655,7 +1629,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {object} describeBlock
      * @param {boolean} hasFocusedTests
      * @param {RegExp|undefined} testNamePattern
-     * @returns {number}
      */
     markPre30ConcurrentTests (describeBlock, hasFocusedTests, testNamePattern) {
       if (describeBlock.mode === 'skip') return 0
@@ -1687,7 +1660,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     /**
      * @param {object} describeBlock
      * @param {object} state
-     * @returns {void}
      */
     preparePre30ConcurrentTests (describeBlock, state) {
       const testNamePattern = state.testNamePattern
@@ -1705,7 +1677,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
     /**
      * @param {object[]} tests
-     * @returns {void}
      */
     orderConcurrentEfdRetries (tests) {
       if (!this.#efdRetryGatesByName) return
@@ -1727,7 +1698,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     /**
      * @param {string} testName
      * @param {number} durationMs
-     * @returns {void}
      */
     determineEfdRetries (testName, durationMs) {
       if (efdDeterminedRetries.has(testName)) return
@@ -1746,9 +1716,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
-    /**
-     * @returns {void}
-     */
     removeDiscardedEfdRetries () {
       if (!this.#discardedEfdRetryTests) return
 
@@ -1774,7 +1741,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      *
      * @param {object} event
      * @param {object} state
-     * @returns {void}
      */
     handleAddTestEvent (event, state) {
       if (event.concurrent) {
@@ -3322,7 +3288,6 @@ function cleanupTestSuiteState (testSuiteAbsolutePath) {
  * Rechecks custom handlers after Jest has finished constructing the environment.
  *
  * @param {object} environment
- * @returns {void}
  */
 function wrapEnvironmentCustomHandleTestEvent (environment) {
   const datadogHandleTestEvent = environment[DD_JEST_HANDLE_TEST_EVENT_DATADOG]
@@ -3887,7 +3852,6 @@ function requireOutsideJestRequireEngine (runtime, moduleName) {
  * @param {object} runtime
  * @param {string} from
  * @param {string} moduleName
- * @returns {void}
  */
 function recordJestEsmLoggingModulePath (runtime, from, moduleName) {
   if (
@@ -3933,7 +3897,6 @@ function getJestEsmLoggingModuleName (runtime, from, modulePath) {
 
 /**
  * @param {object} runtime
- * @returns {void}
  */
 function wrapJestEsmLoader (runtime) {
   const esmLoader = runtime?.esmLoader
@@ -3994,7 +3957,6 @@ function getJestBypassModulePath (runtime, from, moduleName) {
  * @param {object} runtime
  * @param {string} from
  * @param {string} moduleName
- * @returns {string}
  */
 function resolveJestModulePath (runtime, from, moduleName) {
   if (path.isAbsolute(moduleName)) return moduleName

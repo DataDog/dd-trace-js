@@ -179,7 +179,6 @@ class OtlpHttpExporterBase {
 
   /**
    * @param {() => void} [done]
-   * @returns {void}
    */
   shutdown (done) {
     done?.()

@@ -15,7 +15,6 @@ let missingRouteWarningLogged = false
 /**
  * Logs the unavailable exposure-delivery warning once.
  *
- * @returns {void}
  */
 function warnExposureDeliveryUnavailable () {
   if (missingRouteWarningLogged) return
@@ -31,7 +30,6 @@ function warnExposureDeliveryUnavailable () {
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {void}
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
   discoverEVPProxy(config.url, {
@@ -61,7 +59,6 @@ function setAgentStrategy (config, setWriterEnabledValue) {
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {void}
  */
 function setAgentlessStrategy (config, setWriterEnabledValue) {
   const directRoute = createDirectEVPRoute(config, EVP_EVENT_PLATFORM_SUBDOMAIN)
@@ -105,7 +102,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {void}
  */
 function setExposureDeliveryStrategy (config, setWriterEnabledValue) {
   if (config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless') {

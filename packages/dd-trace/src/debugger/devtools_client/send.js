@@ -89,7 +89,6 @@ function onFlush (payload) {
 /**
  * @param {number} statusCode - The status code of the response
  * @param {string} payload - The payload to send
- * @returns {boolean} True if the fallback was needed, false otherwise
  */
 function handleV2FallbackIfNeeded (statusCode, payload) {
   if (statusCode !== 404 || config.inputPath !== DEBUGGER_INPUT_V2) {

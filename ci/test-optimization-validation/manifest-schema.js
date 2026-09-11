@@ -94,7 +94,6 @@ function validateManifest (manifest) {
  *
  * @param {object} manifest validation manifest
  * @param {{push: function(string): void, full: function(): boolean}} errors error collector
- * @returns {void}
  */
 function validateFrameworks (manifest, errors) {
   const ids = new Set()
@@ -164,7 +163,6 @@ function validateFrameworks (manifest, errors) {
  * @param {object} project project metadata
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateProject (repositoryRoot, project, prefix, errors) {
   if (!isObject(project)) return
@@ -192,7 +190,6 @@ function validateProject (repositoryRoot, project, prefix, errors) {
  * @param {string} prefix error prefix
  * @param {Map<string, string>} generatedPaths generated paths used by other frameworks
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateRunnableFramework (repositoryRoot, framework, prefix, generatedPaths, errors) {
   if (!isObject(framework.validation)) {
@@ -276,7 +273,6 @@ function validateRunnableFramework (repositoryRoot, framework, prefix, generated
  * @param {object} validation direct-runner validation data
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateFallbackTests (repositoryRoot, validation, prefix, errors) {
   if (validation.fallbackTests === undefined) return
@@ -322,7 +318,6 @@ function validateFallbackTests (repositoryRoot, validation, prefix, errors) {
  * @param {string} prefix framework error prefix
  * @param {Map<string, string>} generatedPaths generated paths used by other frameworks
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateGeneratedStrategy (repositoryRoot, framework, prefix, generatedPaths, errors) {
   const strategy = framework.generatedTestStrategy
@@ -406,7 +401,6 @@ function validateGeneratedStrategy (repositoryRoot, framework, prefix, generated
  * @param {object} scenario generated scenario
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateScenarioIdentity (repositoryRoot, scenario, prefix, errors) {
   if (!Array.isArray(scenario.testIdentities) || scenario.testIdentities.length !== 1) {
@@ -431,7 +425,6 @@ function validateScenarioIdentity (repositoryRoot, scenario, prefix, errors) {
  * @param {object|undefined} ciWiring CI evidence
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateCiWiring (repositoryRoot, ciWiring, prefix, errors) {
   if (ciWiring === undefined) return
@@ -468,7 +461,6 @@ function validateCiWiring (repositoryRoot, ciWiring, prefix, errors) {
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
  * @param {Set<string>} [allowed] explicitly inert keys
- * @returns {void}
  */
 function rejectExecutionFields (value, prefix, errors, allowed = new Set()) {
   if (!isObject(value)) return
@@ -487,7 +479,6 @@ function rejectExecutionFields (value, prefix, errors, allowed = new Set()) {
  * @param {string} prefix error prefix
  * @param {Map<string, string>} generatedPaths previously claimed paths
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function claimGeneratedPath (filename, owner, prefix, generatedPaths, errors) {
   if (typeof filename !== 'string' || !path.isAbsolute(filename)) return
@@ -505,7 +496,6 @@ function claimGeneratedPath (filename, owner, prefix, generatedPaths, errors) {
  * @param {unknown} value current value
  * @param {string} prefix error prefix
  * @param {{push: function(string): void, full: function(): boolean}} errors error collector
- * @returns {void}
  */
 function validateAllStrings (value, prefix, errors) {
   if (errors.full()) return
@@ -534,7 +524,6 @@ function validateAllStrings (value, prefix, errors) {
  * @param {string} field field name
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function requiredObject (object, field, prefix, errors) {
   if (!isObject(object[field])) errors.push(`${prefix}.${field} must be an object.`)
@@ -547,7 +536,6 @@ function requiredObject (object, field, prefix, errors) {
  * @param {string} field field name
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function requiredArray (object, field, prefix, errors) {
   if (!Array.isArray(object[field])) errors.push(`${prefix}.${field} must be an array.`)
@@ -560,7 +548,6 @@ function requiredArray (object, field, prefix, errors) {
  * @param {string} field field name
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function requiredString (object, field, prefix, errors) {
   if (typeof object?.[field] !== 'string' || object[field].trim() === '') {
@@ -576,7 +563,6 @@ function requiredString (object, field, prefix, errors) {
  * @param {Set<string>} values accepted values
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function enumString (object, field, values, prefix, errors) {
   if (!values.has(object?.[field])) {
@@ -591,7 +577,6 @@ function enumString (object, field, values, prefix, errors) {
  * @param {string} field field name
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function requiredAbsolutePath (object, field, prefix, errors) {
   absolutePathValue(object?.[field], `${prefix}.${field}`, errors)
@@ -603,7 +588,6 @@ function requiredAbsolutePath (object, field, prefix, errors) {
  * @param {unknown} value path value
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function absolutePathValue (value, prefix, errors) {
   if (typeof value !== 'string' || !path.isAbsolute(value)) errors.push(`${prefix} must be an absolute path.`)
@@ -616,7 +600,6 @@ function absolutePathValue (value, prefix, errors) {
  * @param {string} field field name
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function optionalAbsolutePathOrNull (object, field, prefix, errors) {
   if (object[field] !== null && object[field] !== undefined &&
@@ -632,7 +615,6 @@ function optionalAbsolutePathOrNull (object, field, prefix, errors) {
  * @param {string} field field name
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function optionalStringOrNull (object, field, prefix, errors) {
   if (object[field] !== null && object[field] !== undefined && typeof object[field] !== 'string') {
@@ -646,7 +628,6 @@ function optionalStringOrNull (object, field, prefix, errors) {
  * @param {unknown} value array value
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function validateStringArray (value, prefix, errors) {
   if (value === undefined) return
@@ -667,7 +648,6 @@ function validateStringArray (value, prefix, errors) {
  * @param {unknown} filename candidate path
  * @param {string} prefix error prefix
  * @param {{push: function(string): void}} errors error collector
- * @returns {void}
  */
 function containedPath (root, filename, prefix, errors) {
   if (typeof root !== 'string' || !path.isAbsolute(root) ||
@@ -682,7 +662,6 @@ function containedPath (root, filename, prefix, errors) {
  * Returns whether a value is a plain object.
  *
  * @param {unknown} value candidate value
- * @returns {boolean} whether the value is an object
  */
 function isObject (value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)

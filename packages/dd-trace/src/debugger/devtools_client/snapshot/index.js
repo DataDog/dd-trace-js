@@ -204,7 +204,6 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
  * Extract the error message from the exception details.
  *
  * @param {import('inspector').Runtime.ExceptionDetails} exceptionDetails - The exception details
- * @returns {string} The error message
  */
 function extractErrorMessage (exceptionDetails) {
   const description = exceptionDetails.exception?.description

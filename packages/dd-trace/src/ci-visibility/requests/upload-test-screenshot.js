@@ -46,7 +46,6 @@ function isValidId (value) {
  * Renders an idempotency key into a value safe to carry in the upload's query string.
  *
  * @param {string} idempotencyKey - Raw per-artifact idempotency key
- * @returns {string} Query-safe, deterministic representation of the key
  */
 function toIdempotencyQueryValue (idempotencyKey) {
   const separatorIndex = idempotencyKey.indexOf(':')
@@ -76,7 +75,6 @@ function toIdempotencyQueryValue (idempotencyKey) {
  * @param {number} [options.deadline] - Absolute finalization deadline in epoch milliseconds
  * @param {AbortSignal} [options.signal] - Signal used to cancel the upload
  * @param {Function} callback - Callback function (err)
- * @returns {void}
  */
 function uploadTestMedia (options, callback) {
   const {
@@ -216,7 +214,6 @@ function uploadTestMedia (options, callback) {
  *
  * @param {object} options - Upload options
  * @param {Function} callback - Callback function (err)
- * @returns {void}
  */
 function uploadTestScreenshot (options, callback) {
   uploadTestMedia({ ...options, kind: 'screenshot' }, callback)
@@ -227,7 +224,6 @@ function uploadTestScreenshot (options, callback) {
  *
  * @param {object} options - Upload options
  * @param {Function} callback - Callback function (err)
- * @returns {void}
  */
 function uploadTestVideo (options, callback) {
   uploadTestMedia({ ...options, kind: 'video' }, callback)
@@ -238,7 +234,6 @@ function uploadTestVideo (options, callback) {
  *
  * @param {object} options - Upload options
  * @param {Function} callback - Callback function (err)
- * @returns {void}
  */
 function uploadTestSuiteVideo (options, callback) {
   uploadTestMedia({ ...options, kind: 'video' }, callback)

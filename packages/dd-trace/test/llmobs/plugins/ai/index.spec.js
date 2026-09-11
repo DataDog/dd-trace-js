@@ -71,7 +71,6 @@ function getAiSdkAnthropicOrGoogleRange (vercelAiVersion) {
  *
  * @param {string} vercelAiVersion
  * @param {Array<{span_id: string}>} llmobsSpans
- * @returns {string}
  */
 function getToolSpanParentId (vercelAiVersion, llmobsSpans) {
   const toolRunsUnderModel = semifies(vercelAiVersion, '>=5.0.241 <6.0.0') ||

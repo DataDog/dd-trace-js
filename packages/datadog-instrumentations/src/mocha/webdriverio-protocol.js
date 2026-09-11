@@ -18,7 +18,6 @@ const SCREENSHOT_UPLOAD_TIMEOUT_MS = FINAL_FLUSH_TIMEOUT + 5000
  * @param {object} message
  * @param {(error?: Error) => void} [onError]
  * @param {() => void} [onDone]
- * @returns {void}
  */
 function sendWebdriverioWorkerMessage (message, onError, onDone) {
   if (!process.send || !process.connected) {
@@ -41,7 +40,6 @@ const screenshotUploadRequests = new Map()
 /**
  * Removes shared screenshot response listeners when there are no pending requests.
  *
- * @returns {void}
  */
 function removeScreenshotUploadListeners () {
   if (screenshotUploadRequests.size !== 0) return
@@ -55,7 +53,6 @@ function removeScreenshotUploadListeners () {
  *
  * @param {string} requestId
  * @param {Error} [error]
- * @returns {void}
  */
 function finishScreenshotUploadRequest (requestId, error) {
   const request = screenshotUploadRequests.get(requestId)
@@ -71,7 +68,6 @@ function finishScreenshotUploadRequest (requestId, error) {
  * Dispatches one coordinator screenshot response to its pending request.
  *
  * @param {object} message
- * @returns {void}
  */
 function onScreenshotUploadResponse (message) {
   if (message?.name !== SCREENSHOT_UPLOAD_RESPONSE) return
@@ -85,7 +81,6 @@ function onScreenshotUploadResponse (message) {
 /**
  * Fails every pending screenshot upload after coordinator disconnect.
  *
- * @returns {void}
  */
 function onScreenshotUploadDisconnect () {
   for (const requestId of screenshotUploadRequests.keys()) {
@@ -101,7 +96,6 @@ function onScreenshotUploadDisconnect () {
  *
  * @param {object} content - Screenshot upload metadata
  * @param {(error?: Error) => void} onDone - Upload completion callback
- * @returns {void}
  */
 function requestWebdriverioScreenshotUpload (content, onDone) {
   const requestId = `${process.pid}-${++screenshotUploadRequestId}`

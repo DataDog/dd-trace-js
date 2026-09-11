@@ -170,7 +170,6 @@ const MAJOR_CEILING_PROBE = 999_999
  *
  * @param {number} major
  * @param {string} range
- * @returns {boolean}
  */
 function reachesMajorCeiling (major, range) {
   return satisfies(`${major}.${MAJOR_CEILING_PROBE}.${MAJOR_CEILING_PROBE}`, range)
@@ -181,7 +180,6 @@ function reachesMajorCeiling (major, range) {
  * range whose top resolves to the same newest version.
  *
  * @param {string} name
- * @returns {string}
  */
 function latestMajor (name) {
   const latest = coerce(latests[name])
@@ -200,7 +198,6 @@ function latestMajor (name) {
  * @param {string} name
  * @param {string} range
  * @param {number} floorMajor
- * @returns {number}
  */
 function highestMajor (name, range, floorMajor) {
   const latest = coerce(latests[name])
@@ -222,7 +219,7 @@ function highestMajor (name, range, floorMajor) {
  * @param {string} [options.nodeVersion] The current Node.js version; injectable for testing.
  * @param {boolean} [options.honourEnvRange] Whether `PACKAGE_VERSION_RANGE` applies to this module. False for sibling
  *   externals that must stay on their declared versions while the matrix shards a different package.
- * @param {NodeJS.ProcessEnv} [options.env] Injectable for testing.
+ * @param {typeof process.env} [options.env] Injectable for testing.
  * @returns {{ versionList: Array<{ versionKey: string, range: string }>, unversioned: string|undefined }} The ordered,
  *   `RANGE`-filtered key set, and the range the default `versions/<name>` folder resolves from.
  */

@@ -77,7 +77,6 @@ const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
  *
  * @param {string} testName
  * @param {boolean} isRetry
- * @returns {string}
  */
 function getCucumberTestName (testName, isRetry) {
   return isRetry ? testName.replace(CUCUMBER_RETRY_NAME_SUFFIX, '') : testName
@@ -142,9 +141,6 @@ let isSuitesSkipped = false
 let areAllSuitesSkipped = false
 let repositoryRoot
 
-/**
- * @returns {boolean}
- */
 function shouldRunEarlyFlakeDetection () {
   return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }

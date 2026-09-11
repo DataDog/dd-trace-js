@@ -106,7 +106,6 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
  * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
  * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
  * @param {(error: Error|null, route?: {url: URL, basePath: string}) => void} callback - Result callback
- * @returns {void}
  */
 function discoverEVPProxy (url, options, callback) {
   fetchAgentInfo(url, (error, agentInfo) => {

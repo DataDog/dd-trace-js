@@ -44,7 +44,6 @@ function installProbeSampler () {
      * @param {string} probeId - The probe id.
      * @param {bigint} nsBetweenSampling - Minimum nanoseconds between samples for this probe.
      * @param {boolean} isSnapshotProducingProbe - Whether this probe counts toward the global snapshot sample limit.
-     * @returns {boolean} Whether this probe should make the breakpoint condition pause.
      */
     makeSampleDecision (probeIndex, probeId, nsBetweenSampling, isSnapshotProducingProbe) {
       const now = process.hrtime.bigint()

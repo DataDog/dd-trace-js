@@ -67,7 +67,6 @@ class MsgpackChunk {
    * buffer at the resulting position.
    *
    * @param {string} value
-   * @returns {number}
    */
   write (value) {
     const length = Buffer.byteLength(value)

@@ -31,7 +31,6 @@ class DatadogTracingHelper {
    * Needs a sampled tracecontext to generate engine spans
    *
    * @param {object} [context]
-   * @returns {string}
    */
   getTraceParent (context) {
     const store = storage('legacy').getStore()

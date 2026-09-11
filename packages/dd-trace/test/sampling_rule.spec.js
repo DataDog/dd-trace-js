@@ -51,7 +51,6 @@ function runProgrammaticRegExpRules (ruleSampleRate) {
     /**
      * @param {string} name
      * @param {Record<string, string>} [tags]
-     * @returns {string}
      */
     function getPriority (name, tags = {}) {
       const span = tracer.startSpan(name)

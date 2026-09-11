@@ -59,7 +59,6 @@ function bootstrapCoverage () {
  * A gracefully-exiting foreign-directory child is handled parent-side in `helpers#stopProc`, which
  * copies *after* V8's own single teardown write, so its counters are never split.
  *
- * @returns {void}
  */
 function flushCoverage () {
   try {
@@ -74,7 +73,6 @@ function flushCoverage () {
  * listeners with `process.once` and only force the exit when we're the sole listener for the
  * signal, so a fixture with its own handler keeps control.
  *
- * @returns {void}
  */
 function installCoverageFlush () {
   for (const signal of ['SIGTERM', 'SIGINT']) {
@@ -93,7 +91,6 @@ function installCoverageFlush () {
  * connected child to flush via an IPC sentinel instead. Flush and exit cleanly on receipt.
  * `unrefCounted` keeps this listener from holding an otherwise-idle fixture open.
  *
- * @returns {void}
  */
 function installWindowsFlush () {
   if (process.platform !== 'win32') return
