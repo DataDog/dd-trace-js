@@ -578,7 +578,6 @@ class OpenAIAgentsIntegration {
    *
    * @param {string | undefined | null} spanId agents-core spanId to start from
    * @param {string} ancestorId agents-core ancestor spanId
-   * @returns {boolean}
    */
   #hasUntracedPathToAncestor (spanId, ancestorId) {
     let currentId = spanId
@@ -596,7 +595,6 @@ class OpenAIAgentsIntegration {
    * mistaken for top-level, or an error would finalize the workflow span early.
    *
    * @param {object} oaiSpan
-   * @returns {boolean}
    */
   #isTopLevelSpan (oaiSpan) {
     let currentId = oaiSpan.parentId
@@ -681,7 +679,6 @@ class OpenAIAgentsIntegration {
    * Read the mutable tracer configuration so remote/runtime enablement is
    * reflected without reconstructing the plugin.
    *
-   * @returns {boolean}
    */
   #isLLMObsEnabled () {
     return this.#llmobsEnabled && !!this.#config.llmobs?.DD_LLMOBS_ENABLED
@@ -690,7 +687,6 @@ class OpenAIAgentsIntegration {
   /**
    * Resolve model provider from the model invocation's async-local context.
    *
-   * @returns {string}
    */
   #getCurrentModelProvider () {
     const baseURL = legacyStorage.getStore()?.[MODEL_BASE_URL_STORE_KEY]

@@ -30,7 +30,6 @@ function getTestsuiteAttr (openTag, name) {
 
 /**
  * @param {string|number|undefined} value
- * @returns {string}
  */
 function escapeXmlAttribute (value) {
   return String(value)
@@ -42,7 +41,6 @@ function escapeXmlAttribute (value) {
 
 /**
  * @param {Record<string, string|number|undefined>} properties
- * @returns {string}
  */
 function formatXunitProperties (properties) {
   let xml = '<properties>'

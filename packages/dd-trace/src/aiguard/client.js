@@ -9,7 +9,6 @@ const TAGS = require('./tags')
  * Resolves the AI Guard host for a Datadog site.
  *
  * @param {string} site
- * @returns {string}
  */
 function aiGuardHost (site) {
   return site.split('.').length === 2 ? `app.${site}` : site

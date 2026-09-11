@@ -118,7 +118,6 @@ function digitRunEnd (value, from, length) {
  * @param {string} value
  * @param {number} intEnd Index after the integer digit run measured by the caller.
  * @param {number} length
- * @returns {number} Index after the literal, or `-1` to defer to the `NUMERIC` regex.
  */
 function scanPlainNumber (value, intEnd, length) {
   // A digit run touching `x`/`b` is a radix prefix (`0x`, `0b`) — let the regex own it.
@@ -177,7 +176,6 @@ const FALL_THROUGH = -2 // not a literal start -> advance one character and reco
  * @param {string} value
  * @param {number} from
  * @param {number} length
- * @returns {number} Index of the first line terminator at or after `from`, else `length`.
  */
 function lineEnd (value, from, length) {
   for (let i = from; i < length; i++) {
@@ -196,7 +194,6 @@ function lineEnd (value, from, length) {
  * @param {number} quote Char code of the opening delimiter, `'` or `"`.
  * @param {boolean} conservativeBackslash Whether an odd backslash before a closing quote makes the
  *   remainder ambiguous and therefore unterminated.
- * @returns {number} Index after the closing quote, or `UNTERMINATED`.
  */
 function scanQuotedDoubled (value, start, length, quote, conservativeBackslash) {
   let backslashCount = 0
@@ -229,7 +226,6 @@ function scanQuotedDoubled (value, start, length, quote, conservativeBackslash) 
  * @param {number} length
  * @param {number} quote Char code of the opening delimiter, `'` or `"`.
  * @param {boolean} doubled Whether two adjacent quotes escape each other.
- * @returns {number} Index after the closing quote, or `UNTERMINATED`.
  */
 function scanQuotedBackslash (value, start, length, quote, doubled) {
   for (let i = start + 1; i < length; i++) {
@@ -269,12 +265,13 @@ function isPostgresEscapeString (value, quoteIndex) {
 /**
  * Oracle `q'X…X'`: `X` is one of `< ( { [` (closed by its mirror) or any other char (closed by
  * itself). The body may span line terminators.
+ * The result is the index after the closing `X'`.
+ * It is `FALL_THROUGH` when `q'` ends the value or is followed by a line terminator.
+ * Oracle forbids whitespace as the delimiter, so this case is a plain string instead of a quote opener.
+ * It is `UNTERMINATED` when no closing delimiter exists.
  * @param {string} value
  * @param {number} start
  * @param {number} length
- * @returns {number} Index after the closing `X'`; `FALL_THROUGH` when `q'` is at the end of the value
- *   or followed by a line terminator — Oracle forbids whitespace as the delimiter, so that `'` is a
- *   plain string, not a quote opener; or `UNTERMINATED`.
  */
 function scanOracleQuote (value, start, length) {
   const delimiter = value.charCodeAt(start + 2)
@@ -294,11 +291,12 @@ function scanOracleQuote (value, start, length) {
  * Postgres `$tag$ … $tag$`, where `tag` is empty or an identifier. The body may span line
  * terminators — PL/pgSQL function bodies routinely do, and treating a newline as the end of the
  * literal would leave the rest of a multi-line body unredacted.
+ * The result is the index after the closing tag.
+ * It is `FALL_THROUGH` when no second `$` exists.
+ * It is `UNTERMINATED` when the opening tag is malformed or has no close.
  * @param {string} value
  * @param {number} start
  * @param {number} length
- * @returns {number} Index after the closing tag; `FALL_THROUGH` when no second `$` exists; or
- *   `UNTERMINATED` when the opening tag is malformed or has no close.
  */
 function scanDollarQuote (value, start, length) {
   const tagEnd = value.indexOf('$', start + 1)

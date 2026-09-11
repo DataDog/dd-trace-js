@@ -179,7 +179,6 @@ function getNextAttemptIndex (task) {
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {void}
  */
 function prepareRumCorrelation (task, attemptIndex) {
   // A per-origin cookie cannot identify overlapping attempts without racing.
@@ -213,7 +212,6 @@ function prepareRumCorrelation (task, attemptIndex) {
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {void}
  */
 function finishRumCorrelation (task, attemptIndex) {
   const testExecutionId = task.meta.__ddTestOptRumTestExecutionIds?.[attemptIndex]
@@ -228,7 +226,6 @@ function finishRumCorrelation (task, attemptIndex) {
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {void}
  */
 function recordRumActivity (task, attemptIndex) {
   if (!getIsRumActive(getRum())) return
@@ -252,7 +249,6 @@ function getRum () {
  * Returns whether the current RUM session is active.
  *
  * @param {object|undefined} rum
- * @returns {boolean}
  */
 function getIsRumActive (rum) {
   if (!rum) return false
@@ -269,7 +265,6 @@ function getIsRumActive (rum) {
  * Returns whether a task or any containing suite is concurrent.
  *
  * @param {object} task
- * @returns {boolean}
  */
 function isConcurrentTask (task) {
   let currentTask = task
@@ -308,7 +303,6 @@ function generateTestExecutionId () {
  * Sets and verifies the RUM correlation cookie for the current origin.
  *
  * @param {string} testExecutionId
- * @returns {boolean}
  */
 function setRumCorrelationCookie (testExecutionId) {
   try {
@@ -324,7 +318,6 @@ function setRumCorrelationCookie (testExecutionId) {
  * Clears the RUM correlation cookie if it still belongs to this attempt.
  *
  * @param {string} testExecutionId
- * @returns {void}
  */
 function clearRumCorrelationCookie (testExecutionId) {
   try {
@@ -440,7 +433,6 @@ function recordManualRepeatStatus (task, attemptIndex) {
  * Records cumulative errors at the end of each configured retry attempt.
  *
  * @param {object} task
- * @returns {void}
  */
 function recordRetryErrorCount (task) {
   const retryLimit = getRetryLimit(task)
@@ -457,7 +449,6 @@ function recordRetryErrorCount (task) {
  * @param {object} task
  * @param {number} attemptIndex
  * @param {number} attemptStart
- * @returns {void}
  */
 function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
   task.meta.__ddTestOptAttemptStartTimes ||= []
@@ -470,7 +461,6 @@ function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
  * Returns the configured retry count for numeric and object-form retry options.
  *
  * @param {object} task
- * @returns {number}
  */
 function getRetryLimit (task) {
   return typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
@@ -480,7 +470,6 @@ function getRetryLimit (task) {
  * Wraps Vitest's retry condition so final-attempt handling follows the condition's actual result.
  *
  * @param {object} task
- * @returns {void}
  */
 function wrapRetryCondition (task) {
   if (typeof task.retry !== 'object' || !task.retry?.condition || getRetryLimit(task) === 0) return
@@ -572,7 +561,6 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
  * Converts a quarantined failure into the passing runner state expected by Vitest.
  *
  * @param {object} task
- * @returns {void}
  */
 function markQuarantinedFailure (task) {
   const testSuite = getTestSuite(task)
@@ -676,7 +664,6 @@ function noopTest () {}
 /**
  * Returns whether Vitest's private task function setter is available.
  *
- * @returns {boolean}
  */
 function canReplaceVitestTaskFn () {
   return typeof setVitestTaskFn === 'function'
@@ -703,7 +690,6 @@ function isEarlyFlakeDetectionTest (testSuite, testName) {
  * Returns whether Datadog admitted this task for EFD retries.
  *
  * @param {object} task
- * @returns {boolean}
  */
 function isEarlyFlakeDetectionTask (task) {
   return task.meta.__ddTestOptEfdRetries !== undefined
@@ -751,7 +737,6 @@ function getEarlyFlakeDetectionSuiteCandidate (suite) {
  *
  * @param {string} testSuite
  * @param {string} testName
- * @returns {boolean}
  */
 function isNewTest (testSuite, testName) {
   return !(knownTests[testSuite] || []).includes(testName)

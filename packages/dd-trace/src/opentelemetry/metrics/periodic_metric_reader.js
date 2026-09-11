@@ -180,7 +180,6 @@ class PeriodicMetricReader {
   /**
    * @param {Function} callback
    * @param {Set} instruments
-   * @returns {number} index in #batchCallbacks, or -1
    */
   #findBatchCallback (callback, instruments) {
     return this.#batchCallbacks.findIndex(record =>
@@ -215,7 +214,6 @@ class PeriodicMetricReader {
   /**
    * Forces an immediate collection and export of all metrics.
    * @param {(error: Error | null) => void} [done] Called after the metric export completes
-   * @returns {void}
    */
   forceFlush (done) {
     if (this.#isShutdown) {
@@ -230,7 +228,6 @@ class PeriodicMetricReader {
   /**
    * Shuts down the reader and stops periodic collection.
    * @param {(error: Error | null) => void} [done] Called after the final export and exporter shutdown complete
-   * @returns {void}
    */
   shutdown (done) {
     if (this.#isShutdown) {
@@ -273,14 +270,12 @@ class PeriodicMetricReader {
   /**
    * @param {boolean} flushExporter Whether to flush the exporter after export
    * @param {(error: Error | null) => void} [done] Called when the queued export completes
-   * @returns {void}
    */
   #enqueueExport (flushExporter, done) {
     this.#exportQueue.push({ flushExporter, done })
     this.#drainExportQueue()
   }
 
-  /** @returns {void} */
   #drainExportQueue () {
     if (this.#isExporting || this.#exportQueue.length === 0) return
 
@@ -318,7 +313,6 @@ class PeriodicMetricReader {
 
   /**
    * @param {Error} [exportError] Error from the final export
-   * @returns {void}
    */
   #shutdownExporter (exportError) {
     let completed = false
@@ -425,7 +419,6 @@ class MetricAggregator {
    * Gets the temporality for a given metric type.
    *
    * @param {string} type - Metric type from METRIC_TYPES
-   * @returns {string} Temporality from TEMPORALITY
    */
   #getTemporality (type) {
     // UpDownCounter and Observable UpDownCounter always use CUMULATIVE
@@ -520,7 +513,6 @@ class MetricAggregator {
    * Gets unique identifier for a given instrumentation scope.
    *
    * @param {InstrumentationScope} instrumentationScope - The instrumentation scope
-   * @returns {string} - The scope identifier
    */
   #getScopeKey (instrumentationScope) {
     return `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
@@ -533,7 +525,6 @@ class MetricAggregator {
    * @param {string} name - The metric name
    * @param {string} type - The metric type from METRIC_TYPES
    * @param {string} attrKey - The attribute key
-   * @returns {string} - The metric identifier
    */
   #getStateKey (scopeKey, name, type, attrKey) {
     return `${scopeKey}:${name}:${type}:${attrKey}`
@@ -543,7 +534,6 @@ class MetricAggregator {
    * Checks if a given metric type is a delta type.
    *
    * @param {string} type - The metric type from METRIC_TYPES
-   * @returns {boolean} - True if the metric type is a delta type
    */
   #isDeltaType (type) {
     return type === METRIC_TYPES.COUNTER ||
@@ -556,7 +546,6 @@ class MetricAggregator {
    *
    * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
-   * @returns {void}
    */
   #applyDeltaTemporality (metrics, lastExportedState) {
     for (const metric of metrics) {
@@ -681,7 +670,6 @@ class MetricAggregator {
    * @param {number} timestamp - The timestamp of the measurement
    * @param {string} stateKey - The state key
    * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
-   * @returns {void}
    */
   #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
@@ -733,7 +721,6 @@ class MetricAggregator {
 
 /**
  * @param {object} x
- * @returns {boolean}
  */
 function isObservableInstrument (x) {
   return x instanceof ObservableInstrument
@@ -742,7 +729,6 @@ function isObservableInstrument (x) {
 /**
  * @param {Set} a
  * @param {Set} b
- * @returns {boolean}
  */
 function setEquals (a, b) {
   if (a.size !== b.size) return false
