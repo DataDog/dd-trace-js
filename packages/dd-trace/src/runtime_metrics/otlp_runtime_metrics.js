@@ -63,7 +63,7 @@ module.exports = {
     this.stop()
 
     client = createMetricsClient(config)
-    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
+    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config, resetSamplerBaselines)
     flushInterval = setInterval(() => {
       client.flush()
     }, config.DD_RUNTIME_METRICS_FLUSH_INTERVAL ?? 10_000)
@@ -254,6 +254,24 @@ module.exports = {
     if (client) return client.flush(done)
     done?.()
   },
+}
+
+/**
+ * Rebases the event-loop-delay and ELU sampler baselines to now. Without this, a MicroVM clone's
+ * first collection after resume would report a delta spanning the snapshot pause instead of just
+ * the time since resume.
+ * @returns {void}
+ */
+function resetSamplerBaselines () {
+  eventLoopHistogram?.reset()
+
+  if (lastElu !== null) {
+    lastElu = performance.eventLoopUtilization()
+  }
+
+  // Discards any GC entries recorded but not yet delivered to the observer's callback, so a GC
+  // pause from just before the snapshot isn't attributed to the clone's first post-resume sample.
+  gcObserver?.takeRecords()
 }
 
 /**

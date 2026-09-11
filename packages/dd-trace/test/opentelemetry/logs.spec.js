@@ -961,5 +961,24 @@ describe('OpenTelemetry Logs', () => {
 
       validator()
     })
+
+    it('drops log records queued before an identity refresh', () => {
+      const validator = mockOtlpExport((decoded) => {
+        const records = decoded.resourceLogs[0].scopeLogs[0].logRecords
+        assert.strictEqual(records.length, 1)
+        assert.strictEqual(records[0].body.stringValue, 'after-refresh')
+      })
+      // A batch size larger than 1 so the pre-refresh record queues instead of auto-exporting.
+      const { config, logs, loggerProvider } = setupLogs(true, '10')
+
+      logs.getLogger('test-logger').emit({ body: 'before-refresh' })
+
+      identityRefreshChannel.publish(config)
+
+      logs.getLogger('test-logger').emit({ body: 'after-refresh' })
+      loggerProvider.forceFlush()
+
+      validator()
+    })
   })
 })

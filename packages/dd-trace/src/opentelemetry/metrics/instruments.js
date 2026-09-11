@@ -159,14 +159,23 @@ class ObservableInstrument extends Instrument {
   /**
    * Collects observations from all callbacks. Errors are silently ignored.
    *
+   * @param {number} [maxMeasurements] Maximum number of measurements to retain
+   * @param {() => void} [onDrop] Called for every measurement that exceeds the limit
    * @returns {Array<Measurement>} Array of measurements
    */
-  collect () {
+  collect (maxMeasurements = Infinity, onDrop) {
     const observations = []
+    const observe = maxMeasurements === Infinity
+      ? (value, attributes) => observations.push(this.createObservation(value, attributes))
+      : (value, attributes) => {
+          if (observations.length < maxMeasurements) {
+            observations.push(this.createObservation(value, attributes))
+          } else {
+            onDrop?.()
+          }
+        }
     const observableResult = {
-      observe: (value, attributes) => {
-        observations.push(this.createObservation(value, attributes))
-      },
+      observe,
     }
 
     for (const callback of this.#callbacks) {

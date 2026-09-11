@@ -254,6 +254,33 @@ describe('dogstatsd', () => {
       }
     })
 
+    it('drops client telemetry counters on identity refresh even when its tags are unchanged', async () => {
+      const now = sinon.stub(performance, 'now').returns(0)
+      const completions = stubUdpSend()
+
+      try {
+        client = createTelemetryClient({ tags: ['runtime-id:initial-id'] })
+        client.increment('test.count')
+        client.flush()
+        await Promise.all(completions)
+
+        const userPacketCount = udp4.send.callCount
+
+        client.updateTags(['runtime-id:initial-id'])
+
+        now.returns(10_000)
+        client.flush()
+
+        const telemetry = getUdpPayload(userPacketCount)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:0\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.aggregated_context:0\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:0\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_sent:0\|c\|/)
+      } finally {
+        now.restore()
+      }
+    })
+
     it('emits the client and aggregation metrics every 10 seconds with common UDP tags', async () => {
       const now = sinon.stub(performance, 'now').returns(0)
       const completions = stubUdpSend()
@@ -430,6 +457,40 @@ describe('dogstatsd', () => {
       } finally {
         now.restore()
       }
+    })
+
+    it('drops a detached UDP queue when identity refresh happens during DNS lookup', () => {
+      let resolveLookup
+      dns.lookup.withArgs('localhost').callsFake((hostname, callback) => {
+        resolveLookup = callback
+      })
+
+      client = createDogStatsDClient({ host: 'localhost' })
+      client.gauge('test.stale', 1)
+      client.flush()
+
+      client.updateTags([])
+      resolveLookup(null, '127.0.0.1', 4)
+
+      sinon.assert.notCalled(udp4.send)
+    })
+
+    it('completes each packet once when a UDP queue becomes stale', () => {
+      const callbacks = []
+      udp4.send = sinon.stub().callsFake((...args) => callbacks.push(args.at(-1)))
+      client = createDogStatsDClient()
+      client.gauge('a'.repeat(1000), 1)
+      client.gauge('b'.repeat(1000), 1)
+
+      const done = sinon.spy()
+      client.flush(done)
+      client.updateTags([])
+
+      callbacks[0]()
+      sinon.assert.notCalled(done)
+
+      callbacks[1]()
+      sinon.assert.calledOnce(done)
     })
 
     it('reports asynchronous UDP send failures', async () => {
@@ -1340,7 +1401,7 @@ describe('dogstatsd', () => {
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:20|g\n')
     })
 
-    it('should preserve buffered metrics when an identity refresh does not change its tags', () => {
+    it('should drop buffered metrics on identity refresh even when its tags are unchanged', () => {
       const config = {
         dogstatsd: {
           hostname: '127.0.0.1',
@@ -1357,7 +1418,53 @@ describe('dogstatsd', () => {
       identityRefreshChannel.publish(config)
       client.flush()
 
-      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#runtime-id:initial-id\n')
+      sinon.assert.notCalled(udp4.send)
+    })
+
+    it('should drop pending aggregated counters/gauges/histograms when an identity refresh changes its tags',
+      () => {
+        const config = {
+          dogstatsd: {
+            hostname: '127.0.0.1',
+            port: 8125,
+          },
+          lookup: dns.lookup,
+          runtimeMetricsRuntimeId: true,
+          tags: { 'runtime-id': 'initial-id' },
+        }
+
+        client = new CustomMetrics(config)
+        client.increment('test.count', 10)
+        client.gauge('test.avg', 5)
+        client.histogram('test.hist', 1)
+
+        config.tags['runtime-id'] = 'refreshed-id'
+        identityRefreshChannel.publish(config)
+
+        client.flush()
+
+        sinon.assert.notCalled(udp4.send)
+      })
+
+    it('should drop pending aggregated counters/gauges/histograms on identity refresh even when its tags are ' +
+      'unchanged', () => {
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      client = new CustomMetrics(config)
+      client.increment('test.count', 10)
+
+      identityRefreshChannel.publish(config)
+      client.flush()
+
+      sinon.assert.notCalled(udp4.send)
     })
   })
 

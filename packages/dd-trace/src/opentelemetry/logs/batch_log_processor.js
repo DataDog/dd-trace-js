@@ -102,6 +102,16 @@ class BatchLogRecordProcessor {
   }
 
   /**
+   * Discards whatever's queued. Used on a MicroVM clone resume, where log records buffered
+   * before the snapshot would otherwise export under every clone's identity.
+   * @returns {void}
+   */
+  resetPendingState () {
+    this.#logRecords = []
+    this.#clearTimer()
+  }
+
+  /**
    * Starts the batch timeout timer.
    * @private
    */
