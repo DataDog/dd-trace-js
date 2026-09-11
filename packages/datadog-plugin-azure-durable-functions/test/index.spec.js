@@ -10,6 +10,7 @@ require('../../dd-trace/test/setup/core')
 const { storage } = require('../../datadog-core')
 const { AUTO_KEEP, USER_KEEP } = require('../../../ext/priority')
 const { SAMPLING_MECHANISM_AGENT, SAMPLING_MECHANISM_RULE } = require('../../dd-trace/src/constants')
+const TraceState = require('../../dd-trace/src/opentracing/propagation/tracestate')
 const AzureDurableFunctionsPlugin = require('../src')
 
 describe('azure-durable-functions plugin', () => {
@@ -59,7 +60,7 @@ describe('azure-durable-functions plugin', () => {
   }
 
   it('continues the host trace when traceparent is provided', () => {
-    const parent = { _traceId: 'parent' }
+    const parent = { _traceId: 'parent', _sampling: { priority: AUTO_KEEP } }
     extract.returns(parent)
 
     bindStart({
@@ -159,7 +160,7 @@ describe('azure-durable-functions plugin', () => {
   })
 
   it('continues the host trace for orchestration invocations', () => {
-    const parent = { _traceId: 'parent' }
+    const parent = { _traceId: 'parent', _sampling: { priority: AUTO_KEEP } }
     extract.returns(parent)
 
     bindStart({
@@ -178,8 +179,13 @@ describe('azure-durable-functions plugin', () => {
 
   it('re-applies propagated keep without replacing the sampling mechanism', () => {
     const parentId = {}
-    const parent = { _traceId: 'parent', _spanId: parentId }
     const sampling = { priority: 0, mechanism: SAMPLING_MECHANISM_AGENT }
+    const parent = {
+      _traceId: 'parent',
+      _spanId: parentId,
+      _sampling: sampling,
+      _tracestate: TraceState.fromString('dd=s:1'),
+    }
     extract.returns(parent)
     span.context = sinon.stub().returns({ _parentId: parentId, _sampling: sampling })
 
@@ -195,8 +201,13 @@ describe('azure-durable-functions plugin', () => {
 
   it('preserves stronger propagated keep priorities', () => {
     const parentId = {}
-    const parent = { _traceId: 'parent', _spanId: parentId }
     const sampling = { priority: 0, mechanism: SAMPLING_MECHANISM_RULE }
+    const parent = {
+      _traceId: 'parent',
+      _spanId: parentId,
+      _sampling: sampling,
+      _tracestate: TraceState.fromString('dd=s:2'),
+    }
     extract.returns(parent)
     span.context = sinon.stub().returns({ _parentId: parentId, _sampling: sampling })
 
@@ -211,7 +222,12 @@ describe('azure-durable-functions plugin', () => {
   })
 
   it('does not re-apply propagated keep when the extracted context is not continued', () => {
-    const parent = { _traceId: 'parent', _spanId: {} }
+    const parent = {
+      _traceId: 'parent',
+      _spanId: {},
+      _sampling: { priority: 0 },
+      _tracestate: TraceState.fromString('dd=s:1'),
+    }
     extract.returns(parent)
     span.context = sinon.stub().returns({ _parentId: null })
 
@@ -225,8 +241,13 @@ describe('azure-durable-functions plugin', () => {
 
   it('does not re-apply propagated keep to a noop span', () => {
     const parentId = {}
-    const parent = { _traceId: 'parent', _spanId: parentId }
     const sampling = { priority: -1 }
+    const parent = {
+      _traceId: 'parent',
+      _spanId: parentId,
+      _sampling: sampling,
+      _tracestate: TraceState.fromString('dd=s:1'),
+    }
     extract.returns(parent)
     span._prioritySampler = undefined
     span.context = sinon.stub().returns({ _parentId: parentId, _sampling: sampling })
@@ -239,8 +260,12 @@ describe('azure-durable-functions plugin', () => {
     assert.strictEqual(sampling.priority, -1)
   })
 
-  it('does not override sampling when the sampled flag is still set', () => {
-    const parent = { _traceId: 'parent' }
+  it('does not override sampling when extracted as keep', () => {
+    const parent = {
+      _traceId: 'parent',
+      _sampling: { priority: AUTO_KEEP },
+      _tracestate: TraceState.fromString('dd=s:1'),
+    }
     extract.returns(parent)
 
     bindStart({
@@ -252,7 +277,11 @@ describe('azure-durable-functions plugin', () => {
   })
 
   it('does not override sampling when propagated priority is a drop', () => {
-    const parent = { _traceId: 'parent' }
+    const parent = {
+      _traceId: 'parent',
+      _sampling: { priority: -1 },
+      _tracestate: TraceState.fromString('dd=s:-1'),
+    }
     extract.returns(parent)
 
     bindStart({
@@ -264,7 +293,11 @@ describe('azure-durable-functions plugin', () => {
   })
 
   it('does not override sampling when tracestate has no datadog decision', () => {
-    const parent = { _traceId: 'parent' }
+    const parent = {
+      _traceId: 'parent',
+      _sampling: { priority: 0 },
+      _tracestate: TraceState.fromString('other=vendor'),
+    }
     extract.returns(parent)
 
     bindStart({

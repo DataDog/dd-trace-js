@@ -39,6 +39,7 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
 
       childOf = this.tracer.extract('text_map', carrier) ?? undefined
     }
+    const extractedAsDrop = childOf?._sampling.priority < AUTO_KEEP
 
     const span = this.startSpan(this.operationName(), {
       startTime: ctx.startTime,
@@ -64,7 +65,7 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     // The host clears the W3C sampled flag in traceparent while datadog tracestate
     // still says keep, so extraction would drop this chunk. Re-apply only the propagated
     // `s` priority when it indicates keep, preserving the extracted sampling mechanism.
-    if (span._prioritySampler && childOf && sampledFlagCleared(ctx.traceparent)) {
+    if (span._prioritySampler && childOf && extractedAsDrop) {
       const propagatedPriority = propagatedSamplingPriority(childOf._tracestate)
       if (propagatedPriority >= AUTO_KEEP) {
         const spanContext = span.context()
@@ -141,14 +142,6 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     this.error(ctx)
     super.finish(ctx)
   }
-}
-
-// True when the W3C traceparent's sampled flag is cleared (flags & 0x01 === 0),
-// i.e. the carrier says "drop". Format: version-traceId-spanId-flags.
-function sampledFlagCleared (traceparent) {
-  if (typeof traceparent !== 'string') return false
-  const flags = traceparent.slice(-2)
-  return flags !== undefined && (Number.parseInt(flags, 16) & 1) === 0
 }
 
 // Read the datadog-propagated sampling priority (`dd=...;s:<n>`) from a W3C
