@@ -162,8 +162,38 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
-  const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
+  const proposalCommits = capture(
+    `git log --format="%H%x09%s" --reverse v${releaseLine}.x..HEAD`
+  ).split('\n').filter(Boolean).map(line => {
+    const separator = line.indexOf('\t')
+    return {
+      sha: line.slice(0, separator),
+      subject: line.slice(separator + 1),
+    }
+  })
+
+  if (lastCommit === `v${newVersion}`) proposalCommits.pop()
+
+  for (let index = 0; index < proposalCommits.length; index++) {
+    const proposalCommit = proposalCommits[index]
+    const mainSha = allMainShas[index]
+    const mainSubject = mainSha ? capture(`git show -s --format=%s ${mainSha}`) : undefined
+    const proposalPullRequest = proposalCommit.subject.match(pullRequestNumberPattern)
+    const mainPullRequest = mainSubject?.match(pullRequestNumberPattern)
+    const matches = proposalPullRequest && mainPullRequest
+      ? proposalPullRequest[1] === mainPullRequest[1]
+      : proposalCommit.subject === mainSubject
+
+    if (!matches) {
+      fatal(
+        `Release proposal history diverged from ${main} at position ${index + 1}.`,
+        `  proposal: ${proposalCommit.sha.slice(0, 10)} ${proposalCommit.subject}`,
+        `  ${main}: ${mainSha ? `${mainSha.slice(0, 10)} ${mainSubject}` : '(no commit)'}`
+      )
+    }
+  }
+
+  const existingCherryPicked = proposalCommits.length
   const proposalShas = allMainShas.slice(existingCherryPicked)
   const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
   const truncated = shasToApply.length < proposalShas.length
@@ -186,18 +216,41 @@ try {
       run('git reset --hard HEAD~1')
     }
 
-    // Cherry pick commits up to the GitHub rebase limit.
+    // Cherry-pick commits up to the GitHub rebase limit. Preserve empty main commits
+    // so the proposal commit count stays aligned with the ordered main commit list.
     try {
-      run(`git cherry-pick ${shasToApply.join(' ')}`)
+      run(`git cherry-pick --allow-empty ${shasToApply.join(' ')}`)
 
       pass()
-    } catch {
+    } catch (error) {
+      let incomingCommit
+      let proposalHead
+      let conflictedFiles
+
+      try {
+        incomingCommit = capture('git show -s --format="%h %s" CHERRY_PICK_HEAD')
+      } catch {}
+
+      try {
+        proposalHead = capture('git show -s --format="%h %s" HEAD')
+      } catch {}
+
+      try {
+        conflictedFiles = capture('git diff --name-only --diff-filter=U')
+      } catch {}
+
       run('git cherry-pick --abort')
 
-      fatal(
+      const messages = [
         'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
-        'Please make sure the release branch contains all changes from the main branch.'
-      )
+        'Please make sure the release branch contains all changes from the main branch.',
+      ]
+      if (incomingCommit) messages.push(`Incoming from ${main}: ${incomingCommit}`)
+      if (proposalHead) messages.push(`Applying onto v${newVersion}-proposal: ${proposalHead}`)
+      if (conflictedFiles) messages.push(`Conflicted files: ${conflictedFiles.replaceAll('\n', ', ')}`)
+      messages.push(error.stderr?.trim() || error.message)
+
+      fatal(...messages)
     }
   } else if (proposalShas.length > 0) {
     pass(`⚠️  Proposal is at the commit limit (${MAX_CHERRY_PICKS}/${MAX_CHERRY_PICKS}).` +
