@@ -65,7 +65,7 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     // still says keep, so extraction would drop this chunk. Re-apply only the propagated
     // `s` priority when it indicates keep, preserving the extracted sampling mechanism.
     if (span._prioritySampler && childOf && sampledFlagCleared(ctx.traceparent)) {
-      const propagatedPriority = propagatedSamplingPriority(ctx.tracestate)
+      const propagatedPriority = propagatedSamplingPriority(childOf._tracestate)
       if (propagatedPriority >= AUTO_KEEP) {
         const spanContext = span.context()
         if (spanContext._parentId === childOf._spanId) {
