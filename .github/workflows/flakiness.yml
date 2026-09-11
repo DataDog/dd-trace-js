@@ -46,10 +46,13 @@ jobs:
         with:
           version: active
       - run: yarn install --frozen-lockfile --ignore-scripts
-      - run: node scripts/flakiness.mjs
+      - id: flakiness
+        continue-on-error: true
+        run: node scripts/flakiness.mjs
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-      - run: cat flakiness.md >> "$GITHUB_STEP_SUMMARY"
+      - if: steps.flakiness.outcome == 'success'
+        run: cat flakiness.md >> "$GITHUB_STEP_SUMMARY"
       - id: duration
         continue-on-error: true
         run: node scripts/ci-duration.mjs
@@ -59,7 +62,11 @@ jobs:
         run: cat ci-duration.md >> "$GITHUB_STEP_SUMMARY"
       - id: slack
         run: |
-          echo "flakiness=$(cat flakiness.txt)" >> "$GITHUB_OUTPUT"
+          if [[ -f flakiness.txt ]]; then
+            echo "flakiness=$(cat flakiness.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "flakiness=⚠️ Flakiness report failed. See <$REPORT_URL|workflow run>." >> "$GITHUB_OUTPUT"
+          fi
           if [[ -f ci-duration.txt ]]; then
             echo "duration=$(cat ci-duration.txt)" >> "$GITHUB_OUTPUT"
           else
@@ -85,5 +92,5 @@ jobs:
                 text:
                   type: "mrkdwn"
                   text: "${{ steps.slack.outputs.duration }}"
-      - if: steps.duration.outcome == 'failure'
+      - if: steps.flakiness.outcome == 'failure' || steps.duration.outcome == 'failure'
         run: exit 1
