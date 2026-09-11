@@ -6,7 +6,7 @@ const {
   PROPAGATED_SESSION_ID_KEY,
   SESSION_ID_TRACE_DEFAULT_KEY,
 } = require('../constants/tags')
-const { setGenAiApmTags, setGenAiApmUsageMetrics } = require('../gen-ai-tags')
+const { setGenAiApmTags, updateGenAiApmTags } = require('../gen-ai-tags')
 const { storage: llmobsStorage } = require('../storage')
 const telemetry = require('../telemetry')
 
@@ -45,13 +45,15 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   /**
-   * Token usage for the `gen_ai.usage.*` APM metrics while LLMObs is disabled. Integrations that
-   * can read usage off the response without building the LLMObs payload should override this.
+   * The `gen_ai.*` values an integration can only resolve once the operation finished, such as
+   * token usage or a session id the response carries. Only used while LLMObs is disabled; the
+   * LLMObs layer reads them off the span event instead. Fields left out keep their start value.
    *
    * @param {object} ctx
-   * @returns {Record<string, number> | void}
+   * @param {string} spanKind LLMObs span kind resolved at span start
+   * @returns {import('../gen-ai-tags').GenAiApmTags | void}
    */
-  getGenAiApmUsageMetrics (ctx) {}
+  getGenAiApmEndTags (ctx, spanKind) {}
 
   /**
    * @param {object} ctx
@@ -104,7 +106,7 @@ class LLMObsPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     if (!this._llmobsEnabled) {
-      this.#setGenAiApmUsageMetrics(ctx)
+      this.#setGenAiApmEndTags(ctx)
       return
     }
 
@@ -155,15 +157,17 @@ class LLMObsPlugin extends TracingPlugin {
    * @param {object} ctx
    * @returns {void}
    */
-  #setGenAiApmUsageMetrics (ctx) {
+  #setGenAiApmEndTags (ctx) {
     const span = ctx.currentStore?.span
-    if (!span || !ctx.genAiApmSpanKind) return
+    const spanKind = ctx.genAiApmSpanKind
+    if (!span || !spanKind) return
 
     try {
-      const metrics = this.getGenAiApmUsageMetrics(ctx)
-      if (metrics) setGenAiApmUsageMetrics(span, ctx.genAiApmSpanKind, metrics)
+      const endTags = this.getGenAiApmEndTags(ctx, spanKind)
+      // an integration may also correct the kind, the way the tagger's `changeKind` does
+      if (endTags) updateGenAiApmTags(span, { spanKind, ...endTags })
     } catch (e) {
-      log.debug('Failed to set gen_ai APM usage metrics for %s:', this.constructor.name, e.message)
+      log.debug('Failed to set gen_ai APM end tags for %s:', this.constructor.name, e.message)
     }
   }
 

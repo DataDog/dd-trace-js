@@ -21,9 +21,13 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   constructor () {
     super(...arguments)
 
-    // the aggregated response is only used to build the LLMObs payload
     this.addSub('apm:anthropic:request:chunk', ({ ctx, chunk, done }) => {
-      if (!this._llmobsEnabled) return
+      if (!this._llmobsEnabled) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies
+        // and the aggregated response are left to the LLMObs path
+        if (chunk) ctx.streamedUsage = mergeChunkUsage(ctx.streamedUsage, chunk)
+        return
+      }
 
       ctx.chunks ??= []
       const chunks = ctx.chunks
@@ -39,9 +43,8 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             const { message } = chunk
             if (!message) continue
 
-            const { role, usage } = message
-            if (role) response.role = role
-            if (usage) response.usage = usage
+            if (message.role) response.role = message.role
+            response.usage = mergeChunkUsage(response.usage, chunk)
             break
           }
           case 'content_block_start': {
@@ -89,22 +92,10 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
             break
           }
           case 'message_delta': {
-            const { delta } = chunk
-
-            const finishReason = delta?.stop_reason
+            const finishReason = chunk.delta?.stop_reason
             if (finishReason) response.finish_reason = finishReason
 
-            const { usage } = chunk
-            if (usage) {
-              const responseUsage = (response.usage ??= { input_tokens: 0, output_tokens: 0 })
-              responseUsage.output_tokens = usage.output_tokens
-
-              const cacheCreationTokens = usage.cache_creation_input_tokens
-              const cacheReadTokens = usage.cache_read_input_tokens
-              if (cacheCreationTokens) responseUsage.cache_creation_input_tokens = cacheCreationTokens
-              if (cacheReadTokens) responseUsage.cache_read_input_tokens = cacheReadTokens
-            }
-
+            response.usage = mergeChunkUsage(response.usage, chunk)
             break
           }
           case 'error': {
@@ -146,8 +137,8 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   /**
    * @override
    */
-  getGenAiApmUsageMetrics (ctx) {
-    return extractUsage(ctx.result)
+  getGenAiApmEndTags (ctx) {
+    return { metrics: extractUsage(ctx.result ?? { usage: ctx.streamedUsage }) }
   }
 
   setLLMObsTags (ctx) {
@@ -226,6 +217,28 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const metrics = extractUsage(result)
     if (metrics) this._tagger.tagMetrics(span, metrics)
   }
+}
+
+/**
+ * Merges the token usage a streamed chunk carries into the usage accumulated so far.
+ *
+ * @param {Record<string, number> | undefined} usage
+ * @param {object} chunk
+ * @returns {Record<string, number> | undefined}
+ */
+function mergeChunkUsage (usage, chunk) {
+  if (chunk.type === 'message_start') return chunk.message?.usage ?? usage
+  if (chunk.type !== 'message_delta' || !chunk.usage) return usage
+
+  const mergedUsage = usage ?? { input_tokens: 0, output_tokens: 0 }
+  mergedUsage.output_tokens = chunk.usage.output_tokens
+
+  const cacheCreationTokens = chunk.usage.cache_creation_input_tokens
+  const cacheReadTokens = chunk.usage.cache_read_input_tokens
+  if (cacheCreationTokens) mergedUsage.cache_creation_input_tokens = cacheCreationTokens
+  if (cacheReadTokens) mergedUsage.cache_read_input_tokens = cacheReadTokens
+
+  return mergedUsage
 }
 
 /**

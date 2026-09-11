@@ -76,9 +76,9 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   /**
    * @override
    */
-  getGenAiApmUsageMetrics (ctx) {
+  getGenAiApmEndTags (ctx) {
     const response = ctx.result?.data
-    if (response) return this._extractMetrics(response)
+    return { metrics: response && this._extractMetrics(response) }
   }
 
   setLLMObsTags (ctx) {
