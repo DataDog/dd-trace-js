@@ -3901,13 +3901,13 @@ declare namespace tracer {
       /** Create a prompt and its first version. */
       createPrompt (
         promptId: string,
-        template: PromptTemplateMessage[],
+        template: PromptTemplateItem[],
         options?: CreatePromptOptions
       ): Promise<PromptResponse>
       /** Add a version to an existing prompt. */
       createPromptVersion (
         promptId: string,
-        template: PromptTemplateMessage[],
+        template: PromptTemplateItem[],
         options?: CreatePromptVersionOptions
       ): Promise<PromptVersionResponse>
       /** Update prompt metadata. */
@@ -4081,10 +4081,21 @@ declare namespace tracer {
       content: string
     }
 
+    interface PromptMessagePlaceholder {
+      type: 'placeholder',
+      name: string
+    }
+
+    type PromptTemplateItem = PromptTemplateMessage | PromptMessagePlaceholder
+
+    interface FormattedPromptMessage extends PromptTemplateMessage {
+      [key: string]: unknown
+    }
+
     type PromptFallbackValue =
       | string
-      | PromptTemplateMessage[]
-      | { template: string | PromptTemplateMessage[], version?: string }
+      | PromptTemplateItem[]
+      | { template: string | PromptTemplateItem[], version?: string }
     type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
 
     interface GetPromptOptions {
@@ -4126,10 +4137,10 @@ declare namespace tracer {
       readonly id: string,
       readonly version: string,
       readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
-      readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
+      readonly template: string | ReadonlyArray<Readonly<PromptTemplateItem>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
-      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
       toAnnotation (variables?: Record<string, unknown>): Prompt
     }
 

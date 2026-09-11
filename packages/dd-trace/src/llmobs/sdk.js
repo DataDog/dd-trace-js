@@ -120,7 +120,7 @@ class LLMObs extends NoopLLMObs {
   /**
    * Create a prompt.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.PromptTemplateItem[]} template
    * @param {import('../../../../index').llmobs.CreatePromptOptions} [options]
    * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
    */
@@ -131,7 +131,7 @@ class LLMObs extends NoopLLMObs {
   /**
    * Create a prompt version.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
+   * @param {import('../../../../index').llmobs.PromptTemplateItem[]} template
    * @param {import('../../../../index').llmobs.CreatePromptVersionOptions} [options]
    * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
    */

@@ -67,10 +67,87 @@ describe('ManagedPrompt', () => {
     assert.strictEqual(prompt.template[0].content, 'You are {{ persona }}.')
   })
 
+  it('expands message placeholders in place without tracking or rendering their values', () => {
+    const prompt = new ManagedPrompt({
+      id: 'chat',
+      version: '3',
+      source: 'registry',
+      template: [
+        { role: 'system', content: 'Plan: {{ plan }}' },
+        { type: 'placeholder', name: 'history' },
+        { role: 'user', content: '{{ question }}' },
+        { type: 'placeholder', name: 'history' },
+        { type: 'placeholder', name: 'empty' },
+      ],
+    })
+    const history = [
+      { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+      },
+      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+    ]
+    const variables = { plan: 'pro', question: 'Why?', history, empty: [] }
+
+    const rendered = prompt.format(variables)
+    assert.deepStrictEqual(rendered, [
+      { role: 'system', content: 'Plan: pro' },
+      { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+      },
+      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+      { role: 'user', content: 'Why?' },
+      { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+      },
+      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+    ])
+    history[0].content = 'changed'
+    assert.strictEqual(rendered[1].content, '{{ opaque }}')
+    assert.deepStrictEqual(prompt.toAnnotation(variables), {
+      id: 'chat',
+      version: '3',
+      template: [
+        { role: 'system', content: 'Plan: {{ plan }}' },
+        { type: 'placeholder', name: 'history' },
+        { role: 'user', content: '{{ question }}' },
+        { type: 'placeholder', name: 'history' },
+        { type: 'placeholder', name: 'empty' },
+      ],
+      variables: { plan: 'pro', question: 'Why?' },
+    })
+    assert.throws(() => prompt.format({ plan: 'pro', question: 'Why?', empty: [] }), {
+      message: "Missing message placeholder variable 'history'",
+    })
+    for (const malformed of [
+      null,
+      'history',
+      {},
+      [{ role: 'user' }],
+      [{ role: 'assistant', content: null }],
+      [{ role: 'assistant', tool_calls: [] }],
+      [{ role: 'assistant', content: [{ type: 'image' }], tool_calls: [{}] }],
+      [{ type: 'placeholder', name: 'nested', role: 'user', content: 'x' }],
+    ]) {
+      assert.throws(() => prompt.format({ history: malformed, empty: [] }), {
+        message: "Invalid message placeholder variable 'history': expected an array of messages",
+      })
+    }
+  })
+
   it('supports string, chat, object, and synchronous callable fallbacks', () => {
     const string = ManagedPrompt.fromFallback('p', 'Hello {name}')
     const chat = ManagedPrompt.fromFallback('p', [{ role: 'user', content: 'Hi {name}' }])
     const object = ManagedPrompt.fromFallback('p', { template: 'Local', version: 'local-v1' })
+    const placeholder = ManagedPrompt.fromFallback('p', [{ type: 'placeholder', name: 'history' }])
     let calls = 0
     const callable = ManagedPrompt.fromFallback('p', () => {
       calls++
@@ -80,9 +157,10 @@ describe('ManagedPrompt', () => {
     assert.strictEqual(string.format({ name: 'A' }), 'Hello A')
     assert.deepStrictEqual(chat.format({ name: 'B' }), [{ role: 'user', content: 'Hi B' }])
     assert.strictEqual(object.version, 'local-v1')
+    assert.deepStrictEqual(placeholder.format({ history: [] }), [])
     assert.strictEqual(callable.template, 'Lazy')
     assert.strictEqual(calls, 1)
-    for (const prompt of [string, chat, object, callable]) assert.strictEqual(prompt.source, 'fallback')
+    for (const prompt of [string, chat, object, placeholder, callable]) assert.strictEqual(prompt.source, 'fallback')
   })
 
   it('rejects malformed caller fallbacks immediately', () => {

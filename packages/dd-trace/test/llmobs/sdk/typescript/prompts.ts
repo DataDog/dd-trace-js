@@ -21,6 +21,12 @@ async function promptManagement () {
   const template = [{ role: 'user', content: 'Hello {name}' }];
   await llmobs.createPrompt('greeting', template, { title: 'Greeting', envIds: [] });
   await llmobs.createPromptVersion('greeting', template, { userVersion: '2', envIds: [] });
+  const placeholderTemplate = [
+    { role: 'system', content: 'Be concise' },
+    { type: 'placeholder' as const, name: 'history' }
+  ];
+  await llmobs.createPrompt('chat', placeholderTemplate);
+  await llmobs.createPromptVersion('chat', placeholderTemplate);
   await llmobs.updatePrompt('greeting', { title: '', description: '' });
   await llmobs.updatePromptVersion('greeting', 2, { description: '', envIds: [] });
   await llmobs.deletePrompt('greeting');
