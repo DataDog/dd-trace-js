@@ -186,14 +186,9 @@ const web = {
     return context
   },
 
-  // Key an existing context on the underlying `Http2Stream` so a second request
-  // backed by the same stream resolves to it via the `req.stream` lookup in
-  // `patch`. Only a mixed HTTP/2 server (raw-stream + 'request' listeners) needs
-  // this: it creates the span from a throwaway stream adapter, then the
-  // compatibility layer synthesizes the real `Http2ServerRequest` off the same
-  // stream and must reuse the adapter's span rather than open an orphan context.
-  // Confined to that path so the common single-listener request pays no extra
-  // per-request map write.
+  // Key an adapter-backed HTTP/2 context on its stream so the compatibility
+  // request resolves it through `req.stream`. The common request-only path
+  // starts with the real request and does not pay this map write.
   linkContextToStream (stream, context) {
     contexts.set(stream, context)
   },
