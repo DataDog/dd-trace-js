@@ -28,6 +28,7 @@ function onSpanExtract ({ spanContext = {} }) {
     spanContext._sampling.priority = undefined
   } else if (spanContext._sampling.priority !== USER_KEEP) {
     spanContext._sampling.priority = USER_KEEP
+    spanContext._sampling.isProbabilityDecision = false
   }
 }
 

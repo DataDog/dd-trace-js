@@ -77,6 +77,8 @@ const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 const percentByte = /%([0-9A-Fa-f]{2})/g
 
+let updateOtelTraceState
+
 /**
  * @typedef {object} B3Context
  * @property {string} [flags]
@@ -151,12 +153,15 @@ function getB3Priority (sampled, debug) {
  * @returns {DatadogSpanContext | undefined}
  */
 function extractB3Context (b3) {
-  const priority = getB3Priority(b3.sampled, b3.flags === '1')
-  const spanContext = extractGenericContext(b3.traceId, b3.spanId, 16)
+  const debug = b3.flags === '1'
+  const priority = getB3Priority(b3.sampled, debug)
+  let spanContext = extractGenericContext(b3.traceId, b3.spanId, 16)
 
   if (priority !== undefined) {
-    if (!spanContext) {
-      return new DatadogSpanContext({
+    if (spanContext) {
+      spanContext._sampling.priority = priority
+    } else {
+      spanContext = new DatadogSpanContext({
         traceId: id(),
         spanId: null,
         sampling: { priority },
@@ -164,7 +169,7 @@ function extractB3Context (b3) {
       })
     }
 
-    spanContext._sampling.priority = priority
+    if (debug) spanContext._sampling.isProbabilityDecision = false
   }
 
   if (spanContext && b3.traceId) extract128BitTraceId(b3.traceId, spanContext)
@@ -619,6 +624,9 @@ class TextMapPropagator {
 
     writeTraceparent(carrier, spanContext.toTraceparent())
 
+    updateOtelTraceState ??= require('../../otel-sampling').updateOtelTraceState
+    updateOtelTraceState(spanContext, ts)
+
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
         // SpanContext was created by a ddtrace span.
@@ -695,6 +703,33 @@ class TextMapPropagator {
   }
 
   /**
+   * Merges W3C sampling state into the context selected by propagation-style precedence.
+   *
+   * @param {DatadogSpanContext} w3cSpanContext
+   * @param {DatadogSpanContext} selectedSpanContext
+   * @returns {void}
+   */
+  #mergeTraceContextState (w3cSpanContext, selectedSpanContext) {
+    const selectedPriority = selectedSpanContext._sampling.priority
+    if (selectedPriority === undefined) {
+      selectedSpanContext._sampling.priority = w3cSpanContext._sampling.priority
+      selectedSpanContext._sampling.mechanism = w3cSpanContext._sampling.mechanism
+      selectedSpanContext._trace.tags['_dd.p.dm'] = w3cSpanContext._trace.tags['_dd.p.dm']
+    } else if (
+      selectedSpanContext._sampling.isProbabilityDecision === false ||
+      (selectedPriority >= AUTO_KEEP) !== (w3cSpanContext._sampling.priority >= AUTO_KEEP)
+    ) {
+      // Copied sampling metadata must not describe a conflicting or non-probabilistic selected decision.
+      selectedSpanContext._sampling.isProbabilityDecision = false
+      w3cSpanContext._tracestate.forVendor('dd', state => {
+        if (state.get('t.dm') !== undefined) state.delete('t.dm')
+      })
+    }
+
+    selectedSpanContext._tracestate = w3cSpanContext._tracestate
+  }
+
+  /**
    * @param {DatadogSpanContext | undefined} w3cSpanContext
    * @param {DatadogSpanContext} firstSpanContext
    * @param {Record<string, unknown>} carrier
@@ -703,10 +738,13 @@ class TextMapPropagator {
    */
   #resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier, datadogContext) {
     if (w3cSpanContext === undefined ||
-        firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true) ||
-        firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) {
+        firstSpanContext.toTraceId(true) !== w3cSpanContext.toTraceId(true)) {
       return firstSpanContext
     }
+
+    this.#mergeTraceContextState(w3cSpanContext, firstSpanContext)
+    if (firstSpanContext.toSpanId() === w3cSpanContext.toSpanId()) return firstSpanContext
+
     if (tags.DD_PARENT_ID in w3cSpanContext._trace.tags) {
       // tracecontext headers contain a p value, ensure this value is sent to backend
       firstSpanContext._trace.tags[tags.DD_PARENT_ID] = w3cSpanContext._trace.tags[tags.DD_PARENT_ID]
@@ -744,7 +782,8 @@ class TextMapPropagator {
               traceContext = this.#extractTraceparentContext(carrier)
               traceContextExtracted = true
             }
-            this.#addTraceContextState(extractedContext, traceContext)
+            const selectedContext = context && context !== traceContext ? context : extractedContext
+            this.#addTraceContextState(selectedContext, traceContext)
           }
           break
         case 'tracecontext':
@@ -846,7 +885,14 @@ class TextMapPropagator {
     }
 
     const traceTags = this.#extractTags(carrier)
-    if (traceTags) spanContext._trace.tags = traceTags
+    if (traceTags) {
+      spanContext._trace.tags = traceTags
+      const decisionMaker = traceTags['_dd.p.dm']
+      if (decisionMaker !== undefined) {
+        const mechanism = Math.abs(Number.parseInt(decisionMaker, 10))
+        if (Number.isInteger(mechanism)) spanContext._sampling.mechanism = mechanism
+      }
+    }
 
     return spanContext
   }
@@ -883,7 +929,7 @@ class TextMapPropagator {
   #addTraceContextState (datadogContext, traceContext) {
     if (traceContext && datadogContext._traceId.equals(traceContext._traceId)) {
       datadogContext._traceparent = traceContext._traceparent
-      datadogContext._tracestate = traceContext._tracestate
+      this.#mergeTraceContextState(traceContext, datadogContext)
     }
   }
 

@@ -10,7 +10,7 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-const { MANUAL_KEEP } = require('../../../../ext/tags')
+const { MANUAL_DROP, MANUAL_KEEP } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
@@ -46,6 +46,8 @@ describe('Span', () => {
 
     prioritySampler = {
       sample: sinon.stub(),
+      setPriorityFromTag: sinon.stub(),
+      setPriorityFromTags: sinon.stub(),
     }
 
     tagger = {
@@ -594,7 +596,7 @@ describe('Span', () => {
       span.setTag(MANUAL_KEEP, true)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledWith(prioritySampler.sample, span, false)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTag, span, MANUAL_KEEP, true)
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {
@@ -637,13 +639,34 @@ describe('Span', () => {
       sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    const legacyAddTagsShape = DD_MAJOR < 6 ? it : it.skip
-    legacyAddTagsShape('still accepts string and array inputs via tagger on v5', () => {
-      span.addTags('foo:bar')
-      span.addTags([{ baz: 'qux' }])
+    it('only reapplies sampling tags parsed from the current legacy v5 input', () => {
+      const legacyTagger = { add: sinon.spy(require('../../src/tagger').add) }
+      const LegacySpan = proxyquire('../../src/opentracing/span', {
+        perf_hooks: { performance: { now } },
+        '../id': sinon.stub().returns('789'),
+        '../log': log,
+        '../tagger': legacyTagger,
+        '../../../../version': { DD_MAJOR: 5 },
+      })
+      const legacySpan = new LegacySpan(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar')
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), [{ baz: 'qux' }])
+      legacySpan.addTags(`${MANUAL_KEEP}:true`)
+
+      assert.strictEqual(legacySpan.context().getTag(MANUAL_KEEP), 'true')
+      sinon.assert.calledOnceWithExactly(
+        prioritySampler.setPriorityFromTags,
+        legacySpan,
+        { [MANUAL_KEEP]: 'true' }
+      )
+
+      prioritySampler.setPriorityFromTags.resetHistory()
+      legacySpan.setTag(MANUAL_DROP, true)
+      legacySpan.addTags('foo:bar')
+      legacySpan.addTags([{ baz: 'qux' }])
+
+      assert.strictEqual(legacySpan.context().getTag('foo'), 'bar')
+      assert.strictEqual(legacySpan.context().getTag('baz'), 'qux')
+      sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
     })
 
     const v6AddTagsShape = DD_MAJOR >= 6 ? it : it.skip
@@ -658,10 +681,22 @@ describe('Span', () => {
     })
 
     it('should sample based on manual sampling tags', () => {
-      span.addTags({ [MANUAL_KEEP]: true })
+      const tags = { [MANUAL_KEEP]: true }
+      span.addTags(tags)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledWith(prioritySampler.sample, span, false)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, tags)
+    })
+
+    it('should ignore inherited sampling tags', () => {
+      const tags = Object.create({ [MANUAL_DROP]: true })
+      tags.foo = 'bar'
+
+      span.addTags(tags)
+
+      assert.strictEqual(span.context().getTag('foo'), 'bar')
+      assert.strictEqual(span.context().getTag(MANUAL_DROP), undefined)
+      sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {

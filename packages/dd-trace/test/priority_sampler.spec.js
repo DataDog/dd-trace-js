@@ -18,9 +18,10 @@ const {
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY,
   SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
   SAMPLING_KNUTH_RATE,
 } = require('../src/constants')
-const { ASM } = require('../src/standalone/product')
+const { AI_GUARD, ASM } = require('../src/standalone/product')
 
 const SERVICE_NAME = ext.tags.SERVICE_NAME
 const SAMPLING_PRIORITY = ext.tags.SAMPLING_PRIORITY
@@ -111,10 +112,27 @@ describe('PrioritySampler', () => {
   describe('isSampled', () => {
     it('should sample by default', () => {
       assert.strictEqual(prioritySampler.isSampled(span), true)
+      assert.strictEqual(context._trace['_dd.agent_psr'], undefined)
+    })
+
+    it('should not overwrite a committed manual decision while evaluating', () => {
+      prioritySampler.setPriority(span, USER_REJECT)
+
+      assert.strictEqual(prioritySampler.isSampled(span), true)
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      assert.strictEqual(context._sampling.probabilityRate, undefined)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
     })
 
     it('should accept a span context', () => {
       assert.strictEqual(prioritySampler.isSampled(context), true)
+    })
+
+    it('should not record a rule decision while evaluating', () => {
+      prioritySampler = new PrioritySampler('test', { sampleRate: 0.5 })
+
+      assert.strictEqual(prioritySampler.isSampled(span), true)
+      assert.strictEqual(context._trace['_dd.rule_psr'], undefined)
     })
   })
 
@@ -384,6 +402,22 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._sampling.mechanism, 3)
     })
 
+    it('should preserve probability metadata when the rate limiter allows a trace', () => {
+      prioritySampler = new PrioritySampler('test', {
+        rules: [{ service: 'test', sampleRate: 1 }],
+        rateLimit: 1,
+      })
+      sinon.stub(prioritySampler._limiter, 'isAllowed').returns(true)
+      sinon.stub(prioritySampler._limiter, 'effectiveRate').returns(0.5)
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.isProbabilityDecision, undefined)
+      assert.strictEqual(context._trace['_dd.rule_psr'], 1)
+      assert.strictEqual(context._trace['_dd.limit_psr'], 0.5)
+    })
+
     it('should add metrics for agent sample rate', () => {
       prioritySampler.sample(span)
 
@@ -561,6 +595,73 @@ describe('PrioritySampler', () => {
       context._tags = Object.create(null)
 
       prioritySampler.sample(span)
+    })
+  })
+
+  describe('setPriorityFromTag', () => {
+    it('should let a manual sampling tag override an automatic decision', () => {
+      prioritySampler.sample(span)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-0')
+
+      prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, `${USER_KEEP}`)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-4')
+    })
+
+    it('should ignore a disabled manual sampling tag', () => {
+      prioritySampler.setPriorityFromTag(span, MANUAL_KEEP, false)
+
+      assert.strictEqual(context._sampling.priority, undefined)
+    })
+
+    it('should ignore invalid sampling priority values after an automatic decision', () => {
+      prioritySampler.sample(span)
+
+      for (const value of [1n, Symbol('priority')]) {
+        prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, value)
+      }
+
+      assert.strictEqual(context._sampling.priority, AUTO_KEEP)
+    })
+
+    it('should not let a manual tag override an AppSec force-keep', () => {
+      prioritySampler.setPriority(span, USER_KEEP, ASM)
+      prioritySampler.isSampled(span)
+
+      prioritySampler.setPriorityFromTag(span, MANUAL_DROP, true)
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-5')
+    })
+  })
+
+  describe('setPriorityFromTags', () => {
+    it('should apply precedence within the supplied sampling tags', () => {
+      prioritySampler.setPriorityFromTags(span, {
+        [MANUAL_KEEP]: false,
+        [MANUAL_DROP]: true,
+        [SAMPLING_PRIORITY]: USER_KEEP,
+      })
+
+      assert.strictEqual(context._sampling.priority, USER_REJECT)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
+      assert.strictEqual(context._sampling.isProbabilityDecision, false)
+    })
+
+    it('should not let manual tags override an AI Guard force-keep', () => {
+      prioritySampler = new PrioritySampler('test', { sampleRate: 1 })
+      prioritySampler.setPriority(span, USER_KEEP, AI_GUARD)
+      prioritySampler.isSampled(span)
+
+      prioritySampler.setPriorityFromTags(span, { [MANUAL_DROP]: true })
+
+      assert.strictEqual(context._sampling.priority, USER_KEEP)
+      assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_AI_GUARD)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-13')
     })
   })
 

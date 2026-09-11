@@ -213,8 +213,8 @@ class DatadogSpan {
   setTag (key, value) {
     this._spanContext.setTag(key, value)
 
-    if (isSamplingPriorityTag(key) && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+    if (isSamplingPriorityTag(key)) {
+      this._prioritySampler.setPriorityFromTag(this, key, value)
     }
 
     if (tagsUpdateCh.hasSubscribers) {
@@ -232,25 +232,33 @@ class DatadogSpan {
     // `options.tags` callers that pass `'key:val,key:val'` strings.
     const tags = this._spanContext.getTags()
     let mayChangeSamplingPriority
+    let samplingTags
 
     if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
       Object.assign(tags, keyValueMap)
+      samplingTags = keyValueMap
+      // Keep the common path to cheap property probes and verify ownership only when a sampling tag is present.
       mayChangeSamplingPriority =
-        MANUAL_KEEP in keyValueMap ||
-        MANUAL_DROP in keyValueMap ||
-        SAMPLING_PRIORITY in keyValueMap
+        (MANUAL_KEEP in keyValueMap && Object.hasOwn(keyValueMap, MANUAL_KEEP)) ||
+        (MANUAL_DROP in keyValueMap && Object.hasOwn(keyValueMap, MANUAL_DROP)) ||
+        (SAMPLING_PRIORITY in keyValueMap && Object.hasOwn(keyValueMap, SAMPLING_PRIORITY))
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
-        tagger.add(tags, keyValueMap)
-        mayChangeSamplingPriority = true
+        samplingTags = {}
+        tagger.add(samplingTags, keyValueMap)
+        Object.assign(tags, samplingTags)
+        mayChangeSamplingPriority =
+          (MANUAL_KEEP in samplingTags && Object.hasOwn(samplingTags, MANUAL_KEEP)) ||
+          (MANUAL_DROP in samplingTags && Object.hasOwn(samplingTags, MANUAL_DROP)) ||
+          (SAMPLING_PRIORITY in samplingTags && Object.hasOwn(samplingTags, SAMPLING_PRIORITY))
       } else {
         return this
       }
     }
 
-    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
-      this._prioritySampler.sample(this, false)
+    if (mayChangeSamplingPriority) {
+      this._prioritySampler.setPriorityFromTags(this, samplingTags)
     }
 
     if (tagsUpdateCh.hasSubscribers) {

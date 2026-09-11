@@ -2,7 +2,9 @@
 
 const api = require('@opentelemetry/api')
 const { AUTO_KEEP } = require('../../../../ext/priority')
+const { updateOtelTraceState } = require('../otel-sampling')
 const DatadogSpanContext = require('../opentracing/span_context')
+const TraceState = require('../opentracing/propagation/tracestate')
 const id = require('../id')
 
 function newContext () {
@@ -37,8 +39,10 @@ class SpanContext {
   }
 
   get traceState () {
-    const ts = this._ddContext._tracestate
-    return api.createTraceState(ts ? ts.toString() : '')
+    this._ddContext._ensureSamplingPriority()
+    const traceState = TraceState.fromString(this._ddContext._tracestate?.toString())
+    updateOtelTraceState(this._ddContext, traceState)
+    return api.createTraceState(traceState.toString())
   }
 }
 
