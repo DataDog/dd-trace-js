@@ -4395,6 +4395,87 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       Promise.all([once(childProcess, 'exit'), eventsPromise]).then(() => done(), done)
     })
 
+    it('retries a >5m dynamic ATR test once when all EFD fallback buckets are zero', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+          slow_test_retries: {
+            '5s': 0,
+            '10s': 0,
+            '30s': 0,
+            '5m': 0,
+          },
+        },
+      })
+
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+            .filter(test => test.resource ===
+              'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests')
+          assert.strictEqual(tests.length, 2, 'one initial execution plus the dynamic ATR floor')
+          assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+        }
+      )
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-flaky/flaky-fails',
+          CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jestEnvironmentDynamicAtrDuration.js',
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('clears dynamic ATR budgets between Jest runs with colliding test keys', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: { enabled: false },
+      })
+
+      const testSuite = 'ci-visibility/jest-flaky/dynamic-atr-collision-fails.js'
+      const testName = 'dynamic ATR collision retries with the duration budget for this run'
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === testSuite && test.meta[TEST_NAME] === testName)
+          assert.strictEqual(tests.length, 6, 'the first run uses one retry and the second uses three')
+          assert.strictEqual(tests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length, 4)
+        },
+        30_000
+      )
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-flaky/dynamic-atr-collision-fails',
+          RUN_JEST_TWICE: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
     it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
       receiver.setSettings({
         itr_enabled: false,

@@ -524,9 +524,9 @@ afterEach(function () {
 
   cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport }).then((taskResult) => {
     // Cypress decides whether to retry after afterEach completes. Narrow the
-    // initial maximum to the budget cached from this test's first attempt.
+    // initial maximum through Mocha's retry API before Cypress makes that decision.
     if (taskResult && Number.isSafeInteger(taskResult.dynamicAtrRetryCount)) {
-      currentTest._retries = taskResult.dynamicAtrRetryCount
+      currentTest.retries(taskResult.dynamicAtrRetryCount)
     }
   })
 })

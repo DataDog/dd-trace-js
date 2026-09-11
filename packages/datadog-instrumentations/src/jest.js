@@ -692,9 +692,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           // When dynamic ATR is enabled, use the max bucket value as the initial count.
           // The actual duration-based count is computed per test after the first attempt.
           if (this.isDynamicAtrEnabled) {
-            this.global[RETRY_TIMES] = this.dynamicAtrBuckets
-              ? Math.max(...this.dynamicAtrBuckets)
-              : this.#earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+            this.global[RETRY_TIMES] = Math.max(
+              1,
+              this.dynamicAtrBuckets
+                ? Math.max(...this.dynamicAtrBuckets)
+                : this.#earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+            )
           } else {
             this.global[RETRY_TIMES] = this.flakyTestRetriesCount
           }
@@ -2361,6 +2364,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         efdDeterminedRetries.clear()
         efdExpectedExecutions.clear()
         efdSlowAbortedTests.clear()
+        dynamicAtrRetryCountByTestKey.clear()
         efdCandidates.clear()
         newTests.clear()
         retriedTestsToNumAttempts.clear()

@@ -331,6 +331,53 @@ moduleTypes.forEach(({
         )
       })
 
+      it('enforces unequal dynamic ATR budgets after each test duration is known', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: { enabled: false },
+        })
+
+        const specToRun = 'cypress/e2e/dynamic-atr-retries.js'
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            const shortTest = tests.filter(test =>
+              test.resource === 'cypress/e2e/dynamic-atr-retries.js.dynamic ATR retries uses the shortest retry budget'
+            )
+            const longTest = tests.filter(test =>
+              test.resource === 'cypress/e2e/dynamic-atr-retries.js.dynamic ATR retries uses the next retry budget'
+            )
+
+            assert.strictEqual(shortTest.length, 2, 'the first bucket prevents excess framework retries')
+            assert.strictEqual(longTest.length, 4, 'the second bucket retains its larger retry budget')
+            assert.strictEqual(shortTest[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(longTest[3].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          },
+          { hardTimeout: 60_000 }
+        )
+      })
+
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async () => {
         receiver.setSettings({
           itr_enabled: false,
