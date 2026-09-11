@@ -43,7 +43,7 @@ describe('Telemetry logs', () => {
       version: '1.2.3-beta4',
       appsec: { enabled: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: false },
-      dynamicInstrumentation: { enabled: false },
+      dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_ENABLED: false },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',

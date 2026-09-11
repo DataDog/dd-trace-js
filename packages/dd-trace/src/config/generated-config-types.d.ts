@@ -242,6 +242,8 @@ export interface GeneratedConfig {
   DD_TRACE_ELECTRON_ENABLED: boolean;
   DD_TRACE_ENABLED: boolean;
   DD_TRACE_ENCODING_DEBUG: boolean;
+  DD_TRACE_EXPERIMENTAL_EXPORTER: string;
+  DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_SPAN_COUNTS: boolean;
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING: boolean;
@@ -410,27 +412,21 @@ export interface GeneratedConfig {
   };
   dsmEnabled: boolean;
   dynamicInstrumentation: {
-    captureTimeoutMs: number;
-    enabled: boolean;
-    probeFile: string | undefined;
-    redactedIdentifiers: string[];
-    redactionExcludedIdentifiers: string[];
-    uploadIntervalSeconds: number;
+    DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number;
+    DD_DYNAMIC_INSTRUMENTATION_ENABLED: boolean;
+    DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: string | undefined;
+    DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: string[];
+    DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: string[];
+    DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: number;
   };
   env: string | undefined;
   experimental: {
     b3: boolean;
-    enableGetRumData: boolean;
-    exporter: string;
-    flaggingProvider: {
-      enabled: boolean;
-      initializationTimeoutMs: number;
-      spanEnrichment: {
-        enabled: boolean;
-      };
-    };
   };
   featureFlags: {
+    DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: boolean;
+    DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: number;
+    DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: boolean;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: string;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: string | undefined;
     DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;

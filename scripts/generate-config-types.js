@@ -58,8 +58,8 @@ function createTreeNode () {
 }
 
 function getPropertyName (canonicalName, entry) {
-  if (entry.namespace) {
-    return `${entry.namespace}.${canonicalName}`
+  if (entry.namespace !== undefined) {
+    return entry.namespace ? `${entry.namespace}.${canonicalName}` : canonicalName
   }
   return entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName
 }

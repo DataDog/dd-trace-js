@@ -130,9 +130,7 @@ describe('CiPlugin', () => {
     plugin.skippableSuitesCoverage = { 'suite.js': 'coverage' }
     plugin.configure({
       enabled: true,
-      experimental: {
-        exporter: 'jest_worker',
-      },
+      DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker',
     })
 
     dc.channel('ci:vitest:library-configuration').publish({
@@ -212,9 +210,7 @@ describe('CiPlugin', () => {
     }
     plugin.configure({
       enabled: true,
-      experimental: {
-        exporter: 'jest_worker',
-      },
+      DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker',
     })
 
     dc.channel('ci:vitest:library-configuration').publish({
@@ -254,9 +250,7 @@ describe('CiPlugin', () => {
     }
     plugin.configure({
       enabled: true,
-      experimental: {
-        exporter: 'mocha',
-      },
+      DD_TRACE_EXPERIMENTAL_EXPORTER: 'mocha',
     })
 
     dc.channel('ci:vitest:library-configuration').publish({
@@ -773,9 +767,7 @@ describe('CiPlugin', () => {
     const plugin = new TestPlugin({ _exporter: {} })
     plugin.configure({
       enabled,
-      experimental: {
-        exporter,
-      },
+      DD_TRACE_EXPERIMENTAL_EXPORTER: exporter,
     })
     return plugin
   }

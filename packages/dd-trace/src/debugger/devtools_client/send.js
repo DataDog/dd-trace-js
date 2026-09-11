@@ -33,7 +33,7 @@ setInputPath(config.inputPath)
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
   maxQueueBytes: config.queueMaxBytes,
-  timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
+  timeout: config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS * 1000,
   onFlush,
 })
 

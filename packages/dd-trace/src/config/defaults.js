@@ -238,9 +238,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     if (entry.sensitive) {
       sensitiveConfigurations.add(canonicalName)
     }
-    const fullPropertyName = entry.namespace
-      ? `${entry.namespace}.${canonicalName}`
-      : (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
+    const fullPropertyName = entry.namespace === undefined
+      ? (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
+      : (entry.namespace ? `${entry.namespace}.${canonicalName}` : canonicalName)
     const type = entry.type.toUpperCase()
     assert.ok(programmaticTypeCoercions[type])
 
@@ -263,8 +263,10 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
 
     const option = { parser, type }
 
-    if (fullPropertyName !== canonicalName) {
+    if (entry.namespace !== undefined || fullPropertyName !== canonicalName) {
       option.property = fullPropertyName
+    }
+    if (fullPropertyName !== canonicalName) {
       option.canonicalName = canonicalName
       configurationsTable[fullPropertyName] = option
     }
