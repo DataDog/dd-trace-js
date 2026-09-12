@@ -103,6 +103,56 @@ describe('get-known-tests', () => {
     })
   })
 
+  it('should handle multi-page pagination', (done) => {
+    const firstPageResponse = {
+      data: {
+        attributes: {
+          tests: {
+            jest: {
+              'suite1.spec.js': ['test1', 'test2'],
+            },
+          },
+          page_info: {
+            has_next: true,
+            cursor: 'page2cursor',
+          },
+        },
+      },
+    }
+
+    const secondPageResponse = {
+      data: {
+        attributes: {
+          tests: {
+            jest: {
+              'suite2.spec.js': ['test3', 'test4'],
+            },
+          },
+          page_info: {
+            has_next: false,
+          },
+        },
+      },
+    }
+
+    nock(BASE_URL)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(firstPageResponse))
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(secondPageResponse))
+
+    getKnownTests(DEFAULT_PARAMS, (err, knownTests) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(knownTests, {
+        jest: {
+          'suite1.spec.js': ['test1', 'test2'],
+          'suite2.spec.js': ['test3', 'test4'],
+        },
+      })
+      done()
+    })
+  })
+
   it('should write to cache after a successful fetch', (done) => {
     nock(BASE_URL)
       .post('/api/v2/ci/libraries/tests')
@@ -228,6 +278,112 @@ describe('get-known-tests', () => {
 
       const key = cacheKeyForParams(DEFAULT_PARAMS)
       assert.strictEqual(fs.existsSync(getCachePath(key)), false, 'cache should not be written on error')
+      done()
+    })
+  })
+
+  it('should handle pagination error when has_next=true but no cursor', (done) => {
+    const invalidPageResponse = {
+      data: {
+        attributes: {
+          tests: {
+            jest: {
+              'suite.spec.js': ['test1'],
+            },
+          },
+          page_info: {
+            has_next: true,
+            // cursor is missing
+          },
+        },
+      },
+    }
+
+    nock(BASE_URL)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(invalidPageResponse))
+
+    getKnownTests(DEFAULT_PARAMS, (err) => {
+      assert.ok(err, 'should return an error')
+      assert.ok(err.message.includes('has_next=true but no cursor'), 'error message should mention missing cursor')
+
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
+      assert.strictEqual(fs.existsSync(getCachePath(key)), false, 'cache should not be written on pagination error')
+      done()
+    })
+  })
+
+  it('should merge tests from multiple pages correctly', (done) => {
+    const firstPageResponse = {
+      data: {
+        attributes: {
+          tests: {
+            jest: {
+              'suite1.spec.js': ['test1'],
+            },
+            mocha: {
+              'suite2.spec.js': ['test2'],
+            },
+          },
+          page_info: {
+            has_next: true,
+            cursor: 'page2',
+          },
+        },
+      },
+    }
+
+    const secondPageResponse = {
+      data: {
+        attributes: {
+          tests: {
+            jest: {
+              'suite1.spec.js': ['test3'], // Same suite, different tests
+              'suite3.spec.js': ['test4'],
+            },
+          },
+          page_info: {
+            has_next: true,
+            cursor: 'page3',
+          },
+        },
+      },
+    }
+
+    const thirdPageResponse = {
+      data: {
+        attributes: {
+          tests: {
+            mocha: {
+              'suite2.spec.js': ['test5'], // Same module and suite, different tests
+            },
+          },
+          page_info: {
+            has_next: false,
+          },
+        },
+      },
+    }
+
+    nock(BASE_URL)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(firstPageResponse))
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(secondPageResponse))
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(thirdPageResponse))
+
+    getKnownTests(DEFAULT_PARAMS, (err, knownTests) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(knownTests, {
+        jest: {
+          'suite1.spec.js': ['test1', 'test3'],
+          'suite3.spec.js': ['test4'],
+        },
+        mocha: {
+          'suite2.spec.js': ['test2', 'test5'],
+        },
+      })
       done()
     })
   })
