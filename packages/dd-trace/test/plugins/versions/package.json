@@ -4,7 +4,8 @@
   "license": "BSD-3-Clause",
   "private": true,
   "resolutions": {
-    "standardwebhooks": "1.0.0"
+    "standardwebhooks": "1.0.0",
+    "@google/adk/lodash-es": "npm:lodash@4.18.1"
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "5.0.76",
@@ -43,6 +44,7 @@
     "@electron/packager": "20.3.0",
     "@fastify/cookie": "11.1.2",
     "@fastify/multipart": "10.1.1",
+    "@google/adk": "2.0.0",
     "@google-cloud/pubsub": "6.0.1",
     "@google-cloud/vertexai": "1.12.0",
     "@google/genai": "2.21.0",

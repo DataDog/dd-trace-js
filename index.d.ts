@@ -261,6 +261,7 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
+  "google-adk": tracer.plugins.google_adk;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -2582,6 +2583,12 @@ declare namespace tracer {
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
   interface google_cloud_vertexai extends Integration, LLMObsIntegration {}
+
+  /**
+   * This plugin automatically instruments the
+   * [@google/adk](https://google.github.io/adk-docs/) module.
+   */
+  interface google_adk extends Integration, LLMObsIntegration {}
 
   /**
     * This plugin automatically instruments the

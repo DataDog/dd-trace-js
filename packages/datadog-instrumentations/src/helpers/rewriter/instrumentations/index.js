@@ -8,6 +8,7 @@ module.exports = [
   ...require('./claude-agent-sdk'),
   ...require('./graphql'),
   ...require('./graphql-jit'),
+  ...require('./google-adk'),
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./mercurius'),
