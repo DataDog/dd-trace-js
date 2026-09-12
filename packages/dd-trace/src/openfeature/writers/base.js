@@ -353,9 +353,13 @@ class BaseFFEWriter {
         return
       }
 
-      if (!fallbackRoute && route.onUnavailable &&
-          (isSafeToReplay(error, statusCode) || isTransportFailure(error, statusCode) ||
-           shouldSwitchFutureRoute(statusCode))) {
+      if (
+        !fallbackRoute &&
+        route.onUnavailable &&
+        (isSafeToReplay(error, statusCode) ||
+          isTransportFailure(error, statusCode) ||
+          shouldSwitchFutureRoute(statusCode))
+      ) {
         route.onUnavailable()
         if (error) {
           log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
