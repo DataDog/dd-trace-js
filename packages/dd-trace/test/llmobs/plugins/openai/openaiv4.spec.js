@@ -113,7 +113,6 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
@@ -161,10 +160,10 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
@@ -196,7 +195,7 @@ describe('integrations', () => {
           ],
           outputValue: '[1 embedding(s) returned]',
           metrics: {
-            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER,
           },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
@@ -252,14 +251,111 @@ describe('integrations', () => {
               },
             ],
           }],
+          toolDefinitions: [{
+            name: 'get_weather',
+            description: 'Get the weather in a given city',
+            schema: {
+              type: 'object',
+              properties: {
+                city: { type: 'string', description: 'The city to get the weather for' },
+              },
+            },
+          }],
           metadata: { tool_choice: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
+          },
+        })
+      })
+
+      it('submits a multi-turn chat completion with tool calls and results', async function () {
+        if (semifies(realVersion, '<=4.16.0')) {
+          this.skip()
+        }
+
+        await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'user', content: 'What is the weather in New York City?' },
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                id: 'call_abc',
+                type: 'function',
+                function: {
+                  name: 'get_weather',
+                  arguments: '{"city":"NYC"}',
+                },
+              }],
+            },
+            { role: 'tool', tool_call_id: 'call_abc', content: '72F' },
+          ],
+          tools: [{
+            type: 'function',
+            function: {
+              name: 'get_weather',
+              description: 'Get current weather',
+              parameters: {
+                type: 'object',
+                properties: { city: { type: 'string' } },
+              },
+            },
+          }],
+          stream: false,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          inputMessages: [
+            { role: 'user', content: 'What is the weather in New York City?' },
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                name: 'get_weather',
+                arguments: { city: 'NYC' },
+                tool_id: 'call_abc',
+                type: 'function',
+              }],
+            },
+            {
+              role: 'tool',
+              content: '',
+              tool_results: [{
+                name: '',
+                result: '72F',
+                tool_id: 'call_abc',
+                type: 'tool_result',
+              }],
+            },
+          ],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          toolDefinitions: [{
+            name: 'get_weather',
+            description: 'Get current weather',
+            schema: {
+              type: 'object',
+              properties: { city: { type: 'string' } },
+            },
+          }],
+          metadata: { stream: false },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
         })
       })
@@ -300,10 +396,10 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
         })
       })
@@ -336,10 +432,10 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
         })
       })
@@ -376,10 +472,10 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
         })
       })
@@ -409,7 +505,6 @@ describe('integrations', () => {
           tags: { ml_app: 'test', integration: 'openai' },
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
@@ -462,7 +557,6 @@ describe('integrations', () => {
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER,
-              reasoning_output_tokens: 0,
             },
             modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
             modelProvider: 'openai',
@@ -524,10 +618,10 @@ describe('integrations', () => {
             ],
             metrics: {
               cache_read_input_tokens: 0,
-              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER,
+              reasoning_output_tokens: 0,
             },
             modelName: 'gpt-3.5-turbo-0125',
             modelProvider: 'openai',
@@ -601,6 +695,16 @@ describe('integrations', () => {
                 },
               ],
             }],
+            toolDefinitions: [{
+              name: 'get_weather',
+              description: 'Get the weather in a given city',
+              schema: {
+                type: 'object',
+                properties: {
+                  city: { type: 'string', description: 'The city to get the weather for' },
+                },
+              },
+            }],
             metadata: {
               tool_choice: 'auto',
               stream: true,
@@ -609,10 +713,10 @@ describe('integrations', () => {
             tags: { ml_app: 'test', integration: 'openai' },
             metrics: {
               cache_read_input_tokens: 0,
-              reasoning_output_tokens: 0,
               input_tokens: MOCK_NUMBER,
               output_tokens: MOCK_NUMBER,
               total_tokens: MOCK_NUMBER,
+              reasoning_output_tokens: 0,
             },
           })
         })
@@ -822,10 +926,10 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: 1221,
             output_tokens: 100,
             total_tokens: 1321,
+            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-4o-2024-08-06',
           modelProvider: 'openai',
@@ -928,6 +1032,66 @@ describe('integrations', () => {
             text: { format: { type: 'text' }, verbosity: 'medium' },
             stream: false,
           },
+          tags: { ml_app: 'test', integration: 'openai' },
+        })
+      })
+
+      it('submits a response span with MCP tools', async function () {
+        if (semifies(realVersion, '<4.87.0')) {
+          this.skip()
+        }
+
+        await openai.responses.create({
+          model: 'gpt-4o-mini',
+          input: 'Run MCP lookup',
+          tools: [{
+            type: 'mcp',
+            server_label: 'dd',
+            server_url: 'https://example.com/mcp',
+          }],
+          stream: false,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createResponse',
+          inputMessages: [{ role: 'user', content: 'Run MCP lookup' }],
+          outputMessages: [
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                name: 'lookup',
+                arguments: { q: 'x' },
+                tool_id: 'mcp_1',
+                type: 'mcp_call',
+              }],
+              tool_results: [{
+                name: 'lookup',
+                result: 'result text',
+                tool_id: 'mcp_1',
+                type: 'mcp_tool_result',
+              }],
+            },
+            { role: 'assistant', content: 'done' },
+          ],
+          toolDefinitions: [{
+            name: 'lookup',
+            description: 'Lookup',
+            schema: { type: 'object' },
+          }],
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+          },
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          metadata: { stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
         })
       })

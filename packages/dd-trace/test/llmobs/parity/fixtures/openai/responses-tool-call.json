@@ -1,0 +1,49 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/responses" },
+      "status": 200,
+      "body": {
+        "id": "resp-parity-tool",
+        "object": "response",
+        "created_at": 1700000000,
+        "status": "completed",
+        "error": null,
+        "incomplete_details": null,
+        "model": "gpt-4o-mini",
+        "output": [
+          {
+            "id": "fc-parity",
+            "type": "function_call",
+            "status": "completed",
+            "call_id": "call_parity",
+            "name": "get_weather",
+            "arguments": "{\"city\":\"NYC\"}"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "temperature": 1,
+        "top_p": 1,
+        "tools": [
+          {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get current weather.",
+            "parameters": {
+              "type": "object",
+              "properties": { "city": { "type": "string" } },
+              "required": ["city"]
+            }
+          }
+        ],
+        "usage": {
+          "input_tokens": 14,
+          "input_tokens_details": { "cached_tokens": 0 },
+          "output_tokens": 8,
+          "output_tokens_details": { "reasoning_tokens": 0 },
+          "total_tokens": 22
+        }
+      }
+    }
+  ]
+}

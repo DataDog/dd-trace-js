@@ -62,7 +62,6 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
-            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-instruct:20230824-v2',
           modelProvider: 'openai',
@@ -114,10 +113,10 @@ describe('integrations', () => {
           ],
           metrics: {
             cache_read_input_tokens: 0,
-            reasoning_output_tokens: 0,
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
           modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
@@ -149,7 +148,7 @@ describe('integrations', () => {
           ],
           outputValue: '[1 embedding(s) returned]',
           metrics: {
-            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER, reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER, output_tokens: 0, total_tokens: MOCK_NUMBER,
           },
           modelName: 'text-embedding-ada-002-v2',
           modelProvider: 'openai',
@@ -158,8 +157,7 @@ describe('integrations', () => {
         })
       })
 
-      // TODO(sabrenner): missing tool_id and type in actual tool call
-      it.skip('submits a chat completion span with functions', async function () {
+      it('submits a chat completion span with functions', async function () {
         if (semifies(realVersion, '<3.2.0')) {
           this.skip()
         }
@@ -187,7 +185,7 @@ describe('integrations', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'OpenAI.createChatCompletion',
-          modelName: 'gpt-3.5-turbo',
+          modelName: 'gpt-3.5-turbo-0125',
           modelProvider: 'openai',
           inputMessages: [{ role: 'user', content: 'What is the weather in New York City?' }],
           outputMessages: [{
@@ -199,10 +197,18 @@ describe('integrations', () => {
                 arguments: {
                   city: 'New York City',
                 },
-                tool_id: MOCK_STRING,
-                type: 'function',
               },
             ],
+          }],
+          toolDefinitions: [{
+            name: 'get_weather',
+            description: 'Get the weather in a given city',
+            schema: {
+              type: 'object',
+              properties: {
+                city: { type: 'string', description: 'The city to get the weather for' },
+              },
+            },
           }],
           metadata: { function_call: 'auto', stream: false },
           tags: { ml_app: 'test', integration: 'openai' },
@@ -211,6 +217,7 @@ describe('integrations', () => {
             input_tokens: MOCK_NUMBER,
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
           },
         })
       })
