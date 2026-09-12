@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -56,5 +56,18 @@ describe('sdk prompts', () => {
 
     assert.deepStrictEqual(fs.readdirSync(cacheDir), [])
     fs.rmSync(cacheDir, { recursive: true, force: true })
+  })
+
+  it('rejects instead of throwing when lazy manager creation fails', async () => {
+    const config = getConfigFresh({})
+    config.site = 'datadoghq.com@collector.example'
+    const llmobs = new LLMObsSDK(null, { disable () {} }, config)
+    const expected = {
+      name: 'PromptAuthError',
+      detail: 'DD_SITE is invalid for prompt operations',
+    }
+
+    await assert.rejects(llmobs.getPrompt('greeting'), expected)
+    await assert.rejects(llmobs.createPrompt('greeting', []), expected)
   })
 })

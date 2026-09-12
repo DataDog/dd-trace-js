@@ -32,6 +32,18 @@ const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
 
+/** @typedef {import('../../../../index').llmobs.ClearPromptCacheOptions} ClearPromptCacheOptions */
+/** @typedef {import('../../../../index').llmobs.CreatePromptOptions} CreatePromptOptions */
+/** @typedef {import('../../../../index').llmobs.CreatePromptVersionOptions} CreatePromptVersionOptions */
+/** @typedef {import('../../../../index').llmobs.DeletedPromptResponse} DeletedPromptResponse */
+/** @typedef {import('../../../../index').llmobs.GetPromptOptions} GetPromptOptions */
+/** @typedef {import('../../../../index').llmobs.ManagedPrompt} ManagedPrompt */
+/** @typedef {import('../../../../index').llmobs.PromptResponse} PromptResponse */
+/** @typedef {import('../../../../index').llmobs.PromptTemplateMessage} PromptTemplateMessage */
+/** @typedef {import('../../../../index').llmobs.PromptVersionResponse} PromptVersionResponse */
+/** @typedef {import('../../../../index').llmobs.UpdatePromptOptions} UpdatePromptOptions */
+/** @typedef {import('../../../../index').llmobs.UpdatePromptVersionOptions} UpdatePromptVersionOptions */
+
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
@@ -93,25 +105,25 @@ class LLMObs extends NoopLLMObs {
   /**
    * Retrieve and resolve a managed prompt.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.GetPromptOptions} [options]
-   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt>}
+   * @param {GetPromptOptions} [options]
+   * @returns {Promise<ManagedPrompt>}
    */
-  getPrompt (promptId, options) {
+  async getPrompt (promptId, options) {
     return this.#getPromptManager().getPrompt(promptId, options)
   }
 
   /**
    * Refresh the selector implied by the current environment.
    * @param {string} promptId
-   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt | undefined>}
+   * @returns {Promise<ManagedPrompt | undefined>}
    */
-  refreshPrompt (promptId) {
+  async refreshPrompt (promptId) {
     return this.#getPromptManager().refreshPrompt(promptId)
   }
 
   /**
    * Clear managed prompt caches.
-   * @param {import('../../../../index').llmobs.ClearPromptCacheOptions} [options]
+   * @param {ClearPromptCacheOptions} [options]
    */
   clearPromptCache (options = {}) {
     this.#getPromptManager().clearCache(options)
@@ -120,32 +132,32 @@ class LLMObs extends NoopLLMObs {
   /**
    * Create a prompt.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
-   * @param {import('../../../../index').llmobs.CreatePromptOptions} [options]
-   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
+   * @param {PromptTemplateMessage[]} template
+   * @param {CreatePromptOptions} [options]
+   * @returns {Promise<PromptResponse>}
    */
-  createPrompt (promptId, template, options) {
+  async createPrompt (promptId, template, options) {
     return this.#getPromptManager().createPrompt(promptId, template, options)
   }
 
   /**
    * Create a prompt version.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateMessage[]} template
-   * @param {import('../../../../index').llmobs.CreatePromptVersionOptions} [options]
-   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
+   * @param {PromptTemplateMessage[]} template
+   * @param {CreatePromptVersionOptions} [options]
+   * @returns {Promise<PromptVersionResponse>}
    */
-  createPromptVersion (promptId, template, options) {
+  async createPromptVersion (promptId, template, options) {
     return this.#getPromptManager().createPromptVersion(promptId, template, options)
   }
 
   /**
    * Update prompt metadata.
    * @param {string} promptId
-   * @param {import('../../../../index').llmobs.UpdatePromptOptions} options
-   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
+   * @param {UpdatePromptOptions} options
+   * @returns {Promise<PromptResponse>}
    */
-  updatePrompt (promptId, options) {
+  async updatePrompt (promptId, options) {
     return this.#getPromptManager().updatePrompt(promptId, options)
   }
 
@@ -153,36 +165,36 @@ class LLMObs extends NoopLLMObs {
    * Update prompt-version metadata.
    * @param {string} promptId
    * @param {number} version
-   * @param {import('../../../../index').llmobs.UpdatePromptVersionOptions} options
-   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
+   * @param {UpdatePromptVersionOptions} options
+   * @returns {Promise<PromptVersionResponse>}
    */
-  updatePromptVersion (promptId, version, options) {
+  async updatePromptVersion (promptId, version, options) {
     return this.#getPromptManager().updatePromptVersion(promptId, version, options)
   }
 
   /**
    * Delete a prompt.
    * @param {string} promptId
-   * @returns {Promise<import('../../../../index').llmobs.DeletedPromptResponse>}
+   * @returns {Promise<DeletedPromptResponse>}
    */
-  deletePrompt (promptId) {
+  async deletePrompt (promptId) {
     return this.#getPromptManager().deletePrompt(promptId)
   }
 
   /**
    * List prompts.
-   * @returns {Promise<import('../../../../index').llmobs.PromptResponse[]>}
+   * @returns {Promise<PromptResponse[]>}
    */
-  listPrompts () {
+  async listPrompts () {
     return this.#getPromptManager().listPrompts()
   }
 
   /**
    * List prompt versions.
    * @param {string} promptId
-   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse[]>}
+   * @returns {Promise<PromptVersionResponse[]>}
    */
-  listPromptVersions (promptId) {
+  async listPromptVersions (promptId) {
     return this.#getPromptManager().listPromptVersions(promptId)
   }
 
