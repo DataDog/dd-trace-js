@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://host.docker.internal:19126/agents/EITYAHSOCJ/agentAliases/NWGOFQESWP/sessions/failure_session/text",
+    "headers": {
+      "Content-Type": "application/json",
+      "Content-Length": "254",
+      "User-Agent": "aws-sdk-js/3.1126.0 ua/2.1 os/linux#5.15.200 lang/js md/nodejs#22.12.0 api/bedrock-agent-runtime#3.1126.0 m/N,E,g",
+      "Connection": "keep-alive"
+    },
+    "body": "{\"enableTrace\":true,\"inputText\":\"I like beach vacations but also nature and outdoor adventures. I'd like the trip to be 7 days, and include lounging on the beach, something like an all-inclusive resort is nice too (but I prefer luxury 4/5 star resorts)\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/vnd.amazon.eventstream",
+      "x-amzn-bedrock-agent-content-type": "application/json",
+      "x-amzn-bedrock-agent-session-id": "failure_session",
+      "x-amzn-requestid": "bedrock-agent-stub",
+      "Date": "Tue, 08 Sep 2026 16:53:59 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "base64:AAABpwAAAEuNd9dSDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcABXRyYWNlDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJhZ2VudEFsaWFzSWQiOiJOV0dPRlFFU1dQIiwiYWdlbnRJZCI6IkVJVFlBSFNPQ0oiLCJzZXNzaW9uSWQiOiJmYWlsdXJlX3Nlc3Npb24iLCJldmVudFRpbWUiOiIyMDI0LTA3LTAxVDAwOjAwOjAwLjAwMFoiLCJ0cmFjZSI6eyJmYWlsdXJlVHJhY2UiOnsidHJhY2VJZCI6ImZhaWx1cmUtc3RlcCIsImZhaWx1cmVSZWFzb24iOiJTb21ldGhpbmcgYnJva2UiLCJmYWlsdXJlQ29kZSI6NTAwLCJmYWlsdXJlVHlwZSI6IklOVEVSTkFMX1NFUlZFUl9FUlJPUiIsIm1ldGFkYXRhIjp7InN0YXJ0VGltZSI6IjIwMjQtMDctMDFUMDA6MDA6MDAuMDAwWiIsInRvdGFsVGltZU1zIjoxMH19fX28a8WrAAAAfwAAAEv/rjBvDTptZXNzYWdlLXR5cGUHAAVldmVudAs6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29ueyJieXRlcyI6IlptRnBiSFZ5WlNCeVpYTndiMjV6WlE9PSJ99VNDRA=="
+  }
+}

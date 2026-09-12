@@ -101,6 +101,10 @@ module.exports = {
       name: '@aws-sdk/client-bedrock-runtime',
       versions: ['>=3.422.0'],
     },
+    {
+      name: '@aws-sdk/client-bedrock-agent-runtime',
+      versions: ['>=3.461.0'],
+    },
   ],
   bullmq: [
     {
