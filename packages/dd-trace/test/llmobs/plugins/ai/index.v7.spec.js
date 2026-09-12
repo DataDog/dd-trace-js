@@ -93,6 +93,8 @@ describe('Plugin', () => {
         parentId: generateTextSpan.span_id,
         name: 'step',
         spanKind: 'step',
+        outputValue: MOCK_STRING,
+        metadata: { step_number: 0, finish_reason: 'stop' },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -296,6 +298,8 @@ describe('Plugin', () => {
         parentId: streamTextSpan.span_id,
         name: 'step',
         spanKind: 'step',
+        outputValue: 'Hello! How can I assist you today?',
+        metadata: { step_number: 0 },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -386,6 +390,8 @@ describe('Plugin', () => {
         parentId: generateTextSpan.span_id,
         name: 'step',
         spanKind: 'step',
+        outputValue: JSON.stringify([{ name: 'weather', arguments: { location: 'Tokyo' }, tool_id: toolCallId }]),
+        metadata: { step_number: 0, finish_reason: 'tool-calls' },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -447,6 +453,8 @@ describe('Plugin', () => {
         parentId: generateTextSpan.span_id,
         name: 'step',
         spanKind: 'step',
+        outputValue: MOCK_STRING,
+        metadata: { step_number: 1, finish_reason: 'stop' },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -553,6 +561,8 @@ describe('Plugin', () => {
         parentId: streamTextSpan.span_id,
         name: 'step',
         spanKind: 'step',
+        outputValue: MOCK_STRING,
+        metadata: { step_number: 0 },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -611,6 +621,8 @@ describe('Plugin', () => {
         parentId: streamTextSpan.span_id,
         name: 'step',
         spanKind: 'step',
+        outputValue: MOCK_STRING,
+        metadata: { step_number: 1 },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -777,6 +789,8 @@ describe('Plugin', () => {
           name: 'step',
           spanKind: 'step',
           parentId: generateTextSpan.span_id,
+          outputValue: MOCK_STRING,
+          metadata: { step_number: MOCK_NUMBER, finish_reason: MOCK_STRING },
           tags: { ml_app: 'test', integration: 'ai' },
         })
       }
@@ -988,6 +1002,8 @@ describe('Plugin', () => {
         parentId: generateTextSpan.span_id,
         name: 'test.step',
         spanKind: 'step',
+        outputValue: MOCK_STRING,
+        metadata: { step_number: 0, finish_reason: 'stop' },
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -1141,6 +1157,287 @@ describe('Plugin', () => {
             cache_write_input_tokens: 0,
             cache_read_input_tokens: 0,
             output_tokens: MOCK_NUMBER,
+            reasoning_output_tokens: 0,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+    })
+  })
+
+  describe('reasoning, provider-executed tools and tool approvals', () => {
+    function jsonResponse (body) {
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    function chatCompletion (message, finishReason) {
+      return {
+        id: 'chatcmpl-mock',
+        object: 'chat.completion',
+        created: 1234567890,
+        model: 'gpt-4o-mini',
+        choices: [{ index: 0, message: { role: 'assistant', ...message }, finish_reason: finishReason }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+      }
+    }
+
+    withAiSdkOpenAiVersions((version, _, openaiVersion) => {
+      let ai
+      let OpenAI
+
+      beforeEach(() => {
+        ai = require(`../../../../../../versions/ai@${version}`).get()
+        OpenAI = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersion}`).get()
+      })
+
+      it('captures reasoning output and reasoning tokens', async () => {
+        const openai = OpenAI.createOpenAI({
+          apiKey: 'test-api-key',
+          fetch: () => jsonResponse({
+            id: 'resp_mock',
+            object: 'response',
+            created_at: 1779284000,
+            status: 'completed',
+            incomplete_details: null,
+            model: 'o4-mini',
+            output: [
+              { type: 'reasoning', id: 'rs_1', summary: [{ type: 'summary_text', text: 'Thinking about it' }] },
+              {
+                type: 'message',
+                id: 'msg_1',
+                status: 'completed',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'The answer is 4.', annotations: [] }],
+              },
+            ],
+            usage: {
+              input_tokens: 20,
+              input_tokens_details: { cached_tokens: 5 },
+              output_tokens: 30,
+              output_tokens_details: { reasoning_tokens: 25 },
+            },
+          }),
+        })
+
+        await ai.generateText({ model: openai('o4-mini'), prompt: 'What is 2 + 2?' })
+
+        const { apmSpans, llmobsSpans } = await getEvents(3)
+        const stepSpan = llmobsSpans.find(span => span.name === 'step')
+        const languageModelCallSpan = llmobsSpans.find(span => span.name === 'languageModelCall')
+
+        assertLlmObsSpanEvent(stepSpan, {
+          span: apmSpans.find(span => span.name === 'step'),
+          parentId: llmobsSpans.find(span => span.name === 'generateText').span_id,
+          name: 'step',
+          spanKind: 'step',
+          inputValue: 'Thinking about it',
+          outputValue: 'The answer is 4.',
+          metadata: { step_number: 0, finish_reason: 'stop' },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(languageModelCallSpan, {
+          span: apmSpans.find(span => span.name === 'languageModelCall'),
+          parentId: stepSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'o4-mini',
+          modelProvider: 'openai',
+          name: 'languageModelCall',
+          inputMessages: [{ content: 'What is 2 + 2?', role: 'user' }],
+          outputMessages: [
+            { content: 'Thinking about it', role: 'reasoning' },
+            { content: 'The answer is 4.', role: 'assistant' },
+          ],
+          metadata: {},
+          metrics: {
+            input_tokens: 20,
+            cache_write_input_tokens: 0,
+            cache_read_input_tokens: 5,
+            output_tokens: 30,
+            reasoning_output_tokens: 25,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+
+      it('captures provider-executed tool calls and results without a tool span', async () => {
+        const openai = OpenAI.createOpenAI({
+          apiKey: 'test-api-key',
+          fetch: () => jsonResponse({
+            id: 'resp_mock',
+            object: 'response',
+            created_at: 1779284000,
+            status: 'completed',
+            incomplete_details: null,
+            model: 'gpt-4o-mini',
+            output: [
+              {
+                type: 'web_search_call',
+                id: 'ws_1',
+                status: 'completed',
+                action: { type: 'search', query: 'weather in Tokyo' },
+              },
+              {
+                type: 'message',
+                id: 'msg_1',
+                status: 'completed',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'It is sunny in Tokyo.', annotations: [] }],
+              },
+            ],
+            usage: { input_tokens: 20, output_tokens: 10 },
+          }),
+        })
+
+        await ai.generateText({
+          model: openai('gpt-4o-mini'),
+          prompt: 'What is the weather in Tokyo?',
+          tools: { web_search: openai.tools.webSearch() },
+        })
+
+        // provider-executed tools do not run through executeTool, so only workflow + step + llm spans are created
+        const { apmSpans, llmobsSpans } = await getEvents(3)
+        assert.equal(llmobsSpans.filter(span => span.meta['span.kind'] === 'tool').length, 0)
+
+        const stepSpan = llmobsSpans.find(span => span.name === 'step')
+        const languageModelCallSpan = llmobsSpans.find(span => span.name === 'languageModelCall')
+
+        assertLlmObsSpanEvent(languageModelCallSpan, {
+          span: apmSpans.find(span => span.name === 'languageModelCall'),
+          parentId: stepSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'languageModelCall',
+          inputMessages: [{ content: 'What is the weather in Tokyo?', role: 'user' }],
+          outputMessages: [{
+            role: 'assistant',
+            content: 'It is sunny in Tokyo.',
+            tool_calls: [{ tool_id: 'ws_1', name: 'web_search', arguments: {}, type: 'function' }],
+            tool_results: [{
+              tool_id: 'ws_1',
+              name: 'web_search',
+              result: JSON.stringify({ action: { type: 'search', query: 'weather in Tokyo' } }),
+              type: 'tool_result',
+            }],
+          }],
+          toolDefinitions: [{ name: 'web_search', schema: { type: '', properties: {}, required: [] } }],
+          metadata: {},
+          metrics: {
+            input_tokens: 20,
+            cache_write_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 10,
+            reasoning_output_tokens: 0,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+
+      it('captures tool approval requests and responses', async () => {
+        const toolCallMessage = {
+          content: null,
+          tool_calls: [{
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'deleteFile', arguments: '{"path":"/tmp/a"}' },
+          }],
+        }
+        const responses = [
+          chatCompletion(toolCallMessage, 'tool_calls'),
+          chatCompletion({ content: 'Understood, I will not delete the file.' }, 'stop'),
+        ]
+        const openai = OpenAI.createOpenAI({
+          apiKey: 'test-api-key',
+          fetch: () => jsonResponse(responses.shift()),
+          compatibility: 'strict',
+        })
+
+        const tools = {
+          deleteFile: ai.tool({
+            description: 'Delete a file',
+            inputSchema: ai.jsonSchema({ type: 'object', properties: { path: { type: 'string' } } }),
+            needsApproval: true,
+            execute: () => 'deleted',
+          }),
+        }
+
+        // step 1: the model requests a tool call that needs approval, so the workflow stops
+        const first = await ai.generateText({
+          model: openai.chat('gpt-4o-mini'),
+          prompt: 'Delete /tmp/a',
+          tools,
+        })
+
+        const approvalRequest = first.steps[0].content.find(part => part.type === 'tool-approval-request')
+        assert.ok(approvalRequest)
+
+        {
+          const { apmSpans, llmobsSpans } = await getEvents(3)
+          const stepSpan = llmobsSpans.find(span => span.name === 'step')
+
+          assertLlmObsSpanEvent(stepSpan, {
+            span: apmSpans.find(span => span.name === 'step'),
+            parentId: llmobsSpans.find(span => span.name === 'generateText').span_id,
+            name: 'step',
+            spanKind: 'step',
+            outputValue: JSON.stringify([{ name: 'deleteFile', arguments: { path: '/tmp/a' }, tool_id: 'call_1' }]),
+            metadata: { step_number: 0, finish_reason: 'tool-calls', pending_tool_approvals: ['deleteFile'] },
+            tags: { ml_app: 'test', integration: 'ai' },
+          })
+        }
+
+        // step 2: the user denies the approval, the SDK reports the denial to the model
+        await ai.generateText({
+          model: openai.chat('gpt-4o-mini'),
+          messages: [
+            { role: 'user', content: 'Delete /tmp/a' },
+            ...first.response.messages,
+            {
+              role: 'tool',
+              content: [{
+                type: 'tool-approval-response',
+                approvalId: approvalRequest.approvalId,
+                approved: false,
+                reason: 'too risky',
+              }],
+            },
+          ],
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents(3)
+        const stepSpan = llmobsSpans.find(span => span.name === 'step')
+        const languageModelCallSpan = llmobsSpans.find(span => span.name === 'languageModelCall')
+
+        assertLlmObsSpanEvent(languageModelCallSpan, {
+          span: apmSpans.find(span => span.name === 'languageModelCall'),
+          parentId: stepSpan.span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'languageModelCall',
+          inputMessages: [
+            { content: 'Delete /tmp/a', role: 'user' },
+            {
+              role: 'assistant',
+              tool_calls: [{ tool_id: 'call_1', name: 'deleteFile', arguments: { path: '/tmp/a' }, type: 'function' }],
+            },
+            { content: '[Tool Approval Denied]: too risky', role: 'tool', tool_id: 'call_1' },
+            { content: 'too risky', role: 'tool', tool_id: 'call_1' },
+          ],
+          outputMessages: [{ content: 'Understood, I will not delete the file.', role: 'assistant' }],
+          toolDefinitions: [{
+            name: 'deleteFile',
+            description: 'Delete a file',
+            schema: { type: 'object', properties: { path: { type: 'string' } }, required: [] },
+          }],
+          metadata: {},
+          metrics: {
+            input_tokens: 10,
+            cache_write_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 2,
             reasoning_output_tokens: 0,
           },
           tags: { ml_app: 'test', integration: 'ai' },

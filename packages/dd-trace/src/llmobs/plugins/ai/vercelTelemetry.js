@@ -7,9 +7,12 @@ const {
   getGenerationMetadataFromEvent,
   getJsonStringValue,
   getToolCallResultContent,
+  formatProviderToolResult,
+  formatToolApprovalResponse,
 } = require('./util')
 
-// TODO: add in embedMany once it has tracingChannel support
+// generateObject/streamObject do not run in a tracingChannel span in the AI SDK (v7),
+// so they cannot be represented here
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
   embed: 'embedding',
@@ -20,7 +23,7 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   // llm operations
   languageModelCall: 'llm',
   // steps
-  step: 'step', // TODO: support step spans for manual instrumentation as well
+  step: 'step',
   // tools
   executeTool: 'tool',
 }
@@ -51,6 +54,9 @@ function formatLanguageModelInputMessages (instructions, messages) {
     inputMessages.push({ role: 'system', content: systemPrompt })
   }
 
+  /** @type {Map<string, string>} */
+  const toolCallIdsByApprovalId = new Map()
+
   for (const message of messages) {
     const { role, content } = message
 
@@ -70,12 +76,17 @@ function formatLanguageModelInputMessages (instructions, messages) {
       if (typeof content === 'string') {
         inputMessages.push({ role, content })
       } else {
+        for (const part of content) {
+          if (part.type === 'tool-approval-request' && part.approvalId && part.toolCallId) {
+            toolCallIdsByApprovalId.set(part.approvalId, part.toolCallId)
+          }
+        }
         // re-use existing output message formatting
         inputMessages.push(...formatLanguageModelOutputMessages(content))
       }
     } else if (role === 'tool') {
       for (const part of content) {
-        if (part.type === 'tool-result') { // TODO: support tool approvals
+        if (part.type === 'tool-result') {
           const safeResult = getToolCallResultContent(part)
 
           inputMessages.push({
@@ -83,6 +94,8 @@ function formatLanguageModelInputMessages (instructions, messages) {
             content: safeResult,
             toolId: part.toolCallId,
           })
+        } else if (part.type === 'tool-approval-response') {
+          inputMessages.push(formatToolApprovalResponse(part, toolCallIdsByApprovalId))
         }
       }
     }
@@ -96,6 +109,7 @@ function formatLanguageModelOutputMessages (content) {
 
   const outputMessages = []
   const toolCalls = []
+  const toolResults = []
 
   let textContent = ''
   let reasoningContent = ''
@@ -107,6 +121,9 @@ function formatLanguageModelOutputMessages (content) {
       textContent += part.text
     } else if (type === 'reasoning') {
       reasoningContent += part.text
+    } else if (type === 'tool-result' || type === 'tool-error') {
+      // provider-executed tool results are returned inline with the assistant content
+      toolResults.push(formatProviderToolResult(type === 'tool-error' ? { ...part, result: part.error } : part))
     } else if (type === 'tool-call') {
       const toolCallArguments = typeof part.input === 'string'
         ? getJsonStringValue(part.input, {})
@@ -133,6 +150,10 @@ function formatLanguageModelOutputMessages (content) {
 
   if (toolCalls.length) {
     finalTextMessage.toolCalls = toolCalls
+  }
+
+  if (toolResults.length) {
+    finalTextMessage.toolResults = toolResults
   }
 
   outputMessages.push(finalTextMessage)
@@ -324,11 +345,37 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
     const content = ctx.isStream ? this.#lastOutputContentByCallId.get(event.callId) : result?.content
 
-    // capture reasoning if applicable
-    const reasoning = content?.find(part => part.type === 'reasoning')?.text
-    if (reasoning) {
-      this._tagger.tagTextIO(span, reasoning)
+    let text = ''
+    let reasoning = ''
+    const toolCalls = []
+    const pendingApprovals = []
+
+    if (Array.isArray(content)) {
+      for (const part of content) {
+        if (part.type === 'text') {
+          text += part.text
+        } else if (part.type === 'reasoning') {
+          reasoning += part.text
+        } else if (part.type === 'tool-call') {
+          const args = typeof part.input === 'string' ? getJsonStringValue(part.input, {}) : part.input
+          toolCalls.push({ name: part.toolName, arguments: args, tool_id: part.toolCallId })
+        } else if (part.type === 'tool-approval-request') {
+          pendingApprovals.push(part.toolCall?.toolName ?? part.toolCallId)
+        }
+      }
     }
+
+    // a step that only produced tool calls has no text; surface the tool calls as the step output instead
+    const output = text || (toolCalls.length ? JSON.stringify(toolCalls) : undefined)
+    this._tagger.tagTextIO(span, reasoning || undefined, output)
+
+    const metadata = {}
+    if (typeof event.stepNumber === 'number') metadata.step_number = event.stepNumber
+    if (!ctx.isStream && typeof result?.finishReason === 'string') metadata.finish_reason = result.finishReason
+    if (pendingApprovals.length) metadata.pending_tool_approvals = pendingApprovals
+
+    // eslint-disable-next-line no-restricted-syntax -- metadata is small and only built once per step
+    if (Object.keys(metadata).length) this._tagger.tagMetadata(span, metadata)
   }
 
   setLanguageModelCallTags (span, ctx) {
