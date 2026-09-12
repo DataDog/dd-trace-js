@@ -12,7 +12,7 @@ const { addHook, getHooks } = require('./helpers/instrument')
  */
 function addRewriterHooks (name) {
   const files = new Set()
-  for (const hook of getHooks(name)) {
+  for (const hook of getHooks(name).values()) {
     if (files.has(hook.file)) continue
     files.add(hook.file)
     addHook(hook, exports => exports)

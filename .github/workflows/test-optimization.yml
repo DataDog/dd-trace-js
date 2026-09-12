@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
   # TODO: remove this once we have stable tests
   MOCHA_OPTIONS: --retries 2
 

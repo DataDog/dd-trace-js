@@ -1417,6 +1417,18 @@ jobs:
         with:
           id: ${{ github.job }}
 
+  supabase:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: supabase
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/plugins/test
+        with:
+          node-floor: active-lts
+
   tedious:
     runs-on: ubuntu-latest
     permissions:

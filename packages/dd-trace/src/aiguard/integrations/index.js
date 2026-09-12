@@ -11,13 +11,14 @@ let isEnabled = false
  *
  * @param {object} aiguard
  * @param {boolean} block
+ * @param {boolean} analyzeStreamResponses
  */
-function enable (aiguard, block) {
+function enable (aiguard, block, analyzeStreamResponses) {
   if (isEnabled) return
 
   anthropic.enable(aiguard, block)
   openai.enable(aiguard, block)
-  vercelAi.enable(aiguard, block)
+  vercelAi.enable(aiguard, block, analyzeStreamResponses)
 
   isEnabled = true
 }

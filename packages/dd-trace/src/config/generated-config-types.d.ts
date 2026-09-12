@@ -68,6 +68,7 @@ export interface GeneratedConfig {
   DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
+  DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_API_KEY: string | undefined;
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
@@ -390,6 +391,7 @@ export interface GeneratedConfig {
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
+  DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_UNDICI_ENABLED: boolean;
@@ -619,6 +621,7 @@ export interface GeneratedEnvVarConfig {
   DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
+  DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_AI_GUARD_BLOCK: boolean;
   DD_AI_GUARD_ENABLED: boolean;
   DD_AI_GUARD_ENDPOINT: string | undefined;
@@ -1119,6 +1122,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_STARTUP_LOGS: boolean;
   DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
+  DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_TELEMETRY_ENABLED: boolean;

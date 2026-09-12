@@ -145,7 +145,9 @@ function wrapTracer (tracer) {
   })
 }
 
-for (const hook of getHooks('ai')) {
+let orchestrionSubscribed = false
+
+for (const hook of getHooks('ai').values()) {
   if (hook.file === 'dist/index.js') {
     // if not removed, the below hook will never match correctly
     // however, it is still needed in the orchestrion definition
@@ -153,6 +155,9 @@ for (const hook of getHooks('ai')) {
   }
 
   addHook(hook, exports => {
+    if (orchestrionSubscribed) return exports
+    orchestrionSubscribed = true
+
     const getTracerChannel = tracingChannel('orchestrion:ai:getTracer')
     getTracerChannel.subscribe({
       end (ctx) {
