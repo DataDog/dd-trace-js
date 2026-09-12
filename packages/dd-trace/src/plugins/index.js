@@ -8,6 +8,7 @@ const plugins = {
   get '@azure/cosmos' () { return require('../../../datadog-plugin-azure-cosmos/src') },
   get '@azure/event-hubs' () { return require('../../../datadog-plugin-azure-event-hubs/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
+  get '@mistralai/mistralai' () { return require('../../../datadog-plugin-mistralai/src') },
   get '@modelcontextprotocol/sdk' () { return require('../../../datadog-plugin-modelcontextprotocol-sdk/src') },
   get '@aws/durable-execution-sdk-js' () { return require('../../../datadog-plugin-aws-durable-execution-sdk-js/src') },
   get '@supabase/auth-js' () { return require('../../../datadog-plugin-supabase/src') },

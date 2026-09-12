@@ -26,6 +26,7 @@ module.exports = {
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
   '@langchain/langgraph': { esmFirst: true, fn: () => require('../langgraph') },
+  '@mistralai/mistralai': { esmFirst: true, fn: () => require('../mistralai') },
   '@modelcontextprotocol/sdk': { esmFirst: true, fn: () => require('../modelcontextprotocol-sdk') },
   '@openai/agents': () => require('../openai-agents'),
   '@openai/agents-openai': () => require('../openai-agents'),
