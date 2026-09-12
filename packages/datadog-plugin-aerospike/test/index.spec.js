@@ -19,6 +19,9 @@ describe('Plugin', () => {
   let userKey
   let key
   let keyString
+  let indexName
+  let binName
+  let indexCounter = 0
 
   describe('aerospike', function () {
     this.timeout(8000)
@@ -41,6 +44,9 @@ describe('Plugin', () => {
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
+        const id = ++indexCounter
+        binName = `b${id}`
+        indexName = `i${id}`
       })
 
       after(() => {
@@ -94,7 +100,7 @@ describe('Plugin', () => {
                 .then(() => {
                   client.close(false)
                 })
-            })
+            }).catch(done)
           })
 
           it('should instrument connect', done => {
@@ -112,7 +118,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            aerospike.connect(config).then(client => { client.close(false) })
+            aerospike.connect(config).then(client => { client.close(false) }).catch(done)
           })
 
           it('should instrument get', done => {
@@ -137,7 +143,7 @@ describe('Plugin', () => {
             aerospike.connect(config).then(client => {
               return client.get(key)
                 .then(() => client.close(false))
-            })
+            }).catch(done)
           })
 
           it('should instrument operate', done => {
@@ -169,7 +175,7 @@ describe('Plugin', () => {
                   return client.operate(key, ops)
                 })
                 .then(() => client.close(false))
-            })
+            }).catch(done)
           })
 
           it('should instrument createIndex', done => {
@@ -183,8 +189,8 @@ describe('Plugin', () => {
                   'span.kind': 'client',
                   'aerospike.namespace': ns,
                   'aerospike.setname': 'demo',
-                  'aerospike.bin': 'tags',
-                  'aerospike.index': 'tags_idx',
+                  'aerospike.bin': binName,
+                  'aerospike.index': indexName,
                   component: 'aerospike',
                 },
               })
@@ -195,17 +201,18 @@ describe('Plugin', () => {
               const index = {
                 ns,
                 set: 'demo',
-                bin: 'tags',
-                index: 'tags_idx',
+                bin: binName,
+                index: indexName,
                 type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING,
               }
               return client.createIndex(index)
                 .then(() => client.close(false))
-            })
+            }).catch(done)
           })
 
-          it('should instrument query', done => {
+          it('should instrument query', function (done) {
+            this.timeout(15_000)
             agent
               .assertFirstTraceSpan({
                 name: expectedSchema.command.opName,
@@ -218,31 +225,47 @@ describe('Plugin', () => {
                   'aerospike.setname': set,
                   component: 'aerospike',
                 },
-              })
+              }, { timeoutMs: 14000 })
               .then(done)
               .catch(done)
 
+            // Capture now — beforeEach overwrites binName/indexName for the
+            // next test before any async callback fires.
+            const testBinName = binName
+            const testIndexName = indexName
             aerospike.connect(config).then(client => {
               const index = {
                 ns,
                 set: 'demo',
-                bin: 'tags',
-                index: 'tags_idx',
+                bin: testBinName,
+                index: testIndexName,
+                type: aerospike.indexType.LIST,
                 datatype: aerospike.indexDataType.STRING,
               }
               client.createIndex(index, (error, job) => {
+                if (!job) return done(error ?? new Error('no job returned by createIndex'))
                 job.waitUntilDone((waitError) => {
-                  const query = client.query(ns, 'demo')
-                  const queryPolicy = {
-                    totalTimeout: 10000,
+                  if (waitError) return done(waitError)
+                  // waitUntilDone signals the build is done but the server
+                  // query thread on older clients may not have picked it up
+                  // yet. Poll until the query succeeds rather than sleeping a
+                  // fixed amount. testBinName is captured before beforeEach
+                  // can overwrite binName for the next test.
+                  let retries = 0
+                  const runQuery = () => {
+                    const q = client.query(ns, 'demo')
+                    q.select('id', testBinName)
+                    q.where(aerospike.filter.contains(testBinName, 'green', aerospike.indexType.LIST))
+                    const stream = q.foreach({ totalTimeout: 10000 })
+                    stream.on('error', () => {
+                      if (retries++ < 20) setTimeout(runQuery, 500)
+                    })
+                    stream.on('end', () => { client.close(false) })
                   }
-                  query.select('id', 'tags')
-                  query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
-                  const stream = query.foreach(queryPolicy)
-                  stream.on('end', () => { client.close(false) })
+                  runQuery()
                 })
               })
-            })
+            }).catch(done)
           })
 
           it('should run the callback in the parent context', done => {
@@ -255,7 +278,7 @@ describe('Plugin', () => {
                   done()
                 })
               })
-            })
+            }).catch(done)
           })
 
           it('should handle errors', done => {
@@ -325,7 +348,7 @@ describe('Plugin', () => {
           aerospike.connect(config).then(client => {
             return client.put(key, { i: 123 })
               .then(() => client.close(false))
-          })
+          }).catch(done)
         })
 
         withNamingSchema(
