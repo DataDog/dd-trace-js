@@ -228,7 +228,6 @@ describe('withDatadogTurbopack', () => {
 
 /**
  * @param {string} version
- * @returns {string}
  */
 function createProject (version) {
   const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-turbopack-'))

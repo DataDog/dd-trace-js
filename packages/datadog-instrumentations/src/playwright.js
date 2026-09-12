@@ -159,7 +159,6 @@ const automaticFailureVideoPaths = new Set()
  * Returns whether Playwright's internal screenshot recorder created an attachment.
  *
  * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
  */
 function isAutomaticFailureScreenshotAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
@@ -169,7 +168,6 @@ function isAutomaticFailureScreenshotAttachment (attachment) {
  * Returns whether Playwright's internal video recorder created an attachment.
  *
  * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
  */
 function isAutomaticFailureVideoAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureVideoPaths.delete(attachment.path)
@@ -230,7 +228,6 @@ function getTestRepeatEachKey (test) {
 
 /**
  * @param {object} test
- * @returns {string}
  */
 function getTestEfdKey (test) {
   const projectKey = getTestProjectKey(test)
@@ -263,9 +260,6 @@ function registerEfdRetryTest (test) {
   })
 }
 
-/**
- * @returns {boolean}
- */
 function shouldRunEarlyFlakeDetection () {
   return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
@@ -389,7 +383,6 @@ function sendDdPropertiesToWorkerWhenAvailable (workerProcess, testId) {
 
 /**
  * @param {object} test
- * @returns {boolean}
  */
 function shouldRequestEfdRetryCount (test) {
   // The main process remains the source of truth. repeatEachIndex is only used as
@@ -558,7 +551,6 @@ function getProjectsFromRunner (runner, configArg) {
  * Returns whether at least one Playwright project captures automatic screenshots for failed tests.
  *
  * @param {Array<object>} projects - Playwright projects with resolved use options
- * @returns {boolean} Whether failure screenshot capture is enabled
  */
 function isFailureScreenshotCaptureEnabled (projects) {
   for (const project of projects) {
@@ -575,7 +567,6 @@ function isFailureScreenshotCaptureEnabled (projects) {
  * Returns whether at least one Playwright project records videos that can be retained for failures.
  *
  * @param {Array<object>} projects - Playwright projects with resolved use options
- * @returns {boolean} Whether video capture is enabled
  */
 function isFailureVideoCaptureEnabled (projects) {
   for (const project of projects) {
@@ -789,7 +780,6 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
  *
  * @param {object} test
  * @param {string} testSuiteAbsolutePath
- * @returns {void}
  */
 function recordSkippedTestOptimizationExecution (test, testSuiteAbsolutePath) {
   if (recordedTestOptimizationExecutions.has(test) ||
@@ -1734,7 +1724,6 @@ reporterRunSummaryCh.subscribe((runSummary) => {
  * Records a reporter failure even when the reporter throws a falsy value.
  *
  * @param {unknown} error
- * @returns {void}
  */
 function recordReporterError (error) {
   if (hasReporterError) return
@@ -1756,7 +1745,6 @@ function recordReporterError (error) {
  * Records a path created by Playwright's automatic screenshot recorder.
  *
  * @param {object} ctx - Orchestrion context
- * @returns {void}
  */
 function recordAutomaticFailureScreenshotPath (ctx) {
   if (isFailureScreenshotUploadEnabled &&
@@ -1770,7 +1758,6 @@ function recordAutomaticFailureScreenshotPath (ctx) {
  * Records only the destination used by Playwright's automatic video recorder.
  *
  * @param {object} ctx - Orchestrion context
- * @returns {void}
  */
 function recordAutomaticFailureVideoPath (ctx) {
   const video = ctx.arguments?.[0]

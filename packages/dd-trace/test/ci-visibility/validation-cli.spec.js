@@ -716,7 +716,6 @@ function listJavaScriptFiles (directory) {
  * Returns a package name from a module specifier.
  *
  * @param {string} specifier module specifier
- * @returns {string} package name
  */
 function getPackageName (specifier) {
   const parts = specifier.split('/')
@@ -727,7 +726,6 @@ function getPackageName (specifier) {
  * Checks whether a relative file is shipped in the package.
  *
  * @param {string} filename package-relative file
- * @returns {boolean} whether published
  */
 function isPublishedValidationPath (filename) {
   return filename === 'package.json' ||

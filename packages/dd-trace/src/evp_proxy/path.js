@@ -4,7 +4,6 @@ const LEADING_SLASHES = /^\/+/
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function stripTrailingSlashes (value) {
   let end = value.length
@@ -19,7 +18,6 @@ function stripTrailingSlashes (value) {
  *
  * @param {string} basePath - EVP proxy base path
  * @param {string} endpoint - Product intake endpoint
- * @returns {string} Joined request path
  */
 function joinEVPProxyPath (basePath, endpoint) {
   const normalizedBasePath = stripTrailingSlashes(basePath)

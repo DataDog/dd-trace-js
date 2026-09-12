@@ -148,7 +148,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @param {string} baseKey
    * @param {boolean} topLevel
    * @param {string} statusCode
-   * @returns {void}
    */
   #addDistribution (distributions, sketch, startNano, endNano, baseAttributes, baseKey, topLevel, statusCode) {
     if (!sketch || sketch.count === 0) return

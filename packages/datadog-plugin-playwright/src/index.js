@@ -75,7 +75,6 @@ const noop = () => {}
  * Returns whether an attachment is an automatic Playwright failure screenshot.
  *
  * @param {object} attachment - Playwright test attachment
- * @returns {boolean}
  */
 function isPlaywrightFailureScreenshot (attachment) {
   return attachment?.name === 'screenshot' &&
@@ -88,7 +87,6 @@ function isPlaywrightFailureScreenshot (attachment) {
  * Returns whether an attachment is a Playwright test video.
  *
  * @param {object} attachment - Playwright test attachment
- * @returns {boolean}
  */
 function isPlaywrightFailureVideo (attachment) {
   return attachment?.name === 'video' &&
@@ -682,7 +680,6 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
    * @param {(result: string|undefined) => void} onDone - Completion callback
-   * @returns {boolean} Whether at least one upload was started
    */
   uploadTestScreenshots ({ screenshots, traceId, signal }, onDone) {
     const exporter = this.tracer?._exporter
@@ -735,7 +732,6 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {string} options.traceId - Test trace id used as the video key
    * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
    * @param {(result: string|undefined) => void} onDone - Completion callback
-   * @returns {boolean} Whether at least one upload was started
    */
   uploadTestVideos ({ videos, traceId, signal }, onDone) {
     const exporter = this.tracer?._exporter

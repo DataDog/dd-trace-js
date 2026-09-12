@@ -528,7 +528,6 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
  * of the `[name, value]` tuple.
  *
  * @param {object} block
- * @returns {string}
  */
 function getContentBlockType (block) {
   const key = Object.keys(block)[0]

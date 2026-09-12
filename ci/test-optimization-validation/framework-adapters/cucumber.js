@@ -86,7 +86,6 @@ const JAVASCRIPT_STRING_ESCAPES = Object.freeze({
  * directory would alter project test semantics, so those versions remain a validator limitation.
  *
  * @param {string|null|undefined} version installed Cucumber version
- * @returns {boolean} whether validator-owned config isolation is supported
  */
 function supportsConfigIsolation (version) {
   const match = /^[v=]?(\d+)(?:\.|$)/.exec(String(version || ''))
@@ -97,7 +96,6 @@ function supportsConfigIsolation (version) {
  * Reports whether a file follows the Cucumber feature convention.
  *
  * @param {string} filename candidate filename
- * @returns {boolean} whether the candidate can be selected by Cucumber
  */
 function isTestFile (filename) {
   return filename.endsWith('.feature')
@@ -107,7 +105,6 @@ function isTestFile (filename) {
  * Counts statically declared Cucumber scenarios in a feature.
  *
  * @param {string} source feature source
- * @returns {number} declared scenario count
  */
 function getScenarioCount (source) {
   return [...source.matchAll(/^[ \t]*(?:Example|Scenario(?: Outline| Template)?):[ \t]*\S/gm)].length
@@ -118,7 +115,6 @@ function getScenarioCount (source) {
  *
  * @param {object} input generated source input
  * @param {string} input.testName generated scenario name
- * @returns {string} canonical generated feature source
  */
 function getGeneratedTestContent ({ testName }) {
   return [
@@ -132,7 +128,6 @@ function getGeneratedTestContent ({ testName }) {
 /**
  * Returns the validator-owned Cucumber step definitions shared by generated scenarios.
  *
- * @returns {string} canonical generated step-definition source
  */
 function getGeneratedStepsContent () {
   return [
@@ -154,7 +149,6 @@ function getGeneratedStepsContent () {
  * Returns the generated Cucumber step-definition path for a feature directory.
  *
  * @param {string} testDirectory generated feature directory
- * @returns {string} generated step-definition path
  */
 function getGeneratedStepsPath (testDirectory) {
   return path.join(testDirectory, GENERATED_STEPS_FILENAME)

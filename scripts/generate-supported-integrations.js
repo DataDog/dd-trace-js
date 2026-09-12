@@ -104,7 +104,6 @@ function readInstrumentationRanges (engines) {
 
 /**
  * @param {Set<string> | undefined} ranges
- * @returns {string} Lowest version satisfying any of the given ranges, or `''`.
  */
 function lowestVersion (ranges) {
   let lowest

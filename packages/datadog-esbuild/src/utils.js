@@ -78,7 +78,6 @@ function isBareSpecifier (specifier) {
 /**
  * @param {string} modulePath
  * @param {string} format
- * @returns {string}
  */
 function getModuleFormat (modulePath, format) {
   if (modulePath.endsWith('.mts')) return 'module-typescript'
@@ -287,7 +286,6 @@ async function processModuleWithResolver (
  * @param {string} fullPathToModule File to analize
  * @param {string} [modulePackageJsonPath] Path of the package.json
  * @param {object} [packageJson] The content of the module package.json
- * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
   if (fullPathToModule.endsWith('.mjs') || fullPathToModule.endsWith('.mts')) return true

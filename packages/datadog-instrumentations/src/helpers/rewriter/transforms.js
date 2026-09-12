@@ -41,7 +41,6 @@ module.exports = {
  * @param {import('estree').FunctionExpression} node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
- * @returns {void}
  */
 function publishDurableOrchestrationFailure (state, node, _parent, ancestry) {
   // Class queries also visit the owning ClassDeclaration so Orchestrion can
@@ -108,7 +107,6 @@ function publishDurableOrchestrationFailure (state, node, _parent, ancestry) {
  * } node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
- * @returns {void}
  */
 function awaitContextCallback (state, node, _parent, ancestry) {
   let insertionTarget
@@ -358,7 +356,6 @@ function replaceIdentifier (root, name, replacement) {
  * @param {import('estree').Node} root
  * @param {import('estree').Node} target
  * @param {import('estree').Node[]} statements
- * @returns {boolean}
  */
 function insertBeforeStatement (root, target, statements) {
   for (const key of Object.keys(root)) {
@@ -668,7 +665,6 @@ function configureMercuriusRequest (_state, node) {
  *
  * @param {object} _state
  * @param {import('estree').CallExpression} node
- * @returns {void}
  */
 function waitForAsyncEnd (_state, node) {
   const onFulfilled = node.arguments[0]
@@ -688,7 +684,6 @@ function waitForAsyncEnd (_state, node) {
  * @param {import('estree').BlockStatement} body
  * @param {'ReturnStatement'|'ThrowStatement'} exitType
  * @param {'resolveCallback'|'rejectCallback'} callbackProperty
- * @returns {void}
  */
 function injectAsyncEndCallbackWait (body, exitType, callbackProperty) {
   const callbackVariable = `__apm$${callbackProperty}`

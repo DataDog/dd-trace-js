@@ -8,5 +8,5 @@ module.exports = {
   // mode: 'file',
   name: 'dd-trace',
   out: 'out',
-  readme: 'API.md'
+  readme: 'API.md',
 }

@@ -108,7 +108,6 @@ function isValidRetryCount (value) {
  * Checks whether a cached EFD retry policy has the complete parsed shape.
  *
  * @param {unknown} retryPolicy - Candidate retry policy.
- * @returns {boolean}
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
   if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
@@ -357,7 +356,6 @@ class CiVisibilityExporter extends BufferingExporter {
    *
    * @param {TestConfiguration} testConfiguration
    * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} callback
-   * @returns {void}
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
@@ -444,7 +442,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
    * @param {boolean} isFilesystemCache - Whether settings came from the cross-process cache.
    * @param {Function} callback - Completion callback.
-   * @returns {void}
    */
   _applyCachedSettings (settings, configuration, repositoryUrl, isFilesystemCache, callback) {
     writeSettingsToCache(settings)
@@ -471,7 +468,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
    * @param {string|null} cacheKey - Filesystem cache key when this process owns the lock, null otherwise.
    * @param {Function} done - Completion callback.
-   * @returns {void}
    */
   _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
     this.sendGitMetadata(repositoryUrl)
@@ -607,7 +603,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * Exports spans that are not retained for late updates to session, module, or suite events.
    *
    * @param {Array<object>} trace
-   * @returns {void}
    */
   #exportTrace (trace) {
     // Until it's initialized, we just store the traces as is
@@ -633,7 +628,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * Retries session, module, and suite traces rejected by writer backpressure within the final deadline.
    *
    * @param {{ deadline?: number }} options final-flush options
-   * @returns {void}
    */
   #exportDeferredTestSessionTraces (options) {
     if (!this._writer || !this.canReportSessionTraces()) return
@@ -859,7 +853,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Allows later test activity to establish a new finalization boundary.
    *
-   * @returns {void}
    */
   #resetFinalFlush () {
     this.#finalFlush = undefined
@@ -933,7 +926,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Returns whether the exporter can upload test failure screenshots.
    *
-   * @returns {boolean}
    */
   canUploadTestScreenshots () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
@@ -942,7 +934,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Returns whether the exporter can upload test failure videos.
    *
-   * @returns {boolean}
    */
   canUploadTestVideos () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled
@@ -985,7 +976,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
-   * @returns {void}
    */
   uploadTestVideo (options, callback) {
     if (!this._testScreenshotUploadUrl) {
@@ -1006,7 +996,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
-   * @returns {void}
    */
   uploadTestSuiteVideo (options, callback) {
     if (!this._testScreenshotUploadUrl) {
@@ -1024,7 +1013,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {AbortSignal} [uploadOptions.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    * @param {number} [timeoutMs] - Maximum background upload duration
-   * @returns {void}
    */
   #uploadTestMedia (uploadRequest, uploadOptions, callback, timeoutMs = FINAL_FLUSH_TIMEOUT) {
     const { signal } = uploadOptions

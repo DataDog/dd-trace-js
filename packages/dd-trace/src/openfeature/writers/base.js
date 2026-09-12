@@ -37,7 +37,6 @@ const log = require('../../log')
  *
  * @param {Error | null} error - Request error
  * @param {number | undefined} statusCode - HTTP response status
- * @returns {boolean} Whether direct retry is safe
  */
 function isDefinitiveRejection (error, statusCode) {
   return error?.code === 'EAI_AGAIN' || error?.code === 'ECONNREFUSED' ||
@@ -49,7 +48,6 @@ function isDefinitiveRejection (error, statusCode) {
  * Tests whether a local route can have accepted an event batch before failing.
  *
  * @param {Error | null} error - Request error
- * @returns {boolean} Whether the delivery result is ambiguous
  */
 function isAmbiguousNetworkFailure (error) {
   return error?.code === 'ECONNRESET' || error?.code === 'EPIPE' || error?.code === 'ETIMEDOUT'
@@ -189,7 +187,6 @@ class BaseFFEWriter {
   /**
    * @private
    * @param {Array<object>} payload - Payload to encode
-   * @returns {string} JSON-stringified payload
    */
   _encode (payload) {
     return JSON.stringify(payload)
@@ -200,7 +197,6 @@ class BaseFFEWriter {
    *
    * @param {WriterRoute} route - Active route
    * @param {WriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   _setRoutes (route, fallbackRoute) {
     this.#activateRoute(this.#createRoute(route))
@@ -251,7 +247,6 @@ class BaseFFEWriter {
    * Makes a route active for future event batches.
    *
    * @param {ActiveWriterRoute} route - Route state
-   * @returns {void}
    */
   #activateRoute (route) {
     this._baseUrl = route.url
@@ -266,7 +261,6 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   #sendRequest (payload, eventCount, route, fallbackRoute) {
     request(payload, route.requestOptions, (error, response, statusCode) => {

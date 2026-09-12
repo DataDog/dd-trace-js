@@ -128,7 +128,6 @@ function wrapCallbackWithFinish (callback, finish, context) {
 
 /**
  * @param {{ pool?: { numFree?: () => number, numPendingAcquires?: () => number } }} client
- * @returns {boolean}
  */
 function knexHasIdleConnection (client) {
   const pool = client.pool

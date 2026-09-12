@@ -152,7 +152,6 @@ function disable () {
  * Keeps retired writers reachable until their destroy-triggered deliveries complete.
  * @param {LLMObsSpanWriter | null} retiredSpanWriter
  * @param {LLMObsEvalMetricsWriter | null} retiredEvalWriter
- * @returns {void}
  */
 function retireWriters (retiredSpanWriter, retiredEvalWriter) {
   const retiredWriters = [retiredSpanWriter, retiredEvalWriter].filter(Boolean)
@@ -239,7 +238,6 @@ function handleLLMObsInjection (injection) {
  * @param {Function} [done]
  * @param {LLMObsSpanWriter | null} [currentSpanWriter]
  * @param {LLMObsEvalMetricsWriter | null} [currentEvalWriter]
- * @returns {boolean} `true` when a writer throws synchronously.
  */
 function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter = evalWriter) {
   let failed = false

@@ -17,7 +17,6 @@ let expectedContextBytes
 
 /**
  * @param {number} size
- * @returns {string}
  */
 function makeEventDetail (size) {
   const prefix = '{"myGreatData":"'
@@ -27,7 +26,6 @@ function makeEventDetail (size) {
 
 /**
  * @param {number} size
- * @returns {string}
  */
 function makeEventDetailForInjectedSize (size) {
   return makeEventDetail(size - expectedContextBytes)

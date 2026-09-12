@@ -220,7 +220,6 @@ function partsToContent (parts, hasImages) {
 
 /**
  * @param {Array<object>} parts
- * @returns {boolean}
  */
 function hasImageParts (parts) {
   return parts.some(part => part.type === 'image_url')
@@ -267,7 +266,6 @@ function convertAnthropicToolResultContent (content) {
 
 /**
  * @param {unknown} content
- * @returns {string}
  */
 function convertServerToolResultContent (content) {
   if (typeof content === 'string') return content || '[tool result]'

@@ -97,7 +97,6 @@ class LoggerProvider {
 
   /**
    * Shuts down the logger provider and all associated processors.
-   * @returns {undefined} Promise that resolves when shutdown is complete
    */
   shutdown () {
     if (!this.isShutdown) {

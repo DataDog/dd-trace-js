@@ -16,7 +16,6 @@ function detectRum () {
   return { isRumInstrumented, isRumActive, rumSamplingRate }
 }
 
-/** @returns {boolean} */
 function stopRumSession () {
   if (window.DD_RUM && window.DD_RUM.stopSession) {
     window.DD_RUM.stopSession()
@@ -25,7 +24,6 @@ function stopRumSession () {
   return false
 }
 
-/** @returns {boolean} */
 function stopRumSessionAndReportActivity () {
   if (window.DD_RUM && window.DD_RUM.stopSession) {
     const isRumActive = window.DD_RUM.getInternalContext

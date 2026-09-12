@@ -232,7 +232,6 @@ function getTestFilepaths (ctx, testSpecifications) {
  *
  * @param {string} testFilepath
  * @param {string} repositoryRoot
- * @returns {string}
  */
 function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
   const testSuiteAbsolutePath = path.isAbsolute(testFilepath) ? testFilepath : path.join(repositoryRoot, testFilepath)
@@ -242,7 +241,6 @@ function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
 /**
  * Resets suite-level EFD admission state between Vitest runs.
  *
- * @returns {void}
  */
 function resetEfdSuiteTracker () {
   activeNoWorkerInitState = undefined
@@ -255,7 +253,6 @@ function resetEfdSuiteTracker () {
  * Returns whether a Vitest pool has a transport for runtime EFD suite admission.
  *
  * @param {string|undefined} pool
- * @returns {boolean}
  */
 function isEfdSuiteAdmissionPool (pool) {
   return pool === undefined || pool === 'forks' || pool === 'threads' || pool === 'browser'
@@ -267,7 +264,6 @@ function isEfdSuiteAdmissionPool (pool) {
  * @param {string} frameworkVersion
  * @param {object[]|undefined} testSpecifications
  * @param {object} ctx
- * @returns {boolean}
  */
 function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
   if (!satisfies(frameworkVersion, '>=4.0.0')) return false
@@ -288,7 +284,6 @@ function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
  *
  * @param {string[]} testFilepaths
  * @param {string} repositoryRoot
- * @returns {void}
  */
 function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
   const testSuites = new Set()
@@ -308,7 +303,6 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  *
  * @param {string} testSuite
  * @param {boolean} hasNewTest
- * @returns {boolean}
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
   if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
@@ -1306,7 +1300,6 @@ function getTestSpecificationPool (testSpecification) {
  * Detect whether Vitest selected only TypeScript typecheck specifications.
  *
  * @param {unknown} testSpecifications
- * @returns {boolean}
  */
 function hasOnlyTypecheckTestSpecifications (testSpecifications) {
   if (!Array.isArray(testSpecifications) || testSpecifications.length === 0) return false
@@ -1413,7 +1406,6 @@ function getTypecheckTaskStatus (task) {
  *
  * @param {string|undefined} suiteName
  * @param {string} testSuiteAbsolutePath
- * @returns {boolean}
  */
 function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
   if (!suiteName || !testSuiteAbsolutePath) return false
@@ -1429,7 +1421,6 @@ function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
  *
  * @param {object} task
  * @param {string} testSuiteAbsolutePath
- * @returns {string}
  */
 function getTypecheckTestName (task, testSuiteAbsolutePath) {
   let testName = task.name || task.fullTestName
@@ -1508,7 +1499,6 @@ function updateTypecheckTaskResultForTestManagement (task, status, testManagemen
  * Recompute suite/file typecheck results after Test Management rewrites child test results.
  *
  * @param {object} task
- * @returns {string}
  */
 function updateTypecheckTaskTreeResult (task) {
   if (!Array.isArray(task.tasks)) return getTypecheckTaskStatus(task)
@@ -1552,7 +1542,6 @@ function updateTypecheckTaskTreeResult (task) {
  *   sourceErrors?: object[],
  *   state?: string
  * }} result
- * @returns {boolean}
  */
 function updateTypecheckResult (result) {
   if (result.sourceErrors?.length) return false
@@ -1945,7 +1934,6 @@ function getWrappedOn (on) {
  * @param {object} workerProcess
  * @param {number} interprocessCode
  * @param {object} data
- * @returns {boolean}
  */
 function handleEfdAdmissionMessage (workerProcess, interprocessCode, data) {
   if (interprocessCode !== VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE) return false

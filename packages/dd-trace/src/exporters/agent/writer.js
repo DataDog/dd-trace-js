@@ -44,7 +44,6 @@ class AgentWriter extends BaseWriter {
    * Test Optimization owns its own request lifecycle tracking.
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
-   * @returns {void}
    */
   flushDirect (done, options) {
     if (this.#requestTracker) {

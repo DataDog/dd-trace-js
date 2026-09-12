@@ -36,7 +36,6 @@ class Identifier {
 
   /**
    * @param {number} [radix]
-   * @returns {string}
    */
   toString (radix = 16) {
     if (radix === 16) {
@@ -50,9 +49,6 @@ class Identifier {
     return toNumberString(this.#buffer, radix)
   }
 
-  /**
-   * @returns {bigint}
-   */
   toBigInt () {
     this.#bigInt ??= Buffer.from(this.#buffer).readBigUInt64BE(0)
     return this.#bigInt
@@ -75,9 +71,6 @@ class Identifier {
     return this.#buffer.slice(-8)
   }
 
-  /**
-   * @returns {string}
-   */
   toJSON () {
     return this.toString()
   }
@@ -88,7 +81,6 @@ class Identifier {
    * only this identifier's hex representation.
    *
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits, or undefined
-   * @returns {string}
    */
   toTraceIdHex (traceIdHigh) {
     if (traceIdHigh && this.#buffer.length <= 8) {
@@ -99,7 +91,6 @@ class Identifier {
 
   /**
    * @param {Identifier} other
-   * @returns {boolean}
    */
   equals (other) {
     // Big-endian suffix compare: when buffers differ in length, only the
@@ -182,7 +173,6 @@ function fromString (str, raddix) {
 /**
  * @param {number[] | Uint8Array} buffer
  * @param {number} [radix]
- * @returns {string}
  */
 function toNumberString (buffer, radix) {
   let high = readInt32(buffer, buffer.length - 8)
@@ -233,7 +223,6 @@ function pseudoRandom () {
 /**
  * @param {number[] | Uint8Array} buffer
  * @param {number} offset
- * @returns {number}
  */
 function readInt32 (buffer, offset) {
   return (buffer[offset + 0] * 16_777_216) +

@@ -76,9 +76,6 @@ describe('AgentlessConfigurationSource', () => {
       }
       requests.push(requestRecord)
 
-      /**
-       * @returns {void}
-       */
       const abort = () => {
         requestRecord.aborted = true
         if (response?.pending && !response.ignoreAbort) {

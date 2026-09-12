@@ -32,7 +32,6 @@ function createVercelFlush () {
 /**
  * @param {TelemetryFlusher} tracer
  * @param {() => void} done
- * @returns {void}
  */
 function flushVercelTelemetry (tracer, done) {
   setImmediate(() => {

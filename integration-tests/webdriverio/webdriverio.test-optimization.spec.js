@@ -187,7 +187,6 @@ function getEvents (payloads) {
  *
  * @param {object[]} payloads
  * @param {string} requestPath
- * @returns {number}
  */
 function countRequests (payloads, requestPath) {
   return payloads.filter(({ url }) => url.endsWith(requestPath)).length
@@ -378,7 +377,6 @@ for (const version of versions) {
 
             /**
              * @param {boolean} [includesTraceIds]
-             * @returns {void}
              */
             function assertLoggerOutput (includesTraceIds = false) {
               const lines = testOutput.split('\n')

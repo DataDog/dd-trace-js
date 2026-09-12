@@ -45,7 +45,6 @@ class FinalFlushRequestTracker {
    *
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
-   * @returns {void}
    */
   flush (done, options) {
     if (options?.deadline === undefined) {
@@ -112,7 +111,6 @@ class FinalFlushRequestTracker {
    * @param {RequestOptions} options
    * @param {(error: Error|null, result?: string|null, statusCode?: number,
    *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
-   * @returns {void}
    */
   send (request, data, options, callback) {
     const controller = new AbortController()
@@ -141,7 +139,6 @@ class FinalFlushRequestTracker {
 
   /**
    * @param {PendingRequest} pendingRequest
-   * @returns {void}
    */
   #dropRequest (pendingRequest) {
     this.#pendingRequests.delete(pendingRequest)
@@ -155,7 +152,6 @@ class FinalFlushRequestTracker {
   /**
    * @param {FinalFlush} finalFlush
    * @param {PendingRequest} pendingRequest
-   * @returns {void}
    */
   #attachRequest (finalFlush, pendingRequest) {
     finalFlush.requests.add(pendingRequest)
@@ -165,7 +161,6 @@ class FinalFlushRequestTracker {
 
   /**
    * @param {PendingRequest} pendingRequest
-   * @returns {void}
    */
   #updateRequestDeadline (pendingRequest) {
     let deadline = 0
@@ -177,7 +172,6 @@ class FinalFlushRequestTracker {
 
   /**
    * @param {FinalFlush} finalFlush
-   * @returns {void}
    */
   #finishFinalFlush (finalFlush) {
     if (!this.#finalFlushes.has(finalFlush) || !finalFlush.writerDone || finalFlush.requests.size !== 0) return

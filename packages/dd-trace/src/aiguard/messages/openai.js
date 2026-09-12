@@ -348,7 +348,6 @@ function openAIResponseImageContentPart (part) {
  * Extracts a stable text marker from an OpenAI file content part.
  *
  * @param {{file_id?: string|null, file_url?: string, filename?: string, file_data?: string}} part
- * @returns {string}
  */
 function openAIResponseFileContentPart (part) {
   return part.file_id ?? part.file_url ?? part.filename ?? FILE_FALLBACK

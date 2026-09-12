@@ -10,7 +10,6 @@ const path = require('path')
  * and AppSec reporter promote it.
  *
  * @param {object | undefined} obj
- * @returns {boolean}
  */
 function isEmpty (obj) {
   // eslint-disable-next-line no-unreachable-loop

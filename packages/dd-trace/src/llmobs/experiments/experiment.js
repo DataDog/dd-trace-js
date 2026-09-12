@@ -1015,9 +1015,6 @@ class ExternalExperiment {
     this.#experiment = experiment
   }
 
-  /**
-   * @returns {string}
-   */
   name () {
     return this.#experiment.name()
   }

@@ -32,7 +32,6 @@ const GENERATED_SCENARIOS = {
  *
  * @param {string} framework test framework
  * @param {string} filename generated ATR test file
- * @returns {string} retry-state path
  */
 function getGeneratedRetryStatePath (framework, filename) {
   const namespace = `dd-test-optimization-validation-${framework}-`
@@ -52,7 +51,6 @@ function getGeneratedRetryStatePath (framework, filename) {
  * @param {string} input.moduleSystem generated module system
  * @param {string} input.scenarioId generated scenario id
  * @param {string} [input.stateFile] persistent ATR state file
- * @returns {string} canonical generated source
  */
 function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFile }) {
   const scenario = GENERATED_SCENARIOS[scenarioId]
@@ -232,7 +230,6 @@ function getGeneratedTestContractError (framework) {
  * Describes adapter-specific files in generated-contract errors.
  *
  * @param {string} framework framework name
- * @returns {string} additional file description
  */
 function getAdditionalGeneratedFileDescription (framework) {
   if (framework === 'cucumber') return ' plus isolated Cucumber step definitions'
@@ -245,7 +242,6 @@ function getAdditionalGeneratedFileDescription (framework) {
  *
  * @param {string} root project root
  * @param {string} filename generated path
- * @returns {boolean} whether the path is contained
  */
 function isPathInside (root, filename) {
   const relative = path.relative(path.resolve(root), path.resolve(filename))
@@ -259,7 +255,6 @@ function isPathInside (root, filename) {
  * @param {string} input.moduleSystem generated module system
  * @param {string} input.assertion passing assertion
  * @param {string} input.stateFile persistent ATR state file
- * @returns {string} retry test body
  */
 function getAtrBody ({ moduleSystem, assertion, stateFile }) {
   if (typeof stateFile !== 'string' || !path.isAbsolute(stateFile)) {

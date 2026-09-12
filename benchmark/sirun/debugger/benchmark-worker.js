@@ -44,7 +44,6 @@ loadDevtoolsClient()
  * Load the production client with its pause handler wrapped so the application
  * can wait for post-resume formatting to finish.
  *
- * @returns {void}
  */
 function loadDevtoolsClient () {
   const session = require('../../../packages/dd-trace/src/debugger/devtools_client/session')
@@ -62,7 +61,6 @@ function loadDevtoolsClient () {
     const paused = /** @type {(event: object) => Promise<void>} */ (listener)
     /**
      * @param {object} event
-     * @returns {void}
      */
     function benchmarkPaused (event) {
       paused.call(this, event).then(markProbeHandled)
@@ -92,7 +90,6 @@ function markProbeHandled () {
  * @param {Record<string, unknown> | undefined} dd
  * @param {DebuggerSnapshot} snapshot
  * @param {string | undefined} processTags
- * @returns {void}
  */
 function sendAndCount (message, logger, dd, snapshot, processTags) {
   const captureKind = getCaptureKind(snapshot)
@@ -112,7 +109,6 @@ function sendAndCount (message, logger, dd, snapshot, processTags) {
  * Classify output by the production capture shape.
  *
  * @param {DebuggerSnapshot} snapshot
- * @returns {number}
  */
 function getCaptureKind (snapshot) {
   if (snapshot.captures === undefined) return CAPTURE_KINDS.none

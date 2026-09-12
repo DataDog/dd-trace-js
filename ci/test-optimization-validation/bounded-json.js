@@ -35,7 +35,6 @@ function parseBoundedJson (source, options = {}) {
  *
  * @param {Buffer} buffer JSON bytes
  * @param {object} limits parser limits
- * @returns {number} aggregate collection entries
  */
 function scanJson (buffer, limits) {
   const containerTypes = new Uint8Array(limits.maxNestingDepth)

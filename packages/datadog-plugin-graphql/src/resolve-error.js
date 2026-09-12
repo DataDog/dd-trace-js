@@ -70,7 +70,6 @@ function recordResolveErrorForPath (error, path, fieldNodes) {
 
 /**
  * @param {(string | number)[]} path
- * @returns {string}
  */
 function getPathString (path) {
   let pathString = ''

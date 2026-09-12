@@ -195,9 +195,6 @@ module.exports = {
     log.debug('Started OTLP runtime metrics with OTel-native naming (v8js.*, nodejs.*)')
   },
 
-  /**
-   * @returns {void}
-   */
   stop () {
     if (eventLoopHistogram) {
       eventLoopHistogram.disable()

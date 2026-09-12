@@ -32,7 +32,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
    * @param {string} key   Top-level key to insert. Must be a simple
    *   identifier that does not need JSON escaping.
    * @param {object} value Value to inject; will be `JSON.stringify`'d.
-   * @returns {string}
    */
   static injectFieldIntoJsonObject (payload, key, value) {
     const last = payload.length - 1

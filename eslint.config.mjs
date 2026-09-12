@@ -85,8 +85,16 @@ const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
   'integration-tests/**/*.js',
+  'integration-tests/**/*.jsx',
   'integration-tests/**/*.mjs',
   '**/*.spec.js',
+]
+
+const TRACKED_NODE_MODULE_DIRECTORIES = [
+  'packages/datadog-instrumentations/test/helpers/rewriter/node_modules',
+  'packages/dd-trace/test/appsec/iast/security-controls/resources/node_modules',
+  'packages/dd-trace/test/appsec/iast/security-controls/resources/node_modules/anotherlib/node_modules',
+  'packages/dd-trace/test/node_modules',
 ]
 
 const GLOBAL_RESTRICTED_REQUIRES = [
@@ -156,13 +164,11 @@ export default [
       '!**/integration-tests/coverage', // The integration-test coverage harness lives here, not a report.
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
-      '**/docs', // Any JS here is for presentation only.
       '**/.next', // Generated Next.js build output
       '**/out', // Generated
-      '**/node_modules', // We don't own these.
-      '**/versions', // This is effectively a node_modules tree.
+      ...TRACKED_NODE_MODULE_DIRECTORIES.map(directory => `!${directory}/`),
+      'packages/dd-trace/test/plugins/versions/*/', // Generated dependency installations
       '**/acmeair-nodejs', // We don't own this.
-      '**/vendor', // Generally, we didn't author this code.
       '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/ci-visibility/test-management/test-suite-failed-to-run-parse.js', // Intentional syntax error
       'integration-tests/code-origin/typescript.js', // Generated
@@ -360,6 +366,22 @@ export default [
       'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
+      'jsdoc/no-restricted-syntax': ['error', {
+        contexts: [{
+          context: 'any',
+          comment:
+            'JsdocBlock:not(*:has(JsdocTag[tag=/^(?:callback|func|function|interface|method|overload|typedef)$/]))' +
+            ':has(JsdocTag[tag=/^returns?$/]:matches(' +
+            '[parsedType.type=/^(?:JsdocTypeNull|JsdocTypeUndefined)$/],' +
+            '[parsedType.type="JsdocTypeName"]' +
+            '[parsedType.value=/^(?:string|number|boolean|bigint|symbol|void)$/]))',
+          message: 'Primitive return types are inferred and should be omitted.',
+        }, {
+          context: 'any',
+          comment: 'JsdocBlock:has(JsdocTag[tag=/^returns?$/]:not([parsedType.type]))',
+          message: 'Return descriptions without a type should be omitted.',
+        }],
+      }],
       'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
@@ -368,6 +390,7 @@ export default [
       'jsdoc/require-property-description': 'off',
       'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
+      'jsdoc/require-returns-type': 'off',
       'jsdoc/require-returns': 'off',
       'jsdoc/require-template': 'error',
       'jsdoc/require-throws-description': 'error',
@@ -463,6 +486,7 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
+      '**/*.jsx', // Browser code does not use Node.js module semantics.
       '**/*.mjs', // TODO: This shouldn't be required, research why it is
     ],
   },
@@ -1013,6 +1037,7 @@ export default [
   {
     ...eslintPluginCypress.configs.recommended,
     files: [
+      'integration-tests/cypress/**/*.jsx',
       'packages/datadog-plugin-cypress/src/support.js',
     ],
   },
@@ -1079,6 +1104,55 @@ export default [
       }],
       'n/no-missing-require': 'off',
       'require-await': 'off',
+    },
+  },
+  {
+    // Tracked package fixtures can intentionally exercise sloppy-mode input.
+    name: 'dd-trace/tracked-node-module-fixtures',
+    files: TRACKED_NODE_MODULE_DIRECTORIES.map(directory => `${directory}/**/*.js`),
+    rules: {
+      strict: 'off',
+    },
+  },
+  {
+    name: 'dd-trace/instrumentation-rewriter/esm-fixtures',
+    files: ['packages/datadog-instrumentations/test/helpers/rewriter/node_modules/test-esm/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
+  {
+    name: 'dd-trace/instrumentation-rewriter/var-class-fixture',
+    files: [
+      'packages/datadog-instrumentations/test/helpers/rewriter/node_modules/' +
+      'test-trace-var-class-instance-method/index.js',
+    ],
+    rules: {
+      'no-var': 'off',
+    },
+  },
+  {
+    // The adjacent package manifest describes generated installations, not this controller's development dependencies.
+    name: 'dd-trace/plugin-versions-controller',
+    files: ['packages/dd-trace/test/plugins/versions/index.js'],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/vendor-build',
+    files: ['vendor/*.js'],
+    rules: {
+      'n/no-unpublished-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/vendor-build/cli',
+    files: ['vendor/rspack.js'],
+    rules: {
+      'n/no-process-exit': 'off',
+      'no-console': 'off',
     },
   },
   {

@@ -34,7 +34,6 @@ debuggerBenchmark.start(() => {
 /**
  * Run the passive-breakpoint control as a CPU loop.
  *
- * @returns {void}
  */
 function runLoop () {
   guard.loopStart()
@@ -46,7 +45,6 @@ function runLoop () {
  * Run one continuous hot loop, then wait for every production pause handler.
  * The final barrier makes completed work exact without adding work between hits.
  *
- * @returns {void}
  */
 function runCapturedLoop () {
   guard.loopStart()
@@ -69,7 +67,6 @@ function runCapturedLoop () {
  * @param {Int32Array} counter
  * @param {number} expected
  * @param {() => void} done
- * @returns {void}
  */
 function waitForProbeHandlers (counter, expected, done) {
   const actual = Atomics.load(counter, HANDLED_PROBE_INDEX)
@@ -91,7 +88,6 @@ function waitForProbeHandlers (counter, expected, done) {
  * @param {number} expected
  * @param {() => void} done
  * @param {'ok' | 'not-equal' | 'timed-out'} result
- * @returns {void}
  */
 function finishHandlerWait (counter, expected, done, result) {
   const actual = Atomics.load(counter, HANDLED_PROBE_INDEX)
@@ -108,7 +104,6 @@ function finishHandlerWait (counter, expected, done, result) {
  *
  * @param {Int32Array} counts
  * @param {number} completed
- * @returns {void}
  */
 function validateProbePayloads (counts, completed) {
   const payloads = Atomics.load(counts, COMPLETED_PROBE_INDEX)
@@ -122,7 +117,6 @@ function validateProbePayloads (counts, completed) {
  *
  * @param {Int32Array} counts
  * @param {number} completed
- * @returns {void}
  */
 function validateMeasuredCaptureKinds (counts, completed) {
   const matched = Atomics.load(counts, MATCHED_CAPTURE_KIND_INDEX)
@@ -136,7 +130,6 @@ function validateMeasuredCaptureKinds (counts, completed) {
 /**
  * Report the measured loop and stop the benchmark after all worker output is complete.
  *
- * @returns {void}
  */
 function finish () {
   clearInterval(keepAlive)
@@ -145,7 +138,6 @@ function finish () {
 
 /**
  * @param {number} n
- * @returns {number}
  */
 function doSomeWork (n) {
   const data = dataFixture
@@ -183,7 +175,6 @@ function createData () {
 /**
  * Prove the selected capture path once before starting the measured loop.
  *
- * @returns {void}
  */
 function preflightProbe () {
   if (!probeCounts) throw new Error('debugger completion counter was not initialized')
@@ -201,7 +192,6 @@ function preflightProbe () {
  * Ensure the payload shape reflects the selected capture limits.
  *
  * @param {Int32Array} counts
- * @returns {void}
  */
 function validateCaptureKind (counts) {
   const expected = CAPTURE_KINDS[EXPECTED_CAPTURE_KIND]
@@ -221,7 +211,6 @@ function validateCaptureKind (counts) {
  * Reset preflight state so only measured probe output contributes to completion.
  *
  * @param {Int32Array} counts
- * @returns {void}
  */
 function resetProbeCounts (counts) {
   for (let i = 0; i < counts.length; i++) Atomics.store(counts, i, 0)

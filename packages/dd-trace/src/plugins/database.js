@@ -46,7 +46,6 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} serviceName
    * @param {import('../../../..').Span} span
    * @param {object} peerData
-   * @returns {string}
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
     const spanTags = span.context().getTags()
@@ -70,7 +69,6 @@ class DatabasePlugin extends StoragePlugin {
   /**
    * @param {string} tracerService
    * @param {object} peerData
-   * @returns {string}
    */
   #getDbmServiceName (tracerService, peerData) {
     if (this._tracerConfig.spanComputePeerService) {
@@ -123,7 +121,6 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} query
    * @param {string} serviceName
    * @param {boolean} disableFullMode
-   * @returns {string}
    */
   injectDbmQuery (span, query, serviceName, disableFullMode = false) {
     const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
@@ -139,7 +136,6 @@ class DatabasePlugin extends StoragePlugin {
 
   /**
    * @param {string} query
-   * @returns {string}
    */
   maybeTruncate (query) {
     const maxLength = typeof this.config.truncate === 'number'
@@ -156,7 +152,6 @@ class DatabasePlugin extends StoragePlugin {
 
 /**
  * @param {string | number | undefined | null} value
- * @returns {string}
  */
 function encode (value) {
   if (!value) return ''

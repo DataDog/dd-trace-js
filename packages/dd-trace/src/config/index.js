@@ -67,7 +67,6 @@ channel('datadog:identity:update').subscribe(refreshRuntimeId)
  * Lazily generates the process-wide runtime ID on first access instead of at module load,
  * so modules that merely require this file without constructing a Config never pay for it.
  *
- * @returns {string}
  */
 function getRuntimeId () {
   runtimeId ??= uuid()

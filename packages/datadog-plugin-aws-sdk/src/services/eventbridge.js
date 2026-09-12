@@ -30,7 +30,6 @@ const PATHWAY_SIZE_PROBE = { hash: Buffer.alloc(8), pathwayStartNs: 0, edgeStart
  * consumer receives, which is also why this differs from `putEventEntrySize`.
  *
  * @param {PutEventsRequestEntry} entry whose `Detail` the caller has already checked is a string.
- * @returns {number}
  */
 function dsmPayloadSize (entry) {
   let size = Buffer.byteLength(entry.Detail)

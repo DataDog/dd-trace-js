@@ -113,7 +113,6 @@ function compilePrecompiledTypeScriptSpecs (cwd, env) {
 
 /**
  * @param {string} cwd
- * @returns {void}
  */
 function configureCypressTypeScriptCompilation (cwd) {
   // Cypress's webpack preprocessor resolves TypeScript config from the spec directory.
@@ -138,7 +137,6 @@ function configureCypressTypeScriptCompilation (cwd) {
 /**
  * @param {{ type: string, content: { meta: Record<string, string> } }[]} events
  * @param {string} tag
- * @returns {void}
  */
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -2480,9 +2478,6 @@ moduleTypes.forEach(({
       })
     }
 
-    /**
-     * @returns {string} temporary Cypress project root
-     */
     function createProjectRoot () {
       const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-config-'))
       temporaryDirectories.push(projectRoot)
@@ -2922,7 +2917,6 @@ moduleTypes.forEach(({
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('before:run', legacyBeforeRunHandler)
@@ -2971,7 +2965,6 @@ moduleTypes.forEach(({
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('before:run', sinon.stub())
@@ -3021,7 +3014,6 @@ moduleTypes.forEach(({
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('after:screenshot', userAfterScreenshotHandler)
@@ -3082,7 +3074,6 @@ moduleTypes.forEach(({
               e2e: {
                 /**
                  * @param {Function} on Cypress event registration function
-                 * @returns {void}
                  */
                 setupNodeEvents (on) {
                   if (position === 'before') on(event, userHandler)
@@ -3134,7 +3125,6 @@ moduleTypes.forEach(({
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('before:run', sinon.stub())
@@ -3181,7 +3171,6 @@ moduleTypes.forEach(({
             e2e: {
               /**
                * @param {Function} on Cypress event registration function
-               * @returns {void}
                */
               setupNodeEvents (on) {
                 on(event, (...args) => legacyHelper(...args))
@@ -3241,7 +3230,6 @@ moduleTypes.forEach(({
             e2e: {
               /**
                * @param {Function} on Cypress event registration function
-               * @returns {void}
                */
               setupNodeEvents (on) {
                 if (position === 'before') on('after:run', userHandler)
@@ -3292,7 +3280,6 @@ moduleTypes.forEach(({
             e2e: {
               /**
                * @param {Function} on Cypress event registration function
-               * @returns {void}
                */
               setupNodeEvents (on) {
                 if (position === 'before') on('after:spec', userHandler)
@@ -3342,7 +3329,6 @@ moduleTypes.forEach(({
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('after:screenshot', userHandler)
@@ -3366,7 +3352,6 @@ moduleTypes.forEach(({
           /**
            * @param {string} event Cypress event name
            * @param {Function} handler Cypress event handler
-           * @returns {void}
            */
           (event, handler) => {
             handlers[event] = handler

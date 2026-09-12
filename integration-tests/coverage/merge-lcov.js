@@ -42,7 +42,6 @@ const SANDBOX_MARKER = `${path.sep}node_modules${path.sep}dd-trace${path.sep}`
 
 /**
  * @param {string} filePath
- * @returns {string}
  */
 function rebaseSandboxPath (filePath) {
   const markerIndex = filePath.lastIndexOf(SANDBOX_MARKER)
@@ -52,7 +51,6 @@ function rebaseSandboxPath (filePath) {
 
 /**
  * @param {string} filePath
- * @returns {boolean}
  */
 function shouldInclude (filePath) {
   if (!filePath.startsWith(REPO_ROOT + path.sep)) return false
@@ -77,7 +75,6 @@ function zeroCoverageCount (key, value) {
 /**
  * @param {FunctionCoverage[]} target
  * @param {FunctionCoverage[]} source
- * @returns {void}
  */
 function mergeCoverageCounts (target, source) {
   for (let functionIndex = 0; functionIndex < target.length; functionIndex++) {
@@ -97,7 +94,6 @@ function mergeCoverageCounts (target, source) {
  * @param {Record<string, import('istanbul-lib-coverage').FileCoverageData>} target
  * @param {Record<string, import('istanbul-lib-coverage').FileCoverageData>} source
  * @param {number} multiplier
- * @returns {void}
  */
 function addCoverageCounts (target, source, multiplier) {
   for (const [filePath, targetFile] of Object.entries(target)) {

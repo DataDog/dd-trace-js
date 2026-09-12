@@ -94,7 +94,6 @@ function noop () {}
  * Removes Vite and Vitest runtime query parameters from browser error URLs.
  *
  * @param {string} url
- * @returns {string}
  */
 function removeVitestBrowserUrlMetadata (url) {
   const locationMatch = url.match(VITEST_BROWSER_STACK_LOCATION_RE)
@@ -129,7 +128,6 @@ function removeVitestBrowserUrlMetadata (url) {
  * Removes Vite and Vitest runtime URL metadata from browser error text.
  *
  * @param {string} value
- * @returns {string}
  */
 function normalizeVitestBrowserErrorText (value) {
   return value.replaceAll(VITEST_BROWSER_URL_RE, removeVitestBrowserUrlMetadata)
@@ -139,7 +137,6 @@ function normalizeVitestBrowserErrorText (value) {
  * Removes the ephemeral Vite server origin in addition to its runtime query parameters.
  *
  * @param {string} url
- * @returns {string}
  */
 function normalizeVitestBrowserStackUrl (url) {
   const normalizedUrl = removeVitestBrowserUrlMetadata(url)
@@ -152,7 +149,6 @@ function normalizeVitestBrowserStackUrl (url) {
  * Normalizes browser URLs in a stack when Vitest does not provide parsed frames.
  *
  * @param {string} value
- * @returns {string}
  */
 function normalizeVitestBrowserStackText (value) {
   return value.replaceAll(VITEST_BROWSER_URL_RE, normalizeVitestBrowserStackUrl)
@@ -330,7 +326,6 @@ function isNoWorkerInitPool (pool, isVitestWorkerPool) {
 
 /**
  * @param {object} state
- * @returns {boolean}
  */
 function isEarlyFlakeDetectionActive (state) {
   return state.isEarlyFlakeDetectionEnabled &&
@@ -456,7 +451,6 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
  * @param {{
  *   resolve?: { dedupe?: string[] }
  * }} viteConfig
- * @returns {void}
  */
 function configureVitestBrowserSetupFile (viteConfig) {
   viteConfig.resolve ||= {}
@@ -473,7 +467,6 @@ function configureVitestBrowserSetupFile (viteConfig) {
  * @param {unknown} _context
  * @param {string} testSuite
  * @param {unknown} hasNewTest
- * @returns {boolean}
  */
 function handleBrowserEfdSuiteAdmission (_context, testSuite, hasNewTest) {
   return reserveEarlyFlakeDetectionSuite?.(testSuite, hasNewTest === true) === true
@@ -483,7 +476,6 @@ function handleBrowserEfdSuiteAdmission (_context, testSuite, hasNewTest) {
  * Allows Vite to serve the Datadog setup file after its default workspace detection has run.
  *
  * @param {{ server?: { fs?: { allow?: string[] } } }} viteConfig
- * @returns {void}
  */
 function allowVitestBrowserSetupFile (viteConfig) {
   const allow = viteConfig.server?.fs?.allow
@@ -505,7 +497,6 @@ function allowVitestBrowserSetupFile (viteConfig) {
  * Installs the Vite access plugin on each parent project that owns a Browser Mode server.
  *
  * @param {object[]|undefined} testSpecifications
- * @returns {void}
  */
 function addVitestBrowserSetupFileAccess (testSpecifications) {
   if (!Array.isArray(testSpecifications)) return
@@ -545,7 +536,6 @@ function addVitestBrowserRuntimeCommand (project) {
  * Adds the private EFD admission command to a Vitest Browser Mode configuration.
  *
  * @param {object|undefined} config
- * @returns {void}
  */
 function addVitestBrowserCommand (config) {
   const browserConfig = config?.browser
@@ -1169,7 +1159,6 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
  * @param {'attempt_to_fix'|'early_flake_detection'|'external'} type
  * @param {string[]} statuses
  * @param {boolean} isFinalAttempt
- * @returns {boolean}
  */
 function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt) {
   if (!isFinalAttempt || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
@@ -1207,7 +1196,6 @@ function getEarlyFlakeDetectionFinalStatus (statuses, testProperties) {
  *
  * @param {string} status
  * @param {{ isDisabled?: boolean, isQuarantined?: boolean }} testProperties
- * @returns {string}
  */
 function getExternalFinalStatus (status, testProperties) {
   return testProperties.isDisabled || testProperties.isQuarantined ? 'skip' : status
@@ -1692,7 +1680,6 @@ function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
  * Resolves Vitest's default worker pool when the user did not configure one.
  *
  * @param {{ pool?: string }|undefined} config
- * @returns {string}
  */
 function getEffectiveConfigPool (config) {
   return config?.pool || VITEST_DEFAULT_POOL
@@ -1747,7 +1734,6 @@ function normalizeProjectName (name) {
  * Returns whether a Vitest specification runs in Browser Mode.
  *
  * @param {object} testSpecification
- * @returns {boolean}
  */
 function isBrowserTestSpecification (testSpecification) {
   return getTestSpecificationPool(testSpecification) === 'browser' ||
@@ -1758,7 +1744,6 @@ function isBrowserTestSpecification (testSpecification) {
  * Returns whether a Vitest project has Browser Mode enabled.
  *
  * @param {object|undefined} project
- * @returns {boolean}
  */
 function isBrowserProject (project) {
   try {
@@ -1771,7 +1756,6 @@ function isBrowserProject (project) {
  * Returns whether Vitest can overlap tests or their setup and teardown.
  *
  * @param {object|undefined} config
- * @returns {boolean}
  */
 function hasConcurrentTestExecution (config) {
   const sequence = config?.sequence
@@ -1785,7 +1769,6 @@ function hasConcurrentTestExecution (config) {
  *
  * @param {object} ctx
  * @param {object[]|undefined} testSpecifications
- * @returns {boolean}
  */
 function canRaceRumCorrelation (ctx, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
