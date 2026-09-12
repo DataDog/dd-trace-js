@@ -31,6 +31,7 @@ function promptResponse (overrides = {}) {
     prompt_version_uuid: 'version-uuid',
     version: 1,
     template: 'Hello {name}',
+    config: { model: { temperature: 0.2 }, unknown: [1, true] },
     ...overrides,
   }
 }
@@ -84,6 +85,7 @@ describe('PromptManager', () => {
       user_version: '0.3.0',
       prompt_version_uuid: undefined,
       ID: 'backend-version-id',
+      config: undefined,
     })))
     const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
@@ -100,7 +102,9 @@ describe('PromptManager', () => {
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/a%2Fb/versions/3')
     assert.strictEqual(fetchStub.firstCall.args[1].redirect, 'error')
     assert.strictEqual(latest.source, 'registry')
+    assert.deepStrictEqual(latest.config, { model: { temperature: 0.2 }, unknown: [1, true] })
     assert.strictEqual(exact.version, '0.3.0')
+    assert.deepStrictEqual(exact.config, {})
     assert.strictEqual(exact.promptVersionUuid, 'backend-version-id')
     sinon.assert.notCalled(provider.resolveObjectEvaluation)
   })
@@ -145,6 +149,7 @@ describe('PromptManager', () => {
 
     assert.strictEqual(prompt.source, 'ff')
     assert.deepStrictEqual(prompt.template, [])
+    assert.deepStrictEqual(prompt.config, { model: { temperature: 0.2 }, unknown: [1, true] })
     sinon.assert.calledOnceWithExactly(
       provider.resolveObjectEvaluation,
       '__llmobs__.prompt.greeting',
@@ -226,12 +231,17 @@ describe('PromptManager', () => {
       DD_APP_KEY: undefined,
       env: 'production',
     }), () => provider)
-    const fallback = sinon.stub().returns({ template: 'Local {name}', version: 'local' })
+    const fallback = sinon.stub().returns({
+      template: 'Local {name}',
+      version: 'local',
+      config: { model: { temperature: 0.4 } },
+    })
 
     const prompt = await manager.getPrompt('greeting', { fallback })
 
     assert.strictEqual(prompt.source, 'fallback')
     assert.strictEqual(prompt.version, 'local')
+    assert.deepStrictEqual(prompt.config, { model: { temperature: 0.4 } })
     sinon.assert.calledOnce(provider.resolveObjectEvaluation)
     sinon.assert.calledOnce(fallback)
     sinon.assert.notCalled(fetchStub)
@@ -516,7 +526,9 @@ describe('PromptManager', () => {
     const template = [{ role: 'user', content: 'Hi' }]
 
     await manager.createPrompt('a/b', template, { title: '', description: '', userVersion: '', envIds: [] })
-    await manager.createPromptVersion('a/b', template, { description: 'v', userVersion: '1', envIds: [] })
+    await manager.createPromptVersion('a/b', template, {
+      description: 'v', userVersion: '1', envIds: [], config: {},
+    })
     await manager.updatePrompt('a/b', { title: '', description: '' })
     await manager.updatePromptVersion('a/b', 2, { description: '', envIds: [] })
     await manager.deletePrompt('a/b')
@@ -539,7 +551,7 @@ describe('PromptManager', () => {
     ])
     assert.deepStrictEqual(JSON.parse(calls[0].options.body), { prompt_id: 'a/b', template, env_ids: [] })
     assert.deepStrictEqual(JSON.parse(calls[1].options.body), {
-      template, description: 'v', user_version: '1', env_ids: [],
+      template, description: 'v', user_version: '1', env_ids: [], config: {},
     })
     assert.deepStrictEqual(JSON.parse(calls[2].options.body), { title: '', description: '' })
     assert.deepStrictEqual(JSON.parse(calls[3].options.body), { description: '', env_ids: [] })
@@ -615,6 +627,12 @@ describe('PromptManager', () => {
     const manager = new PromptManager(makeConfig(), () => provider)
     await assert.rejects(manager.updatePrompt('p'), { name: 'PromptValidationError', status: 0 })
     await assert.rejects(manager.updatePromptVersion('p', 1), { name: 'PromptValidationError', status: 0 })
+    for (const config of [null, [], 'bad']) {
+      await assert.rejects(manager.createPrompt('p', [], { config }), { name: 'PromptValidationError', status: 0 })
+      await assert.rejects(manager.createPromptVersion('p', [], { config }), {
+        name: 'PromptValidationError', status: 0,
+      })
+    }
 
     const noApi = new PromptManager(makeConfig({ DD_API_KEY: undefined }), () => provider)
     await assert.rejects(noApi.updatePrompt('p', { title: 'Prompt' }), { name: 'PromptAuthError', status: 0 })

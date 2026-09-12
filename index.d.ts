@@ -3894,7 +3894,7 @@ declare namespace tracer {
     type PromptFallbackValue =
       | string
       | PromptTemplateMessage[]
-      | { template: string | PromptTemplateMessage[], version?: string }
+      | { template: string | PromptTemplateMessage[], version?: string, config?: Record<string, JSONType> }
     type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
 
     interface GetPromptOptions {
@@ -3913,13 +3913,15 @@ declare namespace tracer {
       title?: string,
       description?: string,
       userVersion?: string,
-      envIds?: string[]
+      envIds?: string[],
+      config?: Record<string, JSONType>
     }
 
     interface CreatePromptVersionOptions {
       description?: string,
       userVersion?: string,
-      envIds?: string[]
+      envIds?: string[],
+      config?: Record<string, JSONType>
     }
 
     interface UpdatePromptOptions {
@@ -3937,6 +3939,7 @@ declare namespace tracer {
       readonly version: string,
       readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
       readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
+      readonly config: Readonly<Record<string, JSONType>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
       format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
@@ -3957,7 +3960,8 @@ declare namespace tracer {
       ml_app?: string,
       ml_apps?: string[],
       last_version_created_at?: string,
-      extracted_from?: string
+      extracted_from?: string,
+      config?: Record<string, JSONType>
     }
 
     interface PromptVersionResponse {
@@ -3971,7 +3975,8 @@ declare namespace tracer {
       version_created_at?: string,
       author?: string,
       description?: string,
-      ml_app?: string
+      ml_app?: string,
+      config?: Record<string, JSONType>
     }
 
     interface DeletedPromptResponse {
