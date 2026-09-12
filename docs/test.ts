@@ -385,6 +385,8 @@ tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
 tracer.use('langgraph', { llmobs: false });
+tracer.use('llamaindex');
+tracer.use('llamaindex', { llmobs: false });
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);

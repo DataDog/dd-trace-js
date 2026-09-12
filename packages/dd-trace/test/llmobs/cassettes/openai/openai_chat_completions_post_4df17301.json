@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:8787/chat/completions",
+    "headers": {
+      "Content-Length": "496",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.12.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "60",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 0,\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"function\": {\n        \"name\": \"weather\",\n        \"description\": \"Get the weather\",\n        \"parameters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"city\": {\n              \"type\": \"string\"\n            }\n          }\n        }\n      }\n    }\n  ],\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the weather?\"\n    }\n  ],\n  \"top_p\": 1,\n  \"stream\": false\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "393",
+      "Date": "Tue, 08 Sep 2026 16:39:23 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5"
+    },
+    "body": "{\"id\":\"chatcmpl-llamaindex-tool\",\"object\":\"chat.completion\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_llamaindex\",\"type\":\"function\",\"function\":{\"name\":\"weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":7,\"total_tokens\":16}}"
+  }
+}

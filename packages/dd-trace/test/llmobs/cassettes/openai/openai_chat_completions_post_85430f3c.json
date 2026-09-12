@@ -1,0 +1,27 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.17.0.1:8787/chat/completions",
+    "headers": {
+      "User-Agent": "curl/7.81.0",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "67"
+    },
+    "body": "{\"model\":\"test-manual\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 404,
+      "message": "Not Found"
+    },
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "33",
+      "Date": "Tue, 08 Sep 2026 16:38:55 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5"
+    },
+    "body": "{\"error\":{\"message\":\"not found\"}}"
+  }
+}
