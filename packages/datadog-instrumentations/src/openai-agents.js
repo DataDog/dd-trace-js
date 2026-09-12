@@ -32,6 +32,7 @@ for (const hook of getHooks('@openai/agents-openai').values()) {
 // `@openai/agents` loads. Publishing from here keeps this file free of
 // any cross-package import from the plugin.
 const agentsCoreLoadedCh = channel('apm:openai-agents:agents-core:loaded')
+const agentPrepareCh = channel('apm:openai-agents:agent:prepare')
 
 // Plugin uses addBind on this channel so that legacyStorage.run(store, fn) wraps
 // the model call — including async iterator advancement for streaming responses.
@@ -73,6 +74,14 @@ addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
   if (typeof mod?.addTraceProcessor !== 'function' && typeof mod?.getGlobalTraceProvider !== 'function') return mod
   patchedMods.add(mod)
   agentsMod = mod
+  try {
+    const agentProto = mod?.Agent?.prototype
+    if (typeof agentProto?.getSystemPrompt === 'function') {
+      shimmer.wrap(agentProto, 'getSystemPrompt', wrapAgentSystemPrompt)
+    }
+  } catch {
+    // Instrumentation must never prevent the Agents SDK from loading.
+  }
   if (typeof mod.tool === 'function') {
     shimmer.wrap(mod, 'tool', wrapToolFactory, { replaceGetter: true })
   }
@@ -87,6 +96,19 @@ function wrapToolFactory (original) {
       shimmer.wrap(tool, 'invoke', wrapToolInvoke)
     }
     return tool
+  }
+}
+
+function wrapAgentSystemPrompt (original) {
+  return function (...args) {
+    try {
+      if (agentPrepareCh.hasSubscribers) {
+        agentPrepareCh.publish({ agent: this, agentsCoreSpan: getCurrentSpan() })
+      }
+    } catch {
+      // Instrumentation must never prevent an agent run from continuing.
+    }
+    return original.apply(this, args)
   }
 }
 

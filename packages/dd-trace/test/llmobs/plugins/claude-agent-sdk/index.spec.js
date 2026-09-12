@@ -6,6 +6,7 @@ const { withVersions } = require('../../../setup/mocha')
 const {
   useLlmObs,
   assertLlmObsSpanEvent,
+  MOCK_OBJECT,
   MOCK_STRING,
   MOCK_NUMBER,
 } = require('../../util')
@@ -154,7 +155,21 @@ describe('Plugin', () => {
         name: 'claude_agent_sdk.query',
         inputValue: PROMPT,
         outputValue: MOCK_STRING,
-        metadata: { cwd: require('node:fs').realpathSync('/tmp'), permissionMode: 'default' },
+        metrics: {
+          input_tokens: MOCK_NUMBER,
+          output_tokens: MOCK_NUMBER,
+          total_tokens: MOCK_NUMBER,
+          cache_read_input_tokens: MOCK_NUMBER,
+          cache_write_input_tokens: MOCK_NUMBER,
+        },
+        metadata: {
+          cwd: require('node:fs').realpathSync('/tmp'),
+          permissionMode: 'default',
+          stop_reason: MOCK_STRING,
+          _dd: {
+            agent_manifest: MOCK_OBJECT,
+          },
+        },
         sessionId,
         tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
