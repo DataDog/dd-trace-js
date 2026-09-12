@@ -1076,6 +1076,37 @@ describe('Config', () => {
     })
   })
 
+  describe('HTTP client query string tagging', () => {
+    it('should use safe defaults', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING, true)
+      assert.strictEqual(config.DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST, undefined)
+    })
+
+    it('should initialize from environment variables', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING = 'false'
+      process.env.DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST = 'page,filter'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING, false)
+      assert.strictEqual(config.DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST, 'page,filter')
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING', value: false, origin: 'env_var' },
+        { name: 'DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST', value: 'page,filter', origin: 'env_var' },
+      ])
+    })
+
+    it('should support the unprefixed query string tagging alias', () => {
+      process.env.DD_HTTP_CLIENT_TAG_QUERY_STRING = 'false'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING, false)
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 

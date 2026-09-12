@@ -236,7 +236,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          child.send({ name: 'utility-request', url: `http://127.0.0.1:${port}/utility` })
+          child.send({ name: 'utility-request', url: `http://127.0.0.1:${port}/utility?page=2` })
         })
 
         it('should do automatic instrumentation for renderer IPC when sending', done => {

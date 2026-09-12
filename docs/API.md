@@ -52,6 +52,13 @@ tracer.use('pg', {
 })
 ```
 
+Outbound HTTP query strings use bounded schemas in `http.url`. Values become type markers such as `<number>`,
+`<uuid>`, and `<date>`. A schema appears after three observations, and each tracer instance admits at most 32 schemas.
+Set `DD_TRACE_HTTP_CLIENT_TAG_QUERY_STRING=false` to omit client query strings. Set
+`DD_TRACE_HTTP_URL_QUERY_STRING_ALLOWLIST` to a comma-separated list of parameter names to include. HTTP client plugins
+also accept `queryStringAllowlist` as an array of names. Setting `queryStringObfuscation` to `false` retains raw values
+for selected parameters, but the schema admission limit still applies.
+
 LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
 The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
