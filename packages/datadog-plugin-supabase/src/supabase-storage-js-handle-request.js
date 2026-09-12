@@ -32,7 +32,6 @@ const storageRoutes = [
  * Returns a low-cardinality storage route for a request URL.
  *
  * @param {string|URL} url Request URL.
- * @returns {string} Normalized storage route.
  */
 function getStorageRoute (url) {
   const path = extractPathFromUrl(stripQueryAndFragment(String(url)))
