@@ -27,7 +27,31 @@
         }
       ],
       "transformers": ["lowercase"]
+    },
+    {
+      "id": "test-rule-block-uri",
+      "name": "test-rule-block-uri",
+      "tags": {
+        "type": "security_scanner",
+        "category": "attack_attempt"
+      },
+      "conditions": [
+        {
+          "parameters": {
+            "inputs": [
+              {
+                "address": "server.request.uri.raw"
+              }
+            ],
+            "list": [
+              "blockattack"
+            ]
+          },
+          "operator": "phrase_match"
+        }
+      ],
+      "transformers": ["lowercase"],
+      "on_match": ["block"]
     }
   ]
 }
-

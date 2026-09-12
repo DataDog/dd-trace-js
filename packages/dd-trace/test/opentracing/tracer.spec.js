@@ -18,6 +18,7 @@ describe('Tracer', () => {
   let Tracer
   let tracer
   let Span
+  let NoopSpan
   let span
   let spanCtx
   let PrioritySampler
@@ -50,6 +51,7 @@ describe('Tracer', () => {
       context: sinon.stub().returns(spanCtx),
     }
     Span = sinon.stub().returns(span)
+    NoopSpan = sinon.stub()
 
     prioritySampler = {
       sample: sinon.stub(),
@@ -99,6 +101,7 @@ describe('Tracer', () => {
 
     Tracer = proxyquire('../../src/opentracing/tracer', {
       './span': Span,
+      '../noop/span': NoopSpan,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
       '../span_processor': SpanProcessor,
@@ -339,6 +342,18 @@ describe('Tracer', () => {
 
       assert.strictEqual(testSpan, span)
     })
+
+    it('should reuse a non-recording parent span', () => {
+      const noopSpan = new NoopSpan()
+      const parent = new SpanContext({ noop: noopSpan })
+      noopSpan.context = () => parent
+
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', { childOf: noopSpan })
+
+      sinon.assert.notCalled(Span)
+      assert.strictEqual(testSpan, noopSpan)
+    })
   })
 
   describe('inject', () => {
@@ -399,6 +414,18 @@ describe('Tracer', () => {
 
       sinon.assert.notCalled(prioritySampler.sample)
       sinon.assert.calledWith(propagator.inject, spanContext, carrier)
+    })
+
+    it('should inject a non-recording span context', () => {
+      TextMapPropagator.returns(propagator)
+      const noopSpan = new NoopSpan()
+      const noopContext = new SpanContext({ noop: noopSpan })
+      noopSpan.context = () => noopContext
+
+      tracer = new Tracer(config)
+      tracer.inject(noopSpan, opentracing.FORMAT_TEXT_MAP, carrier)
+
+      sinon.assert.calledWith(propagator.inject, noopContext, carrier)
     })
   })
 

@@ -56,15 +56,17 @@ describe('Span', () => {
       warn: sinon.spy(),
     }
 
+    const performance = { now }
+    const createSpanContext = proxyquire('../../src/opentracing/create-span-context', {
+      'node:perf_hooks': { performance },
+      '../id': id,
+    })
     Span = proxyquire('../../src/opentracing/span', {
-      perf_hooks: {
-        performance: {
-          now,
-        },
-      },
+      'node:perf_hooks': { performance },
       '../id': id,
       '../log': log,
       '../tagger': tagger,
+      './create-span-context': createSpanContext,
     })
   })
 
