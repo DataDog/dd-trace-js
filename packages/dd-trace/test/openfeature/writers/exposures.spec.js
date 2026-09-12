@@ -87,51 +87,90 @@ describe('OpenFeature Exposures Writer', () => {
   })
 
   describe('append', () => {
-    beforeEach(() => {
-      writer.setEnabled(true) // Enable writer for append tests
-    })
-
-    it('should add exposure event to buffer', () => {
+    it('should enqueue exposure events without waiting for another event loop turn', () => {
+      writer.setEnabled(true)
       writer.append(exposureEvent)
 
       assert.strictEqual(writer._buffer?.length, 1)
       assert.strictEqual(writer._buffer[0], exposureEvent)
+      sinon.assert.notCalled(request)
     })
 
-    it('should track buffer size', () => {
-      const initialSize = writer._bufferSize
+    it('should defer event serialization until flush', () => {
+      writer.setEnabled(true)
+      const toJSON = sinon.spy(() => exposureEvent)
+      const event = { ...exposureEvent, toJSON }
 
-      writer.append(exposureEvent)
+      writer.append(event)
+      sinon.assert.notCalled(toJSON)
 
-      assert.ok(writer._bufferSize > initialSize, `Expected ${writer._bufferSize} > ${initialSize}`)
+      writer.flush()
+      sinon.assert.calledOnce(toJSON)
     })
 
-    it('should drop events when buffer is full', () => {
+    it('should retain the newest events when the buffer is full', () => {
+      writer.setEnabled(true)
       writer._bufferLimit = 2
 
-      writer.append(exposureEvent)
-      writer.append(exposureEvent)
-      writer.append(exposureEvent) // Should be dropped
+      writer.append([
+        { ...exposureEvent, sequence: 1 },
+        { ...exposureEvent, sequence: 2 },
+        { ...exposureEvent, sequence: 3 },
+      ])
 
       assert.strictEqual(writer._buffer?.length, 2)
+      assert.strictEqual(writer._bufferStart, 1)
+      assert.deepStrictEqual(
+        [...writer._buffer.slice(writer._bufferStart), ...writer._buffer.slice(0, writer._bufferStart)]
+          .map(event => event.sequence),
+        [2, 3]
+      )
       assert.strictEqual(writer._droppedEvents, 1)
       sinon.assert.calledOnce(log.warn)
     })
 
-    it('should drop events exceeding 1MB size limit', () => {
+    it('should use one queue across event loop turns', async () => {
+      writer.setEnabled(true)
+      writer._bufferLimit = 2
+
+      writer.append([
+        { ...exposureEvent, sequence: 1 },
+        { ...exposureEvent, sequence: 2 },
+      ])
+      await clock.tickAsync(0)
+      writer.append([
+        { ...exposureEvent, sequence: 3 },
+        { ...exposureEvent, sequence: 4 },
+      ])
+
+      assert.deepStrictEqual(
+        [...writer._buffer.slice(writer._bufferStart), ...writer._buffer.slice(0, writer._bufferStart)]
+          .map(event => event.sequence),
+        [3, 4]
+      )
+      assert.strictEqual(writer._droppedEvents, 2)
+    })
+
+    it('should drop events exceeding 1MB size limit during flush', () => {
+      writer.setEnabled(true)
       const largeEvent = {
         ...exposureEvent,
         largeData: 'x'.repeat(1024 * 1024 + 1), // > 1MB
       }
 
       writer.append(largeEvent)
+      assert.strictEqual(writer._buffer?.length, 1)
+      assert.strictEqual(writer._droppedEvents, 0)
+
+      writer.flush()
 
       assert.strictEqual(writer._buffer?.length, 0)
       assert.strictEqual(writer._droppedEvents, 1)
       sinon.assert.calledWith(log.warn, sinon.match(/event size[\s\S]*bytes exceeds limit/))
     })
 
-    it('should flush when payload would exceed 5MB limit', () => {
+    it('should split buffered events into payload-size batches during flush', () => {
+      writer.setEnabled(true)
       // Create events that together exceed 5MB (limit is 5242880 bytes)
       // Individual event limit is (1MB - 1KB) = 1047552 bytes
       // Use ~1020KB events to safely stay under individual limit
@@ -140,77 +179,70 @@ describe('OpenFeature Exposures Writer', () => {
         largeData: 'x'.repeat(1020 * 1024), // ~1020KB each
       }
 
-      // Add 5 events (~5MB total)
-      // Events 1-5 should accumulate and not trigger flush
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 6; i++) {
         writer.append(largeEvent)
         assert.strictEqual(writer._buffer.length, i + 1,
           `Buffer should contain ${i + 1} event(s) after appending event ${i + 1}`)
       }
 
-      // Verify request was not called yet
       sinon.assert.notCalled(request)
+      writer.flush()
 
-      // Add 6th event (~6MB total) - should trigger flush
-      writer.append(largeEvent)
-      // Verify request was called (flush happened when limit was reached)
-      sinon.assert.called(request)
-      // 6th event should have triggered flush, leaving only the new event
-      assert.strictEqual(writer._buffer.length, 1,
-        'Buffer should contain 1 event after flush was triggered by 6th event')
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(JSON.parse(request.firstCall.args[0]).exposures.length, 5)
+      assert.strictEqual(JSON.parse(request.secondCall.args[0]).exposures.length, 1)
+      assert.strictEqual(writer._buffer.length, 0)
     })
 
-    it('should buffer events while disabled and drain on enable', () => {
-      writer.setEnabled(false)
+    it('should buffer events while the startup route is unresolved and flush on enable', async () => {
       writer.append(exposureEvent)
 
-      // Pending events stay out of the main buffer until enable.
-      assert.strictEqual(writer._buffer.length, 0)
+      assert.strictEqual(writer._buffer.length, 1)
 
       writer.setEnabled(true)
-
       assert.strictEqual(writer._buffer.length, 1)
-      assert.strictEqual(writer._buffer[0], exposureEvent)
+      await clock.tickAsync(0)
+
+      assert.strictEqual(writer._buffer.length, 0)
+      sinon.assert.calledOnce(request)
     })
 
-    it('should keep every pending event when count equals the cap', () => {
-      writer.setEnabled(false)
-
+    it('should keep every event when count equals the cap', () => {
       const cap = 1000
       const events = []
       for (let i = 0; i < cap; i++) {
         events.push({ ...exposureEvent, seq: i })
       }
       writer.append(events)
-      writer.setEnabled(true)
 
       assert.strictEqual(writer._buffer.length, cap)
-      assert.strictEqual(writer.droppedEventCount, 0)
+      assert.strictEqual(writer._droppedEvents, 0)
       sinon.assert.notCalled(log.warn)
     })
 
-    it('should drop oldest pending events one past the cap', () => {
-      writer.setEnabled(false)
-
+    it('should drop the oldest event one past the cap', () => {
       const cap = 1000
       const events = []
       for (let i = 0; i < cap + 1; i++) {
-        events.push({ ...exposureEvent, seq: i })
+        events.push({
+          ...exposureEvent,
+          subject: { ...exposureEvent.subject, id: `user-${i}` },
+        })
       }
-      writer.append(events)
       writer.setEnabled(true)
+      writer.append(events)
+      writer.flush()
 
-      assert.strictEqual(writer._buffer.length, cap)
-      assert.strictEqual(writer._buffer[0].seq, 1)
-      assert.strictEqual(writer._buffer.at(-1).seq, cap)
-      assert.strictEqual(writer.droppedEventCount, 1)
+      const payload = JSON.parse(request.firstCall.args[0])
+      assert.strictEqual(payload.exposures.length, cap)
+      assert.strictEqual(payload.exposures[0].subject.id, 'user-1')
+      assert.strictEqual(payload.exposures.at(-1).subject.id, `user-${cap}`)
+      assert.strictEqual(writer._droppedEvents, 1)
       sinon.assert.calledOnce(log.warn)
       assert.match(format(...log.warn.firstCall.args), /dropped exposure event\(s\) at cap 1000/)
     })
 
     it('should throttle the drop warning while still counting every dropped event', () => {
-      writer.setEnabled(false)
-
       const cap = 1000
       const events = []
       for (let i = 0; i < cap + 1; i++) {
@@ -220,8 +252,19 @@ describe('OpenFeature Exposures Writer', () => {
       writer.append({ ...exposureEvent, seq: cap + 1 })
       writer.append({ ...exposureEvent, seq: cap + 2 })
 
-      assert.strictEqual(writer.droppedEventCount, 3)
+      assert.strictEqual(writer._droppedEvents, 3)
       sinon.assert.calledOnce(log.warn)
+    })
+
+    it('should discard pending and future events after route resolution fails', async () => {
+      writer.append(exposureEvent)
+      writer.setEnabled(false)
+      writer.append(exposureEvent)
+      writer.setEnabled(true)
+      await clock.tickAsync(0)
+
+      assert.strictEqual(writer._buffer.length, 0)
+      sinon.assert.notCalled(request)
     })
   })
 
@@ -601,7 +644,7 @@ describe('OpenFeature Exposures Writer', () => {
       writer.flush()
 
       assert.strictEqual(writer._buffer?.length, 0)
-      assert.strictEqual(writer._bufferSize, 0)
+      assert.strictEqual(writer._bufferStart, 0)
     })
 
     it('should log errors on request failure', (done) => {
