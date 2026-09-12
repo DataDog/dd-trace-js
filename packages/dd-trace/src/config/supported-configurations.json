@@ -1843,6 +1843,7 @@
         "implementation": "C",
         "type": "string",
         "default": "datadoghq.com",
+        "transform": "toLowerCase",
         "configurationNames": [
           "site"
         ]
@@ -4238,6 +4239,7 @@
         "type": "string",
         "default": "http/json",
         "allowed": "http/json",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4276,6 +4278,8 @@
         "implementation": "D",
         "type": "string",
         "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4315,6 +4319,8 @@
         "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4344,7 +4350,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http/protobuf"
+        "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase"
       }
     ],
     "OTEL_EXPORTER_OTLP_TIMEOUT": [

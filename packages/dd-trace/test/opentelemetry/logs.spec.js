@@ -489,7 +489,7 @@ describe('OpenTelemetry Logs', () => {
     })
 
     it('encodes exact timestamp strings using the OTLP JSON protocol', () => {
-      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'http/json'
+      process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'HTTP/JSON'
       mockOtlpExport((decoded) => {
         const record = decoded.resourceLogs[0].scopeLogs[0].logRecords[0]
         assert.strictEqual(record.timeUnixNano, '1700000000789123456')

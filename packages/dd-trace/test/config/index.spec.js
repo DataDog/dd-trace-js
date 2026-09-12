@@ -570,7 +570,7 @@ describe('Config', () => {
   it('should use generic OTLP exporter config for logs and metrics when specific config is not set', () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
     process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-test=value'
-    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'HTTP/PROTOBUF'
     process.env.OTEL_EXPORTER_OTLP_TIMEOUT = '1234'
 
     const config = getConfig()
@@ -584,13 +584,36 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
-      OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
-      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
+  })
+
+  it('should normalize site from environment and programmatic configuration', () => {
+    process.env.DD_SITE = 'US3.DATADOGHQ.COM'
+
+    assert.strictEqual(getConfig().site, 'us3.datadoghq.com')
+    assert.strictEqual(getConfig({ site: 'DATADOGHQ.EU' }).site, 'datadoghq.eu')
+  })
+
+  it('should keep standard gRPC protocols inert when OTLP exporters are inactive', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.OTEL_LOGS_EXPORTER = 'none'
+    process.env.OTEL_METRICS_EXPORTER = 'none'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
+    process.env.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL = 'grpc'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
+    sinon.assert.notCalled(log.warn)
   })
 
   describe('sensitive configurations excluded from telemetry', () => {
@@ -978,12 +1001,13 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
   })
 
-  it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/json'
-    getConfig()
+  it('should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL casing without warning', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'HTTP/JSON'
+    const config = getConfig()
     const warnCall = log.warn.getCalls().find(
       (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
     )
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
     assert.strictEqual(warnCall, undefined)
   })
 
@@ -1995,6 +2019,7 @@ describe('Config', () => {
       value: 'yes',
       origin: 'code',
       error: {
+        code: null,
         message: "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
       },
     }])
@@ -4472,6 +4497,19 @@ apm_configuration_default:
       assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
 
+    it('should normalize stable site and OTLP protocol configuration', () => {
+      fs.writeFileSync(
+        localConfigPath,
+        `
+apm_configuration_default:
+  DD_SITE: US3.DATADOGHQ.COM
+  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: HTTP/JSON
+`)
+      const config = getConfig()
+      assert.strictEqual(config.site, 'us3.datadoghq.com')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/json')
+    })
+
     it('should apply service specific config', () => {
       fs.writeFileSync(
         localConfigPath,
@@ -5739,7 +5777,7 @@ rules:
           name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
           value: 'offline',
           origin: 'env_var',
-          error: { message: warning },
+          error: { code: null, message: warning },
         },
         { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
       ])

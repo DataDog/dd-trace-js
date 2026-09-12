@@ -47,10 +47,11 @@ function warnInvalidValue (value, optionName, source, baseMessage, error, outcom
       error.stack = error.toString()
       message += `\n\n${util.inspect(error)}`
     }
+    const telemetryError = { code: null, message }
     if (telemetryEntry) {
-      telemetryEntry.error = { message }
+      telemetryEntry.error = telemetryError
     } else {
-      parseErrors.set(telemetryKey, { message })
+      parseErrors.set(telemetryKey, telemetryError)
     }
     log ??= require('../log')
     const logLevel = error ? 'error' : 'warn'
