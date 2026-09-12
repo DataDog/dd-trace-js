@@ -41,6 +41,13 @@ describe('exporters/common/url createSiteUrl', () => {
       assert.strictEqual(createSiteUrl(site), undefined)
     })
   }
+
+  it('rejects a valid site suffix when the composed intake hostname is too long', () => {
+    const label = 'a'.repeat(63)
+    const site = `${label}.${label}.${label}.${'a'.repeat(49)}`
+
+    assert.strictEqual(createSiteUrl(site, 'event-platform-intake'), undefined)
+  })
 })
 
 describe('exporters/common/url parseUrl', () => {

@@ -600,7 +600,7 @@ describe('OpenFeature Exposures Writer', () => {
       ['HTTP 429', Object.assign(new Error('Too Many Requests'), { status: 429 }), 429],
       ['HTTP 500', Object.assign(new Error('Internal Server Error'), { status: 500 }), 500],
     ]) {
-      it(`should not replay ${name} through direct intake or switch future batches`, async () => {
+      it(`should not replay ${name} but should switch future batches to direct intake`, async () => {
         const localUrl = new URL('http://serverless-init:8126')
         request.onFirstCall().yieldsAsync(error, null, statusCode)
         writer.setEnabled(true, {
@@ -628,7 +628,7 @@ describe('OpenFeature Exposures Writer', () => {
         writer.flush()
 
         sinon.assert.calledTwice(request)
-        assert.strictEqual(request.secondCall.args[1].url, localUrl)
+        assert.strictEqual(request.secondCall.args[1].url.href, 'https://event-platform-intake.datadoghq.com/')
       })
     }
 

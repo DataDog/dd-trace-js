@@ -66,6 +66,16 @@ function isTransportFailure (error, statusCode) {
 }
 
 /**
+ * Tests whether an HTTP response should move only future Agentless batches.
+ *
+ * @param {number | undefined} statusCode - HTTP response status
+ * @returns {boolean} Whether the local route should be replaced without replay
+ */
+function shouldSwitchFutureRoute (statusCode) {
+  return statusCode === 403 || statusCode === 429 || statusCode >= 500 && statusCode < 600
+}
+
+/**
  * Base writer for Feature Flagging and Experimentation event delivery.
  * @class BaseFFEWriter
  */
@@ -328,8 +338,24 @@ class BaseFFEWriter {
         return
       }
 
+      if (fallbackRoute && shouldSwitchFutureRoute(statusCode)) {
+        log.debug(
+          '%s switching future batches from %s%s to direct intake after status %d without replay',
+          this.constructor.name,
+          route.url.href,
+          route.endpoint,
+          statusCode
+        )
+        this.#activateRoute(fallbackRoute)
+        this._fallbackRoute = undefined
+        route.onFallback?.()
+        log.warn('Events request returned status %d', statusCode)
+        return
+      }
+
       if (!fallbackRoute && route.onUnavailable &&
-          (isSafeToReplay(error, statusCode) || isTransportFailure(error, statusCode))) {
+          (isSafeToReplay(error, statusCode) || isTransportFailure(error, statusCode) ||
+           shouldSwitchFutureRoute(statusCode))) {
         route.onUnavailable()
         if (error) {
           log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)

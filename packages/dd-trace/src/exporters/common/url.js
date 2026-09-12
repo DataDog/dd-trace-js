@@ -40,6 +40,7 @@ function createSiteUrl (site, intake) {
   if (normalizedSite === undefined) return
 
   const hostname = `${intake === undefined ? '' : `${intake}.`}${normalizedSite}`
+  if (hostname.length > 253) return
 
   try {
     const url = new URL(format({

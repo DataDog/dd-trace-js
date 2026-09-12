@@ -149,4 +149,22 @@ describe('OpenFeature Base FFE Writer transport', () => {
     sinon.assert.calledTwice(request)
     assert.strictEqual(request.secondCall.args[1].url, directUrl)
   })
+
+  it('marks a local-only route unavailable after a non-replayable response', async () => {
+    const localUrl = new URL('http://localhost:8126')
+    const onUnavailable = sinon.spy()
+    request.onFirstCall().yieldsAsync(Object.assign(new Error('rate limited'), { status: 429 }), null, 429)
+    writer.setRoute({
+      url: localUrl,
+      basePath: '/evp_proxy/v4',
+      headers: { 'X-Datadog-EVP-Subdomain': 'event-platform-intake' },
+      onUnavailable,
+    })
+
+    writer.send('{"flag":"rate-limited","count":1}', 1)
+    await clock.tickAsync(0)
+
+    sinon.assert.calledOnce(request)
+    sinon.assert.calledOnce(onUnavailable)
+  })
 })
