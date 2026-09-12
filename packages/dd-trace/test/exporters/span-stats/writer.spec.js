@@ -109,6 +109,19 @@ describe('span-stats writer', () => {
       })
     })
 
+    it('should use the configured stats sender instead of the agent', async () => {
+      const expectedData = Buffer.from('prefixed')
+      const sendStats = sinon.stub().callsArg(1)
+      writer = new Writer({ url, sendStats })
+      encoder.count.returns(1)
+      encoder.makePayload.returns(expectedData)
+
+      await new Promise(resolve => writer.flush(resolve))
+
+      sinon.assert.calledOnceWithExactly(sendStats, expectedData, sinon.match.func)
+      sinon.assert.notCalled(request)
+    })
+
     // The writer must hand the agent URL to request() rather than pre-setting
     // protocol/hostname/port itself. Only request() knows to map a `unix:` URL
     // onto options.socketPath; a forced `protocol: 'unix:'` reaches

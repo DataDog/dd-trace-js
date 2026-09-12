@@ -439,10 +439,8 @@ describe('SpanStatsProcessor', () => {
     clearTimeout(processor.timer)
 
     assert.deepStrictEqual(SpanStatsExporter.lastCall.args[0], {
-      hostname: config.hostname,
-      port: config.port,
       url: config.url,
-      tags: config.tags,
+      sendStats: undefined,
     })
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
@@ -450,6 +448,13 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.strictEqual(processor.version, config.version)
+  })
+
+  it('should pass an injected stats sender to the exporter', () => {
+    const sendStats = sinon.stub()
+    processor = new SpanStatsProcessor(config, undefined, sendStats)
+
+    assert.strictEqual(SpanStatsExporter.lastCall.args[0].sendStats, sendStats)
   })
 
   it('should construct a disabled instance', () => {

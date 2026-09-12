@@ -18,6 +18,7 @@ describe('AgentlessExporter', () => {
   let writer
   let initialHandlersSize
   let clock
+  let writerOptions
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
@@ -25,10 +26,12 @@ describe('AgentlessExporter', () => {
     writer = {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
+      sendStats: sinon.stub().callsFake((payload, done) => done()),
       setUrl: sinon.stub(),
     }
 
-    const Writer = function () {
+    const Writer = function (options) {
+      writerOptions = options
       return writer
     }
 
@@ -72,6 +75,33 @@ describe('AgentlessExporter', () => {
       assert.strictEqual(exporter._url.hostname, 'trace.browser-intake-us3-datadoghq.com')
     })
 
+    it('should configure direct client stats intake when local stats are enabled', () => {
+      exporter = new Exporter({
+        site: 'us3.datadoghq.com',
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        tags: {},
+      })
+
+      assert.strictEqual(
+        writerOptions.statsEndpoint,
+        'https://trace.agent.us3.datadoghq.com/api/v0.2/stats'
+      )
+    })
+
+    for (const [name, config] of [
+      ['client stats are disabled', { stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false } }],
+      ['OTLP span metrics are enabled', {
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        OTEL_TRACES_SPAN_METRICS_ENABLED: true,
+      }],
+    ]) {
+      it(`should leave direct client stats intake disabled when ${name}`, () => {
+        exporter = new Exporter({ site: 'datadoghq.com', tags: {}, ...config })
+
+        assert.strictEqual(writerOptions.statsEndpoint, undefined)
+      })
+    }
+
     it('should register beforeExit handler', () => {
       exporter = new Exporter({})
 
@@ -93,7 +123,7 @@ describe('AgentlessExporter', () => {
       exporter = new Exporter({ site: 'bad host' })
 
       sinon.assert.calledOnce(log.error)
-      assert.strictEqual(exporter._url, null)
+      assert.strictEqual(exporter._url, undefined)
     })
 
     it('should pass metadata from config to writer', () => {
@@ -143,7 +173,8 @@ describe('AgentlessExporter', () => {
         tags: { 'runtime-id': 'test-uuid' },
       })
 
-      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerID'), false)
+      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerId'), false)
+      assert.strictEqual(writerOptions.metadata.entityId, 'in-1234')
     })
 
     it('should reflect a runtime id updated on config after construction', () => {
@@ -251,6 +282,17 @@ describe('AgentlessExporter', () => {
 
       sinon.assert.calledWith(writer.append, spans)
       sinon.assert.calledOnce(writer.flush)
+    })
+  })
+
+  describe('sendStats', () => {
+    it('should delegate client stats to the writer', async () => {
+      exporter = new Exporter({})
+      const payload = Buffer.from('stats')
+
+      await new Promise(resolve => exporter.sendStats(payload, resolve))
+
+      sinon.assert.calledOnceWithExactly(writer.sendStats, payload, sinon.match.func)
     })
   })
 
