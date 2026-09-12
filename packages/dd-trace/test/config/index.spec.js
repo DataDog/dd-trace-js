@@ -5522,11 +5522,11 @@ rules:
       assert.strictEqual(config.sampler.rateLimit, -1)
     })
 
-    it('should disable stats computation when agentless is enabled', () => {
+    it('should preserve stats computation when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
     })
 
     it('should enable hostname reporting when agentless is enabled', () => {
