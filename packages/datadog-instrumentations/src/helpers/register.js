@@ -35,6 +35,10 @@ if (!disabledInstrumentations.has('process')) {
   require('../process')
 }
 
+if (!disabledInstrumentations.has('console')) {
+  require('../console')
+}
+
 const debugEnabled = DD_TRACE_DEBUG
 checkRequireCache.checkForRequiredModules()
 if (debugEnabled) {

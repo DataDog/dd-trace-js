@@ -85,6 +85,7 @@ const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -3744,6 +3745,19 @@ const JEST_LOGGING_LIBRARIES = new Set([
 const disabledJestInstrumentations = new Set(
   getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
 )
+
+addHook({
+  name: '@jest/console',
+  versions: [MINIMUM_JEST_VERSION],
+}, (jestConsole) => {
+  if (!disabledJestInstrumentations.has('console') && consoleLogSubmissionCh.hasSubscribers) {
+    const { wrapConsole, wrapJestBufferedConsole } = require('./console')
+    wrapJestBufferedConsole(jestConsole.BufferedConsole)
+    wrapConsole(jestConsole.CustomConsole?.prototype)
+  }
+  return jestConsole
+})
+
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
   'selenium-webdriver/chrome',

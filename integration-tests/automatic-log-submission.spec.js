@@ -53,4 +53,40 @@ describe('automatic log submission', () => {
       logsPromise,
     ])
   })
+
+  it('submits console logs without an active span', async () => {
+    const logsPromise = receiver.gatherPayloadsMaxTimeout(
+      ({ url }) => url.includes('/api/v2/logs'),
+      (payloads) => {
+        assert.strictEqual(payloads.length, 1)
+        assert.strictEqual(payloads[0].headers['dd-api-key'], 'test-api-key')
+        assert.strictEqual(payloads[0].url, '/api/v2/logs?ddsource=console&service=my-service')
+        assert.deepStrictEqual(payloads[0].logMessage, [{
+          dd: { service: 'my-service' },
+          message: 'Hello automatic console log submission!',
+          status: 'info',
+        }])
+      }
+    )
+    const fixture = path.join(sandboxCwd(), 'fixtures/automatic-log-submission/console.js')
+
+    await Promise.all([
+      execFileAsync(process.execPath, ['--require', 'dd-trace/init', fixture], {
+        cwd: sandboxCwd(),
+        env: {
+          ...process.env,
+          DD_AGENTLESS_ENABLED: 'true',
+          DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+          DD_API_KEY: 'test-api-key',
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          DD_LOGS_OTEL_ENABLED: 'false',
+          DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          DD_SERVICE: 'my-service',
+          DD_TRACE_STARTUP_LOGS: 'false',
+          OTEL_TRACES_EXPORTER: 'none',
+        },
+      }),
+      logsPromise,
+    ])
+  })
 })

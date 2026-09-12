@@ -72,12 +72,12 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'mocha',
       command: './node_modules/.bin/mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
-      loggerNames: ['winston', 'bunyan', 'pino'],
+      loggerNames: ['winston', 'bunyan', 'pino', 'console'],
     },
     {
       name: 'vitest',
       command: './node_modules/.bin/vitest run --config ./ci-visibility/automatic-log-submission-vitest/config.mjs',
-      loggerNames: ['winston', 'bunyan', 'pino'],
+      loggerNames: ['winston', 'bunyan', 'pino', 'console'],
       getExtraEnvVars: () => ({
         NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
       }),
@@ -85,13 +85,13 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'jest',
       command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js',
-      loggerNames: ['winston', 'bunyan', 'pino'],
+      loggerNames: ['winston', 'bunyan', 'pino', 'console'],
     },
     {
       name: 'jest ESM',
       command: 'node --experimental-vm-modules ./node_modules/jest/bin/jest ' +
         '--config ./ci-visibility/automatic-log-submission/config-jest.js',
-      loggerNames: ['winston', 'bunyan', 'pino'],
+      loggerNames: ['winston', 'bunyan', 'pino', 'console'],
       getExtraEnvVars: () => ({
         TEST_MODULE_TYPE: 'esm',
       }),
@@ -99,12 +99,12 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'cucumber',
       command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
-      loggerNames: ['winston', 'bunyan', 'pino'],
+      loggerNames: ['winston', 'bunyan', 'pino', 'console'],
     },
     {
       name: 'playwright',
       command: './node_modules/.bin/playwright test -c playwright.config.js',
-      loggerNames: ['winston', 'bunyan', 'pino'],
+      loggerNames: ['winston', 'bunyan', 'pino', 'console'],
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
@@ -115,6 +115,7 @@ describe('test optimization automatic log submission', () => {
 
   const loggers = {
     bunyan: { level: 30, messageKey: 'msg' },
+    console: { level: 'info', levelKey: 'status', messageKey: 'message' },
     pino: { level: 30, messageKey: 'msg' },
     winston: { level: 'info', messageKey: 'message' },
   }
@@ -124,7 +125,7 @@ describe('test optimization automatic log submission', () => {
   }).forEach(({ name, command, getExtraEnvVars = () => ({}), loggerName }) => {
     if (!isLatestCucumberSupported && name === 'cucumber') return
 
-    const { level: expectedLevel, messageKey } = loggers[loggerName]
+    const { level: expectedLevel, levelKey = 'level', messageKey } = loggers[loggerName]
 
     context(`with ${loggerName} and ${name}`, () => {
       it('can automatically submit logs', async () => {
@@ -132,36 +133,48 @@ describe('test optimization automatic log submission', () => {
         let testIds = {}
 
         const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes(`/api/v2/logs?ddsource=${loggerName}`), payloads => {
             payloads.forEach(({ headers }) => {
               assert.equal(headers['dd-api-key'], '1')
               assert.equal(headers['content-type'], 'application/json')
             })
-            assert.equal(payloads.length, 1)
+            if (loggerName !== 'console') {
+              assert.equal(payloads.length, 1)
+            }
             const logMessages = payloads.flatMap(({ logMessage }) => logMessage)
-            const [url] = payloads.flatMap(({ url }) => url)
+            const urls = payloads.flatMap(({ url }) => url)
+            const expectedMessages = new Set(['Hello simple log!', 'sum function being called'])
+            const testLogMessages = loggerName === 'console'
+              ? logMessages.filter(logMessage => expectedMessages.has(logMessage[messageKey]))
+              : logMessages
 
-            assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`)
-            assert.equal(logMessages.length, 2)
+            urls.forEach(url => assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`))
+            assert.equal(testLogMessages.length, 2)
 
-            logMessages.forEach(({ dd, level }) => {
-              assert.equal(level, expectedLevel)
+            testLogMessages.forEach((logMessage) => {
+              const { dd } = logMessage
+              assert.equal(logMessage[levelKey], expectedLevel)
               assert.equal(dd.service, 'my-service')
               assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(dd).sort())
             })
 
-            assertObjectContains(logMessages.map(logMessage => logMessage[messageKey]), [
+            assertObjectContains(testLogMessages.map(logMessage => logMessage[messageKey]), [
               'Hello simple log!',
               'sum function being called',
             ])
+            if (loggerName === 'console') {
+              const outsideTestLogs = logMessages.filter(({ message }) => message === 'outside a test')
+              assert.ok(outsideTestLogs.length > 0)
+              outsideTestLogs.forEach(({ dd }) => assert.deepStrictEqual(dd, { service: 'my-service' }))
+            }
             if (loggerName === 'winston' && (name === 'mocha' || name.startsWith('jest'))) {
-              const circularLog = logMessages.find(({ message }) => message === 'Hello simple log!')
+              const circularLog = testLogMessages.find(({ message }) => message === 'Hello simple log!')
               assert.equal(circularLog.circular.self, '[Circular]')
             }
 
             logIds = {
-              logSpanId: logMessages[0].dd.span_id,
-              logTraceId: logMessages[0].dd.trace_id,
+              logSpanId: testLogMessages[0].dd.span_id,
+              logTraceId: testLogMessages[0].dd.trace_id,
             }
           })
 
@@ -212,10 +225,14 @@ describe('test optimization automatic log submission', () => {
         // cucumber has `cucumber.step`, and that's the active span, not the test.
         // logs are queried by trace id, so it should be OK
         if (name !== 'cucumber') {
-          assert.match(testOutput, new RegExp(`"span_id":"${testSpanId}"`))
+          if (loggerName !== 'console') {
+            assert.match(testOutput, new RegExp(`"span_id":"${testSpanId}"`))
+          }
           assert.equal(logSpanId, testSpanId)
         }
-        assert.match(testOutput, new RegExp(`"trace_id":"${testTraceId}"`))
+        if (loggerName !== 'console') {
+          assert.match(testOutput, new RegExp(`"trace_id":"${testTraceId}"`))
+        }
         assert.equal(logTraceId, testTraceId)
       })
 
@@ -253,7 +270,9 @@ describe('test optimization automatic log submission', () => {
         ])
 
         assert.match(testOutput, /Hello simple log!/)
-        assert.match(testOutput, /span_id/)
+        if (loggerName !== 'console') {
+          assert.match(testOutput, /span_id/)
+        }
         assert.strictEqual(hasReceivedEvents, false)
       })
 
