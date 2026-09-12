@@ -8,6 +8,9 @@ const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
+const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
+const FlagEvaluationsWriter = require('./writers/flag-evaluations')
+const { setExposureDeliveryStrategy } = require('./writers/util')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -16,6 +19,9 @@ const SpanEnrichmentHook = require('./span-enrichment-hook')
 class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
+
+  /** @type {FlagEvaluationsWriter | undefined} */
+  #flagEvalEVPWriter
 
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
@@ -31,6 +37,20 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     })
 
     this.hooks.push(new EvalMetricsHook(config))
+
+    if (config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED) {
+      this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
+      const writer = this.#flagEvalEVPWriter
+      this.hooks.push(new FlagEvalEVPHook(writer))
+      setExposureDeliveryStrategy(config, (enabled, route) => {
+        if (this.#flagEvalEVPWriter !== writer) return
+        writer.setEnabled(enabled, route)
+      })
+      log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)
+    } else {
+      log.debug('%s EVP flagevaluation writer disabled (DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false)',
+        this.constructor.name)
+    }
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
@@ -73,6 +93,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
     this.#spanEnrichmentHook = undefined
+    this.#flagEvalEVPWriter?.destroy()
+    this.#flagEvalEVPWriter = undefined
   }
 }
 
