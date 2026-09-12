@@ -392,7 +392,7 @@ describe('profiler', function () {
       const compressed = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
       const zstdCompress = sinon.stub().returns(compressed)
       initProfiler({
-        '@datadog/libdatadog': { zstd_compress: zstdCompress },
+        '@datadog/libdatadog/zstd': { zstd_compress: zstdCompress },
         zlib: { zstdCompress: undefined },
       })
 
