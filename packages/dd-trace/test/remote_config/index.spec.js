@@ -181,11 +181,11 @@ describe('RemoteConfig', () => {
       config.env = undefined
       config.version = undefined
       rc = new RemoteConfig(config)
-      rc.updateCapabilities(Capabilities.APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION, true)
+      rc.updateCapabilities(Capabilities.SDK_CONFIGURATION, true)
       sinon.assert.calledOnceWithExactly(
         fetcher.setProductCapabilities,
         [],
-        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION']
+        ['SDK_CONFIGURATION']
       )
       fetcher.setProductCapabilities.returns(['UNKNOWN'])
       rc.setProductHandler('LIVE_DEBUGGING', noop)
@@ -194,7 +194,7 @@ describe('RemoteConfig', () => {
       sinon.assert.calledTwice(fetcher.setProductCapabilities)
       assert.deepStrictEqual(fetcher.setProductCapabilities.secondCall.args, [
         ['LIVE_DEBUGGING'],
-        ['APM_TRACING_ENABLE_DYNAMIC_INSTRUMENTATION'],
+        ['SDK_CONFIGURATION'],
       ])
 
       await poll()

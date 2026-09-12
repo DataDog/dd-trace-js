@@ -53,7 +53,7 @@ describe('Code Origin Remote Config', function () {
     return response.json()
   }
 
-  const addRemoteConfigAndWaitForAck = (libConfig) => {
+  const addRemoteConfigAndWaitForAck = (sdkConfig) => {
     return /** @type {Promise<void>} */ (new Promise((resolve) => {
       // Random config id - Just needs to be unique between calls to this function
       const configId = Math.random().toString(36).slice(2)
@@ -69,7 +69,9 @@ describe('Code Origin Remote Config', function () {
         id: configId,
         config: {
           service_target: { service: 'node', env: '*' },
-          lib_config: libConfig,
+          sdk_config: {
+            config: Object.entries(sdkConfig).map(([key, value]) => ({ key, value })),
+          },
         },
       })
     }))
@@ -120,7 +122,7 @@ describe('Code Origin Remote Config', function () {
           assert.strictEqual(configBefore.remoteConfigEnabled, true)
 
           // Step 2: Disable code origin via remote config
-          await addRemoteConfigAndWaitForAck({ code_origin_enabled: false })
+          await addRemoteConfigAndWaitForAck({ DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'false' })
 
           // Verify config shows disabled
           const configAfter = await request('/config')
@@ -162,7 +164,7 @@ describe('Code Origin Remote Config', function () {
           assert.strictEqual(configBefore.remoteConfigEnabled, true)
 
           // Step 2: Enable code origin at runtime via remote config
-          await addRemoteConfigAndWaitForAck({ code_origin_enabled: true })
+          await addRemoteConfigAndWaitForAck({ DD_CODE_ORIGIN_FOR_SPANS_ENABLED: 'true' })
 
           // Verify config shows CO enabled
           const configAfter = await request('/config')
