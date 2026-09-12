@@ -121,7 +121,22 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
   })
 }
 
+/**
+ * @typedef {object} GenerationOptions
+ * @property {string | unknown[]} [message]
+ * @property {string} [finishReason]
+ * @property {string} [choiceId]
+ * @property {string} [role]
+ * @property {number} [inputTokens]
+ * @property {number} [outputTokens]
+ * @property {number} [cacheReadTokens]
+ * @property {number} [cacheWriteTokens]
+ * @property {Array<Record<string, unknown>>} [messages]
+ * @property {Array<Record<string, unknown>>} [content] Anthropic Messages API output content blocks
+ */
+
 class Generation {
+  /** @param {GenerationOptions} [options] */
   constructor ({
     message = '',
     finishReason = '',
@@ -132,6 +147,7 @@ class Generation {
     cacheReadTokens,
     cacheWriteTokens,
     messages,
+    content,
   } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
@@ -145,10 +161,28 @@ class Generation {
       cacheWriteTokens,
     }
     this.messages = messages ?? [{ content: this.message, role: this.role }]
+    this.content = content
   }
 }
 
+/**
+ * @typedef {object} RequestParamsOptions
+ * @property {string | Array<Record<string, unknown>>} [prompt]
+ * @property {number | string} [temperature]
+ * @property {number | string} [topP]
+ * @property {number | string} [topK]
+ * @property {number | string} [maxTokens]
+ * @property {string[]} [stopSequences]
+ * @property {string} [inputType]
+ * @property {string} [truncate]
+ * @property {string | boolean} [stream]
+ * @property {number} [n]
+ * @property {string | Array<Record<string, unknown>>} [system]
+ * @property {Array<Record<string, unknown>>} [tools]
+ */
+
 class RequestParams {
+  /** @param {RequestParamsOptions} [options] */
   constructor ({
     prompt = '',
     temperature,
@@ -160,6 +194,8 @@ class RequestParams {
     truncate = '',
     stream = '',
     n,
+    system,
+    tools,
   } = {}) {
     this.prompt = prompt
     this.temperature = temperature
@@ -171,6 +207,8 @@ class RequestParams {
     this.truncate = truncate || ''
     this.stream = stream || ''
     this.n = n
+    this.system = system
+    this.tools = tools
   }
 }
 
@@ -286,26 +324,20 @@ function extractRequestParams (params, provider) {
       return new RequestParams({ prompt })
     }
     case PROVIDER.ANTHROPIC: {
-      let prompt = requestBody.prompt
-      if (Array.isArray(requestBody.messages)) { // newer claude models
-        for (let idx = requestBody.messages.length - 1; idx >= 0; idx--) {
-          const message = requestBody.messages[idx]
-          if (message.role === 'user') {
-            const content = message.content
-            prompt = undefined
-            if (content) {
-              prompt = ''
-              for (const block of content) {
-                if (block.type === 'text') prompt += block.text
-              }
-            }
-            break
-          }
-        }
+      if (Array.isArray(requestBody.messages)) {
+        return new RequestParams({
+          prompt: requestBody.messages,
+          system: requestBody.system,
+          tools: requestBody.tools,
+          temperature: requestBody.temperature,
+          topP: requestBody.top_p,
+          maxTokens: requestBody.max_tokens_to_sample ?? requestBody.max_tokens,
+          stopSequences: requestBody.stop_sequences,
+        })
       }
 
       return new RequestParams({
-        prompt,
+        prompt: requestBody.prompt,
         temperature: requestBody.temperature,
         topP: requestBody.top_p,
         maxTokens: requestBody.max_tokens_to_sample ?? requestBody.max_tokens,
@@ -358,6 +390,8 @@ function extractRequestParams (params, provider) {
 }
 
 function extractTextAndResponseReason (response, provider, modelName) {
+  if (!response || response.error || response.body == null) return new Generation()
+
   const body = JSON.parse(Buffer.from(response.body).toString('utf8'))
   const shouldSetChoiceIds = provider.toUpperCase() === PROVIDER.COHERE && !modelName.includes('embed')
   try {
@@ -417,10 +451,16 @@ function extractTextAndResponseReason (response, provider, modelName) {
         break
       }
       case PROVIDER.ANTHROPIC: {
+        if (Array.isArray(body.content)) {
+          return new Generation({
+            content: body.content,
+            finishReason: body.stop_reason,
+            role: 'assistant',
+            ...buildUsage(body.usage),
+          })
+        }
         let message = body.completion
-        if (Array.isArray(body.content)) { // newer claude models
-          message = body.content.find(item => item.type === 'text')?.text ?? body.content
-        } else if (body.content) {
+        if (body.content) {
           message = body.content
         }
         return new Generation({ message, finishReason: body.stop_reason })
@@ -448,6 +488,10 @@ function extractTextAndResponseReason (response, provider, modelName) {
             message: generation.text,
             finishReason: generation.finish_reason,
             choiceId: shouldSetChoiceIds ? generation.id : undefined,
+            messages: generations.map(generation => ({
+              content: generation.text,
+              role: '',
+            })),
           })
         }
         break
@@ -488,37 +532,56 @@ function extractTextAndResponseReason (response, provider, modelName) {
  *
  * @param {string} role
  * @param {Array<object>} contentBlocks
- * @returns {{ content?: string, role: string, toolCalls?: Array, toolResults?: Array } | undefined}
+ * @returns {Array<{ content?: string, role: string, toolCalls?: Array, toolResults?: Array }>}
  */
 function extractMessagesFromConverseContent (role, contentBlocks) {
   let content = ''
   const toolCalls = []
-  const toolResults = []
+  const unsupportedMessages = []
+  const toolResultMessages = []
 
   if (contentBlocks) {
     for (const block of contentBlocks) {
       if (block == null || typeof block !== 'object') continue
       if (typeof block.text === 'string') {
-        content += block.text
+        content += content ? ` ${block.text}` : block.text
       } else if (typeof block.guardContent?.text?.text === 'string') {
-        content += block.guardContent.text.text
+        const text = block.guardContent.text.text
+        content += content ? ` ${text}` : text
       } else if (block.toolUse) {
         toolCalls.push(buildToolCall(block.toolUse))
       } else if (block.toolResult) {
-        toolResults.push(buildToolResult(block.toolResult))
+        if (block.toolResult.content) {
+          for (const item of block.toolResult.content) {
+            toolResultMessages.push({
+              role: 'user',
+              toolResults: [{
+                name: block.toolResult.name ?? '',
+                result: resolveToolResultItem(item),
+                toolId: block.toolResult.toolUseId ?? '',
+                type: 'toolResult',
+              }],
+            })
+          }
+        }
       } else {
-        content += `[Unsupported content type: ${getContentBlockType(block)}]`
+        unsupportedMessages.push({
+          content: `[Unsupported content type: ${getContentBlockType(block)}]`,
+          role,
+        })
       }
     }
   }
 
-  if (!content && toolCalls.length === 0 && toolResults.length === 0) return
-
-  const message = { role }
-  if (content) message.content = content
-  if (toolCalls.length > 0) message.toolCalls = toolCalls
-  if (toolResults.length > 0) message.toolResults = toolResults
-  return message
+  const messages = []
+  if (content || toolCalls.length > 0) {
+    const message = { role }
+    if (content) message.content = content
+    if (toolCalls.length > 0) message.toolCalls = toolCalls
+    messages.push(message)
+  }
+  messages.push(...unsupportedMessages, ...toolResultMessages)
+  return messages
 }
 
 /**
@@ -538,8 +601,8 @@ function getContentBlockType (block) {
 
 // Always emit at least one output message so downstream tagging has a role to attach to.
 function toOutputMessages (role, contentBlocks) {
-  const message = extractMessagesFromConverseContent(role, contentBlocks)
-  return message ? [message] : [{ role, content: '' }]
+  const messages = extractMessagesFromConverseContent(role, contentBlocks)
+  return messages.length > 0 ? messages : [{ role, content: '' }]
 }
 
 function buildToolCall ({ name, input, toolUseId }) {
@@ -555,15 +618,8 @@ function parseToolInput (inputStr) {
   }
 }
 
-function buildToolResult ({ toolUseId, content }) {
-  let result = ''
-  if (content) {
-    for (const item of content) result += resolveToolResultItem(item)
-  }
-  return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
-}
-
 function resolveToolResultItem (item) {
+  if (item == null || typeof item !== 'object') return '[Unsupported content type(s): unknown]'
   if (typeof item.text === 'string') return item.text
   if (item.json != null) return JSON.stringify(item.json)
   return `[Unsupported content type(s): ${getContentBlockType(item)}]`
@@ -571,10 +627,14 @@ function resolveToolResultItem (item) {
 
 function buildUsage (usage = {}) {
   return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cacheReadTokens: usage.cacheReadInputTokens ?? usage.cacheReadInputTokenCount,
-    cacheWriteTokens: usage.cacheWriteInputTokens ?? usage.cacheWriteInputTokenCount,
+    inputTokens: usage.inputTokens ?? usage.input_tokens,
+    outputTokens: usage.outputTokens ?? usage.output_tokens,
+    cacheReadTokens: usage.cacheReadInputTokens ??
+      usage.cacheReadInputTokenCount ??
+      usage.cache_read_input_tokens,
+    cacheWriteTokens: usage.cacheWriteInputTokens ??
+      usage.cacheWriteInputTokenCount ??
+      usage.cache_creation_input_tokens,
   }
 }
 
@@ -612,19 +672,12 @@ function extractConverseToolDefinitions (params) {
 function extractRequestParamsConverse (params) {
   const prompt = []
   if (params.system) {
-    for (const block of params.system) {
-      if (typeof block?.text === 'string') {
-        prompt.push({ content: block.text, role: 'system' })
-      } else if (typeof block?.guardContent?.text?.text === 'string') {
-        prompt.push({ content: block.guardContent.text.text, role: 'system' })
-      }
-    }
+    prompt.push(...extractMessagesFromConverseContent('system', params.system))
   }
   if (params.messages) {
     for (const msg of params.messages) {
       if (msg == null || typeof msg !== 'object') continue
-      const message = extractMessagesFromConverseContent(msg.role || 'user', msg.content)
-      if (message) prompt.push(message)
+      prompt.push(...extractMessagesFromConverseContent(msg.role || 'user', msg.content))
     }
   }
 
