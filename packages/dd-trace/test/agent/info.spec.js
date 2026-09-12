@@ -98,6 +98,22 @@ describe('agent/info', () => {
       }, options, request)
     })
 
+    it('preserves a caller-supplied information path', (done) => {
+      const request = sinon.stub().yieldsAsync(null, JSON.stringify({ endpoints: ['/evp_proxy/v4'] }))
+      const options = { path: '/agent-prefix/info', retry: false }
+
+      fetchAgentInfo(new URL(url), (err, response) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(response.endpoints, ['/evp_proxy/v4'])
+        sinon.assert.calledOnceWithMatch(request, '', {
+          path: '/agent-prefix/info',
+          retry: false,
+          url: new URL(url),
+        })
+        done()
+      }, options, request)
+    })
+
     describe('caching', () => {
       let clock
 

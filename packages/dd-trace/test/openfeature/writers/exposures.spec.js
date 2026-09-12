@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const tracerVersion = require('../../../../../package.json').version
 
 describe('OpenFeature Exposures Writer', () => {
   let ExposuresWriter
@@ -390,10 +391,12 @@ describe('OpenFeature Exposures Writer', () => {
       const [payload, options] = request.getCall(0).args
 
       assert.strictEqual(options.method, 'POST')
-      assert.strictEqual(options.retry, true)
+      assert.strictEqual(options.retry, false)
       assert.match(options.path, /\/evp_proxy\/v2\//)
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'dd-trace-js')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN-VERSION'], tracerVersion)
 
       const parsedPayload = JSON.parse(payload)
       assert.ok(
@@ -405,6 +408,40 @@ describe('OpenFeature Exposures Writer', () => {
       assert.strictEqual(parsedPayload.exposures?.length, 1)
       assert.ok(parsedPayload.exposures[0].timestamp)
       assert.strictEqual(parsedPayload.context.service, 'test-service')
+    })
+
+    it('should log only structural batch metadata', () => {
+      const sensitiveEvent = {
+        ...exposureEvent,
+        subject: {
+          id: 'private-subject-987',
+          attributes: { secret: 'private-attribute-654' },
+        },
+      }
+      writer.append(sensitiveEvent)
+
+      writer.flush()
+
+      const debugMessage = log.debug.firstCall.args[0]()
+      assert.match(debugMessage, /ExposuresWriter flushing 1 events \(\d+ bytes\)/)
+      assert.ok(!debugMessage.includes('private-subject-987'))
+      assert.ok(!debugMessage.includes('private-attribute-654'))
+    })
+
+    it('should keep the fixed Agent EVP v2 route for the next batch after a transport failure', async () => {
+      request.onFirstCall().yieldsAsync(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))
+      writer.append(exposureEvent)
+      writer.flush()
+      await clock.tickAsync(0)
+
+      writer.append(exposureEvent)
+      writer.flush()
+
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(request.firstCall.args[1].path, '/evp_proxy/v2/api/v2/exposures')
+      assert.strictEqual(request.secondCall.args[1].path, '/evp_proxy/v2/api/v2/exposures')
+      assert.strictEqual(request.firstCall.args[1].retry, false)
+      assert.strictEqual(request.secondCall.args[1].retry, false)
     })
 
     it('should flush events through the selected EVP v4 proxy path', () => {
@@ -459,9 +496,11 @@ describe('OpenFeature Exposures Writer', () => {
       const [, options] = request.getCall(0).args
       assert.strictEqual(options.url, url)
       assert.strictEqual(options.path, '/api/v2/exposures')
-      assert.strictEqual(options.retry, true)
+      assert.strictEqual(options.retry, false)
       assert.strictEqual(options.agent, agent)
       assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'dd-trace-js')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN-VERSION'], tracerVersion)
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
@@ -473,7 +512,6 @@ describe('OpenFeature Exposures Writer', () => {
         { code: 'ENOENT' }
       )],
       ['unresolvable hostname', Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' })],
-      ['HTTP 403', Object.assign(new Error('Forbidden'), { status: 403 }), 403],
       ['HTTP 404', Object.assign(new Error('Not Found'), { status: 404 }), 404],
       ['HTTP 405', Object.assign(new Error('Method Not Allowed'), { status: 405 }), 405],
     ]) {
@@ -523,7 +561,7 @@ describe('OpenFeature Exposures Writer', () => {
       ['broken pipe', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })],
       ['timeout', Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })],
     ]) {
-      it(`should retry ambiguous local ${name} through direct intake and switch future batches`, async () => {
+      it(`should not replay ambiguous local ${name} and should switch future batches`, async () => {
         const localUrl = new URL('http://serverless-init:8126')
         const directUrl = new URL('https://event-platform-intake.datadoghq.com')
         request.onFirstCall().yieldsAsync(error, null, statusCode)
@@ -546,23 +584,23 @@ describe('OpenFeature Exposures Writer', () => {
         writer.flush()
         await clock.tickAsync(0)
 
-        sinon.assert.calledTwice(request)
+        sinon.assert.calledOnce(request)
         assert.strictEqual(request.firstCall.args[1].url, localUrl)
-        assert.strictEqual(request.secondCall.args[1].url, directUrl)
 
         writer.append(exposureEvent)
         writer.flush()
 
-        sinon.assert.calledThrice(request)
-        assert.strictEqual(request.thirdCall.args[1].url, directUrl)
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.secondCall.args[1].url, directUrl)
       })
     }
 
     for (const [name, error, statusCode] of [
+      ['HTTP 403', Object.assign(new Error('Forbidden'), { status: 403 }), 403],
       ['HTTP 429', Object.assign(new Error('Too Many Requests'), { status: 429 }), 429],
       ['HTTP 500', Object.assign(new Error('Internal Server Error'), { status: 500 }), 500],
     ]) {
-      it(`should not replay ${name} through direct intake or switch future batches`, async () => {
+      it(`should not replay ${name} but should switch future batches to direct intake`, async () => {
         const localUrl = new URL('http://serverless-init:8126')
         request.onFirstCall().yieldsAsync(error, null, statusCode)
         writer.setEnabled(true, {
@@ -590,7 +628,7 @@ describe('OpenFeature Exposures Writer', () => {
         writer.flush()
 
         sinon.assert.calledTwice(request)
-        assert.strictEqual(request.secondCall.args[1].url, localUrl)
+        assert.strictEqual(request.secondCall.args[1].url.href, 'https://event-platform-intake.datadoghq.com/')
       })
     }
 
