@@ -1351,6 +1351,25 @@ describe('tagger', () => {
         })
       })
 
+      it('accepts a ManagedPrompt annotation from Prompt Management', () => {
+        const { ManagedPrompt } = require('../../src/llmobs/prompts/prompt')
+        const prompt = ManagedPrompt.fromResponse({
+          prompt_id: 'managed-prompt',
+          version: 1,
+          template: 'Hello {name}',
+        })
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, prompt.toAnnotation({ name: 'Ada' }))
+        assert.deepEqual(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          template: 'Hello {name}',
+          variables: { name: 'Ada' },
+          version: '1',
+          id: 'managed-prompt',
+          _dd_context_variable_keys: ['context'],
+          _dd_query_variable_keys: ['question'],
+        })
+      })
+
       it('tags a span with a chat message template list', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         tagger.tagPrompt(span, {
