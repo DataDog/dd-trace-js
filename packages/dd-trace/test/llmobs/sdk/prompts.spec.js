@@ -14,6 +14,14 @@ const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
 const { getConfigFresh } = require('../../helpers/config')
 
 describe('sdk prompts', () => {
+  it('exposes Prompt Management only through a stable prompts namespace', () => {
+    const llmobs = new LLMObsSDK(null, { disable () {} }, getConfigFresh({}))
+
+    assert.strictEqual(llmobs.prompts, llmobs.prompts)
+    assert.strictEqual(typeof llmobs.prompts.getPrompt, 'function')
+    assert.strictEqual(llmobs.getPrompt, undefined)
+  })
+
   it('resolves provider prompts without credentials while LLMObs span export is disabled', async () => {
     const config = getConfigFresh({})
     config.DD_API_KEY = undefined
@@ -29,7 +37,7 @@ describe('sdk prompts', () => {
 
     sinon.assert.notCalled(getProvider)
 
-    const prompt = await llmobs.getPrompt('greeting')
+    const prompt = await llmobs.prompts.getPrompt('greeting')
 
     assert.strictEqual(llmobs.enabled, false)
     assert.strictEqual(prompt.source, 'ff')
@@ -43,6 +51,7 @@ describe('sdk prompts', () => {
     config.DD_API_KEY = 'api-key'
     config.DD_LLMOBS_PROMPTS_CACHE_DIR = cacheDir
     config.DD_LLMOBS_PROMPTS_CACHE_TTL = 60
+    config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED = true
     const cache = new WarmCache({
       cacheDir,
       ttlMs: 60_000,
@@ -52,7 +61,7 @@ describe('sdk prompts', () => {
     }))
     const llmobs = new LLMObsSDK(null, { disable () {} }, config)
 
-    llmobs.clearPromptCache({ hot: false })
+    llmobs.prompts.clearPromptCache({ hot: false })
 
     assert.deepStrictEqual(fs.readdirSync(cacheDir), [])
     fs.rmSync(cacheDir, { recursive: true, force: true })
@@ -67,7 +76,7 @@ describe('sdk prompts', () => {
       detail: 'DD_SITE is invalid for prompt operations',
     }
 
-    await assert.rejects(llmobs.getPrompt('greeting'), expected)
-    await assert.rejects(llmobs.createPrompt('greeting', []), expected)
+    await assert.rejects(llmobs.prompts.getPrompt('greeting'), expected)
+    await assert.rejects(llmobs.prompts.createPrompt('greeting', []), expected)
   })
 })

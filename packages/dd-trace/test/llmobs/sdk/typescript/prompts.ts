@@ -1,9 +1,10 @@
 import tracer from 'dd-trace';
 
 const llmobs = tracer.init().llmobs;
+const prompts = llmobs.prompts;
 
 async function promptManagement () {
-  const prompt = await llmobs.getPrompt('greeting', {
+  const prompt = await prompts.getPrompt('greeting', {
     version: 2,
     fallback: () => ({ template: 'Hello {name}', version: 'local' }),
     targetingKey: 'user-1',
@@ -16,14 +17,13 @@ async function promptManagement () {
     prompt.template[0].content = 'Changed';
   }
   llmobs.annotationContext({ prompt: annotation }, () => messages);
-  await llmobs.refreshPrompt('greeting');
-  llmobs.clearPromptCache({ hot: true, warm: false });
-  const template = [{ role: 'user', content: 'Hello {name}' }];
-  await llmobs.createPrompt('greeting', template, { title: 'Greeting', envIds: [] });
-  await llmobs.createPromptVersion('greeting', template, { userVersion: '2', envIds: [] });
-  await llmobs.updatePrompt('greeting', { title: '', description: '' });
-  await llmobs.updatePromptVersion('greeting', 2, { description: '', envIds: [] });
-  await llmobs.deletePrompt('greeting');
-  await llmobs.listPrompts();
-  await llmobs.listPromptVersions('greeting');
+  await prompts.refreshPrompt('greeting');
+  prompts.clearPromptCache({ hot: true, warm: false });
+  await prompts.createPrompt('greeting', 'Hello {name}', { title: 'Greeting', envIds: [] });
+  await prompts.createPromptVersion('greeting', 'Hello again {name}', { userVersion: '2', envIds: [] });
+  await prompts.updatePrompt('greeting', { title: '', description: '' });
+  await prompts.updatePromptVersion('greeting', 2, { description: '', envIds: [] });
+  await prompts.deletePrompt('greeting');
+  await prompts.listPrompts();
+  await prompts.listPromptVersions('greeting');
 }

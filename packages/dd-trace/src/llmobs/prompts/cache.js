@@ -226,6 +226,7 @@ class WarmCache {
    * @param {string} key
    */
   delete (key) {
+    if (!this.enabled) return
     try {
       fs.rmSync(this.#path(key), { force: true })
     } catch (error) {
@@ -238,6 +239,7 @@ class WarmCache {
    * @param {string} promptId
    */
   evictPrompt (promptId) {
+    if (!this.enabled) return
     try {
       fs.rmSync(this.#promptDir(promptId), { recursive: true, force: true })
     } catch (error) {
@@ -249,6 +251,7 @@ class WarmCache {
    * Clear all warm prompt entries.
    */
   clear () {
+    if (!this.enabled) return
     try {
       for (const entry of fs.readdirSync(this.cacheDir)) {
         fs.rmSync(path.join(this.cacheDir, entry), { recursive: true, force: true })

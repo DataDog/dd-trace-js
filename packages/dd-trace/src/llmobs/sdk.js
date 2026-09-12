@@ -32,18 +32,6 @@ const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
 
-/** @typedef {import('../../../../index').llmobs.ClearPromptCacheOptions} ClearPromptCacheOptions */
-/** @typedef {import('../../../../index').llmobs.CreatePromptOptions} CreatePromptOptions */
-/** @typedef {import('../../../../index').llmobs.CreatePromptVersionOptions} CreatePromptVersionOptions */
-/** @typedef {import('../../../../index').llmobs.DeletedPromptResponse} DeletedPromptResponse */
-/** @typedef {import('../../../../index').llmobs.GetPromptOptions} GetPromptOptions */
-/** @typedef {import('../../../../index').llmobs.ManagedPrompt} ManagedPrompt */
-/** @typedef {import('../../../../index').llmobs.PromptResponse} PromptResponse */
-/** @typedef {import('../../../../index').llmobs.PromptTemplateMessage} PromptTemplateMessage */
-/** @typedef {import('../../../../index').llmobs.PromptVersionResponse} PromptVersionResponse */
-/** @typedef {import('../../../../index').llmobs.UpdatePromptOptions} UpdatePromptOptions */
-/** @typedef {import('../../../../index').llmobs.UpdatePromptVersionOptions} UpdatePromptVersionOptions */
-
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
@@ -92,110 +80,15 @@ class LLMObs extends NoopLLMObs {
   }
 
   /**
-   * Get the lazily-created Prompt Management owner.
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
    */
-  #getPromptManager () {
+  get prompts () {
     if (!this.#promptManager) {
       const PromptManager = require('./prompts/manager')
       this.#promptManager = new PromptManager(this._config, this.#getProvider)
     }
     return this.#promptManager
-  }
-
-  /**
-   * Retrieve and resolve a managed prompt.
-   * @param {string} promptId
-   * @param {GetPromptOptions} [options]
-   * @returns {Promise<ManagedPrompt>}
-   */
-  async getPrompt (promptId, options) {
-    return this.#getPromptManager().getPrompt(promptId, options)
-  }
-
-  /**
-   * Refresh the selector implied by the current environment.
-   * @param {string} promptId
-   * @returns {Promise<ManagedPrompt | undefined>}
-   */
-  async refreshPrompt (promptId) {
-    return this.#getPromptManager().refreshPrompt(promptId)
-  }
-
-  /**
-   * Clear managed prompt caches.
-   * @param {ClearPromptCacheOptions} [options]
-   */
-  clearPromptCache (options = {}) {
-    this.#getPromptManager().clearCache(options)
-  }
-
-  /**
-   * Create a prompt.
-   * @param {string} promptId
-   * @param {PromptTemplateMessage[]} template
-   * @param {CreatePromptOptions} [options]
-   * @returns {Promise<PromptResponse>}
-   */
-  async createPrompt (promptId, template, options) {
-    return this.#getPromptManager().createPrompt(promptId, template, options)
-  }
-
-  /**
-   * Create a prompt version.
-   * @param {string} promptId
-   * @param {PromptTemplateMessage[]} template
-   * @param {CreatePromptVersionOptions} [options]
-   * @returns {Promise<PromptVersionResponse>}
-   */
-  async createPromptVersion (promptId, template, options) {
-    return this.#getPromptManager().createPromptVersion(promptId, template, options)
-  }
-
-  /**
-   * Update prompt metadata.
-   * @param {string} promptId
-   * @param {UpdatePromptOptions} options
-   * @returns {Promise<PromptResponse>}
-   */
-  async updatePrompt (promptId, options) {
-    return this.#getPromptManager().updatePrompt(promptId, options)
-  }
-
-  /**
-   * Update prompt-version metadata.
-   * @param {string} promptId
-   * @param {number} version
-   * @param {UpdatePromptVersionOptions} options
-   * @returns {Promise<PromptVersionResponse>}
-   */
-  async updatePromptVersion (promptId, version, options) {
-    return this.#getPromptManager().updatePromptVersion(promptId, version, options)
-  }
-
-  /**
-   * Delete a prompt.
-   * @param {string} promptId
-   * @returns {Promise<DeletedPromptResponse>}
-   */
-  async deletePrompt (promptId) {
-    return this.#getPromptManager().deletePrompt(promptId)
-  }
-
-  /**
-   * List prompts.
-   * @returns {Promise<PromptResponse[]>}
-   */
-  async listPrompts () {
-    return this.#getPromptManager().listPrompts()
-  }
-
-  /**
-   * List prompt versions.
-   * @param {string} promptId
-   * @returns {Promise<PromptVersionResponse[]>}
-   */
-  async listPromptVersions (promptId) {
-    return this.#getPromptManager().listPromptVersions(promptId)
   }
 
   enable (options = {}) {
