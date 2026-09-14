@@ -20,6 +20,12 @@ const DEFAULT_AUDIO_RATE = 24_000
 // the caller's thread, and this state machine is only safe because every path runs on it.
 const PARK_MAX_MS = 5000
 
+// How many un-acknowledged `response.create`s to remember. Each is matched off by the next
+// `response.created`, so the queue is normally empty or holds one; the bound only stops a client
+// whose creates are rejected — the server answers with `error`, which carries no response id — from
+// growing it across a long connection.
+const MAX_PENDING_RESPONSE_CREATES = 8
+
 /**
  * @typedef {import('./turns').ResponseTurn} Turn
  * @typedef {import('./turns').ToolCall} ToolCall
@@ -139,7 +145,23 @@ class RealtimeSession {
    */
   #pendingInputBytes = 0
 
-  #pendingInput = new InputTurn()
+  /**
+   * Whether anything consumes the captured audio. Only LLM Observability does, so with it disabled
+   * — the default — the segments keep their byte counts, which size the speech windows, and hold no
+   * bytes. See `AudioAccumulator`.
+   */
+  #retainAudio
+
+  /** @type {InputTurn} */
+  #pendingInput
+
+  /**
+   * One entry per client `response.create` still waiting for its `response.created`, recording
+   * whether that response supplies its own input. FIFO: the server acknowledges creates in order.
+   *
+   * @type {boolean[]}
+   */
+  #responseCreates = []
 
   /** @type {Map<string, Turn>} */
   #responses = new Map()
@@ -179,12 +201,15 @@ class RealtimeSession {
    * @param {(turn: Turn) => void} options.captureContext
    * @param {string} [options.model]
    * @param {string} [options.basePath]
+   * @param {boolean} [options.retainAudio]
    */
-  constructor ({ emitTurn, captureContext, model, basePath = '' }) {
+  constructor ({ emitTurn, captureContext, model, basePath = '', retainAudio = true }) {
     this.#emitTurn = emitTurn
     this.#captureContext = captureContext
     this.#model = model
     this.#basePath = basePath
+    this.#retainAudio = retainAudio
+    this.#pendingInput = new InputTurn(retainAudio)
   }
 
   // -- event entry points ---------------------------------------------------
@@ -216,6 +241,9 @@ class RealtimeSession {
           break
         case 'conversation.item.create':
           this.#absorbInputItem(event.item, now)
+          break
+        case 'response.create':
+          this.#onResponseCreate(event.response)
           break
       }
     } catch (error) {
@@ -338,16 +366,16 @@ class RealtimeSession {
         return
       }
       case 'response.audio_transcript.delta':
-        turn.transcript += event.delta ?? ''
+        turn.transcript.appendDelta(event.item_id, event.delta ?? '')
         return
       case 'response.audio_transcript.done':
-        turn.transcript = event.transcript ?? turn.transcript
+        if (event.transcript != null) turn.transcript.complete(event.item_id, String(event.transcript))
         return
       case 'response.text.delta':
-        turn.text += event.delta ?? ''
+        turn.text.appendDelta(event.item_id, event.delta ?? '')
         return
       case 'response.text.done':
-        turn.text = event.text ?? turn.text
+        if (event.text != null) turn.text.complete(event.item_id, String(event.text))
     }
   }
 
@@ -425,10 +453,13 @@ class RealtimeSession {
     const onset = this.#bufferOffsetToWallTime(audioStartMs, now)
     pending.speechStartTime = onset
 
-    const hadAudio = pending.audio.startTime !== undefined
     pending.audio.trimLeading(this.#preOnsetBytes(audioStartMs))
-    // Re-anchor the segment on the onset: whatever survived the trim starts there.
-    if (hadAudio) pending.audio.startTime = onset
+    // Re-anchor the segment on the onset: whatever survived the trim starts there. A trim that
+    // covered the whole segment resets it instead, and re-anchoring then would leave `startTime`
+    // set with no format recorded — `append` only records the format on the frame that opens a
+    // segment, so every later frame would skip it and the segment would fall back to whatever
+    // format the session holds at describe time.
+    if (pending.audio.startTime !== undefined) pending.audio.startTime = onset
   }
 
   /**
@@ -443,7 +474,12 @@ class RealtimeSession {
     const rate = bytesPerSecond(this.#inputAudioMime, this.#inputAudioRate)
     if (baseMs === undefined || onsetMs === undefined || !rate) return 0
 
-    return Math.max(0, Math.trunc((onsetMs - baseMs) / 1000 * rate))
+    const bytes = Math.max(0, Math.trunc((onsetMs - baseMs) / 1000 * rate))
+    // Cut on a sample boundary, as the truncation cap does: `audioBaseMs` is a fractional millisecond
+    // offset, so this lands on an odd byte often enough to matter, and slicing a PCM16 segment
+    // mid-sample pairs every low byte with the next sample's high byte — the whole clip decodes to
+    // noise. Rounding down keeps a byte of lead-in rather than corrupting what follows.
+    return bytes - bytes % 2 // keep PCM16 samples whole; a byte is nothing for G.711
   }
 
   /**
@@ -585,6 +621,25 @@ class RealtimeSession {
   // -- turn lifecycle -------------------------------------------------------
 
   /**
+   * Note a client-initiated response, so the `response.created` it produces knows whether it owns
+   * the buffered user input.
+   *
+   * A response that carries its own `input`, or that is explicitly out-of-band
+   * (`conversation: 'none'`), is not the user's turn — the app is asking the model something on the
+   * side, which OpenAI supports running in parallel with the conversation. Letting it consume the
+   * pending input would attribute the user's microphone audio and transcript to it *and* leave the
+   * next real turn with nothing, dropping that turn's user-speech span entirely.
+   *
+   * @param {Record<string, unknown> | undefined} response
+   * @returns {void}
+   */
+  #onResponseCreate (response) {
+    if (this.#responseCreates.length >= MAX_PENDING_RESPONSE_CREATES) this.#responseCreates.shift()
+
+    this.#responseCreates.push(Array.isArray(response?.input) || response?.conversation === 'none')
+  }
+
+  /**
    * @param {unknown} responseId
    * @param {number} now
    * @returns {void}
@@ -598,8 +653,13 @@ class RealtimeSession {
     this.#flushAwaiting(now)
     this.#flushPlaying(now, true)
 
-    const turn = new ResponseTurn(this.#pendingInput, now)
-    this.#pendingInput = new InputTurn()
+    // An empty queue means the server created this response on its own — server VAD deciding the
+    // user finished speaking — which is exactly the case that owns the pending input.
+    const outOfBand = this.#responseCreates.shift() === true
+
+    const input = outOfBand ? new InputTurn(this.#retainAudio) : this.#pendingInput
+    const turn = new ResponseTurn(input, now, this.#retainAudio)
+    if (!outOfBand) this.#pendingInput = new InputTurn(this.#retainAudio)
     turn.model = this.#model
 
     this.#captureContext(turn)
@@ -794,7 +854,7 @@ class RealtimeSession {
         : {
             startTime: agentStart,
             finishTime: Math.max(agentStart, agentEnd),
-            transcript: turn.transcript || turn.text,
+            transcript: turn.transcript.value || turn.text.value,
           },
       input: {
         text: input.text,
@@ -806,8 +866,8 @@ class RealtimeSession {
         toolResults: input.toolResults,
       },
       output: {
-        text: turn.text,
-        transcript: turn.transcript,
+        text: turn.text.value,
+        transcript: turn.transcript.value,
         audio: turn.audio.toBuffer(),
         audioPresent: turn.audio.present,
         mimeType: outputFormat.mimeType,

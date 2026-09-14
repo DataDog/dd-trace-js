@@ -154,9 +154,11 @@ describe('openai realtime AudioAccumulator', () => {
       assert.strictEqual(accumulator.startTime, undefined)
     })
 
-    // A long silent lead-in can spend the retention cap before the speech even starts. Clearing must
-    // reopen the accumulator, or the turn keeps nothing but an `[audio]` marker.
-    it('reopens a segment once the surviving audio is back under the cap', () => {
+    // Once the cap has dropped frames, a partial trim cannot put them back: the bytes after the trim
+    // point are gone too. Reopening here would let later frames build a clip that starts partway
+    // through the segment while the duration still spans all of it, so the segment stays closed and
+    // the turn falls back to an `[audio]` marker.
+    it('stays closed when a partial trim leaves a gap in a dropped segment', () => {
       const accumulator = new AudioAccumulator()
       accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES).toString('base64'), 1000)
       accumulator.append(b64([1, 2, 3, 4]), 2000)
@@ -165,8 +167,23 @@ describe('openai realtime AudioAccumulator', () => {
       // Shed the lead-in that spent the cap, but not the whole segment.
       accumulator.trimLeading(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
 
-      assert.strictEqual(accumulator.oversize, false)
+      assert.strictEqual(accumulator.oversize, true)
       assert.strictEqual(accumulator.totalDecodedBytes, 4)
+      // The timing survives; the bytes do not, and nothing claims otherwise.
+      assert.strictEqual(accumulator.toBuffer().length, 0)
+      assert.strictEqual(accumulator.present, true)
+    })
+
+    it('keeps dropping frames after a partial trim, rather than starting a clip mid-segment', () => {
+      const accumulator = new AudioAccumulator()
+      accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES).toString('base64'), 1000)
+      accumulator.append(b64([1, 2, 3, 4]), 2000)
+      accumulator.trimLeading(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+
+      accumulator.append(b64([7, 8]), 3000)
+
+      assert.strictEqual(accumulator.toBuffer().length, 0)
+      assert.strictEqual(accumulator.totalDecodedBytes, 6)
     })
 
     it('reopens a segment the lead-in had already pushed oversize', () => {
@@ -182,6 +199,55 @@ describe('openai realtime AudioAccumulator', () => {
       assert.deepStrictEqual(accumulator.toBuffer(), Buffer.from([7, 8]))
       assert.strictEqual(accumulator.totalDecodedBytes, 2)
       assert.strictEqual(accumulator.startTime, 2000)
+    })
+  })
+
+  // Only LLM Observability consumes the bytes. With it off — the default — the segment still has to
+  // report how much audio went by, since the speech windows are derived from that count, but holding
+  // the audio would buffer megabytes per turn for nothing.
+  describe('with retention off', () => {
+    it('counts the bytes exactly, as the retaining accumulator would', () => {
+      const retaining = new AudioAccumulator()
+      const counting = new AudioAccumulator(false)
+
+      for (const frame of [[1, 2, 3], [4, 5], [6, 7, 8, 9]]) {
+        const reported = counting.append(b64(frame), 1000)
+        retaining.append(b64(frame), 1000)
+
+        assert.strictEqual(reported, frame.length, 'append reports the decoded length')
+      }
+
+      assert.strictEqual(counting.totalDecodedBytes, retaining.totalDecodedBytes)
+      assert.strictEqual(counting.totalDecodedBytes, 9)
+    })
+
+    it('holds no bytes, but still marks the segment present and anchored', () => {
+      const accumulator = new AudioAccumulator(false)
+
+      accumulator.append(b64([1, 2, 3, 4]), 1000, 'audio/pcm', 24_000)
+
+      assert.strictEqual(accumulator.toBuffer().length, 0)
+      assert.strictEqual(accumulator.present, true)
+      assert.strictEqual(accumulator.startTime, 1000)
+      assert.strictEqual(accumulator.mimeType, 'audio/pcm')
+      assert.strictEqual(accumulator.sampleRate, 24_000)
+    })
+
+    it('never trips the retention cap, however much audio goes by', () => {
+      const accumulator = new AudioAccumulator(false)
+
+      accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES + 1).toString('base64'), 1000)
+
+      assert.strictEqual(accumulator.oversize, false)
+      assert.strictEqual(accumulator.totalDecodedBytes, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES + 1)
+    })
+
+    it('ignores a missing or non-string frame, as when retaining', () => {
+      const accumulator = new AudioAccumulator(false)
+
+      assert.strictEqual(accumulator.append(undefined, 1000), 0)
+      assert.strictEqual(accumulator.append('', 1000), 0)
+      assert.strictEqual(accumulator.present, false)
     })
   })
 

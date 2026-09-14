@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 const {
   audioMimeTypeFromFormat,
+  fitsInlineAudioBudget,
   formatAudioPart,
   formatAudioPartWithGuard,
   isRenderableAudioMime,
@@ -123,6 +124,35 @@ describe('audio-utils', () => {
       const raw = Buffer.alloc(LLMOBS_AUDIO_INLINE_MAX_BYTES / 4 * 3)
       assert.notStrictEqual(formatAudioPartWithGuard(raw, 'audio/wav'), undefined)
       assert.strictEqual(formatAudioPartWithGuard(Buffer.alloc(raw.length + 3), 'audio/wav'), undefined)
+    })
+  })
+
+  // Lets a caller that has to allocate to produce its audio — decoding G.711 to PCM16, wrapping raw
+  // PCM in a WAV container — check the size it is about to produce before paying for it.
+  describe('fitsInlineAudioBudget', () => {
+    it('agrees with the guard on both sides of the boundary', () => {
+      const maxBytes = 400
+      const exact = maxBytes / 4 * 3 // 300 raw bytes -> exactly 400 encoded
+
+      assert.strictEqual(fitsInlineAudioBudget(exact, maxBytes), true)
+      assert.strictEqual(fitsInlineAudioBudget(exact + 1, maxBytes), false)
+    })
+
+    it('defaults the budget to the inline maximum', () => {
+      const exact = LLMOBS_AUDIO_INLINE_MAX_BYTES / 4 * 3
+
+      assert.strictEqual(fitsInlineAudioBudget(exact), true)
+      assert.strictEqual(fitsInlineAudioBudget(exact + 3), false)
+    })
+
+    // The sizes `buildAudioPart` projects: a WAV header on raw PCM16, and G.711 doubling on top of
+    // it. The G.711 ceiling is a little under half the accumulator's retention cap, which is why the
+    // check has to happen before the decode rather than after.
+    it('rejects a G.711 segment the retention cap would still admit', () => {
+      const maxG711Raw = 1_572_842
+
+      assert.strictEqual(fitsInlineAudioBudget(maxG711Raw * 2 + 44), true)
+      assert.strictEqual(fitsInlineAudioBudget((maxG711Raw + 1) * 2 + 44), false)
     })
   })
 })

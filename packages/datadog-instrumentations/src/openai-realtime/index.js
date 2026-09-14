@@ -2,9 +2,8 @@
 
 const dc = require('dc-polyfill')
 
-const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
+const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const log = require('../../../dd-trace/src/log')
-const { isFalse } = require('../../../dd-trace/src/util')
 const shimmer = require('../../../datadog-shimmer')
 const RealtimeSession = require('./session')
 
@@ -23,6 +22,16 @@ const speechChannel = dc.tracingChannel('apm:openai:realtime:speech')
 // compose a `runInContext` onto the turn, so the tree replayed at finalize nests under whatever
 // context the caller had active — the active context at finalize is the socket's, not theirs.
 const captureContextChannel = dc.channel('dd-trace:openai:realtime:capture-context')
+
+// Never published on — subscribed to as a capability signal, the way `captureContextChannel` is
+// probed before publishing. Only LLM Observability consumes a turn's audio bytes (the tracing
+// plugins read the model and the phase boundaries), and a disabled plugin unsubscribes its channels,
+// so `hasSubscribers` here is exactly "someone will read the audio". Without it the default
+// APM-only configuration decodes and buffers every frame of every turn for no consumer.
+//
+// A dedicated channel is what makes the distinction possible: the two plugin families share the
+// `apm:openai:realtime:*` prefixes, so the turn channel cannot tell them apart.
+const audioChannel = dc.channel('dd-trace:openai:realtime:audio')
 
 const USER_SPEECH = { operation: 'createRealtimeUserSpeech', llmobsName: 'user speech' }
 const AGENT_SPEECH = { operation: 'createRealtimeAgentSpeech', llmobsName: 'agent speech' }
@@ -113,7 +122,15 @@ function createConnection (emitter) {
     // The URL shape is not guaranteed across SDK versions; the session works without it.
   }
 
-  const session = new RealtimeSession({ emitTurn, captureContext, model, basePath })
+  // Settled before any connection exists: plugins subscribe at tracer init, and user code cannot
+  // open a realtime socket before that.
+  const session = new RealtimeSession({
+    emitTurn,
+    captureContext,
+    model,
+    basePath,
+    retainAudio: audioChannel.hasSubscribers,
+  })
 
   const reference = new WeakRef(session)
   liveSessions.add(reference)
@@ -232,10 +249,15 @@ function patchRealtimeTransport (prototype) {
  * Realtime is a large wrapping surface that buffers audio in memory, so it can be turned off on its
  * own without giving up the rest of the OpenAI integration.
  *
+ * Read through every configuration source, not just `process.env`: this is an operator-facing kill
+ * switch, and an org that sets it through Fleet Automation or local stable config would otherwise
+ * see it reported as disabled in configuration telemetry while the patching stayed on. Resolving it
+ * here also applies the option's registered boolean parser and its `true` default.
+ *
  * @returns {boolean}
  */
 function realtimeEnabled () {
-  return !isFalse(getEnvironmentVariable('DD_OPENAI_REALTIME_ENABLED'))
+  return getValueFromEnvSources('DD_OPENAI_REALTIME_ENABLED') !== false
 }
 
 /**

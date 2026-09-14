@@ -468,6 +468,95 @@ describe('integrations', () => {
             }])
           })
 
+          // The whole flow a voice app with a `get_weather` tool actually drives: the user asks, the
+          // model calls the tool instead of speaking, the app returns the result and asks for a
+          // response with a bare `response.create`, and the model speaks the answer. Pinned end to
+          // end because that bare `response.create` is a client event the session now inspects — it
+          // carries no `input` and is not out-of-band, so the follow-up turn must still take the tool
+          // result as its input — and because the tool turn must not disturb the audio on either side.
+          it('carries audio and tools together across a function-call turn and its answer', async () => {
+            sessionCreated({ transcription: false })
+
+            // Turn 1: the user asks about the weather. The model calls the tool, no speech.
+            mic.stream(100)
+            mic.speechStarted()
+            mic.stream(300)
+            mic.commit('item_1')
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            clock.tick(40)
+            socket.deliver({
+              type: 'response.done',
+              response: {
+                id: 'resp_1',
+                status: 'completed',
+                output: [{
+                  type: 'function_call',
+                  name: 'get_weather',
+                  call_id: 'call_1',
+                  arguments: '{"location":"Denver"}',
+                }],
+              },
+            })
+
+            const first = await getEvents(3)
+
+            assert.deepStrictEqual(names(first.llmobsSpans).sort(), [TURN_ROOT, USER_SPEECH, LLM].sort())
+            const asked = byName(first.llmobsSpans, LLM)
+            // The user's 300ms of speech still rides the tool turn's llm span.
+            assertWavClip(asked.meta.input.messages[0].audio_parts[0], { durationMs: 300, sampleRate: 24_000 })
+            assert.deepStrictEqual(asked.meta.output.messages[0].tool_calls, [{
+              name: 'get_weather',
+              arguments: { location: 'Denver' },
+              tool_id: 'call_1',
+              type: 'function',
+            }])
+
+            // Turn 2: the app returns the result and asks for a spoken answer, exactly as the
+            // reference app does — `conversation.item.create`, then a bare `response.create`.
+            realtime.send({
+              type: 'conversation.item.create',
+              item: {
+                type: 'function_call_output',
+                call_id: 'call_1',
+                output: '{"location":"Denver","temp_f":72,"conditions":"sunny"}',
+              },
+            })
+            realtime.send({ type: 'response.create' })
+
+            socket.deliver({ type: 'response.created', response: { id: 'resp_2' } })
+            clock.tick(60)
+            socket.deliver({
+              type: 'response.output_audio.delta',
+              response_id: 'resp_2',
+              item_id: 'out_2',
+              delta: pcm16(500),
+            })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'resp_2',
+              transcript: "It's 72 and sunny in Denver.",
+            })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_2', status: 'completed' } })
+
+            const second = await getEvents(3)
+            const answered = byName(second.llmobsSpans, LLM)
+
+            // The tool result is the follow-up turn's input — the bare `response.create` did not
+            // divert it — and the spoken answer's audio is intact alongside its transcript.
+            assert.deepStrictEqual(answered.meta.input.messages[0].tool_results, [{
+              name: 'get_weather',
+              result: '{"location":"Denver","temp_f":72,"conditions":"sunny"}',
+              tool_id: 'call_1',
+              type: 'function_call_output',
+            }])
+            assert.strictEqual(answered.meta.output.messages[0].content, "It's 72 and sunny in Denver.")
+            assertWavClip(answered.meta.output.messages[0].audio_parts[0], { durationMs: 500, sampleRate: 24_000 })
+
+            // The answer is a full turn with its own agent-speech window, and no second user-speech
+            // span: the user never spoke again.
+            assert.deepStrictEqual(names(second.llmobsSpans).sort(), [TURN_ROOT, AGENT_SPEECH, LLM].sort())
+          })
+
           it('captures an MCP call together with its inline result', async () => {
             // Unlike a function call, an MCP call runs server-side, so its result arrives on the
             // same item rather than coming back from the app on the next turn.
@@ -510,6 +599,105 @@ describe('integrations', () => {
                 type: 'mcp_tool_result',
               }],
             }])
+          })
+
+          // A response can produce several output items — here a preamble message, a server-side MCP
+          // call, then the answer — and each message item ends with its own `.done` carrying that
+          // item's final transcript. Treating a `.done` as the whole response's transcript drops
+          // everything the items before it contributed.
+          it('keeps every output item transcript in a multi-item response', async () => {
+            sessionCreated({ transcription: false })
+
+            mic.stream(100)
+            mic.commit('item_1')
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+
+            socket.deliver({
+              type: 'response.output_audio_transcript.delta',
+              response_id: 'resp_1',
+              item_id: 'out_1',
+              delta: 'Let me look that up.',
+            })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'resp_1',
+              item_id: 'out_1',
+              transcript: 'Let me look that up.',
+            })
+            socket.deliver({
+              type: 'response.output_audio_transcript.delta',
+              response_id: 'resp_1',
+              item_id: 'out_2',
+              delta: ' I found three results.',
+            })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'resp_1',
+              item_id: 'out_2',
+              transcript: ' I found three results.',
+            })
+
+            socket.deliver({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } })
+
+            const { llmobsSpans } = await getEvents(3)
+
+            assert.strictEqual(
+              byName(llmobsSpans, LLM).meta.output.messages[0].content,
+              'Let me look that up. I found three results.'
+            )
+          })
+
+          // An out-of-band response — `conversation: 'none'`, or one carrying its own `input` — is
+          // the app asking the model something on the side, which OpenAI supports running in
+          // parallel with the conversation. It does not own the buffered microphone audio: taking it
+          // would both misattribute the user's speech to the side request and leave the real turn
+          // that follows with no user-speech span at all.
+          it('leaves the buffered user input to the real turn, not an out-of-band response', async () => {
+            sessionCreated({ transcription: false })
+
+            mic.stream(100)
+            mic.speechStarted()
+            mic.stream(300)
+            mic.commit('item_1')
+
+            // The app asks for a summary on the side while the user's turn is still buffered.
+            realtime.send({
+              type: 'response.create',
+              response: { conversation: 'none', input: [{ type: 'message', role: 'user', content: 'Summarize.' }] },
+            })
+            socket.deliver({ type: 'response.created', response: { id: 'resp_oob' } })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'resp_oob',
+              transcript: 'Three results so far.',
+            })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_oob', status: 'completed' } })
+
+            // Then server VAD creates the real turn, with no client `response.create` of its own.
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'resp_1',
+              transcript: 'Sure, here you go.',
+            })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } })
+
+            // Two turn roots and two llm spans, but only one user-speech span: neither response
+            // produced audio, so neither has an agent-speech span.
+            const { llmobsSpans } = await getEvents(5)
+
+            assert.deepStrictEqual(
+              llmobsSpans.filter(span => span.name === TURN_ROOT).length, 2)
+            // One user-speech span in total, on the real turn — not consumed by the side request.
+            assert.strictEqual(llmobsSpans.filter(span => span.name === USER_SPEECH).length, 1)
+
+            const llmSpans = llmobsSpans.filter(span => span.name === LLM)
+            const sideRequest = llmSpans.find(span => span.meta.output.messages[0].content === 'Three results so far.')
+            const realTurn = llmSpans.find(span => span.meta.output.messages[0].content === 'Sure, here you go.')
+
+            assert.ok(sideRequest, 'the out-of-band response should still be traced')
+            assert.ok(!sideRequest.meta.input?.messages?.length, 'no user input on the side request')
+            assert.ok(realTurn.meta.input.messages[0].audio_parts, 'the real turn keeps the user audio')
           })
 
           it('discards buffered audio the client clears, and ignores non-user items', async () => {
@@ -833,6 +1021,69 @@ describe('integrations', () => {
               byName(llmobsSpans, LLM).meta.output.messages[0].audio_parts[0],
               { durationMs: 600, sampleRate: 24_000 }
             )
+          })
+
+          // `audioBaseMs` is a fractional-millisecond offset, so the pre-onset byte count lands on an
+          // odd byte for plenty of ordinary onsets — 290ms here, where `290 / 1000 * 48000` is
+          // 13919.999999999998 and truncates to 13919. Slicing PCM16 there pairs every sample's low
+          // byte with the next sample's high byte and the whole clip decodes to noise, so the trim
+          // rounds down to a sample boundary the way the barge-in cap already does.
+          it('trims the lead-in on a sample boundary when the onset lands mid-sample', async () => {
+            const leadInMs = 290
+            const speechMs = 200
+            sessionCreated({ transcription: false })
+
+            mic.stream(leadInMs, 0)
+            mic.speechStarted()
+            mic.stream(speechMs, 7)
+            mic.commit('item_1')
+
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } })
+
+            const { llmobsSpans } = await getEvents(3)
+            const audioPart = byName(llmobsSpans, LLM).meta.input.messages[0].audio_parts[0]
+            const wav = Buffer.from(audioPart.content, 'base64')
+            const data = wav.subarray(44)
+
+            assert.strictEqual(data.length % 2, 0, 'PCM16 clip must hold whole samples')
+            // Rounding down keeps one extra sample of lead-in rather than cutting into the speech.
+            assert.strictEqual(data.length, speechMs * 48 + 2)
+            assert.deepStrictEqual(data.subarray(0, 2), Buffer.from([0, 0]), 'the kept lead-in sample')
+            assert.ok(data.subarray(2).every(byte => byte === 7), 'the rest is the speech, unshifted')
+          })
+
+          // A trim that covers the whole segment resets it, so the frames that follow open a fresh
+          // segment and must record their own format. Re-anchoring the start time over that reset
+          // would leave the segment with a start but no format, and `append` only records one on the
+          // frame that opens a segment — so every later frame would skip it and the turn would fall
+          // back to whatever format the session happened to hold at describe time.
+          it('records the format of audio that arrives after the lead-in was trimmed away', async () => {
+            sessionCreated({ transcription: false })
+
+            mic.stream(100)
+            mic.speechStarted() // the onset is past everything buffered, so the segment resets
+            mic.stream(200)
+            mic.commit('item_1')
+
+            // The session switches to G.711 after the bytes were captured. Read as telephony audio
+            // the same 200ms clip would time as 1200ms and be decoded at 8 kHz.
+            socket.deliver({
+              type: 'session.updated',
+              session: { audio: { input: { format: { type: 'audio/pcmu' } } } },
+            })
+
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } })
+
+            const { llmobsSpans } = await getEvents(3)
+            const windows = timeline(llmobsSpans)
+
+            assertWavClip(
+              byName(llmobsSpans, LLM).meta.input.messages[0].audio_parts[0],
+              { durationMs: 200, sampleRate: 24_000 }
+            )
+            assert.strictEqual(windows[USER_SPEECH].end - windows[USER_SPEECH].start, 200 * MS)
           })
 
           it('does not trim audio buffered before the session announced a format', async () => {
