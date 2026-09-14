@@ -603,7 +603,7 @@ class TextMapPropagator {
     if (!this.#hasPropagationStyle('inject', 'tracecontext')) return
 
     if (!injectTraceContext) {
-      const tracestate = TraceState.fromString(spanContext._tracestate?.toString())
+      const tracestate = spanContext._tracestate?.clone() ?? new TraceState()
       tracestate.delete('dd')
       const header = tracestate.toString()
       if (!header) return
@@ -619,7 +619,7 @@ class TextMapPropagator {
       _trace: { origin },
     } = spanContext
     const ts = traceTagReplacements
-      ? TraceState.fromString(_tracestate?.toString())
+      ? _tracestate?.clone() ?? new TraceState()
       : _tracestate ?? new TraceState()
 
     writeTraceparent(carrier, spanContext.toTraceparent())

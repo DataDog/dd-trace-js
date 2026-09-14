@@ -91,6 +91,17 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'other=bleh')
   })
 
+  it('should clone without sharing mutations', () => {
+    const original = TraceState.fromString('other=bleh,dd=s:2')
+    const clone = original.clone()
+
+    clone.delete('other')
+    clone.set('dd', 's:1')
+
+    assert.strictEqual(original.toString(), 'other=bleh,dd=s:2')
+    assert.strictEqual(clone.toString(), 'dd=s:1')
+  })
+
   it('should cap parsing at 32 list-members per W3C Trace Context §3.3.1.2', () => {
     const header = Array.from({ length: 33 }, (_, index) => `k${index}=v${index}`).join(',')
     const ts = TraceState.fromString(header)
