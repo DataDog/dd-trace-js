@@ -162,6 +162,11 @@ class TraceState {
     return this.#map.size
   }
 
+  /** @returns {TraceState} A shallow copy with independent member storage. */
+  clone () {
+    return new TraceState(this.#map)
+  }
+
   forVendor (vendor, handle) {
     const data = this.#map.get(vendor)
     const state = TraceStateData.fromString(data)
