@@ -83,7 +83,7 @@ function generateFields (context) {
  */
 function getProbabilityRate (context) {
   if (context._sampling.isProbabilityDecision === false) return
-  return context._trace[SAMPLING_RULE_DECISION] ?? context._trace[SAMPLING_AGENT_DECISION]
+  return (context._trace[SAMPLING_RULE_DECISION] ?? context._trace[SAMPLING_AGENT_DECISION]) || undefined
 }
 
 /**
