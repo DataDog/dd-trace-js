@@ -156,6 +156,9 @@ function getProducts (config) {
       version: tracerVersion,
       enabled: profilingEnabledToBoolean(config.profiling.DD_PROFILING_ENABLED),
     },
+    dynamic_instrumentation: {
+      enabled: config.dynamicInstrumentation.enabled,
+    },
   }
 }
 
