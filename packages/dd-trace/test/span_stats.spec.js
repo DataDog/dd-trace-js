@@ -793,6 +793,19 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(p.buckets.size, 0)
   })
 
+  it('should preserve OTLP trace-root splitting after an identity refresh', () => {
+    const childSpan = { ...topLevelSpan, parent_id: { equals: () => false } }
+    const p = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(p.timer)
+
+    identityRefreshChannel.publish(config)
+
+    p.onSpanFinished(topLevelSpan)
+    p.onSpanFinished(childSpan)
+
+    assert.strictEqual(p.buckets.values().next().value.size, 2)
+  })
+
   it('should stop reacting to identity refresh once a newer instance takes over', () => {
     const first = new SpanStatsProcessor(config)
     clearTimeout(first.timer)
