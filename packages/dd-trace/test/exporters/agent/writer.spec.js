@@ -24,6 +24,8 @@ function describeWriter (protocolVersion) {
   let log
   let AgentEncoder
   let createAgentEncoder
+  let runtimeMetrics
+  let startupLog
 
   beforeEach((done) => {
     span = 'formatted'
@@ -52,6 +54,11 @@ function describeWriter (protocolVersion) {
       error: sinon.spy(),
       errorWithoutTelemetry: sinon.spy(),
     }
+    runtimeMetrics = { increment: sinon.spy() }
+    startupLog = {
+      logAgentError: sinon.spy(),
+      logIntegrations: sinon.spy(),
+    }
 
     AgentEncoder = sinon.stub().returns(encoder)
     createAgentEncoder = sinon.stub().returns(encoder)
@@ -64,6 +71,8 @@ function describeWriter (protocolVersion) {
       '../../encode/0.5': { AgentEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
+      '../../runtime_metrics': runtimeMetrics,
+      '../../startup-log': startupLog,
     })
     writer = new Writer({ url, prioritySampler, protocolVersion })
 
@@ -234,6 +243,20 @@ function describeWriter (protocolVersion) {
           error.status,
           error
         )
+        done()
+      })
+    })
+
+    it('should silently discard requests cancelled on identity refresh', (done) => {
+      const error = new Error('request cancelled')
+      error.code = 'ERR_DD_IDENTITY_REFRESH'
+      request.yieldsAsync(error)
+      encoder.count.returns(1)
+
+      writer.flush(() => {
+        sinon.assert.neverCalledWithMatch(runtimeMetrics.increment, sinon.match(/errors/))
+        sinon.assert.notCalled(log.errorWithoutTelemetry)
+        sinon.assert.notCalled(startupLog.logAgentError)
         done()
       })
     })
