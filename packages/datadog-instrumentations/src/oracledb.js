@@ -107,7 +107,7 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
     return function wrappedGetConnection (connAttrs, callback) {
       if (callback) {
         arguments[1] = shimmer.wrapFunction(callback, callback => (err, connection) => {
-          if (connection) {
+          if (connection && !connectionAttributes.has(connection)) {
             connectionAttributes.set(connection, connAttrs)
           }
           callback(err, connection)
@@ -116,7 +116,9 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
         getConnection.apply(this, arguments)
       } else {
         return getConnection.apply(this, arguments).then((connection) => {
-          connectionAttributes.set(connection, connAttrs)
+          if (!connectionAttributes.has(connection)) {
+            connectionAttributes.set(connection, connAttrs)
+          }
           return connection
         })
       }
