@@ -21,7 +21,7 @@ class Writer extends BaseWriter {
   _sendPayload (data, _, done) {
     makeRequest(data, this._url, this._identityRefreshController, (err, res) => {
       if (err) {
-        log.error('Error sending span stats', err)
+        if (err.code !== 'ERR_DD_IDENTITY_REFRESH') log.error('Error sending span stats', err)
         done()
         return
       }

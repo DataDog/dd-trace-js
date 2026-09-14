@@ -10,6 +10,7 @@ const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
 const propagationHash = require('../../propagation-hash')
+const { IS_AWS_LAMBDA_MICROVM } = require('../../serverless')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
@@ -31,6 +32,7 @@ class AgentWriter extends BaseWriter {
     this._lookup = lookup
     this._protocolVersion = protocolVersion
     this._headers = headers
+    this._identityRefreshController = IS_AWS_LAMBDA_MICROVM ? this._resetController : undefined
     this._encoder = createEncoder(protocolVersion, flushInterval, this)
     if (isTestOptimization) {
       this.#request = require('../../ci-visibility/exporters/request')
@@ -114,7 +116,7 @@ class AgentWriter extends BaseWriter {
       flushOptions,
       this.#request,
       this.#requestTracker,
-      this._resetController,
+      this._identityRefreshController,
       onResponse
     )
   }

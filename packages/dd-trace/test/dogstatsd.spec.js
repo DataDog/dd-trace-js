@@ -459,6 +459,40 @@ describe('dogstatsd', () => {
       }
     })
 
+    it('drops a detached UDP queue when identity refresh happens during DNS lookup', () => {
+      let resolveLookup
+      dns.lookup.withArgs('localhost').callsFake((hostname, callback) => {
+        resolveLookup = callback
+      })
+
+      client = createDogStatsDClient({ host: 'localhost' })
+      client.gauge('test.stale', 1)
+      client.flush()
+
+      client.updateTags([])
+      resolveLookup(null, '127.0.0.1', 4)
+
+      sinon.assert.notCalled(udp4.send)
+    })
+
+    it('completes each packet once when a UDP queue becomes stale', () => {
+      const callbacks = []
+      udp4.send = sinon.stub().callsFake((...args) => callbacks.push(args.at(-1)))
+      client = createDogStatsDClient()
+      client.gauge('a'.repeat(1000), 1)
+      client.gauge('b'.repeat(1000), 1)
+
+      const done = sinon.spy()
+      client.flush(done)
+      client.updateTags([])
+
+      callbacks[0]()
+      sinon.assert.notCalled(done)
+
+      callbacks[1]()
+      sinon.assert.calledOnce(done)
+    })
+
     it('reports asynchronous UDP send failures', async () => {
       const now = sinon.stub(performance, 'now').returns(0)
       const completions = stubUdpSend(new Error('send failed'))
