@@ -98,8 +98,9 @@ class TraceStateData {
   }
 
   delete (key) {
+    if (!this.#map.delete(key)) return false
     this.changed = true
-    return this.#map.delete(key)
+    return true
   }
 
   clear () {

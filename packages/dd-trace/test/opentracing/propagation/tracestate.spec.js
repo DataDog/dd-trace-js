@@ -76,6 +76,14 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'dd=s:2;t.dm:-4,other=bleh')
   })
 
+  it('should not rewrite a vendor after deleting a missing value', () => {
+    const ts = TraceState.fromString('other=bleh,dd=s:2')
+
+    ts.forVendor('dd', state => state.delete('missing'))
+
+    assert.strictEqual(ts.toString(), 'other=bleh,dd=s:2')
+  })
+
   it('should remove value from tracestate when clearing values', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
