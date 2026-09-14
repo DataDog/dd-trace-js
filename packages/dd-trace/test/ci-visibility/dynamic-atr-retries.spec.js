@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 
 const {
-  DYNAMIC_ATR_BUCKETS_ENV,
-  DYNAMIC_ATR_ENABLED_ENV,
   getDynamicAtrBuckets,
   getDynamicAtrRetryCount,
   isDynamicAtrEnabled,
@@ -15,66 +13,52 @@ const {
 } = require('../../src/ci-visibility/efd-retry-policy')
 
 describe('dynamic-atr-retries', () => {
-  afterEach(() => {
-    delete process.env[DYNAMIC_ATR_ENABLED_ENV]
-    delete process.env[DYNAMIC_ATR_BUCKETS_ENV]
-  })
-
   describe('isDynamicAtrEnabled', () => {
     for (const [value, expected] of [
       [undefined, false],
-      ['', false],
-      ['false', false],
-      ['0', false],
-      ['true', true],
-      ['1', true],
+      [false, false],
+      ['true', false],
+      [true, true],
     ]) {
-      it(`returns ${expected} for ${value === undefined ? 'unset' : `"${value}"`}`, () => {
-        if (value === undefined) {
-          delete process.env[DYNAMIC_ATR_ENABLED_ENV]
-        } else {
-          process.env[DYNAMIC_ATR_ENABLED_ENV] = value
-        }
-        assert.equal(isDynamicAtrEnabled(), expected)
+      it(`returns ${expected} for ${String(value)}`, () => {
+        assert.equal(isDynamicAtrEnabled(value), expected)
       })
     }
   })
 
   describe('getDynamicAtrBuckets', () => {
     it('returns null when unset', () => {
-      delete process.env[DYNAMIC_ATR_BUCKETS_ENV]
-      assert.equal(getDynamicAtrBuckets(), null)
+      assert.equal(getDynamicAtrBuckets(undefined), null)
     })
 
     it('returns null when empty', () => {
-      process.env[DYNAMIC_ATR_BUCKETS_ENV] = ''
-      assert.equal(getDynamicAtrBuckets(), null)
+      assert.equal(getDynamicAtrBuckets([]), null)
     })
 
     it('parses valid buckets', () => {
-      process.env[DYNAMIC_ATR_BUCKETS_ENV] = '10,4,1,1,1'
-      assert.deepEqual(getDynamicAtrBuckets(), [10, 4, 1, 1, 1])
+      assert.deepEqual(getDynamicAtrBuckets(['10', '4', '1', '1', '1']), [10, 4, 1, 1, 1])
     })
 
     it('returns null for wrong count', () => {
-      process.env[DYNAMIC_ATR_BUCKETS_ENV] = '10,4,1'
-      assert.equal(getDynamicAtrBuckets(), null)
+      assert.equal(getDynamicAtrBuckets(['10', '4', '1']), null)
     })
 
     it('returns null for value below 1', () => {
-      process.env[DYNAMIC_ATR_BUCKETS_ENV] = '10,4,0,1,1'
-      assert.equal(getDynamicAtrBuckets(), null)
+      assert.equal(getDynamicAtrBuckets(['10', '4', '0', '1', '1']), null)
     })
 
     it('returns null for value above 20', () => {
-      process.env[DYNAMIC_ATR_BUCKETS_ENV] = '21,4,1,1,1'
-      assert.equal(getDynamicAtrBuckets(), null)
+      assert.equal(getDynamicAtrBuckets(['21', '4', '1', '1', '1']), null)
     })
 
-    for (const value of ['1x,2,3,4,5', '1.5,2,3,4,5', '1,,3,4,5', 'invalid']) {
-      it(`returns null for malformed integer field ${JSON.stringify(value)}`, () => {
-        process.env[DYNAMIC_ATR_BUCKETS_ENV] = value
-        assert.equal(getDynamicAtrBuckets(), null)
+    for (const value of [
+      ['1x', '2', '3', '4', '5'],
+      ['1.5', '2', '3', '4', '5'],
+      ['1', '', '3', '4', '5'],
+      ['invalid'],
+    ]) {
+      it(`returns null for malformed bucket value ${JSON.stringify(value)}`, () => {
+        assert.equal(getDynamicAtrBuckets(value), null)
       })
     }
   })

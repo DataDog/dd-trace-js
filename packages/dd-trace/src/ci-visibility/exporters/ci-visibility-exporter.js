@@ -212,8 +212,10 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
-    this._dynamicAtrEnabled = isDynamicAtrEnabled()
-    this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets() ?? undefined : undefined
+    const dynamicAtrEnabled = config?.testOptimization?.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED
+    const dynamicAtrBuckets = config?.testOptimization?.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS
+    this._dynamicAtrEnabled = isDynamicAtrEnabled(dynamicAtrEnabled)
+    this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets(dynamicAtrBuckets) ?? undefined : undefined
     this._hasRecordedDynamicAtrTelemetry = false
     this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
     this._isTestOptimizationCacheOnly = options.cacheOnly === true

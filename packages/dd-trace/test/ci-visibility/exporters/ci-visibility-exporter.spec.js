@@ -103,8 +103,6 @@ describe('CI Visibility Exporter', () => {
   })
 
   afterEach(() => {
-    delete process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED
-    delete process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS
     getConfig().DD_API_KEY = originalApiKey
     sinon.restore()
   })
@@ -172,11 +170,14 @@ describe('CI Visibility Exporter', () => {
     })
 
     it('enables dynamic ATR only when backend ATR is enabled and caches accepted buckets', () => {
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = 'true'
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = '1,2,3,4,5'
-      const ciVisibilityExporter = new CiVisibilityExporter({ testOptimization })
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        testOptimization: {
+          ...testOptimization,
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
+        },
+      })
 
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = 'invalid'
       const disabled = ciVisibilityExporter.filterConfiguration({ isFlakyTestRetriesEnabled: false })
       const enabled = ciVisibilityExporter.filterConfiguration({ isFlakyTestRetriesEnabled: true })
 
@@ -213,10 +214,10 @@ describe('CI Visibility Exporter', () => {
 
   describe('dynamic ATR telemetry', () => {
     it('records one metric only when dynamic ATR is effective', () => {
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = 'true'
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = '1,2,3,4,5'
       const ciVisibilityExporter = new CiVisibilityExporter({
         testOptimization: {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
           DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
         },
       })
@@ -236,10 +237,10 @@ describe('CI Visibility Exporter', () => {
     })
 
     it('does not tag EFD fallback settings as custom buckets', () => {
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = 'true'
-      process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = 'invalid'
       const ciVisibilityExporter = new CiVisibilityExporter({
         testOptimization: {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['invalid'],
           DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
         },
       })

@@ -1,7 +1,6 @@
 'use strict'
 
 const log = require('../log')
-const { getEnvironmentVariable } = require('../config/helper')
 
 const {
   retriesForDuration,
@@ -17,32 +16,31 @@ const MAX_RETRIES_PER_BUCKET = 20
 /**
  * Returns whether duration-based ATR retry budgets are enabled.
  *
+ * @param {unknown} value A parsed test-optimization configuration value.
  * @returns {boolean}
  */
-function isDynamicAtrEnabled () {
-  const value = getEnvironmentVariable(DYNAMIC_ATR_ENABLED_ENV)
-  if (value === undefined || value === '') {
-    return false
-  }
-  return /^(true|1)$/i.test(value)
+function isDynamicAtrEnabled (value) {
+  return value === true
 }
 
 /**
- * Parses and validates the custom ATR retry buckets from the environment.
+ * Parses and validates custom ATR retry buckets from the parsed
+ * test-optimization configuration.
  *
  * Returns a frozen array of 5 positive integers in [1, 20], or `null`
- * when the variable is unset/empty or invalid (in which case the EFD retry
+ * when the value is unset/empty or invalid (in which case the EFD retry
  * settings from the backend are used).
  *
+ * @param {unknown} value A parsed test-optimization configuration value.
  * @returns {number[] | null}
  */
-function getDynamicAtrBuckets () {
-  const raw = getEnvironmentVariable(DYNAMIC_ATR_BUCKETS_ENV)
-  if (raw === undefined || raw === '') {
+function getDynamicAtrBuckets (value) {
+  if (!Array.isArray(value) || value.length === 0) {
     return null
   }
 
-  const parts = raw.split(',')
+  const parts = value
+  const raw = parts.join(',')
   if (parts.length !== RETRY_BUCKET_COUNT) {
     log.warn(
       'Invalid %s value %o; expected five comma-separated integers in [1, %d]',
@@ -53,7 +51,7 @@ function getDynamicAtrBuckets () {
 
   const buckets = []
   for (const part of parts) {
-    const trimmedPart = part.trim()
+    const trimmedPart = typeof part === 'string' ? part.trim() : ''
     if (!/^\d+$/.test(trimmedPart)) {
       log.warn(
         'Invalid %s value %o; expected five comma-separated integers in [1, %d]',
