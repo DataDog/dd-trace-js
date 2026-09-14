@@ -41,7 +41,7 @@ To find `filePath`, inspect the installed package to locate where the target met
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('<npm-package>')) {
+for (const hook of getHooks('<npm-package>').values()) {
   addHook(hook, exports => exports)
 }
 ```

@@ -681,6 +681,9 @@ describe('profiler', () => {
         DD_PROFILING_ENABLED: '1',
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
+        // Allocation profiling is not yet supported together with OOM monitoring: combining them triggers an
+        // upstream @datadog/pprof bug in the async OOM callback path. Disable it here until that's fixed upstream.
+        DD_PROFILING_ALLOCATION_ENABLED: '0',
       }
     })
 
