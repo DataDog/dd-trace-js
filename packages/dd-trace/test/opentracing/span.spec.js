@@ -674,7 +674,11 @@ describe('Span', () => {
 
       prioritySampler.setPriorityFromTags.resetHistory()
       legacySpan.setTag(MANUAL_DROP, true)
-      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, legacySpan, legacySpan.context().getTags())
+      sinon.assert.calledOnceWithExactly(
+        prioritySampler.setPriorityFromTags,
+        legacySpan,
+        legacySpan.context().getTags()
+      )
       prioritySampler.setPriorityFromTags.resetHistory()
       legacySpan.addTags('foo:bar')
       legacySpan.addTags([{ baz: 'qux' }])
