@@ -254,6 +254,33 @@ describe('dogstatsd', () => {
       }
     })
 
+    it('drops client telemetry counters on identity refresh even when its tags are unchanged', async () => {
+      const now = sinon.stub(performance, 'now').returns(0)
+      const completions = stubUdpSend()
+
+      try {
+        client = createTelemetryClient({ tags: ['runtime-id:initial-id'] })
+        client.increment('test.count')
+        client.flush()
+        await Promise.all(completions)
+
+        const userPacketCount = udp4.send.callCount
+
+        client.updateTags(['runtime-id:initial-id'])
+
+        now.returns(10_000)
+        client.flush()
+
+        const telemetry = getUdpPayload(userPacketCount)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.metrics:0\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.aggregated_context:0\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.bytes_sent:0\|c\|/)
+        assert.match(telemetry, /datadog\.dogstatsd\.client\.packets_sent:0\|c\|/)
+      } finally {
+        now.restore()
+      }
+    })
+
     it('emits the client and aggregation metrics every 10 seconds with common UDP tags', async () => {
       const now = sinon.stub(performance, 'now').returns(0)
       const completions = stubUdpSend()
@@ -1340,7 +1367,7 @@ describe('dogstatsd', () => {
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:20|g\n')
     })
 
-    it('should preserve buffered metrics when an identity refresh does not change its tags', () => {
+    it('should drop buffered metrics on identity refresh even when its tags are unchanged', () => {
       const config = {
         dogstatsd: {
           hostname: '127.0.0.1',
@@ -1357,7 +1384,7 @@ describe('dogstatsd', () => {
       identityRefreshChannel.publish(config)
       client.flush()
 
-      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#runtime-id:initial-id\n')
+      sinon.assert.notCalled(udp4.send)
     })
 
     it('should drop pending aggregated counters/gauges/histograms when an identity refresh changes its tags',
@@ -1385,8 +1412,8 @@ describe('dogstatsd', () => {
         sinon.assert.notCalled(udp4.send)
       })
 
-    it('should preserve pending aggregated counters/gauges/histograms when an identity refresh does not change ' +
-      'its tags', () => {
+    it('should drop pending aggregated counters/gauges/histograms on identity refresh even when its tags are ' +
+      'unchanged', () => {
       const config = {
         dogstatsd: {
           hostname: '127.0.0.1',
@@ -1403,8 +1430,7 @@ describe('dogstatsd', () => {
       identityRefreshChannel.publish(config)
       client.flush()
 
-      sinon.assert.called(udp4.send)
-      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c|#runtime-id:initial-id\n')
+      sinon.assert.notCalled(udp4.send)
     })
   })
 
