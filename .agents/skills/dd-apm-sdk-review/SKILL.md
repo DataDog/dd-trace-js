@@ -157,14 +157,17 @@ emit_diff_or_redact "unstaged" git diff
 #    NUL-safely and never let a name be parsed as an option. Grep each file for
 #    known secret shapes BEFORE printing its diff — once a tool call emits
 #    content, it has already reached this transcript and any retained logs, so
-#    catching it only after reading the printed output is too late. A grep
-#    error (exit >= 2: unreadable file, bad locale, etc.) must not fall through
-#    to "no match" - fail closed on it exactly like emit_diff_or_redact above.
+#    catching it only after reading the printed output is too late. Do not use
+#    grep -I: that treats a binary-classified file as a non-match, so a
+#    keystore / serialized blob / non-UTF8 .env would skip the secret scan.
+#    Scan as text (-a). A grep error (exit >= 2: unreadable file, bad locale,
+#    etc.) must not fall through to "no match" - fail closed on it exactly
+#    like emit_diff_or_redact above.
 # Process substitution, not a pipe: `exit 1` inside a `while` fed by `|` only
 # kills the loop subshell, so a failed untracked-file diff would otherwise
 # truncate the scan and still exit 0.
 while IFS= read -r -d '' f; do
-  grep -IlqE -e "$SECRET_GREP" -- "./$f" 2>"$err_file"
+  grep -aqE -e "$SECRET_GREP" -- "./$f" 2>"$err_file"
   grc=$?
   if [ "$grc" -eq 0 ]; then
     echo "SUSPECT SECRET (diff not printed): $f - read it yourself, redact, then decide"
@@ -175,6 +178,12 @@ while IFS= read -r -d '' f; do
     echo "SUSPECT SECRET (diff not printed): $f - read it yourself, redact, then decide"
     continue
   fi
+  # grep -I would have skipped this file. If it is binary, do not print a
+  # "clean" diff — fail closed and ask for out-of-band inspection.
+  if ! grep -Iq . -- "./$f" && grep -aq . -- "./$f"; then
+    echo "SUSPECT SECRET (diff not printed): $f - binary file, inspect out of band"
+    continue
+  fi
   # `--no-index` exits 1 when it finds a difference, which it always will here -
   # that's success, not an error. A higher exit code is always a real failure.
   # Git also returns 1 *with a stderr error* (e.g. "Could not access") when the
@@ -182,8 +191,9 @@ while IFS= read -r -d '' f; do
   # presence of stderr - a global diff.external/textconv driver can write
   # benign progress there on an otherwise-successful diff, and `--no-ext-diff
   # --no-textconv` only cover a driver configured on *this* command, not one
-  # forced by repo-level config this loop doesn't control.
-  git diff --no-index --no-ext-diff --no-textconv -- /dev/null "./$f" 2>"$err_file"
+  # forced by repo-level config this loop doesn't control. LC_ALL=C so a
+  # localized git still prints English `fatal:` / `error:` and this regex hits.
+  LC_ALL=C git diff --no-index --no-ext-diff --no-textconv -- /dev/null "./$f" 2>"$err_file"
   rc=$?
   if [ "$rc" -gt 1 ] || { [ "$rc" -eq 1 ] && grep -qE '^(error|fatal):' "$err_file"; }; then
     echo "ERROR: failed to diff untracked file: $f" >&2
