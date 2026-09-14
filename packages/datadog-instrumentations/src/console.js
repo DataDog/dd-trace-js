@@ -48,8 +48,13 @@ function wrapConsole (target) {
               if (typeof chunk === 'string') message = chunk
               return originalWrite.apply(this, arguments)
             }
-            stream.write = wrappedWrite
-            if (stream.write !== wrappedWrite) wrappedWrite = undefined
+            Object.defineProperty(stream, 'write', {
+              configurable: writeDescriptor?.configurable ?? true,
+              enumerable: writeDescriptor?.enumerable ?? true,
+              writable: true,
+              value: wrappedWrite,
+            })
+            if (Object.getOwnPropertyDescriptor(stream, 'write')?.value !== wrappedWrite) wrappedWrite = undefined
           }
         } catch {
           wrappedWrite = undefined
@@ -66,7 +71,7 @@ function wrapConsole (target) {
       } finally {
         if (wrappedWrite) {
           try {
-            if (stream.write === wrappedWrite) {
+            if (Object.getOwnPropertyDescriptor(stream, 'write')?.value === wrappedWrite) {
               if (writeDescriptor) {
                 Object.defineProperty(stream, 'write', writeDescriptor)
               } else {

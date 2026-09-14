@@ -98,6 +98,36 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('preserves accessor-backed stream writes', () => {
+    const originalWrite = sinon.stub()
+    let write = originalWrite
+    const setter = sinon.spy((value) => { write = value })
+    const stream = {}
+    Object.defineProperty(stream, 'write', {
+      configurable: true,
+      get: () => write,
+      set: setter,
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('first')
+    target.warn('second')
+
+    assert.strictEqual(stream.write, originalWrite)
+    sinon.assert.notCalled(setter)
+    sinon.assert.calledTwice(originalWrite)
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'first' },
+      { method: 'warn', message: 'second' },
+    ])
+  })
+
   it('captures only Jest buffered warnings and errors without wrapping public methods', () => {
     class BufferedConsole {
       static write (buffer, method, message) {
