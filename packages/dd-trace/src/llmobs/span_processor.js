@@ -38,39 +38,12 @@ const {
   SAMPLE_RATE,
   SAMPLING_DECISION,
   TRACE_ID,
-  INPUT_TOKENS_METRIC_KEY,
-  OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY,
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  REASONING_OUTPUT_TOKENS_METRIC_KEY,
-  GEN_AI_OPERATION_NAME,
-  GEN_AI_REQUEST_MODEL,
-  GEN_AI_PROVIDER_NAME,
-  GEN_AI_APPLICATION_NAME,
-  GEN_AI_CONVERSATION_ID,
-  GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  DEFAULT_MODEL,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
+const { setGenAiApmTags } = require('./gen-ai-tags')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
-
-const DEFAULT_MODEL = 'custom'
-const MODEL_BACKED_SPAN_KINDS = new Set(['llm', 'embedding'])
-
-const GEN_AI_TOKEN_METRIC_KEYS = [
-  [INPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY],
-  [OUTPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY],
-  [TOTAL_TOKENS_METRIC_KEY, GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY],
-  [CACHE_READ_INPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY],
-  [CACHE_WRITE_INPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY],
-  [REASONING_OUTPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY],
-]
 
 class LLMObservabilitySpan {
   /**
@@ -319,43 +292,19 @@ class LLMObsSpanProcessor {
   }
 
   /**
-   * Writes the scalar `gen_ai.*` attributes onto the APM span, so model, provider, application,
-   * conversation and token usage are searchable in APM. Message bodies stay off the APM span.
-   *
    * @param {import('../opentracing/span')} span
    */
   #setGenAiApmTags (span) {
     const mlObsTags = LLMObsTagger.tagMap.get(span)
-    const spanContext = span.context()
-    const spanKind = mlObsTags[SPAN_KIND]
 
-    if (spanKind) spanContext.setTag(GEN_AI_OPERATION_NAME, spanKind)
-
-    const modelName = mlObsTags[MODEL_NAME]
-    const modelProvider = mlObsTags[MODEL_PROVIDER]
-    const modelBacked = MODEL_BACKED_SPAN_KINDS.has(spanKind)
-    if (modelBacked) {
-      spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName || DEFAULT_MODEL)
-      spanContext.setTag(GEN_AI_PROVIDER_NAME, (modelProvider || DEFAULT_MODEL).toLowerCase())
-    } else {
-      if (modelName) spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName)
-      if (modelProvider) spanContext.setTag(GEN_AI_PROVIDER_NAME, modelProvider.toLowerCase())
-    }
-
-    const mlApp = mlObsTags[ML_APP]
-    if (mlApp) spanContext.setTag(GEN_AI_APPLICATION_NAME, mlApp)
-
-    const sessionId = mlObsTags[SESSION_ID]
-    if (sessionId) spanContext.setTag(GEN_AI_CONVERSATION_ID, sessionId)
-
-    const metrics = mlObsTags[METRICS]
-    // Other kinds carry unrelated metrics that would be misleading under a `gen_ai.usage.*` key.
-    if (modelBacked && metrics) {
-      for (const [metricKey, genAiKey] of GEN_AI_TOKEN_METRIC_KEYS) {
-        const value = metrics[metricKey]
-        if (value != null) spanContext.setTag(genAiKey, value)
-      }
-    }
+    setGenAiApmTags(span, {
+      spanKind: mlObsTags[SPAN_KIND],
+      modelName: mlObsTags[MODEL_NAME],
+      modelProvider: mlObsTags[MODEL_PROVIDER],
+      mlApp: mlObsTags[ML_APP],
+      sessionId: mlObsTags[SESSION_ID],
+      metrics: mlObsTags[METRICS],
+    })
   }
 
   // For now, this only applies to metadata, as we let users annotate this field with any object
