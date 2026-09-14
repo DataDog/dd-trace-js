@@ -1091,9 +1091,25 @@ function getOnFailHandler (isMain, config) {
 
 function getOnTestRetryHandler (config) {
   return function (test, err) {
+    const isFirstAttempt = test._currentRetry === 0
+    const isDynamicAtrTest = config.isDynamicAtrEnabled &&
+      config.isFlakyTestRetriesEnabled &&
+      !test._ddIsAttemptToFix &&
+      !isEarlyFlakeDetectionTest(test, config)
+    if (isDynamicAtrTest && isFirstAttempt) {
+      const testName = getTestFullName(test)
+      const dynamicCount = getDynamicAtrRetryCount(
+        test.duration > 0 ? test.duration : performance.now() - test._ddStartTime,
+        config.earlyFlakeDetectionRetryPolicy,
+        config.dynamicAtrBuckets
+      )
+      dynamicAtrRetryCountByTestFullName.set(testName, dynamicCount)
+      // Mocha emits retry before its next attempt starts; narrow its ceiling here.
+      test._retries = dynamicCount
+    }
+
     const ctx = getTestContext(test)
     if (ctx) {
-      const isFirstAttempt = test._currentRetry === 0
       const willBeRetried = test._currentRetry < test._retries
       const isAtrRetry = !isFirstAttempt &&
         config.isFlakyTestRetriesEnabled &&
