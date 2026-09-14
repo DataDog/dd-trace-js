@@ -49,7 +49,7 @@ function tagOperationsAreEmpty (operations) {
  */
 function normalizePositiveInteger (value, name) {
   if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
-  return value
+  return /** @type {number} */ (value)
 }
 
 function generateRunId () {

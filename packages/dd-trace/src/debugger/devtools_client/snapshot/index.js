@@ -91,8 +91,8 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
 }
 
 /**
+ * Returns whether the scope variables are collected into the snapshot.
  * @param {import('inspector').Debugger.Scope} scope
- * @returns {boolean} Whether the variables of the scope are collected into the snapshot
  */
 function isCollectable (scope) {
   // The global scope is too noisy, and a scope without an object id is possible according to the types

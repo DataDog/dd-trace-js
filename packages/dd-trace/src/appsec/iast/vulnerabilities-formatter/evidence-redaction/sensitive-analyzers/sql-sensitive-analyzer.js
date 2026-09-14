@@ -114,7 +114,7 @@ function digitRunEnd (value, from, length) {
 }
 
 /**
- * Handles plain integer and decimal literals. Exponents and radix literals defer to `NUMERIC`.
+ * Returns the end of a plain integer or decimal literal, or `-1` to delegate exponents and radix literals to `NUMERIC`.
  * @param {string} value
  * @param {number} intEnd Index after the integer digit run measured by the caller.
  * @param {number} length

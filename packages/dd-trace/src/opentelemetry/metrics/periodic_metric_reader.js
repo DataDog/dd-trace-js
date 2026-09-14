@@ -178,6 +178,7 @@ class PeriodicMetricReader {
   }
 
   /**
+   * Returns the matching index, or `-1` when no batch callback matches.
    * @param {Function} callback
    * @param {Set} instruments
    */
