@@ -40,7 +40,7 @@ class SpanContext {
 
   get traceState () {
     this._ddContext._ensureSamplingPriority()
-    const traceState = TraceState.fromString(this._ddContext._tracestate?.toString())
+    const traceState = this._ddContext._tracestate?.clone() ?? new TraceState()
     updateOtelTraceState(this._ddContext, traceState)
     return api.createTraceState(traceState.toString())
   }
