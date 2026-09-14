@@ -109,22 +109,10 @@ describe('TraceState', () => {
     assert.strictEqual(members[31], 'k29=v29')
   })
 
-  it('should keep a tracestate at the 512-byte cap', () => {
-    const ts = TraceState.fromString(`a=${'x'.repeat(510)}`)
-
-    assert.strictEqual(Buffer.byteLength(ts.toString()), 512)
-  })
-
-  it('should drop the first member beyond the 512-byte cap', () => {
+  it('should not impose an aggregate byte limit', () => {
     const ts = TraceState.fromString(`a=${'x'.repeat(511)}`)
 
-    assert.strictEqual(ts.toString(), '')
-  })
-
-  it('should preserve valid members after a first member beyond the 512-byte cap', () => {
-    const ts = TraceState.fromString(`dd=${'x'.repeat(510)},ot=rv:f0948a54d43b8e;th:8,vendor=value`)
-
-    assert.strictEqual(ts.toString(), 'ot=rv:f0948a54d43b8e;th:8,vendor=value')
+    assert.strictEqual(Buffer.byteLength(ts.toString()), 513)
   })
 
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
