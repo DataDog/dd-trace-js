@@ -63,7 +63,19 @@ function toString (map, pairSeparator, fieldSeparator) {
  * @returns {string}
  */
 function limitTraceState (value) {
-  return value.split(',', MAX_LIST_MEMBERS).join(',')
+  let end = 0
+  let members = 0
+  let start = 0
+
+  while (start < value.length && members < MAX_LIST_MEMBERS) {
+    const next = value.indexOf(',', start)
+    if (next === -1) return value
+    end = next
+    members++
+    start = next + 1
+  }
+
+  return value.slice(0, end)
 }
 
 class TraceStateData {
