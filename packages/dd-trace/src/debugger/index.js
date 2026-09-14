@@ -4,8 +4,10 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const dc = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
+const telemetryMetrics = require('../telemetry/metrics')
 const getDebuggerConfig = require('./config')
 const {
   DEBUGGER_DIAGNOSTICS_V1,
@@ -13,6 +15,7 @@ const {
   DEBUGGER_INPUT_V2,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
 } = require('./constants')
+const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -23,12 +26,24 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
  * @typedef {import('../remote_config')} RemoteConfig
  */
 
+// Guardrail counters are aggregated in shared memory and only converted into telemetry metrics at this interval, so
+// the interval bounds the delay before a guardrail hit becomes visible, not the cost of recording it.
+const GUARDRAIL_METRICS_FLUSH_INTERVAL_MS = 10_000
+
+// Published by telemetry right before it sends its final metrics on process exit. The flush interval timer is unref'ed
+// and the worker does not keep the process alive, so without this hook everything counted since the last tick would
+// be lost when the application exits on its own.
+const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
+
 let worker = null
 let configChannel = null
 let ackId = 0
 let rcAckCallbacks = null
 let rc = null
 let inputPath = null
+/** @type {GuardrailMetrics | null} */
+let guardrailMetrics = null
+let guardrailMetricsTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -77,7 +92,13 @@ function start (config, rcInstance) {
   debuggerGlobals.utilTypes = types
   debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
 
-  const probeSamplerBuffer = installProbeSampler()
+  const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
+  guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
+  guardrailMetricsTimer = setInterval(flushGuardrailMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
+  guardrailMetricsTimer.unref?.()
+  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
+
+  const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
 
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
@@ -125,6 +146,7 @@ function start (config, rcInstance) {
           logPort: logChannel.port1,
           configPort: configChannel.port1,
           probeSamplerBuffer,
+          guardrailMetricsBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -211,6 +233,20 @@ function cleanup (error) {
   configChannel = null
   inputPath = null
 
+  if (guardrailMetricsTimer !== null) {
+    clearInterval(guardrailMetricsTimer)
+    guardrailMetricsTimer = null
+  }
+  if (guardrailMetrics !== null) {
+    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
+    // Report what the worker counted up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
+    // worker asynchronously, so anything it counts between this drain and its actual termination is lost. That only
+    // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, so it isn't worth
+    // deferring the drain until the worker has exited.
+    flushGuardrailMetrics()
+    guardrailMetrics = null
+  }
+
   // Call any pending ack callbacks
   // Pass error for unexpected exits, or undefined for graceful shutdown
   if (rcAckCallbacks) {
@@ -221,6 +257,17 @@ function cleanup (error) {
     }
     rcAckCallbacks = null
   }
+}
+
+/**
+ * Convert the guardrail counters accumulated by the probe sampler and the worker into telemetry metrics.
+ */
+function flushGuardrailMetrics () {
+  if (guardrailMetrics === null) return
+  const namespace = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+  guardrailMetrics.drain((metric, tags, count) => {
+    namespace.count(metric, tags).inc(count)
+  })
 }
 
 /**
