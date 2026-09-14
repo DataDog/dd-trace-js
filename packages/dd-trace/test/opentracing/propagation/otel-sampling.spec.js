@@ -204,13 +204,10 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       assert.strictEqual(context._sampling.priority, USER_REJECT)
     })
 
-    it('keeps probability fields when the probability decision itself drops', () => {
+    it('does not emit probability fields for a zero sample rate', () => {
       const { carrier, context } = sampleAndInject({ traceId: '1', sampleRate: 0, rateLimit: 0 })
 
-      assert.deepStrictEqual(parseOtel(carrier.tracestate), {
-        rv: 'f0948a54d43b8e',
-        th: 'ffffffffffffff',
-      })
+      assert.strictEqual(parseTracestate(carrier.tracestate).ot, undefined)
       assert.strictEqual(context._sampling.priority, USER_REJECT)
     })
   })
