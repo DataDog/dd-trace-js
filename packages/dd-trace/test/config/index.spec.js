@@ -1346,6 +1346,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_SPAN_CHAR_LIMIT', value: 128, origin: 'default' },
       { name: 'DD_OPENAI_LOGS_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_OPENAI_REALTIME_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: '', origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
