@@ -150,25 +150,27 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       assert.deepStrictEqual(parseOtel(carrier.tracestate), { foo: 'bar' })
     })
 
-    it('forwards malformed inherited rv and th unchanged', () => {
+    it('clears malformed inherited fields without generating replacements', () => {
       const malformedBoth = extractParent({
         sampled: true,
         tracestate: 'dd=s:1,ot=rv:not-hex;th:not-hex,congo=value',
       })
+      assert.strictEqual(malformedBoth._tracestate.get('ot'), undefined)
       const first = startSpan({ parent: malformedBoth, sampleRate: 0.1 })
       const firstCarrier = inject(first.span, first.prioritySampler)
 
-      assert.strictEqual(parseTracestate(firstCarrier.tracestate).ot, 'rv:not-hex;th:not-hex')
+      assert.strictEqual(parseTracestate(firstCarrier.tracestate).ot, undefined)
       assert.strictEqual(parseTracestate(firstCarrier.tracestate).congo, 'value')
 
       const malformedThreshold = extractParent({
         sampled: true,
         tracestate: 'ot=rv:1234567890abcd;th:not-hex',
       })
+      assert.strictEqual(malformedThreshold._tracestate.get('ot'), 'rv:1234567890abcd')
       const second = startSpan({ parent: malformedThreshold, sampleRate: 0.1 })
       const secondCarrier = inject(second.span, second.prioritySampler)
 
-      assert.strictEqual(parseTracestate(secondCarrier.tracestate).ot, 'rv:1234567890abcd;th:not-hex')
+      assert.strictEqual(parseTracestate(secondCarrier.tracestate).ot, 'rv:1234567890abcd')
     })
   })
 

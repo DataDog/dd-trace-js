@@ -102,6 +102,39 @@ function getProbabilityRate (context) {
 }
 
 /**
+ * Removes malformed OTel sampling fields and returns the valid values.
+ *
+ * @param {import('./opentracing/propagation/tracestate')} state
+ * @returns {{ randomValue: string | undefined, threshold: string | undefined }}
+ */
+function sanitizeFields (state) {
+  let randomValue = state.get('rv')
+  let threshold = state.get('th')
+
+  if (!isLowerHex(randomValue, 14, 14)) {
+    state.delete('rv')
+    randomValue = undefined
+  }
+  if (!isLowerHex(threshold, 1, 14)) {
+    state.delete('th')
+    threshold = undefined
+  }
+
+  return { randomValue, threshold }
+}
+
+/**
+ * Sanitizes inherited OTel sampling fields without changing valid state.
+ *
+ * @param {import('./opentracing/propagation/tracestate')} traceState
+ * @returns {void}
+ */
+function normalizeOtelTraceState (traceState) {
+  if (traceState.get('ot') === undefined) return
+  traceState.forVendor('ot', sanitizeFields, MAX_OTEL_VALUE_BYTES)
+}
+
+/**
  * Updates the OTel tracestate member to represent the context's sampling decision.
  *
  * @param {import('./opentracing/span_context')} context
@@ -118,17 +151,7 @@ function updateOtelTraceState (context, traceState) {
   }
 
   traceState.forVendor('ot', state => {
-    let randomValue = state.get('rv')
-    let threshold = state.get('th')
-
-    if (!isLowerHex(randomValue, 14, 14)) {
-      state.delete('rv')
-      randomValue = undefined
-    }
-    if (!isLowerHex(threshold, 1, 14)) {
-      state.delete('th')
-      threshold = undefined
-    }
+    const { randomValue, threshold } = sanitizeFields(state)
 
     if (context._sampling.isProbabilityDecision === false) {
       state.delete('th')
@@ -144,5 +167,6 @@ function updateOtelTraceState (context, traceState) {
 }
 
 module.exports = {
+  normalizeOtelTraceState,
   updateOtelTraceState,
 }

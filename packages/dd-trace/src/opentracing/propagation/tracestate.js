@@ -215,17 +215,13 @@ class TraceState {
     const data = this.#map.get(vendor)
     const state = TraceStateData.fromString(data)
     const result = handle(state)
-    const exceedsLimit = maxBytes !== undefined && typeof data === 'string' &&
-      data.length > maxBytes / 4 && Buffer.byteLength(data) > maxBytes
 
-    if (state.changed || exceedsLimit) {
-      const value = state.toString(maxBytes)
-      if (value) {
-        this.set(vendor, value)
-      } else {
-        this.delete(vendor)
-      }
-    }
+    if (!state.changed && maxBytes === undefined) return result
+
+    const value = state.toString(maxBytes)
+    if (value === data) return result
+    if (value) this.set(vendor, value)
+    else this.delete(vendor)
 
     return result
   }
