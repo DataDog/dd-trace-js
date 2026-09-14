@@ -106,10 +106,12 @@ async function teardown () {
  * @param {number} line - The line to break on
  * @param {() => void} [trigger] - The function hitting the breakpoint. Defaults to the target's `run` export.
  */
-async function setAndTriggerBreakpoint (path, line, trigger = require(path).run) {
+async function setAndTriggerBreakpoint (path, line, trigger) {
+  const target = require(path)
+  trigger ??= target.run
   await session.post('Debugger.setBreakpoint', {
     location: {
-      scriptId: await require(path).scriptId,
+      scriptId: await target.scriptId,
       lineNumber: line - 1, // Beware! lineNumber is zero-indexed
     },
   })
