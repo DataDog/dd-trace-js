@@ -1,14 +1,17 @@
 name: All Green
+
+# PR-only by design: All Green's job is to gate pull requests — it polls every sibling workflow,
+# merges their junit/coverage artifacts, and uploads them once. On master it had no consumer (the
+# `master-coverage` Codecov flag is only attached on PRs targeting master, and test events reach
+# CI Visibility through the tracer's own instrumentation), so its default-branch failures were
+# pure noise in the Green CI SLI: artifact 410s from expired/re-run siblings, siblings stuck
+# pending past the poll budget, and failures mirrored from sibling flakiness. Keep it off master
+# (and the scheduler, which also runs on the default branch) entirely.
 on:
   pull_request:
-  push:
-    branches:
-      - master
-  schedule:
-    - cron: 0 4 * * *
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
