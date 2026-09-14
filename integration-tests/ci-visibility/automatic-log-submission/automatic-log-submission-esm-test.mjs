@@ -13,7 +13,7 @@ const logger = loggerName === 'bunyan'
     : loggerName === 'console'
       ? {
           // eslint-disable-next-line no-console
-          info: (...args) => console.log(...args),
+          error: (...args) => console.error(...args),
         }
       : winston.createLogger({
         level: 'info',
@@ -26,7 +26,7 @@ const logger = loggerName === 'bunyan'
 
 if (loggerName === 'console') {
   // eslint-disable-next-line no-console
-  console.log('outside a test')
+  console.warn('outside a test')
 }
 
 describe('test', () => {
@@ -35,11 +35,17 @@ describe('test', () => {
       const circular = {}
       circular.self = circular
       logger.log('info', 'Hello simple log!', { circular })
+    } else if (loggerName === 'console') {
+      logger.error('Hello simple log!')
     } else {
       logger.info('Hello simple log!')
     }
 
-    logger.info('sum function being called')
+    if (loggerName === 'console') {
+      logger.error('sum function being called')
+    } else {
+      logger.info('sum function being called')
+    }
     assert.strictEqual(true, true)
   })
 })

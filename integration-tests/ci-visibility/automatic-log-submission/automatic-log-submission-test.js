@@ -10,6 +10,8 @@ describe('test', () => {
       const circular = {}
       circular.self = circular
       logger.log('info', 'Hello simple log!', { circular })
+    } else if (process.env.TEST_LOGGER === 'console') {
+      logger.error('Hello simple log!')
     } else {
       logger.info('Hello simple log!')
     }

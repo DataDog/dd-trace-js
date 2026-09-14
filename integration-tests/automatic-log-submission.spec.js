@@ -64,7 +64,7 @@ describe('automatic log submission', () => {
         assert.deepStrictEqual(payloads[0].logMessage, [{
           dd: { service: 'my-service' },
           message: 'Hello automatic console log submission!',
-          status: 'info',
+          status: 'error',
         }])
       }
     )

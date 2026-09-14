@@ -16,10 +16,7 @@ const MAX_BATCH_LOGS = 1000
 const BATCH_FLUSH_INTERVAL = 1000
 const FINAL_FLUSH_TIMEOUT = 60_000
 const CONSOLE_METHOD_TO_STATUS = {
-  debug: 'debug',
   error: 'error',
-  info: 'info',
-  log: 'info',
   warn: 'warn',
 }
 const consoleConfigureCh = channel('ci:log-submission:console:configure')

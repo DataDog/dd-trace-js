@@ -126,7 +126,7 @@ describe('LogSubmissionPlugin', () => {
   it('formats and submits console logs with the active span', () => {
     const span = { spanId: '123', traceId: '456' }
     legacyStorage.run({ span }, () => {
-      consoleLogSubmissionCh.publish({ method: 'log', args: ['hello %s %d', 'world', 42] })
+      consoleLogSubmissionCh.publish({ method: 'error', args: ['hello %s %d', 'world', 42] })
     })
     clock.tick(1000)
 
@@ -139,7 +139,7 @@ describe('LogSubmissionPlugin', () => {
         trace_id: '456',
       },
       message: 'hello world 42',
-      status: 'info',
+      status: 'error',
     }])
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=console&service=my+service')
   })
@@ -157,17 +157,14 @@ describe('LogSubmissionPlugin', () => {
   })
 
   it('maps console methods to log statuses', () => {
-    for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
+    for (const method of ['error', 'warn']) {
       consoleLogSubmissionCh.publish({ method, args: [method] })
     }
     clock.tick(1000)
 
     const [data] = request.firstCall.args
     assert.deepStrictEqual(JSON.parse(data).map(({ status }) => status), [
-      'debug',
       'error',
-      'info',
-      'info',
       'warn',
     ])
   })
@@ -180,7 +177,7 @@ describe('LogSubmissionPlugin', () => {
       },
     }
 
-    consoleLogSubmissionCh.publish({ method: 'log', args: [argument] })
+    consoleLogSubmissionCh.publish({ method: 'error', args: [argument] })
 
     sinon.assert.notCalled(request)
     sinon.assert.calledWith(log.error, 'Could not format console log for automatic submission', error)

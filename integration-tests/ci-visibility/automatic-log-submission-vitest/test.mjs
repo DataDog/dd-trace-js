@@ -9,7 +9,11 @@ const sum = require('../automatic-log-submission/sum')
 
 describe('test', () => {
   it('should return true', () => {
-    logger.info('Hello simple log!')
+    if (process.env.TEST_LOGGER === 'console') {
+      logger.error('Hello simple log!')
+    } else {
+      logger.info('Hello simple log!')
+    }
 
     assert.strictEqual(sum(1, 2), 3)
   })

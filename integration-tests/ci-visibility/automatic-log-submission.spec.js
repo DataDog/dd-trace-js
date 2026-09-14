@@ -115,7 +115,7 @@ describe('test optimization automatic log submission', () => {
 
   const loggers = {
     bunyan: { level: 30, messageKey: 'msg' },
-    console: { level: 'info', levelKey: 'status', messageKey: 'message' },
+    console: { level: 'error', levelKey: 'status', messageKey: 'message' },
     pino: { level: 30, messageKey: 'msg' },
     winston: { level: 'info', messageKey: 'message' },
   }
@@ -165,7 +165,10 @@ describe('test optimization automatic log submission', () => {
             if (loggerName === 'console') {
               const outsideTestLogs = logMessages.filter(({ message }) => message === 'outside a test')
               assert.ok(outsideTestLogs.length > 0)
-              outsideTestLogs.forEach(({ dd }) => assert.deepStrictEqual(dd, { service: 'my-service' }))
+              outsideTestLogs.forEach(({ dd, status }) => {
+                assert.deepStrictEqual(dd, { service: 'my-service' })
+                assert.equal(status, 'warn')
+              })
             }
             if (loggerName === 'winston' && (name === 'mocha' || name.startsWith('jest'))) {
               const circularLog = testLogMessages.find(({ message }) => message === 'Hello simple log!')

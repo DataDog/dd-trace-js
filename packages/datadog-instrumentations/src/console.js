@@ -7,7 +7,8 @@ const { channel } = require('./helpers/instrument')
 
 const configureCh = channel('ci:log-submission:console:configure')
 const logSubmissionCh = channel('ci:log-submission:console')
-const methods = ['debug', 'error', 'info', 'log', 'warn']
+// Keep routine test output local while submitting diagnostics that can explain failures.
+const methods = ['error', 'warn']
 const methodSet = new Set(methods)
 const wrappedTargets = new WeakSet()
 

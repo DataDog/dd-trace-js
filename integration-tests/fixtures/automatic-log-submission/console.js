@@ -1,4 +1,4 @@
 'use strict'
 
 // eslint-disable-next-line no-console
-console.log('Hello automatic console log submission!')
+console.error('Hello automatic console log submission!')

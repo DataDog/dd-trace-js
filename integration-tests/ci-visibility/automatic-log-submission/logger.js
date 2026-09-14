@@ -9,10 +9,10 @@ if (process.env.TEST_LOGGER === 'bunyan') {
   logger = createPino({ level: 'info' })
 } else if (process.env.TEST_LOGGER === 'console') {
   // eslint-disable-next-line no-console
-  console.log('outside a test')
+  console.warn('outside a test')
   logger = {
     // eslint-disable-next-line no-console
-    info: (...args) => console.log(...args),
+    error: (...args) => console.error(...args),
   }
 } else {
   const { createLogger, format, transports } = require('winston')

@@ -23,45 +23,46 @@ describe('console instrumentation', () => {
     logSubmissionCh.unsubscribe(subscriber)
   })
 
-  it('publishes supported console methods and preserves their behavior', () => {
+  it('publishes warnings and errors and preserves all console methods', () => {
     const target = {}
+    const originalMethods = {}
     for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
-      target[method] = sinon.stub().returns(method)
+      originalMethods[method] = target[method] = sinon.stub().returns(method)
     }
     wrapConsole(target)
 
     for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
       assert.strictEqual(target[method]('hello', method), method)
     }
+    for (const method of ['debug', 'info', 'log']) {
+      assert.strictEqual(target[method], originalMethods[method])
+    }
 
     assert.deepStrictEqual(payloads.map(({ method, args }) => ({ method, args: [...args] })), [
-      { method: 'debug', args: ['hello', 'debug'] },
       { method: 'error', args: ['hello', 'error'] },
-      { method: 'info', args: ['hello', 'info'] },
-      { method: 'log', args: ['hello', 'log'] },
       { method: 'warn', args: ['hello', 'warn'] },
     ])
   })
 
   it('publishes once when one wrapped console delegates to another', () => {
-    const innerLog = sinon.stub().returns('result')
-    const inner = { log: innerLog }
+    const innerWarn = sinon.stub().returns('result')
+    const inner = { warn: innerWarn }
     const outer = {
-      log () {
-        return inner.log.apply(inner, arguments)
+      warn () {
+        return inner.warn.apply(inner, arguments)
       },
     }
     wrapConsole(inner)
     wrapConsole(outer)
 
-    assert.strictEqual(outer.log('hello'), 'result')
+    assert.strictEqual(outer.warn('hello'), 'result')
     assert.deepStrictEqual(payloads.map(({ method, args }) => ({ method, args: [...args] })), [
-      { method: 'log', args: ['hello'] },
+      { method: 'warn', args: ['hello'] },
     ])
-    sinon.assert.calledOnceWithExactly(innerLog, 'hello')
+    sinon.assert.calledOnceWithExactly(innerWarn, 'hello')
   })
 
-  it('captures Jest buffered console records without wrapping public methods', () => {
+  it('captures only Jest buffered warnings and errors without wrapping public methods', () => {
     class BufferedConsole {
       static write (buffer, method, message) {
         buffer.push(message)
@@ -71,20 +72,25 @@ describe('console instrumentation', () => {
     wrapJestBufferedConsole(BufferedConsole)
     const buffer = []
 
+    assert.strictEqual(BufferedConsole.write(buffer, 'log', 'ignored'), buffer)
     assert.strictEqual(BufferedConsole.write(buffer, 'warn', 'hello'), buffer)
-    assert.deepStrictEqual(buffer, ['hello'])
-    assert.deepStrictEqual(payloads, [{ method: 'warn', args: ['hello'] }])
+    assert.strictEqual(BufferedConsole.write(buffer, 'error', 'boom'), buffer)
+    assert.deepStrictEqual(buffer, ['ignored', 'hello', 'boom'])
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', args: ['hello'] },
+      { method: 'error', args: ['boom'] },
+    ])
   })
 
   it('does not publish without a subscriber', () => {
     logSubmissionCh.unsubscribe(subscriber)
-    const originalLog = sinon.stub()
-    const target = { log: originalLog }
+    const originalWarn = sinon.stub()
+    const target = { warn: originalWarn }
     wrapConsole(target)
 
-    target.log('hello')
+    target.warn('hello')
 
-    sinon.assert.calledOnceWithExactly(originalLog, 'hello')
+    sinon.assert.calledOnceWithExactly(originalWarn, 'hello')
     assert.deepStrictEqual(payloads, [])
   })
 })
