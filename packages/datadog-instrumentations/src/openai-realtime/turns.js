@@ -7,9 +7,73 @@ const AudioAccumulator = require('./audio-accumulator')
  * @typedef {{ name?: string, result?: string, toolId?: string, type?: string }} ToolResult
  */
 
+/**
+ * One response's text or transcript, accumulated across the output items it arrives in.
+ *
+ * Deltas stream per output item, and each item ends with a `.done` carrying that item's
+ * authoritative final value. A single response can hold several output items — a server-side MCP
+ * call sits between a preamble message and the answer — so a `.done` replaces only the span its own
+ * item contributed rather than the whole response, which would drop every item before it.
+ *
+ * Events that carry no item id are treated as one continuous item, which is how a response with a
+ * single output item behaves anyway.
+ */
+class ItemText {
+  /** @type {string} */
+  value = ''
+
+  /** @type {string | undefined} */
+  #itemId = undefined
+
+  /** Offset into `value` at which the current item's span begins. */
+  #itemStart = 0
+
+  /**
+   * @param {unknown} itemId
+   * @param {string} delta
+   * @returns {void}
+   */
+  appendDelta (itemId, delta) {
+    this.#openItem(itemId)
+    this.value += delta
+  }
+
+  /**
+   * Replace the current item's span with the final value the server reported for it.
+   *
+   * @param {unknown} itemId
+   * @param {string} final
+   * @returns {void}
+   */
+  complete (itemId, final) {
+    this.#openItem(itemId)
+    this.value = this.value.slice(0, this.#itemStart) + final
+  }
+
+  /**
+   * Begin a new item's span, leaving everything earlier items contributed in place.
+   *
+   * @param {unknown} itemId
+   * @returns {void}
+   */
+  #openItem (itemId) {
+    const item = itemId == null ? undefined : String(itemId)
+    if (item === this.#itemId) return
+
+    this.#itemId = item
+    this.#itemStart = this.value.length
+  }
+}
+
 /** Accumulated user input — audio plus transcript or text — for a single turn. */
 class InputTurn {
-  audio = new AudioAccumulator()
+  /**
+   * @param {boolean} [retainAudio] - False when nothing consumes the bytes, so only their count is
+   *   kept. See `AudioAccumulator`.
+   */
+  constructor (retainAudio = true) {
+    this.audio = new AudioAccumulator(retainAudio)
+  }
 
   text = ''
 
@@ -70,17 +134,18 @@ class ResponseTurn {
    * @param {InputTurn} input
    * @param {number} createdTime - Epoch ms at which `response.created` arrived. The fallback start
    *   for the turn root and llm spans when the turn produced no user speech to back-date to.
+   * @param {boolean} [retainAudio] - False when nothing consumes the bytes, so only their count is
+   *   kept. See `AudioAccumulator`.
    */
-  constructor (input, createdTime) {
+  constructor (input, createdTime, retainAudio = true) {
     this.input = input
     this.createdTime = createdTime
+    this.audio = new AudioAccumulator(retainAudio)
   }
 
-  audio = new AudioAccumulator()
+  transcript = new ItemText()
 
-  transcript = ''
-
-  text = ''
+  text = new ItemText()
 
   /** @type {{ input_tokens?: number, output_tokens?: number, total_tokens?: number } | undefined} */
   usage = undefined
@@ -140,4 +205,4 @@ class ResponseTurn {
   toolResults = []
 }
 
-module.exports = { InputTurn, ResponseTurn }
+module.exports = { InputTurn, ItemText, ResponseTurn }

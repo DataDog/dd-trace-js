@@ -6,8 +6,13 @@ const {
   isPcm16AudioMime,
   pcm16ToWav,
 } = require('../../audio-codec')
-const { formatAudioPartWithGuard } = require('../../audio-utils')
-const { AUDIO_FALLBACK, G711_SAMPLE_RATE } = require('../../constants/audio')
+const { fitsInlineAudioBudget, formatAudioPartWithGuard } = require('../../audio-utils')
+const {
+  AUDIO_FALLBACK,
+  G711_SAMPLE_RATE,
+  PCM16_BYTES_PER_SAMPLE,
+  WAV_HEADER_BYTES,
+} = require('../../constants/audio')
 const { storage: llmobsStorage } = require('../../storage')
 const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
@@ -32,6 +37,11 @@ const { getModelProviderAndClient } = require('./utils')
  * integrations, is decoded to PCM16 and likewise WAV-wrapped at its fixed 8 kHz rate. Anything else
  * is passed to the size guard as-is, which keeps it only if it is renderable and within budget.
  *
+ * Both conversions expand what they are given — G.711 doubles it, and either way a WAV header is
+ * prepended — so the budget is checked against the size the conversion *would* produce before
+ * running it. Checking afterwards, as the guard alone does, means decoding and copying megabytes
+ * only to discard them: the retention cap admits roughly twice what a G.711 turn can ever inline.
+ *
  * @param {Buffer} audio
  * @param {string} mimeType
  * @param {number} sampleRate
@@ -41,11 +51,13 @@ function buildAudioPart (audio, mimeType, sampleRate) {
   if (!audio.length) return
 
   if (isPcm16AudioMime(mimeType)) {
+    if (!fitsInlineAudioBudget(audio.length + WAV_HEADER_BYTES)) return
     return formatAudioPartWithGuard(pcm16ToWav(audio, sampleRate), 'audio/wav')
   }
 
   const variant = g711Variant(mimeType)
   if (variant !== undefined) {
+    if (!fitsInlineAudioBudget(audio.length * PCM16_BYTES_PER_SAMPLE + WAV_HEADER_BYTES)) return
     return formatAudioPartWithGuard(pcm16ToWav(g711ToPcm16(audio, variant), G711_SAMPLE_RATE), 'audio/wav')
   }
 
@@ -183,6 +195,16 @@ class RealtimeTurnLLMObsPlugin extends RealtimeLLMObsPlugin {
 class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
   static id = 'openai_realtime_response_llmobs'
   static prefix = 'tracing:apm:openai:realtime:response'
+
+  constructor (...args) {
+    super(...args)
+
+    // This plugin is the only consumer of a turn's audio bytes, and the instrumentation keeps them
+    // only while something is subscribed here — a disabled plugin unsubscribes, so an APM-only
+    // process never buffers audio it cannot use. Nothing is ever published; the subscription is the
+    // signal. Keep it if `buildMessage` stops reading `side.audio`, and the buffering stops with it.
+    this.addSub('dd-trace:openai:realtime:audio', () => {})
+  }
 
   getLLMObsSpanRegisterOptions (ctx) {
     const { turn } = ctx

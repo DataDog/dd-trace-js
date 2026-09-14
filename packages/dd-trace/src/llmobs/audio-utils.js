@@ -79,6 +79,27 @@ function formatAudioPart (data, mimeType) {
 }
 
 /**
+ * Whether `byteLength` bytes of audio fit the inline budget once base64-encoded.
+ *
+ * Compares the *encoded* size: `formatAudioPart` base64-encodes the bytes (~4/3 expansion), and it
+ * is that encoded content which counts against the per-span-event limit. Exposed separately so a
+ * caller that has to allocate to produce those bytes — decoding G.711 to PCM16, wrapping raw PCM in
+ * a WAV container — can check the size it is about to produce before paying for it.
+ *
+ * @param {number} byteLength
+ * @param {number} [maxBytes]
+ * @returns {boolean}
+ */
+function fitsInlineAudioBudget (byteLength, maxBytes = LLMOBS_AUDIO_INLINE_MAX_BYTES) {
+  const encodedLength = base64EncodedLength(byteLength)
+  if (encodedLength <= maxBytes) return true
+
+  log.debug('Audio (%d encoded bytes) exceeds inline budget %d; omitting inline audio content',
+    encodedLength, maxBytes)
+  return false
+}
+
+/**
  * Build a playable audio part, but only for renderable formats within the size budget. Returns
  * `undefined` for a non-renderable format (e.g. raw PCM) or oversize audio; callers fall back to the
  * transcript as the message content in that case.
@@ -90,21 +111,14 @@ function formatAudioPart (data, mimeType) {
  */
 function formatAudioPartWithGuard (audioBytes, mimeType, maxBytes = LLMOBS_AUDIO_INLINE_MAX_BYTES) {
   if (!audioBytes?.length || !isRenderableAudioMime(mimeType)) return
-
-  // Compare the *encoded* size: `formatAudioPart` base64-encodes the bytes (~4/3 expansion), and it
-  // is that encoded content which counts against the per-span-event limit.
-  const encodedLength = base64EncodedLength(audioBytes.length)
-  if (encodedLength > maxBytes) {
-    log.debug('Audio (%d encoded bytes) exceeds inline budget %d; omitting inline audio content',
-      encodedLength, maxBytes)
-    return
-  }
+  if (!fitsInlineAudioBudget(audioBytes.length, maxBytes)) return
 
   return formatAudioPart(audioBytes, mimeType)
 }
 
 module.exports = {
   audioMimeTypeFromFormat,
+  fitsInlineAudioBudget,
   formatAudioPart,
   formatAudioPartWithGuard,
   isRenderableAudioMime,

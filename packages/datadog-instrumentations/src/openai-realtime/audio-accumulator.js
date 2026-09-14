@@ -13,7 +13,13 @@ const {
  * `subarray`, where operating on base64 would have to decode and re-encode the straddling frame.
  *
  * `present` records that audio was seen at all, so a turn can still surface an `[audio]` marker when
- * the bytes were dropped; `oversize` marks that the retention cap was hit.
+ * the bytes were dropped; `oversize` marks that the retention cap was hit. `oversize` is sticky for
+ * the life of the segment — once frames have been dropped the segment can never again be a faithful
+ * recording of its own window — and is only lifted by `clear()`, which starts a new segment.
+ *
+ * Constructed with `retain = false` when nothing consumes the audio, which is the default APM-only
+ * configuration: the byte *count* still drives the speech windows, but no frame is decoded and no
+ * segment is held.
  */
 class AudioAccumulator {
   /** @type {Buffer[]} */
@@ -53,6 +59,16 @@ class AudioAccumulator {
   /** Bytes currently retained across `chunks`. */
   #retainedBytes = 0
 
+  /** Whether anything consumes the bytes. When false only `totalDecodedBytes` is maintained. */
+  #retain
+
+  /**
+   * @param {boolean} [retain]
+   */
+  constructor (retain = true) {
+    this.#retain = retain
+  }
+
   /**
    * @param {string} base64
    * @param {number} now - Epoch ms at which this frame was observed.
@@ -69,6 +85,14 @@ class AudioAccumulator {
       this.sampleRate = sampleRate
     }
     this.present = true
+
+    if (!this.#retain) {
+      // `byteLength` is what `Buffer.from(base64, 'base64').length` would be, computed without
+      // allocating, so the speech windows derived from this count are unchanged.
+      const decodedLength = Buffer.byteLength(base64, 'base64')
+      this.totalDecodedBytes += decodedLength
+      return decodedLength
+    }
 
     const decoded = Buffer.from(base64, 'base64')
     this.totalDecodedBytes += decoded.length
@@ -109,6 +133,21 @@ class AudioAccumulator {
       return
     }
 
+    if (this.oversize) {
+      // The cap already emptied `chunks` and every frame since was dropped, so there is nothing here
+      // to trim and nothing to reopen around: the audio for the rest of this segment is gone. Stay
+      // closed. Reopening would let later frames build a buffer that silently starts partway through
+      // the segment while the duration derived from `totalDecodedBytes` still spans all of it — a
+      // clip that begins mid-word under a window it doesn't fill. The turn keeps its timing and
+      // falls back to the `[audio]` marker instead.
+      //
+      // The case this trim exists for — a lead-in that spends the cap before the user speaks — is
+      // the branch above: the onset is past everything buffered, so the segment resets outright and
+      // starts clean.
+      this.totalDecodedBytes -= decodedBytes
+      return
+    }
+
     let remaining = decodedBytes
     while (this.chunks.length > 0 && remaining > 0) {
       const chunk = this.chunks[0]
@@ -120,16 +159,10 @@ class AudioAccumulator {
       remaining -= chunk.length
     }
 
-    // Re-derive the cap from what actually survived, which also reopens a segment the lead-in had
-    // closed. On a continuously-streaming client the lead-in is what spends the cap — the buffer
-    // stays open across the whole previous agent response — and `append` drops the frames when it
-    // trips, so without this the cap the trimmed-away audio filled would go on rejecting the user's
-    // actual speech for the rest of the turn. That is the outcome trimming exists to prevent.
     this.#retainedBytes = 0
     for (const chunk of this.chunks) this.#retainedBytes += chunk.length
-    this.oversize = this.#retainedBytes > LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES
 
-    this.totalDecodedBytes = Math.max(0, this.totalDecodedBytes - decodedBytes)
+    this.totalDecodedBytes -= decodedBytes
   }
 
   /**
