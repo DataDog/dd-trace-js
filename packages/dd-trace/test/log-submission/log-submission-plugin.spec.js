@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -123,10 +122,10 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service')
   })
 
-  it('formats and submits console logs with the active span', () => {
+  it('submits formatted console logs with the active span', () => {
     const span = { spanId: '123', traceId: '456' }
     legacyStorage.run({ span }, () => {
-      consoleLogSubmissionCh.publish({ method: 'error', args: ['hello %s %d', 'world', 42] })
+      consoleLogSubmissionCh.publish({ method: 'error', message: 'hello world 42' })
     })
     clock.tick(1000)
 
@@ -145,7 +144,7 @@ describe('LogSubmissionPlugin', () => {
   })
 
   it('submits console logs without trace correlation when no span is active', () => {
-    consoleLogSubmissionCh.publish({ method: 'warn', args: ['outside a test'] })
+    consoleLogSubmissionCh.publish({ method: 'warn', message: 'outside a test' })
     clock.tick(1000)
 
     const [data] = request.firstCall.args
@@ -158,7 +157,7 @@ describe('LogSubmissionPlugin', () => {
 
   it('maps console methods to log statuses', () => {
     for (const method of ['error', 'warn']) {
-      consoleLogSubmissionCh.publish({ method, args: [method] })
+      consoleLogSubmissionCh.publish({ method, message: method })
     }
     clock.tick(1000)
 
@@ -167,21 +166,6 @@ describe('LogSubmissionPlugin', () => {
       'error',
       'warn',
     ])
-  })
-
-  it('does not disable submission when a console argument cannot be formatted', () => {
-    const error = new Error('boom')
-    const argument = {
-      [inspect.custom] () {
-        throw error
-      },
-    }
-
-    consoleLogSubmissionCh.publish({ method: 'error', args: [argument] })
-
-    sinon.assert.notCalled(request)
-    sinon.assert.calledWith(log.error, 'Could not format console log for automatic submission', error)
-    assert.strictEqual(plugin._enabled, true)
   })
 
   it('flushes pending Bunyan logs before exit', () => {

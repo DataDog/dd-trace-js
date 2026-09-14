@@ -31,12 +31,50 @@ function wrapConsole (target) {
     // rewrite every receiver that test frameworks create or replace.
     shimmer.wrap(target, method, original => function () {
       const shouldPublish = callDepth++ === 0 && logSubmissionCh.hasSubscribers
-      try {
-        if (shouldPublish) {
-          logSubmissionCh.publish({ method, args: arguments })
+      let stream
+      let writeDescriptor
+      let originalWrite
+      let message
+      let wrappedWrite
+
+      if (shouldPublish) {
+        try {
+          const receiver = this?._stderr ? this : target
+          stream = receiver?._stderr
+          originalWrite = stream?.write
+          if (typeof originalWrite === 'function') {
+            writeDescriptor = Object.getOwnPropertyDescriptor(stream, 'write')
+            wrappedWrite = function (chunk) {
+              if (typeof chunk === 'string') message = chunk
+              return originalWrite.apply(this, arguments)
+            }
+            stream.write = wrappedWrite
+            if (stream.write !== wrappedWrite) wrappedWrite = undefined
+          }
+        } catch {
+          wrappedWrite = undefined
         }
-        return original.apply(this, arguments)
+      }
+
+      try {
+        const result = original.apply(this, arguments)
+        if (wrappedWrite && message !== undefined) {
+          if (message.endsWith('\n')) message = message.slice(0, -1)
+          logSubmissionCh.publish({ method, message })
+        }
+        return result
       } finally {
+        if (wrappedWrite) {
+          try {
+            if (stream.write === wrappedWrite) {
+              if (writeDescriptor) {
+                Object.defineProperty(stream, 'write', writeDescriptor)
+              } else {
+                delete stream.write
+              }
+            }
+          } catch {}
+        }
         callDepth--
       }
     })
@@ -57,7 +95,7 @@ function wrapJestBufferedConsole (BufferedConsole) {
     const shouldPublish = callDepth++ === 0 && methodSet.has(method) && logSubmissionCh.hasSubscribers
     try {
       if (shouldPublish) {
-        logSubmissionCh.publish({ method, args: [message] })
+        logSubmissionCh.publish({ method, message })
       }
       return original.apply(this, arguments)
     } finally {

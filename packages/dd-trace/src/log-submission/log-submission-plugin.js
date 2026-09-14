@@ -1,7 +1,6 @@
 'use strict'
 
 const { Writable } = require('node:stream')
-const { format } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 
@@ -144,15 +143,7 @@ class LogSubmissionPlugin extends Plugin {
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
     })
-    this.addSub('ci:log-submission:console', ({ method, args }) => {
-      let formattedMessage
-      try {
-        formattedMessage = format(...args)
-      } catch (error) {
-        log.error('Could not format console log for automatic submission', error)
-        return
-      }
-
+    this.addSub('ci:log-submission:console', ({ method, message: formattedMessage }) => {
       const message = {
         message: formattedMessage,
         status: CONSOLE_METHOD_TO_STATUS[method],

@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { Console } = require('node:console')
+const { Writable } = require('node:stream')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
@@ -24,10 +27,14 @@ describe('console instrumentation', () => {
   })
 
   it('publishes warnings and errors and preserves all console methods', () => {
-    const target = {}
+    const stream = { write: sinon.stub() }
+    const target = { _stderr: stream }
     const originalMethods = {}
     for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
-      originalMethods[method] = target[method] = sinon.stub().returns(method)
+      originalMethods[method] = target[method] = sinon.stub().callsFake((...args) => {
+        if (method === 'error' || method === 'warn') stream.write(`${args.join(' ')}\n`)
+        return method
+      })
     }
     wrapConsole(target)
 
@@ -38,16 +45,21 @@ describe('console instrumentation', () => {
       assert.strictEqual(target[method], originalMethods[method])
     }
 
-    assert.deepStrictEqual(payloads.map(({ method, args }) => ({ method, args: [...args] })), [
-      { method: 'error', args: ['hello', 'error'] },
-      { method: 'warn', args: ['hello', 'warn'] },
+    assert.deepStrictEqual(payloads, [
+      { method: 'error', message: 'hello error' },
+      { method: 'warn', message: 'hello warn' },
     ])
   })
 
   it('publishes once when one wrapped console delegates to another', () => {
-    const innerWarn = sinon.stub().returns('result')
-    const inner = { warn: innerWarn }
+    const stream = { write: sinon.stub() }
+    const innerWarn = sinon.stub().callsFake((message) => {
+      stream.write(`${message}\n`)
+      return 'result'
+    })
+    const inner = { _stderr: stream, warn: innerWarn }
     const outer = {
+      _stderr: stream,
       warn () {
         return inner.warn.apply(inner, arguments)
       },
@@ -56,10 +68,34 @@ describe('console instrumentation', () => {
     wrapConsole(outer)
 
     assert.strictEqual(outer.warn('hello'), 'result')
-    assert.deepStrictEqual(payloads.map(({ method, args }) => ({ method, args: [...args] })), [
-      { method: 'warn', args: ['hello'] },
-    ])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
     sinon.assert.calledOnceWithExactly(innerWarn, 'hello')
+  })
+
+  it('submits the native-formatted output without inspecting arguments twice', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    let inspections = 0
+    const value = {
+      [inspect.custom] () {
+        inspections++
+        if (inspections > 1) throw new Error('inspected twice')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello %o', value)
+
+    assert.strictEqual(inspections, 1)
+    assert.deepStrictEqual(output, ['hello formatted value\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
   it('captures only Jest buffered warnings and errors without wrapping public methods', () => {
@@ -77,15 +113,16 @@ describe('console instrumentation', () => {
     assert.strictEqual(BufferedConsole.write(buffer, 'error', 'boom'), buffer)
     assert.deepStrictEqual(buffer, ['ignored', 'hello', 'boom'])
     assert.deepStrictEqual(payloads, [
-      { method: 'warn', args: ['hello'] },
-      { method: 'error', args: ['boom'] },
+      { method: 'warn', message: 'hello' },
+      { method: 'error', message: 'boom' },
     ])
   })
 
   it('does not publish without a subscriber', () => {
     logSubmissionCh.unsubscribe(subscriber)
-    const originalWarn = sinon.stub()
-    const target = { warn: originalWarn }
+    const stream = { write: sinon.stub() }
+    const originalWarn = sinon.stub().callsFake(message => stream.write(`${message}\n`))
+    const target = { _stderr: stream, warn: originalWarn }
     wrapConsole(target)
 
     target.warn('hello')

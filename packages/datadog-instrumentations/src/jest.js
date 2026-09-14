@@ -59,6 +59,7 @@ const {
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
+const getDisabledInstrumentations = require('./helpers/get-disabled-instrumentations')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -3742,8 +3743,8 @@ const JEST_LOGGING_LIBRARIES = new Set([
   'pino',
   'winston',
 ])
-const disabledJestInstrumentations = new Set(
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
+const disabledJestInstrumentations = getDisabledInstrumentations(
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
 )
 
 addHook({

@@ -145,7 +145,9 @@ describe('test optimization automatic log submission', () => {
             const urls = payloads.flatMap(({ url }) => url)
             const expectedMessages = new Set(['Hello simple log!', 'sum function being called'])
             const testLogMessages = loggerName === 'console'
-              ? logMessages.filter(logMessage => expectedMessages.has(logMessage[messageKey]))
+              ? logMessages.filter(logMessage => {
+                return [...expectedMessages].some(message => logMessage[messageKey].includes(message))
+              })
               : logMessages
 
             urls.forEach(url => assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`))
@@ -158,12 +160,18 @@ describe('test optimization automatic log submission', () => {
               assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(dd).sort())
             })
 
-            assertObjectContains(testLogMessages.map(logMessage => logMessage[messageKey]), [
-              'Hello simple log!',
-              'sum function being called',
-            ])
             if (loggerName === 'console') {
-              const outsideTestLogs = logMessages.filter(({ message }) => message === 'outside a test')
+              for (const message of expectedMessages) {
+                assert.ok(testLogMessages.some(logMessage => logMessage[messageKey].includes(message)))
+              }
+            } else {
+              assertObjectContains(testLogMessages.map(logMessage => logMessage[messageKey]), [
+                'Hello simple log!',
+                'sum function being called',
+              ])
+            }
+            if (loggerName === 'console') {
+              const outsideTestLogs = logMessages.filter(({ message }) => message.includes('outside a test'))
               assert.ok(outsideTestLogs.length > 0)
               outsideTestLogs.forEach(({ dd, status }) => {
                 assert.deepStrictEqual(dd, { service: 'my-service' })
@@ -263,7 +271,7 @@ describe('test optimization automatic log submission', () => {
 
         const logsPromise = receiver.assertPayloadReceived(() => {
           hasReceivedEvents = true
-        }, ({ url }) => url.endsWith('/api/v2/logs'), 5000).catch(() => {})
+        }, ({ url }) => url.includes('/api/v2/logs'), 5000).catch(() => {})
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -278,6 +286,48 @@ describe('test optimization automatic log submission', () => {
         }
         assert.strictEqual(hasReceivedEvents, false)
       })
+
+      if (loggerName === 'console' && name === 'jest') {
+        it('does not submit console logs when node:console instrumentation is disabled', async () => {
+          childProcess = exec(command,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+                DD_API_KEY: '1',
+                DD_SERVICE: 'my-service',
+                DD_TRACE_DISABLED_INSTRUMENTATIONS: 'node:console',
+                TEST_LOGGER: loggerName,
+                ...getExtraEnvVars(),
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          let hasReceivedConsoleLogs = false
+          const logsPromise = receiver.assertPayloadReceived(() => {
+            hasReceivedConsoleLogs = true
+          }, ({ url }) => url.includes('/api/v2/logs?ddsource=console'), 5000).catch(() => {})
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            once(childProcess.stdout, 'end'),
+            once(childProcess.stderr, 'end'),
+            logsPromise,
+          ])
+
+          assert.match(testOutput, /Hello simple log!/)
+          assert.match(testOutput, /sum function being called/)
+          assert.strictEqual(hasReceivedConsoleLogs, false)
+        })
+      }
 
       it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set but DD_API_KEY is not', async () => {
         childProcess = exec(command,

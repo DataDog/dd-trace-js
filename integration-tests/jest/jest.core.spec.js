@@ -1701,7 +1701,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       mockIsolationIt(`instruments ${loggerName} after another suite mocks it`, async () => {
         let testOutput = ''
         const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes(`/api/v2/logs?ddsource=${loggerName}`), payloads => {
             assert.strictEqual(payloads.length, 1, testOutput)
 
             const [{ headers, logMessage, url }] = payloads
@@ -1838,7 +1838,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         let testOutput = ''
         const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs?ddsource=winston'), payloads => {
             assert.strictEqual(payloads.length, 1, testOutput)
 
             const [{ headers, logMessage, url }] = payloads
