@@ -185,6 +185,7 @@ class TraceState {
 
   toString () {
     const value = toString(this, '=', ',')
+    if (this.size <= MAX_LIST_MEMBERS) return value
     return limitTraceState(value)
   }
 }
