@@ -1033,9 +1033,11 @@ class MochaPlugin extends CiPlugin {
       // When dynamic ATR is enabled, use the max bucket value as the initial count.
       // The actual duration-based count is computed after the first attempt.
       if (this.libraryConfig.isDynamicAtrEnabled) {
-        retryCount = this.libraryConfig.dynamicAtrBuckets
+        const maximumDynamicAtrRetries = this.libraryConfig.dynamicAtrBuckets
           ? Math.max(...this.libraryConfig.dynamicAtrBuckets)
           : this.libraryConfig.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+        // Dynamic ATR guarantees one retry, including the >5m EFD fallback bucket.
+        retryCount = Math.max(1, maximumDynamicAtrRetries)
       } else {
         retryCount = this.libraryConfig.flakyTestRetriesCount
       }

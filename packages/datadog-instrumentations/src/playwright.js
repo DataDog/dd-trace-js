@@ -896,7 +896,8 @@ function testEndHandler ({
 
   const isEfdManagedTest = isTestEfdManaged(test)
   const testFqn = getTestFullyQualifiedName(test)
-  const testStatusKey = isEfdManagedTest ? getTestEfdKey(test) : testFqn
+  // Dynamic ATR budgets and retry status must be isolated per Playwright project.
+  const testStatusKey = (isEfdManagedTest || isDynamicAtrEnabled) ? getTestEfdKey(test) : testFqn
   const testStatuses = testsToTestStatuses.get(testStatusKey) || []
 
   if (testStatuses.length === 0) {
@@ -909,7 +910,7 @@ function testEndHandler ({
   }
 
   const testEfdKey = getTestEfdKey(test)
-  const dynamicAtrTestKey = getTestFullyQualifiedName(test)
+  const dynamicAtrTestKey = testEfdKey
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime

@@ -548,7 +548,8 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           const maxRetries = libraryConfig.dynamicAtrBuckets
             ? Math.max(...libraryConfig.dynamicAtrBuckets)
             : libraryConfig.earlyFlakeDetectionRetryPolicy?.schedulingRetryCount ?? 0
-          this.retries(maxRetries)
+          // Dynamic ATR guarantees one retry, including the >5m EFD fallback bucket.
+          this.retries(Math.max(1, maxRetries))
         } else {
           this.retries(dynamicCount)
         }
