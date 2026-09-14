@@ -8,8 +8,23 @@ const MAX_OTEL_VALUE_BYTES = 256
 const MAX_THRESHOLD = 2n ** 56n
 const MAX_ENCODABLE_THRESHOLD = MAX_THRESHOLD - 1n
 const UINT64_MASK = 2n ** 64n - 1n
-const validRandomValue = /^[0-9a-f]{14}$/
-const validThreshold = /^[0-9a-f]{1,14}$/
+
+/**
+ * @param {unknown} value
+ * @param {number} minLength
+ * @param {number} maxLength
+ * @returns {value is string}
+ */
+function isLowerHex (value, minLength, maxLength) {
+  if (typeof value !== 'string' || value.length < minLength || value.length > maxLength) return false
+
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if ((code < 48 || code > 57) && (code < 97 || code > 102)) return false
+  }
+
+  return true
+}
 
 /**
  * Derives the OTel 56-bit random value from Datadog's sampling hash.
@@ -106,11 +121,11 @@ function updateOtelTraceState (context, traceState) {
     let randomValue = state.get('rv')
     let threshold = state.get('th')
 
-    if (!validRandomValue.test(randomValue)) {
+    if (!isLowerHex(randomValue, 14, 14)) {
       state.delete('rv')
       randomValue = undefined
     }
-    if (!validThreshold.test(threshold)) {
+    if (!isLowerHex(threshold, 1, 14)) {
       state.delete('th')
       threshold = undefined
     }

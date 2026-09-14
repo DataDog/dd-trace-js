@@ -242,6 +242,24 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       })
     })
 
+    for (const randomValue of ['123456789abcd', '1234567890abcde', '1234567890abcD', 'g234567890abcd']) {
+      it(`rejects the malformed random value ${randomValue}`, () => {
+        const { span, prioritySampler } = startSpan({ traceId: '1', sampleRate: 0.1 })
+        span.context()._tracestate = TraceState.fromString(`ot=rv:${randomValue};th:8`)
+
+        assert.deepStrictEqual(parseOtel(inject(span, prioritySampler).tracestate), { th: '8' })
+      })
+    }
+
+    for (const threshold of ['1234567890abcde', 'A', '123g']) {
+      it(`rejects the malformed threshold ${threshold}`, () => {
+        const { span, prioritySampler } = startSpan({ traceId: '1', sampleRate: 0.1 })
+        span.context()._tracestate = TraceState.fromString(`ot=rv:1234567890abcd;th:${threshold}`)
+
+        assert.deepStrictEqual(parseOtel(inject(span, prioritySampler).tracestate), { rv: '1234567890abcd' })
+      })
+    }
+
     for (const behavior of ['ignore', 'restart']) {
       it(`ignores inbound ot fields and creates a new decision with ${behavior}`, () => {
         config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = behavior
