@@ -12,10 +12,11 @@ const WHITESPACE = /[ \t]/
  * @param {string} fieldSeparator Between entries.
  * @param {string} pairSeparator Between key and value within an entry.
  * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
+ * @param {number} [maxEntries] Maximum number of entries to parse.
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
-function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
-  const segments = value.split(fieldSeparator, MAX_LIST_MEMBERS)
+function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries) {
+  const segments = maxEntries === undefined ? value.split(fieldSeparator) : value.split(fieldSeparator, maxEntries)
 
   // TODO: We should extract dd no matter at what position and move it to the front of the list.
   // Extract up 31 additional entries.
@@ -38,11 +39,11 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
   return entries
 }
 
-function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs) {
+function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs))
+  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -53,6 +54,37 @@ function toString (map, pairSeparator, fieldSeparator) {
     }
     result = `${key}${pairSeparator}${value}${result}`
   }
+  return result
+}
+
+/**
+ * Keeps complete leftmost fields within a byte limit, skipping fields that do not fit.
+ *
+ * @param {string} value
+ * @param {string} separator
+ * @param {number} maxBytes
+ * @returns {string}
+ */
+function limitValue (value, separator, maxBytes) {
+  if (value.length <= maxBytes / 4 || Buffer.byteLength(value) <= maxBytes) return value
+
+  let result = ''
+  let byteLength = 0
+  let start = 0
+
+  while (start < value.length) {
+    let end = value.indexOf(separator, start)
+    if (end === -1) end = value.length
+    const field = value.slice(start, end)
+    const fieldLength = Buffer.byteLength(field) + (result ? 1 : 0)
+    if (byteLength + fieldLength <= maxBytes) {
+      if (result) result += separator
+      result += field
+      byteLength += fieldLength
+    }
+    start = end + 1
+  }
+
   return result
 }
 
@@ -124,8 +156,13 @@ class TraceStateData {
     return fromString(TraceStateData, value, ';', ':', false)
   }
 
-  toString () {
-    return toString(this, ':', ';')
+  /**
+   * @param {number} [maxBytes]
+   * @returns {string}
+   */
+  toString (maxBytes) {
+    const value = toString(this, ':', ';')
+    return maxBytes === undefined ? value : limitValue(value, ';', maxBytes)
   }
 }
 
@@ -168,13 +205,21 @@ class TraceState {
     return new TraceState(this.#map)
   }
 
-  forVendor (vendor, handle) {
+  /**
+   * @param {string} vendor
+   * @param {(state: TraceStateData) => unknown} handle
+   * @param {number} [maxBytes]
+   * @returns {unknown}
+   */
+  forVendor (vendor, handle, maxBytes) {
     const data = this.#map.get(vendor)
     const state = TraceStateData.fromString(data)
     const result = handle(state)
+    const exceedsLimit = maxBytes !== undefined && typeof data === 'string' &&
+      data.length > maxBytes / 4 && Buffer.byteLength(data) > maxBytes
 
-    if (state.changed) {
-      const value = state.toString()
+    if (state.changed || exceedsLimit) {
+      const value = state.toString(maxBytes)
       if (value) {
         this.set(vendor, value)
       } else {
@@ -186,7 +231,7 @@ class TraceState {
   }
 
   static fromString (value) {
-    return fromString(TraceState, value, ',', '=', true)
+    return fromString(TraceState, value, ',', '=', true, MAX_LIST_MEMBERS)
   }
 
   toString () {
