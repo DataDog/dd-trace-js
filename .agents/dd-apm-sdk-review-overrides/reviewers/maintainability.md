@@ -12,7 +12,7 @@ Read **AGENTS.md § "Backportability and Runtime Support"** for the requirement 
 
 Beyond what that section covers, these are also public contracts:
 - `index.js` (package `main`) and the exports of `packages/dd-trace/src/index.js` / `proxy.js`.
-- `docs/API.md` (documented options/plugins) and `docs/test.ts` (type smoke test). A new plugin must also be registered in `packages/dd-trace/src/plugins/index.js` and `.github/workflows/apm-integrations.yml`.
+- `docs/API.md` (documented options/plugins). A new plugin must also be registered in `packages/dd-trace/src/plugins/index.js` and `.github/workflows/apm-integrations.yml`.
 - Config option names and `DD_*` env vars (`packages/dd-trace/src/config/supported-configurations.json`).
 - Span tag names, metric names, telemetry config names, and diagnostic-channel names consumed across package boundaries - de-facto contracts even though they are not typed.
 - `_underscore` fields: avoid refactoring without evidence they are not reached externally; prefer `#private` for state that does not cross the class boundary.
