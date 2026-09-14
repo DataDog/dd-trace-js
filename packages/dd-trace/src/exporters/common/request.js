@@ -148,9 +148,8 @@ function request (data, options, callback) {
       return
     }
   }
-  delete connectionOptions.resetController
-
   const connectionOptions = { ...options, agent }
+  delete connectionOptions.resetController
 
   /**
    * @param {import('node:http').IncomingMessage} res
