@@ -604,6 +604,69 @@ describe('Plugin', () => {
           }
         })
 
+        it('should preserve collapsed error attribution after a retained context is released', async () => {
+          let lateErrorPromise
+          const { locatedError } = graphql.locatedError
+            ? graphql
+            : require(`../../../versions/graphql@${version}`).get('graphql/error/locatedError')
+          const Item = new graphql.GraphQLObjectType({
+            name: 'RetainedContextErrorItem',
+            fields: {
+              value: {
+                type: graphql.GraphQLString,
+                resolve (source) {
+                  if (source.error) return Promise.reject(source.error)
+                  return source.value
+                },
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'RetainedContextErrorQuery',
+              fields: {
+                retained: {
+                  type: graphql.GraphQLString,
+                  resolve: () => {
+                    lateErrorPromise = (async () => {
+                      await setImmediatePromise()
+                      return locatedError(new Error('late failure'), undefined, ['retained'])
+                    })()
+                    return 'ok'
+                  },
+                },
+                items: {
+                  type: new graphql.GraphQLList(Item),
+                  resolve: () => [
+                    { value: 'first' },
+                    { error: new Error('later failure') },
+                  ],
+                },
+              },
+            }),
+          })
+          const document = graphql.parse('query RetainedContext { retained }')
+          const firstResult = await graphql.execute({ schema: localSchema, document })
+
+          assert.strictEqual(firstResult.data.retained, 'ok')
+          assert.strictEqual((await lateErrorPromise).message, 'late failure')
+
+          const [secondResult] = await Promise.all([
+            graphql.graphql({ schema: localSchema, source: 'query AfterRetainedContext { items { value } }' }),
+            agent.assertSomeTraces(traces => {
+              const span = sort(traces[0]).find(span => {
+                return span.meta?.['graphql.field.path'] === 'items.*.value'
+              })
+
+              assert.ok(span)
+              assert.strictEqual(span.error, 1)
+              assert.strictEqual(span.meta[ERROR_MESSAGE], 'later failure')
+            }, { spanResourceMatch: /AfterRetainedContext/ }),
+          ])
+
+          assert.strictEqual(secondResult.errors.length, 1)
+        })
+
         it('should release collapsed resolver fields retained through copied stores', async function () {
           if (typeof global.gc !== 'function') this.skip()
 
