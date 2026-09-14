@@ -243,7 +243,7 @@ class RealtimeSession {
           this.#absorbInputItem(event.item, now)
           break
         case 'response.create':
-          this.#onResponseCreate(event.response)
+          this.#onResponseCreate(event.response, event.event_id)
           break
       }
     } catch (error) {
@@ -302,6 +302,11 @@ class RealtimeSession {
           return
         case 'response.done':
           this.#finishResponse(event.response?.id ?? event.response_id, event.response, now)
+          return
+        case 'error':
+          // A rejected `response.create` never produces the `response.created` its queue entry is
+          // waiting for, so retire it before it misclassifies the next response.
+          this.#discardFailedResponseCreate(event.error)
           return
         default:
           this.#handleResponseDelta(event, eventType, now)
@@ -631,12 +636,48 @@ class RealtimeSession {
    * next real turn with nothing, dropping that turn's user-speech span entirely.
    *
    * @param {Record<string, unknown> | undefined} response
+   * @param {unknown} eventId - The client event's own `event_id`, when it set one, so a server
+   *   `error` naming it can retire this entry.
    * @returns {void}
    */
-  #onResponseCreate (response) {
+  #onResponseCreate (response, eventId) {
     if (this.#responseCreates.length >= MAX_PENDING_RESPONSE_CREATES) this.#responseCreates.shift()
 
-    this.#responseCreates.push(Array.isArray(response?.input) || response?.conversation === 'none')
+    this.#responseCreates.push({
+      outOfBand: Array.isArray(response?.input) || response?.conversation === 'none',
+      eventId: eventId == null ? undefined : String(eventId),
+    })
+  }
+
+  /**
+   * Retire the queue entry for a `response.create` the server rejected.
+   *
+   * A rejected create never produces a `response.created` — the server answers with `error` — so its
+   * entry would otherwise be consumed by the *next* response and misclassify it. Getting that wrong
+   * in the out-of-band direction is the expensive one: a genuine turn would be handed a fresh
+   * `InputTurn` and lose the user speech it had buffered.
+   *
+   * `error.event_id` names the client event at fault when the app set one, which resolves this
+   * exactly: an error naming some other event (a bad audio append, say) means no create failed and
+   * the queue is left alone. Without an id there is nothing to correlate on, so the most recent
+   * create is retired — the errors that reach this state are overwhelmingly about the create just
+   * sent, and being wrong merely restores the pre-existing behaviour of treating the next response as
+   * conversational.
+   *
+   * @param {Record<string, unknown> | undefined} error
+   * @returns {void}
+   */
+  #discardFailedResponseCreate (error) {
+    if (this.#responseCreates.length === 0) return
+
+    const eventId = error?.event_id
+    if (eventId != null) {
+      const index = this.#responseCreates.findIndex(create => create.eventId === String(eventId))
+      if (index !== -1) this.#responseCreates.splice(index, 1)
+      return
+    }
+
+    this.#responseCreates.pop()
   }
 
   /**
@@ -647,15 +688,19 @@ class RealtimeSession {
   #startResponse (responseId, now) {
     if (responseId == null) return
 
-    // A new turn starting means a prior turn's input transcription is almost certainly not coming
-    // anymore, and that any held playback is over (or was cut off without a truncation reaching us),
-    // so flush both rather than let a turn hang.
-    this.#flushAwaiting(now)
-    this.#flushPlaying(now, true)
-
     // An empty queue means the server created this response on its own — server VAD deciding the
-    // user finished speaking — which is exactly the case that owns the pending input.
-    const outOfBand = this.#responseCreates.shift() === true
+    // user finished speaking — which is exactly the case that owns the pending input. Classify
+    // before flushing: an out-of-band response runs *alongside* the conversation, so it is not
+    // evidence that a pending turn's transcript has stopped coming.
+    const outOfBand = this.#responseCreates.shift()?.outOfBand === true
+
+    if (!outOfBand) {
+      // A new conversational turn starting means a prior turn's input transcription is almost
+      // certainly not coming anymore, and that any held playback is over (or was cut off without a
+      // truncation reaching us), so flush both rather than let a turn hang.
+      this.#flushAwaiting(now)
+      this.#flushPlaying(now, true)
+    }
 
     const input = outOfBand ? new InputTurn(this.#retainAudio) : this.#pendingInput
     const turn = new ResponseTurn(input, now, this.#retainAudio)
@@ -898,9 +943,18 @@ class RealtimeSession {
     let outputFormat = audio?.output?.format
     let voice = audio?.output?.voice
 
-    if (audio?.input?.transcription != null) this.#inputTranscriptionEnabled = true
-    // Legacy flat fields (older SDKs).
-    if (session.input_audio_transcription != null) this.#inputTranscriptionEnabled = true
+    // A `session.update` carrying the transcription field explicitly set to `null` turns
+    // transcription off, so track whether the field is *present* rather than whether it is set.
+    // Latching the flag on would leave every later turn deferred in `#awaiting` for a transcript
+    // that is never coming; ignoring absence is equally required, since a partial update that says
+    // nothing about transcription must not disable it.
+    if (audio?.input != null && Object.hasOwn(audio.input, 'transcription')) {
+      this.#inputTranscriptionEnabled = audio.input.transcription != null
+    } else if (Object.hasOwn(session, 'input_audio_transcription')) {
+      // Legacy flat field (older SDKs).
+      this.#inputTranscriptionEnabled = session.input_audio_transcription != null
+    }
+
     inputFormat ??= session.input_audio_format
     outputFormat ??= session.output_audio_format
     voice ??= session.voice
