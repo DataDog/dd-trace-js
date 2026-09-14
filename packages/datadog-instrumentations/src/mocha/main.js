@@ -1204,8 +1204,10 @@ addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
-}, function (Runner, frameworkVersion) {
-  if (patched.has(Runner)) return Runner
+}, function (runnerPackage, frameworkVersion) {
+  const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
+  if (typeof Runner !== 'function') return
+  if (patched.has(Runner)) return
 
   patched.add(Runner)
   wrapRunnerEmit(Runner)
@@ -1550,7 +1552,7 @@ addHook({
     return runMochaRunner(run, this, args)
   })
 
-  return Runner
+  return runnerPackage
 })
 
 // Used both in serial and parallel mode, and by both the main process and the workers
