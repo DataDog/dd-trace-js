@@ -77,7 +77,7 @@ const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 const percentByte = /%([0-9A-Fa-f]{2})/g
 
-let updateOtelTraceState
+let otelSampling
 
 /**
  * @typedef {object} B3Context
@@ -624,8 +624,8 @@ class TextMapPropagator {
 
     writeTraceparent(carrier, spanContext.toTraceparent())
 
-    updateOtelTraceState ??= require('../../otel-sampling').updateOtelTraceState
-    updateOtelTraceState(spanContext, ts)
+    otelSampling ??= require('../../otel-sampling')
+    otelSampling.updateOtelTraceState(spanContext, ts)
 
     ts.forVendor('dd', state => {
       if (!spanContext._isRemote) {
@@ -954,6 +954,11 @@ class TextMapPropagator {
 
       // Version 00 should have no tail, but future versions may
       if (tail && version === '00') return
+
+      if (tracestate.get('ot') !== undefined) {
+        otelSampling ??= require('../../otel-sampling')
+        otelSampling.normalizeOtelTraceState(tracestate)
+      }
 
       const spanContext = new DatadogSpanContext({
         traceId: id(traceId, 16),
