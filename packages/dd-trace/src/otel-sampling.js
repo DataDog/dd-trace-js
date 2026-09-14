@@ -51,11 +51,11 @@ function formatThreshold (threshold) {
  * Generates OTel sampling fields for a local probability decision.
  *
  * @param {import('./opentracing/span_context')} context
+ * @param {number} probabilityRate
  * @returns {{ randomValue: string, threshold: string } | undefined}
  */
-function generateFields (context) {
+function generateFields (context, probabilityRate) {
   const { priority } = context._sampling
-  const probabilityRate = getProbabilityRate(context)
   if (priority === undefined || probabilityRate === undefined) return
 
   const thresholdValue = thresholdFor(probabilityRate)
@@ -87,87 +87,6 @@ function getProbabilityRate (context) {
 }
 
 /**
- * Adds a complete sub-field while the OTel member remains within its byte cap.
- *
- * @param {string[]} fields
- * @param {string} field
- * @param {number} byteLength
- * @returns {number}
- */
-function addField (fields, field, byteLength) {
-  const fieldLength = Buffer.byteLength(field) + (fields.length === 0 ? 0 : 1)
-  if (byteLength + fieldLength <= MAX_OTEL_VALUE_BYTES) {
-    fields.push(field)
-    return byteLength + fieldLength
-  }
-  return byteLength
-}
-
-/**
- * Parses and rebuilds the OTel tracestate member, preserving unknown sub-fields.
- *
- * @param {import('./opentracing/span_context')} context
- * @param {string | undefined} member
- * @returns {string | undefined}
- */
-function buildOtelMember (context, member) {
-  if (member === undefined) {
-    if (context._sampling.isProbabilityDecision === false) return
-    const generated = generateFields(context)
-    if (!generated) return
-    return `rv:${generated.randomValue};th:${generated.threshold}`
-  }
-
-  let randomValue
-  let threshold
-  const unknownFields = []
-  let start = 0
-
-  while (start <= member.length) {
-    let end = member.indexOf(';', start)
-    if (end === -1) end = member.length
-    const field = member.slice(start, end)
-    if (field) {
-      const separator = field.indexOf(':')
-      const key = separator === -1 ? field : field.slice(0, separator)
-      const value = separator === -1 ? undefined : field.slice(separator + 1)
-      if (key === 'rv') {
-        randomValue = value
-      } else if (key === 'th') {
-        threshold = value
-      } else {
-        unknownFields.push(field)
-      }
-    }
-    if (end === member.length) break
-    start = end + 1
-  }
-
-  if (!validRandomValue.test(randomValue)) randomValue = undefined
-  if (!validThreshold.test(threshold)) threshold = undefined
-
-  if (context._sampling.isProbabilityDecision === false) {
-    threshold = undefined
-  } else if (randomValue === undefined && threshold === undefined) {
-    const generated = generateFields(context)
-    if (generated) {
-      randomValue = generated.randomValue
-      threshold = generated.threshold
-    }
-  }
-
-  const fields = []
-  let byteLength = 0
-  if (randomValue !== undefined) byteLength = addField(fields, `rv:${randomValue}`, byteLength)
-  if (threshold !== undefined) byteLength = addField(fields, `th:${threshold}`, byteLength)
-  for (const field of unknownFields) {
-    byteLength = addField(fields, field, byteLength)
-  }
-
-  return fields.length === 0 ? undefined : fields.join(';')
-}
-
-/**
  * Updates the OTel tracestate member to represent the context's sampling decision.
  *
  * @param {import('./opentracing/span_context')} context
@@ -176,21 +95,39 @@ function buildOtelMember (context, member) {
  */
 function updateOtelTraceState (context, traceState) {
   const otelMember = traceState.get('ot')
+  const probabilityRate = getProbabilityRate(context)
   if (context._sampling.isProbabilityDecision === false) {
     if (otelMember === undefined) return
-  } else if (getProbabilityRate(context) === undefined) {
+  } else if (probabilityRate === undefined) {
     return
   }
 
-  const rebuiltOtelMember = buildOtelMember(context, otelMember)
-  if (rebuiltOtelMember === undefined) {
-    traceState.delete('ot')
-  } else {
-    traceState.set('ot', rebuiltOtelMember)
-  }
+  traceState.forVendor('ot', state => {
+    let randomValue = state.get('rv')
+    let threshold = state.get('th')
+
+    if (!validRandomValue.test(randomValue)) {
+      state.delete('rv')
+      randomValue = undefined
+    }
+    if (!validThreshold.test(threshold)) {
+      state.delete('th')
+      threshold = undefined
+    }
+
+    if (context._sampling.isProbabilityDecision === false) {
+      state.delete('th')
+    } else if (randomValue === undefined && threshold === undefined) {
+      const generated = generateFields(context, probabilityRate)
+      if (generated) {
+        // Entries serialize in reverse insertion order, so add th before rv.
+        state.set('th', generated.threshold)
+        state.set('rv', generated.randomValue)
+      }
+    }
+  }, MAX_OTEL_VALUE_BYTES)
 }
 
 module.exports = {
-  buildOtelMember,
   updateOtelTraceState,
 }

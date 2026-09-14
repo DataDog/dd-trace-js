@@ -46,6 +46,16 @@ describe('TraceState', () => {
     assert.strictEqual(called, true)
   })
 
+  it('should parse more than 32 fields within a vendor member', () => {
+    const fields = Array.from({ length: 40 }, (_, index) => `k${index}:v`).join(';')
+    const ts = TraceState.fromString(`ot=${fields}`)
+
+    ts.forVendor('ot', state => {
+      assert.strictEqual(state.size, 40)
+      assert.strictEqual(state.get('k39'), 'v')
+    })
+  })
+
   it('should mutate value in tracestate when changing value', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
