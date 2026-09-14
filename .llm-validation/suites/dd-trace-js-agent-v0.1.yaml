@@ -168,11 +168,10 @@ cases:
       Answer in at most 3 bullets and mention every stated exception.
     expected_criteria:
       - Rejects adding a promise-returning helper to ordinary shipped production code.
-      - Treats a Promise-returning helper as the same ban as async/await; "no async keyword" is not permission.
       - Notes that promises are allowed in tests.
       - Notes that promises are allowed in worker threads.
     bad_signals:
-      - Says yes, or otherwise allows a promise-returning helper in shipped production code. Listing the tests / worker-thread exceptions is not this signal.
+      - Says yes to adding a promise-returning helper in shipped production code.
       - Claims promises are forbidden in tests.
       - Claims promises are forbidden in worker threads.
 
@@ -206,8 +205,9 @@ cases:
         P0 or P1 per the core performance.md's SEV-to-P mapping section, not left as a bare
         SEV-1 label.
       - Names the concrete fixes — gate the publish call on `channel.hasSubscribers`, and
-        bound the map (by count and bytes, or don't key it by request id at all).
-      - The final verdict is BLOCK.
+        bound the map (by count or bytes, or don't key it by request id at all).
+      - The final verdict is BLOCK if any finding is P0, or APPROVE_WITH_COMMENTS if
+        every finding is P1 or P2 (per reviewers/report-template.md).
     bad_signals:
       - Treats the ungated `channel.publish` call as a style nit rather than a hot-path
         cost concern (it runs on every request, per the override's "Hot paths" section).

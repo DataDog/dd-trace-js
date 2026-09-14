@@ -12,10 +12,11 @@ Per-span / per-request:
 - `packages/datadog-shimmer/src/shimmer.js` (package entry `packages/datadog-shimmer/index.js`) — wrap/unwrap machinery in the call path.
 - `packages/dd-trace/src/priority_sampler.js`, `sampling_rule.js`, `rate_limiter.js`, `span_processor.js`, `span_sampler.js`, `span_format.js`, `id.js` (ID generation per span), `tagger.js`.
 - Encode/flush: `packages/dd-trace/src/encode/0.4.js`, `packages/dd-trace/src/encode/0.5.js`, `packages/dd-trace/src/msgpack/` (note: msgpack is a sibling of `encode/`, not inside it), `packages/dd-trace/src/exporters/agent/*`.
-- AppSec per-request: `packages/dd-trace/src/appsec/index.js`, `waf/`, `store.js`, `reporter.js`, `rasp/`; IAST rewriting in `packages/datadog-instrumentations/src/helpers/rewriter`.
+- AppSec per-request: `packages/dd-trace/src/appsec/index.js`, `waf/`, `store.js`, `reporter.js`, `rasp/`.
 
 Startup / require-time:
 - `packages/dd-trace/src/index.js`, `proxy.js`, `bootstrap.js`, `packages/dd-trace/src/guardrails/index.js` (runs before anything; do not pull plugins, instrumentations, or the rest of the tracer), `ritm.js`/`iitm.js` (require hooks — run for every `require()` in the app), `packages/datadog-instrumentations/src/helpers/hooks.js` (lazy hook table; adding eager `require`s here inflates startup), `packages/dd-trace/src/config/index.js`, `startup-log.js`.
+- Require-time rewriting (hooks `Module._compile`, not per-request): `packages/datadog-instrumentations/src/helpers/rewriter` (orchestrion) and `packages/dd-trace/src/appsec/iast/taint-tracking/rewriter.js` (IAST).
 
 Follow the executed path, not the file name: a new declaration or a rare error branch in `config/index.js` is not per-request cost. Work that actually runs on the lists above (span start, every `require()`, or startup) is customer-visible; map severity with the core performance rubric (startup latency is P1, not an automatic blocker). A performance-motivated complexity increase still needs the AGENTS.md microbenchmark bar.
 
