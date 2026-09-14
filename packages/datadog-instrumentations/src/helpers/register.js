@@ -2,15 +2,17 @@
 
 const path = require('path')
 const { channel } = require('dc-polyfill')
-const satisfies = require('../../../../vendor/dist/semifies')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
 const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
 const checkRequireCache = require('./check-require-cache')
-const getDisabledInstrumentations = require('./get-disabled-instrumentations')
 const Hook = require('./hook')
-const { isRelativeRequire } = require('./shared-utils')
+const {
+  filename,
+  getDisabledInstrumentations,
+  matchesInstrumentation,
+} = require('./instrumentation-utils')
 const rewriter = require('./rewriter')
 
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
@@ -20,9 +22,7 @@ const instrumentations = require('./instrumentations')
 const names = Object.keys(hooks)
 const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 
-const disabledInstrumentations = getDisabledInstrumentations(
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
-)
+const disabledInstrumentations = getDisabledInstrumentations()
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
@@ -90,21 +90,9 @@ for (const name of names) {
       instrumentedNodeModules.set(name, moduleExports)
     }
 
-    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
-      const fullFilename = filename(name, file)
-
-      let matchesFile = moduleName === fullFilename
-
-      if (!matchesFile && isRelativeRequire(name)) matchesFile = true
-
-      const fullFilePattern = filePattern && filename(name, filePattern)
-      if (fullFilePattern) {
-        // Some libraries include a hash in their filenames when installed,
-        // so our instrumentation has to include a '.*' to match them for more than a single version.
-        matchesFile ||= new RegExp(fullFilePattern).test(moduleName)
-      }
-
-      if (matchesFile && matchVersion(moduleVersion, versions)) {
+    for (const instrumentation of instrumentations[name]) {
+      if (matchesInstrumentation(name, moduleVersion, moduleName, instrumentation)) {
+        const { hook, patchDefault } = instrumentation
         // IITM invokes this callback for every module in the package. Only unwrap the namespace after its file and
         // version match, otherwise a default export from an unrelated internal module can replace that module.
         if (isIitm && patchDefault === !!moduleExports.default) {
@@ -167,26 +155,8 @@ function logAbortedIntegrations () {
   instrumentedIntegrationsSuccess.clear()
 }
 
-/**
- * @param {string|undefined} version
- * @param {string[]|undefined} ranges
- */
-function matchVersion (version, ranges) {
-  return !version || !ranges || ranges.some(range => satisfies(version, range))
-}
-
-/**
- * @param {string} name
- * @param {string} [file]
- * @returns {string}
- */
-function filename (name, file) {
-  return file ? `${name}/${file}` : name
-}
-
 module.exports = {
   filename,
   pathSepExpr,
   loadChannel,
-  matchVersion,
 }

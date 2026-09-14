@@ -11,7 +11,7 @@ const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   EMPTY_EFD_RETRY_POLICY,
@@ -59,8 +59,8 @@ const {
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
-const getDisabledInstrumentations = require('./helpers/get-disabled-instrumentations')
 const { addHook, channel } = require('./helpers/instrument')
+const { getDisabledInstrumentations } = require('./helpers/instrumentation-utils')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -3743,9 +3743,7 @@ const JEST_LOGGING_LIBRARIES = new Set([
   'pino',
   'winston',
 ])
-const disabledJestInstrumentations = getDisabledInstrumentations(
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
-)
+const disabledJestInstrumentations = getDisabledInstrumentations()
 
 addHook({
   name: '@jest/console',

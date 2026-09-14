@@ -97,7 +97,7 @@ describe('config', () => {
       flushInterval: 65 * 1000,
       activation: 'manual',
       v8ProfilerBugWorkaroundEnabled: true,
-      allocationProfilingEnabled: false,
+      allocationProfilingEnabled: isAtLeast26,
       cpuProfilingEnabled: samplingContextsAvailable,
       uploadCompression: {
         method: zstdOrGzip,

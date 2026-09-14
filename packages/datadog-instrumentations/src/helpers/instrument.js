@@ -5,6 +5,8 @@ const dc = /** @type {typeof import('node:diagnostics_channel')} */ (require('dc
 const instrumentations = require('./instrumentations')
 const rewriterInstrumentations = require('./rewriter/instrumentations')
 
+const sourceRewritePaths = new WeakMap()
+
 /**
  * @typedef {import('node:diagnostics_channel').Channel} Channel
  * @typedef {import('node:diagnostics_channel').TracingChannel} TracingChannel
@@ -74,13 +76,26 @@ exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
   }
 }
 
+// The rewriter instrumentation list holds one entry per *transform*, so a
+// module with several transforms repeats its module definition several times
+// (mercurius defines 3, graphql 26). A hook only cares about the module, not
+// the transform, so duplicates would push the same (versionRange, filePath)
+// registration through `addHook` once per transform and have shimmer patch the
+// same file several times.
 exports.getHooks = function getHooks (names) {
-  names = [names].flat()
-
-  return rewriterInstrumentations
-    .map(inst => inst.module)
-    .filter(({ name }) => names.includes(name))
-    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
+  const requested = new Set([names].flat())
+  const hooks = new Map()
+  for (const { module } of rewriterInstrumentations) {
+    if (!requested.has(module.name)) continue
+    // Fresh objects, including the versions array: callers may adjust a hook
+    // for their own registration (the ai, claude-agent-sdk and
+    // aws-durable-execution-sdk-js plugins set `hook.file = null`), which must
+    // not leak into any other call.
+    const hook = { name: module.name, versions: [module.versionRange], file: module.filePath }
+    sourceRewritePaths.set(hook, module.filePath)
+    hooks.set(`${module.name}|${module.versionRange}|${module.filePath}`, hook)
+  }
+  return hooks
 }
 
 /**
@@ -93,12 +108,14 @@ exports.getHooks = function getHooks (names) {
  * @param {(moduleExports: unknown, version: string, isIitm?: boolean, hookMeta?: object) => unknown} [hook]
  * Patches module exports
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
+exports.addHook = function addHook (args, hook) {
+  const { name, versions, file, filePattern, patchDefault } = args
   if (!instrumentations[name]) {
     instrumentations[name] = []
   }
 
-  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault })
+  const sourceRewrite = sourceRewritePaths.get(args)
+  instrumentations[name].push({ versions, file, filePattern, hook, patchDefault, sourceRewrite })
 }
 
 exports.AsyncResource = AsyncResource
