@@ -596,7 +596,20 @@ describe('Span', () => {
       span.setTag(MANUAL_KEEP, true)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTag, span, MANUAL_KEEP, true)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, span.context().getTags())
+    })
+
+    it('should reapply all manual sampling tags so precedence is preserved', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setTag(MANUAL_KEEP, true)
+      span.setTag(MANUAL_DROP, true)
+
+      sinon.assert.calledTwice(prioritySampler.setPriorityFromTags)
+      assert.deepStrictEqual(prioritySampler.setPriorityFromTags.secondCall.args, [span, span.context().getTags()])
+      assert.deepStrictEqual(prioritySampler.setPriorityFromTags.secondCall.args[1], {
+        [MANUAL_KEEP]: true,
+        [MANUAL_DROP]: true,
+      })
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {
@@ -661,6 +674,8 @@ describe('Span', () => {
 
       prioritySampler.setPriorityFromTags.resetHistory()
       legacySpan.setTag(MANUAL_DROP, true)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, legacySpan, legacySpan.context().getTags())
+      prioritySampler.setPriorityFromTags.resetHistory()
       legacySpan.addTags('foo:bar')
       legacySpan.addTags([{ baz: 'qux' }])
 
