@@ -214,7 +214,7 @@ class DatadogSpan {
     this._spanContext.setTag(key, value)
 
     if (isSamplingPriorityTag(key)) {
-      this._prioritySampler.setPriorityFromTag(this, key, value)
+      this._prioritySampler.setPriorityFromTags(this, this._spanContext.getTags())
     }
 
     if (tagsUpdateCh.hasSubscribers) {
