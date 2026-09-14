@@ -22,9 +22,10 @@ describe('bundler register', () => {
   })
 
   it('patches modules published by existing bundlers', () => {
-    const Original = class Original {}
-    const Patched = class Patched {}
-    const hook = sinon.stub().returns(Patched)
+    const moduleExports = { original: true }
+    const hook = sinon.stub().callsFake(exports => {
+      exports.patched = true
+    })
     const { loadChannel, publish } = loadBundlerRegister({
       hooks: { 'test-commonjs-export': sinon.stub() },
       instrumentations: {
@@ -32,7 +33,7 @@ describe('bundler register', () => {
       },
     })
     const payload = {
-      module: { Original },
+      module: moduleExports,
       package: 'test-commonjs-export',
       path: 'test-commonjs-export/index.js',
       version: '1.0.0',
@@ -40,9 +41,10 @@ describe('bundler register', () => {
 
     publish(payload)
 
-    sinon.assert.calledOnceWithExactly(hook, { Original }, '1.0.0')
+    sinon.assert.calledOnceWithExactly(hook, moduleExports, '1.0.0')
     sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-commonjs-export' })
-    assert.equal(payload.module, Patched)
+    assert.strictEqual(payload.module, moduleExports)
+    assert.equal(payload.module.patched, true)
   })
 
   it('does not activate explicitly disabled bundled integrations', () => {
@@ -66,6 +68,95 @@ describe('bundler register', () => {
     sinon.assert.notCalled(loadChannel.publish)
     sinon.assert.notCalled(hook)
     sinon.assert.notCalled(integrationHook)
+  })
+
+  it('activates a source-rewritten integration without patching exports', () => {
+    const hook = sinon.stub()
+    const integrationHook = sinon.stub()
+    const duplicateHook = sinon.stub()
+    const ordinaryHook = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      hooks: { 'test-rewritten-integration': hook },
+      instrumentations: {
+        'test-rewritten-integration': [
+          { file: 'dist/index.js', hook: ordinaryHook },
+          { hook: integrationHook, sourceRewrite: 'dist/index.js', versions: ['>=1'] },
+          { hook: duplicateHook, sourceRewrite: 'dist/index.js', versions: ['>=1'] },
+        ],
+      },
+    })
+    const payload = {
+      activate: true,
+      package: 'test-rewritten-integration',
+      path: 'test-rewritten-integration/dist/index.js',
+      version: '1.0.0',
+    }
+
+    publish(payload)
+
+    sinon.assert.calledOnceWithExactly(hook)
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-rewritten-integration' })
+    sinon.assert.calledOnceWithExactly(integrationHook, undefined, '1.0.0')
+    sinon.assert.notCalled(duplicateHook)
+    sinon.assert.notCalled(ordinaryHook)
+    assert.equal(Object.hasOwn(payload, 'module'), false)
+  })
+
+  it('does not report activation-only integrations as missing export hooks', () => {
+    const activationHook = sinon.stub()
+    const exportHook = sinon.stub()
+    const { log, publish } = loadBundlerRegister({
+      hooks: {
+        'test-activation-only': activationHook,
+        'test-missing-export-hook': exportHook,
+      },
+      instrumentations: {},
+    })
+
+    publish({
+      activate: true,
+      package: 'test-activation-only',
+      path: 'test-activation-only/index.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.notCalled(log.error)
+    sinon.assert.calledOnceWithExactly(activationHook)
+
+    publish({
+      module: {},
+      package: 'test-missing-export-hook',
+      path: 'test-missing-export-hook',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(
+      log.error,
+      'esbuild-wrapped %s missing in list of instrumentations',
+      'test-missing-export-hook'
+    )
+    sinon.assert.calledOnceWithExactly(exportHook)
+  })
+
+  it('patches file-pattern publications', () => {
+    const integrationHook = sinon.stub().returns({ patched: true })
+    const { publish } = loadBundlerRegister({
+      hooks: { 'test-pattern': sinon.stub() },
+      instrumentations: {
+        'test-pattern': [{ filePattern: String.raw`lib/chunk-.*\.js`, hook: integrationHook }],
+      },
+    })
+    const payload = {
+      module: {},
+      package: 'test-pattern',
+      path: 'test-pattern/lib/chunk-one.js',
+      version: '1.0.0',
+    }
+
+    publish(payload)
+
+    sinon.assert.calledOnceWithExactly(integrationHook, {}, '1.0.0')
+    assert.deepStrictEqual(payload.module, { patched: true })
   })
 
   it('rejects unmatched paths and incompatible versions', () => {
@@ -96,13 +187,25 @@ describe('bundler register', () => {
   it('contains non-Error loader and instrumentation failures', () => {
     const loadHook = sinon.stub().callsFake(() => throwValue('load failed'))
     const integrationHook = sinon.stub().callsFake(() => throwValue('patch failed'))
+    const activationHook = sinon.stub().callsFake(() => throwValue('activation failed'))
     const { log, publish } = loadBundlerRegister({
       hooks: { 'test-hook-errors': loadHook },
       instrumentations: {
+        'test-activation-errors': [{
+          hook: activationHook,
+          sourceRewrite: 'dist/index.js',
+          versions: ['1'],
+        }],
         'test-hook-errors': [{ hook: integrationHook }],
       },
     })
 
+    publish({
+      activate: true,
+      package: 'test-activation-errors',
+      path: 'test-activation-errors/dist/index.js',
+      version: '1.0.0',
+    })
     publish({
       module: {},
       package: 'test-hook-errors',
@@ -111,6 +214,7 @@ describe('bundler register', () => {
     })
 
     sinon.assert.calledWithMatch(log.error, 'esbuild-wrapped %s hook failed: %s', 'test-hook-errors', 'load failed')
+    sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'activation failed')
     sinon.assert.calledWithMatch(log.error, 'Error executing bundler hook: %s', 'patch failed')
   })
 })
