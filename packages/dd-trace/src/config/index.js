@@ -367,17 +367,6 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
-    // These public options predate the canonical AppSec names. Keep the grouped
-    // objects as derived runtime state without using the aliases as source fields.
-    this.appsec.extendedHeadersCollection = {
-      enabled: this.appsec.DD_APPSEC_COLLECT_ALL_HEADERS,
-      maxHeaders: this.appsec.DD_APPSEC_MAX_COLLECTED_HEADERS,
-      redaction: this.appsec.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED,
-    }
-    this.appsec.rasp = {
-      bodyCollection: this.appsec.DD_APPSEC_RASP_COLLECT_REQUEST_BODY,
-    }
-
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
         trackedConfigOrigins.has('experimental.flaggingProvider.enabled')) {

@@ -1123,13 +1123,7 @@ describe('Config', () => {
         DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: true,
         DD_APPSEC_MAX_COLLECTED_HEADERS: 50,
         DD_APPSEC_RASP_COLLECT_REQUEST_BODY: false,
-        extendedHeadersCollection: {
-          enabled: false,
-          maxHeaders: 50,
-          redaction: true,
-        },
         DD_APPSEC_RULES: undefined,
-        rasp: { bodyCollection: false },
         DD_APPSEC_RASP_ENABLED: true,
         DD_APPSEC_TRACE_RATE_LIMIT: 100,
         DD_APPSEC_SCA_ENABLED: undefined,
@@ -1608,14 +1602,8 @@ describe('Config', () => {
         DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: false,
         DD_APPSEC_MAX_COLLECTED_HEADERS: 42,
         DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
-        extendedHeadersCollection: {
-          enabled: true,
-          maxHeaders: 42,
-          redaction: false,
-        },
         DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
         DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
-        rasp: { bodyCollection: true },
         DD_APPSEC_RASP_ENABLED: false,
         DD_APPSEC_TRACE_RATE_LIMIT: 42,
         DD_APPSEC_RULES: RULES_JSON_PATH,
@@ -2359,6 +2347,8 @@ describe('Config', () => {
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, ['foo', 'bar'])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, ['a', 'b', 'c'])
     assert.strictEqual(config.appsec.enabled, undefined)
+    assert.strictEqual(config.appsec.extendedHeadersCollection, undefined)
+    assert.strictEqual(config.appsec.rasp, undefined)
     assert.strictEqual(config.appsec.stackTrace, undefined)
     if (DD_MAJOR < 6) {
       assert.strictEqual(
@@ -2923,14 +2913,12 @@ describe('Config', () => {
         DD_APPSEC_RULES: RULES_JSON_PATH,
         DD_APPSEC_ENABLED: true,
         DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'anonymous',
-        extendedHeadersCollection: {
-          enabled: true,
-          maxHeaders: 42,
-          redaction: true,
-        },
+        DD_APPSEC_COLLECT_ALL_HEADERS: true,
+        DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: true,
+        DD_APPSEC_MAX_COLLECTED_HEADERS: 42,
+        DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
         DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
         DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
-        rasp: { bodyCollection: true },
         DD_APPSEC_RASP_ENABLED: false,
         DD_APPSEC_TRACE_RATE_LIMIT: 42,
         DD_APPSEC_STACK_TRACE_ENABLED: false,
@@ -3132,14 +3120,12 @@ describe('Config', () => {
       DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: BLOCKED_TEMPLATE_JSON,
       DD_APPSEC_ENABLED: true,
       DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'disabled',
-      extendedHeadersCollection: {
-        enabled: true,
-        redaction: true,
-        maxHeaders: 42,
-      },
+      DD_APPSEC_COLLECT_ALL_HEADERS: true,
+      DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: true,
+      DD_APPSEC_MAX_COLLECTED_HEADERS: 42,
+      DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
       DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: '.*',
       DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: '.*',
-      rasp: { bodyCollection: true },
       DD_APPSEC_RASP_ENABLED: false,
       DD_APPSEC_TRACE_RATE_LIMIT: 42,
       DD_APPSEC_RULES: RULES_JSON_PATH,
@@ -5179,14 +5165,13 @@ rules:
       assert.strictEqual(config.codeOriginForSpans.enabled, false)
     })
 
-    it('should derive deprecated AppSec objects from canonical Remote Config fields', () => {
+    it('should map deprecated AppSec aliases to canonical Remote Config fields', () => {
       const config = getConfig()
 
       updateConfig.resetHistory()
       config.setRemoteConfig({ appsec: { extendedHeadersCollection: { enabled: true } } })
 
       assert.strictEqual(config.appsec.DD_APPSEC_COLLECT_ALL_HEADERS, true)
-      assert.strictEqual(config.appsec.extendedHeadersCollection.enabled, true)
       assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_COLLECT_ALL_HEADERS'), 'remote_config')
       assertConfigUpdateContains(updateConfig.firstCall.args[0], [
         { name: 'DD_APPSEC_COLLECT_ALL_HEADERS', value: true, origin: 'remote_config' },
@@ -5196,7 +5181,6 @@ rules:
       config.setRemoteConfig({ appsec: { extendedHeadersCollection: { enabled: false } } })
 
       assert.strictEqual(config.appsec.DD_APPSEC_COLLECT_ALL_HEADERS, false)
-      assert.strictEqual(config.appsec.extendedHeadersCollection.enabled, false)
       assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_COLLECT_ALL_HEADERS'), 'remote_config')
 
       config.setRemoteConfig({ appsec: { extendedHeadersCollection: { enabled: true } } })
@@ -5204,7 +5188,6 @@ rules:
       config.setRemoteConfig(null)
 
       assert.strictEqual(config.appsec.DD_APPSEC_COLLECT_ALL_HEADERS, false)
-      assert.strictEqual(config.appsec.extendedHeadersCollection.enabled, false)
       assert.strictEqual(config.getOrigin('appsec.DD_APPSEC_COLLECT_ALL_HEADERS'), 'default')
       assertConfigUpdateContains(updateConfig.firstCall.args[0], [
         { name: 'DD_APPSEC_COLLECT_ALL_HEADERS', value: false, origin: 'default' },

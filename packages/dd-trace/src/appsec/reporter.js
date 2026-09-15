@@ -114,11 +114,15 @@ const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHea
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
 const REDACTED_HEADERS = new Set(redactedHeadersList)
 
+/**
+ * @param {import('../config/config-types').ConfigProperties['appsec']} _config
+ * @param {boolean} [inferredProxyServicesEnabled]
+ */
 function init (_config, inferredProxyServicesEnabled) {
-  config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
-  config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
-  config.headersRedaction = _config.extendedHeadersCollection.redaction
-  config.raspBodyCollection = _config.rasp.bodyCollection
+  config.headersExtendedCollectionEnabled = _config.DD_APPSEC_COLLECT_ALL_HEADERS
+  config.maxHeadersCollected = _config.DD_APPSEC_MAX_COLLECTED_HEADERS
+  config.headersRedaction = _config.DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
+  config.raspBodyCollection = _config.DD_APPSEC_RASP_COLLECT_REQUEST_BODY
   config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
 }
 
