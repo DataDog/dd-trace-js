@@ -170,6 +170,7 @@ function request (data, options, callback) {
         }
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
+        error.responseBody = responseData
 
         complete(error, null, res.statusCode, res.headers)
       }

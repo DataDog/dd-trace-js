@@ -1,6 +1,7 @@
 'use strict'
 
 let NoopExperiments
+let NoopPrompts
 
 class NoopLLMObs {
   constructor (noopTracer) {
@@ -14,6 +15,15 @@ class NoopLLMObs {
   get experiments () {
     NoopExperiments ??= require('./experiments/noop')
     return new NoopExperiments('LLM Observability is not enabled')
+  }
+
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    NoopPrompts ??= require('./prompts/noop')
+    return new NoopPrompts()
   }
 
   enable (options) {}

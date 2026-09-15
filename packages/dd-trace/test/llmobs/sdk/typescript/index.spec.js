@@ -36,6 +36,10 @@ const testCases = [
     file: 'noop',
   },
   {
+    name: 'compiles Prompt Management SDK types',
+    file: 'prompts',
+  },
+  {
     name: 'instruments an application with decorators',
     file: 'index',
     setup: (agent, results) => {
