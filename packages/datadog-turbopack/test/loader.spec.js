@@ -755,6 +755,22 @@ function runRealHooklessPipeline ({ disabled = false, esm, version }) {
     const dc = require(${JSON.stringify(require.resolve('dc-polyfill'))})
     const hooks = require(${JSON.stringify(require.resolve('../../datadog-instrumentations/src/helpers/hooks'))})
     const log = require(${JSON.stringify(require.resolve('../../dd-trace/src/log'))})
+    const loader = require(${JSON.stringify(loaderPath)})
+
+    // Source rewriting is build time, so the loader runs before any runtime
+    // instrumentation registration or error capture.
+    const resourcePath = ${JSON.stringify(resourcePath)}
+    const source = fs.readFileSync(resourcePath, 'utf8')
+    let output
+    loader.call({
+      resourcePath,
+      callback (error, code) {
+        if (error) throw error
+        output = code
+      }
+    }, source)
+
+    // Error capture covers runtime bundler registration and evaluation only.
     const errors = []
     log.error = (...args) => errors.push(args)
     require(${JSON.stringify(require.resolve('../../datadog-instrumentations/src/helpers/bundler-register'))})
@@ -770,18 +786,6 @@ function runRealHooklessPipeline ({ disabled = false, esm, version }) {
     })
     dc.channel('dd-trace:bundler:load').subscribe(() => bundlerEvents++)
     ${tracingSubscription}
-
-    const loader = require(${JSON.stringify(loaderPath)})
-    const resourcePath = ${JSON.stringify(resourcePath)}
-    const source = fs.readFileSync(resourcePath, 'utf8')
-    let output
-    loader.call({
-      resourcePath,
-      callback (error, code) {
-        if (error) throw error
-        output = code
-      }
-    }, source)
 
     async function run () {
       let Queue
