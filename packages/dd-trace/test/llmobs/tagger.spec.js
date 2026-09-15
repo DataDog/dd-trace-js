@@ -629,6 +629,26 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagAgentVersion', () => {
+      it('stashes the version under the internal key', () => {
+        tagger._register(span)
+        tagger.tagAgentVersion(span, 'v3')
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.agent_version': 'v3',
+        })
+      })
+
+      it('throws for a non string version', () => {
+        tagger._register(span)
+        assert.throws(() => tagger.tagAgentVersion(span, 3), { message: /Agent version must be a non-empty string/ })
+      })
+
+      it('throws for an empty string version', () => {
+        tagger._register(span)
+        assert.throws(() => tagger.tagAgentVersion(span, ''), { message: /Agent version must be a non-empty string/ })
+      })
+    })
+
     describe('tagSpanTags', () => {
       it('sets tags on a span', () => {
         const tags = { foo: 'bar' }
