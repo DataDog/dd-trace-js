@@ -126,6 +126,7 @@ describe('test optimization automatic log submission', () => {
     if (!isLatestCucumberSupported && name === 'cucumber') return
 
     const { level: expectedLevel, levelKey = 'level', messageKey } = loggers[loggerName]
+    const source = loggerName === 'console' ? 'nodejs' : loggerName
 
     context(`with ${loggerName} and ${name}`, () => {
       it('can automatically submit logs', async () => {
@@ -133,7 +134,7 @@ describe('test optimization automatic log submission', () => {
         let testIds = {}
 
         const logsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.includes(`/api/v2/logs?ddsource=${loggerName}`), payloads => {
+          .gatherPayloadsMaxTimeout(({ url }) => url.includes(`/api/v2/logs?ddsource=${source}`), payloads => {
             payloads.forEach(({ headers }) => {
               assert.equal(headers['dd-api-key'], '1')
               assert.equal(headers['content-type'], 'application/json')
@@ -150,7 +151,7 @@ describe('test optimization automatic log submission', () => {
               })
               : logMessages
 
-            urls.forEach(url => assert.equal(url, `/api/v2/logs?ddsource=${loggerName}&service=my-service`))
+            urls.forEach(url => assert.equal(url, `/api/v2/logs?ddsource=${source}&service=my-service`))
             assert.equal(testLogMessages.length, 2)
 
             testLogMessages.forEach((logMessage) => {
@@ -314,7 +315,7 @@ describe('test optimization automatic log submission', () => {
           let hasReceivedConsoleLogs = false
           const logsPromise = receiver.assertPayloadReceived(() => {
             hasReceivedConsoleLogs = true
-          }, ({ url }) => url.includes('/api/v2/logs?ddsource=console'), 5000).catch(() => {})
+          }, ({ url }) => url.includes('/api/v2/logs?ddsource=nodejs'), 5000).catch(() => {})
 
           await Promise.all([
             once(childProcess, 'exit'),

@@ -140,7 +140,7 @@ describe('LogSubmissionPlugin', () => {
       message: 'hello world 42',
       status: 'error',
     }])
-    assert.strictEqual(options.path, '/api/v2/logs?ddsource=console&service=my+service')
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=nodejs&service=my+service')
   })
 
   it('submits console logs without trace correlation when no span is active', () => {

@@ -60,7 +60,7 @@ describe('automatic log submission', () => {
       (payloads) => {
         assert.strictEqual(payloads.length, 1)
         assert.strictEqual(payloads[0].headers['dd-api-key'], 'test-api-key')
-        assert.strictEqual(payloads[0].url, '/api/v2/logs?ddsource=console&service=my-service')
+        assert.strictEqual(payloads[0].url, '/api/v2/logs?ddsource=nodejs&service=my-service')
         assert.deepStrictEqual(payloads[0].logMessage, [{
           dd: { service: 'my-service' },
           message: 'Hello automatic console log submission!',

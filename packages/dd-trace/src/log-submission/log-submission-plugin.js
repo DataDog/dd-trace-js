@@ -153,7 +153,7 @@ class LogSubmissionPlugin extends Plugin {
       const logHolder = Object.hasOwn(payload, 'logHolder') ? capturedLogHolder : this.#getLogHolder()
       if (logHolder) message.dd = logHolder.dd
 
-      this.#enqueueLog({ source: 'console', message })
+      this.#enqueueLog({ source: 'nodejs', message })
     })
     this.addSub('ci:log-submission:flush', ({ onDone } = {}) => {
       if (!onDone) {
