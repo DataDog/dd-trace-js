@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const workerThreads = require('node:worker_threads')
 
 const { beforeEach, describe, it } = require('mocha')
@@ -344,7 +345,7 @@ describe('onPause', function () {
     }
 
     await onPaused(eventWithScope)
-    await new Promise((resolve) => setImmediate(resolve)) // The refresh is not awaited by the pause handler
+    await setImmediatePromise() // The refresh is not awaited by the pause handler
 
     sinon.assert.calledOnce(send)
     const logError = /** @type {sinon.SinonSpy} */ (/** @type {{ error: sinon.SinonSpy }} */ (log).error)
