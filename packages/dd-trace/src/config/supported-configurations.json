@@ -4205,6 +4205,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4220,6 +4221,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4260,6 +4262,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4301,6 +4304,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
