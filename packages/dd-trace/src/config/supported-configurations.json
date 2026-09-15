@@ -1601,7 +1601,7 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "transform": "normalizeProfilingHeapLimitExtensionSize",
         "default": "auto"
