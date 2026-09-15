@@ -9,16 +9,35 @@ const request = require('../common/request')
 const log = require('../../log')
 
 class Writer extends BaseWriter {
-  constructor ({ url }) {
-    super(...arguments)
+  #sendStats
+
+  /**
+   * @param {object} options
+   * @param {string|URL} options.url
+   * @param {(payload: Buffer, done: () => void) => void} [options.sendStats]
+   * @param {import('../../serverless/telemetry-delivery-tracker')} [options.deliveryTracker]
+   */
+  constructor ({ url, sendStats, deliveryTracker }) {
+    super({ url, deliveryTracker, beforeFirstFlush: undefined })
     this._url = url
+    this.#sendStats = sendStats
     this._encoder = new SpanStatsEncoder(this)
   }
 
+  /**
+   * @param {Buffer} data
+   * @param {number} _
+   * @param {() => void} done
+   */
   _sendPayload (data, _, done) {
-    makeRequest(data, this._url, (err, res) => {
-      if (err) {
-        log.error('Error sending span stats', err)
+    if (this.#sendStats) {
+      this.#sendStats(data, done)
+      return
+    }
+
+    makeRequest(data, this._url, (error, res) => {
+      if (error) {
+        log.error('Error sending span stats', error)
         done()
         return
       }
@@ -42,8 +61,8 @@ function makeRequest (data, url, cb) {
 
   log.debug('Request to the intake: %j', options)
 
-  request(data, options, (err, res) => {
-    cb(err, res)
+  request(data, options, (error, res) => {
+    cb(error, res)
   })
 }
 

@@ -157,4 +157,12 @@ describe('span-stats exporter', () => {
       url: exporter._url,
     })
   })
+
+  it('should pass the configured stats sender to the writer', () => {
+    const sendStats = sinon.stub()
+
+    exporter = new Exporter({ url, sendStats })
+
+    assert.strictEqual(writerOptions.sendStats, sendStats)
+  })
 })
