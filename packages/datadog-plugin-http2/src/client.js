@@ -10,7 +10,8 @@ const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
-const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, normalizeQueryStringAllowlist } = require('../../dd-trace/src/plugins/util/url')
+const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -32,12 +33,18 @@ class Http2ClientPlugin extends ClientPlugin {
     const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
-    const pathname = path.split(/[?#]/, 1)[0]
+    const pathname = stripQueryAndFragment(path)
+    const hasQuery = path.length > pathname.length && path.charCodeAt(pathname.length) === 63
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
     const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
     const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const httpUrl = hasQuery && allowed && this.config.queryStringTaggingEnabled !== false
+      ? otelSemantics
+        ? buildClientHttpUrl(this.config, base, path, uri)
+        : this.config.queryStringSchema.getUrl(this.config, path, uri, this.constructor.id)
+      : uri
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
@@ -51,7 +58,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        'http.url': httpUrl,
         'out.host': sessionDetails.host,
       },
       metrics: {
@@ -175,6 +182,7 @@ function normalizeConfig (config) {
     validateStatus,
     filter,
     headers,
+    queryStringAllowlist: normalizeQueryStringAllowlist(config.queryStringAllowlist),
   }
 }
 
