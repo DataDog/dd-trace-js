@@ -57,7 +57,7 @@ module.exports = {
   addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
   modifyBreakpoint: lock(modifyBreakpoint),
-  refreshBreakpoint: lock(refreshBreakpoint),
+  refreshBreakpoints: lock(refreshBreakpoints),
 }
 
 async function addBreakpoint (probe) {
@@ -243,22 +243,34 @@ async function modifyBreakpoint (probe) {
 }
 
 /**
- * Rebuild the breakpoint condition at a probe's location from the current state of the probes attached to it.
+ * Rebuild the breakpoint conditions at the locations of the given probes from the current state of the probes
+ * attached to them.
  *
- * The breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against the
+ * A breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against the
  * global snapshot rate limit and how a skipped hit is classified. That changes when the pause handler permanently
- * disables capture for a probe after a fatal capture error, so the condition has to be recompiled.
+ * disables capture for a probe after a fatal capture error, so the conditions have to be recompiled.
  *
- * A probe that has been removed in the meantime is ignored: its location no longer needs the update.
+ * Probes sharing a location share a breakpoint, so each location is only refreshed once. A probe that has been removed
+ * in the meantime is ignored: its location no longer needs the update.
  *
- * @param {{ id: string }} probe - A probe attached to the breakpoint to refresh.
+ * @param {{ id: string }[]} probes - Probes attached to the breakpoints to refresh.
  * @returns {Promise<void>}
  */
-async function refreshBreakpoint ({ id }) {
+async function refreshBreakpoints (probes) {
   if (!sessionStarted) return
-  const locationKey = probeToLocation.get(id)
-  if (locationKey === undefined) return
-  await updateBreakpointInternal(locationToBreakpoint.get(locationKey), undefined, `while refreshing ${locationKey}`)
+
+  // Breakpoints set next to each other can snap to the same logical location and be hit at the same time, so the
+  // probes can be spread over more than one breakpoint.
+  const locationKeys = new Set()
+  for (const { id } of probes) {
+    const locationKey = probeToLocation.get(id)
+    if (locationKey !== undefined) locationKeys.add(locationKey)
+  }
+
+  for (const locationKey of locationKeys) {
+    // eslint-disable-next-line no-await-in-loop
+    await updateBreakpointInternal(locationToBreakpoint.get(locationKey), undefined, `while refreshing ${locationKey}`)
+  }
 }
 
 /**
