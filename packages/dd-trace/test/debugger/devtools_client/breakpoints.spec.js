@@ -1188,8 +1188,9 @@ describe('breakpoints', function () {
       assert(probe !== undefined && otherProbe !== undefined)
       sessionMock.post.resetHistory()
 
-      // Breakpoints at two locations can snap together and be hit at the same time, in which case a single fatal
-      // capture error disables capture for the probes at both of them
+      // Probes at separate locations end up disabled by the same pause when their breakpoints snapped together, and
+      // a single fatal capture error then leaves every one of those locations stale. Which lines they asked for does
+      // not matter here, only that they resolve to different breakpoints.
       probe.captureSnapshot = false
       otherProbe.captureSnapshot = false
 

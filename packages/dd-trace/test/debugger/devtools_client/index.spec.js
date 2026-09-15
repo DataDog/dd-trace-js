@@ -283,12 +283,15 @@ describe('onPause', function () {
   it('should refresh every breakpoint whose probes stopped capturing', async function () {
     const probe1 = genProcessedProbe('probe-1')
     const probe2 = genProcessedProbe('probe-2')
+    // V8 refuses a second breakpoint at a location that already has one, and probes asking for the same location are
+    // merged into a single breakpoint anyway. Two breakpoints are therefore only hit in the same pause when they
+    // asked for slightly different locations that snapped to the same one, so probe-2 asks for the next line.
+    probe2.location.lines = ['2']
     for (const probe of [probe1, probe2]) {
       probe.captureSnapshot = true
       probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
     }
 
-    // Breakpoints set next to each other snap to the same logical location and are hit at the same time
     const otherBreakpointId = 'other-breakpoint-id'
     state.breakpointToProbes.set(breakpointId, new Map([[probe1.id, probe1]]))
     state.breakpointToProbes.set(otherBreakpointId, new Map([[probe2.id, probe2]]))
