@@ -14,6 +14,7 @@ require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
+const { ObservableGauge } = require('../../src/opentelemetry/metrics/instruments')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
@@ -29,7 +30,13 @@ function getMicroVmOtlpHttpMetricExporter () {
     '../otlp/otlp_http_exporter_base': OtlpHttpExporterBase,
   })
 }
-
+function getMicroVmPeriodicMetricReader () {
+  const loadReader = proxyquire.noPreserveCache()
+  const serverless = { ...require('../../src/serverless'), IS_AWS_LAMBDA_MICROVM: true }
+  return loadReader('../../src/opentelemetry/metrics/periodic_metric_reader', {
+    '../../serverless': serverless,
+  })
+}
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -50,7 +57,12 @@ describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
   let httpStub
 
-  function setupMetrics (envOverrides, setDefaultEnv = true, OtlpHttpMetricExporter) {
+  function setupMetrics (
+    envOverrides,
+    setDefaultEnv = true,
+    OtlpHttpMetricExporter,
+    PeriodicMetricReaderClass = PeriodicMetricReader
+  ) {
     if (setDefaultEnv) {
       process.env.DD_METRICS_OTEL_ENABLED = 'true'
       process.env.DD_SERVICE = 'test-service'
@@ -73,10 +85,13 @@ describe('OpenTelemetry Meter Provider', () => {
     const config = getConfigFresh()
     if (config.DD_METRICS_OTEL_ENABLED) {
       const loadMetrics = proxyquire.noPreserveCache()
+      const overrides = {}
+      if (OtlpHttpMetricExporter) overrides['./otlp_http_metric_exporter'] = OtlpHttpMetricExporter
+      if (PeriodicMetricReaderClass !== PeriodicMetricReader) {
+        overrides['./periodic_metric_reader'] = PeriodicMetricReaderClass
+      }
       const { initializeOpenTelemetryMetrics } =
-        loadMetrics('../../src/opentelemetry/metrics', OtlpHttpMetricExporter
-          ? { './otlp_http_metric_exporter': OtlpHttpMetricExporter }
-          : {})
+        loadMetrics('../../src/opentelemetry/metrics', overrides)
       initializeOpenTelemetryMetrics(config)
     }
     return { config, meterProvider: metrics.getMeterProvider() }
@@ -1262,6 +1277,22 @@ describe('OpenTelemetry Meter Provider', () => {
       setTimeout(() => { validator(); warnSpy.restore(); done() }, 200)
     })
 
+    it('bounds observable callback measurements before allocation', () => {
+      const reader = { observableInstruments: new Set() }
+      const gauge = new ObservableGauge('gauge', {}, { name: 'test', version: '', schemaUrl: '' }, reader)
+      const onDrop = sinon.spy()
+      gauge.addCallback((result) => {
+        result.observe(1)
+        result.observe(2)
+        result.observe(3)
+      })
+
+      const measurements = gauge.collect(2, onDrop)
+
+      assert.strictEqual(measurements.length, 2)
+      sinon.assert.calledOnce(onDrop)
+    })
+
     it('overflows with 2 synchronous + 2 observable metrics when max is 3', (done) => {
       const log = require('../../src/log')
       const warnSpy = sinon.spy(log, 'warn')
@@ -1420,7 +1451,12 @@ describe('OpenTelemetry Meter Provider', () => {
         return request
       })
 
-      const { config } = setupMetrics(undefined, true, getMicroVmOtlpHttpMetricExporter())
+      const { config } = setupMetrics(
+        undefined,
+        true,
+        getMicroVmOtlpHttpMetricExporter(),
+        getMicroVmPeriodicMetricReader()
+      )
       const meter = metrics.getMeter('app')
       meter.createCounter('requests').add(1)
       metrics.getMeterProvider().reader.forceFlush()
@@ -1451,7 +1487,9 @@ describe('OpenTelemetry Meter Provider', () => {
 
       clock.tick(100)
 
-      // Refresh happens after the first export already established a baseline of 20.
+      // Refresh happens after the first export established a baseline of 20, but before the
+      // snapshot-time value of 23 was exported. The post-refresh delta should start from 23.
+      value = 23
       config.tags['runtime-id'] = 'refreshed-id'
       identityRefreshChannel.publish(config)
       value = 25
@@ -1460,8 +1498,151 @@ describe('OpenTelemetry Meter Provider', () => {
 
       assert.deepStrictEqual(exportedMetrics, [
         { runtimeId: initialRuntimeId, value: 20 },
-        { runtimeId: 'refreshed-id', value: 5 },
+        { runtimeId: 'refreshed-id', value: 2 },
       ])
+    })
+
+    it('rebases CUMULATIVE ObservableCounter values on identity refresh', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(counter.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics({
+        OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE',
+      })
+      const meter = metrics.getMeter('app')
+      let value = 20
+      meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
+
+      clock.tick(100)
+
+      value = 23
+      identityRefreshChannel.publish(config)
+      value = 25
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedValues, [20, 2])
+    })
+
+    it('rebases LOWMEMORY ObservableCounter values on identity refresh', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(counter.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics({
+        OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'LOWMEMORY',
+      })
+      const meter = metrics.getMeter('app')
+      let value = 20
+      meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
+
+      clock.tick(100)
+
+      value = 23
+      identityRefreshChannel.publish(config)
+      value = 25
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedValues, [20, 2])
+    })
+
+    it('discards the first later ObservableCounter reading for a series absent during identity refresh', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(metric.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics()
+      const meter = metrics.getMeter('app')
+      let value = 20
+      let reportSeries = true
+      meter.createObservableCounter('obs').addCallback((result) => {
+        if (reportSeries) result.observe(value, { route: '/checkout' })
+      })
+
+      clock.tick(100)
+
+      value = 23
+      reportSeries = false
+      identityRefreshChannel.publish(config)
+
+      // The series returns after the refresh. Its snapshot-time growth is discarded and becomes
+      // the new baseline; only later clone-local growth is exported.
+      value = 25
+      reportSeries = true
+      clock.tick(100)
+      value = 27
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedValues, [20, 2])
+    })
+    it('discards an absent ObservableCounter series when CUMULATIVE temporality returns', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedValues = []
+      mockOtlpExport((decoded) => {
+        const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedValues.push(metric.sum.dataPoints[0].asInt)
+      })
+
+      const { config } = setupMetrics({
+        OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE',
+      }, true, undefined, getMicroVmPeriodicMetricReader())
+      const meter = metrics.getMeter('app')
+      let value = 20
+      let reportSeries = true
+      meter.createObservableCounter('obs').addCallback((result) => {
+        if (reportSeries) result.observe(value, { route: '/checkout' })
+      })
+
+      clock.tick(100)
+
+      value = 23
+      reportSeries = false
+      identityRefreshChannel.publish(config)
+
+      value = 25
+      reportSeries = true
+      clock.tick(100)
+      value = 27
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedValues, [20, 2])
+    })
+
+
+    it('rebases the CUMULATIVE start time on identity refresh so it does not span the pause', () => {
+      const clock = sinon.useFakeTimers()
+      const startTimes = []
+      mockOtlpExport((decoded) => {
+        const dataPoint = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0].sum.dataPoints[0]
+        startTimes.push(dataPoint.startTimeUnixNano)
+      })
+
+      const { config } = setupMetrics({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
+      const meter = metrics.getMeter('app')
+      const counter = meter.createUpDownCounter('tasks')
+      counter.add(3)
+      clock.tick(100)
+
+      // Simulates the MicroVM snapshot pause between the two exports.
+      clock.tick(60 * 60 * 1000)
+      identityRefreshChannel.publish(config)
+
+      counter.add(2)
+      clock.tick(100)
+
+      assert.strictEqual(startTimes.length, 2)
+      assert.ok(startTimes[1] > startTimes[0],
+        `expected the post-refresh start time (${startTimes[1]}) to be rebased past ` +
+        `the pre-refresh one (${startTimes[0]})`)
     })
 
     it('drops sync Counter measurements recorded before an identity refresh', () => {
@@ -1485,6 +1666,130 @@ describe('OpenTelemetry Meter Provider', () => {
       clock.tick(100)
 
       assert.deepStrictEqual(exportedValues, [7])
+    })
+    it('discards pre-refresh gauge and histogram state while exporting later values', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedMetrics = []
+      mockOtlpExport((decoded) => {
+        const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        for (const metric of metrics) {
+          if (metric.name === 'temperature' || metric.name === 'duration') {
+            exportedMetrics.push({
+              name: metric.name,
+              value: metric.gauge?.dataPoints[0]?.asInt ?? metric.histogram?.dataPoints[0]?.sum,
+            })
+          }
+        }
+      })
+
+      const { config } = setupMetrics()
+      const meter = metrics.getMeter('app')
+      const gauge = meter.createGauge('temperature')
+      const histogram = meter.createHistogram('duration')
+      gauge.record(1)
+      histogram.record(2)
+
+      identityRefreshChannel.publish(config)
+
+      gauge.record(3)
+      histogram.record(4)
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedMetrics, [
+        { name: 'temperature', value: 3 },
+        { name: 'duration', value: 4 },
+      ])
+    })
+
+
+    it('clears the dropped measurement count on identity refresh', () => {
+      const constants = require('../../src/opentelemetry/metrics/constants')
+      const SmallQueueReader = proxyquire('../../src/opentelemetry/metrics/periodic_metric_reader', {
+        './constants': {
+          ...constants,
+          DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE: 1,
+        },
+      })
+      const clock = sinon.useFakeTimers()
+      try {
+        const log = require('../../src/log')
+        const warnSpy = sinon.spy(log, 'warn')
+        const exporter = {
+          export: sinon.stub().callsFake((metrics, done) => done?.()),
+          flush: sinon.stub().callsFake(done => done?.()),
+        }
+        const reader = new SmallQueueReader(exporter, 30000, constants.TEMPORALITY.DELTA, 10)
+        const meterProvider = new MeterProvider({ reader })
+        const meter = meterProvider.getMeter('app')
+
+        meter.createCounter('queued').add(1)
+        meter.createCounter('dropped').add(1)
+
+        reader.resetPendingState()
+        reader.forceFlush()
+
+        sinon.assert.notCalled(warnSpy)
+      } finally {
+        clock.restore()
+      }
+    })
+    it('invokes the inherited exporter reset hook for each reader reset', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        const exporter = {
+          export: sinon.stub().callsFake((metrics, done) => done?.()),
+          resetPendingState: sinon.spy(),
+        }
+        const reader = new PeriodicMetricReader(exporter, 30000, 'DELTA', 10)
+
+        reader.resetPendingState()
+        reader.resetPendingState()
+
+        sinon.assert.calledTwice(exporter.resetPendingState)
+        reader.shutdown()
+      } finally {
+        clock.restore()
+      }
+    })
+
+
+    it('reserves reset capacity for ObservableCounter baselines', () => {
+      const constants = require('../../src/opentelemetry/metrics/constants')
+      const SmallQueueReader = proxyquire('../../src/opentelemetry/metrics/periodic_metric_reader', {
+        './constants': {
+          ...constants,
+          DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE: 1,
+        },
+      })
+      const clock = sinon.useFakeTimers()
+      try {
+        let exportedMetrics
+        const exporter = {
+          export: sinon.stub().callsFake((metrics, done) => {
+            exportedMetrics = metrics
+            done?.()
+          }),
+        }
+        const reader = new SmallQueueReader(exporter, 30000, constants.TEMPORALITY.DELTA, 10)
+        const meter = new MeterProvider({ reader }).getMeter('app')
+        const gauge = meter.createObservableGauge('gauge')
+        const gaugeCallback = result => result.observe(1)
+        gauge.addCallback(gaugeCallback)
+        let value = 10
+
+        meter.createObservableCounter('obs').addCallback(result => result.observe(value))
+
+        reader.resetPendingState()
+        gauge.removeCallback(gaugeCallback)
+        value = 12
+        reader.forceFlush()
+
+        const observableMetric = [...exportedMetrics.values()].find(metric => metric.name === 'obs')
+        assert.strictEqual(observableMetric.dataPointMap.get('').value, 2)
+        reader.shutdown()
+      } finally {
+        clock.restore()
+      }
     })
   })
 })
