@@ -82,7 +82,6 @@ function names (llmobsSpans) {
  *
  * @param {{ mime_type: string, content: string }} audioPart
  * @param {{ durationMs: number, sampleRate: number }} expected
- * @returns {string}
  */
 function assertWavClip (audioPart, { durationMs, sampleRate }) {
   assert.strictEqual(audioPart.mime_type, 'audio/wav')

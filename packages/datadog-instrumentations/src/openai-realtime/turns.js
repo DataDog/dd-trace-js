@@ -31,7 +31,6 @@ class ItemText {
   /**
    * @param {unknown} itemId
    * @param {string} delta
-   * @returns {void}
    */
   appendDelta (itemId, delta) {
     this.#openItem(itemId)
@@ -43,7 +42,6 @@ class ItemText {
    *
    * @param {unknown} itemId
    * @param {string} final
-   * @returns {void}
    */
   complete (itemId, final) {
     this.#openItem(itemId)
@@ -54,7 +52,6 @@ class ItemText {
    * Begin a new item's span, leaving everything earlier items contributed in place.
    *
    * @param {unknown} itemId
-   * @returns {void}
    */
   #openItem (itemId) {
     const item = itemId == null ? undefined : String(itemId)
@@ -118,8 +115,6 @@ class InputTurn {
    * The input audio buffer was cleared: drop the buffered audio and the speech onset derived from
    * it, so neither can be attributed to the next response. A commit that already happened is left
    * alone — a client that clears the buffer after committing has still ended that speech.
-   *
-   * @returns {void}
    */
   discardAudio () {
     this.audio.clear()

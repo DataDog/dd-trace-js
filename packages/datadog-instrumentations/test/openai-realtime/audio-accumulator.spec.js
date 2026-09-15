@@ -11,7 +11,6 @@ const {
 
 /**
  * @param {number[]} bytes
- * @returns {string}
  */
 function b64 (bytes) {
   return Buffer.from(bytes).toString('base64')

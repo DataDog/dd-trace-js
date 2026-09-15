@@ -32,7 +32,6 @@ const G711_MIME_TO_VARIANT = new Map([
  * Decode one G.711 mu-law byte to a signed 16-bit linear PCM sample (CCITT G.711).
  *
  * @param {number} byte
- * @returns {number}
  */
 function decodeUlawSample (byte) {
   byte = ~byte & 0xFF
@@ -45,7 +44,6 @@ function decodeUlawSample (byte) {
  * Decode one G.711 A-law byte to a signed 16-bit linear PCM sample (CCITT G.711).
  *
  * @param {number} byte
- * @returns {number}
  */
 function decodeAlawSample (byte) {
   byte ^= 0x55
@@ -73,10 +71,10 @@ for (let byte = 0; byte < 256; byte++) {
  * Map an OpenAI Realtime audio format to a MIME type.
  *
  * Handles both the legacy string form (e.g. "pcm16", "g711_ulaw") and the newer discriminated-union
- * object whose `type` is already a MIME type (e.g. "audio/pcm").
+ * object whose `type` is already a MIME type (e.g. "audio/pcm"). Yields an empty string when the
+ * format is absent or unusable, which callers treat as "unknown" rather than guessing a rate.
  *
  * @param {string | { type?: string } | undefined} format
- * @returns {string} The MIME type, or an empty string when the format is absent or unusable.
  */
 function realtimeAudioFormatToMime (format) {
   const type = typeof format === 'object' && format !== null ? format.type : format
@@ -91,7 +89,6 @@ function realtimeAudioFormatToMime (format) {
 
 /**
  * @param {string} mimeType
- * @returns {boolean}
  */
 function isPcm16AudioMime (mimeType) {
   return typeof mimeType === 'string' && PCM16_MIME_TYPES.has(mimeType.trim().toLowerCase())

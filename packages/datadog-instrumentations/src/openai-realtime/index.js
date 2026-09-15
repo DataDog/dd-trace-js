@@ -52,7 +52,6 @@ function noop () {}
 
 /**
  * @param {() => void} fn
- * @returns {void}
  */
 function runNow (fn) {
   fn()
@@ -64,7 +63,6 @@ function runNow (fn) {
  * up as its parent from the active store without any explicit parent stamping.
  *
  * @param {TurnDescriptor} turn
- * @returns {void}
  */
 function emitTurn (turn) {
   const run = turn.runInContext ?? runNow
@@ -92,7 +90,6 @@ function emitTurn (turn) {
 
 /**
  * @param {ResponseTurn} turn
- * @returns {void}
  */
 function captureContext (turn) {
   if (captureContextChannel.hasSubscribers) captureContextChannel.publish(turn)
@@ -138,7 +135,6 @@ function createConnection (emitter) {
   /**
    * @param {boolean} [failed] - Whether the connection ended abnormally, so a response still in
    *   flight is reported as failed rather than as a clean finish.
-   * @returns {void}
    */
   const finalize = (failed = false) => {
     liveSessions.delete(reference)
@@ -158,7 +154,6 @@ const NORMAL_CLOSE_CODES = new Set([1000, 1001, 1005])
 
 /**
  * @param {unknown} code
- * @returns {boolean}
  */
 function isAbnormalClose (code) {
   return typeof code === 'number' && !NORMAL_CLOSE_CODES.has(code)
@@ -171,7 +166,6 @@ function isAbnormalClose (code) {
  *
  * @param {object} emitter
  * @param {(failed?: boolean) => void} finalize
- * @returns {void}
  */
 function attachSocketClose (emitter, finalize) {
   try {
@@ -217,7 +211,6 @@ function getConnection (emitter) {
  * one.
  *
  * @param {object} prototype
- * @returns {void}
  */
 function patchRealtimeEmitter (prototype) {
   if (prototype == null) return
@@ -240,7 +233,6 @@ function patchRealtimeEmitter (prototype) {
  * Wrap a concrete realtime transport's `send` (every client event) and `close` (session end).
  *
  * @param {object} prototype
- * @returns {void}
  */
 function patchRealtimeTransport (prototype) {
   if (prototype == null) return
@@ -274,8 +266,6 @@ function patchRealtimeTransport (prototype) {
  * switch, and an org that sets it through Fleet Automation or local stable config would otherwise
  * see it reported as disabled in configuration telemetry while the patching stayed on. Resolving it
  * here also applies the option's registered boolean parser and its `true` default.
- *
- * @returns {boolean}
  */
 function realtimeEnabled () {
   return getValueFromEnvSources('DD_OPENAI_REALTIME_ENABLED') !== false
@@ -288,8 +278,6 @@ function realtimeEnabled () {
  * would not help: the socket's own `message` handler closes over the emitter, and libuv holds the
  * socket for as long as the connection is open, so the emitter is never unreachable while there is
  * anything left to report.
- *
- * @returns {void}
  */
 function flushLiveSessions () {
   for (const reference of liveSessions) {

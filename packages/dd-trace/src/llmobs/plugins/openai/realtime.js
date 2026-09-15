@@ -146,7 +146,6 @@ class RealtimeLLMObsPlugin extends LLMObsPlugin {
    * Observability plugins are registered first.
    *
    * @param {object} ctx
-   * @returns {void}
    */
   end (ctx) {
     super.end(ctx)

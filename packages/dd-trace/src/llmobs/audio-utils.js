@@ -28,7 +28,6 @@ const NON_RENDERABLE_AUDIO_MIME_TYPES = new Set([
  * Length of `byteLength` bytes after standard base64 encoding: 4 characters per 3 bytes, padded.
  *
  * @param {number} byteLength
- * @returns {number}
  */
 function base64EncodedLength (byteLength) {
   return Math.ceil(byteLength / 3) * 4
@@ -41,7 +40,6 @@ function base64EncodedLength (byteLength) {
 /**
  * @param {string} fmt
  * @param {Record<string, string>} [mimeTypeLookup]
- * @returns {string}
  */
 function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
   fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''
@@ -55,7 +53,6 @@ function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
  * Whether a MIME type can be rendered as an audio player in the UI. Raw PCM cannot.
  *
  * @param {string} mimeType
- * @returns {boolean}
  */
 function isRenderableAudioMime (mimeType) {
   return typeof mimeType === 'string' &&
@@ -88,7 +85,6 @@ function formatAudioPart (data, mimeType) {
  *
  * @param {number} byteLength
  * @param {number} [maxBytes]
- * @returns {boolean}
  */
 function fitsInlineAudioBudget (byteLength, maxBytes = LLMOBS_AUDIO_INLINE_MAX_BYTES) {
   const encodedLength = base64EncodedLength(byteLength)

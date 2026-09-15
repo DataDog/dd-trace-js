@@ -157,9 +157,10 @@ class RealtimeSession {
 
   /**
    * One entry per client `response.create` still waiting for its `response.created`, recording
-   * whether that response supplies its own input. FIFO: the server acknowledges creates in order.
+   * whether that response supplies its own input and the client event id a server `error` would
+   * name. FIFO: the server acknowledges creates in order.
    *
-   * @type {boolean[]}
+   * @type {Array<{ outOfBand: boolean, eventId: string | undefined }>}
    */
   #responseCreates = []
 
@@ -217,7 +218,6 @@ class RealtimeSession {
   /**
    * @param {Record<string, unknown>} event
    * @param {number} now - Epoch ms at which the event was observed.
-   * @returns {void}
    */
   onClientEvent (event, now) {
     try {
@@ -254,7 +254,6 @@ class RealtimeSession {
   /**
    * @param {Record<string, unknown>} event
    * @param {number} now - Epoch ms at which the event was observed.
-   * @returns {void}
    */
   onServerEvent (event, now) {
     try {
@@ -325,7 +324,6 @@ class RealtimeSession {
    * @param {boolean} [failed] - The connection ended abnormally. Only responses still in flight are
    *   marked: a turn already awaiting a transcript or playback had its `response.done`, so it
    *   succeeded whatever the transport did afterwards.
-   * @returns {void}
    */
   finishSession (now, failed = false) {
     if (this.#closed) return
@@ -362,7 +360,6 @@ class RealtimeSession {
    * @param {Record<string, unknown>} event
    * @param {string} eventType
    * @param {number} now
-   * @returns {void}
    */
   #handleResponseDelta (event, eventType, now) {
     const turn = this.#responses.get(String(event.response_id))
@@ -402,7 +399,6 @@ class RealtimeSession {
    *
    * @param {string} base64
    * @param {number} now
-   * @returns {void}
    */
   #appendInputAudio (base64, now) {
     const pending = this.#pendingInput
@@ -428,7 +424,6 @@ class RealtimeSession {
    *
    * @param {number} decodedBytes
    * @param {number} now
-   * @returns {void}
    */
   #advanceInputBufferClock (decodedBytes, now) {
     this.#pendingInputBytes += decodedBytes
@@ -460,7 +455,6 @@ class RealtimeSession {
    *
    * @param {unknown} audioStartMs
    * @param {number} now
-   * @returns {void}
    */
   #onSpeechStarted (audioStartMs, now) {
     const pending = this.#pendingInput
@@ -482,7 +476,6 @@ class RealtimeSession {
    * Byte count of the audio buffered for this turn ahead of the speech onset.
    *
    * @param {unknown} audioStartMs
-   * @returns {number}
    */
   #preOnsetBytes (audioStartMs) {
     const baseMs = this.#pendingInput.audioBaseMs
@@ -512,7 +505,6 @@ class RealtimeSession {
    *
    * @param {unknown} offsetMs
    * @param {number} observedTime
-   * @returns {number}
    */
   #bufferOffsetToWallTime (offsetMs, observedTime) {
     const offset = toFiniteNumber(offsetMs)
@@ -543,7 +535,6 @@ class RealtimeSession {
    * @param {unknown} itemId
    * @param {unknown} audioEndMs
    * @param {number} now
-   * @returns {void}
    */
   #onTruncate (itemId, audioEndMs, now) {
     this.#clientTruncates = true
@@ -592,9 +583,10 @@ class RealtimeSession {
    * every byte we captured and finalize at `response.done` exactly as before, paying nothing. The
    * cost of that trade is that the first interruption on a connection is reported untruncated.
    *
+   * Reports whether the turn was parked, so the caller knows not to finalize it.
+   *
    * @param {Turn} turn
    * @param {number} now
-   * @returns {boolean} Whether the turn was parked.
    */
   #parkForPlayback (turn, now) {
     if (!this.#clientTruncates || turn.audio.startTime === undefined) return false
@@ -620,7 +612,6 @@ class RealtimeSession {
    *
    * @param {number} now
    * @param {boolean} [force]
-   * @returns {void}
    */
   #flushPlaying (now, force = false) {
     if (this.#playing.length === 0) return
@@ -649,7 +640,6 @@ class RealtimeSession {
    * @param {Record<string, unknown> | undefined} response
    * @param {unknown} eventId - The client event's own `event_id`, when it set one, so a server
    *   `error` naming it can retire this entry.
-   * @returns {void}
    */
   #onResponseCreate (response, eventId) {
     if (this.#responseCreates.length >= MAX_PENDING_RESPONSE_CREATES) this.#responseCreates.shift()
@@ -676,7 +666,6 @@ class RealtimeSession {
    * conversational.
    *
    * @param {Record<string, unknown> | undefined} error
-   * @returns {void}
    */
   #discardFailedResponseCreate (error) {
     if (this.#responseCreates.length === 0) return
@@ -694,7 +683,6 @@ class RealtimeSession {
   /**
    * @param {unknown} responseId
    * @param {number} now
-   * @returns {void}
    */
   #startResponse (responseId, now) {
     if (responseId == null) return
@@ -726,7 +714,6 @@ class RealtimeSession {
    * @param {unknown} responseId
    * @param {Record<string, unknown>} response
    * @param {number} now
-   * @returns {void}
    */
   #finishResponse (responseId, response, now) {
     if (responseId == null) return
@@ -775,7 +762,6 @@ class RealtimeSession {
    * @param {unknown} itemId
    * @param {unknown} transcript
    * @param {number} now
-   * @returns {void}
    */
   #onInputTranscript (itemId, transcript, now) {
     const item = itemId == null ? undefined : String(itemId)
@@ -794,7 +780,6 @@ class RealtimeSession {
    * @param {unknown} itemId
    * @param {number} now
    * @param {string} [transcript]
-   * @returns {void}
    */
   #finalizeAwaitingFor (itemId, now, transcript) {
     if (itemId == null) return
@@ -812,7 +797,6 @@ class RealtimeSession {
 
   /**
    * @param {number} now
-   * @returns {void}
    */
   #flushAwaiting (now) {
     if (this.#awaiting.length === 0) return
@@ -824,7 +808,6 @@ class RealtimeSession {
 
   /**
    * @param {Turn} turn
-   * @returns {void}
    */
   #applyCachedTranscript (turn) {
     if (turn.input.transcript || turn.input.itemId === undefined) return
@@ -835,7 +818,6 @@ class RealtimeSession {
    * @param {Turn} turn
    * @param {number} now
    * @param {boolean} [force] - Skip parking, for the paths that must not wait (close, next turn).
-   * @returns {void}
    */
   #finalizeTurn (turn, now, force = false) {
     // The turn's data is complete, but on a barge-in-capable client the agent's audio may still be
@@ -944,7 +926,6 @@ class RealtimeSession {
 
   /**
    * @param {Record<string, unknown>} session
-   * @returns {void}
    */
   #updateSessionConfig (session) {
     if (session == null) return
@@ -994,7 +975,6 @@ class RealtimeSession {
   /**
    * @param {Record<string, unknown>} item
    * @param {number} now
-   * @returns {void}
    */
   #absorbInputItem (item, now) {
     if (item == null) return

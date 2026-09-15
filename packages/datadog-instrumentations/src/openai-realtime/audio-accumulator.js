@@ -70,11 +70,12 @@ class AudioAccumulator {
   }
 
   /**
+   * Add one base64 audio frame, reporting its decoded byte count for the input-buffer clock.
+   *
    * @param {string} base64
    * @param {number} now - Epoch ms at which this frame was observed.
    * @param {string} [mimeType] - The session's audio format, recorded on the first frame only.
    * @param {number} [sampleRate]
-   * @returns {number} Decoded byte count of this frame, for advancing the input-buffer clock.
    */
   append (base64, now, mimeType = '', sampleRate = 0) {
     if (typeof base64 !== 'string' || base64.length === 0) return 0
@@ -117,7 +118,6 @@ class AudioAccumulator {
    * window the span reports.
    *
    * @param {number} decodedBytes
-   * @returns {void}
    */
   trimLeading (decodedBytes) {
     if (!(decodedBytes > 0)) return
@@ -171,7 +171,6 @@ class AudioAccumulator {
    * a client truncation and the server's acknowledgement of it apply the cap once between them.
    *
    * @param {number} decodedBytes
-   * @returns {void}
    */
   capTo (decodedBytes) {
     if (decodedBytes >= this.totalDecodedBytes) return
@@ -212,7 +211,6 @@ class AudioAccumulator {
     return this.chunks.length === 1 ? this.chunks[0] : Buffer.concat(this.chunks, this.#retainedBytes)
   }
 
-  /** @returns {void} */
   clear () {
     this.chunks = []
     this.present = false
