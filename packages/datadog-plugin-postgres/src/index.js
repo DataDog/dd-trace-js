@@ -22,8 +22,8 @@ class PostgresPlugin extends DatabasePlugin {
   static id = 'postgres'
   static prefix = 'tracing:orchestrion:postgres:query'
 
-  /** @type {WeakMap<PostgresQuery, PostgresContext>} */
-  #contexts = new WeakMap()
+  /** @type {WeakMap<PostgresQuery, import('../../..').Span>} */
+  #spans = new WeakMap()
 
   /**
    * @param {PostgresContext} ctx
@@ -50,7 +50,7 @@ class PostgresPlugin extends DatabasePlugin {
       })
     }
 
-    this.#contexts.set(query, ctx)
+    this.#spans.set(query, span)
     return ctx.currentStore
   }
 
@@ -58,7 +58,7 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {PostgresContext} ctx
    */
   error (ctx) {
-    const span = this.#contexts.get(ctx.query)?.currentStore.span
+    const span = this.#spans.get(ctx.query)
     if (span !== undefined) {
       this.addError(ctx.error, span)
     }
@@ -68,19 +68,17 @@ class PostgresPlugin extends DatabasePlugin {
    * @param {PostgresContext} result
    */
   asyncEnd (result) {
-    const ctx = this.#contexts.get(result.query)
-    if (ctx === undefined) return
+    const span = this.#spans.get(result.query)
+    if (span === undefined) return
 
-    this.#contexts.delete(result.query)
-
-    const span = ctx.currentStore.span
+    this.#spans.delete(result.query)
 
     if (typeof result.statement === 'string') {
       span.setTag('resource.name', this.maybeTruncate(result.statement))
     }
 
     span.setTag('db.pid', result.pid)
-    this.finish(ctx)
+    this.finishSpan(span)
   }
 }
 

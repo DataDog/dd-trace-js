@@ -79,6 +79,13 @@ class TracingPlugin extends Plugin {
    */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
+    this.finishSpan(span)
+  }
+
+  /**
+   * @param {import('../../../..').Span | undefined} span
+   */
+  finishSpan (span) {
     span?.finish()
   }
 
