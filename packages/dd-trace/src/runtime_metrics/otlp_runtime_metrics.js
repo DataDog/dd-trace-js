@@ -268,6 +268,10 @@ function resetSamplerBaselines () {
   if (lastElu !== null) {
     lastElu = performance.eventLoopUtilization()
   }
+
+  // Discards any GC entries recorded but not yet delivered to the observer's callback, so a GC
+  // pause from just before the snapshot isn't attributed to the clone's first post-resume sample.
+  gcObserver?.takeRecords()
 }
 
 /**
