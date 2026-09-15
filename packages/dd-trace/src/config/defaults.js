@@ -36,12 +36,13 @@ const parseErrors = new Map()
  */
 function warnInvalidValue (value, optionName, source, baseMessage, error, outcome = 'picked default') {
   const canonicalName = optionsTable[optionName]?.canonicalName ?? optionName
+  const displayValue = sensitiveConfigurations.has(canonicalName) ? '<redacted>' : value
   const telemetryKey = canonicalName + source
   const telemetryEntry = configWithOrigin.get(telemetryKey)
   // Lazy load log module to avoid circular dependency
   if (!parseErrors.has(telemetryKey) && !telemetryEntry?.error) {
     // TODO: Report the prior source when an invalid value does not use the default.
-    let message = `${baseMessage}: ${util.inspect(value)} for ${optionName} (source: ${source})`
+    let message = `${baseMessage}: ${util.inspect(displayValue)} for ${optionName} (source: ${source})`
     if (outcome) message += `, ${outcome}`
     if (error) {
       error.stack = error.toString()
