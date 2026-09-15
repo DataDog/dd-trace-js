@@ -2,15 +2,23 @@
 
 const { Writable } = require('node:stream')
 
+const { channel } = require('dc-polyfill')
+
 const FinalFlushRequestTracker = require('../exporters/common/final-flush-request-tracker')
 const request = require('../exporters/common/request')
 const log = require('../log')
+const { buildLogHolder } = require('../plugins/log_injection')
 const Plugin = require('../plugins/plugin')
 
 const MAX_BATCH_BYTES = 5 * 1024 * 1024
 const MAX_BATCH_LOGS = 1000
 const BATCH_FLUSH_INTERVAL = 1000
 const FINAL_FLUSH_TIMEOUT = 60_000
+const CONSOLE_METHOD_TO_STATUS = {
+  error: 'error',
+  warn: 'warn',
+}
+const consoleConfigureCh = channel('ci:log-submission:console:configure')
 
 /**
  * @returns {Error & { code: string }}
@@ -78,6 +86,7 @@ class LogSubmissionPlugin extends Plugin {
   #timer
   #beforeExitHandler = () => this.#flushLogs()
   #createWinstonJsonFormat
+  #getLogHolder = () => buildLogHolder(this.tracer)
   #winstonStreamClass
   // Winston formats records inside its transports, not at logger.write time, so (unlike Bunyan/Pino)
   // the instrumentation can't publish a post-format line. A Stream transport pipes format.json()
@@ -134,6 +143,17 @@ class LogSubmissionPlugin extends Plugin {
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
     })
+    this.addSub('ci:log-submission:console', (payload) => {
+      const { logHolder: capturedLogHolder, method, message: formattedMessage } = payload
+      const message = {
+        message: formattedMessage,
+        status: CONSOLE_METHOD_TO_STATUS[method],
+      }
+      const logHolder = Object.hasOwn(payload, 'logHolder') ? capturedLogHolder : this.#getLogHolder()
+      if (logHolder) message.dd = logHolder.dd
+
+      this.#enqueueLog({ source: 'nodejs', message })
+    })
     this.addSub('ci:log-submission:flush', ({ onDone } = {}) => {
       if (!onDone) {
         this.#flushLogs()
@@ -158,6 +178,7 @@ class LogSubmissionPlugin extends Plugin {
       ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
+    if (this._enabled) consoleConfigureCh.publish({ getLogHolder: this.#getLogHolder })
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     if (this._enabled) {

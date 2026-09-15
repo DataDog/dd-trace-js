@@ -10,14 +10,24 @@ const logger = loggerName === 'bunyan'
   ? bunyan.createLogger({ name: 'test-logger' })
   : loggerName === 'pino'
     ? pino({ level: 'info' })
-    : winston.createLogger({
-      level: 'info',
-      exitOnError: false,
-      format: winston.format.json(),
-      transports: [
-        new winston.transports.Console(),
-      ],
-    })
+    : loggerName === 'console'
+      ? {
+          // eslint-disable-next-line no-console
+          error: (...args) => console.error(...args),
+        }
+      : winston.createLogger({
+        level: 'info',
+        exitOnError: false,
+        format: winston.format.json(),
+        transports: [
+          new winston.transports.Console(),
+        ],
+      })
+
+if (loggerName === 'console') {
+  // eslint-disable-next-line no-console
+  console.warn('outside a test')
+}
 
 describe('test', () => {
   it('should return true', () => {
@@ -25,11 +35,17 @@ describe('test', () => {
       const circular = {}
       circular.self = circular
       logger.log('info', 'Hello simple log!', { circular })
+    } else if (loggerName === 'console') {
+      logger.error('Hello simple log!')
     } else {
       logger.info('Hello simple log!')
     }
 
-    logger.info('sum function being called')
+    if (loggerName === 'console') {
+      logger.error('sum function being called')
+    } else {
+      logger.info('sum function being called')
+    }
     assert.strictEqual(true, true)
   })
 })

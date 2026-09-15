@@ -11,7 +11,7 @@ const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   EMPTY_EFD_RETRY_POLICY,
@@ -60,6 +60,7 @@ const {
   publishWithCompletion,
 } = require('./helpers/channel')
 const { addHook, channel } = require('./helpers/instrument')
+const { getDisabledInstrumentations } = require('./helpers/instrumentation-utils')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -85,6 +86,7 @@ const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -3706,9 +3708,20 @@ const JEST_LOGGING_LIBRARIES = new Set([
   'pino',
   'winston',
 ])
-const disabledJestInstrumentations = new Set(
-  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
-)
+const disabledJestInstrumentations = getDisabledInstrumentations()
+
+addHook({
+  name: '@jest/console',
+  versions: [MINIMUM_JEST_VERSION],
+}, (jestConsole) => {
+  if (!disabledJestInstrumentations.has('console') && consoleLogSubmissionCh.hasSubscribers) {
+    const { wrapConsole, wrapJestBufferedConsole } = require('./console')
+    wrapJestBufferedConsole(jestConsole.BufferedConsole)
+    wrapConsole(jestConsole.CustomConsole?.prototype)
+  }
+  return jestConsole
+})
+
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
   'selenium-webdriver/chrome',

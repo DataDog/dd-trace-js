@@ -8,8 +8,11 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
+const { storage } = require('../../../datadog-core')
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
 
+const legacyStorage = storage('legacy')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const winstonAddTransportCh = channel('ci:log-submission:winston:add-transport')
@@ -17,6 +20,15 @@ const winstonConfigureCh = channel('ci:log-submission:winston:configure')
 const request = sinon.stub()
 const log = {
   error: sinon.stub(),
+}
+const tracer = {
+  inject (span, format, carrier) {
+    carrier.dd = { service: 'my service' }
+    if (span) {
+      carrier.dd.span_id = span.spanId
+      carrier.dd.trace_id = span.traceId
+    }
+  },
 }
 const pluginConfig = {
   enabled: true,
@@ -50,7 +62,7 @@ describe('LogSubmissionPlugin', () => {
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     const previousBeforeExitHandlers = new Set(beforeExitHandlers)
-    plugin = new LogSubmissionPlugin({}, {})
+    plugin = new LogSubmissionPlugin(tracer, {})
     plugin.configure(pluginConfig)
     beforeExitHandler = [...beforeExitHandlers].find(handler => !previousBeforeExitHandlers.has(handler))
   })
@@ -107,6 +119,81 @@ describe('LogSubmissionPlugin', () => {
     const [data, options] = request.firstCall.args
     assert.deepStrictEqual(JSON.parse(data), [{ level: 'info', message: 'hello' }])
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service')
+  })
+
+  it('submits formatted console logs with the active span', () => {
+    const span = { spanId: '123', traceId: '456' }
+    legacyStorage.run({ span }, () => {
+      consoleLogSubmissionCh.publish({ method: 'error', message: 'hello world 42' })
+    })
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const [data, options] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{
+      dd: {
+        service: 'my service',
+        span_id: '123',
+        trace_id: '456',
+      },
+      message: 'hello world 42',
+      status: 'error',
+    }])
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=nodejs&service=my+service')
+  })
+
+  it('submits console logs without trace correlation when no span is active', () => {
+    consoleLogSubmissionCh.publish({ method: 'warn', message: 'outside a test' })
+    clock.tick(1000)
+
+    const [data] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{
+      dd: { service: 'my service' },
+      message: 'outside a test',
+      status: 'warn',
+    }])
+  })
+
+  it('uses console log correlation captured before publication', () => {
+    const span = { spanId: 'outer span', traceId: 'outer trace' }
+    legacyStorage.run({ span }, () => {
+      consoleLogSubmissionCh.publish({
+        logHolder: {
+          dd: {
+            service: 'my service',
+            span_id: 'nested span',
+            trace_id: 'nested trace',
+          },
+        },
+        method: 'error',
+        message: 'nested error',
+      })
+    })
+    clock.tick(1000)
+
+    const [data] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{
+      dd: {
+        service: 'my service',
+        span_id: 'nested span',
+        trace_id: 'nested trace',
+      },
+      message: 'nested error',
+      status: 'error',
+    }])
+  })
+
+  it('maps console methods to log statuses', () => {
+    for (const method of ['error', 'warn']) {
+      consoleLogSubmissionCh.publish({ method, message: method })
+    }
+    clock.tick(1000)
+
+    const [data] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data).map(({ status }) => status), [
+      'error',
+      'warn',
+    ])
   })
 
   it('flushes pending Bunyan logs before exit', () => {

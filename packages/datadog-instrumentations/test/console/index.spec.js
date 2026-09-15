@@ -1,0 +1,444 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const { AsyncLocalStorage } = require('node:async_hooks')
+const { Console } = require('node:console')
+const { Writable } = require('node:stream')
+const { inspect } = require('node:util')
+
+const { channel } = require('dc-polyfill')
+const sinon = require('sinon')
+
+const { wrapConsole, wrapJestBufferedConsole } = require('../../src/console')
+
+const logSubmissionCh = channel('ci:log-submission:console')
+
+describe('console instrumentation', () => {
+  let payloads
+  let subscriber
+
+  beforeEach(() => {
+    payloads = []
+    subscriber = payload => payloads.push(payload)
+    logSubmissionCh.subscribe(subscriber)
+  })
+
+  afterEach(() => {
+    logSubmissionCh.unsubscribe(subscriber)
+  })
+
+  it('publishes warnings and errors and preserves all console methods', () => {
+    const stream = { write: sinon.stub() }
+    const target = { _stderr: stream }
+    const originalMethods = {}
+    for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
+      originalMethods[method] = target[method] = sinon.stub().callsFake((...args) => {
+        if (method === 'error' || method === 'warn') stream.write(`${args.join(' ')}\n`)
+        return method
+      })
+    }
+    wrapConsole(target)
+
+    for (const method of ['debug', 'error', 'info', 'log', 'warn']) {
+      assert.strictEqual(target[method]('hello', method), method)
+    }
+    for (const method of ['debug', 'info', 'log']) {
+      assert.strictEqual(target[method], originalMethods[method])
+    }
+
+    assert.deepStrictEqual(payloads, [
+      { method: 'error', message: 'hello error' },
+      { method: 'warn', message: 'hello warn' },
+    ])
+  })
+
+  it('publishes once when one wrapped console delegates to another', () => {
+    const stream = { write: sinon.stub() }
+    const innerError = sinon.stub().callsFake((message) => {
+      stream.write(`${message}\n`)
+      return 'result'
+    })
+    const inner = { _stderr: stream, error: innerError }
+    const outer = {
+      _stderr: stream,
+      warn () {
+        return inner.error.apply(inner, arguments)
+      },
+    }
+    wrapConsole(inner)
+    wrapConsole(outer)
+
+    assert.strictEqual(outer.warn('hello'), 'result')
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+    sinon.assert.calledOnceWithExactly(innerError, 'hello')
+  })
+
+  it('submits the native-formatted output without inspecting arguments twice', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    let inspections = 0
+    const value = {
+      [inspect.custom] () {
+        inspections++
+        if (inspections > 1) throw new Error('inspected twice')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello %o', value)
+
+    assert.strictEqual(inspections, 1)
+    assert.deepStrictEqual(output, ['hello formatted value\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
+  it('does not publish direct stream writes made while formatting a record', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        stream.write('unrelated stderr output\n')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello %o', value)
+
+    assert.deepStrictEqual(output, ['unrelated stderr output\n', 'hello formatted value\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
+  it('does not publish console.log output written to the same stream while formatting a record', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        target.log('unrelated console output')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.error('hello %o', value)
+
+    assert.deepStrictEqual(output, ['unrelated console output\n', 'hello formatted value\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'hello formatted value' }])
+  })
+
+  it('publishes nested console calls made while formatting another record', () => {
+    const context = new AsyncLocalStorage()
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        context.run({ dd: { span_id: 'nested' } }, () => target.warn('nested warning'))
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target, () => context.getStore())
+
+    context.run({ dd: { span_id: 'outer' } }, () => target.error('outer %o', value))
+
+    assert.deepStrictEqual(output, ['nested warning\n', 'outer formatted value\n'])
+    assert.deepStrictEqual(payloads, [
+      { logHolder: { dd: { span_id: 'nested' } }, method: 'warn', message: 'nested warning' },
+      { logHolder: { dd: { span_id: 'outer' } }, method: 'error', message: 'outer formatted value' },
+    ])
+  })
+
+  it('publishes reentrant console calls made while writing another record', () => {
+    const output = []
+    const target = {
+      _stderr: {
+        write (message) {
+          output.push(message)
+          if (message === 'outer warning\n') target.error('nested error')
+        },
+      },
+      error (message) {
+        this._stderr.write(`${message}\n`)
+      },
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('outer warning')
+
+    assert.deepStrictEqual(output, ['outer warning\n', 'nested error\n'])
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'outer warning' },
+      { method: 'error', message: 'nested error' },
+    ])
+  })
+
+  it('does not replace a console record with a reentrant direct stream write', () => {
+    const output = []
+    let hasReentered = false
+    const stream = {
+      write (message) {
+        output.push(message)
+        if (!hasReentered) {
+          hasReentered = true
+          stream.write('auxiliary write\n')
+        }
+      },
+    }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('actual warning')
+
+    assert.deepStrictEqual(output, ['actual warning\n', 'auxiliary write\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'actual warning' }])
+  })
+
+  it('does not read an accessor-backed stderr while instrumenting a console call', () => {
+    const stream = { write: sinon.stub() }
+    let stderrReads = 0
+    const target = {
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    Object.defineProperty(target, '_stderr', {
+      configurable: true,
+      get () {
+        if (++stderrReads > 1) throw new Error('unexpected stderr read')
+        return stream
+      },
+    })
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.strictEqual(stderrReads, 1)
+    sinon.assert.calledOnceWithExactly(stream.write, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
+  })
+
+  it('skips accessor-backed replacement console methods', () => {
+    const stream = { write: sinon.stub() }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    const getError = sinon.stub().throws(new Error('unexpected read'))
+    Object.defineProperty(target, 'error', {
+      configurable: true,
+      enumerable: true,
+      get: getError,
+    })
+    const descriptor = Object.getOwnPropertyDescriptor(target, 'error')
+
+    wrapConsole(target)
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(target, 'error'), descriptor)
+    sinon.assert.notCalled(getError)
+
+    target.warn('hello')
+
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+  })
+
+  it('preserves accessor-backed stream writes', () => {
+    const originalWrite = sinon.stub()
+    let write = originalWrite
+    const setter = sinon.spy((value) => { write = value })
+    const stream = {}
+    Object.defineProperty(stream, 'write', {
+      configurable: true,
+      get: () => write,
+      set: setter,
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('first')
+    target.warn('second')
+
+    assert.strictEqual(stream.write, originalWrite)
+    sinon.assert.notCalled(setter)
+    sinon.assert.calledTwice(originalWrite)
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'first' },
+      { method: 'warn', message: 'second' },
+    ])
+  })
+
+  it('does not read non-configurable accessor-backed stream writes while instrumenting', () => {
+    const originalWrite = sinon.stub()
+    let writeReads = 0
+    const stream = {}
+    Object.defineProperty(stream, 'write', {
+      configurable: false,
+      get () {
+        if (++writeReads > 1) throw new Error('unexpected write read')
+        return originalWrite
+      },
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.strictEqual(writeReads, 1)
+    sinon.assert.calledOnceWithExactly(originalWrite, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
+  })
+
+  it('restores a stream write when descriptor verification fails', () => {
+    const originalWrite = sinon.stub()
+    let descriptorReads = 0
+    const stream = new Proxy({ write: originalWrite }, {
+      getOwnPropertyDescriptor (target, property) {
+        if (property === 'write' && ++descriptorReads === 2) throw new Error('unexpected descriptor read')
+        return Reflect.getOwnPropertyDescriptor(target, property)
+      },
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('first')
+    assert.strictEqual(stream.write, originalWrite)
+    target.warn('second')
+
+    sinon.assert.calledTwice(originalWrite)
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'second' }])
+  })
+
+  it('captures only Jest buffered warnings and errors without wrapping public methods', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+        return buffer
+      }
+    }
+    wrapJestBufferedConsole(BufferedConsole)
+    const buffer = []
+
+    assert.strictEqual(BufferedConsole.write(buffer, 'log', 'ignored'), buffer)
+    assert.strictEqual(BufferedConsole.write(buffer, 'warn', 'hello'), buffer)
+    assert.strictEqual(BufferedConsole.write(buffer, 'error', 'boom'), buffer)
+    assert.deepStrictEqual(buffer, ['ignored', 'hello', 'boom'])
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'hello' },
+      { method: 'error', message: 'boom' },
+    ])
+  })
+
+  it('publishes once when Jest buffers a wrapped console write', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+        return buffer
+      }
+    }
+    const buffer = []
+    const stream = {
+      write (message) {
+        BufferedConsole.write(buffer, 'error', `formatted ${message}`)
+      },
+    }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapJestBufferedConsole(BufferedConsole)
+    wrapConsole(target)
+
+    target.error('boom')
+
+    assert.deepStrictEqual(buffer, ['formatted boom\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
+  })
+
+  it('does not resubmit Jest internal console rendering', () => {
+    const stream = { write: sinon.stub() }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        target.error(`formatted ${message}`)
+        buffer.push(message)
+        return buffer
+      }
+    }
+    wrapConsole(target)
+    wrapJestBufferedConsole(BufferedConsole)
+    const buffer = []
+
+    BufferedConsole.write(buffer, 'error', 'boom')
+
+    assert.deepStrictEqual(buffer, ['boom'])
+    sinon.assert.calledOnceWithExactly(stream.write, 'formatted boom\n')
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
+  })
+
+  it('does not publish without a subscriber', () => {
+    logSubmissionCh.unsubscribe(subscriber)
+    const stream = { write: sinon.stub() }
+    const originalWarn = sinon.stub().callsFake(message => stream.write(`${message}\n`))
+    const target = { _stderr: stream, warn: originalWarn }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    sinon.assert.calledOnceWithExactly(originalWarn, 'hello')
+    assert.deepStrictEqual(payloads, [])
+  })
+})

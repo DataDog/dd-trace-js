@@ -13,6 +13,7 @@ describe('register', () => {
   let HookMock
   let instrumentationsMock
   let originalModuleProtoRequire
+  let requiredModules
   let satisfiesMock
   let telemetryMock
 
@@ -38,6 +39,7 @@ describe('register', () => {
 
     HookMock = sinon.stub()
     instrumentationsMock = {}
+    requiredModules = []
     satisfiesMock = sinon.spy(satisfies)
     telemetryMock = sinon.stub()
 
@@ -50,6 +52,7 @@ describe('register', () => {
         return satisfiesMock
       }
       if (this.filename === registerPath) {
+        requiredModules.push(request)
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
@@ -112,6 +115,14 @@ describe('register', () => {
         registeredNames.push(names[0])
       }
       assert.deepStrictEqual(registeredNames.sort(), ['@confluentinc/kafka-javascript', 'mongodb-core'])
+    })
+  }
+
+  for (const disabledName of ['console', 'node:console']) {
+    it(`should not load console instrumentation when ${disabledName} is disabled`, () => {
+      loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: disabledName })
+
+      assert.strictEqual(requiredModules.includes('../console'), false)
     })
   }
 

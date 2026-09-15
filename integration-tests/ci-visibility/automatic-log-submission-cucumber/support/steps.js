@@ -12,5 +12,9 @@ Then('I should have made a log', async function () {
 })
 
 When('we run a test', async function () {
-  logger.info('Hello simple log!')
+  if (process.env.TEST_LOGGER === 'console') {
+    logger.error('Hello simple log!')
+  } else {
+    logger.info('Hello simple log!')
+  }
 })
