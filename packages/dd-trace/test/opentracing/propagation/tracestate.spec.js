@@ -56,6 +56,21 @@ describe('TraceState', () => {
     })
   })
 
+  it('should bound vendor fields before parsing when a byte limit is provided', () => {
+    const prefix = `rv:1234567890abcd;th:8;unknown:${'x'.repeat(225)}`
+    const ts = TraceState.fromString(`ot=${prefix};outside:value`)
+    assert.strictEqual(Buffer.byteLength(prefix), 256)
+
+    ts.forVendor('ot', state => {
+      assert.strictEqual(state.size, 3)
+      assert.strictEqual(state.get('rv'), '1234567890abcd')
+      assert.strictEqual(state.get('th'), '8')
+      assert.strictEqual(state.get('outside'), undefined)
+    }, 256)
+
+    assert.strictEqual(ts.get('ot'), prefix)
+  })
+
   it('should mutate value in tracestate when changing value', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 

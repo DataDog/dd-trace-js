@@ -89,6 +89,36 @@ function limitValue (value, separator, maxBytes) {
 }
 
 /**
+ * Returns the complete leftmost fields within a byte limit without scanning the unbounded suffix.
+ *
+ * @param {string} value
+ * @param {string} separator
+ * @param {number} maxBytes
+ * @returns {string}
+ */
+function limitInputValue (value, separator, maxBytes) {
+  if (value.length <= maxBytes / 4) return value
+
+  let end = Math.min(value.length, maxBytes)
+  if (end === value.length && Buffer.byteLength(value) <= maxBytes) return value
+
+  let low = 0
+  let high = end
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (Buffer.byteLength(value.slice(0, middle)) <= maxBytes) low = middle
+    else high = middle - 1
+  }
+  end = low
+
+  if (end === value.length) return value
+  if (value[end] === separator) return value.slice(0, end)
+
+  const separatorIndex = value.lastIndexOf(separator, end - 1)
+  return separatorIndex === -1 ? '' : value.slice(0, separatorIndex)
+}
+
+/**
  * Keeps the 32 leftmost members allowed by W3C Trace Context.
  *
  * @param {string} value
@@ -152,7 +182,15 @@ class TraceStateData {
     return this.#map.size
   }
 
-  static fromString (value) {
+  /**
+   * @param {string | undefined} value
+   * @param {number} [maxBytes]
+   * @returns {TraceStateData}
+   */
+  static fromString (value, maxBytes) {
+    if (typeof value === 'string' && maxBytes !== undefined) {
+      value = limitInputValue(value, ';', maxBytes)
+    }
     return fromString(TraceStateData, value, ';', ':', false)
   }
 
@@ -213,7 +251,7 @@ class TraceState {
    */
   forVendor (vendor, handle, maxBytes) {
     const data = this.#map.get(vendor)
-    const state = TraceStateData.fromString(data)
+    const state = TraceStateData.fromString(data, maxBytes)
     const result = handle(state)
 
     if (!state.changed && maxBytes === undefined) return result

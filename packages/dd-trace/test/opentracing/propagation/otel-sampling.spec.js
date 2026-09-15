@@ -244,6 +244,20 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       })
     })
 
+    it('does not parse OTel sub-fields beyond the 256-byte value cap', () => {
+      const prefix = `rv:1234567890abcd;th:8;unknown:${'x'.repeat(225)}`
+      const parent = extractParent({
+        sampled: true,
+        tracestate: `ot=${prefix};outside:value`,
+      })
+
+      assert.strictEqual(parent._tracestate.get('ot'), prefix)
+      const { span, prioritySampler } = startSpan({ parent, sampleRate: 0.1 })
+      const carrier = inject(span, prioritySampler)
+
+      assert.strictEqual(parseTracestate(carrier.tracestate).ot, prefix)
+    })
+
     for (const randomValue of ['123456789abcd', '1234567890abcde', '1234567890abcD', 'g234567890abcd']) {
       it(`rejects the malformed random value ${randomValue}`, () => {
         const { span, prioritySampler } = startSpan({ traceId: '1', sampleRate: 0.1 })
