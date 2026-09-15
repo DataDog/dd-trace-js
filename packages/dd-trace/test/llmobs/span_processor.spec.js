@@ -48,7 +48,7 @@ describe('span processor', () => {
       sinon.assert.notCalled(writer.append)
     })
 
-    it('should format the span event for the writer', () => {
+    it('should format the span event for apm meta_struct', () => {
       span = {
         _name: 'test',
         _startTime: 0, // this is in ms, will be converted to ns
@@ -79,28 +79,25 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload, {
         trace_id: 'mlob123',
-        span_id: '456',
         parent_id: '1234',
         name: 'test',
-        tags: [
-          'version:',
-          'env:',
-          'service:',
-          'source:integration',
-          'ml_app:myApp',
-          'ddtrace.version:x.y.z',
-          'error:0',
-          'language:javascript',
-        ],
-        start_ns: 0,
-        duration: 1000000,
-        status: 'ok',
+        ml_app: 'myApp',
+        tags: {
+          version: '',
+          env: '',
+          service: '',
+          source: 'integration',
+          ml_app: 'myApp',
+          'ddtrace.version': 'x.y.z',
+          error: '0',
+          language: 'javascript',
+        },
         meta: {
-          'span.kind': 'llm',
+          span: { kind: 'llm' },
           model_name: 'myModel',
           model_provider: 'myprovider', // should be lowercase
           input: {
@@ -113,15 +110,205 @@ describe('span processor', () => {
         },
         metrics: {},
         _dd: {
-          trace_id: '123',
-          span_id: '456',
           sample_rate: '1',
           sampling_decision: '1',
-          apm_trace_id: '123',
         },
       })
 
+      sinon.assert.notCalled(writer.append)
+    })
+
+    it('attaches the llmobs payload to meta_struct when the apm trace is kept', () => {
+      const apmTags = {}
+      const ensureSamplingPriority = sinon.stub()
+      span = {
+        _name: 'test',
+        _startTime: 0,
+        _duration: 1,
+        meta_struct: {
+          existing: { value: true },
+        },
+        context () {
+          return {
+            _tags: apmTags,
+            _sampling: { priority: 1 },
+            _ensureSamplingPriority: ensureSamplingPriority,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.model_name': 'myModel',
+        '_ml_obs.meta.model_provider': 'myProvider',
+        '_ml_obs.meta.ml_app': 'myApp',
+        '_ml_obs.meta.input.value': 'hello',
+        '_ml_obs.meta.output.value': 'world',
+        '_ml_obs.llmobs_parent_id': '1234',
+        '_ml_obs.sample_rate': '1',
+        '_ml_obs.sampling_decision': '1',
+        '_ml_obs.trace_id': 'mlob123',
+      })
+
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      sinon.assert.calledOnce(ensureSamplingPriority)
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+      assert.deepStrictEqual(span.meta_struct, {
+        existing: { value: true },
+        _llmobs: {
+          trace_id: 'mlob123',
+          parent_id: '1234',
+          name: 'test',
+          ml_app: 'myApp',
+          tags: {
+            version: '',
+            env: '',
+            service: '',
+            source: 'integration',
+            ml_app: 'myApp',
+            'ddtrace.version': 'x.y.z',
+            error: '0',
+            language: 'javascript',
+          },
+          meta: {
+            span: { kind: 'llm' },
+            model_name: 'myModel',
+            model_provider: 'myprovider',
+            input: {
+              value: 'hello',
+            },
+            output: {
+              value: 'world',
+            },
+          },
+          metrics: {},
+          _dd: {
+            sample_rate: '1',
+            sampling_decision: '1',
+          },
+        },
+      })
+    })
+
+    it('keeps using evp proxy when the apm trace is predicted to be dropped', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 0 },
+            _ensureSamplingPriority: sinon.stub(),
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      processor.process(span)
+
       sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('nests error fields when attaching the llmobs payload to meta_struct', () => {
+      span = {
+        context () {
+          return {
+            _tags: {
+              'error.message': 'error message',
+              'error.type': 'error type',
+              'error.stack': 'error stack',
+            },
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct._llmobs.meta.error, {
+        message: 'error message',
+        type: 'error type',
+        stack: 'error stack',
+      })
+    })
+
+    it('attaches meta_struct for agentless apm intake', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      writer._agentless = true
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      assert.ok(span.meta_struct._llmobs)
+    })
+
+    it('keeps using the writer for routed tenant submissions', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_dd.llmobs.routing.api_key': 'tenant-api-key',
+        '_dd.llmobs.routing.site': 'datadoghq.com',
+      })
+
+      processor.process(span)
+
+      sinon.assert.calledOnceWithMatch(writer.append, sinon.match.object, {
+        apiKey: 'tenant-api-key',
+        site: 'datadoghq.com',
+      })
+      assert.strictEqual(span.meta_struct, undefined)
     })
 
     it('marks spans with experiment_id tags as experiment-scoped', () => {
@@ -132,6 +319,7 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            _sampling: { priority: 0 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },
@@ -189,7 +377,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.metadata, {
         bar: 'baz',
@@ -227,7 +415,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.metadata, {
         foo: 'bar',
@@ -260,7 +448,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.metadata, {
         _dd: {
@@ -297,7 +485,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.tool_definitions, toolDefinitions)
     })
@@ -330,7 +518,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.metadata, {
         _dd: {
@@ -360,7 +548,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.output.documents, [{
         text: 'hello',
@@ -390,7 +578,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.deepStrictEqual(payload.meta.input.documents, [{
         text: 'hello',
@@ -420,7 +608,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.strictEqual(payload.meta.model_provider, 'custom')
     })
@@ -448,16 +636,17 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assertObjectContains(payload, {
         meta: {
-          'error.message': 'error message',
-          'error.type': 'error type',
-          'error.stack': 'error stack',
+          error: {
+            message: 'error message',
+            type: 'error type',
+            stack: 'error stack',
+          },
         },
-        status: 'error',
-        tags: ['error_type:error type'],
+        tags: { error_type: 'error type' },
       })
     })
 
@@ -482,14 +671,12 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
-      assert.strictEqual(payload.meta['error.message'], 'error message')
-      assert.strictEqual(payload.meta['error.type'], 'Error')
-      assert.ok(payload.meta['error.stack'])
-      assert.strictEqual(payload.status, 'error')
-
-      assertObjectContains(payload.tags, ['error_type:Error'])
+      assert.strictEqual(payload.meta.error.message, 'error message')
+      assert.strictEqual(payload.meta.error.type, 'Error')
+      assert.ok(payload.meta.error.stack)
+      assert.strictEqual(payload.tags.error_type, 'Error')
     })
 
     it('uses the span name from the tag if provided', () => {
@@ -513,7 +700,7 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.strictEqual(payload.name, 'mySpan')
     })
@@ -538,10 +725,10 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
       assert.strictEqual(payload.session_id, '1234')
-      assertObjectContains(payload.tags, ['session_id:1234'])
+      assert.strictEqual(payload.tags.session_id, '1234')
     })
 
     it('sets span tags appropriately', () => {
@@ -564,9 +751,9 @@ describe('span processor', () => {
       })
 
       processor.process(span)
-      const payload = writer.append.getCall(0).firstArg
+      const payload = span.meta_struct._llmobs
 
-      assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
+      assertObjectContains(payload.tags, { source: 'mySource', hostname: 'localhost', foo: 'bar' })
     })
 
     it('fans out array-valued user tags into one wire entry per element', () => {
@@ -580,6 +767,7 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            _sampling: { priority: 0 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },
@@ -629,6 +817,7 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            _sampling: { priority: 0 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },
@@ -651,12 +840,13 @@ describe('span processor', () => {
       assert.deepStrictEqual(payload.meta.metadata._dd.cost_tags, ['team'])
     })
 
-    it('marks the apm span with _dd.llmobs.submitted=1 for sdk-tagged spans', () => {
+    it('marks the apm span with _dd.llmobs.submitted=1 when using the writer fallback', () => {
       const apmTags = {}
       span = {
         context () {
           return {
             _tags: apmTags,
+            _sampling: { priority: 0 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },
@@ -758,6 +948,7 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            _sampling: { priority: 0 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },
@@ -784,6 +975,7 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            _sampling: { priority: 0 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },

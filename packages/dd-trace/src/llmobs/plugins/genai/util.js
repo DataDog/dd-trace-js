@@ -125,10 +125,10 @@ function extractMetrics (response) {
 /**
  * Extract metadata from config
  * @param {object} config
- * @returns {object}
+ * @returns {object | undefined}
  */
 function extractMetadata (config) {
-  if (!config) return {}
+  if (!config) return
 
   const fieldMap = {
     temperature: 'temperature',
@@ -147,9 +147,13 @@ function extractMetadata (config) {
     automatic_function_calling: 'automaticFunctionCalling',
   }
 
-  const metadata = {}
+  let metadata
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
-    metadata[metadataKey] = config[configKey] ?? null
+    const value = config[configKey]
+    if (value !== undefined && value !== null) {
+      metadata ??= {}
+      metadata[metadataKey] = value
+    }
   }
 
   return metadata

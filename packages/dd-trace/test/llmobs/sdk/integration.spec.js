@@ -5,6 +5,7 @@ const assert = require('node:assert')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { MANUAL_DROP } = require('../../../../../ext/tags')
 const { useLlmObs, assertLlmObsSpanEvent, assertLlmObsEvaluationMetric } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -171,8 +172,8 @@ describe('end to end sdk integration tests', () => {
   })
 
   describe('otel correlation bridge tags', () => {
-    it('writes llmobs_trace_id, llmobs_parent_id, and _dd.llmobs.submitted to apm span meta', async () => {
-      llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
+    it('writes llmobs_trace_id, llmobs_parent_id, and llmobs meta_struct to apm spans', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {
         llmobs.trace({ kind: 'task', name: 'inner' }, () => {})
       })
 
@@ -181,12 +182,14 @@ describe('end to end sdk integration tests', () => {
 
       // The first span in the chunk carries _trace.tags, including the bridge tags.
       const firstSpan = apmSpans[0]
-      assert.equal(firstSpan.meta.llmobs_trace_id, llmobsSpans[0].trace_id)
-      assert.equal(firstSpan.meta.llmobs_parent_id, llmobsSpans[0].span_id)
+      const workflowSpan = llmobsSpans.find(span => span.name === 'wf')
+      assert.equal(firstSpan.meta.llmobs_trace_id, workflowSpan.trace_id)
+      assert.equal(firstSpan.meta.llmobs_parent_id, workflowSpan.span_id)
 
-      // Every SDK-tagged apm span carries the submitted marker.
+      // The sampled agent path rides the APM trace via meta_struct, matching dd-trace-py.
       for (const apmSpan of apmSpans) {
-        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], '1')
+        assert.ok(apmSpan.meta_struct._llmobs)
+        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], undefined)
       }
     })
 
@@ -202,12 +205,27 @@ describe('end to end sdk integration tests', () => {
       assert.ok(plainApmSpan)
       assert.ok(sdkSpan)
       assert.equal(plainApmSpan.meta['_dd.llmobs.submitted'], undefined)
-      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
+      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], undefined)
+      assert.ok(sdkSpan.meta_struct._llmobs)
 
       // bridge tags still flow to the local trace's chunk meta
       const firstSpan = apmSpans[0]
       assert.match(firstSpan.meta.llmobs_trace_id, /^[0-9a-f]{32}$/)
       assert.ok(firstSpan.meta.llmobs_parent_id)
+    })
+
+    it('marks llmobs apm spans with _dd.llmobs.submitted when rejected traces use the writer fallback', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'rejected' }, span => {
+        span.setTag(MANUAL_DROP, true)
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(1)
+      const sdkSpan = apmSpans.find(s => s.name === 'rejected')
+
+      assert.ok(sdkSpan)
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
+      assert.equal(sdkSpan.meta_struct?._llmobs, undefined)
     })
   })
 

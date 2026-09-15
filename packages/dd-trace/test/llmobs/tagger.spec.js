@@ -71,11 +71,13 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, 'llm')
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
+        assert.strictEqual(spanContext._tags['span.type'], undefined)
       })
 
       it('tags an llm obs span with basic and default properties', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
+        assert.strictEqual(spanContext._tags['span.type'], 'llm')
         assertObjectContains(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -227,6 +229,7 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, { kind: false })
 
         assert.strictEqual(Tagger.tagMap.get(span), undefined)
+        assert.strictEqual(spanContext._tags['span.type'], undefined)
       })
 
       it('creates a custom trace id', () => {
@@ -310,7 +313,10 @@ describe('tagger', () => {
           assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
 
           config.llmobs.sampleRate = 0
-          const nextSpan = { context () { return spanContext } }
+          const nextSpan = {
+            context () { return spanContext },
+            setTag (key, value) { spanContext._tags[key] = value },
+          }
           tagger.registerLLMObsSpan(nextSpan, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(nextSpan)
@@ -385,7 +391,10 @@ describe('tagger', () => {
             toTraceId () { return 'ffffffffffffffffffffffffffffffff' },
             toSpanId () { return '9999999999999999' },
           }
-          const secondSpan = { context () { return secondSpanContext } }
+          const secondSpan = {
+            context () { return secondSpanContext },
+            setTag (key, value) { secondSpanContext._tags[key] = value },
+          }
 
           tagger.registerLLMObsSpan(secondSpan, { kind: 'task' })
 
