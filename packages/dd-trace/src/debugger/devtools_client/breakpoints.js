@@ -275,9 +275,7 @@ async function refreshBreakpoints (probes) {
   for (const locationKey of locationKeys) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      await updateBreakpointInternal(
-        locationToBreakpoint.get(locationKey), undefined, `while refreshing ${locationKey}`
-      )
+      await updateBreakpointInternal(locationToBreakpoint.get(locationKey))
     } catch (err) {
       // Keep going: the remaining locations would otherwise hold on to the condition this refresh exists to replace
       errors ??= []
@@ -295,20 +293,20 @@ async function refreshBreakpoints (probes) {
  *
  * @param {{ id: string, location: object, locationKey: string }} breakpoint - The breakpoint to replace.
  * @param {object} [probe] - A probe to attach to the breakpoint first, when one is being added.
- * @param {string} [context] - What the update is part of, for error messages. Derived from `probe` when omitted.
  * @returns {Promise<void>}
  */
-async function updateBreakpointInternal (breakpoint, probe, context) {
+async function updateBreakpointInternal (breakpoint, probe) {
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
 
   // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe or the probes at the
   // location changed. In all cases the breakpoint condition must be rebuilt to match the probes at the location.
+  let context // identifies the update in the error messages below
   if (probe) {
     probesAtLocation.set(probe.id, probe)
     probeToLocation.set(probe.id, breakpoint.locationKey)
-    context ??= `while adding probe ${probe.id} (version: ${probe.version})`
+    context = `while adding probe ${probe.id} (version: ${probe.version})`
   } else {
-    context ??= `after removing probe from ${breakpoint.locationKey}`
+    context = `at ${breakpoint.locationKey}`
   }
 
   try {

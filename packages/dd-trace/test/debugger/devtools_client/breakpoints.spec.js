@@ -995,7 +995,7 @@ describe('breakpoints', function () {
           breakpoints.removeBreakpoint({ id: 'probe-1' }),
           (err) => {
             assert(err instanceof Error)
-            assert.strictEqual(err.message, 'Error replacing breakpoint after removing probe from script-1:10:0')
+            assert.strictEqual(err.message, 'Error replacing breakpoint at script-1:10:0')
             assert.strictEqual(err.cause, cause)
             return true
           }
@@ -1019,7 +1019,7 @@ describe('breakpoints', function () {
           breakpoints.removeBreakpoint({ id: 'probe-1' }),
           (err) => {
             assert(err instanceof Error)
-            assert.strictEqual(err.message, 'Error setting breakpoint after removing probe from script-1:10:0')
+            assert.strictEqual(err.message, 'Error setting breakpoint at script-1:10:0')
             assert.strictEqual(err.cause, cause)
             return true
           }
@@ -1282,7 +1282,7 @@ describe('breakpoints', function () {
         breakpoints.refreshBreakpoints([probe, otherProbe]),
         (err) => {
           assert(err instanceof Error)
-          assert.strictEqual(err.message, 'Error setting breakpoint while refreshing script-1:10:0')
+          assert.strictEqual(err.message, 'Error setting breakpoint at script-1:10:0')
           assert.strictEqual(err.cause, cause)
           return true
         }
@@ -1317,8 +1317,8 @@ describe('breakpoints', function () {
         (err) => {
           assert(err instanceof AggregateError)
           assert.deepStrictEqual(err.errors.map(({ message }) => message), [
-            'Error setting breakpoint while refreshing script-1:10:0',
-            'Error setting breakpoint while refreshing script-1:20:0',
+            'Error setting breakpoint at script-1:10:0',
+            'Error setting breakpoint at script-1:20:0',
           ])
           return true
         }
@@ -1341,7 +1341,7 @@ describe('breakpoints', function () {
         breakpoints.refreshBreakpoints([{ id: 'probe-1' }]),
         (err) => {
           assert(err instanceof Error)
-          assert.strictEqual(err.message, 'Error setting breakpoint while refreshing script-1:10:0')
+          assert.strictEqual(err.message, 'Error setting breakpoint at script-1:10:0')
           assert.strictEqual(err.cause, cause)
           return true
         }
