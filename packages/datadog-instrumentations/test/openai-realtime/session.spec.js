@@ -11,7 +11,6 @@ const PCM16_BYTES_PER_MS = 48
 
 /**
  * @param {number} durationMs
- * @returns {string}
  */
 function pcm16 (durationMs) {
   return Buffer.alloc(durationMs * PCM16_BYTES_PER_MS).toString('base64')
@@ -61,7 +60,6 @@ function openSession ({ transcription = false } = {}) {
  * @param {ReturnType<typeof openSession>} harness
  * @param {string} itemId
  * @param {number} [durationMs]
- * @returns {void}
  */
 function speak (harness, itemId, durationMs = 200) {
   const { session, tick, now } = harness

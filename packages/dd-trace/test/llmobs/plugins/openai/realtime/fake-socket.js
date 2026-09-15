@@ -108,7 +108,6 @@ class FakeRealtimeSocket {
    * Hand a server event to the SDK, synchronously, exactly as the real socket would.
    *
    * @param {object} event
-   * @returns {void}
    */
   deliver (event) {
     const json = JSON.stringify(event)
@@ -174,7 +173,6 @@ function installFakeSocket (openaiPath) {
  *
  * @param {number} durationMs
  * @param {number} [fill]
- * @returns {string}
  */
 function pcm16 (durationMs, fill = 0) {
   return Buffer.alloc(durationMs * PCM16_BYTES_PER_MS, fill).toString('base64')
@@ -203,7 +201,6 @@ class Mic {
    *
    * @param {number} durationMs
    * @param {number} [fill]
-   * @returns {void}
    */
   stream (durationMs, fill = 0) {
     // Tick before sending: a real microphone hands over the frame covering [t-10ms, t) at t, so the
@@ -216,14 +213,12 @@ class Mic {
     }
   }
 
-  /** @returns {void} */
   speechStarted () {
     this.socket.deliver({ type: 'input_audio_buffer.speech_started', audio_start_ms: this.bufferMs })
   }
 
   /**
    * @param {string} itemId
-   * @returns {void}
    */
   commit (itemId) {
     this.socket.deliver({ type: 'input_audio_buffer.committed', item_id: itemId })

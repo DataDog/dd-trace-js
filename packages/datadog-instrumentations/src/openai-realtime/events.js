@@ -10,7 +10,6 @@
  * older `response.audio.*` / `response.text.*` equivalents.
  *
  * @param {string} eventType
- * @returns {string}
  */
 function normalizeResponseEventType (eventType) {
   // Only `response.*` events carry the renamed segments, and they are a small fraction of the

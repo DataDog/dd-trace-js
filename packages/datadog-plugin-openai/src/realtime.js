@@ -58,7 +58,6 @@ class RealtimeTracingPlugin extends TracingPlugin {
 
   /**
    * @param {object} ctx
-   * @returns {void}
    */
   end (ctx) {
     const span = ctx.currentStore?.span
@@ -119,7 +118,6 @@ class RealtimeSpeechTracingPlugin extends RealtimeTracingPlugin {
 
   /**
    * @param {{ phase: { operation: string } }} ctx
-   * @returns {string}
    */
   resource (ctx) {
     return ctx.phase.operation

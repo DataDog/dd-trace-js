@@ -13,7 +13,6 @@ const { realtimeEnabled } = require('../../src/openai-realtime')
  * through Fleet Automation or `/etc/datadog-agent/application_monitoring.yaml` would.
  *
  * @param {{ fleet?: Record<string, string>, local?: Record<string, string> }} sources
- * @returns {boolean}
  */
 function realtimeEnabledWith ({ fleet = {}, local = {} }) {
   const StableConfigStub = sinon.stub().callsFake(function () {
