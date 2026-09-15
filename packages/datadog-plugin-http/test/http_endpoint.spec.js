@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const axios = require('axios')
 
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 describe('Plugin', () => {
   let http
@@ -65,7 +65,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/users/123`).catch(done)
+          httpRequest.get(`http://localhost:${port}/users/123`).catch(done)
         })
 
         it('should set http.endpoint with int_id when no route is available', done => {
@@ -78,7 +78,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/resources/123-456`).catch(done)
+          httpRequest.get(`http://localhost:${port}/resources/123-456`).catch(done)
         })
 
         it('should set http.endpoint with hex when no route is available', done => {
@@ -92,7 +92,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/orders/abc123`).catch(done)
+          httpRequest.get(`http://localhost:${port}/orders/abc123`).catch(done)
         })
 
         it('should set http.endpoint with hex_id when no route is available', done => {
@@ -105,7 +105,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/resources/abc-123`).catch(done)
+          httpRequest.get(`http://localhost:${port}/resources/abc-123`).catch(done)
         })
 
         it('keeps http.route when a framework resolves the route at finish time', done => {
@@ -126,7 +126,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/users/123`).catch(done)
+          httpRequest.get(`http://localhost:${port}/users/123`).catch(done)
         })
       })
     })

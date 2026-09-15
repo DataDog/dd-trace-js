@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const semifies = require('semifies')
@@ -10,6 +9,7 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 withVersions('express', 'express', version => {
   describe('express query instrumentation', () => {
     const queryParserReadCh = dc.channel('datadog:query:read:finish')
@@ -42,7 +42,7 @@ withVersions('express', 'express', version => {
     })
 
     it('should not abort the request by default', async () => {
-      const res = await axios.get(`http://localhost:${port}/`)
+      const res = await httpRequest.get(`http://localhost:${port}/`)
 
       sinon.assert.calledOnce(requestBody)
       assert.strictEqual(res.data, 'DONE')
@@ -52,7 +52,7 @@ withVersions('express', 'express', version => {
       function noop () {}
       queryParserReadCh.subscribe(noop)
 
-      const res = await axios.get(`http://localhost:${port}/`)
+      const res = await httpRequest.get(`http://localhost:${port}/`)
 
       sinon.assert.calledOnce(requestBody)
       assert.strictEqual(res.data, 'DONE')
@@ -67,7 +67,7 @@ withVersions('express', 'express', version => {
       }
       queryParserReadCh.subscribe(blockRequest)
 
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.notCalled(requestBody)
       assert.strictEqual(res.data, 'BLOCKED')

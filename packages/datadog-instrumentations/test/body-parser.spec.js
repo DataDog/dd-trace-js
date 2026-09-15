@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -11,6 +10,7 @@ const sinon = require('sinon')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 withVersions('body-parser', 'body-parser', version => {
   describe('body parser instrumentation', () => {
     const bodyParserReadCh = dc.channel('datadog:body-parser:read:finish')
@@ -45,7 +45,7 @@ withVersions('body-parser', 'body-parser', version => {
     })
 
     it('should not abort the request by default', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.calledOnce(middlewareProcessBodyStub)
       assert.strictEqual(res.data, 'DONE')
@@ -55,7 +55,7 @@ withVersions('body-parser', 'body-parser', version => {
       function noop () {}
       bodyParserReadCh.subscribe(noop)
 
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.calledOnce(middlewareProcessBodyStub)
       assert.strictEqual(res.data, 'DONE')
@@ -70,7 +70,7 @@ withVersions('body-parser', 'body-parser', version => {
       }
       bodyParserReadCh.subscribe(blockRequest)
 
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.notCalled(middlewareProcessBodyStub)
       assert.strictEqual(res.data, 'BLOCKED')
@@ -88,7 +88,7 @@ withVersions('body-parser', 'body-parser', version => {
       }
       bodyParserReadCh.subscribe(handler)
 
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       assert.ok(payload.req)
       assert.ok(payload.res)
