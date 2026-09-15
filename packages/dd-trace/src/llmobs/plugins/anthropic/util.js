@@ -1,5 +1,7 @@
 'use strict'
 
+const { safeJsonParse } = require('../../util')
+
 /**
  * @typedef {{type: 'text', text: string}} TextBlock
  * @typedef {{type: 'image'}} ImageBlock
@@ -40,6 +42,7 @@ function formatAnthropicToolResultContent (content) {
   } else if (Array.isArray(content)) {
     let formattedContent = ''
     for (const toolResultBlock of content) {
+      if (!toolResultBlock || typeof toolResultBlock !== 'object') continue
       let part
       if (toolResultBlock.text) {
         part = toolResultBlock.text
@@ -53,7 +56,7 @@ function formatAnthropicToolResultContent (content) {
 
     return formattedContent
   }
-  return JSON.stringify(content)
+  return safeJsonStringify(content)
 }
 
 /**
@@ -64,24 +67,30 @@ function formatAnthropicToolResultContent (content) {
  * @param {{ role: string, content: string | Array<TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock> }} message
  * @returns {void}
  */
-function appendMessage (messages, { role, content }) {
+function appendMessage (messages, { role, content } = {}) {
   if (typeof content === 'string') {
     messages.push({ content, role })
     return
   }
 
+  if (!Array.isArray(content)) {
+    messages.push({ content: content == null ? '' : String(content), role })
+    return
+  }
+
   for (const block of content) {
+    if (!block || typeof block !== 'object') continue
     if (block.type === 'text') {
       messages.push({ content: block.text, role })
     } else if (block.type === 'image') {
       messages.push({ content: '([IMAGE DETECTED])', role })
     } else if (block.type === 'thinking') {
       messages.push({ content: block.thinking ?? '', role: 'reasoning' })
-    } else if (block.type === 'tool_use') {
+    } else if (typeof block.type === 'string' && block.type.includes('tool_use')) {
       const { text, name, id, type } = block
       let input = block.input
       if (typeof input === 'string') {
-        input = JSON.parse(input)
+        input = safeJsonParse(input, {})
       }
 
       const toolCall = {
@@ -92,7 +101,7 @@ function appendMessage (messages, { role, content }) {
       }
 
       messages.push({ content: text ?? '', role, toolCalls: [toolCall] })
-    } else if (block.type === 'tool_result') {
+    } else if (typeof block.type === 'string' && block.type.includes('tool_result')) {
       const { content } = block
       const formattedContent = formatAnthropicToolResultContent(content)
       const toolResult = {
@@ -103,11 +112,38 @@ function appendMessage (messages, { role, content }) {
 
       messages.push({ content: '', role, toolResults: [toolResult] })
     } else {
-      messages.push({ content: JSON.stringify(block), role })
+      messages.push({ content: safeJsonStringify(block), role })
     }
   }
 }
 
+function safeJsonStringify (value) {
+  try {
+    return JSON.stringify(value) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function getAnthropicToolDefinitions (tools) {
+  if (!Array.isArray(tools)) return []
+
+  const definitions = []
+  for (const tool of tools) {
+    if (!tool || typeof tool !== 'object' || Array.isArray(tool)) continue
+    if (typeof tool.name !== 'string' || tool.name.length === 0) continue
+
+    const deferred = Boolean(tool.defer_loading)
+    definitions.push({
+      name: tool.name,
+      description: deferred ? '' : (tool.description ?? ''),
+      schema: deferred ? {} : (tool.input_schema ?? {}),
+    })
+  }
+  return definitions
+}
+
 module.exports = {
   appendMessage,
+  getAnthropicToolDefinitions,
 }
