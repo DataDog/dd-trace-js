@@ -12,9 +12,50 @@ const methods = ['error', 'warn']
 const methodSet = new Set(methods)
 const wrappedTargets = new WeakSet()
 
-let callDepth = 0
+/** @typedef {{ method: string, message: string, writeId: number }} ConsoleRecord */
+/** @typedef {{ fallbackRecord?: ConsoleRecord, records: ConsoleRecord[], writeId: number }} ConsoleCapture */
+
+/** @type {ConsoleCapture | undefined} */
+let activeCapture
+let activeWriteId = 0
+let expectedWrite
+let isPublishing = false
+let nextWriteId = 0
 
 /** @typedef {{ write: (buffer: unknown, method: string, message: string) => unknown }} JestBufferedConsole */
+
+/**
+ * @param {ConsoleRecord[]} records
+ * @returns {void}
+ */
+function publishRecords (records) {
+  if (records.length === 0) return
+
+  /** @type {Iterable<ConsoleRecord>} */
+  let recordsToPublish = records
+  if (records.length > 1) {
+    const recordsByWrite = new Map()
+    for (const record of records) {
+      // Console implementations can delegate to another wrapped method. In
+      // that case both wrappers observe the same write and the outer method is
+      // the logical log record.
+      recordsByWrite.set(record.writeId, record)
+    }
+    recordsToPublish = recordsByWrite.values()
+  }
+
+  const previousCapture = activeCapture
+  activeCapture = undefined
+  isPublishing = true
+  try {
+    for (const { method, message } of recordsToPublish) {
+      logSubmissionCh.publish({ method, message })
+    }
+  } finally {
+    isPublishing = false
+    activeCapture = previousCapture
+  }
+}
 
 /**
  * @param {Record<string, unknown> | undefined} target
@@ -30,14 +71,16 @@ function wrapConsole (target) {
     // Console methods are bound onto instances at runtime, so Orchestrion cannot
     // rewrite every receiver that test frameworks create or replace.
     shimmer.wrap(target, method, original => function () {
-      const shouldPublish = callDepth++ === 0 && logSubmissionCh.hasSubscribers
+      const shouldCapture = !isPublishing && logSubmissionCh.hasSubscribers
+      let capture
+      let parentCapture
       let stream
       let writeDescriptor
       let originalWrite
       let message
       let wrappedWrite
 
-      if (shouldPublish) {
+      if (shouldCapture) {
         try {
           const receiver = this?._stderr ? this : target
           stream = receiver?._stderr
@@ -45,8 +88,21 @@ function wrapConsole (target) {
           if (typeof originalWrite === 'function') {
             writeDescriptor = Object.getOwnPropertyDescriptor(stream, 'write')
             wrappedWrite = function (chunk) {
-              if (typeof chunk === 'string') message = chunk
-              return originalWrite.apply(this, arguments)
+              const previousWriteId = activeWriteId
+              const previousExpectedWrite = expectedWrite
+              const writeId = expectedWrite === wrappedWrite ? activeWriteId : ++nextWriteId
+              activeWriteId = writeId
+              expectedWrite = originalWrite
+              try {
+                if (typeof chunk === 'string') {
+                  message = chunk
+                  capture.writeId = writeId
+                }
+                return originalWrite.apply(this, arguments)
+              } finally {
+                activeWriteId = previousWriteId
+                expectedWrite = previousExpectedWrite
+              }
             }
             Object.defineProperty(stream, 'write', {
               configurable: writeDescriptor?.configurable ?? true,
@@ -55,18 +111,21 @@ function wrapConsole (target) {
               value: wrappedWrite,
             })
             if (Object.getOwnPropertyDescriptor(stream, 'write')?.value !== wrappedWrite) wrappedWrite = undefined
+            if (wrappedWrite) {
+              parentCapture = activeCapture
+              capture = { records: parentCapture?.records || [], writeId: 0 }
+              activeCapture = capture
+            }
           }
         } catch {
           wrappedWrite = undefined
         }
       }
 
+      let completed = false
       try {
         const result = original.apply(this, arguments)
-        if (wrappedWrite && message !== undefined) {
-          if (message.endsWith('\n')) message = message.slice(0, -1)
-          logSubmissionCh.publish({ method, message })
-        }
+        completed = true
         return result
       } finally {
         if (wrappedWrite) {
@@ -79,8 +138,18 @@ function wrapConsole (target) {
               }
             }
           } catch {}
+          activeCapture = parentCapture
+
+          if (completed) {
+            if (message !== undefined) {
+              if (message.endsWith('\n')) message = message.slice(0, -1)
+              capture.records.push({ method, message, writeId: capture.writeId })
+            } else if (capture.fallbackRecord) {
+              capture.records.push(capture.fallbackRecord)
+            }
+          }
+          if (!parentCapture) publishRecords(capture.records)
         }
-        callDepth--
       }
     })
   }
@@ -97,15 +166,26 @@ function wrapJestBufferedConsole (BufferedConsole) {
   // Jest buffers records through this static method without calling Node's
   // Console methods. Wrapping it also preserves Jest's user-facing callsite.
   shimmer.wrap(BufferedConsole, 'write', original => function (buffer, method, message) {
-    const shouldPublish = callDepth++ === 0 && methodSet.has(method) && logSubmissionCh.hasSubscribers
-    try {
-      if (shouldPublish) {
-        logSubmissionCh.publish({ method, message })
+    const shouldPublish = !isPublishing && methodSet.has(method) && logSubmissionCh.hasSubscribers
+    if (shouldPublish) {
+      const record = { method, message, writeId: ++nextWriteId }
+      if (activeCapture) {
+        activeCapture.fallbackRecord = record
+      } else {
+        publishRecords([record])
       }
-      return original.apply(this, arguments)
-    } finally {
-      callDepth--
+
+      // Some Jest versions render the buffered record through another wrapped
+      // console method. The buffered message is already the logical record, so
+      // suppress that internal rendering path.
+      isPublishing = true
+      try {
+        return original.apply(this, arguments)
+      } finally {
+        isPublishing = false
+      }
     }
+    return original.apply(this, arguments)
   })
 }
 

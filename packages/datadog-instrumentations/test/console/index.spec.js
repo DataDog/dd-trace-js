@@ -53,15 +53,15 @@ describe('console instrumentation', () => {
 
   it('publishes once when one wrapped console delegates to another', () => {
     const stream = { write: sinon.stub() }
-    const innerWarn = sinon.stub().callsFake((message) => {
+    const innerError = sinon.stub().callsFake((message) => {
       stream.write(`${message}\n`)
       return 'result'
     })
-    const inner = { _stderr: stream, warn: innerWarn }
+    const inner = { _stderr: stream, error: innerError }
     const outer = {
       _stderr: stream,
       warn () {
-        return inner.warn.apply(inner, arguments)
+        return inner.error.apply(inner, arguments)
       },
     }
     wrapConsole(inner)
@@ -69,7 +69,7 @@ describe('console instrumentation', () => {
 
     assert.strictEqual(outer.warn('hello'), 'result')
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
-    sinon.assert.calledOnceWithExactly(innerWarn, 'hello')
+    sinon.assert.calledOnceWithExactly(innerError, 'hello')
   })
 
   it('submits the native-formatted output without inspecting arguments twice', () => {
@@ -96,6 +96,32 @@ describe('console instrumentation', () => {
     assert.strictEqual(inspections, 1)
     assert.deepStrictEqual(output, ['hello formatted value\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
+  it('publishes nested console calls made while formatting another record', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        target.warn('nested warning')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.error('outer %o', value)
+
+    assert.deepStrictEqual(output, ['nested warning\n', 'outer formatted value\n'])
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'nested warning' },
+      { method: 'error', message: 'outer formatted value' },
+    ])
   })
 
   it('preserves accessor-backed stream writes', () => {
@@ -146,6 +172,60 @@ describe('console instrumentation', () => {
       { method: 'warn', message: 'hello' },
       { method: 'error', message: 'boom' },
     ])
+  })
+
+  it('publishes once when Jest buffers a wrapped console write', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+        return buffer
+      }
+    }
+    const buffer = []
+    const stream = {
+      write (message) {
+        BufferedConsole.write(buffer, 'error', `formatted ${message}`)
+      },
+    }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapJestBufferedConsole(BufferedConsole)
+    wrapConsole(target)
+
+    target.error('boom')
+
+    assert.deepStrictEqual(buffer, ['formatted boom\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
+  })
+
+  it('does not resubmit Jest internal console rendering', () => {
+    const stream = { write: sinon.stub() }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        target.error(`formatted ${message}`)
+        buffer.push(message)
+        return buffer
+      }
+    }
+    wrapConsole(target)
+    wrapJestBufferedConsole(BufferedConsole)
+    const buffer = []
+
+    BufferedConsole.write(buffer, 'error', 'boom')
+
+    assert.deepStrictEqual(buffer, ['boom'])
+    sinon.assert.calledOnceWithExactly(stream.write, 'formatted boom\n')
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
   })
 
   it('does not publish without a subscriber', () => {
