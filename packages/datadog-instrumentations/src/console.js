@@ -57,6 +57,23 @@ function createRecord (method, message, writeId, captureLogHolder) {
 }
 
 /**
+ * @param {object | Function | undefined} target
+ * @param {string} property
+ * @returns {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>}
+ */
+function getPropertyDescriptor (target, property) {
+  let descriptor
+  try {
+    let owner = target
+    while (owner && !descriptor) {
+      descriptor = Object.getOwnPropertyDescriptor(owner, property)
+      owner = Object.getPrototypeOf(owner)
+    }
+  } catch {}
+  return descriptor
+}
+
+/**
  * @param {Record<string, unknown>} stream
  * @param {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>} writeDescriptor
  * @param {Function} [expectedWrite]
@@ -118,16 +135,7 @@ function wrapConsole (target, captureLogHolder) {
 
   wrappedTargets.add(target)
   for (const method of methods) {
-    let descriptor
-    try {
-      let owner = target
-      while (owner && !descriptor) {
-        descriptor = Object.getOwnPropertyDescriptor(owner, method)
-        owner = Object.getPrototypeOf(owner)
-      }
-    } catch {
-      continue
-    }
+    const descriptor = getPropertyDescriptor(target, method)
     // Accessor-backed replacements cannot be inspected without running user
     // code, so leave them untouched.
     if (typeof descriptor?.value !== 'function') continue
@@ -143,18 +151,30 @@ function wrapConsole (target, captureLogHolder) {
       let writeInstallationAttempted = false
       let originalWrite
       let captureActive = false
+      let writeActive = false
       let wrappedWrite
 
       if (shouldCapture) {
         try {
-          const receiver = this?._stderr ? this : target
-          stream = receiver?._stderr
-          originalWrite = stream?.write
+          const streamDescriptor = getPropertyDescriptor(this, '_stderr') ||
+            getPropertyDescriptor(target, '_stderr')
+          stream = streamDescriptor?.value
+          // Node's global console owns a known lazy accessor. Avoid invoking arbitrary replacement
+          // console accessors, but preserve capture for the built-in global console.
+          if (!stream && target === globalThis.console) stream = target._stderr
+          writeDescriptor = stream && Object.getOwnPropertyDescriptor(stream, 'write')
+          let originalWriteDescriptor = writeDescriptor
+          if (!originalWriteDescriptor && stream) {
+            originalWriteDescriptor = getPropertyDescriptor(Object.getPrototypeOf(stream), 'write')
+          }
+          originalWrite = originalWriteDescriptor && Object.hasOwn(originalWriteDescriptor, 'value')
+            ? originalWriteDescriptor.value
+            : stream?.write
           if (typeof originalWrite === 'function') {
-            writeDescriptor = Object.getOwnPropertyDescriptor(stream, 'write')
             wrappedWrite = function (chunk) {
-              if (!captureActive) return originalWrite.apply(this, arguments)
+              if (!captureActive || writeActive) return originalWrite.apply(this, arguments)
 
+              writeActive = true
               const previousWriteId = activeWriteId
               const previousExpectedWrite = expectedWrite
               const isNewWrite = expectedWrite !== wrappedWrite
@@ -175,6 +195,7 @@ function wrapConsole (target, captureLogHolder) {
               } finally {
                 activeWriteId = previousWriteId
                 expectedWrite = previousExpectedWrite
+                writeActive = false
               }
             }
             writeInstallationAttempted = true

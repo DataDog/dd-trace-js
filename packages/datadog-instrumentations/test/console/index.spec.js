@@ -199,6 +199,56 @@ describe('console instrumentation', () => {
     ])
   })
 
+  it('does not replace a console record with a reentrant direct stream write', () => {
+    const output = []
+    let hasReentered = false
+    const stream = {
+      write (message) {
+        output.push(message)
+        if (!hasReentered) {
+          hasReentered = true
+          stream.write('auxiliary write\n')
+        }
+      },
+    }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('actual warning')
+
+    assert.deepStrictEqual(output, ['actual warning\n', 'auxiliary write\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'actual warning' }])
+  })
+
+  it('does not read an accessor-backed stderr while instrumenting a console call', () => {
+    const stream = { write: sinon.stub() }
+    let stderrReads = 0
+    const target = {
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    Object.defineProperty(target, '_stderr', {
+      configurable: true,
+      get () {
+        if (++stderrReads > 1) throw new Error('unexpected stderr read')
+        return stream
+      },
+    })
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.strictEqual(stderrReads, 1)
+    sinon.assert.calledOnceWithExactly(stream.write, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('skips accessor-backed replacement console methods', () => {
     const stream = { write: sinon.stub() }
     const target = {
