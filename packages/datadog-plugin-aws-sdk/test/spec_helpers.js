@@ -13,6 +13,25 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
  * @param {object} params Operation parameters.
  * @returns {Promise<object>} Resolves with the operation result.
  */
+function callViaCallback (client, method, params) {
+  return new Promise((resolve, reject) => {
+    const operation = client[method](params, (error, result) => {
+      if (error) {
+        reject(error)
+      } else {
+        resolve(result)
+      }
+    })
+    Promise.resolve(operation).catch(reject)
+  })
+}
+
+/**
+ * @param {object} client AWS client (v2 service instance or v3 aggregated client).
+ * @param {string} method Operation name, e.g. `getRecords` or `sendMessage`.
+ * @param {object} params Operation parameters.
+ * @returns {Promise<object>} Resolves with the operation result.
+ */
 function callViaPromise (client, method, params) {
   const result = client[method](params)
   // v2 returns an AWS.Request exposing `.promise()`; v3's aggregated client returns a Promise directly.
@@ -79,6 +98,7 @@ function getAwsSdkV3Range (range) {
 }
 
 const helpers = {
+  callViaCallback,
   callViaPromise,
   sort,
   withAwsSdkV2Versions,

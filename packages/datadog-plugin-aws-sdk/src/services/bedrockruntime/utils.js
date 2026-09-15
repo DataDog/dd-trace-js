@@ -500,6 +500,8 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
       if (block == null || typeof block !== 'object') continue
       if (typeof block.text === 'string') {
         content += block.text
+      } else if (typeof block.guardContent?.text?.text === 'string') {
+        content += block.guardContent.text.text
       } else if (block.toolUse) {
         toolCalls.push(buildToolCall(block.toolUse))
       } else if (block.toolResult) {
@@ -611,7 +613,11 @@ function extractRequestParamsConverse (params) {
   const prompt = []
   if (params.system) {
     for (const block of params.system) {
-      if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+      if (typeof block?.text === 'string') {
+        prompt.push({ content: block.text, role: 'system' })
+      } else if (typeof block?.guardContent?.text?.text === 'string') {
+        prompt.push({ content: block.guardContent.text.text, role: 'system' })
+      }
     }
   }
   if (params.messages) {

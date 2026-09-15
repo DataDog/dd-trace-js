@@ -99,11 +99,7 @@ module.exports = [
       versionRange: '>=1.60.0',
       filePath: 'lib/coreBundle.js',
     },
-    astQuery: 'AssignmentExpression[left.name="Page2"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async], ' +
-      'VariableDeclarator[id.name="Page2"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async], ' +
-      'ClassDeclaration[id.name="Page2"] > ClassBody > ' +
+    astQuery: 'ClassExpression[id.name="_Page"] > ClassBody > ' +
       'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async]',
     functionQuery: {
       methodName: 'goto',

@@ -638,7 +638,7 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
 
 let querySubscribed = false
 
-for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
+for (const hook of getHooks('@anthropic-ai/claude-agent-sdk').values()) {
   hook.file = null
 
   addHook(hook, exports => {

@@ -253,6 +253,18 @@ describe('release changelog', () => {
     ].join('\n'))
   })
 
+  it('normalizes repeated whitespace before pull request numbers', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'fix: trim release-note whitespace   (#1234)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Fixes',
+      `- **General:** Trim release-note whitespace ${prLink(1234)}`,
+      '',
+    ].join('\n'))
+  })
+
   it('ignores empty scopes in multi-scope subjects', () => {
     const changelog = createReleaseChangelog([
       {

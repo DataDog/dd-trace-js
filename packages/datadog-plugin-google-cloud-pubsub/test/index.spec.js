@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -220,7 +219,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should give the current span a parentId from the sender', async () => {
+          it('should parent the first batch message to the Pub/Sub request span', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -234,17 +233,27 @@ describe('Plugin', () => {
             const [topic] = await pubsub.createTopic(topicName)
             const [sub] = await topic.createSubscription('foo')
             sub.on('message', msg => {
-              const activeSpan = tracer.scope().active()
-              if (activeSpan) {
-                const receiverSpanContext = activeSpan.context()
-                assert.ok(
-                  typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null,
-                  `Expected non-null object, got ${inspect(receiverSpanContext._parentId)}`
-                )
-              }
+              const receiverSpanContext = tracer.scope().active().context()
+              const traceIdLower = msg.attributes['_dd.pubsub_request.trace_id']
+              const traceIdUpper = msg.attributes['_dd.pubsub_request.p.tid']
+
+              assert.strictEqual(
+                receiverSpanContext.toTraceId(true),
+                traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
+              )
+              assert.strictEqual(
+                receiverSpanContext._parentId.toString(16).padStart(16, '0'),
+                msg.attributes['_dd.pubsub_request.span_id']
+              )
               msg.ack()
             })
-            await publish(topic, { data: Buffer.from('hello') })
+            await publish(topic, {
+              data: Buffer.from('hello'),
+              attributes: {
+                'x-datadog-trace-id': '42',
+                'x-datadog-parent-id': '43',
+              },
+            })
             return expectedSpanPromise
           })
 
@@ -596,6 +605,6 @@ function publish (topic, options) {
   if (topic.publishMessage) {
     return topic.publishMessage(options)
   } else {
-    return topic.publish(options.data)
+    return topic.publish(options.data, options.attributes)
   }
 }

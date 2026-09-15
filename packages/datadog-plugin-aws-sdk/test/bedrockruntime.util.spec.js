@@ -6,6 +6,7 @@ const { describe, it } = require('mocha')
 
 const {
   extractRequestParams,
+  extractRequestParamsConverse,
   extractMessagesFromConverseContent,
   extractTextAndResponseReasonConverseFromStream,
   PROVIDER,
@@ -71,6 +72,36 @@ describe('bedrockruntime utils', () => {
         type: 'tool_result',
       }],
     })
+  })
+
+  it('reads the text of Converse guardContent blocks', () => {
+    const message = extractMessagesFromConverseContent('user', [
+      { text: 'Context: ' },
+      { guardContent: { text: { text: 'What is the dose?', qualifiers: ['guard_content'] } } },
+      { text: ' Cite sources.' },
+    ])
+
+    assert.deepStrictEqual(message, {
+      role: 'user',
+      content: 'Context: What is the dose? Cite sources.',
+    })
+  })
+
+  it('reads guarded text from Converse system blocks', () => {
+    const requestParams = extractRequestParamsConverse({
+      system: [
+        { text: 'Follow the policy. ' },
+        { guardContent: { text: { text: 'Do not expose secrets.', qualifiers: ['guard_content'] } } },
+        { guardContent: { image: { format: 'png', source: { bytes: Buffer.from('image') } } } },
+      ],
+      messages: [{ role: 'user', content: [{ text: 'Summarize the document.' }] }],
+    })
+
+    assert.deepStrictEqual(requestParams.prompt, [
+      { content: 'Follow the policy. ', role: 'system' },
+      { content: 'Do not expose secrets.', role: 'system' },
+      { content: 'Summarize the document.', role: 'user' },
+    ])
   })
 
   describe('converse stream extractor', () => {

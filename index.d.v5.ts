@@ -308,6 +308,7 @@ interface Plugins {
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
+  "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -3429,6 +3430,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Supabase JavaScript client](https://github.com/supabase/supabase-js).
+     */
+    interface supabase extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
@@ -3473,6 +3480,10 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider {
+      shutdown(callback?: (error: Error | null) => void): void;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */

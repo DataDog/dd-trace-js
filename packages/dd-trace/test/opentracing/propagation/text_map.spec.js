@@ -846,6 +846,37 @@ describe('TextMapPropagator', () => {
   })
 
   describe('extract', () => {
+    it('should return null instead of throwing when the carrier is undefined', () => {
+      setBaggageItem('stale', 'leftover')
+
+      assert.strictEqual(propagator.extract(undefined), null)
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
+    it('should return null instead of throwing when the carrier is null', () => {
+      setBaggageItem('stale', 'leftover')
+
+      assert.strictEqual(propagator.extract(null), null)
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
+    it('should clear pre-existing baggage when the carrier is a primitive', () => {
+      setBaggageItem('stale', 'leftover')
+      const outboundCarrier = {}
+
+      assert.strictEqual(propagator.extract('payload'), null)
+      propagator.inject(undefined, outboundCarrier)
+
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+      assert.strictEqual(outboundCarrier.baggage, undefined)
+    })
+
+    it('should return null when the carrier is not an object', () => {
+      const carrier = Object.assign(() => {}, textMap)
+
+      assert.strictEqual(propagator.extract(carrier), null)
+    })
+
     it('should extract a span context from the carrier', () => {
       const carrier = textMap
       const spanContext = propagator.extract(carrier)
@@ -1326,6 +1357,10 @@ describe('TextMapPropagator', () => {
 
     it('should return null for an aws-sqsd header that parses to null', () => {
       assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': 'null' }), null)
+    })
+
+    it('should return null for an aws-sqsd header that parses to a non-object', () => {
+      assert.strictEqual(propagator.extract({ 'x-aws-sqsd-attr-_datadog': '"carrier"' }), null)
     })
 
     it('should return null when the carrier carries a trace id but no parent id', () => {
@@ -2450,6 +2485,7 @@ describe('TextMapPropagator', () => {
 
       afterEach(() => {
         delete process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
+        removeAllBaggageItems()
       })
 
       it('should reset span links when Trace_Propagation_Behavior_Extract is set to ignore', () => {
@@ -2485,6 +2521,7 @@ describe('TextMapPropagator', () => {
       })
 
       it('should not extract baggage when Trace_Propagation_Behavior_Extract is set to ignore', () => {
+        setBaggageItem('existing', 'value')
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
         config = getConfigFresh({
           tracePropagationStyle: {
@@ -2500,7 +2537,17 @@ describe('TextMapPropagator', () => {
         propagator = new TextMapPropagator(config)
         propagator.extract(textMap)
 
-        assert.deepStrictEqual(getAllBaggageItems(), {})
+        assert.deepStrictEqual(getAllBaggageItems(), { existing: 'value' })
+      })
+
+      it('should preserve existing baggage for an invalid carrier when extraction behavior is ignore', () => {
+        setBaggageItem('existing', 'value')
+        process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
+        config = getConfigFresh()
+        propagator = new TextMapPropagator(config)
+
+        assert.strictEqual(propagator.extract('payload'), null)
+        assert.deepStrictEqual(getAllBaggageItems(), { existing: 'value' })
       })
 
       it('returns null without throwing when ignore mode has no matching extractors', () => {

@@ -180,7 +180,32 @@ function buildOutputMessages (inputMessages, content) {
   return []
 }
 
+/**
+ * Converts Vercel stream chunks into the content shape a doGenerate result carries.
+ *
+ * @param {Array<object>} chunks
+ * @returns {Array<object>}
+ */
+function getStreamedContent (chunks) {
+  const toolCalls = []
+  let text = ''
+
+  for (const chunk of chunks) {
+    if (chunk?.type === 'tool-call') {
+      toolCalls.push(chunk)
+    } else if (chunk?.type === 'text-delta') {
+      // AI SDK 6 renamed `textDelta` to `delta`; both shapes are supported. Coalesced with `??`
+      // because a missing delta must contribute nothing, not "undefined".
+      text += chunk.delta ?? chunk.textDelta ?? ''
+    }
+  }
+
+  if (toolCalls.length) return toolCalls
+  return text ? [{ type: 'text', text }] : []
+}
+
 module.exports = {
+  getStreamedContent,
   convertVercelPromptToMessages,
   convertFilePartToImageUrl,
   buildToolCallOutputMessages,

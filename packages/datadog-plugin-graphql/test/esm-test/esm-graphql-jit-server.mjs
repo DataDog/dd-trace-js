@@ -1,9 +1,12 @@
 import 'dd-trace/init.js'
+import tracer from 'dd-trace'
 import { createServer } from 'node:http'
 
 import dc from 'dc-polyfill'
 import * as graphql from 'graphql'
 import { compileQuery } from 'graphql-jit'
+
+tracer.use('graphql', { source: true })
 
 const User = new graphql.GraphQLObjectType({
   name: 'User',

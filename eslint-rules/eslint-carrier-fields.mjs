@@ -516,7 +516,7 @@ export default {
       context.report({ node, messageId })
     }
 
-    return {
+    const listeners = {
       /**
        * @param {import('eslint').CodePath} codePath
        * @param {import('estree').Node} node
@@ -534,7 +534,6 @@ export default {
 
       onCodePathEnd () {
         const frame = codePathFrames.pop()
-        if (!strictCarrierIdentifiers) return
         completedCodePathFrames.push(frame)
         if (frame.node.type === 'Program') analyzeCodePaths()
       },
@@ -660,6 +659,7 @@ export default {
           if (!checkObjectPattern(node.left, node.right)) recordCarrierCheck(node.right, node)
           return
         }
+        if (!strictCarrierIdentifiers) return
 
         const variable = findVariable(node.left)
         if (variable) {
@@ -692,6 +692,11 @@ export default {
             isCarrierModuleReference(node.init.object)) {
           context.report({ node, messageId: 'aliasCarrierOperation' })
         }
+        if (!strictCarrierIdentifiers) {
+          if (node.id.type === 'ObjectPattern' && node.init) checkObjectPattern(node.id, node.init)
+          return
+        }
+
         recordCarrierFunctions(node)
         if (node.id.type === 'ObjectPattern' && node.init) {
           if (!checkObjectPattern(node.id, node.init)) recordCarrierCheck(node.init, node)
@@ -731,6 +736,16 @@ export default {
           recordCodePathEvent({ type: 'write', variable, expression: node, preserve: false })
         }
       },
+    }
+
+    if (strictCarrierIdentifiers) return listeners
+    return {
+      'MemberExpression:exit': listeners['MemberExpression:exit'],
+      'ObjectExpression > Property': listeners['ObjectExpression > Property'],
+      'BinaryExpression:exit': listeners['BinaryExpression:exit'],
+      'CallExpression:exit': listeners['CallExpression:exit'],
+      'AssignmentExpression:exit': listeners['AssignmentExpression:exit'],
+      'VariableDeclarator:exit': listeners['VariableDeclarator:exit'],
     }
   },
 }
