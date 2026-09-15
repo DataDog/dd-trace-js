@@ -16,11 +16,16 @@ const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 const TraceState = require('../../../src/opentracing/propagation/tracestate')
 const { setBaggageItem, getBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../../src/baggage')
-const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../../ext/priority')
-const { SAMPLING_MECHANISM_MANUAL } = require('../../../src/constants')
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../../ext/priority')
+const {
+  SAMPLING_MECHANISM_MANUAL,
+  SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
+} = require('../../../src/constants')
 
 // v5 spells single-header B3 propagation as `'b3 single header'`; v6+ reuses `'b3'` for it.
 const B3_SINGLE_STYLE = DD_MAJOR >= 6 ? 'b3' : 'b3 single header'
+const B3_MULTI_STYLE = DD_MAJOR >= 6 ? 'b3multi' : 'b3'
 
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
@@ -1234,6 +1239,18 @@ describe('TextMapPropagator', () => {
       })
     })
 
+    for (const mechanism of [SAMPLING_MECHANISM_APPSEC, SAMPLING_MECHANISM_AI_GUARD]) {
+      it(`should extract product sampling mechanism ${mechanism} from Datadog trace tags`, () => {
+        textMap['x-datadog-sampling-priority'] = `${USER_KEEP}`
+        textMap['x-datadog-tags'] = `_dd.p.dm=-${mechanism}`
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+        assert.strictEqual(spanContext._sampling.mechanism, mechanism)
+      })
+    }
+
     it('should preserve separators and empty trace tag values', () => {
       textMap['x-datadog-tags'] = '_dd.p.empty,_dd.p.also_empty,_dd.p.foo=bar=baz'
 
@@ -1499,13 +1516,204 @@ describe('TextMapPropagator', () => {
 
     it('should always extract tracestate from tracecontext when trace IDs match', () => {
       textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
-      textMap.tracestate = 'other=bleh,dd=t.foo_bar_baz_:abc_!@#$%^&*()_+`-~;s:2;o:foo;t.dm:-4'
+      textMap.tracestate = 'other=bleh,ot=rv:ffffffffffffff;th:8'
       config.tracePropagationStyle.extract = ['datadog']
+      config.tracePropagationStyle.inject = ['tracecontext']
 
-      const carrier = textMap
-      const spanContext = propagator.extract(carrier)
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
 
+      assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
       assert.strictEqual(spanContext._tracestate.get('other'), 'bleh')
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
+    })
+
+    it('should clear conflicting W3C sampling state during implicit tracecontext merging', () => {
+      textMap['x-datadog-sampling-priority'] = '0'
+      textMap.traceparent = '00-0000000000000000000000000000007B-0000000000000456-01'
+      textMap.tracestate = 'other=bleh,dd=t.dm:-3,ot=rv:ffffffffffffff;th:8'
+      config.tracePropagationStyle.extract = ['datadog']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff(?:,|$)/)
+      assert.doesNotMatch(carrier.tracestate, /t\.dm:/)
+    })
+
+    it('should propagate tracecontext tracestate when matching B3 headers take precedence', () => {
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap = {
+        b3: `${traceId}-${spanId}-1`,
+        traceparent: `00-${traceId}-${spanId}-01`,
+        tracestate: 'ot=rv:123456789abcde;th:8',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._tracestate.get('ot'), 'rv:123456789abcde;th:8')
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:123456789abcde;th:8(?:,|$)/)
+    })
+
+    it('should merge implicit tracecontext state into a matching B3 context', () => {
+      const traceId = '0000000000000000000000000000007b'
+      const spanId = '00000000000001c8'
+      textMap = {
+        b3: `${traceId}-${spanId}`,
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        traceparent: `00-${traceId}-${spanId}-01`,
+        tracestate: 'ot=rv:ffffffffffffff;th:8',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'datadog']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.priority, AUTO_KEEP)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;th:8(?:,|$)/)
+    })
+
+    it('should inherit a tracecontext drop when matching B3 headers omit a sampling decision', () => {
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap = {
+        b3: `${traceId}-${spanId}`,
+        traceparent: `00-${traceId}-${spanId}-00`,
+        tracestate: 'ot=rv:00000000000000;th:8',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
+      assert.match(carrier.traceparent, /-00$/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:00000000000000;th:8(?:,|$)/)
+    })
+
+    it('should inherit tracecontext sampling metadata when matching Datadog headers omit a decision', () => {
+      textMap = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
+        tracestate: 'dd=s:2;t.dm:-5,ot=rv:ffffffffffffff',
+      }
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      assert.strictEqual(spanContext._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
+      assert.strictEqual(spanContext._trace.tags['_dd.p.dm'], '-5')
+      assert.match(carrier.traceparent, /-01$/)
+      assert.match(carrier.tracestate, /(?:^|,)dd=s:2;t\.dm:-5(?:,|$)/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff(?:,|$)/)
+    })
+
+    for (const [decision, priority, flag, randomValue] of [
+      ['keep', USER_KEEP, '01', 'ffffffffffffff'],
+      ['drop', USER_REJECT, '00', '00000000000000'],
+    ]) {
+      it(`should preserve W3C probability state for an agreeing Datadog rule ${decision}`, () => {
+        textMap = {
+          'x-datadog-trace-id': '123',
+          'x-datadog-parent-id': '456',
+          'x-datadog-sampling-priority': `${priority}`,
+          traceparent: `00-0000000000000000000000000000007b-00000000000001c8-${flag}`,
+          tracestate: `dd=t.dm:-3,ot=rv:${randomValue};th:8`,
+        }
+        config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+        config.tracePropagationStyle.inject = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        const carrier = propagator.inject(spanContext, {})
+
+        assert.strictEqual(spanContext._sampling.priority, priority)
+        assert.match(carrier.tracestate, new RegExp(`(?:^|,)dd=s:${priority};t\\.dm:-3(?:,|$)`))
+        assert.match(carrier.tracestate, new RegExp(`(?:^|,)ot=rv:${randomValue};th:8(?:,|$)`))
+      })
+    }
+
+    for (const [style, b3Headers] of [
+      [B3_SINGLE_STYLE, { b3: '1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-d' }],
+      [B3_MULTI_STYLE, {
+        'x-b3-traceid': '1111aaaa2222bbbb3333cccc4444dddd',
+        'x-b3-spanid': '5555eeee6666ffff',
+        'x-b3-flags': '1',
+      }],
+    ]) {
+      it(`should clear the W3C threshold when a selected ${style} debug decision agrees with tracecontext`, () => {
+        const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+        const spanId = '5555eeee6666ffff'
+        textMap = {
+          ...b3Headers,
+          traceparent: `00-${traceId}-${spanId}-01`,
+          tracestate: 'dd=t.dm:-3,ot=rv:ffffffffffffff;th:8;vendor:value',
+        }
+        config.tracePropagationStyle.extract = [style, 'tracecontext']
+        config.tracePropagationStyle.inject = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+        const carrier = propagator.inject(spanContext, {})
+
+        assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+        assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+        assert.match(carrier.traceparent, /-01$/)
+        assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;vendor:value(?:,|$)/)
+        assert.doesNotMatch(carrier.tracestate, /t\.dm:/)
+      })
+    }
+
+    it('should clear the W3C threshold when a selected B3 keep conflicts with tracecontext', () => {
+      const traceId = '1111aaaa2222bbbb3333cccc4444dddd'
+      const spanId = '5555eeee6666ffff'
+      textMap = {
+        b3: `${traceId}-${spanId}-1`,
+        traceparent: `00-${traceId}-${spanId}-00`,
+        tracestate: 'ot=rv:00000000000000;th:8;vendor:value',
+      }
+      config.tracePropagationStyle.extract = [B3_SINGLE_STYLE, 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+      assert.match(carrier.traceparent, /-01$/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:00000000000000;vendor:value(?:,|$)/)
+    })
+
+    it('should clear the W3C sampling state when a selected Datadog drop conflicts with tracecontext', () => {
+      textMap = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        'x-datadog-sampling-priority': '-1',
+        traceparent: '00-0000000000000000000000000000007b-00000000000001c8-01',
+        tracestate: 'other=bleh,dd=t.dm:-3,ot=rv:ffffffffffffff;th:8;vendor:value',
+      }
+      config.tracePropagationStyle.extract = ['datadog', 'tracecontext']
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      const spanContext = propagator.extract(textMap)
+      const carrier = propagator.inject(spanContext, {})
+
+      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+      assert.match(carrier.traceparent, /-00$/)
+      assert.match(carrier.tracestate, /(?:^|,)ot=rv:ffffffffffffff;vendor:value(?:,|$)/)
+      assert.match(carrier.tracestate, /(?:^|,)dd=s:-1(?:,|$)/)
+      assert.doesNotMatch(carrier.tracestate, /t\.dm:/)
     })
 
     it('should read tracecontext once while resolving multiple propagation styles', () => {

@@ -46,6 +46,16 @@ describe('TraceState', () => {
     assert.strictEqual(called, true)
   })
 
+  it('should parse more than 32 fields within a vendor member', () => {
+    const fields = Array.from({ length: 40 }, (_, index) => `k${index}:v`).join(';')
+    const ts = TraceState.fromString(`ot=${fields}`)
+
+    ts.forVendor('ot', state => {
+      assert.strictEqual(state.size, 40)
+      assert.strictEqual(state.get('k39'), 'v')
+    })
+  })
+
   it('should mutate value in tracestate when changing value', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
@@ -76,6 +86,14 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'dd=s:2;t.dm:-4,other=bleh')
   })
 
+  it('should not rewrite a vendor after deleting a missing value', () => {
+    const ts = TraceState.fromString('other=bleh,dd=s:2')
+
+    ts.forVendor('dd', state => state.delete('missing'))
+
+    assert.strictEqual(ts.toString(), 'other=bleh,dd=s:2')
+  })
+
   it('should remove value from tracestate when clearing values', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
 
@@ -91,10 +109,39 @@ describe('TraceState', () => {
     assert.strictEqual(ts.toString(), 'other=bleh')
   })
 
+  it('should clone without sharing mutations', () => {
+    const original = TraceState.fromString('other=bleh,dd=s:2')
+    const clone = original.clone()
+
+    clone.delete('other')
+    clone.set('dd', 's:1')
+
+    assert.strictEqual(original.toString(), 'other=bleh,dd=s:2')
+    assert.strictEqual(clone.toString(), 'dd=s:1')
+  })
+
   it('should cap parsing at 32 list-members per W3C Trace Context §3.3.1.2', () => {
     const header = Array.from({ length: 33 }, (_, index) => `k${index}=v${index}`).join(',')
     const ts = TraceState.fromString(header)
     assert.strictEqual(ts.size, 32)
+  })
+
+  it('should keep the 32 leftmost list-members after updates', () => {
+    const header = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`).join(',')
+    const ts = TraceState.fromString(header)
+    ts.set('ot', 'rv:f0948a54d43b8e;th:8')
+    ts.set('dd', 's:1')
+
+    const members = ts.toString().split(',')
+    assert.strictEqual(members.length, 32)
+    assert.deepStrictEqual(members.slice(0, 3), ['dd=s:1', 'ot=rv:f0948a54d43b8e;th:8', 'k0=v0'])
+    assert.strictEqual(members[31], 'k29=v29')
+  })
+
+  it('should not impose an aggregate byte limit', () => {
+    const ts = TraceState.fromString(`a=${'x'.repeat(511)}`)
+
+    assert.strictEqual(Buffer.byteLength(ts.toString()), 513)
   })
 
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
