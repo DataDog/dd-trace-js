@@ -18,8 +18,12 @@ const buildTags = require('./tags')
 module.exports = send
 
 const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
-const MAX_LOG_PAYLOAD_SIZE_MB = 1
-const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
+// The backend caps a single debugger event at 1 MiB, but measures the CBOR-encoded event *after* the
+// intake has enriched it with host tags, `ddtags` and other metadata we cannot size from here. Leave
+// the same 4 KiB of headroom as dd-trace-go: crossing the backend cap is worse than pruning, since
+// its truncation destroys the log message before it drops the snapshot.
+const BACKEND_ENRICHMENT_HEADROOM_BYTES = 4 * 1024
+const MAX_LOG_PAYLOAD_SIZE_BYTES = 1024 * 1024 - BACKEND_ENRICHMENT_HEADROOM_BYTES
 
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
