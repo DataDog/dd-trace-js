@@ -59,7 +59,6 @@ function asTracerConfig (config) {
 /**
  * @param {import('../config/config-base')} config
  * @param {string} source
- * @returns {string}
  */
 function getLogSubmissionPath (config, source) {
   return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service: config.service })}`
@@ -149,7 +148,6 @@ class LogSubmissionPlugin extends Plugin {
 
   /**
    * @param {boolean | (Record<string, unknown> & { enabled: boolean })} config
-   * @returns {void}
    */
   configure (config) {
     if (this._enabled) this.#flushLogs()
@@ -171,7 +169,6 @@ class LogSubmissionPlugin extends Plugin {
 
   /**
    * @param {{ source: string, message: string | Record<string, unknown> }} payload
-   * @returns {void}
    */
   #enqueueLog ({ source, message }) {
     if (!this.#logSubmissionUrl) return
@@ -210,9 +207,6 @@ class LogSubmissionPlugin extends Plugin {
     }
   }
 
-  /**
-   * @returns {void}
-   */
   #flushLogs () {
     clearTimeout(this.#timer)
     this.#timer = undefined

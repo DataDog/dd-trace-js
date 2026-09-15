@@ -45,7 +45,6 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
  * Resolves a path without failing Test Optimization when the path is unavailable.
  *
  * @param {string} filepath
- * @returns {string}
  */
 function realpath (filepath) {
   try {

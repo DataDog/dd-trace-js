@@ -91,8 +91,8 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
 }
 
 /**
+ * Returns whether the scope variables are collected into the snapshot.
  * @param {import('inspector').Debugger.Scope} scope
- * @returns {boolean} Whether the variables of the scope are collected into the snapshot
  */
 function isCollectable (scope) {
   // The global scope is too noisy, and a scope without an object id is possible according to the types
@@ -245,7 +245,6 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
  * Extract the error message from the exception details.
  *
  * @param {import('inspector').Runtime.ExceptionDetails} exceptionDetails - The exception details
- * @returns {string} The error message
  */
 function extractErrorMessage (exceptionDetails) {
   const description = exceptionDetails.exception?.description
