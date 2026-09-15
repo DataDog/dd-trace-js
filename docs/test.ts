@@ -790,9 +790,141 @@ llmobs.annotate(span, {
 })
 
 
+// experiments: evaluators and control plane (type-checked only; never executed)
+async function llmobsExperimentsTypes () {
+  // experiments: built-in evaluators
+  const {
+    LengthEvaluator,
+    JSONEvaluator,
+    StringCheckEvaluator,
+    RegexMatchEvaluator,
+    SemanticSimilarityEvaluator,
+    LLMJudge,
+    BooleanStructuredOutput,
+    ScoreStructuredOutput,
+    CategoricalStructuredOutput,
+    EvaluatorResult
+  } = llmobs.evaluators
+
+  const judge = new LLMJudge({
+    userPrompt: 'Is {{output_data}} a good answer to {{input_data}}?',
+    provider: 'openai',
+    model: 'gpt-4o',
+    structuredOutput: new BooleanStructuredOutput({ description: 'correct', reasoning: true }),
+    modelCall: async (request) => {
+      request.messages[0].content
+      request.jsonSchema
+      return JSON.stringify({ boolean_eval: true, reasoning: 'ok' })
+    }
+  })
+
+  const experimentWithEvaluators = llmobs.experiments.experiment({
+    name: 'exp',
+    dataset: llmobs.experiments.createDataset('ds'),
+    task: (input) => input,
+    evaluators: [
+      new LengthEvaluator({ minLength: 1, maxLength: 100, countType: 'words' }),
+      new JSONEvaluator({ requiredKeys: ['answer'] }),
+      new StringCheckEvaluator({ operation: 'icontains', stripWhitespace: true }),
+      new RegexMatchEvaluator({ pattern: /^yes/i, matchMode: 'fullmatch' }),
+      new SemanticSimilarityEvaluator({ embeddingFn: async (text) => [text.length], threshold: 0.9 }),
+      judge,
+      (input, output, expectedOutput, context) => new EvaluatorResult(output === expectedOutput, {
+        reasoning: `span ${context.spanId}`,
+        assessment: 'pass',
+        tags: { source: 'callback' }
+      })
+    ],
+    summaryEvaluators: {
+      passRate: (inputs, outputs, expectedOutputs, evaluatorResults) => evaluatorResults.LengthEvaluator.length
+    }
+  })
+  experimentWithEvaluators.run().then(result => result.rows[0].evaluationDetails?.LengthEvaluator?.assessment)
+
+  new ScoreStructuredOutput({ minScore: 0, maxScore: 10, minThreshold: 7 }).toJsonSchema()
+  new CategoricalStructuredOutput({ categories: ['good', 'bad'], passValues: ['good'] }).label
+
+  // experiments: control plane
+  llmobs.experiments.publishEvaluator(judge, { agentService: 'my-agent', variableMapping: { question: 'input_data' } })
+    .then(({ uiUrl }) => uiUrl)
+  llmobs.experiments.pullExperiment('experiment-id').then(pulled => {
+    pulled.projectName
+    pulled.result.rows[0].evaluations
+  })
+  llmobs.experiments.listExperiments({ experimentName: 'exp', metadataFilter: { tags: ['git.commit.sha:abc'] }, maxResults: 10 })
+    .then(summaries => summaries[0].tags.project_name)
+  llmobs.experiments.createDatasetFromCsv({
+    csvPath: './data.csv',
+    datasetName: 'csv-dataset',
+    inputDataColumns: ['question'],
+    expectedOutputColumns: ['answer'],
+    metadataColumns: ['source'],
+    csvDelimiter: ';',
+    idColumn: 'id',
+    deduplicate: false
+  }).then(dataset => dataset.records().length)
+
+  // experiments: prompt optimization
+  const optimization = llmobs.experiments.optimizePrompt({
+    name: 'opt',
+    dataset: llmobs.experiments.createDataset('ds'),
+    task: (input, config) => `${config?.prompt}:${JSON.stringify(input)}`,
+    optimizationTask: async ({ systemPrompt, userPrompt, messages, model, config }) => {
+      systemPrompt.length + userPrompt.length + messages.length
+      model ?? config.modelName
+      return 'improved prompt'
+    },
+    evaluators: { correct: (input, output, expectedOutput) => output === expectedOutput },
+    summaryEvaluators: { accuracy: (inputs, outputs) => outputs.length },
+    computeScore: (summary) => summary.accuracy.value,
+    labelize: (row) => (row.evaluations.correct ? 'Correct' : 'Incorrect'),
+    stoppingCondition: (summary) => summary.accuracy.value >= 1,
+    config: { prompt: 'Answer.', modelName: 'gpt-4o', evaluationOutputFormat: { answer: 'string' }, runs: 1 },
+    maxIterations: 2,
+    projectName: 'my-project',
+    tags: { team: 'llm' },
+    datasetSplit: [0.8, 0.2],
+    testDataset: 'holdout'
+  })
+  optimization.name
+  optimization.run({ concurrency: 2 }).then(result => {
+    const best: string = result.bestPrompt
+    const score: number | null = result.bestScore
+    result.bestIteration + result.totalIterations
+    result.bestExperimentUrl?.length
+    result.testScore ?? result.testExperimentUrl ?? result.testResults?.rows.length
+    result.getHistory()[0].results.experimentId
+    result.getHistory()[0].trainExperimentUrl
+    result.getScoreHistory().length + result.getPromptHistory().length
+    result.iterations[0].summaryEvaluations.accuracy.error
+    return best + score + result.summary()
+  })
+}
 
 // flush
 llmobs.flush()
+
+async function promptManagementExamples () {
+  const managedPrompt = await tracer.llmobs.prompts.get('welcome', {
+    env: 'production',
+    fallback: 'Hello {name}!'
+  })
+  const renderedPrompt: string | import('..').llmobs.PromptMessage[] = managedPrompt.render({ name: 'Ada' })
+  const renderedChatPrompt = managedPrompt.renderChat({ name: 'Ada' })
+  const annotationPrompt = managedPrompt.toAnnotation({ name: 'Ada' })
+  tracer.llmobs.annotate({ prompt: annotationPrompt })
+  await tracer.llmobs.prompts.create({ id: 'welcome', template: 'Hello {name}!' })
+  await tracer.llmobs.prompts.createVersion('welcome', { template: 'Hi {name}!' })
+  await tracer.llmobs.prompts.update('welcome', { description: 'Greeting' })
+  await tracer.llmobs.prompts.updateVersion('welcome', '2', { description: 'Greeting v2' })
+  await tracer.llmobs.prompts.list()
+  await tracer.llmobs.prompts.listVersions('welcome')
+  await tracer.llmobs.prompts.refresh('welcome')
+  await tracer.llmobs.prompts.delete('welcome')
+  tracer.llmobs.prompts.clearCache()
+  void renderedPrompt
+  void renderedChatPrompt
+}
 
 
 // AI Guard typings tests
