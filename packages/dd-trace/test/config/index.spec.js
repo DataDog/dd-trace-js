@@ -1936,7 +1936,7 @@ describe('Config', () => {
         'DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE (source: env_var), picked default'
     )
     assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
-    assert.strictEqual(config.getOrigin('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'), 'env_var')
+    assert.strictEqual(config.getOrigin('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'), 'default')
   })
 
   it('should transform safe programmatic option types', () => {
