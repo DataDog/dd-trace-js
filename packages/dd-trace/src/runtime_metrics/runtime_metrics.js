@@ -50,7 +50,7 @@ module.exports = {
     const trackGc = config.runtimeMetrics.gc !== false
 
     client = createMetricsClient(config)
-    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config)
+    unsubscribeIdentityRefresh = subscribeToIdentityRefresh(client, config, resetSamplerBaselines)
 
     if (trackGc) {
       startGCObserver()
@@ -173,6 +173,36 @@ module.exports = {
     capture?.()
     client.flush(done)
   },
+}
+
+/**
+ * Rebases the CPU/event-loop/ELU sampler baselines to now. Without this, a MicroVM clone's first
+ * capture after resume would report a delta spanning the snapshot pause instead of just the time
+ * since resume.
+ * @returns {void}
+ */
+function resetSamplerBaselines () {
+  lastTime = performance.now()
+  lastElu = performance.eventLoopUtilization()
+
+  if (lastCpuUsage !== null) {
+    lastCpuUsage = process.cpuUsage()
+  }
+
+  if (eventLoopDelayObserver) {
+    eventLoopDelayObserver.disable()
+    eventLoopDelayObserver.reset()
+    eventLoopDelayObserver.enable()
+  }
+
+  // Drains the addon's own CPU/event-loop/GC accumulators, which stats() otherwise reports as a
+  // delta since the last call - without this, the first post-resume capture would include
+  // pre-snapshot activity.
+  nativeMetrics?.stats()
+
+  // Discards any GC entries recorded but not yet delivered to the observer's callback, so a GC
+  // pause from just before the snapshot isn't attributed to the clone's first post-resume sample.
+  gcObserver?.takeRecords()
 }
 
 function captureCpuUsage () {
