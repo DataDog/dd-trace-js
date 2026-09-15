@@ -135,14 +135,33 @@ function createConnection (emitter) {
   const reference = new WeakRef(session)
   liveSessions.add(reference)
 
-  const finalize = () => {
+  /**
+   * @param {boolean} [failed] - Whether the connection ended abnormally, so a response still in
+   *   flight is reported as failed rather than as a clean finish.
+   * @returns {void}
+   */
+  const finalize = (failed = false) => {
     liveSessions.delete(reference)
-    session.finishSession(Date.now())
+    session.finishSession(Date.now(), failed)
   }
 
   const connection = { session, finalize }
   attachSocketClose(emitter, finalize)
   return connection
+}
+
+// Close codes that mean the conversation ended on purpose: a normal close, the peer going away, and
+// the "no status received" code `ws` reports for a close frame that carried none. Anything else — a
+// dropped connection (1006), an internal error (1011) — cut a response short, so a turn still in
+// flight is a failure rather than a clean finish.
+const NORMAL_CLOSE_CODES = new Set([1000, 1001, 1005])
+
+/**
+ * @param {unknown} code
+ * @returns {boolean}
+ */
+function isAbnormalClose (code) {
+  return typeof code === 'number' && !NORMAL_CLOSE_CODES.has(code)
 }
 
 /**
@@ -151,7 +170,7 @@ function createConnection (emitter) {
  * `error` then always `close`, and a global `WebSocket` that fails to connect does the same.
  *
  * @param {object} emitter
- * @param {() => void} finalize
+ * @param {(failed?: boolean) => void} finalize
  * @returns {void}
  */
 function attachSocketClose (emitter, finalize) {
@@ -160,10 +179,12 @@ function attachSocketClose (emitter, finalize) {
     if (socket == null) return
 
     // `ws` sockets are Node EventEmitters and also expose `addEventListener`, so check `on` first.
+    // The close code arrives as an argument on the `ws` surface and on the `CloseEvent` on the DOM
+    // one; an app-initiated `close()` goes through the shim below instead and is never flagged.
     if (typeof socket.on === 'function') {
-      socket.once('close', finalize)
+      socket.once('close', code => finalize(isAbnormalClose(code)))
     } else if (typeof socket.addEventListener === 'function') {
-      socket.addEventListener('close', finalize, { once: true })
+      socket.addEventListener('close', event => finalize(isAbnormalClose(event?.code)), { once: true })
     }
   } catch (error) {
     log.debug('Error attaching OpenAI realtime close listener: %s', error?.message)
