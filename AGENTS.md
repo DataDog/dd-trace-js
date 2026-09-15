@@ -77,6 +77,7 @@ SERVICES="<service>" PLUGINS="<name>" npm run test:plugins:ci
 - Never rely on real time in unit tests; use sinon fake timers.
 - Test real entry points and observable output, not prototype-created instances or test-only production hooks.
 - A bug fix must cover the failure and untested sibling cases sharing the corrected path.
+- When a fix removes a path, assert its public absence or surviving behavior; do not recreate obsolete state to test it.
 - Scope coverage to changed production paths. Sandbox integration tests do not contribute to nyc coverage.
 
 See `CONTRIBUTING.md#testing` for detailed test conventions and service setup.
@@ -89,8 +90,7 @@ See `CONTRIBUTING.md#testing` for detailed test conventions and service setup.
 - Comments should explain non-obvious intent, constraints, or trade-offs, not narrate the code.
 - Prefer `#private` fields for class-local state. Avoid accessors and large refactors of existing `_underscore` fields.
 - Never use `for-in`; use `for-of`, `for`, or `while` in production hot paths.
-- Call the product **Test Optimization** in new names and prose; retain legacy `ci-visibility` spellings only in
-  existing module paths and classes.
+- Use **Test Optimization** in repository-owned names/prose; preserve external names, ids, and cross-SDK terms.
 
 Group imports with blank lines and sort within each group:
 
@@ -98,23 +98,29 @@ Group imports with blank lines and sort within each group:
 2. Third-party modules
 3. Internal modules, furthest path first
 
-For new methods, add TypeScript-compatible JSDoc with specific parameter and return types. Reuse existing typedefs,
-never use `any`, and do not add runtime work solely to satisfy static typing. Do not rewrite unrelated code only to
-improve its types.
+For new or changed methods with a non-obvious contract, add TypeScript-compatible JSDoc with specific parameter and
+return types; do not repeat inherited or interface contracts on conventional overrides. Reuse existing typedefs,
+never use `any`, and do not add runtime work solely for static typing. Do not rewrite unrelated code for its types.
 
 ## Production Safety and Performance
 
 The tracer runs in user applications and hot paths:
 
-- Never crash a user application. Catch and log errors, then resume safely or disable the affected subsystem.
+- Tracer, instrumentation, and logging failures must not escape into or terminate customer applications. Invalid
+  configuration may disable a subsystem during initialization; partial initialization or recovery is not required
+  without a public contract. Preserve the application's own thrown, rejected, or callback error outcome.
 - Use `packages/dd-trace/src/log/index.js` with printf-style formatting; use callback formatting for expensive data.
-- Do not add promises or `async`/`await` to shipped production code. They are allowed in tests and worker threads.
+- Do not add promise machinery to synchronous library paths or inactive and hot paths. Inherently asynchronous APIs,
+  control-plane code, and worker threads may follow their upstream asynchronous contract; keep inactive paths cheap.
 - Avoid unnecessary allocations, closures, listeners, parsing, and per-call compilation. Cache reusable work.
 - Avoid try/catch in hot paths when inputs can be validated early.
-- Use `.once()` for one-shot events. Register process `beforeExit` work in
+- Use `.once()` for one terminal event on a conforming Node.js `EventEmitter`. Multiple terminal names need a shared
+  completion guard and cleanup. Do not defend against a non-conforming emitter without supported-source proof. Put
+  process `beforeExit` work in
   `globalThis[Symbol.for('dd-trace')].beforeExitHandlers`.
-- A performance-motivated complexity increase requires a focused, reproducible microbenchmark: keep the more readable
-  implementation within ~±2%, justify ~5% in the commit body, keep ≥10% reproducible wins with the numbers.
+- A performance-motivated complexity increase needs reproducible measurement. Prefer readable code within ~±2%,
+  justify ~5%, and keep ≥10% reproducible wins with the numbers. Add a lasting benchmark only for a stable workload
+  that warrants a regression guard; otherwise record the temporary workload, runtime, baseline, candidate, and results.
 
 ## Backportability and Runtime Support
 
@@ -127,17 +133,33 @@ Update every supported public TypeScript surface for new public APIs unless the 
 
 ## Cross-Cutting Configuration Changes
 
-When adding configuration:
+This checklist applies to new top-level tracer options/env vars; other settings update only contract-owned surfaces.
 
 1. Add the default in `packages/dd-trace/src/config/defaults.js`.
 2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
 3. Update public TypeScript definitions in both supported surfaces when applicable.
 4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
 5. Update `packages/dd-trace/src/config/supported-configurations.json`.
-6. Document non-internal, non-experimental options in `docs/API.md`.
+6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
 7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
+
+## Reviewing Changes
+
+Repository instructions guide implementation; they do not prove a defect. A finding must identify behavior introduced
+or worsened by the diff, its reachable entry point, the violated contract, and the observable effect. Production
+findings need a supported production path. Run the real path when static inspection does not prove the behavior.
+
+Do not report a finding for:
+
+- Style, naming, JSDoc, docs, benchmark retention, or process preferences unless a check fails or users are affected.
+- Unsupported package managers, bundlers, versions, emitters, or code shapes, including repository-prohibited shapes.
+- A pre-existing problem or work owned by another PR unless this diff makes the behavior materially worse.
+- Invalid operator configuration that remains contained during initialization. Treat `DD_SITE`, proxy URLs, and
+  process configuration as operator-controlled unless a less-trusted production setter exists.
+- Generated, recorded, or vendored byte formatting not owned by its producer or an enforced check; update its producer
+  or normalizer and regenerate it.
 
 ## Debugging Failures
 
