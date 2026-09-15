@@ -135,6 +135,18 @@ describe('AgentlessWriter', () => {
     assert.strictEqual(flushed, true)
   })
 
+  it('closes the active pipeline exporter when pending traces are reset', () => {
+    exporter.sendV04.resetBehavior()
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    writer.flush()
+    writer.resetPendingBatch()
+
+    sinon.assert.calledOnce(exporter.sendV04)
+    sinon.assert.calledOnce(exporter.close)
+    sinon.assert.calledOnce(encoder.reset)
+  })
+
   it('contains synchronous data-pipeline construction failures', async () => {
     const error = { toString: () => 'exporter unavailable' }
     createAgentlessExporter.callsFake(() => { throw error })

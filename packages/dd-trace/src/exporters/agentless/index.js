@@ -3,10 +3,18 @@
 const { URL } = require('node:url')
 const os = require('node:os')
 
+const { channel } = require('dc-polyfill')
+
 const log = require('../../log')
 const { containerId } = require('../common/docker')
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one AgentlessExporter is ever live in a real process, so replacing the subscription on
+// construction is safe - it just keeps tests (which build several) from piling up listeners.
+let unsubscribeBatchReset = null
 
 /**
  * Agentless exporter for APM trace intake.
@@ -51,6 +59,20 @@ class AgentlessExporter {
       site,
       metadata,
     })
+
+    // A clone resume shouldn't flush spans buffered before the snapshot under its own identity.
+    unsubscribeBatchReset?.()
+    const onIdentityRefresh = () => {
+      // Clear the exporter timer first so no delayed flush can run after the identity reset and
+      // attempt to send the inherited batch.
+      clearTimeout(this.#timer)
+      this.#timer = undefined
+      // Resetting the writer clears buffered spans and closes the private pipeline exporter. The
+      // writer owns both pieces of state, so the refresh boundary stays in one operation.
+      this._writer.resetPendingBatch()
+    }
+    identityRefreshChannel.subscribe(onIdentityRefresh)
+    unsubscribeBatchReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]
     if (ddTrace?.beforeExitHandlers) {
