@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -84,10 +85,7 @@ class LLMObs extends NoopLLMObs {
    * @returns {import('../../../../index').llmobs.Prompts}
    */
   get prompts () {
-    if (!this.#promptManager) {
-      const PromptManager = require('./prompts/manager')
-      this.#promptManager = new PromptManager(this._config, this.#getProvider)
-    }
+    this.#promptManager ??= new PromptManager(this._config, this.#getProvider)
     return this.#promptManager
   }
 
