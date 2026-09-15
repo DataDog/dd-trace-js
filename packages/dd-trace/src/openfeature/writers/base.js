@@ -151,12 +151,21 @@ class BaseFFEWriter {
     this._bufferSize = 0
 
     const payload = this._encode(this.makePayload(events))
+    this._sendPayload(payload, events.length)
+  }
 
+  /**
+   * Sends an encoded payload to the agent.
+   *
+   * @param {string} payload - Encoded payload
+   * @param {number} eventCount - Number of events represented by the payload
+   */
+  _sendPayload (payload, eventCount) {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
 
     const route = this.#createActiveRoute()
-    this.#sendRequest(payload, events.length, route, this._fallbackRoute)
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute)
   }
 
   /**
