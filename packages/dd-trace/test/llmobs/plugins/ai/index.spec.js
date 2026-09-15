@@ -1009,6 +1009,240 @@ describe('Plugin', () => {
       })
     })
 
+    function createMockOpenai (responses) {
+      const OpenAIModule = require(`../../../../../../versions/@ai-sdk/openai@${openaiVersionKey}`)
+      const { createOpenAI } = OpenAIModule.get()
+      return createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify(responses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        compatibility: 'strict',
+      })
+    }
+
+    // Reasoning tokens and provider-executed tool results are only exposed by the AI SDK telemetry from ai 5.0.0.
+    const reasoningTest = semifies(realVersion, '>=5.0.0') ? it : it.skip
+
+    reasoningTest('captures reasoning output and reasoning tokens', async function () {
+      const mockOpenai = createMockOpenai([{
+        id: 'resp_mock',
+        object: 'response',
+        created_at: 1779284000,
+        status: 'completed',
+        incomplete_details: null,
+        model: 'o4-mini',
+        output: [
+          { type: 'reasoning', id: 'rs_1', summary: [{ type: 'summary_text', text: 'Thinking about it' }] },
+          {
+            type: 'message',
+            id: 'msg_1',
+            status: 'completed',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'The answer is 4.', annotations: [] }],
+          },
+        ],
+        usage: {
+          input_tokens: 20,
+          input_tokens_details: { cached_tokens: 5 },
+          output_tokens: 30,
+          output_tokens_details: { reasoning_tokens: 25 },
+        },
+      }])
+
+      await ai.generateText({
+        model: mockOpenai.responses('o4-mini'),
+        prompt: 'What is 2 + 2?',
+        experimental_telemetry: { isEnabled: true },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      // `ai.response.reasoning` is emitted on the model span from ai 6.0.74,
+      // cache/reasoning usage details from ai 6.0.119
+      const outputMessages = semifies(realVersion, '>=6.0.74')
+        ? [{ content: 'Thinking about it', role: 'reasoning' }, { content: 'The answer is 4.', role: 'assistant' }]
+        : [{ content: 'The answer is 4.', role: 'assistant' }]
+      const metrics = { input_tokens: 20, output_tokens: 30, total_tokens: 50 }
+      if (semifies(realVersion, '>=6.0.119')) {
+        metrics.cache_read_input_tokens = 5
+        metrics.reasoning_output_tokens = 25
+      }
+
+      assertLlmObsSpanEvent(llmobsSpans[1], {
+        span: apmSpans[1],
+        parentId: llmobsSpans[0].span_id,
+        spanKind: 'llm',
+        modelName: 'o4-mini',
+        modelProvider: 'openai',
+        name: 'doGenerate',
+        inputMessages: [{ content: 'What is 2 + 2?', role: 'user' }],
+        outputMessages,
+        metrics,
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    reasoningTest('captures provider-executed tool results from prior assistant messages', async function () {
+      const mockOpenai = createMockOpenai([{
+        id: 'resp_mock',
+        object: 'response',
+        created_at: 1779284000,
+        status: 'completed',
+        incomplete_details: null,
+        model: 'gpt-4o-mini',
+        output: [{
+          type: 'message',
+          id: 'msg_1',
+          status: 'completed',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'You are welcome!', annotations: [] }],
+        }],
+        usage: { input_tokens: 20, output_tokens: 10 },
+      }])
+
+      await ai.generateText({
+        model: mockOpenai.responses('gpt-4o-mini'),
+        messages: [
+          { role: 'user', content: 'What is the weather in Tokyo?' },
+          {
+            role: 'assistant',
+            content: [
+              { type: 'tool-call', toolCallId: 'ws_1', toolName: 'web_search', input: {}, providerExecuted: true },
+              {
+                type: 'tool-result',
+                toolCallId: 'ws_1',
+                toolName: 'web_search',
+                output: { type: 'json', value: { action: { type: 'search', query: 'weather in Tokyo' } } },
+              },
+              { type: 'text', text: 'It is sunny in Tokyo.' },
+            ],
+          },
+          { role: 'user', content: 'Thanks!' },
+        ],
+        experimental_telemetry: { isEnabled: true },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[1], {
+        span: apmSpans[1],
+        parentId: llmobsSpans[0].span_id,
+        spanKind: 'llm',
+        modelName: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        name: 'doGenerate',
+        inputMessages: [
+          { content: 'What is the weather in Tokyo?', role: 'user' },
+          {
+            content: 'It is sunny in Tokyo.',
+            role: 'assistant',
+            tool_calls: [{ tool_id: 'ws_1', name: 'web_search', arguments: {}, type: 'function' }],
+            tool_results: [{
+              tool_id: 'ws_1',
+              name: 'web_search',
+              result: JSON.stringify({ action: { type: 'search', query: 'weather in Tokyo' } }),
+              type: 'tool_result',
+            }],
+          },
+          { content: 'Thanks!', role: 'user' },
+        ],
+        outputMessages: [{ content: 'You are welcome!', role: 'assistant' }],
+        metrics: { input_tokens: 20, output_tokens: 10, total_tokens: 30 },
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    // Tool approvals (`needsApproval`) are only available from ai 6.0.0.
+    const toolApprovalTest = semifies(realVersion, '>=6.0.0') ? it : it.skip
+
+    toolApprovalTest('captures tool approval requests and responses', async function () {
+      const chatCompletion = (message, finishReason) => ({
+        id: 'chatcmpl-mock',
+        object: 'chat.completion',
+        created: 1234567890,
+        model: 'gpt-4o-mini',
+        choices: [{ index: 0, message: { role: 'assistant', ...message }, finish_reason: finishReason }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+      })
+      const mockOpenai = createMockOpenai([
+        chatCompletion({
+          content: null,
+          tool_calls: [{
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'deleteFile', arguments: '{"path":"/tmp/a"}' },
+          }],
+        }, 'tool_calls'),
+        chatCompletion({ content: 'Understood, I will not delete the file.' }, 'stop'),
+      ])
+
+      const tools = {
+        deleteFile: ai.tool({
+          description: 'Delete a file',
+          inputSchema: ai.jsonSchema({ type: 'object', properties: { path: { type: 'string' } } }),
+          needsApproval: true,
+          execute: () => 'deleted',
+        }),
+      }
+
+      const first = await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        prompt: 'Delete /tmp/a',
+        tools,
+        experimental_telemetry: { isEnabled: true },
+      })
+
+      const approvalRequest = first.steps[0].content.find(part => part.type === 'tool-approval-request')
+      assert.ok(approvalRequest)
+
+      await getEvents(2)
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [
+          { role: 'user', content: 'Delete /tmp/a' },
+          ...first.response.messages,
+          {
+            role: 'tool',
+            content: [{
+              type: 'tool-approval-response',
+              approvalId: approvalRequest.approvalId,
+              approved: false,
+              reason: 'too risky',
+            }],
+          },
+        ],
+        tools,
+        experimental_telemetry: { isEnabled: true },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[1], {
+        span: apmSpans[1],
+        parentId: llmobsSpans[0].span_id,
+        spanKind: 'llm',
+        modelName: 'gpt-4o-mini',
+        modelProvider: 'openai',
+        name: 'doGenerate',
+        inputMessages: [
+          { content: 'Delete /tmp/a', role: 'user' },
+          {
+            content: '',
+            role: 'assistant',
+            tool_calls: [{ tool_id: 'call_1', name: 'deleteFile', arguments: { path: '/tmp/a' }, type: 'function' }],
+          },
+          // ai 6.x converts the approval response into an `execution-denied` tool result before the model call
+          { content: 'too risky', role: 'tool', tool_id: 'call_1' },
+        ],
+        outputMessages: [{ content: 'Understood, I will not delete the file.', role: 'assistant' }],
+        metrics: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
     const toolLoopAgentDescribe = semifies(realVersion, '>=6.0.0') ? describe : describe.skip
 
     // The cache-token metrics exercised here are only available from ai 6.0.0.
