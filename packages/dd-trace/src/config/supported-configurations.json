@@ -2888,6 +2888,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GOOGLE_ADK_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_GOOGLE_GAX_ENABLED": [
       {
         "implementation": "A",
