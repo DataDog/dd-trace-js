@@ -57,6 +57,7 @@ module.exports = {
   addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
   modifyBreakpoint: lock(modifyBreakpoint),
+  refreshBreakpoints: lock(refreshBreakpoints),
 }
 
 async function addBreakpoint (probe) {
@@ -241,23 +242,77 @@ async function modifyBreakpoint (probe) {
   await addBreakpoint(probe)
 }
 
+/**
+ * Rebuild the breakpoint conditions at the locations of the given probes from the current state of the probes
+ * attached to them.
+ *
+ * A breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against the
+ * global snapshot rate limit and how a skipped hit is classified. That changes when the pause handler permanently
+ * disables capture for a probe after a fatal capture error, so the conditions have to be recompiled.
+ *
+ * Probes sharing a location share a breakpoint, so each location is only refreshed once. A probe that has been removed
+ * in the meantime is ignored: its location no longer needs the update.
+ *
+ * The locations are independent, so one that fails does not stop the others from being refreshed. Any failure is
+ * thrown once every location has been attempted.
+ *
+ * @param {{ id: string }[]} probes - Probes attached to the breakpoints to refresh.
+ * @returns {Promise<void>}
+ */
+async function refreshBreakpoints (probes) {
+  if (!sessionStarted) return
+
+  // Breakpoints set next to each other can snap to the same logical location and be hit at the same time, so the
+  // probes can be spread over more than one breakpoint.
+  const locationKeys = new Set()
+  for (const { id } of probes) {
+    const locationKey = probeToLocation.get(id)
+    if (locationKey !== undefined) locationKeys.add(locationKey)
+  }
+
+  /** @type {Error[] | undefined} */
+  let errors
+  for (const locationKey of locationKeys) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await updateBreakpointInternal(locationToBreakpoint.get(locationKey))
+    } catch (err) {
+      // Keep going: the remaining locations would otherwise hold on to the condition this refresh exists to replace
+      errors ??= []
+      errors.push(err)
+    }
+  }
+
+  if (errors !== undefined) {
+    throw errors.length === 1 ? errors[0] : new AggregateError(errors, 'Error refreshing breakpoints')
+  }
+}
+
+/**
+ * Replace the breakpoint at a location with one whose condition matches the probes currently attached to it.
+ *
+ * @param {{ id: string, location: object, locationKey: string }} breakpoint - The breakpoint to replace.
+ * @param {object} [probe] - A probe to attach to the breakpoint first, when one is being added.
+ * @returns {Promise<void>}
+ */
 async function updateBreakpointInternal (breakpoint, probe) {
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
 
-  // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe. In both cases the
-  // breakpoint condition must be rebuilt to match the remaining probes at the location.
+  // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe or the probes at the
+  // location changed. In all cases the breakpoint condition must be rebuilt to match the probes at the location.
+  let context // identifies the update in the error messages below
   if (probe) {
     probesAtLocation.set(probe.id, probe)
     probeToLocation.set(probe.id, breakpoint.locationKey)
+    context = `while adding probe ${probe.id} (version: ${probe.version})`
+  } else {
+    context = `at ${breakpoint.locationKey}`
   }
 
   try {
     await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
   } catch (err) {
-    const message = probe
-      ? `Error replacing breakpoint while adding probe ${probe.id} (version: ${probe.version})`
-      : `Error replacing breakpoint after removing probe from ${breakpoint.locationKey}`
-    throw new Error(message, { cause: err })
+    throw new Error(`Error replacing breakpoint ${context}`, { cause: err })
   }
   breakpointToProbes.delete(breakpoint.id)
   let result
@@ -267,10 +322,7 @@ async function updateBreakpointInternal (breakpoint, probe) {
       condition: compileBreakpointCondition([...probesAtLocation.values()]),
     }))
   } catch (err) {
-    const message = probe
-      ? `Error setting breakpoint while adding probe ${probe.id} (version: ${probe.version})`
-      : `Error setting breakpoint after removing probe from ${breakpoint.locationKey}`
-    throw new Error(message, { cause: err })
+    throw new Error(`Error setting breakpoint ${context}`, { cause: err })
   }
   breakpoint.id = result.breakpointId
   breakpointToProbes.set(result.breakpointId, probesAtLocation)

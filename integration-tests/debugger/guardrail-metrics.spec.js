@@ -3,11 +3,9 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const { GUARDRAIL_METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
 
-// The guardrail counters are converted into telemetry metrics every 10 seconds, which are then sent on the next
-// telemetry heartbeat
-const GUARDRAIL_METRICS_FLUSH_INTERVAL_MS = 10_000
 const TELEMETRY_HEARTBEAT_INTERVAL_SECONDS = 1
 
 describe('Dynamic Instrumentation', function () {
