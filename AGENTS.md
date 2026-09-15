@@ -154,7 +154,7 @@ never weaken or delete assertions to make them pass.
 
 ### Review Guidelines
 
-Run the [dd-apm-sdk-review](./.agents/skills/dd-apm-sdk-review/SKILL.md) skill on demand when asked. It is not required before every push. Fix blocking findings first, or get explicit authorization from the human you work with and record them verbatim in the PR description.
+Run the [dd-apm-sdk-review](./.agents/skills/dd-apm-sdk-review/SKILL.md) skill on demand when asked. It is not required before every push. Fix blocking findings first, or get explicit authorization from the human you work with and record them in the PR description (location and class of issue only — never paste secret values, tokens, credentials, or exploit details).
 
 **Reviewer without a skill harness** (for example, GitHub Codex): read and follow
 `.agents/skills/dd-apm-sdk-review/review-without-harness.md`. Do not load `SKILL.md`
@@ -177,7 +177,7 @@ Load the relevant repository skill when the task matches:
 - [LLMObs integrations](.agents/skills/llmobs-integration/SKILL.md)
 - [LLMObs tests and VCR cassettes](.agents/skills/llmobs-testing/SKILL.md)
 - [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
-- [Pre-push code review](.agents/skills/dd-apm-sdk-review/SKILL.md)
+- [On-demand code review](.agents/skills/dd-apm-sdk-review/SKILL.md)
 
 New instrumentations belong in `packages/datadog-instrumentations/` and communicate with plugins through diagnostic
 channels. Validate new plugin structure with
