@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 const { setTimeout: sleep } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
@@ -39,7 +40,7 @@ describe('Dynamic Instrumentation', function () {
         namespace: 'live_debugger',
       })
 
-      const firstResult = new Promise((resolve) => t.agent.once('debugger-input', resolve))
+      const firstResult = once(t.agent, 'debugger-input')
       t.agent.addRemoteConfig(t.generateRemoteConfig({
         captureSnapshot: true,
         sampling: { snapshotsPerSecond: 1_000 / PER_PROBE_RATE_LIMIT_WINDOW_MS },
@@ -47,7 +48,7 @@ describe('Dynamic Instrumentation', function () {
       await t.triggerBreakpoint()
 
       // The first hit trips the large object safety threshold, which disables capture for the probe
-      const { payload: [{ debugger: { snapshot } }] } = await firstResult
+      const [{ payload: [{ debugger: { snapshot } }] }] = await firstResult
       assert.strictEqual(snapshot.captures.lines[t.breakpoint.line].locals.huge.notCapturedReason, 'fieldCount')
       assert.match(snapshot.evaluationErrors[0].message, /exceeds the maximum number of allowed properties/)
 
