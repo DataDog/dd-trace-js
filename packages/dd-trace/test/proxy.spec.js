@@ -510,13 +510,13 @@ describe('TracerProxy', () => {
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('debugger-disabled', {
-          dynamic_instrumentation_enabled: false,
+          DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'false',
         }))
 
         sinon.assert.notCalled(dynamicInstrumentation.configure)
@@ -527,13 +527,13 @@ describe('TracerProxy', () => {
 
       it('loads Dynamic Instrumentation when remote config enables it', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('debugger-enabled', {
-          dynamic_instrumentation_enabled: true,
+          DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
         }))
 
         sinon.assert.calledOnce(dynamicInstrumentation.isStarted)
@@ -680,7 +680,7 @@ describe('TracerProxy', () => {
         const boundProvider = proxy.openfeature
 
         const handleApmTracing = handlers.get('APM_TRACING')
-        handleApmTracing(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
+        handleApmTracing(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         const flagConfig = { flags: { 'test-flag': {} } }
         const handleFfeFlags = handlers.get('FFE_FLAGS')
@@ -694,17 +694,17 @@ describe('TracerProxy', () => {
       it('keeps OpenFeature active while tracing is disabled and re-enabled', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
-        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
-          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
         }
 
         proxy.init()
 
         const provider = proxy.openfeature
         const handleApmTracing = handlers.get('APM_TRACING')
-        handleApmTracing(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
-        handleApmTracing(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        handleApmTracing(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: 'false' }))
+        handleApmTracing(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         assert.strictEqual(proxy.openfeature, provider)
         sinon.assert.calledOnce(OpenFeatureProvider)
@@ -713,17 +713,17 @@ describe('TracerProxy', () => {
       })
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {
-        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
-          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
         }
 
         proxy.init()
         const sdk = proxy.aiguard
 
         const handleApmTracing = handlers.get('APM_TRACING')
-        handleApmTracing(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
-        handleApmTracing(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        handleApmTracing(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: 'false' }))
+        handleApmTracing(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         assert.strictEqual(proxy.aiguard, sdk)
         sinon.assert.calledOnce(AIGuardSdk)
@@ -748,13 +748,13 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { DD_TRACE_ENABLED: false }
+        let conf = { DD_TRACE_ENABLED: 'false' }
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { DD_TRACE_ENABLED: true }
+        conf = { DD_TRACE_ENABLED: 'true' }
         handleApmTracing(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -776,7 +776,7 @@ describe('TracerProxy', () => {
         config.appsec.enabled = true
         config.iast.enabled = true
         config.setRemoteConfig = conf => {
-          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED === 'true'
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -785,13 +785,13 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { DD_TRACE_ENABLED: false }
+        let conf = { DD_TRACE_ENABLED: 'false' }
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { DD_TRACE_ENABLED: true }
+        conf = { DD_TRACE_ENABLED: 'true' }
         handleApmTracing(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
@@ -1715,11 +1715,12 @@ async function triggerMicroVmRun (server) {
   })
 }
 
-// Helper function to create APM_TRACING batch transaction objects
-function createApmTracingTransaction (configId, libConfig, action = 'apply') {
+// Helper function to create APM_TRACING batch transaction objects. Accepts a flat
+// { KEY: value } map and mirrors the wire shape RC actually delivers: { config: { KEY: value, ... } }
+function createApmTracingTransaction (configId, sdkConfig, action = 'apply') {
   const item = {
     id: configId,
-    file: { lib_config: libConfig },
+    file: { sdk_config: { config: sdkConfig } },
     path: `datadog/1/APM_TRACING/${configId}`,
   }
 
