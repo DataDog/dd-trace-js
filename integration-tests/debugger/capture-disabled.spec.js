@@ -4,11 +4,8 @@ const assert = require('node:assert/strict')
 const { setTimeout: sleep } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
+const { GUARDRAIL_METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
-
-// The guardrail counters are converted into telemetry metrics every 10 seconds, which are then sent on the next
-// telemetry heartbeat
-const GUARDRAIL_METRICS_FLUSH_INTERVAL_MS = 10_000
 
 // The probe is limited to one event per second, so two hits in quick succession skip the second one
 const PER_PROBE_RATE_LIMIT_WINDOW_MS = 1_000
