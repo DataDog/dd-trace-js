@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { inspect } = require('node:util')
-const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const {
@@ -14,6 +13,7 @@ const {
   spawnProc,
   stopProc,
 } = require('../helpers')
+const httpRequest = require('../../packages/dd-trace/test/setup/helpers/http-client')
 
 describe('multer', () => {
   let cwd, startupTestFile, agent, proc, env
@@ -51,7 +51,7 @@ describe('multer', () => {
             const form = new FormData()
             form.append('key', 'value')
 
-            const res = await axios.post(proc.url, form)
+            const res = await httpRequest.post(proc.url, form)
 
             assert.strictEqual(res.data, 'DONE')
           })
@@ -61,7 +61,7 @@ describe('multer', () => {
               const form = new FormData()
               form.append('key', 'testattack')
 
-              await axios.post(proc.url, form)
+              await httpRequest.post(proc.url, form)
 
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
@@ -75,7 +75,7 @@ describe('multer', () => {
             const form = new FormData()
             form.append('key', 'value')
 
-            const res = await axios.post(`${proc.url}/no-middleware`, form)
+            const res = await httpRequest.post(`${proc.url}/no-middleware`, form)
 
             assert.strictEqual(res.data, 'DONE')
           })
@@ -85,7 +85,7 @@ describe('multer', () => {
               const form = new FormData()
               form.append('key', 'testattack')
 
-              await axios.post(`${proc.url}/no-middleware`, form)
+              await httpRequest.post(`${proc.url}/no-middleware`, form)
 
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
@@ -119,7 +119,7 @@ describe('multer', () => {
             formData.append('command', 'echo 1')
             await Promise.all([
               resultPromise,
-              axios.post(`${proc.url}/cmd`, formData),
+              httpRequest.post(`${proc.url}/cmd`, formData),
             ])
           })
         })
@@ -132,7 +132,7 @@ describe('multer', () => {
             formData.append('command', 'echo 1')
             await Promise.all([
               resultPromise,
-              axios.post(`${proc.url}/cmd-no-middleware`, formData),
+              httpRequest.post(`${proc.url}/cmd-no-middleware`, formData),
             ])
           })
         })
