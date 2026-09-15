@@ -379,8 +379,12 @@ describe('Dynamic Instrumentation', function () {
 
       it('should support not triggering any probes when all conditions are not met', async function () {
         const configs = [
-          t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } }),
-          t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'baz'] } } }),
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'invalid'] } },
+          }),
+          t.generateRemoteConfig({
+            when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'nope'] } },
+          }),
         ]
         const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, [])
 
@@ -406,16 +410,17 @@ describe('Dynamic Instrumentation', function () {
 
       it('trigger on met condition, even if other condition throws (all have conditions)', async function () {
         const configs = [
+          // This condition throws because `foo` is not defined, which is reported as an error result.
           t.generateRemoteConfig({ when: { json: { eq: [{ ref: 'foo' }, 'bar'] } } }),
           t.generateRemoteConfig({
             when: { json: { eq: [{ getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }, 'bar'] } },
           }),
         ]
-        const expectedProbeIds = [configs[1].config.id]
+        const expectedProbeIds = configs.map(config => config.config.id)
         const { emittingProbeIds, response } = await captureEmittingProbesUntilExit(t, configs, expectedProbeIds)
 
         assert.strictEqual(response.status, 200)
-        assert.deepStrictEqual(emittingProbeIds, expectedProbeIds)
+        assert.deepStrictEqual(emittingProbeIds.sort(), expectedProbeIds.sort())
       })
 
       it('should only trigger the probes whose conditions are met (not all have conditions)', async function () {
