@@ -417,6 +417,30 @@ describe('input message http requests', function () {
       const written = JSON.parse(writtenJson)
 
       assert.deepStrictEqual(written.debugger.snapshot.captures.lines[10], { pruned: true })
+      assert.strictEqual(written.message, message)
+    })
+
+    it('should not throw if pruning fails for a snapshot without captures', function () {
+      // Log probes don't capture anything, so there's nothing for the fallback to drop
+      pruneSnapshotStub.returns(undefined)
+      const logSnapshot = {
+        id: '123',
+        probe: { id: 'probe-id' },
+        stack: [{ function: 'x'.repeat(2 * 1024 * 1024) }],
+      }
+
+      send(message, logger, dd, logSnapshot, undefined, EVENT_TYPE.LOG, 0)
+
+      sinon.assert.calledOnce(pruneSnapshotStub)
+      sinon.assert.calledOnce(jsonBufferWrite)
+
+      const written = JSON.parse(jsonBufferWrite.getCall(0).args[0])
+
+      assert.deepStrictEqual(written.debugger.snapshot, logSnapshot)
+      assert.strictEqual(written.message, message)
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.LOG
+      )
     })
 
     it('should record the snapshot as incomplete due to its size when pruned', function () {
