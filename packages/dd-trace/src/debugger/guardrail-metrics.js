@@ -32,8 +32,8 @@ const SKIPPED_REASON_NAMES = ['rateLimitGlobal', 'rateLimitProbe', 'evaluationTi
 /** Complete events dropped before transport (`events.dropped`) */
 const DROPPED_REASON = Object.freeze({
   QUEUE_FULL: 0,
-  // The spec allows either trimming oversized payloads or dropping them whole. This tracer trims, and reports
-  // `capture.incomplete{payloadTooLarge}` instead, so this reason exists for spec parity but is never emitted.
+  // The spec allows either trimming oversized payloads or dropping them whole. This tracer trims and reports
+  // `capture.incomplete{payloadTooLarge}`, and only drops an event when trimming can't get it under the cap.
   PAYLOAD_TOO_LARGE: 1,
 })
 const DROPPED_REASON_NAMES = ['queueFull', 'payloadTooLarge']
