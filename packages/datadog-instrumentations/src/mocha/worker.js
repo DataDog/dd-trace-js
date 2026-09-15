@@ -96,8 +96,12 @@ function applyMochaOptions (options) {
   if (options._ddIsFlakyTestRetriesEnabled) {
     config.isFlakyTestRetriesEnabled = true
     config.flakyTestRetriesCount = options._ddFlakyTestRetriesCount
+    config.isDynamicAtrEnabled = options._ddIsDynamicAtrEnabled
+    config.dynamicAtrBuckets = options._ddDynamicAtrBuckets
     delete options._ddIsFlakyTestRetriesEnabled
     delete options._ddFlakyTestRetriesCount
+    delete options._ddIsDynamicAtrEnabled
+    delete options._ddDynamicAtrBuckets
   }
   if (options._ddIsFailedTestReplayEnabled) {
     config.isTestDynamicInstrumentationEnabled = true

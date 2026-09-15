@@ -40,10 +40,14 @@ let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
 let uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
 let uploadTestVideoRequest = actualUploadTestVideoRequest
 let incrementCountMetric = actualIncrementCountMetric
+let recordDynamicAtrRetries = () => {}
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
   '../telemetry': {
     incrementCountMetric (...args) {
       return incrementCountMetric(...args)
+    },
+    recordDynamicAtrRetries (...args) {
+      return recordDynamicAtrRetries(...args)
     },
   },
   '../requests/upload-coverage-report': {
@@ -95,6 +99,7 @@ describe('CI Visibility Exporter', () => {
     uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
     uploadTestVideoRequest = actualUploadTestVideoRequest
     incrementCountMetric = actualIncrementCountMetric
+    recordDynamicAtrRetries = () => {}
   })
 
   afterEach(() => {
@@ -151,6 +156,8 @@ describe('CI Visibility Exporter', () => {
         earlyFlakeDetectionFaultyThreshold: 0,
         isFlakyTestRetriesEnabled: true,
         flakyTestRetriesCount: 5,
+        isDynamicAtrEnabled: false,
+        dynamicAtrBuckets: undefined,
         isDiEnabled: true,
         isKnownTestsEnabled: true,
         isTestManagementEnabled: true,
@@ -160,6 +167,24 @@ describe('CI Visibility Exporter', () => {
       })
       assert.strictEqual(Object.isFrozen(policy), true)
       assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionRetryPolicy), true)
+    })
+
+    it('enables dynamic ATR only when backend ATR is enabled and caches accepted buckets', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        testOptimization: {
+          ...testOptimization,
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
+        },
+      })
+
+      const disabled = ciVisibilityExporter.filterConfiguration({ isFlakyTestRetriesEnabled: false })
+      const enabled = ciVisibilityExporter.filterConfiguration({ isFlakyTestRetriesEnabled: true })
+
+      assert.strictEqual(disabled.isDynamicAtrEnabled, false)
+      assert.strictEqual(disabled.dynamicAtrBuckets, undefined)
+      assert.strictEqual(enabled.isDynamicAtrEnabled, true)
+      assert.deepStrictEqual(enabled.dynamicAtrBuckets, [1, 2, 3, 4, 5])
     })
 
     it('creates a complete disabled policy when remote settings are unavailable', () => {
@@ -175,6 +200,8 @@ describe('CI Visibility Exporter', () => {
         earlyFlakeDetectionFaultyThreshold: 30,
         isFlakyTestRetriesEnabled: false,
         flakyTestRetriesCount: 5,
+        isDynamicAtrEnabled: false,
+        dynamicAtrBuckets: undefined,
         isDiEnabled: false,
         isKnownTestsEnabled: false,
         isTestManagementEnabled: false,
@@ -182,6 +209,49 @@ describe('CI Visibility Exporter', () => {
         isImpactedTestsEnabled: false,
         isCoverageReportUploadEnabled: false,
       })
+    })
+  })
+
+  describe('dynamic ATR telemetry', () => {
+    it('records one metric only when dynamic ATR is effective', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        testOptimization: {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
+          DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+        },
+      })
+      recordDynamicAtrRetries = sinon.spy()
+
+      ciVisibilityExporter._libraryConfig = ciVisibilityExporter.filterConfiguration({
+        isFlakyTestRetriesEnabled: false,
+      })
+      ciVisibilityExporter._recordDynamicAtrTelemetry()
+      ciVisibilityExporter._libraryConfig = ciVisibilityExporter.filterConfiguration({
+        isFlakyTestRetriesEnabled: true,
+      })
+      ciVisibilityExporter._recordDynamicAtrTelemetry()
+      ciVisibilityExporter._recordDynamicAtrTelemetry()
+
+      sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, true)
+    })
+
+    it('does not tag EFD fallback settings as custom buckets', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        testOptimization: {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['invalid'],
+          DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+        },
+      })
+      recordDynamicAtrRetries = sinon.spy()
+
+      ciVisibilityExporter._libraryConfig = ciVisibilityExporter.filterConfiguration({
+        isFlakyTestRetriesEnabled: true,
+      })
+      ciVisibilityExporter._recordDynamicAtrTelemetry()
+
+      sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, false)
     })
   })
 

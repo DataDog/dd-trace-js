@@ -204,6 +204,8 @@ class JestPlugin extends CiPlugin {
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
+        config._ddIsDynamicAtrEnabled = this.libraryConfig?.isDynamicAtrEnabled ?? false
+        config._ddDynamicAtrBuckets = this.libraryConfig?.dynamicAtrBuckets
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false

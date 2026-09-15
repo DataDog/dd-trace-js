@@ -15,6 +15,9 @@ const {
   shouldSkipEfdRetry,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
+  getDynamicAtrRetryCount,
+} = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const {
   TEST_STATUS,
   setRumTestTags,
   TEST_CODE_OWNERS,
@@ -415,7 +418,12 @@ const FINAL_STATUS_RETRY_KIND = {
   atf: 'atf',
 }
 
-function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTestRetriesCount }) {
+function getFinalStatusRetryKind ({
+  finishedTest,
+  finishedTestAttempts,
+  flakyTestRetriesCount,
+  isDynamicAtrEnabled,
+}) {
   // Infer retry kind from the executions we actually saw so ATR enabled with
   // a retry count of 0 is still treated as a single final execution.
   if (finishedTest.isAttemptToFix) {
@@ -426,7 +434,7 @@ function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTes
     return FINAL_STATUS_RETRY_KIND.efd
   }
 
-  if (finishedTestAttempts.length > 1 && flakyTestRetriesCount > 0) {
+  if (finishedTestAttempts.length > 1 && (isDynamicAtrEnabled || flakyTestRetriesCount > 0)) {
     return FINAL_STATUS_RETRY_KIND.atr
   }
 
@@ -473,6 +481,9 @@ class CypressPlugin {
   isCoverageReportUploadEnabled = false
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
+  isDynamicAtrEnabled = false
+  dynamicAtrBuckets = undefined
+  dynamicAtrRetryCountByTest = new Map()
   isEarlyFlakeDetectionEnabled = false
   isEarlyFlakeDetectionFaulty = false
   isKnownTestsEnabled = false
@@ -564,6 +575,9 @@ class CypressPlugin {
     this.isCoverageReportUploadEnabled = false
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
+    this.isDynamicAtrEnabled = false
+    this.dynamicAtrBuckets = undefined
+    this.dynamicAtrRetryCountByTest = new Map()
     this.isEarlyFlakeDetectionEnabled = false
     this.isEarlyFlakeDetectionFaulty = false
     this.isKnownTestsEnabled = false
@@ -897,6 +911,8 @@ class CypressPlugin {
               earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
+              isDynamicAtrEnabled,
+              dynamicAtrBuckets,
               isKnownTestsEnabled,
               isTestManagementEnabled,
               testManagementAttemptToFixRetries,
@@ -914,13 +930,26 @@ class CypressPlugin {
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
             this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            this.isDynamicAtrEnabled = isDynamicAtrEnabled ?? false
+            this.dynamicAtrBuckets = dynamicAtrBuckets
             if (typeof this.cypressConfig.retries === 'number') {
               this.cypressConfig.retries = {
                 openMode: this.cypressConfig.retries,
                 runMode: this.cypressConfig.retries,
               }
             }
-            this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+            // Dynamic ATR starts at the maximum budget, then narrows each test
+            // after its initial duration is known.
+            if (this.isDynamicAtrEnabled) {
+              this.cypressConfig.retries.runMode = Math.max(
+                1,
+                this.dynamicAtrBuckets
+                  ? Math.max(...this.dynamicAtrBuckets)
+                  : this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+              )
+            } else {
+              this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+            }
           } else {
             this.flakyTestRetriesCount = 0
           }
@@ -980,6 +1009,32 @@ class CypressPlugin {
   }
 
   /**
+   * Stores the dynamic ATR retry count for a test after its first execution duration is known.
+   *
+   * @param {string} testSuite
+   * @param {string} testName
+   * @param {number | undefined} duration
+   * @returns {number}
+   */
+  setDynamicAtrRetryCountForTest (testSuite, testName, duration) {
+    if (!this.dynamicAtrRetryCountByTest) {
+      this.dynamicAtrRetryCountByTest = new Map()
+    }
+    let retryCountByTestName = this.dynamicAtrRetryCountByTest.get(testSuite)
+    if (!retryCountByTestName) {
+      retryCountByTestName = new Map()
+      this.dynamicAtrRetryCountByTest.set(testSuite, retryCountByTestName)
+    }
+    const retryCount = getDynamicAtrRetryCount(
+      duration ?? 0,
+      this.earlyFlakeDetectionRetryPolicy,
+      this.dynamicAtrBuckets
+    )
+    retryCountByTestName.set(testName, retryCount)
+    return retryCount
+  }
+
+  /**
    * Returns whether an EFD retry clone is beyond the selected retry count and should be discarded.
    *
    * @param {string} testSuite
@@ -990,6 +1045,10 @@ class CypressPlugin {
   shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
     return shouldSkipEfdRetry(efdRetryIndex, testSuiteRetries?.[testName])
+  }
+
+  getDynamicAtrRetryCountForTest (testSuite, testName) {
+    return this.dynamicAtrRetryCountByTest.get(testSuite)?.get(testName)
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -1540,15 +1599,19 @@ class CypressPlugin {
     // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
     let latestError
 
-    const finishedTestsByTestName = finishedTests.reduce((acc, finishedTest) => {
-      if (!acc[finishedTest.testName]) {
-        acc[finishedTest.testName] = []
+    // Test titles are user-defined. Use a Map so names such as "constructor"
+    // cannot collide with Object.prototype while grouping completed attempts.
+    const finishedTestsByTestName = new Map()
+    for (const finishedTest of finishedTests) {
+      let finishedTestAttempts = finishedTestsByTestName.get(finishedTest.testName)
+      if (!finishedTestAttempts) {
+        finishedTestAttempts = []
+        finishedTestsByTestName.set(finishedTest.testName, finishedTestAttempts)
       }
-      acc[finishedTest.testName].push(finishedTest)
-      return acc
-    }, {})
+      finishedTestAttempts.push(finishedTest)
+    }
 
-    for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
+    for (const [testName, finishedTestAttempts] of finishedTestsByTestName) {
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
@@ -1648,6 +1711,7 @@ class CypressPlugin {
             finishedTest,
             finishedTestAttempts,
             flakyTestRetriesCount: this.flakyTestRetriesCount,
+            isDynamicAtrEnabled: this.isDynamicAtrEnabled,
           })
 
           const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
@@ -2064,6 +2128,17 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'slow')
           }
         }
+        // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+        if (
+          this.isDynamicAtrEnabled &&
+          this.isFlakyTestRetriesEnabled &&
+          !isAttemptToFix &&
+          !isEfdRetry &&
+          !isEfdManagedTest &&
+          this.getDynamicAtrRetryCountForTest(testSuite, testName) === undefined
+        ) {
+          this.setDynamicAtrRetryCountForTest(testSuite, testName, duration)
+        }
         if (didAbortSlowEfdRetries && testStatus === 'skip' && !error && duration > 0) {
           testStatus = 'pass'
         }
@@ -2160,8 +2235,10 @@ class CypressPlugin {
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
+        const dynamicAtrRetryCount = this.getDynamicAtrRetryCountForTest(testSuite, testName)
+        const atrRetryCount = this.isDynamicAtrEnabled ? dynamicAtrRetryCount : this.flakyTestRetriesCount
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
-          this.flakyTestRetriesCount > 0 && testStatuses.length === this.flakyTestRetriesCount + 1 &&
+          atrRetryCount > 0 && testStatuses.length === atrRetryCount + 1 &&
           testStatuses.every(status => status === 'fail')) {
           this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
@@ -2227,7 +2304,7 @@ class CypressPlugin {
         })
         this.activeTestSpan = null
 
-        return null
+        return dynamicAtrRetryCount === undefined ? null : { dynamicAtrRetryCount }
       },
       'dd:addTags': (tags) => {
         if (this.activeTestSpan) {

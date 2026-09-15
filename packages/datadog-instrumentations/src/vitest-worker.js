@@ -9,7 +9,11 @@ const { isMainThread, parentPort } = require('node:worker_threads')
 const { channel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { getEfdRetryCountForDuration } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
+  getEfdRetryCountForDuration,
+  EMPTY_EFD_RETRY_POLICY,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const {
   DYNAMIC_NAME_RE,
   getTestSuitePath,
@@ -63,6 +67,12 @@ const modifiedTasks = new WeakSet()
 const efdRetryTasks = new WeakSet()
 const efdDeterminedRetries = new WeakMap()
 const efdSlowAbortedTasks = new WeakSet()
+// Per-task: dynamic ATR retry count determined after the first attempt.
+const dynamicAtrRetryCountByTask = new WeakMap()
+// Vitest reads the retry ceiling before the initial attempt. Once the dynamic
+// ceiling is known, replace a surplus retry with a no-op and restore the last
+// real failure after its retry loop completes.
+const dynamicAtrTerminalResults = new WeakMap()
 const efdExecutionStartByTask = new WeakMap()
 const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
@@ -619,6 +629,12 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
+    const dynamicAtrTerminalResult = dynamicAtrTerminalResults.get(task)
+    if (dynamicAtrTerminalResult) {
+      task.result = dynamicAtrTerminalResult
+      dynamicAtrTerminalResults.delete(task)
+    }
+
     if (efdRetryTasks.has(task)) {
       const statuses = taskToStatuses.get(task)
       // If the test has passed at least once, we consider it passed
@@ -712,6 +728,40 @@ function wrapVitestTestRunner (VitestTestRunner) {
           await promises.setProbePromise
         }
       }
+    }
+
+    if (
+      providedContext.isDynamicAtrEnabled &&
+      numAttempt > 0 &&
+      !dynamicAtrRetryCountByTask.has(task) &&
+      isFlakyTestRetriesEnabledForTask(providedContext, task) &&
+      !attemptToFixTasks.has(task) &&
+      !newTasks.has(task) &&
+      !modifiedTasks.has(task)
+    ) {
+      dynamicAtrRetryCountByTask.set(task, getDynamicAtrRetryCount(
+        task.result?.duration ?? 0,
+        earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY,
+        providedContext.dynamicAtrBuckets
+      ))
+    }
+    const dynamicAtrRetryCount = dynamicAtrRetryCountByTask.get(task)
+    if (
+      providedContext.isDynamicAtrEnabled &&
+      dynamicAtrRetryCount !== undefined &&
+      numAttempt > dynamicAtrRetryCount
+    ) {
+      dynamicAtrTerminalResults.set(task, {
+        ...task.result,
+        state: 'fail',
+        errors: task.result.errors?.slice(),
+      })
+      if (vitestSetFn) {
+        const noop = function () {}
+        noop.__ddTraceWrapped = true
+        vitestSetFn(task, noop)
+      }
+      return onBeforeTryTask.apply(this, arguments)
     }
 
     const lastExecutionStatus = task.result.state
@@ -836,15 +886,16 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
       const result = await onAfterTryTask.apply(this, arguments)
 
+      const providedContext = getProvidedContext()
       const {
         testManagementAttemptToFixRetries,
         earlyFlakeDetectionRetryPolicy,
-      } = getProvidedContext()
+      } = providedContext
 
       const status = getVitestTestStatus(task, retryInfo.retry)
       const ctx = taskToCtx.get(task)
 
-      const { isDiEnabled } = getProvidedContext()
+      const { isDiEnabled } = providedContext
       const isFailedTestReplayAllowed = !hasConcurrentTests(task.file)
 
       if (efdSkippedRetryResults.has(task)) {
@@ -1114,9 +1165,26 @@ function getStartTestsWrapper (frameworkVersion) {
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
           const isAtrRetry = isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
             !newTasks.has(task) && !modifiedTasks.has(task)
+          // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+          if (
+            isAtrRetry &&
+            providedContext.isDynamicAtrEnabled &&
+            !dynamicAtrRetryCountByTask.has(task) &&
+            task.result?.retryCount === 0
+          ) {
+            const dynamicCount = getDynamicAtrRetryCount(
+              task.result?.duration ?? 0,
+              providedContext.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY,
+              providedContext.dynamicAtrBuckets
+            )
+            dynamicAtrRetryCountByTask.set(task, dynamicCount)
+          }
           if (isAtrRetry) {
-            const maxRetries = providedContext.flakyTestRetriesCount ?? 0
-            if (maxRetries > 0 && task.result?.retryCount === maxRetries) {
+            // Dynamic ATR: use the per-test duration-based count instead of the flat limit.
+            const maxRetries = providedContext.isDynamicAtrEnabled && dynamicAtrRetryCountByTask.has(task)
+              ? dynamicAtrRetryCountByTask.get(task)
+              : (providedContext.flakyTestRetriesCount ?? 0)
+            if (maxRetries > 0 && task.result?.retryCount >= maxRetries) {
               hasFailedAllRetries = true
             }
           }

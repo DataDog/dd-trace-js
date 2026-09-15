@@ -4122,12 +4122,14 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
+        dynamicAtrBuckets: undefined,
         earlyFlakeDetectionFaultyThreshold: 30,
         earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
         isDiEnabled: true,
+        isDynamicAtrEnabled: false,
         isEarlyFlakeDetectionEnabled: true,
         isFlakyTestRetriesEnabled: true,
         isImpactedTestsEnabled: true,
