@@ -16,4 +16,5 @@ module.exports = [
   ...require('./playwright'),
   ...require('./webdriverio'),
   ...require('./aws-durable-execution-sdk-js'),
+  ...require('./supabase'),
 ]

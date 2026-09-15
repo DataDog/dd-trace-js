@@ -1484,9 +1484,9 @@
     ],
     "DD_PROFILING_ALLOCATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -4012,6 +4012,13 @@
       }
     ],
     "DD_TRACE_SUFFIXPLUGIN_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_SUPABASE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

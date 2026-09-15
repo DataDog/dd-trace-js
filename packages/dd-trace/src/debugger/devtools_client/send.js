@@ -6,9 +6,11 @@ const { stringify } = require('querystring')
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
+const { INCOMPLETE_REASON } = require('../guardrail-metrics')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
 const config = require('./config')
+const guardrailMetrics = require('./guardrail-metrics')
 const getRequestOptions = require('./request-options')
 const { pruneSnapshot } = require('./snapshot-pruner')
 const buildTags = require('./tags')
@@ -34,14 +36,28 @@ const jsonBuffer = new JSONBuffer({
   onFlush,
 })
 
-function send (message, logger, dd, snapshot, processTags) {
+/**
+ * Queue a probe result for upload.
+ *
+ * @param {string} message - The evaluated log message
+ * @param {object} logger - The logger metadata
+ * @param {object | undefined} dd - The trace and span ids of the active trace, if any
+ * @param {object} snapshot - The snapshot payload
+ * @param {string | undefined} processTags - The serialized process tags, if enabled
+ * @param {number} eventType - The guardrail event type, one of `EVENT_TYPE`
+ * @param {number} incompleteReasons - Bitmask of `INCOMPLETE_REASON` flags enforced while capturing the snapshot
+ */
+function send (message, logger, dd, snapshot, processTags, eventType, incompleteReasons) {
+  if (message?.length > MAX_MESSAGE_LENGTH) {
+    message = message.slice(0, MAX_MESSAGE_LENGTH) + '…'
+    incompleteReasons |= INCOMPLETE_REASON.STRING_LENGTH
+  }
+
   const payload = {
     ddsource,
     hostname,
     service,
-    message: message?.length > MAX_MESSAGE_LENGTH
-      ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
-      : message,
+    message,
     logger,
     dd,
     process_tags: processTags,
@@ -52,6 +68,7 @@ function send (message, logger, dd, snapshot, processTags) {
   let size = Buffer.byteLength(json)
 
   if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
+    incompleteReasons |= INCOMPLETE_REASON.PAYLOAD_TOO_LARGE
     let pruned
     try {
       pruned = pruneSnapshot(json, size, MAX_LOG_PAYLOAD_SIZE_BYTES)
@@ -71,6 +88,8 @@ function send (message, logger, dd, snapshot, processTags) {
   }
 
   jsonBuffer.write(json, size)
+
+  if (incompleteReasons !== 0) guardrailMetrics.captureIncomplete(incompleteReasons, eventType)
 }
 
 /**

@@ -3,14 +3,14 @@
     "dependency": "@anthropic-ai/claude-agent-sdk",
     "integration": "claude-agent-sdk",
     "minimum_tracer_supported": "0.2.113",
-    "max_tracer_supported": "0.3.259",
+    "max_tracer_supported": "0.3.263",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@anthropic-ai/sdk",
     "integration": "anthropic",
     "minimum_tracer_supported": "0.14.0",
-    "max_tracer_supported": "0.122.0",
+    "max_tracer_supported": "0.124.0",
     "auto-instrumented": "True"
   },
   {
@@ -31,7 +31,7 @@
     "dependency": "@aws/durable-execution-sdk-js",
     "integration": "aws-durable-execution-sdk-js",
     "minimum_tracer_supported": "1.1.0",
-    "max_tracer_supported": "2.3.0",
+    "max_tracer_supported": "2.3.1",
     "auto-instrumented": "True"
   },
   {
@@ -108,7 +108,14 @@
     "dependency": "@google/genai",
     "integration": "google-genai",
     "minimum_tracer_supported": "1.19.0",
-    "max_tracer_supported": "2.20.0",
+    "max_tracer_supported": "2.21.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@graphql-tools/executor",
+    "integration": "graphql",
+    "minimum_tracer_supported": "0.0.14",
+    "max_tracer_supported": "2.0.1",
     "auto-instrumented": "True"
   },
   {
@@ -129,28 +136,28 @@
     "dependency": "@happy-dom/jest-environment",
     "integration": "jest",
     "minimum_tracer_supported": "10.0.0",
-    "max_tracer_supported": "20.12.0",
+    "max_tracer_supported": "20.14.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@jest/core",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@jest/test-sequencer",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@jest/transform",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
@@ -171,7 +178,7 @@
     "dependency": "@langchain/langgraph",
     "integration": "langgraph",
     "minimum_tracer_supported": "1.1.2",
-    "max_tracer_supported": "1.4.13",
+    "max_tracer_supported": "1.4.14",
     "auto-instrumented": "True"
   },
   {
@@ -245,10 +252,52 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@supabase/auth-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/functions-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/postgrest-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/realtime-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/storage-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.4",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@supabase/supabase-js",
+    "integration": "supabase",
+    "minimum_tracer_supported": "2.112.2",
+    "max_tracer_supported": "2.112.4",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@wdio/local-runner",
     "integration": "mocha",
     "minimum_tracer_supported": "9.0.0",
-    "max_tracer_supported": "9.31.5",
+    "max_tracer_supported": "9.31.7",
     "auto-instrumented": "True"
   },
   {
@@ -262,7 +311,7 @@
     "dependency": "ai",
     "integration": "ai",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "7.0.87",
+    "max_tracer_supported": "7.0.93",
     "auto-instrumented": "True"
   },
   {
@@ -304,7 +353,7 @@
     "dependency": "bullmq",
     "integration": "bullmq",
     "minimum_tracer_supported": "5.66.0",
-    "max_tracer_supported": "6.3.3",
+    "max_tracer_supported": "6.3.4",
     "auto-instrumented": "True"
   },
   {
@@ -325,7 +374,7 @@
     "dependency": "child_process",
     "integration": "child_process",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -350,10 +399,17 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "dd-trace-api",
+    "integration": "dd-trace-api",
+    "minimum_tracer_supported": "1.0.1",
+    "max_tracer_supported": "1.0.1",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "dns",
     "integration": "dns",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -374,7 +430,7 @@
     "dependency": "electron",
     "integration": "electron",
     "minimum_tracer_supported": "37.0.0",
-    "max_tracer_supported": "44.1.0",
+    "max_tracer_supported": "44.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -388,7 +444,7 @@
     "dependency": "fastify",
     "integration": "fastify",
     "minimum_tracer_supported": "1.0.0",
-    "max_tracer_supported": "5.12.1",
+    "max_tracer_supported": "5.12.3",
     "auto-instrumented": "True"
   },
   {
@@ -402,7 +458,7 @@
     "dependency": "fs",
     "integration": "fs",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -423,28 +479,28 @@
     "dependency": "hono",
     "integration": "hono",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.13.5",
+    "max_tracer_supported": "4.13.7",
     "auto-instrumented": "True"
   },
   {
     "dependency": "http",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "http2",
     "integration": "http2",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "https",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -465,42 +521,42 @@
     "dependency": "jest-circus",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-config",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-environment-jsdom",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-environment-node",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-runtime",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "jest-worker",
     "integration": "jest",
     "minimum_tracer_supported": "28.0.0",
-    "max_tracer_supported": "30.5.0",
+    "max_tracer_supported": "30.5.1",
     "auto-instrumented": "True"
   },
   {
@@ -591,7 +647,7 @@
     "dependency": "mongoose",
     "integration": "mongoose",
     "minimum_tracer_supported": "4.6.4",
-    "max_tracer_supported": "9.9.4",
+    "max_tracer_supported": "9.9.5",
     "auto-instrumented": "True"
   },
   {
@@ -605,14 +661,14 @@
     "dependency": "mysql2",
     "integration": "mysql2",
     "minimum_tracer_supported": "1.0.0",
-    "max_tracer_supported": "3.24.2",
+    "max_tracer_supported": "3.24.3",
     "auto-instrumented": "True"
   },
   {
     "dependency": "net",
     "integration": "net",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -626,42 +682,42 @@
     "dependency": "node:dns",
     "integration": "dns",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:fs",
     "integration": "fs",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http2",
     "integration": "http2",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:https",
     "integration": "http",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:net",
     "integration": "net",
     "minimum_tracer_supported": "22.0.0",
-    "max_tracer_supported": "26.4.0",
+    "max_tracer_supported": "26.8.2",
     "auto-instrumented": "True"
   },
   {
@@ -675,7 +731,7 @@
     "dependency": "openai",
     "integration": "openai",
     "minimum_tracer_supported": "3.0.0",
-    "max_tracer_supported": "7.8.0",
+    "max_tracer_supported": "7.10.0",
     "auto-instrumented": "True"
   },
   {
@@ -759,7 +815,7 @@
     "dependency": "sharedb",
     "integration": "sharedb",
     "minimum_tracer_supported": "1.0.0",
-    "max_tracer_supported": "6.0.2",
+    "max_tracer_supported": "6.0.3",
     "auto-instrumented": "True"
   },
   {
@@ -780,7 +836,7 @@
     "dependency": "undici",
     "integration": "undici",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "8.10.0",
+    "max_tracer_supported": "8.10.2",
     "auto-instrumented": "True"
   },
   {
