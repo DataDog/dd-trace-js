@@ -99,6 +99,52 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('does not publish direct stream writes made while formatting a record', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        stream.write('unrelated stderr output\n')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello %o', value)
+
+    assert.deepStrictEqual(output, ['unrelated stderr output\n', 'hello formatted value\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
+  it('does not publish console.log output written to the same stream while formatting a record', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        target.log('unrelated console output')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.error('hello %o', value)
+
+    assert.deepStrictEqual(output, ['unrelated console output\n', 'hello formatted value\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'hello formatted value' }])
+  })
+
   it('publishes nested console calls made while formatting another record', () => {
     const context = new AsyncLocalStorage()
     const output = []

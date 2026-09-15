@@ -213,10 +213,12 @@ function wrapConsole (target, captureLogHolder) {
           activeCapture = parentCapture
 
           if (completed) {
+            // Formatting may write unrelated output to the same stream. The console method's own
+            // output is the final write; observed writes are the fallback for delegated methods.
             if (capture.ownRecords.length > 0) {
-              capture.records.push(...capture.ownRecords)
+              capture.records.push(capture.ownRecords.at(-1))
             } else if (capture.observedRecords.length > 0) {
-              capture.records.push(...capture.observedRecords)
+              capture.records.push(capture.observedRecords.at(-1))
             } else if (capture.fallbackRecord) {
               capture.records.push(capture.fallbackRecord)
             }
