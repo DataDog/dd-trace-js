@@ -48,6 +48,7 @@ describe('esm', () => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
           assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
+          assert.strictEqual(checkSpansForServiceName(payload, 'oracle.pool.acquire'), true)
         }, messageTimeoutMs)
 
         const completed = spawnPluginIntegrationTestProcAndExpectExit(

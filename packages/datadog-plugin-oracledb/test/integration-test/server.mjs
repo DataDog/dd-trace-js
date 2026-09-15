@@ -1,4 +1,5 @@
 import 'dd-trace/init.js'
+import tracer from 'dd-trace'
 import oracledb from 'oracledb'
 
 const hostname = 'localhost'
@@ -12,11 +13,17 @@ const config = {
 
 const dbQuery = 'select current_timestamp from dual'
 
-const connection = await oracledb.getConnection(config)
-// callTimeout bounds each query round-trip. No effect on IPC connections; this connects over TCP.
-connection.callTimeout = 10_000
-await connection.execute(dbQuery)
+const pool = await oracledb.createPool({ ...config, poolMin: 0 })
+let connection
 
-if (connection) {
-  await connection.close()
+try {
+  await tracer.trace('oracledb.esm', async () => {
+    connection = await pool.getConnection()
+    // callTimeout bounds each query round-trip. No effect on IPC connections; this connects over TCP.
+    connection.callTimeout = 10_000
+    await connection.execute(dbQuery)
+  })
+} finally {
+  if (connection !== undefined) await connection.close()
+  await pool.close()
 }
