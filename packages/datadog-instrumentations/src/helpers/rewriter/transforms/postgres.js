@@ -136,7 +136,6 @@ function injectPostgresReadyCheck (program, queryIdentifier) {
 
 /**
  * @param {import('estree').Program} program
- * @returns {string}
  */
 function findPostgresQueryIdentifier (program) {
   const identifiers = []
@@ -254,7 +253,6 @@ function wrapPostgresRejection (assignment, channelVariable) {
 /**
  * @param {object} state
  * @param {import('estree').Program} program
- * @returns {string}
  */
 function injectPostgresTracingChannel (state, program) {
   state.transforms.tracingChannelDeclaration(state, program)
