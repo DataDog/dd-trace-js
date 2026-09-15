@@ -87,6 +87,7 @@ class LogSubmissionPlugin extends Plugin {
   #timer
   #beforeExitHandler = () => this.#flushLogs()
   #createWinstonJsonFormat
+  #getLogHolder = () => buildLogHolder(this.tracer)
   #winstonStreamClass
   // Winston formats records inside its transports, not at logger.write time, so (unlike Bunyan/Pino)
   // the instrumentation can't publish a post-format line. A Stream transport pipes format.json()
@@ -143,12 +144,13 @@ class LogSubmissionPlugin extends Plugin {
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
     })
-    this.addSub('ci:log-submission:console', ({ method, message: formattedMessage }) => {
+    this.addSub('ci:log-submission:console', (payload) => {
+      const { logHolder: capturedLogHolder, method, message: formattedMessage } = payload
       const message = {
         message: formattedMessage,
         status: CONSOLE_METHOD_TO_STATUS[method],
       }
-      const logHolder = buildLogHolder(this.tracer)
+      const logHolder = Object.hasOwn(payload, 'logHolder') ? capturedLogHolder : this.#getLogHolder()
       if (logHolder) message.dd = logHolder.dd
 
       this.#enqueueLog({ source: 'console', message })
@@ -178,7 +180,7 @@ class LogSubmissionPlugin extends Plugin {
       ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
-    if (this._enabled) consoleConfigureCh.publish()
+    if (this._enabled) consoleConfigureCh.publish({ getLogHolder: this.#getLogHolder })
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     if (this._enabled) {

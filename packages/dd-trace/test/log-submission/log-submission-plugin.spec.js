@@ -155,6 +155,35 @@ describe('LogSubmissionPlugin', () => {
     }])
   })
 
+  it('uses console log correlation captured before publication', () => {
+    const span = { spanId: 'outer span', traceId: 'outer trace' }
+    legacyStorage.run({ span }, () => {
+      consoleLogSubmissionCh.publish({
+        logHolder: {
+          dd: {
+            service: 'my service',
+            span_id: 'nested span',
+            trace_id: 'nested trace',
+          },
+        },
+        method: 'error',
+        message: 'nested error',
+      })
+    })
+    clock.tick(1000)
+
+    const [data] = request.firstCall.args
+    assert.deepStrictEqual(JSON.parse(data), [{
+      dd: {
+        service: 'my service',
+        span_id: 'nested span',
+        trace_id: 'nested trace',
+      },
+      message: 'nested error',
+      status: 'error',
+    }])
+  })
+
   it('maps console methods to log statuses', () => {
     for (const method of ['error', 'warn']) {
       consoleLogSubmissionCh.publish({ method, message: method })

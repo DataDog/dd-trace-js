@@ -12,7 +12,8 @@ const methods = ['error', 'warn']
 const methodSet = new Set(methods)
 const wrappedTargets = new WeakSet()
 
-/** @typedef {{ method: string, message: string, writeId: number }} ConsoleRecord */
+/** @typedef {{ dd: object }} LogHolder */
+/** @typedef {{ logHolder?: LogHolder, method: string, message: string, writeId: number }} ConsoleRecord */
 /**
  * @typedef {{
  *   fallbackRecord?: ConsoleRecord,
@@ -26,10 +27,51 @@ const wrappedTargets = new WeakSet()
 let activeCapture
 let activeWriteId = 0
 let expectedWrite
+/** @type {(() => LogHolder | undefined) | undefined} */
+let getLogHolder
 let isPublishing = false
 let nextWriteId = 0
 
 /** @typedef {{ write: (buffer: unknown, method: string, message: string) => unknown }} JestBufferedConsole */
+
+/**
+ * @param {string} method
+ * @param {string} message
+ * @param {number} writeId
+ * @param {(() => LogHolder | undefined) | undefined} captureLogHolder
+ * @returns {ConsoleRecord}
+ */
+function createRecord (method, message, writeId, captureLogHolder) {
+  const record = { method, message, writeId }
+  captureLogHolder ||= getLogHolder
+  if (captureLogHolder) {
+    let logHolder
+    try {
+      logHolder = captureLogHolder()
+    } catch {}
+    // Preserve the absence of correlation as well, so a later publish does
+    // not accidentally pick up a different active span.
+    record.logHolder = logHolder
+  }
+  return record
+}
+
+/**
+ * @param {Record<string, unknown>} stream
+ * @param {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>} writeDescriptor
+ * @param {Function} [expectedWrite]
+ * @returns {void}
+ */
+function restoreStreamWrite (stream, writeDescriptor, expectedWrite) {
+  try {
+    if (expectedWrite && Object.getOwnPropertyDescriptor(stream, 'write')?.value !== expectedWrite) return
+    if (writeDescriptor) {
+      Object.defineProperty(stream, 'write', writeDescriptor)
+    } else {
+      delete stream.write
+    }
+  } catch {}
+}
 
 /**
  * @param {ConsoleRecord[]} records
@@ -55,8 +97,10 @@ function publishRecords (records) {
   activeCapture = undefined
   isPublishing = true
   try {
-    for (const { method, message } of recordsToPublish) {
-      logSubmissionCh.publish({ method, message })
+    for (const record of recordsToPublish) {
+      const payload = { method: record.method, message: record.message }
+      if (Object.hasOwn(record, 'logHolder')) payload.logHolder = record.logHolder
+      logSubmissionCh.publish(payload)
     }
   } finally {
     isPublishing = false
@@ -66,9 +110,10 @@ function publishRecords (records) {
 
 /**
  * @param {Record<string, unknown> | undefined} target
+ * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
  * @returns {void}
  */
-function wrapConsole (target) {
+function wrapConsole (target, captureLogHolder) {
   if (!target || wrappedTargets.has(target)) return
 
   wrappedTargets.add(target)
@@ -95,7 +140,9 @@ function wrapConsole (target) {
       let parentCapture
       let stream
       let writeDescriptor
+      let writeInstallationAttempted = false
       let originalWrite
+      let captureActive = false
       let wrappedWrite
 
       if (shouldCapture) {
@@ -106,15 +153,18 @@ function wrapConsole (target) {
           if (typeof originalWrite === 'function') {
             writeDescriptor = Object.getOwnPropertyDescriptor(stream, 'write')
             wrappedWrite = function (chunk) {
+              if (!captureActive) return originalWrite.apply(this, arguments)
+
               const previousWriteId = activeWriteId
               const previousExpectedWrite = expectedWrite
-              const writeId = expectedWrite === wrappedWrite ? activeWriteId : ++nextWriteId
+              const isNewWrite = expectedWrite !== wrappedWrite
+              const writeId = isNewWrite ? ++nextWriteId : activeWriteId
               activeWriteId = writeId
               expectedWrite = originalWrite
               try {
                 if (typeof chunk === 'string') {
                   const message = chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk
-                  const record = { method, message, writeId }
+                  const record = createRecord(method, message, writeId, captureLogHolder)
                   // Nested calls pass through outer write wrappers. Keep all
                   // observations for delegation, but only claim writes that
                   // started while this console call was active.
@@ -127,20 +177,26 @@ function wrapConsole (target) {
                 expectedWrite = previousExpectedWrite
               }
             }
+            writeInstallationAttempted = true
             Object.defineProperty(stream, 'write', {
               configurable: writeDescriptor?.configurable ?? true,
               enumerable: writeDescriptor?.enumerable ?? true,
               writable: true,
               value: wrappedWrite,
             })
-            if (Object.getOwnPropertyDescriptor(stream, 'write')?.value !== wrappedWrite) wrappedWrite = undefined
+            if (Object.getOwnPropertyDescriptor(stream, 'write')?.value !== wrappedWrite) {
+              restoreStreamWrite(stream, writeDescriptor)
+              wrappedWrite = undefined
+            }
             if (wrappedWrite) {
               parentCapture = activeCapture
               capture = { records: parentCapture?.records || [], observedRecords: [], ownRecords: [] }
               activeCapture = capture
+              captureActive = true
             }
           }
         } catch {
+          if (writeInstallationAttempted) restoreStreamWrite(stream, writeDescriptor)
           wrappedWrite = undefined
         }
       }
@@ -152,15 +208,8 @@ function wrapConsole (target) {
         return result
       } finally {
         if (wrappedWrite) {
-          try {
-            if (Object.getOwnPropertyDescriptor(stream, 'write')?.value === wrappedWrite) {
-              if (writeDescriptor) {
-                Object.defineProperty(stream, 'write', writeDescriptor)
-              } else {
-                delete stream.write
-              }
-            }
-          } catch {}
+          captureActive = false
+          restoreStreamWrite(stream, writeDescriptor, wrappedWrite)
           activeCapture = parentCapture
 
           if (completed) {
@@ -184,9 +233,10 @@ function wrapConsole (target) {
 
 /**
  * @param {JestBufferedConsole | undefined} BufferedConsole
+ * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
  * @returns {void}
  */
-function wrapJestBufferedConsole (BufferedConsole) {
+function wrapJestBufferedConsole (BufferedConsole, captureLogHolder) {
   if (!BufferedConsole || wrappedTargets.has(BufferedConsole)) return
 
   wrappedTargets.add(BufferedConsole)
@@ -195,7 +245,7 @@ function wrapJestBufferedConsole (BufferedConsole) {
   shimmer.wrap(BufferedConsole, 'write', original => function (buffer, method, message) {
     const shouldPublish = !isPublishing && methodSet.has(method) && logSubmissionCh.hasSubscribers
     if (shouldPublish) {
-      const record = { method, message, writeId: ++nextWriteId }
+      const record = createRecord(method, message, ++nextWriteId, captureLogHolder)
       if (activeCapture) {
         activeCapture.fallbackRecord = record
       } else {
@@ -216,7 +266,8 @@ function wrapJestBufferedConsole (BufferedConsole) {
   })
 }
 
-configureCh.subscribe(() => {
+configureCh.subscribe(({ getLogHolder: configuredGetLogHolder } = {}) => {
+  getLogHolder = configuredGetLogHolder
   // The global console has bound own methods, while Console.prototype covers
   // instances that are created after log submission is enabled.
   wrapConsole(globalThis.console)

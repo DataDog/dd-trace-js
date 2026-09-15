@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { AsyncLocalStorage } = require('node:async_hooks')
 const { Console } = require('node:console')
 const { Writable } = require('node:stream')
 const { inspect } = require('node:util')
@@ -99,6 +100,7 @@ describe('console instrumentation', () => {
   })
 
   it('publishes nested console calls made while formatting another record', () => {
+    const context = new AsyncLocalStorage()
     const output = []
     const stream = new Writable({
       write (chunk, encoding, callback) {
@@ -109,18 +111,18 @@ describe('console instrumentation', () => {
     const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
     const value = {
       [inspect.custom] () {
-        target.warn('nested warning')
+        context.run({ dd: { span_id: 'nested' } }, () => target.warn('nested warning'))
         return 'formatted value'
       },
     }
-    wrapConsole(target)
+    wrapConsole(target, () => context.getStore())
 
-    target.error('outer %o', value)
+    context.run({ dd: { span_id: 'outer' } }, () => target.error('outer %o', value))
 
     assert.deepStrictEqual(output, ['nested warning\n', 'outer formatted value\n'])
     assert.deepStrictEqual(payloads, [
-      { method: 'warn', message: 'nested warning' },
-      { method: 'error', message: 'outer formatted value' },
+      { logHolder: { dd: { span_id: 'nested' } }, method: 'warn', message: 'nested warning' },
+      { logHolder: { dd: { span_id: 'outer' } }, method: 'error', message: 'outer formatted value' },
     ])
   })
 
@@ -204,6 +206,31 @@ describe('console instrumentation', () => {
       { method: 'warn', message: 'first' },
       { method: 'warn', message: 'second' },
     ])
+  })
+
+  it('restores a stream write when descriptor verification fails', () => {
+    const originalWrite = sinon.stub()
+    let descriptorReads = 0
+    const stream = new Proxy({ write: originalWrite }, {
+      getOwnPropertyDescriptor (target, property) {
+        if (property === 'write' && ++descriptorReads === 2) throw new Error('unexpected descriptor read')
+        return Reflect.getOwnPropertyDescriptor(target, property)
+      },
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('first')
+    assert.strictEqual(stream.write, originalWrite)
+    target.warn('second')
+
+    sinon.assert.calledTwice(originalWrite)
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'second' }])
   })
 
   it('captures only Jest buffered warnings and errors without wrapping public methods', () => {
