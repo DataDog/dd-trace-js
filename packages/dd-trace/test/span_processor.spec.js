@@ -87,6 +87,54 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
+  it('should leave client stats to an exporter that computes them', () => {
+    const SpanStatsProcessor = sinon.stub()
+    const NativeSpanProcessor = proxyquire('../src/span_processor', {
+      './span_stats': { SpanStatsProcessor },
+      './span_format': spanFormat,
+      './span_sampler': SpanSampler,
+    })
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    exporter.computesClientStats = true
+
+    const nativeProcessor = new NativeSpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    assert.strictEqual(nativeProcessor._stats, undefined)
+  })
+
+  it('should retain JavaScript client stats for other exporters', () => {
+    const statsProcessor = {}
+    const SpanStatsProcessor = sinon.stub().returns(statsProcessor)
+    const AgentSpanProcessor = proxyquire('../src/span_processor', {
+      './span_stats': { SpanStatsProcessor },
+      './span_format': spanFormat,
+      './span_sampler': SpanSampler,
+    })
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    const agentProcessor = new AgentSpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, undefined)
+    assert.strictEqual(agentProcessor._stats, statsProcessor)
+  })
+
+  it('should leave client stats disabled in AppSec standalone mode', () => {
+    const SpanStatsProcessor = sinon.stub()
+    const StandaloneSpanProcessor = proxyquire('../src/span_processor', {
+      './span_stats': { SpanStatsProcessor },
+      './span_format': spanFormat,
+      './span_sampler': SpanSampler,
+    })
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    config.appsec.standalone = { enabled: true }
+
+    const standaloneProcessor = new StandaloneSpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    assert.strictEqual(standaloneProcessor._stats, undefined)
+  })
+
   it('should generate sampling priority when sampling manually', () => {
     processor.sample(finishedSpan)
 
