@@ -58,13 +58,13 @@ docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
   --repo /repo --base-sha master --level full --runs 1
 
-# CI-shaped set (14 cases)
+# CI-shaped set (13 cases)
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
   --repo /repo --base-sha master --level gate --runs 1
 
 # One named case (id from suites/dd-trace-js-agent-v0.1.yaml)
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
-  --repo /repo --base-sha master --case js-security-secret-into-log --runs 1
+  --repo /repo --base-sha master --case js-perf-lens-ungated-publish --runs 1
 ```
 
 `--level` picks **which cases** run. `--runs` only changes how many times **those** cases
@@ -113,8 +113,8 @@ that level already selected.
 | Level | Cases | Default runs | Use |
 |---|---|---|---|
 | `minimum` | **1** (`dd-trace-js-package-manager-001`) | 3 | First smoke |
-| `gate` (default) | **14** listed in `config.yaml` | 3 | CI-shaped |
-| `full` | **every** case in `suites/` (20) | 3 | Broader pass |
+| `gate` (default) | **13** listed in `config.yaml` | 3 | CI-shaped |
+| `full` | **every** case in `suites/` (19) | 3 | Broader pass |
 
 So this command runs **one** case once, not the whole suite:
 
@@ -128,19 +128,19 @@ To run every case once, use `--level full`. To run the CI set once, use `--level
 ### One specific case
 
 `--case` takes the `id` from [`suites/dd-trace-js-agent-v0.1.yaml`](./suites/dd-trace-js-agent-v0.1.yaml)
-(e.g. `js-perf-lens-ungated-publish`, `js-security-secret-into-log`). It overrides
+(e.g. `js-perf-lens-ungated-publish`, `js-coherence-comment-contradicts-code`). It overrides
 the preset’s case list; `--level` still supplies default `--runs` unless you pass `--runs`.
 
 ```bash
 # Docker
 docker run --rm -e LLMVAL_AUTH_HEADER -v "$PWD:/repo" "$LLMVAL_IMAGE" \
-  --repo /repo --base-sha master --case js-security-secret-into-log --runs 1
+  --repo /repo --base-sha master --case js-perf-lens-ungated-publish --runs 1
 
 # Host .NET (from the platform repo)
 dotnet run --project src/Datadog.LlmValidation.Cli -- run \
   --repo /path/to/dd-trace-js \
   --base-sha master \
-  --case js-security-secret-into-log \
+  --case js-perf-lens-ungated-publish \
   --runs 1 \
   --out results.json --report report.md --details details.json
 ```

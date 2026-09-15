@@ -255,7 +255,6 @@ cases:
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
       - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
-      - .agents/skills/dd-apm-sdk-review/reviewers/security.md
       - .agents/skills/dd-apm-sdk-review/reviewers/design.md
       - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
       - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
@@ -263,7 +262,6 @@ cases:
       - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
       - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
       - .agents/dd-apm-sdk-review-overrides/repo-context.md
-      - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
@@ -305,7 +303,6 @@ cases:
       - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
       - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
       - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
-      - .agents/skills/dd-apm-sdk-review/reviewers/security.md
       - .agents/skills/dd-apm-sdk-review/reviewers/design.md
       - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
       - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
@@ -313,7 +310,6 @@ cases:
       - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
       - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
       - .agents/dd-apm-sdk-review-overrides/repo-context.md
-      - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
       - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
@@ -340,7 +336,7 @@ cases:
     expected_criteria:
       - The report's Mode line states pasted diff / no git.
       - Includes a "Rule files used" section covering every reviewer in the roster —
-        coherence, correctness, security, design, performance, maintainability,
+        coherence, correctness, design, performance, maintainability,
         conventions, and cross-SDK consistency.
       - Includes a "Related skills in this repo" section derived from repo-context.md,
         including at least `apm-integrations` and `architecture-review`.
@@ -383,41 +379,6 @@ cases:
         contradiction.
       - Claims the code retries when it does not.
       - Reviews performance or design concerns instead of the coherence contradiction.
-
-  - id: js-security-secret-into-log
-    files:
-      - .agents/skills/dd-apm-sdk-review/reviewers/security.md
-      - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
-      - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
-    input: |
-      Apply this repo's security-review criteria (reviewers/security.md, its
-      .agents/dd-apm-sdk-review-overrides/reviewers/security.md override, and _common.md) to the
-      following code. No git checkout available — this snippet is the entire change to
-      review. `config.dsn` is a full connection string with an embedded username and
-      password, e.g. `amqp://user:password@host:5672`.
-
-      ```js
-      function onConnect (config) {
-        log.debug('connecting with config %j', config)
-      }
-      ```
-    expected_criteria:
-      - Flags `log.debug('connecting with config %j', config)` as logging a config object
-        that contains credentials (the DSN's embedded username/password) — this repo's
-        security override and the generic security.md both call out config values that may
-        contain secrets (API keys, DSNs, passwords in URLs).
-      - States the failure mode — the credential ends up in logs, a customer-visible or
-        persisted place, not just a style complaint.
-      - Classifies the finding at a severity consistent with _common.md's P0 bar for a
-        security/privacy defect, or explicitly justifies a lower severity — does not leave
-        it unclassified or downgrade it to a bare style nit.
-      - Treats this finding as needing private routing per this repo's disclosure rule,
-        rather than proposing it be pasted verbatim into a wide-audience PR description.
-    bad_signals:
-      - Misses the logged secret entirely (e.g., only comments on log level or format
-        string style).
-      - Reports this only as a P2 style issue.
-      - Suggests pasting the finding's detail directly into a public PR description.
 
   - id: js-design-bypasses-config-registration
     files:
@@ -478,7 +439,7 @@ cases:
         silent catch/swallow that drops context.
     bad_signals:
       - Does not mention the empty catch block at all.
-      - Treats this as a performance or security issue instead of an
+      - Treats this as a performance issue instead of an
         observability/maintainability one.
 
   - id: js-conventions-async-in-production-path

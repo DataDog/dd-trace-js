@@ -11,7 +11,6 @@ instruction_files:
   - .agents/skills/dd-apm-sdk-review/reviewers/_common.md
   - .agents/skills/dd-apm-sdk-review/reviewers/coherence.md
   - .agents/skills/dd-apm-sdk-review/reviewers/correctness.md
-  - .agents/skills/dd-apm-sdk-review/reviewers/security.md
   - .agents/skills/dd-apm-sdk-review/reviewers/design.md
   - .agents/skills/dd-apm-sdk-review/reviewers/performance.md
   - .agents/skills/dd-apm-sdk-review/reviewers/maintainability.md
@@ -19,7 +18,6 @@ instruction_files:
   - .agents/skills/dd-apm-sdk-review/reviewers/cross-sdk.md
   - .agents/skills/dd-apm-sdk-review/reviewers/report-template.md
   - .agents/skills/dd-apm-sdk-review/review-without-harness.md
-  - .agents/dd-apm-sdk-review-overrides/reviewers/security.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/design.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/performance.md
   - .agents/dd-apm-sdk-review-overrides/reviewers/maintainability.md
@@ -46,7 +44,6 @@ presets:
       - js-perf-lens-ungated-publish
       - js-coherence-comment-contradicts-code
       - js-correctness-inverted-condition
-      - js-security-secret-into-log
       - js-design-bypasses-config-registration
       - js-maintainability-silent-catch
       - js-cross-sdk-new-env-var-not-verified
