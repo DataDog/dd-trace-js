@@ -13,7 +13,14 @@ const methodSet = new Set(methods)
 const wrappedTargets = new WeakSet()
 
 /** @typedef {{ method: string, message: string, writeId: number }} ConsoleRecord */
-/** @typedef {{ fallbackRecord?: ConsoleRecord, records: ConsoleRecord[], writeId: number }} ConsoleCapture */
+/**
+ * @typedef {{
+ *   fallbackRecord?: ConsoleRecord,
+ *   observedRecords: ConsoleRecord[],
+ *   ownRecords: ConsoleRecord[],
+ *   records: ConsoleRecord[]
+ * }} ConsoleCapture
+ */
 
 /** @type {ConsoleCapture | undefined} */
 let activeCapture
@@ -41,7 +48,7 @@ function publishRecords (records) {
       // the logical log record.
       recordsByWrite.set(record.writeId, record)
     }
-    recordsToPublish = recordsByWrite.values()
+    recordsToPublish = [...recordsByWrite.values()].sort((a, b) => a.writeId - b.writeId)
   }
 
   const previousCapture = activeCapture
@@ -66,18 +73,29 @@ function wrapConsole (target) {
 
   wrappedTargets.add(target)
   for (const method of methods) {
-    if (typeof target[method] !== 'function') continue
+    let descriptor
+    try {
+      let owner = target
+      while (owner && !descriptor) {
+        descriptor = Object.getOwnPropertyDescriptor(owner, method)
+        owner = Object.getPrototypeOf(owner)
+      }
+    } catch {
+      continue
+    }
+    // Accessor-backed replacements cannot be inspected without running user
+    // code, so leave them untouched.
+    if (typeof descriptor?.value !== 'function') continue
 
     // Console methods are bound onto instances at runtime, so Orchestrion cannot
     // rewrite every receiver that test frameworks create or replace.
-    shimmer.wrap(target, method, original => function () {
+    const wrapMethod = original => function () {
       const shouldCapture = !isPublishing && logSubmissionCh.hasSubscribers
       let capture
       let parentCapture
       let stream
       let writeDescriptor
       let originalWrite
-      let message
       let wrappedWrite
 
       if (shouldCapture) {
@@ -95,8 +113,13 @@ function wrapConsole (target) {
               expectedWrite = originalWrite
               try {
                 if (typeof chunk === 'string') {
-                  message = chunk
-                  capture.writeId = writeId
+                  const message = chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk
+                  const record = { method, message, writeId }
+                  // Nested calls pass through outer write wrappers. Keep all
+                  // observations for delegation, but only claim writes that
+                  // started while this console call was active.
+                  capture.observedRecords.push(record)
+                  if (activeCapture === capture) capture.ownRecords.push(record)
                 }
                 return originalWrite.apply(this, arguments)
               } finally {
@@ -113,7 +136,7 @@ function wrapConsole (target) {
             if (Object.getOwnPropertyDescriptor(stream, 'write')?.value !== wrappedWrite) wrappedWrite = undefined
             if (wrappedWrite) {
               parentCapture = activeCapture
-              capture = { records: parentCapture?.records || [], writeId: 0 }
+              capture = { records: parentCapture?.records || [], observedRecords: [], ownRecords: [] }
               activeCapture = capture
             }
           }
@@ -141,9 +164,10 @@ function wrapConsole (target) {
           activeCapture = parentCapture
 
           if (completed) {
-            if (message !== undefined) {
-              if (message.endsWith('\n')) message = message.slice(0, -1)
-              capture.records.push({ method, message, writeId: capture.writeId })
+            if (capture.ownRecords.length > 0) {
+              capture.records.push(...capture.ownRecords)
+            } else if (capture.observedRecords.length > 0) {
+              capture.records.push(...capture.observedRecords)
             } else if (capture.fallbackRecord) {
               capture.records.push(capture.fallbackRecord)
             }
@@ -151,7 +175,10 @@ function wrapConsole (target) {
           if (!parentCapture) publishRecords(capture.records)
         }
       }
-    })
+    }
+    try {
+      shimmer.wrap(target, method, wrapMethod)
+    } catch {}
   }
 }
 

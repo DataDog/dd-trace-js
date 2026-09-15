@@ -124,6 +124,58 @@ describe('console instrumentation', () => {
     ])
   })
 
+  it('publishes reentrant console calls made while writing another record', () => {
+    const output = []
+    const target = {
+      _stderr: {
+        write (message) {
+          output.push(message)
+          if (message === 'outer warning\n') target.error('nested error')
+        },
+      },
+      error (message) {
+        this._stderr.write(`${message}\n`)
+      },
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('outer warning')
+
+    assert.deepStrictEqual(output, ['outer warning\n', 'nested error\n'])
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'outer warning' },
+      { method: 'error', message: 'nested error' },
+    ])
+  })
+
+  it('skips accessor-backed replacement console methods', () => {
+    const stream = { write: sinon.stub() }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    const getError = sinon.stub().throws(new Error('unexpected read'))
+    Object.defineProperty(target, 'error', {
+      configurable: true,
+      enumerable: true,
+      get: getError,
+    })
+    const descriptor = Object.getOwnPropertyDescriptor(target, 'error')
+
+    wrapConsole(target)
+    assert.deepStrictEqual(Object.getOwnPropertyDescriptor(target, 'error'), descriptor)
+    sinon.assert.notCalled(getError)
+
+    target.warn('hello')
+
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+  })
+
   it('preserves accessor-backed stream writes', () => {
     const originalWrite = sinon.stub()
     let write = originalWrite
