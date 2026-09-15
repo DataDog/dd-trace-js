@@ -21,25 +21,33 @@ class Writer {
     this.#deliveryTracker = deliveryTracker
   }
 
+  /**
+   * @param {import('../../serverless/telemetry-delivery-tracker')} deliveryTracker
+   */
+  enableDeliveryTracking (deliveryTracker) {
+    this.#deliveryTracker = deliveryTracker
+  }
+
   #isFirstFlush = true
 
   /**
    * Flushes queued telemetry, retaining delivery on supported serverless platforms.
    * @param {(error?: Error) => void} [done]
-   * @param {{ deadline?: number }} [options]
+   * @param {{ deadline?: number, reportErrors?: boolean }} [options]
    * @returns {void}
    */
   flush (done, options) {
+    const callback = options?.reportErrors || options?.deadline !== undefined || !done ? done : () => done()
     if (this.#deliveryTracker) {
-      return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), done)
+      return this.#deliveryTracker.track(callback => this.flushDirect(callback, options), callback)
     }
-    this.flushDirect(done, options)
+    this.flushDirect(callback, options)
   }
 
   /**
    * Flushes queued telemetry without registering serverless delivery retention.
    * @param {(error?: Error) => void} [done]
-   * @param {{ deadline?: number }} [options]
+   * @param {{ deadline?: number, reportErrors?: boolean }} [options]
    * @returns {void}
    */
   flushDirect (done = noop, options) {
@@ -47,7 +55,13 @@ class Writer {
 
     if (!request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
       this._encoder.reset()
-      done()
+      if (options?.reportErrors) {
+        const error = new log.NoTransmitError('Maximum active request buffer size reached: payload is discarded.')
+        error.code = 'ERR_DD_REQUEST_BUFFER_FULL'
+        done(error)
+      } else {
+        done()
+      }
     } else if (count > 0) {
       if (this.#isFirstFlush && firstFlushChannel.hasSubscribers && this._beforeFirstFlush) {
         this.#isFirstFlush = false
@@ -66,7 +80,7 @@ class Writer {
         // the oversized payload at the network boundary anyway.
         this._encoder.reset()
         log.error('Writer dropped %d trace(s) that exceeded the %d byte chunk cap', count, MAX_CHUNK_SIZE)
-        done()
+        done(options?.reportErrors ? error : undefined)
         return
       }
       if (options === undefined) {

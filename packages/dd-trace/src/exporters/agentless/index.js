@@ -4,6 +4,8 @@ const { URL } = require('node:url')
 const os = require('node:os')
 
 const log = require('../../log')
+const { createServerlessDeliveryTracker } = require('../../serverless')
+const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
 const { containerId } = require('../common/docker')
 const Writer = require('./writer')
 const { computeIntakeUrl } = require('./intake')
@@ -14,6 +16,7 @@ const { computeIntakeUrl } = require('./intake')
  * Batches multiple traces per request using timer-based flushing.
  */
 class AgentlessExporter {
+  #deliveryTracker
   #timer
   #config
 
@@ -25,6 +28,10 @@ class AgentlessExporter {
    * @param {object} config.tags - Tags including runtime-id
    */
   constructor (config) {
+    this.#deliveryTracker = createServerlessDeliveryTracker()
+    if (!this.#deliveryTracker && TelemetryDeliveryTracker.isProcessTrackingEnabled()) {
+      this.#deliveryTracker = new TelemetryDeliveryTracker()
+    }
     this.#config = config
     const site = config.site ?? 'datadoghq.com'
 
@@ -50,6 +57,7 @@ class AgentlessExporter {
       url: this._url,
       site,
       metadata,
+      deliveryTracker: this.#deliveryTracker,
     })
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]
@@ -58,6 +66,13 @@ class AgentlessExporter {
     } else {
       log.error('dd-trace global not properly initialized. beforeExit handler not registered for agentless exporter.')
     }
+  }
+
+  enableDeliveryTracking () {
+    if (this.#deliveryTracker) return
+
+    this.#deliveryTracker = new TelemetryDeliveryTracker()
+    this._writer.enableDeliveryTracking(this.#deliveryTracker)
   }
 
   /**
@@ -112,17 +127,42 @@ class AgentlessExporter {
 
   /**
    * Flushes any pending traces immediately. Clears the batch timer.
-   * @param {Function} [done] - Callback when flush is complete
+   * @param {(error?: Error) => void} [done] - Callback when flush is complete
+   * @param {{ reportErrors?: boolean }} [options]
    */
-  flush (done = () => {}) {
+  flush (done, options) {
     clearTimeout(this.#timer)
     this.#timer = undefined
-    try {
-      this._writer.flush(done)
-    } catch (err) {
-      log.error('Failed to flush traces: %s', err.message)
-      done()
+
+    if (!this.#deliveryTracker) {
+      try {
+        this._writer.flush(done, options)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        log.error('Failed to flush traces: %s', message)
+        done?.(options?.reportErrors ? (error instanceof Error ? error : new Error(message)) : undefined)
+      }
+      return
     }
+
+    let boundaryError
+    let waiting = false
+    const captureError = error => {
+      if (!waiting) boundaryError = error
+    }
+    try {
+      this._writer.flush(captureError, options)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      log.error('Failed to flush traces: %s', message)
+      boundaryError = error instanceof Error ? error : new Error(message)
+    }
+    waiting = true
+    if (!done) return
+
+    this.#deliveryTracker.waitForIdle(() => {
+      done(options?.reportErrors ? boundaryError : undefined)
+    })
   }
 }
 

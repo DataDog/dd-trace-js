@@ -4,10 +4,49 @@ const { trace, context, propagation } = require('@opentelemetry/api')
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
+const TelemetryDeliveryTracker = require('../serverless/telemetry-delivery-tracker')
 
 const ContextManager = require('./context_manager')
-const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
+const { MultiSpanProcessor, NoopSpanProcessor, settleAllFlushes } = require('./span_processor')
 const Tracer = require('./tracer')
+
+/**
+ * @typedef {{
+ *   enableDeliveryTracking?: () => void
+ *   flush?: (done?: (error?: Error) => void, options?: { reportErrors?: boolean }) => void
+ *   forceFlush?: (done?: (error?: Error) => void) => void
+ * }} TraceExporter
+ */
+
+/**
+ * @param {TraceExporter} exporter
+ * @returns {Promise<void>}
+ */
+function flushExporter (exporter) {
+  if (typeof exporter.forceFlush !== 'function' && typeof exporter.flush !== 'function') return Promise.resolve()
+
+  /**
+   * @param {() => void} resolve
+   * @param {(reason?: unknown) => void} reject
+   */
+  function flush (resolve, reject) {
+    /**
+     * @param {Error} [error]
+     */
+    function done (error) {
+      if (error) reject(error)
+      else resolve()
+    }
+
+    if (typeof exporter.forceFlush === 'function') {
+      exporter.forceFlush(done)
+    } else {
+      exporter.flush(done, { reportErrors: true })
+    }
+  }
+
+  return new Promise(flush)
+}
 
 class TracerProvider {
   #activeProcessor = new NoopSpanProcessor()
@@ -16,6 +55,8 @@ class TracerProvider {
   #tracers = new Map()
 
   constructor (config = {}) {
+    TelemetryDeliveryTracker.enableProcessTracking()
+    tracer._tracer?._exporter?.enableDeliveryTracking?.()
     this.config = config
     this.resource = config.resource
 
@@ -84,8 +125,10 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    exporter._writer?.flush()
-    return this.#activeProcessor.forceFlush()
+    return settleAllFlushes([
+      flushExporter(exporter),
+      this.#activeProcessor.forceFlush(),
+    ])
   }
 
   shutdown () {
