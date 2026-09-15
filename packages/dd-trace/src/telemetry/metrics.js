@@ -33,7 +33,6 @@ function mapToJsonArray (map, filter) {
 
 /**
  * @param {Metric} metric
- * @returns {boolean}
  */
 function hasPoints (metric) {
   return metric.hasPoints()
@@ -138,7 +137,6 @@ class DistributionMetric extends Metric {
 
   /**
    * @param {number} [value]
-   * @returns {void}
    */
   track (value = 1) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return

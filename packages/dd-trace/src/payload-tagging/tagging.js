@@ -12,7 +12,6 @@ const redacted = 'redacted'
  * Escapes dots in keys to preserve hierarchy in flattened tag names.
  *
  * @param {string} key
- * @returns {string}
  */
 function escapeKey (key) {
   return key.replaceAll('.', String.raw`\.`)

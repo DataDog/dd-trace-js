@@ -88,7 +88,6 @@ const percentByte = /%([0-9A-Fa-f]{2})/g
 /**
  * @param {Array<string | undefined>} traceTagReplacements
  * @param {string} key
- * @returns {boolean}
  */
 function hasTraceTagReplacement (traceTagReplacements, key) {
   for (let index = 0; index < traceTagReplacements.length; index += 2) {
@@ -117,7 +116,6 @@ function extractGenericContext (traceId, spanId, radix) {
 /**
  * @param {string} traceId
  * @param {DatadogSpanContext} spanContext
- * @returns {void}
  */
 function extract128BitTraceId (traceId, spanContext) {
   const buffer = spanContext._traceId.toBuffer()
@@ -485,7 +483,6 @@ class TextMapPropagator {
    * @param {Record<string, string>} traceTags
    * @param {Array<string | undefined>} [traceTagReplacements]
    * @param {number} optionalTraceTagCount
-   * @returns {void}
    */
   #injectTags (carrier, traceTags, traceTagReplacements, optionalTraceTagCount) {
     if (this.#config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) {
@@ -688,7 +685,6 @@ class TextMapPropagator {
   /**
    * @param {'inject' | 'extract'} mode
    * @param {string} name
-   * @returns {boolean}
    */
   #hasPropagationStyle (mode, name) {
     return this.#config.tracePropagationStyle[mode].includes(name)
@@ -974,7 +970,6 @@ class TextMapPropagator {
   /**
    * @param {Record<string, unknown>} carrier
    * @param {DatadogSpanContext} spanContext
-   * @returns {void}
    */
   #extractLegacyBaggageItems (carrier, spanContext) {
     if (!this.#config.legacyBaggageEnabled) return
@@ -985,7 +980,6 @@ class TextMapPropagator {
    * @param {Record<string, unknown> | undefined} carrier
    * @param {DatadogSpanContext | undefined} spanContext
    * @param {boolean} extractBaggage
-   * @returns {void}
    */
   #extractBaggageItems (carrier, spanContext, extractBaggage) {
     removeAllBaggageItems()

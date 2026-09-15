@@ -550,7 +550,6 @@ class CypressPlugin {
    * Resets state that is scoped to a single Cypress run so the singleton plugin
    * can be reused safely across multiple programmatic cypress.run() calls.
    *
-   * @returns {void}
    */
   resetRunState () {
     this._isInit = false
@@ -630,7 +629,6 @@ class CypressPlugin {
    *
    * @param {string} traceId - Test trace id used for the upload
    * @param {Promise<string|undefined>} uploadPromise - Promise resolving to the upload outcome
-   * @returns {void}
    */
   addScreenshotUploadPromise (traceId, uploadPromise) {
     const uploadPromises = this.screenshotUploadPromisesByTraceId.get(traceId)
@@ -659,7 +657,6 @@ class CypressPlugin {
    * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
    *
    * @param {Error} error - Error that triggered finalization
-   * @returns {void}
    */
   abortPendingScreenshotUploads (error) {
     for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
@@ -673,7 +670,6 @@ class CypressPlugin {
    * start/finish. Captured at session span creation so it shares the same
    * epoch as the trace without reaching into span internals.
    *
-   * @returns {number}
    */
   _now () {
     return this._timeOrigin + performance.now() - this._perfOrigin
@@ -682,7 +678,6 @@ class CypressPlugin {
   /**
    * Returns the directory used to normalize coverage file names.
    *
-   * @returns {string}
    */
   getCoverageRootDir () {
     return this.repositoryRoot || this.rootDir || process.cwd()
@@ -691,7 +686,6 @@ class CypressPlugin {
   /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
-   * @returns {boolean}
    */
   shouldBackfillSkippedCoverage () {
     return this.isItrEnabled &&
@@ -704,7 +698,6 @@ class CypressPlugin {
    * Adds a test's Istanbul coverage to the aggregated session coverage map.
    *
    * @param {object} coverage
-   * @returns {void}
    */
   addTestSessionCoverage (coverage) {
     mergeCoverage(coverage, this.testSessionCoverageMap)
@@ -713,7 +706,6 @@ class CypressPlugin {
   /**
    * Applies backend skipped-test coverage to the aggregated session coverage map.
    *
-   * @returns {boolean}
    */
   applySkippedCoverageToTestSessionCoverage () {
     if (!this.shouldBackfillSkippedCoverage()) {
@@ -756,7 +748,6 @@ class CypressPlugin {
   /**
    * Uploads executable-line coverage for the test session when backend configuration enables it.
    *
-   * @returns {void}
    */
   reportTestSessionCoverage () {
     const exporter = this.tracer._tracer._exporter
@@ -785,7 +776,6 @@ class CypressPlugin {
    * @param {object} cypressConfig - Cypress resolved config
    * @param {object} tracer - dd-trace proxy tracer
    * @param {object} testOptimizationConfig - Test Optimization config
-   * @returns {void}
    */
   warnIfMisconfiguredTestFailureScreenshots (cypressConfig, tracer, testOptimizationConfig) {
     if (!testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) {
@@ -816,7 +806,6 @@ class CypressPlugin {
    * @param {object} cypressConfig - Cypress resolved config
    * @param {object} tracer - dd-trace proxy tracer
    * @param {object} testOptimizationConfig - Test Optimization config
-   * @returns {void}
    */
   warnIfMisconfiguredTestFailureVideos (cypressConfig, tracer, testOptimizationConfig) {
     if (!testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED) return
@@ -962,7 +951,6 @@ class CypressPlugin {
    * @param {string} testSuite
    * @param {string} testName
    * @param {number | undefined} duration
-   * @returns {number}
    */
   setEfdRetryCountForTest (testSuite, testName, duration) {
     if (!this.efdRetryCountByTest[testSuite]) {
@@ -985,7 +973,6 @@ class CypressPlugin {
    * @param {string} testSuite
    * @param {string} testName
    * @param {number} efdRetryIndex
-   * @returns {boolean}
    */
   shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
@@ -1434,7 +1421,6 @@ class CypressPlugin {
    * Uploads failure screenshots as soon as Cypress creates them.
    *
    * @param {object} details - Cypress screenshot details
-   * @returns {void}
    */
   afterScreenshot (details) {
     const lastFailedTestSpan = this.lastFinishedTest?.testStatus === 'fail'
@@ -1838,7 +1824,6 @@ class CypressPlugin {
    * @param {string|undefined} options.filePath - Cypress video path
    * @param {string|undefined} options.testSessionId - Test session id
    * @param {string|undefined} options.testSuiteId - Test suite id
-   * @returns {boolean}
    */
   #canUploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
     const exporter = this.tracer?._tracer?._exporter

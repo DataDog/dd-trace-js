@@ -368,7 +368,6 @@ function waitForFailedCompletion () {
 /**
  * @param {string} name
  * @param {string|undefined} value
- * @returns {void}
  */
 function restoreEnvironmentVariable (name, value) {
   if (value === undefined) {

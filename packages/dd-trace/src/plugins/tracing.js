@@ -46,7 +46,6 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
-   * @returns {string}
    */
   operationName (opts = {}) {
     const {
