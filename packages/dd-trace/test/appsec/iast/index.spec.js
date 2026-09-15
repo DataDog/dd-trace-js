@@ -2,8 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
-
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -17,6 +15,7 @@ const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { testInRequest } = require('./utils')
+const httpRequest = require('../../setup/helpers/http-client')
 
 describe('IAST Index', () => {
   beforeEach(() => {
@@ -42,7 +41,7 @@ describe('IAST Index', () => {
             })
             .then(done)
             .catch(done)
-          axios.get(`http://localhost:${config.port}/`).catch(done)
+          httpRequest.get(`http://localhost:${config.port}/`).catch(done)
         })
       })
 
@@ -75,7 +74,7 @@ describe('IAST Index', () => {
             })
             .then(done)
             .catch(done)
-          axios.get(`http://localhost:${config.port}/`).catch(done)
+          httpRequest.get(`http://localhost:${config.port}/`).catch(done)
         })
 
         it('should call to cleanIastContext', (done) => {
@@ -91,7 +90,7 @@ describe('IAST Index', () => {
             })
             .then(done)
             .catch(done)
-          axios.get(`http://localhost:${config.port}/`).catch(done)
+          httpRequest.get(`http://localhost:${config.port}/`).catch(done)
         })
 
         it('should call to overhead controller release', (done) => {
@@ -107,7 +106,7 @@ describe('IAST Index', () => {
             })
             .then(done)
             .catch(done)
-          axios.get(`http://localhost:${config.port}/`).catch(done)
+          httpRequest.get(`http://localhost:${config.port}/`).catch(done)
         })
       })
     }

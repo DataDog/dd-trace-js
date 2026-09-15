@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
+const HttpRequest = require('../setup/helpers/http-client')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
@@ -28,7 +28,7 @@ function assertFingerprintInTraces (traces) {
 
 withVersions('passport-local', 'passport-local', version => {
   describe('Attacker fingerprinting', () => {
-    let port, server, axios
+    let port, server, httpRequest
 
     before(async () => {
       await agent.load(['express', 'http'], { client: false })
@@ -64,7 +64,7 @@ withVersions('passport-local', 'passport-local', version => {
       server = app.listen(port)
       await once(server, 'listening')
       port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({
+      httpRequest = HttpRequest.create({
         baseURL: `http://localhost:${port}`,
         headers: {
           'User-Agent': 'test-user-agent',
@@ -83,7 +83,7 @@ withVersions('passport-local', 'passport-local', version => {
 
     it('should report http fingerprints on login fail', async () => {
       try {
-        await axios.post(
+        await httpRequest.post(
           `http://localhost:${port}/login`,
           {
             username: 'fail',
@@ -96,7 +96,7 @@ withVersions('passport-local', 'passport-local', version => {
     })
 
     it('should report http fingerprints on login successful', async () => {
-      await axios.post(
+      await httpRequest.post(
         `http://localhost:${port}/login`,
         {
           username: 'success',

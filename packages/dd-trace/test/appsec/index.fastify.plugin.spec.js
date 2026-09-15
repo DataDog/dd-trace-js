@@ -6,7 +6,6 @@ const path = require('node:path')
 const zlib = require('node:zlib')
 const fs = require('node:fs')
 
-const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -16,6 +15,7 @@ const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+const HttpRequest = require('../setup/helpers/http-client')
 
 /**
  * @param {string} cookieVersion
@@ -77,7 +77,7 @@ describe('Fastify plugin version compatibility', () => {
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
-    let app, server, requestBody, axios
+    let app, server, requestBody, httpRequest
 
     before(async () => {
       await agent.load(['fastify', 'http'], { client: false })
@@ -93,7 +93,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -117,7 +117,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     it('should not block the request without an attack', async () => {
-      const res = await axios.get('/?key=value')
+      const res = await httpRequest.get('/?key=value')
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'DONE')
@@ -126,7 +126,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     it('should block the request when attack is detected', async () => {
       try {
-        await axios.get('/?key=testattack')
+        await httpRequest.get('/?key=testattack')
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -138,7 +138,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - body', () => {
-    let app, server, requestBody, axios
+    let app, server, requestBody, httpRequest
 
     before(async () => {
       await agent.load(['fastify', 'http'], { client: false })
@@ -154,7 +154,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -178,7 +178,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     })
 
     it('should not block the request without an attack', async () => {
-      const res = await axios.post('/', { key: 'value' })
+      const res = await httpRequest.post('/', { key: 'value' })
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'DONE')
@@ -187,7 +187,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     it('should block the request when attack is detected', async () => {
       try {
-        await axios.post('/', { key: 'testattack' })
+        await httpRequest.post('/', { key: 'testattack' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -214,7 +214,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           largeObject,
         }
 
-        await axios.post('/', { complexPayload })
+        await httpRequest.post('/', { complexPayload })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -234,7 +234,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Appsec blocking with schema validation', () => {
-    let app, server, axios
+    let app, server, httpRequest
 
     before(async () => {
       await agent.load(['fastify', 'http'], { client: false })
@@ -259,7 +259,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -283,7 +283,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     it('should return 403 for dangerous payloads', async () => {
       try {
-        await axios.post('/schema-validated', { key: 'testattack' })
+        await httpRequest.post('/schema-validated', { key: 'testattack' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -294,7 +294,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     it('should return 403 for valid schema with attack content', async () => {
       try {
-        await axios.post('/schema-validated', { validField: 'testattack' })
+        await httpRequest.post('/schema-validated', { validField: 'testattack' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -305,7 +305,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - path parameters', () => {
-    let app, server, preHandlerHookSpy, preValidationHookSpy, axios
+    let app, server, preHandlerHookSpy, preValidationHookSpy, httpRequest
 
     before(async () => {
       await agent.load(['fastify', 'http'], { client: false })
@@ -344,7 +344,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -369,7 +369,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     describe('route with multiple path parameters', () => {
       it('should not block the request when attack is not detected', async () => {
-        const res = await axios.get('/multiple-path-params/safe_param/safe_param')
+        const res = await httpRequest.get('/multiple-path-params/safe_param/safe_param')
 
         assert.strictEqual(res.status, 200)
         assert.strictEqual(res.data, 'DONE')
@@ -377,7 +377,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected in both parameters', async () => {
         try {
-          await axios.get('/multiple-path-params/testattack/testattack')
+          await httpRequest.get('/multiple-path-params/testattack/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -388,7 +388,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected in the first parameter', async () => {
         try {
-          await axios.get('/multiple-path-params/testattack/safe_param')
+          await httpRequest.get('/multiple-path-params/testattack/safe_param')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -399,7 +399,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected in the second parameter', async () => {
         try {
-          await axios.get('/multiple-path-params/safe_param/testattack')
+          await httpRequest.get('/multiple-path-params/safe_param/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -411,7 +411,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     describe('nested routes', () => {
       it('should not block the request when attack is not detected', async () => {
-        const res = await axios.get('/nested/safe_param/safe_param')
+        const res = await httpRequest.get('/nested/safe_param/safe_param')
 
         assert.strictEqual(res.status, 200)
         assert.strictEqual(res.data, 'DONE')
@@ -419,7 +419,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected in the nested parameter', async () => {
         try {
-          await axios.get('/nested/safe_param/testattack')
+          await httpRequest.get('/nested/safe_param/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -430,7 +430,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected in the parent parameter', async () => {
         try {
-          await axios.get('/nested/testattack/safe_param')
+          await httpRequest.get('/nested/testattack/safe_param')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -441,7 +441,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected in both parameters', async () => {
         try {
-          await axios.get('/nested/testattack/testattack')
+          await httpRequest.get('/nested/testattack/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -453,7 +453,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     describe('path parameter with hook', () => {
       it('should not block the request when attack is not detected', async () => {
-        const res = await axios.get('/callback-path-param/safe_param')
+        const res = await httpRequest.get('/callback-path-param/safe_param')
 
         assert.strictEqual(res.status, 200)
         assert.strictEqual(res.data, 'DONE')
@@ -463,7 +463,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       it('should block the request when attack is detected', async () => {
         try {
-          await axios.get('/callback-path-param/testattack')
+          await httpRequest.get('/callback-path-param/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -487,7 +487,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       hookConfigurations.forEach((hook) => {
         describe(`with ${hook} hook`, () => {
-          let server, requestCookie, axios
+          let server, requestCookie, httpRequest
 
           before(async function () {
             if (isCookieVersionUnsupported(cookieLoadedVersion, fastifyLoadedVersion)) {
@@ -518,7 +518,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
             server = app.server
             const { port } = /** @type {import('net').AddressInfo} */ (server.address())
-            axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+            httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
           })
 
           beforeEach(async () => {
@@ -544,7 +544,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           })
 
           it('should not block the request without an attack', async () => {
-            const res = await axios.post('/', {})
+            const res = await httpRequest.post('/', {})
 
             sinon.assert.calledOnce(requestCookie)
             assert.strictEqual(res.data, 'DONE')
@@ -552,7 +552,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           it('should block the request when attack is detected', async () => {
             try {
-              await axios.post('/', {}, {
+              await httpRequest.post('/', {}, {
                 headers: {
                   Cookie: 'key=testattack',
                 },
@@ -572,7 +572,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
   describe('Suspicious request blocking - multipart', () => {
     withVersions('fastify', '@fastify/multipart', (multipartVersion, _, multipartLoadedVersion) => {
-      let server, uploadSpy, axios
+      let server, uploadSpy, httpRequest
 
       before(async function () {
         if (isMultipartVersionUnsupported(multipartLoadedVersion, fastifyLoadedVersion)) {
@@ -597,7 +597,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         server = app.server
         const { port } = /** @type {import('net').AddressInfo} */ (server.address())
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+        httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
       })
 
       beforeEach(() => {
@@ -623,7 +623,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         const form = new FormData()
         form.append('key', 'value')
 
-        const res = await axios.post('/', form)
+        const res = await httpRequest.post('/', form)
 
         assert.strictEqual(res.status, 200)
         sinon.assert.calledOnce(uploadSpy)
@@ -635,7 +635,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           const form = new FormData()
           form.append('key', 'testattack')
 
-          await axios.post('/', form)
+          await httpRequest.post('/', form)
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -649,7 +649,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
 describe('Api Security - Fastify', () => {
   withVersions('fastify', 'fastify', version => {
-    let config, app, server, axios
+    let config, app, server, httpRequest
 
     before(async () => {
       await agent.load(['fastify', 'http'], { client: false }, { appsec: { enabled: true } })
@@ -686,7 +686,7 @@ describe('Api Security - Fastify', () => {
       await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -717,7 +717,7 @@ describe('Api Security - Fastify', () => {
 
     it('should get the response body schema with reply.send', async () => {
       const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
-      const res = await axios.post('/send', { key: 'value' })
+      const res = await httpRequest.post('/send', { key: 'value' })
 
       await agent.assertFirstTraceSpan({
         meta: {
@@ -731,7 +731,7 @@ describe('Api Security - Fastify', () => {
 
     it('should get the response body schema with return', async () => {
       const expectedResponseBodySchema = formatSchema([{ returnResKey: [8] }])
-      const res = await axios.post('/return', { key: 'value' })
+      const res = await httpRequest.post('/return', { key: 'value' })
 
       await agent.assertFirstTraceSpan({
         meta: {
@@ -744,7 +744,7 @@ describe('Api Security - Fastify', () => {
     })
 
     it('should not get the schema for string', async () => {
-      const res = await axios.get('/')
+      const res = await httpRequest.get('/')
 
       await agent.assertFirstTraceSpan(span => {
         assert.ok(!('_dd.appsec.s.res.body' in span.meta))
@@ -755,7 +755,7 @@ describe('Api Security - Fastify', () => {
     })
 
     it('should not get the schema for Buffer', async () => {
-      const res = await axios.get('/buffer')
+      const res = await httpRequest.get('/buffer')
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
@@ -768,7 +768,7 @@ describe('Api Security - Fastify', () => {
     })
 
     it('should not get the schema for stream', async () => {
-      const res = await axios.get('/stream', { responseType: 'arraybuffer' })
+      const res = await httpRequest.get('/stream', { responseType: 'arraybuffer' })
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {
@@ -780,7 +780,7 @@ describe('Api Security - Fastify', () => {
     })
 
     it('should not get the schema for TypedArray', async () => {
-      const res = await axios.get('/typedarray', { responseType: 'arraybuffer' })
+      const res = await httpRequest.get('/typedarray', { responseType: 'arraybuffer' })
 
       await agent.assertFirstTraceSpan(span => {
         if (span.meta) {

@@ -5,7 +5,6 @@ const http = require('node:http')
 const os = require('node:os')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -13,6 +12,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const proxy = require('./proxy')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 describe('Plugin', () => {
   let Gateway
@@ -93,7 +93,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get('http://localhost:' + gatewayPort + '/v1/foo').catch(done)
+          httpRequest.get('http://localhost:' + gatewayPort + '/v1/foo').catch(done)
         })
 
         it('should propagate context to plugins', done => {
@@ -113,7 +113,7 @@ describe('Plugin', () => {
           gateway.addPlugin('first', first.init)
           gateway.addPlugin('second', second.init)
 
-          axios.get('http://localhost:' + gatewayPort + '/v1/foo')
+          httpRequest.get('http://localhost:' + gatewayPort + '/v1/foo')
             .then(() => done())
             .catch(done)
         })
@@ -144,7 +144,7 @@ describe('Plugin', () => {
 
           gateway.addPlugin('test', plugin.init)
 
-          axios.get('http://localhost:' + gatewayPort + '/v1/foo').catch(() => {})
+          httpRequest.get('http://localhost:' + gatewayPort + '/v1/foo').catch(() => {})
         })
 
         it('should handle plugin exceptions', done => {
@@ -173,7 +173,7 @@ describe('Plugin', () => {
 
           gateway.addPlugin('test', plugin.init)
 
-          axios.get('http://localhost:' + gatewayPort + '/v1/foo').catch(() => {})
+          httpRequest.get('http://localhost:' + gatewayPort + '/v1/foo').catch(() => {})
         })
 
         if (semver.intersects(version, '>=2.3.3')) {

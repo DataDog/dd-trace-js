@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
@@ -11,6 +10,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 // mercurius 15+ requires Node 20.9+ (it ships fastify 5, which enforces it).
 // Skip those versions on older Node so the oldest-LTS CI leg exercises the 13/14
@@ -74,7 +74,7 @@ describe('Plugin', () => {
         port = app.server.address().port
 
         // Prime the JIT path so a later request runs the warm (compiled) query.
-        await axios.post(`http://localhost:${port}/graphql`, { query: '{ hello(name: "warmup") }' })
+        await httpRequest.post(`http://localhost:${port}/graphql`, { query: '{ hello(name: "warmup") }' })
       })
 
       after(async () => {
@@ -83,7 +83,7 @@ describe('Plugin', () => {
       })
 
       withNamingSchema(
-        () => axios.post(`http://localhost:${port}/graphql`, {
+        () => httpRequest.post(`http://localhost:${port}/graphql`, {
           query: 'query MyQuery { hello(name: "world") }',
         }),
         rawExpectedSchema.server,
@@ -112,7 +112,7 @@ describe('Plugin', () => {
           })
         }, { spanResourceMatch: /MyQuery/ })
 
-        return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+        return Promise.all([assertion, httpRequest.post(`http://localhost:${port}/graphql`, { query })])
       })
 
       it('skips only the exact Apollo health-check on cold and JIT paths', async () => {
@@ -150,9 +150,9 @@ describe('Plugin', () => {
           await Promise.all([
             assertion,
             (async () => {
-              await axios.post(`http://localhost:${port}/graphql`, { query: healthCheck })
-              await axios.post(`http://localhost:${port}/graphql`, { query: healthCheck })
-              await axios.post(`http://localhost:${port}/graphql`, { query: sentinel })
+              await httpRequest.post(`http://localhost:${port}/graphql`, { query: healthCheck })
+              await httpRequest.post(`http://localhost:${port}/graphql`, { query: healthCheck })
+              await httpRequest.post(`http://localhost:${port}/graphql`, { query: sentinel })
             })(),
           ])
         } finally {
@@ -175,7 +175,7 @@ describe('Plugin', () => {
           assert.strictEqual(request.resource, execute.resource)
         }, { spanResourceMatch: /Nested/ })
 
-        return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+        return Promise.all([assertion, httpRequest.post(`http://localhost:${port}/graphql`, { query })])
       })
 
       it('tags the request span when a resolver throws', () => {
@@ -187,7 +187,7 @@ describe('Plugin', () => {
           assert.strictEqual(request.error, 1)
         }, { spanResourceMatch: /FailQuery/ })
 
-        return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+        return Promise.all([assertion, httpRequest.post(`http://localhost:${port}/graphql`, { query })])
       })
 
       it('tags and labels the request span when validation fails before execute', () => {
@@ -217,7 +217,7 @@ describe('Plugin', () => {
 
         return Promise.all([
           assertion,
-          axios.post(`http://localhost:${port}/graphql`, { query }).catch(() => {}),
+          httpRequest.post(`http://localhost:${port}/graphql`, { query }).catch(() => {}),
         ])
       })
 
@@ -241,7 +241,7 @@ describe('Plugin', () => {
 
         return Promise.all([
           assertion,
-          axios.post(`http://localhost:${port}/graphql`, { query, operationName }),
+          httpRequest.post(`http://localhost:${port}/graphql`, { query, operationName }),
         ])
       })
 
@@ -264,7 +264,7 @@ describe('Plugin', () => {
 
         return Promise.all([
           assertion,
-          axios.post(`http://localhost:${port}/graphql`, { query }),
+          httpRequest.post(`http://localhost:${port}/graphql`, { query }),
         ])
       })
 
@@ -278,7 +278,7 @@ describe('Plugin', () => {
           assert.strictEqual(request.error, 0)
         })
 
-        return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+        return Promise.all([assertion, httpRequest.post(`http://localhost:${port}/graphql`, { query })])
       })
 
       it('opens a request span for a programmatic app.graphql() call', () => {
@@ -387,7 +387,7 @@ describe('Plugin', () => {
       it('carries the operation signature on the JIT warm path', async () => {
         const query = 'query WarmQuery { hello(name: "jit") }'
 
-        await axios.post(`http://localhost:${port}/graphql`, { query })
+        await httpRequest.post(`http://localhost:${port}/graphql`, { query })
 
         const assertion = agent.assertSomeTraces(traces => {
           const request = traces[0].find(span => span.name === expectedSchema.server.opName)
@@ -415,14 +415,14 @@ describe('Plugin', () => {
           assert.strictEqual(execute.resource, request.resource)
         }, { spanResourceMatch: /WarmQuery/ })
 
-        return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
+        return Promise.all([assertion, httpRequest.post(`http://localhost:${port}/graphql`, { query })])
       })
 
       it('labels the selected operation on the JIT warm path', async () => {
         const source = 'query First { hello(name: "first") } query Second { hello(name: "second") }'
 
-        await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'First' })
-        await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' })
+        await httpRequest.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'First' })
+        await httpRequest.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' })
 
         const assertion = agent.assertSomeTraces(traces => {
           const request = traces[0].find(span => span.name === expectedSchema.server.opName)
@@ -443,7 +443,7 @@ describe('Plugin', () => {
 
         return Promise.all([
           assertion,
-          axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' }),
+          httpRequest.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' }),
         ])
       })
 
@@ -454,8 +454,8 @@ describe('Plugin', () => {
 
         try {
           tracer.use('graphql', { signature: false, source: true })
-          await axios.post(`http://localhost:${port}/graphql`, { query: enabledQuery })
-          await axios.post(`http://localhost:${port}/graphql`, { query: enabledQuery })
+          await httpRequest.post(`http://localhost:${port}/graphql`, { query: enabledQuery })
+          await httpRequest.post(`http://localhost:${port}/graphql`, { query: enabledQuery })
 
           tracer.use('graphql', { signature: true, source: true })
           const enabledAssertion = agent.assertSomeTraces(traces => {
@@ -465,11 +465,11 @@ describe('Plugin', () => {
           }, { spanResourceMatch: /ReconfiguredEnabled\{/ })
           await Promise.all([
             enabledAssertion,
-            axios.post(`http://localhost:${port}/graphql`, { query: enabledQuery }),
+            httpRequest.post(`http://localhost:${port}/graphql`, { query: enabledQuery }),
           ])
 
-          await axios.post(`http://localhost:${port}/graphql`, { query: disabledQuery })
-          await axios.post(`http://localhost:${port}/graphql`, { query: disabledQuery })
+          await httpRequest.post(`http://localhost:${port}/graphql`, { query: disabledQuery })
+          await httpRequest.post(`http://localhost:${port}/graphql`, { query: disabledQuery })
 
           tracer.use('graphql', { signature: false, source: true })
           const disabledAssertion = agent.assertSomeTraces(traces => {
@@ -479,7 +479,7 @@ describe('Plugin', () => {
           }, { spanResourceMatch: /^query ReconfiguredDisabled$/ })
           await Promise.all([
             disabledAssertion,
-            axios.post(`http://localhost:${port}/graphql`, { query: disabledQuery }),
+            httpRequest.post(`http://localhost:${port}/graphql`, { query: disabledQuery }),
           ])
         } finally {
           tracer.use('graphql', { signature: true, source: true })
@@ -522,7 +522,7 @@ describe('Plugin', () => {
             assert.ok(!('graphql.source' in request.meta), 'graphql.source must be absent by default')
           }, { spanResourceMatch: /NoSource/ })
 
-          return Promise.all([assertion, axios.post(`http://localhost:${plainPort}/graphql`, { query })])
+          return Promise.all([assertion, httpRequest.post(`http://localhost:${plainPort}/graphql`, { query })])
         })
       })
 
@@ -575,7 +575,7 @@ describe('Plugin', () => {
             )
           }, { spanResourceMatch: /ExtQuery/ })
 
-          return Promise.all([assertion, axios.post(`http://localhost:${extPort}/graphql`, { query })])
+          return Promise.all([assertion, httpRequest.post(`http://localhost:${extPort}/graphql`, { query })])
         })
       })
 
@@ -630,7 +630,7 @@ describe('Plugin', () => {
             assert.strictEqual(request.meta['graphql.operation.name'], 'BatchB')
           })
 
-          return Promise.all([sawA, sawB, axios.post(`http://localhost:${batchPort}/graphql`, batch)])
+          return Promise.all([sawA, sawB, httpRequest.post(`http://localhost:${batchPort}/graphql`, batch)])
         })
       })
     })

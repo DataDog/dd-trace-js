@@ -4,13 +4,13 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const { blockedTemplateJson: json, blockedTemplateGraphql: graphqlJson, setTestBlockingTemplates } = require('./utils')
+const httpRequest = require('../setup/helpers/http-client')
 
 const schema = `
 directive @case(format: String) on FIELD
@@ -66,7 +66,7 @@ async function makeGraphqlRequest (port, variables, derivativeParam, extraHeader
   }
 
   const query = makeQuery(derivativeParam)
-  return axios.post(`http://localhost:${port}/graphql`, {
+  return httpRequest.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
     variables,
@@ -140,7 +140,7 @@ function graphqlCommonTests (config) {
       await makeGraphqlRequest(config.port, { title: 'Test' }, 'lower')
 
       try {
-        await axios.get(`http://localhost:${config.port}/hello`, { headers: { customHeader: 'testattack' } })
+        await httpRequest.get(`http://localhost:${config.port}/hello`, { headers: { customHeader: 'testattack' } })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {

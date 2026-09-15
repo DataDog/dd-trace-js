@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
 const util = require('node:util')
 
-const axios = require('axios')
 const { after, before, beforeEach, describe, it } = require('mocha')
 
 const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
@@ -12,13 +11,14 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
 const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const LOCALSTACK_TIMEOUT_MS = 5000
 
 /* eslint-disable no-console */
 async function resetLocalStackDynamo () {
   try {
-    await axios.post('http://localhost:4566/reset')
+    await httpRequest.post('http://localhost:4566/reset')
     console.log('LocalStack Dynamo reset successful')
   } catch (error) {
     console.error('Error resetting LocalStack Dynamo:', error.message)

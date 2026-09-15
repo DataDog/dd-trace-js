@@ -4,8 +4,8 @@ const assert = require('node:assert/strict')
 
 const { fork } = require('child_process')
 const { join } = require('path')
-const axios = require('axios')
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
+const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
@@ -58,7 +58,7 @@ async function getWithRetry (url, timeoutMs) {
   let lastErr
   while (Date.now() < deadline) {
     try {
-      return await axios.get(url)
+      return await httpRequest.get(url)
     } catch (err) {
       lastErr = err
       await new Promise(resolve => setTimeout(resolve, 100))

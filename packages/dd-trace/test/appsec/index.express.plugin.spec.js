@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const zlib = require('node:zlib')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
@@ -17,6 +16,7 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+const HttpRequest = require('../setup/helpers/http-client')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -25,8 +25,7 @@ withVersions('express', 'express', version => {
   }
 
   describe('Suspicious request blocking - path parameters', () => {
-    /** @type {import('axios').AxiosInstance} */
-    let axios
+    let httpRequest
     let server
     /** @type {import('sinon').SinonSpy} */
     let paramCallbackSpy
@@ -65,7 +64,7 @@ withVersions('express', 'express', version => {
 
       server = app.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}` })
         done()
       })
     })
@@ -92,7 +91,7 @@ withVersions('express', 'express', version => {
 
     describe('route with multiple path parameters', () => {
       it('should not block the request when attack is not detected', async () => {
-        const res = await axios.get('/multiple-path-params/safe_param/safe_param')
+        const res = await httpRequest.get('/multiple-path-params/safe_param/safe_param')
 
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
@@ -100,7 +99,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected in both parameters', async () => {
         try {
-          await axios.get('/multiple-path-params/testattack/testattack')
+          await httpRequest.get('/multiple-path-params/testattack/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -111,7 +110,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected in the first parameter', async () => {
         try {
-          await axios.get('/multiple-path-params/testattack/safe_param')
+          await httpRequest.get('/multiple-path-params/testattack/safe_param')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -122,7 +121,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected in the second parameter', async () => {
         try {
-          await axios.get('/multiple-path-params/safe_param/testattack')
+          await httpRequest.get('/multiple-path-params/safe_param/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -134,7 +133,7 @@ withVersions('express', 'express', version => {
 
     describe('nested routers', () => {
       it('should not block the request when attack is not detected', async () => {
-        const res = await axios.get('/nested/safe_param/safe_param')
+        const res = await httpRequest.get('/nested/safe_param/safe_param')
 
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
@@ -142,7 +141,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected in the nested paremeter', async () => {
         try {
-          await axios.get('/nested/safe_param/testattack')
+          await httpRequest.get('/nested/safe_param/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -153,7 +152,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected in the parent paremeter', async () => {
         try {
-          await axios.get('/nested/testattack/safe_param')
+          await httpRequest.get('/nested/testattack/safe_param')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -164,7 +163,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected both parameters', async () => {
         try {
-          await axios.get('/nested/testattack/testattack')
+          await httpRequest.get('/nested/testattack/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -176,7 +175,7 @@ withVersions('express', 'express', version => {
 
     describe('path parameter callback', () => {
       it('should not block the request when attack is not detected', async () => {
-        const res = await axios.get('/callback-path-param/safe_param')
+        const res = await httpRequest.get('/callback-path-param/safe_param')
         assert.equal(res.status, 200)
         assert.equal(res.data, 'DONE')
         sinon.assert.calledOnce(paramCallbackSpy)
@@ -184,7 +183,7 @@ withVersions('express', 'express', version => {
 
       it('should block the request when attack is detected', async () => {
         try {
-          await axios.get('/callback-path-param/testattack')
+          await httpRequest.get('/callback-path-param/testattack')
 
           return Promise.reject(new Error('Request should not return 200'))
         } catch (e) {
@@ -197,7 +196,7 @@ withVersions('express', 'express', version => {
   })
 
   describe('Suspicious request blocking - query', () => {
-    let server, requestBody, axios
+    let server, requestBody, httpRequest
 
     before(() => {
       return agent.load(['express', 'http'], { client: false }, { appsec: { enabled: true } })
@@ -215,7 +214,7 @@ withVersions('express', 'express', version => {
 
       server = app.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}` })
         done()
       })
     })
@@ -241,7 +240,7 @@ withVersions('express', 'express', version => {
     })
 
     it('should not block the request without an attack', async () => {
-      const res = await axios.get('/?key=value')
+      const res = await httpRequest.get('/?key=value')
 
       assert.equal(res.status, 200)
       assert.equal(res.data, 'DONE')
@@ -250,7 +249,7 @@ withVersions('express', 'express', version => {
 
     it('should block the request when attack is detected', async () => {
       try {
-        await axios.get('/?key=testattack')
+        await httpRequest.get('/?key=testattack')
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -262,7 +261,7 @@ withVersions('express', 'express', version => {
   })
 
   describe('Api Security', () => {
-    let config, server, axios
+    let config, server, httpRequest
 
     before(() => {
       return agent.load(['express', 'http'], { client: false }, { appsec: { enabled: true } })
@@ -293,7 +292,7 @@ withVersions('express', 'express', version => {
 
       server = app.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}` })
         done()
       })
     })
@@ -332,7 +331,7 @@ withVersions('express', 'express', version => {
       it('should get the request body schema', async () => {
         const expectedRequestBodySchema = formatSchema([{ key: [8] }])
 
-        const res = await axios.post('/', { key: 'value' })
+        const res = await httpRequest.post('/', { key: 'value' })
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -350,7 +349,7 @@ withVersions('express', 'express', version => {
 
       it('should get the response body schema with res.send method with object', async () => {
         const expectedResponseBodySchema = formatSchema([{ sendResKey: [8] }])
-        const res = await axios.post('/sendjson', { key: 'value' })
+        const res = await httpRequest.post('/sendjson', { key: 'value' })
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -363,7 +362,7 @@ withVersions('express', 'express', version => {
 
       it('should get the response body schema with res.json method', async () => {
         const expectedResponseBodySchema = formatSchema([{ jsonResKey: [8] }])
-        const res = await axios.post('/json', { key: 'value' })
+        const res = await httpRequest.post('/json', { key: 'value' })
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -376,7 +375,7 @@ withVersions('express', 'express', version => {
 
       it('should get the response body schema with res.jsonp method', async () => {
         const expectedResponseBodySchema = formatSchema([{ jsonpResKey: [8] }])
-        const res = await axios.post('/jsonp', { key: 'value' })
+        const res = await httpRequest.post('/jsonp', { key: 'value' })
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
@@ -393,7 +392,7 @@ withVersions('express', 'express', version => {
       config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 10
       appsec.enable(config)
 
-      const res = await axios.post('/', { key: 'value' })
+      const res = await httpRequest.post('/', { key: 'value' })
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]

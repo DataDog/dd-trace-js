@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 
@@ -13,6 +12,7 @@ const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mo
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const accounts = require('./fixtures.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const fixtures = [accounts]
 const typeDefs = accounts.typeDefs
@@ -166,7 +166,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.post(`http://localhost:${port}/`, {
+          httpRequest.post(`http://localhost:${port}/`, {
             query,
           })
         })

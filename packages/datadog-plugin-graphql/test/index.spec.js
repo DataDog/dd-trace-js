@@ -5,7 +5,6 @@ const http = require('node:http')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -18,6 +17,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const legacyStorage = storage('legacy')
 
@@ -288,7 +288,7 @@ describe('Plugin', () => {
 
             // The first request primes the lazily built execution pipeline so
             // the timed assertion does not race a cold request on CI.
-            await axios.post(`http://localhost:${port}/graphql`, {
+            await httpRequest.post(`http://localhost:${port}/graphql`, {
               query: 'query Warmup { hello(name: "warmup") }',
             })
           })
@@ -327,7 +327,7 @@ describe('Plugin', () => {
 
             return Promise.all([
               assertion,
-              axios.post(`http://localhost:${port}/graphql`, { query }),
+              httpRequest.post(`http://localhost:${port}/graphql`, { query }),
             ])
           })
 
@@ -354,7 +354,7 @@ describe('Plugin', () => {
 
             return Promise.all([
               assertion,
-              axios.post(`http://localhost:${port}/graphql`, { query }),
+              httpRequest.post(`http://localhost:${port}/graphql`, { query }),
             ])
           })
 
@@ -381,7 +381,7 @@ describe('Plugin', () => {
 
             return Promise.all([
               assertion,
-              axios.post(`http://localhost:${port}/graphql`, { query }, {
+              httpRequest.post(`http://localhost:${port}/graphql`, { query }, {
                 headers: {
                   accept: 'text/event-stream',
                 },

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -13,6 +12,7 @@ const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { rawExpectedSchema } = require('./naming')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 describe('Plugin', () => {
   let http
@@ -89,7 +89,7 @@ describe('Plugin', () => {
             assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
           }).then(done).catch(done)
 
-          axios.get(`http://localhost:${otelPort}/user`).catch(done)
+          httpRequest.get(`http://localhost:${otelPort}/user`).catch(done)
         })
       })
 
@@ -138,10 +138,11 @@ describe('Plugin', () => {
             })
             .then(done)
             .catch(done)
-          const source = axios.CancelToken.source()
-          axios.get(`http://localhost:${port}/user`, { cancelToken: source.token })
+          const controller = new AbortController()
+          httpRequest.get(`http://localhost:${port}/user`, { signal: controller.signal })
             .then(() => {})
-          setTimeout(() => { source.cancel() }, 100)
+            .catch(() => {})
+          setTimeout(() => { controller.abort() }, 100)
         })
       })
 
@@ -161,7 +162,7 @@ describe('Plugin', () => {
 
         withNamingSchema(
           done => {
-            axios.get(`http://localhost:${port}/user`).catch(done)
+            httpRequest.get(`http://localhost:${port}/user`).catch(done)
           },
           rawExpectedSchema.server
         )
@@ -182,7 +183,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
         it('should run the request listener in the request scope', done => {
@@ -201,7 +202,7 @@ describe('Plugin', () => {
             done()
           }
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
         it('should preserve request access through child scope activation without strong fields', done => {
@@ -223,7 +224,7 @@ describe('Plugin', () => {
             done()
           }
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
         it('should run the request\'s close event in the correct context', done => {
@@ -234,7 +235,7 @@ describe('Plugin', () => {
             })
           }
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
         it('should run the response\'s close event in the correct context', done => {
@@ -247,7 +248,7 @@ describe('Plugin', () => {
             })
           }
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
         it('should run the finish event in the correct context', done => {
@@ -260,7 +261,7 @@ describe('Plugin', () => {
             })
           }
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
 
         it('should not instrument manually instantiated server responses', () => {
@@ -282,7 +283,7 @@ describe('Plugin', () => {
             })
           }
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
       })
 
@@ -310,7 +311,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
               assert.strictEqual(traces[0][0].error, 1)
             }),
-            axios.get(`http://localhost:${port}/user`),
+            httpRequest.get(`http://localhost:${port}/user`),
           ])
         })
       })
@@ -335,7 +336,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/user`).catch(done)
+          httpRequest.get(`http://localhost:${port}/user`).catch(done)
         })
       })
 
@@ -378,7 +379,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/products`).catch(done)
+          httpRequest.get(`http://localhost:${port}/products`).catch(done)
         })
 
         it('should keep the default resource name when the hook does not touch it', done => {
@@ -390,7 +391,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/health`).catch(done)
+          httpRequest.get(`http://localhost:${port}/health`).catch(done)
         })
       })
 
@@ -415,7 +416,7 @@ describe('Plugin', () => {
             }, { timeoutMs: 100 })
             .then(done, done)
 
-          axios.get(`http://localhost:${port}/health`).catch(done)
+          httpRequest.get(`http://localhost:${port}/health`).catch(done)
         })
       })
 
@@ -446,7 +447,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios.get(`http://localhost:${port}/users`).catch(done)
+            httpRequest.get(`http://localhost:${port}/users`).catch(done)
           })
 
           it('should reuse the cached start config across requests', done => {
@@ -460,11 +461,11 @@ describe('Plugin', () => {
             // not stale and the span shape stays identical.
             Promise.all([
               agent.assertSomeTraces(expect),
-              axios.get(`http://localhost:${port}/first`),
+              httpRequest.get(`http://localhost:${port}/first`),
             ])
               .then(() => Promise.all([
                 agent.assertSomeTraces(expect),
-                axios.get(`http://localhost:${port}/second`),
+                httpRequest.get(`http://localhost:${port}/second`),
               ]))
               .then(() => done())
               .catch(done)
@@ -497,7 +498,7 @@ describe('Plugin', () => {
               .then(done)
               .catch(done)
 
-            axios.get(`http://localhost:${port}/users`).catch(done)
+            httpRequest.get(`http://localhost:${port}/users`).catch(done)
           })
         })
       })
@@ -527,7 +528,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/users/a1f3e2d1c0/profile`).catch(done)
+          httpRequest.get(`http://localhost:${port}/users/a1f3e2d1c0/profile`).catch(done)
         })
 
         it('should normalize int segments in the path', done => {
@@ -538,7 +539,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/users/1234/profile`).catch(done)
+          httpRequest.get(`http://localhost:${port}/users/1234/profile`).catch(done)
         })
 
         it('should normalize int id segments in the path', done => {
@@ -549,7 +550,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/users/1234-1234/profile`).catch(done)
+          httpRequest.get(`http://localhost:${port}/users/1234-1234/profile`).catch(done)
         })
 
         it('should keep short path segments unchanged', done => {
@@ -560,7 +561,7 @@ describe('Plugin', () => {
             .then(done)
             .catch(done)
 
-          axios.get(`http://localhost:${port}/api/v1/users`).catch(done)
+          httpRequest.get(`http://localhost:${port}/api/v1/users`).catch(done)
         })
       })
     })

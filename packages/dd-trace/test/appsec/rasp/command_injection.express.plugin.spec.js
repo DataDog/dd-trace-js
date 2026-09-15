@@ -3,7 +3,6 @@
 const assert = require('node:assert')
 const path = require('node:path')
 
-const Axios = require('axios')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
 const agent = require('../../plugins/agent')
@@ -12,14 +11,15 @@ const { getConfigFresh } = require('../../helpers/config')
 const { withVersions } = require('../../setup/mocha')
 const { temporaryWarningExceptions } = require('../../setup/core')
 const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
+const HttpRequest = require('../../setup/helpers/http-client')
 
 describe('RASP - command_injection', () => {
   withVersions('express', 'express', expressVersion => {
-    let app, server, axios
+    let app, server, httpRequest
     function testShellBlockingAndSafeRequests () {
       it('should block the threat', async () => {
         try {
-          await axios.get('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
+          await httpRequest.get('/?dir=$(cat /etc/passwd 1>%262 ; echo .)')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -32,7 +32,7 @@ describe('RASP - command_injection', () => {
       })
 
       it('should not block safe request', async () => {
-        await axios.get('/?dir=.')
+        await httpRequest.get('/?dir=.')
 
         return checkRaspExecutedAndNotThreat(agent)
       })
@@ -41,7 +41,7 @@ describe('RASP - command_injection', () => {
     function testNonShellBlockingAndSafeRequests () {
       it('should block the threat', async () => {
         try {
-          await axios.get('/?command=/usr/bin/reboot')
+          await httpRequest.get('/?command=/usr/bin/reboot')
         } catch (e) {
           if (!e.response) {
             throw e
@@ -54,7 +54,7 @@ describe('RASP - command_injection', () => {
       })
 
       it('should not block safe request', async () => {
-        await axios.get('/?command=.')
+        await httpRequest.get('/?command=.')
 
         return checkRaspExecutedAndNotThreat(agent)
       })
@@ -82,7 +82,7 @@ describe('RASP - command_injection', () => {
 
       server = expressApp.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
+        httpRequest = HttpRequest.create({
           baseURL: `http://localhost:${port}`,
         })
 

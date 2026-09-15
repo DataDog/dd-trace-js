@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const path = require('node:path')
 
-const axios = require('axios')
 const sinon = require('sinon')
 
 const appsec = require('../../src/appsec')
@@ -12,6 +11,7 @@ const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const { withVersions } = require('../setup/mocha')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+const httpRequest = require('../setup/helpers/http-client')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
@@ -55,7 +55,7 @@ withVersions('body-parser', 'body-parser', version => {
     })
 
     it('should not block the request without an attack', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, { key: 'value' })
+      const res = await httpRequest.post(`http://localhost:${port}/`, { key: 'value' })
 
       sinon.assert.calledOnce(requestBody)
       assert.strictEqual(res.data, 'DONE')
@@ -63,7 +63,7 @@ withVersions('body-parser', 'body-parser', version => {
 
     it('should block the request when attack is detected', async () => {
       try {
-        await axios.post(`http://localhost:${port}/`, { key: 'testattack' })
+        await httpRequest.post(`http://localhost:${port}/`, { key: 'testattack' })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {
@@ -90,7 +90,7 @@ withVersions('body-parser', 'body-parser', version => {
           largeObject,
         }
 
-        await axios.post(`http://localhost:${port}/`, { complexPayload })
+        await httpRequest.post(`http://localhost:${port}/`, { complexPayload })
 
         return Promise.reject(new Error('Request should not return 200'))
       } catch (e) {

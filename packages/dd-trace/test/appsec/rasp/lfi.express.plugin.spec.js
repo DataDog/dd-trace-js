@@ -8,7 +8,6 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const semver = require('semver')
 
 const { NODE_MAJOR } = require('../../../../../version')
@@ -17,13 +16,14 @@ const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
 const { getConfigFresh } = require('../../helpers/config')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
+const HttpRequest = require('../../setup/helpers/http-client')
 
 describe('RASP - lfi', () => {
-  let axios
+  let httpRequest
 
   async function testBlockingRequest (url = '/?file=/test.file', config = undefined, ruleEvalCount = 1) {
     try {
-      await axios.get(url, config)
+      await httpRequest.get(url, config)
     } catch (e) {
       if (!e.response) {
         throw e
@@ -73,7 +73,7 @@ describe('RASP - lfi', () => {
         server = expressApp.listen(0)
         await once(server, 'listening')
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({
+        httpRequest = HttpRequest.create({
           baseURL: `http://localhost:${port}`,
         })
       })
@@ -132,7 +132,7 @@ describe('RASP - lfi', () => {
             it('should not block if param not found in the request', async () => {
               app = getAppFn(fn, args, options)
 
-              await axios.get(`/?file=${secureFile}`)
+              await httpRequest.get(`/?file=${secureFile}`)
 
               return checkRaspExecutedAndNotThreat(agent, false)
             })
@@ -481,7 +481,7 @@ describe('RASP - lfi', () => {
       server.listen(0)
       await once(server, 'listening')
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({
+      httpRequest = HttpRequest.create({
         baseURL: `http://localhost:${port}`,
       })
     })

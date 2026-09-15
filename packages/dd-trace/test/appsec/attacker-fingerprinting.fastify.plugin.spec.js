@@ -5,15 +5,15 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
+const HttpRequest = require('../setup/helpers/http-client')
 
 withVersions('fastify', 'fastify', fastifyVersion => {
   describe('Attacker fingerprinting', () => {
-    let app, server, axios
+    let app, server, httpRequest
 
     before(async () => {
       await agent.load(['fastify', 'http'], { client: false })
@@ -28,7 +28,7 @@ withVersions('fastify', 'fastify', fastifyVersion => {
       await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
       const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
+      httpRequest = HttpRequest.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -52,7 +52,7 @@ withVersions('fastify', 'fastify', fastifyVersion => {
     })
 
     it('should report http fingerprints', async () => {
-      await axios.post('/?key=testattack',
+      await httpRequest.post('/?key=testattack',
         {
           bodyParam: 'bodyValue',
         },

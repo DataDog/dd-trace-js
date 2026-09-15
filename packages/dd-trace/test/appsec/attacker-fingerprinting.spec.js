@@ -4,10 +4,10 @@ const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
-const axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
+const httpRequest = require('../setup/helpers/http-client')
 
 describe('Attacker fingerprinting', () => {
   describe('SDK', () => {
@@ -62,7 +62,7 @@ describe('Attacker fingerprinting', () => {
         assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
-      axios.get(`http://localhost:${port}/`, {
+      httpRequest.get(`http://localhost:${port}/`, {
         headers: {
           'User-Agent': 'test-user-agent',
         },
@@ -88,7 +88,7 @@ describe('Attacker fingerprinting', () => {
         assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
       }).then(done).catch(done)
 
-      axios.get(`http://localhost:${port}/`, {
+      httpRequest.get(`http://localhost:${port}/`, {
         headers: {
           'User-Agent': 'test-user-agent',
         },

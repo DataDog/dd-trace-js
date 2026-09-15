@@ -4,7 +4,6 @@ const assert = require('node:assert')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const Axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
@@ -14,12 +13,13 @@ const { getConfigFresh } = require('../helpers/config')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 
 const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
+const HttpRequest = require('../setup/helpers/http-client')
 const blockingResponse = JSON.parse(blockedTemplateJson)
 
 describe('HTTP Response Blocking', () => {
   let server
   let responseHandler
-  let axios
+  let httpRequest
 
   before(async () => {
     await agent.load('http')
@@ -45,7 +45,7 @@ describe('HTTP Response Blocking', () => {
         .once('listening', (...args) => {
           const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
 
-          axios = Axios.create(({
+          httpRequest = HttpRequest.create(({
             baseURL: `http://localhost:${port}`,
             validateStatus: null,
           }))
@@ -92,7 +92,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -105,7 +105,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -117,7 +117,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -128,7 +128,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assert.equal(res.status, 200)
     assert.deepStrictEqual([
@@ -150,7 +150,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -163,7 +163,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -175,7 +175,7 @@ describe('HTTP Response Blocking', () => {
       streamFile(res)
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -187,7 +187,7 @@ describe('HTTP Response Blocking', () => {
       res.end('end')
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -204,7 +204,7 @@ describe('HTTP Response Blocking', () => {
       streamFile(res)
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })
@@ -221,7 +221,7 @@ describe('HTTP Response Blocking', () => {
       streamFile(res)
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assert.equal(res.status, 201)
     assert.deepStrictEqual([
@@ -250,7 +250,7 @@ describe('HTTP Response Blocking', () => {
       }, 1000)
     }
 
-    const res = await axios.get('/')
+    const res = await httpRequest.get('/')
 
     assertBlocked(res)
   })

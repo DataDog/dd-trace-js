@@ -1,3 +1,5 @@
+
+const HttpRequest = require('../setup/helpers/http-client')
 'use strict'
 
 /* eslint-disable camelcase */
@@ -7,7 +9,6 @@ const crypto = require('node:crypto')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const Axios = require('axios')
 const { describe, it, before, after } = require('mocha')
 
 const agent = require('../plugins/agent')
@@ -20,7 +21,7 @@ withVersions('stripe', 'stripe', version => {
   describe('Stripe Payment Events', () => {
     const WEBHOOK_SECRET = 'whsec_FAKE'
 
-    let server, axios
+    let server, httpRequest
 
     function webhookRequest (data, secret = WEBHOOK_SECRET, url = '/stripe/webhook') {
       const timestamp = Date.now()
@@ -29,7 +30,7 @@ withVersions('stripe', 'stripe', version => {
 
       const signature = crypto.createHmac('sha256', secret).update(payload).digest('hex')
 
-      return axios.post(url, jsonStr, {
+      return httpRequest.post(url, jsonStr, {
         headers: {
           'Content-Type': 'application/json',
           'Stripe-Signature': `t=${timestamp},v1=${signature}`,
@@ -181,7 +182,7 @@ withVersions('stripe', 'stripe', version => {
 
       server = app.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}`, validateStatus: false })
+        httpRequest = HttpRequest.create({ baseURL: `http://localhost:${port}`, validateStatus: false })
         stripe = Stripe('sk_FAKE', {
           host: 'localhost',
           port,
@@ -199,7 +200,7 @@ withVersions('stripe', 'stripe', version => {
     })
 
     it('should detect checkout session creation', async () => {
-      const res = await axios.post('/stripe/create_checkout_session', {
+      const res = await httpRequest.post('/stripe/create_checkout_session', {
         client_reference_id: 'GabeN',
         line_items: [{
           price_data: {
@@ -263,7 +264,7 @@ withVersions('stripe', 'stripe', version => {
     })
 
     it('should not detect unsupported checkout session type', async () => {
-      const res = await axios.post('/stripe/create_checkout_session', {
+      const res = await httpRequest.post('/stripe/create_checkout_session', {
         client_reference_id: 'GabeN',
         line_items: [{
           price_data: {
@@ -358,7 +359,7 @@ withVersions('stripe', 'stripe', version => {
     })
 
     it('should not detect checkout session creation when error occurs', async () => {
-      const res = await axios.post('/stripe/create_checkout_session', {
+      const res = await httpRequest.post('/stripe/create_checkout_session', {
         client_reference_id: 'GabeN',
         line_items: [{
           price_data: {
@@ -438,7 +439,7 @@ withVersions('stripe', 'stripe', version => {
     })
 
     it('should detect payment intent creation', async () => {
-      const res = await axios.post('/stripe/create_payment_intent', {
+      const res = await httpRequest.post('/stripe/create_payment_intent', {
         amount: 6969,
         currency: 'eur',
         payment_method: 'pm_FAKE',
@@ -466,7 +467,7 @@ withVersions('stripe', 'stripe', version => {
     })
 
     it('should not detect payment intent creation when error occurs', async () => {
-      const res = await axios.post('/stripe/create_payment_intent', {
+      const res = await httpRequest.post('/stripe/create_payment_intent', {
         // missing amount field
         currency: 'eur',
         payment_method: 'pm_FAKE',

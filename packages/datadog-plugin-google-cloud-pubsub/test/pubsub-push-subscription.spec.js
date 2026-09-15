@@ -1,3 +1,5 @@
+
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 'use strict'
 
 // Set K_SERVICE before any modules load to enable push subscription plugin
@@ -6,7 +8,6 @@ process.env.K_SERVICE = 'test-service'
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
 
-const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -66,7 +67,7 @@ describe('Push Subscription Plugin', () => {
       'x-goog-pubsub-publish-time': new Date().toISOString(),
     }
 
-    return axios.post(`http://localhost:${port}/push-endpoint`, {
+    return httpRequest.post(`http://localhost:${port}/push-endpoint`, {
       message: { data: 'dGVzdA==', messageId: 'test-message-id' },
     }, {
       headers: { ...defaultHeaders, ...headers },
@@ -216,7 +217,7 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
+        httpRequest.post(`http://localhost:${port}/push-endpoint`, { data: 'regular' }, {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'Mozilla/5.0', // Not Google user agent
@@ -240,7 +241,7 @@ describe('Push Subscription Plugin', () => {
           .then(done)
           .catch(done)
 
-        axios.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
+        httpRequest.post(`http://localhost:${port}/push-endpoint`, { message: { data: 'dGVzdA==' } }, {
           headers: {
             'Content-Type': 'application/json',
             'User-Agent': 'APIs-Google; (+https://developers.google.com/webmasters/APIs-Google.html)',

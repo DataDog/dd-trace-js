@@ -4,7 +4,6 @@ const assert = require('node:assert')
 const { once } = require('node:events')
 const path = require('node:path')
 
-const axios = require('axios')
 const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
@@ -12,6 +11,7 @@ const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+const httpRequest = require('../setup/helpers/http-client')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('Suspicious request blocking - cookie-parser', () => {
@@ -55,7 +55,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
     })
 
     it('should not block the request without an attack', async () => {
-      const res = await axios.post(`http://localhost:${port}/`, {})
+      const res = await httpRequest.post(`http://localhost:${port}/`, {})
 
       sinon.assert.calledOnce(requestCookie)
       assert.strictEqual(res.data, 'DONE')
@@ -63,7 +63,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
 
     it('should block the request when attack is detected', async () => {
       try {
-        await axios.post(`http://localhost:${port}/`, {}, {
+        await httpRequest.post(`http://localhost:${port}/`, {}, {
           headers: {
             Cookie: 'key=testattack',
           },
