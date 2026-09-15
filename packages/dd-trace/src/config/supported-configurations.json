@@ -58,7 +58,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "description": "Buffer Vercel AI streamed responses for After Model evaluation before replaying them."
+        "description": "Analyze streamed OpenAI and Vercel AI responses with AI Guard After Model evaluation."
       }
     ],
     "DD_AI_GUARD_BLOCK": [
