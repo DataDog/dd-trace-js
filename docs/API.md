@@ -37,6 +37,22 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+Set `llmobs.spanTrack` to select which backend track receives LLM Observability span events:
+
+- `auto` (default) sends spans tagged with `experiment_id` to Experiments and all other spans to LLM Observability.
+- `experiments` sends all LLM Observability spans to Experiments.
+- `llmobs` sends all spans to LLM Observability, including spans tagged with `experiment_id`.
+
+```javascript
+const tracer = require('dd-trace').init({
+  llmobs: {
+    spanTrack: 'experiments'
+  }
+})
+```
+
+The equivalent environment variable is `DD_LLMOBS_SPAN_TRACK`. This option only changes LLM Observability span-event routing; APM trace submission is unaffected.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.

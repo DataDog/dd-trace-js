@@ -99,6 +99,7 @@ class LLMObs extends NoopLLMObs {
     this._config.llmobs.DD_LLMOBS_ENABLED = true
     this._config.llmobs.mlApp = options.mlApp
     this._config.llmobs.agentlessEnabled = options.agentlessEnabled
+    if (options.spanTrack !== undefined) this._config.llmobs.spanTrack = options.spanTrack
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)

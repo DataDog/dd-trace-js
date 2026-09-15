@@ -480,6 +480,7 @@ export interface GeneratedConfig {
     mlApp: string | undefined;
     projectName: string | undefined;
     sampleRate: number;
+    spanTrack: "auto" | "llmobs" | "experiments";
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
@@ -770,6 +771,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_ML_APP: string | undefined;
   DD_LLMOBS_PROJECT_NAME: string | undefined;
   DD_LLMOBS_SAMPLE_RATE: number;
+  DD_LLMOBS_SPAN_TRACK: "auto" | "llmobs" | "experiments";
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;
