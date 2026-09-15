@@ -1359,6 +1359,53 @@ describe('dogstatsd', () => {
 
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.buffered:1|d|#runtime-id:initial-id\n')
     })
+
+    it('should drop pending aggregated counters/gauges/histograms when an identity refresh changes its tags',
+      () => {
+        const config = {
+          dogstatsd: {
+            hostname: '127.0.0.1',
+            port: 8125,
+          },
+          lookup: dns.lookup,
+          runtimeMetricsRuntimeId: true,
+          tags: { 'runtime-id': 'initial-id' },
+        }
+
+        client = new CustomMetrics(config)
+        client.increment('test.count', 10)
+        client.gauge('test.avg', 5)
+        client.histogram('test.hist', 1)
+
+        config.tags['runtime-id'] = 'refreshed-id'
+        identityRefreshChannel.publish(config)
+
+        client.flush()
+
+        sinon.assert.notCalled(udp4.send)
+      })
+
+    it('should preserve pending aggregated counters/gauges/histograms when an identity refresh does not change ' +
+      'its tags', () => {
+      const config = {
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        lookup: dns.lookup,
+        runtimeMetricsRuntimeId: true,
+        tags: { 'runtime-id': 'initial-id' },
+      }
+
+      client = new CustomMetrics(config)
+      client.increment('test.count', 10)
+
+      identityRefreshChannel.publish(config)
+      client.flush()
+
+      sinon.assert.called(udp4.send)
+      assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.count:10|c|#runtime-id:initial-id\n')
+    })
   })
 
   describe('MetricsAggregationClient', () => {
