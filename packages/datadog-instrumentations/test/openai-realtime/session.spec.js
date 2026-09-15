@@ -235,6 +235,56 @@ describe('openai realtime RealtimeSession', () => {
     })
   })
 
+  describe('session close', () => {
+    // An app that holds on to closed transport objects keeps their sessions reachable, and a
+    // server-VAD client streams the microphone continuously, so buffered audio for a turn that can
+    // never start would sit there at up to the retention cap.
+    it('drops audio buffered for a turn that will never start', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.finishSession(now())
+      emitted.length = 0
+
+      // Driving one more response is the only way to observe the buffer from outside: if the
+      // committed audio were still held, this turn would be handed it.
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_late' } }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_late', status: 'completed' } }, now())
+
+      assert.strictEqual(emitted.length, 1, 'the session still processes events after close')
+      assert.strictEqual(emitted[0].input.audio.length, 0)
+      assert.strictEqual(emitted[0].userSpeech, undefined)
+    })
+
+    // `failed` is derived from `turn.status`, so an abnormal close that cut a response short would
+    // otherwise be reported as a success on both the llm span and the turn root.
+    it('marks a response still in flight as failed when the socket dies abnormally', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      // No `response.done` — the connection drops mid-generation.
+      session.finishSession(now(), true)
+
+      assert.strictEqual(emitted.length, 1)
+      assert.strictEqual(emitted[0].failed, true)
+    })
+
+    it('does not flag a turn when the connection closes normally', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.finishSession(now())
+
+      assert.strictEqual(emitted.length, 1)
+      assert.strictEqual(emitted[0].failed, false)
+    })
+  })
+
   describe('input transcription configuration', () => {
     // Latching the flag on would defer every later turn in #awaiting for a transcript that a
     // disabled session will never send.
@@ -252,6 +302,54 @@ describe('openai realtime RealtimeSession', () => {
       session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
 
       assert.strictEqual(emitted.length, 1, 'the turn should submit immediately, not await a transcript')
+    })
+
+    // Either terminal event can land before the response's `response.done`. The turn must not then
+    // park for something that has already happened — it would sit unsubmitted until the next
+    // response or the socket closing.
+    it('does not park a turn whose transcription already failed', () => {
+      const harness = openSession({ transcription: true })
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.onServerEvent({
+        type: 'conversation.item.input_audio_transcription.failed',
+        item_id: 'item_1',
+      }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
+
+      assert.strictEqual(emitted.length, 1, 'the turn should submit immediately')
+      assert.strictEqual(emitted[0].input.transcript, '')
+    })
+
+    it('does not park a turn whose transcription already completed empty', () => {
+      const harness = openSession({ transcription: true })
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      // Whisper returns an empty transcript for silence or noise.
+      session.onServerEvent({
+        type: 'conversation.item.input_audio_transcription.completed',
+        item_id: 'item_1',
+        transcript: '',
+      }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
+
+      assert.strictEqual(emitted.length, 1, 'the turn should submit immediately')
+      assert.strictEqual(emitted[0].input.transcript, '')
+    })
+
+    it('still parks a turn whose transcription has not resolved yet', () => {
+      const harness = openSession({ transcription: true })
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
+
+      assert.strictEqual(emitted.length, 0, 'nothing terminal has arrived for this item')
     })
 
     it('keeps transcription on across a partial update that omits the field', () => {

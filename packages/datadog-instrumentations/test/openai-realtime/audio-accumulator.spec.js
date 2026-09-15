@@ -251,6 +251,43 @@ describe('openai realtime AudioAccumulator', () => {
     })
   })
 
+  // The cap is meant to bound peak allocation, not just what is kept, so a frame that will be
+  // discarded must never be decoded. Observable through `#retainedBytes`, which `toBuffer` uses as
+  // its concat length: a count left describing bytes the segment no longer holds would zero-pad.
+  describe('retention cap allocation', () => {
+    it('reports the right length for a single frame larger than the whole cap', () => {
+      const accumulator = new AudioAccumulator()
+      const huge = LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES + 1024
+
+      const reported = accumulator.append(Buffer.alloc(huge).toString('base64'), 1000)
+
+      assert.strictEqual(reported, huge, 'append still reports the decoded length')
+      assert.strictEqual(accumulator.totalDecodedBytes, huge)
+      assert.strictEqual(accumulator.oversize, true)
+      assert.strictEqual(accumulator.toBuffer().length, 0, 'nothing retained, and no zero padding')
+    })
+
+    it('keeps counting frames once oversize without retaining them', () => {
+      const accumulator = new AudioAccumulator()
+      accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES + 1).toString('base64'), 1000)
+
+      const reported = accumulator.append(b64([1, 2, 3, 4]), 2000)
+
+      assert.strictEqual(reported, 4)
+      assert.strictEqual(accumulator.totalDecodedBytes, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES + 5)
+      assert.strictEqual(accumulator.toBuffer().length, 0)
+    })
+
+    it('retains a frame that lands exactly on the cap', () => {
+      const accumulator = new AudioAccumulator()
+
+      accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES).toString('base64'), 1000)
+
+      assert.strictEqual(accumulator.oversize, false)
+      assert.strictEqual(accumulator.toBuffer().length, LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
+    })
+  })
+
   describe('segment format', () => {
     it('records the format in force when the first frame arrived', () => {
       const accumulator = new AudioAccumulator()

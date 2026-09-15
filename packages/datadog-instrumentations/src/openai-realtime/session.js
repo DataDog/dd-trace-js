@@ -293,9 +293,11 @@ class RealtimeSession {
           this.#onInputTranscript(event.item_id, event.transcript, now)
           return
         case 'conversation.item.input_audio_transcription.failed':
-          // No transcription is coming for this item, so finalize any turn waiting on it rather than
-          // let its span hang until the next turn or close.
-          this.#finalizeAwaitingFor(event.item_id, now)
+          // No transcription is coming for this item. Recorded as an empty transcript rather than
+          // just flushing whatever is already waiting: this can land *before* the response's
+          // `response.done`, and without the record `#finishResponse` would then park the turn for
+          // an event that has already happened.
+          this.#onInputTranscript(event.item_id, '', now)
           return
         case 'response.created':
           this.#startResponse(event.response?.id ?? event.response_id, now)
@@ -320,9 +322,12 @@ class RealtimeSession {
    * Finalize everything still open. Idempotent, so every close path can call it.
    *
    * @param {number} now - Epoch ms.
+   * @param {boolean} [failed] - The connection ended abnormally. Only responses still in flight are
+   *   marked: a turn already awaiting a transcript or playback had its `response.done`, so it
+   *   succeeded whatever the transport did afterwards.
    * @returns {void}
    */
-  finishSession (now) {
+  finishSession (now, failed = false) {
     if (this.#closed) return
     this.#closed = true
 
@@ -333,6 +338,7 @@ class RealtimeSession {
       // In-flight turns that never saw `response.done` (closed mid-turn). Whatever partial data we
       // have is submitted.
       for (const turn of this.#responses.values()) {
+        if (failed) turn.status = 'failed'
         this.#applyCachedTranscript(turn)
         this.#finalizeTurn(turn, now, true)
       }
@@ -340,6 +346,11 @@ class RealtimeSession {
       this.#responses.clear()
       this.#inputTranscripts.clear()
       this.#toolCallNames.clear()
+      // Audio buffered for a turn that will now never start. An app that holds on to closed
+      // transport objects keeps their sessions reachable through the connection map, and a
+      // server-VAD client streams the microphone continuously, so this is up to the whole retention
+      // cap per closed connection with nothing left to consume it.
+      this.#pendingInput = new InputTurn(this.#retainAudio)
     } catch (error) {
       log.debug('Error finalizing OpenAI realtime session: %s', error?.message)
     }
@@ -743,10 +754,16 @@ class RealtimeSession {
 
     this.#applyCachedTranscript(turn)
 
-    // Hold the turn open for a late input transcription ONLY when transcription is actually enabled:
-    // otherwise no transcript is ever coming, and waiting would needlessly delay every turn until
-    // the next one, and the last turn until close.
-    if (!turn.input.transcript && turn.input.itemId !== undefined && this.#inputTranscriptionEnabled) {
+    // Hold the turn open for a late input transcription ONLY when transcription is actually enabled
+    // and this item has not already reached a terminal state: otherwise no transcript is ever
+    // coming, and waiting would needlessly delay every turn until the next one, and the last turn
+    // until close. A cached entry — including the empty string a completion-with-no-text or a
+    // failure records — is that terminal state, and it is why the check is `has` rather than the
+    // transcript's truthiness.
+    if (!turn.input.transcript &&
+        turn.input.itemId !== undefined &&
+        this.#inputTranscriptionEnabled &&
+        !this.#inputTranscripts.has(turn.input.itemId)) {
       this.#awaiting.push(turn)
       return
     }

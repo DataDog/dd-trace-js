@@ -86,29 +86,27 @@ class AudioAccumulator {
     }
     this.present = true
 
-    if (!this.#retain) {
-      // `byteLength` is what `Buffer.from(base64, 'base64').length` would be, computed without
-      // allocating, so the speech windows derived from this count are unchanged.
-      const decodedLength = Buffer.byteLength(base64, 'base64')
-      this.totalDecodedBytes += decodedLength
+    // Size the frame without allocating — `byteLength` is exactly what `Buffer.from(base64,
+    // 'base64').length` would be — so every path that ends up discarding the frame pays nothing for
+    // it. Decoding first would make the retention cap a bound on what is *kept* rather than on peak
+    // allocation, and an oversize live stream would keep paying for discarded decodes.
+    const decodedLength = Buffer.byteLength(base64, 'base64')
+    this.totalDecodedBytes += decodedLength
+
+    if (!this.#retain || this.oversize) return decodedLength
+
+    if (this.#retainedBytes + decodedLength > LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES) {
+      // Free what we had: the size guard would drop the whole segment anyway. `#retainedBytes` goes
+      // with it, so it never describes more bytes than `chunks` holds.
+      this.oversize = true
+      this.chunks = []
+      this.#retainedBytes = 0
       return decodedLength
     }
 
-    const decoded = Buffer.from(base64, 'base64')
-    this.totalDecodedBytes += decoded.length
-
-    if (this.oversize) return decoded.length
-
-    this.#retainedBytes += decoded.length
-    if (this.#retainedBytes > LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES) {
-      // Free what we had: the size guard would drop the whole segment anyway.
-      this.oversize = true
-      this.chunks = []
-      return decoded.length
-    }
-
-    this.chunks.push(decoded)
-    return decoded.length
+    this.#retainedBytes += decodedLength
+    this.chunks.push(Buffer.from(base64, 'base64'))
+    return decodedLength
   }
 
   /**
