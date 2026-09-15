@@ -7,10 +7,10 @@
     "standardwebhooks": "1.0.0"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "5.0.81",
-    "@ai-sdk/anthropic": "4.0.52",
-    "@ai-sdk/google": "4.0.67",
-    "@ai-sdk/openai": "4.0.65",
+    "@ai-sdk/amazon-bedrock": "5.0.82",
+    "@ai-sdk/anthropic": "4.0.53",
+    "@ai-sdk/google": "4.0.68",
+    "@ai-sdk/openai": "4.0.66",
     "@anthropic-ai/claude-agent-sdk": "0.3.268",
     "@anthropic-ai/sdk": "0.125.0",
     "@apollo/gateway": "2.14.4",
@@ -108,7 +108,7 @@
     "@wdio/local-runner": "9.31.7",
     "@wdio/mocha-framework": "9.31.7",
     "aerospike": "6.7.1",
-    "ai": "7.0.97",
+    "ai": "7.0.98",
     "amqp10": "3.6.0",
     "amqplib": "2.0.1",
     "apollo-server-core": "3.13.0",
