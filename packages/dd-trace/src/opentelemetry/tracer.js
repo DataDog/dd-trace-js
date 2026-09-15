@@ -53,6 +53,10 @@ class Tracer {
     return this._tracerProvider.resource
   }
 
+  /**
+   * @param {import('../opentracing/span_context')} parentSpanContext
+   * @returns {SpanContext}
+   */
   _createSpanContextFromParent (parentSpanContext) {
     return new SpanContext({
       traceId: parentSpanContext._traceId,
@@ -62,6 +66,7 @@ class Tracer {
       baggageItems: { ...parentSpanContext._baggageItems },
       trace: parentSpanContext._trace,
       tracestate: parentSpanContext._tracestate,
+      noop: parentSpanContext._noop,
     })
   }
 
@@ -115,6 +120,12 @@ class Tracer {
     return spanContext
   }
 
+  /**
+   * @param {string} name
+   * @param {import('@opentelemetry/api').SpanOptions} [options]
+   * @param {import('@opentelemetry/api').Context} [context]
+   * @returns {import('@opentelemetry/api').Span}
+   */
   startSpan (name, options = {}, context = api.context.active()) {
     // remove span from context in case a root span is requested via options
     if (options.root) {
@@ -131,11 +142,7 @@ class Tracer {
       spanContext = new SpanContext()
     }
 
-    // init() didn't finish setting up real tracing (e.g. DD_TRACE_ENABLED=false,
-    // or init() was never called), so the inner tracer is still the noop.
-    // DatadogSpan can't construct without a processor + prioritySampler, so fall
-    // through to a non-recording span; the SpanContext still propagates.
-    if (!tracer._tracingInitialized) {
+    if (!tracer._tracingInitialized || spanContext._ddContext._noop) {
       return api.trace.wrapSpanContext(spanContext)
     }
 

@@ -1,8 +1,7 @@
 'use strict'
 
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
-const { performance } = require('perf_hooks')
-const now = performance.now.bind(performance)
+const { performance } = require('node:perf_hooks')
 const util = require('util')
 const { channel } = require('dc-polyfill')
 const id = require('../id')
@@ -14,9 +13,10 @@ const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
 const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
+const createSpanContext = require('./create-span-context')
 const SpanContext = require('./span_context')
 
-const dateNow = Date.now
+const now = performance.now.bind(performance)
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -113,7 +113,12 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
-    this._spanContext = this._createContext(parent, fields)
+    this._spanContext = createSpanContext(
+      this.#parentTracer._config,
+      parent,
+      fields.context,
+      fields.traceId128BitGenerationEnabled
+    )
     this._spanContext._name = operationName
     if (fields.tags) Object.assign(this._spanContext.getTags(), fields.tags)
     this._spanContext._hostname = hostname
@@ -416,66 +421,6 @@ class DatadogSpan {
       }
     }
     return sanitizedAttributes
-  }
-
-  _createContext (parent, fields) {
-    let spanContext
-    let startTime
-
-    let baggage
-    const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
-    if (parent && parent._isRemote && propagationBehavior !== 'continue') {
-      baggage = parent._baggageItems
-      parent = null
-    }
-
-    if (fields.context) {
-      spanContext = fields.context
-      if (!spanContext._trace.startTime) {
-        startTime = dateNow()
-      }
-    } else if (parent) {
-      spanContext = new SpanContext({
-        traceId: parent._traceId,
-        spanId: id(),
-        parentId: parent._spanId,
-        sampling: parent._sampling,
-        baggageItems: { ...parent._baggageItems },
-        trace: parent._trace,
-        tracestate: parent._tracestate,
-      })
-
-      if (!spanContext._trace.startTime) {
-        startTime = dateNow()
-      }
-    } else {
-      const spanId = id()
-      startTime = dateNow()
-      spanContext = new SpanContext({
-        traceId: spanId,
-        spanId,
-      })
-      spanContext._trace.startTime = startTime
-
-      if (fields.traceId128BitGenerationEnabled) {
-        spanContext._trace.tags['_dd.p.tid'] = Math.floor(startTime / 1000).toString(16)
-          .padStart(8, '0')
-          .padEnd(16, '0')
-      }
-
-      if (propagationBehavior === 'restart') {
-        spanContext._baggageItems = baggage ?? {}
-      }
-    }
-
-    spanContext._trace.ticks ||= now()
-    if (startTime) {
-      spanContext._trace.startTime = startTime
-    }
-    // SpanContext was NOT propagated from a remote parent
-    spanContext._isRemote = false
-
-    return spanContext
   }
 
   _getTime () {
