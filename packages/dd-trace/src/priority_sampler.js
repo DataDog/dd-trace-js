@@ -86,7 +86,6 @@ class PrioritySampler {
 
   /**
    * @param {DatadogSpan} span
-   * @returns {boolean} True if the trace should be sampled based on priority.
    */
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
@@ -99,7 +98,6 @@ class PrioritySampler {
    *
    * @param {DatadogSpan} span
    * @param {boolean} [auto] - Whether to use automatic sampling if no manual tags are present.
-   * @returns {void}
    */
   sample (span, auto = true) {
     if (!span) return
@@ -131,7 +129,6 @@ class PrioritySampler {
    * Updates agent-provided sampling rates keyed by `service:,env:`.
    *
    * @param {Record<string, number>} rates
-   * @returns {void}
    */
   update (rates) {
     const samplers = {}
@@ -151,7 +148,6 @@ class PrioritySampler {
    * Validates that a sampling priority value is one of the allowed constants.
    *
    * @param {SamplingPriority|undefined} samplingPriority
-   * @returns {boolean}
    */
   validate (samplingPriority) {
     switch (samplingPriority) {
@@ -277,7 +273,6 @@ class PrioritySampler {
    * records the effective rate on the trace.
    *
    * @param {DatadogSpanContext} context
-   * @returns {boolean}
    */
   _isSampledByRateLimit (context) {
     // TODO: Change underscored properties to private ones.
@@ -316,7 +311,6 @@ class PrioritySampler {
    * Tags the trace with a decision maker when priority is keep, or removes it otherwise.
    *
    * @param {DatadogSpan} span
-   * @returns {void}
    */
   #addDecisionMaker (span) {
     const context = span.context()

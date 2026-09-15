@@ -34,7 +34,6 @@ module.exports = inspectSegment
  * truncates objects before inspecting them.
  *
  * @param {unknown} value
- * @returns {string}
  */
 function inspectSegment (value) {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
@@ -99,7 +98,6 @@ function inspectSegment (value) {
  *
  * @param {Collection} value
  * @param {boolean} isMap
- * @returns {string}
  */
 function inspectCollection (value, isMap) {
   if (NODE_MAJOR !== 18) return inspect(value, segmentInspectOptions)
@@ -137,7 +135,6 @@ function inspectCollection (value, isMap) {
  * Determine whether inspecting a value could invoke a proxy trap or toStringTag getter.
  *
  * @param {unknown} value
- * @returns {boolean}
  */
 function inspectionCanRunUserCode (value) {
   const type = typeof value

@@ -233,7 +233,6 @@ function ciVisRequestHandler (request, response) {
  * @param {import('../../src/index')} agent
  * @param {string} expectedHash
  * @param {string[]} expectedEdgeTags
- * @returns {boolean}
  */
 function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
   const dsmStats = agent.getDsmStats()
@@ -264,7 +263,6 @@ function dsmStatsExist (agent, expectedHash, expectedEdgeTags) {
  *
  * @param {import('../../src/index')} agent
  * @param {string} expectedParentHash
- * @returns {boolean}
  */
 function dsmStatsExistWithParentHash (agent, expectedParentHash) {
   const dsmStats = agent.getDsmStats()
@@ -549,7 +547,6 @@ function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
  * `subscribe` handlers have no timer and no promise, so they are cleared but never counted.
  *
  * @param {Set<{ cancel?: () => void }>} handlers
- * @returns {number}
  */
 function disarmHandlers (handlers) {
   let armed = 0

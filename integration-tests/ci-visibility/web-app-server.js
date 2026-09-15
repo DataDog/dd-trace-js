@@ -27,7 +27,6 @@ const DEFAULT_BODY = '<div class="hello-world">Hello World</div>'
  * Builds the static HTML returned by the browser test web app.
  *
  * @param {WebAppServerOptions} [options]
- * @returns {string}
  */
 function getWebAppHtml (options = {}) {
   const {

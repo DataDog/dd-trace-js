@@ -2480,7 +2480,6 @@ describe('test optimization validation manifest scaffold', () => {
  *
  * @param {string} filename config filename
  * @param {string} include selected include pattern
- * @returns {void}
  */
 function writeVitestProjectConfig (filename, include) {
   fs.mkdirSync(path.dirname(filename), { recursive: true })
