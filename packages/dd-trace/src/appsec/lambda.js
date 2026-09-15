@@ -174,8 +174,7 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
 
   if (typeof rawBody !== 'string') return
 
-  const mime = extractMimeType(headers?.['content-type'])
-  if (!mime || !(JSON_MIME_TYPES.has(mime) || mime.endsWith('+json'))) return
+  if (!isJsonContentType(headers?.['content-type'])) return
 
   if (isOverSizeCap(rawBody, isBase64Encoded)) {
     log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',
@@ -194,6 +193,32 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
     // The SyntaxError message embeds a fragment of the body, which is customer data.
     log.debug('[ASM] Failed to parse Lambda response body')
   }
+}
+
+/**
+ * Tells whether the response content type is unambiguously a JSON media type
+ *
+ * The Lambda layer joins repeated headers with ', ', so a content type can reach here as a list.
+ * A list of differing values does not say what the client received, so it is rejected rather
+ * than guessed; identical repetitions are not. The '+json' suffix is checked on the subtype of a
+ * well formed type/subtype, so a bare 'bogus+json' does not pass.
+ *
+ * @param {string | undefined} contentType
+ * @returns {boolean}
+ */
+function isJsonContentType (contentType) {
+  const mimes = new Set(String(contentType ?? '').split(',').map((value) => extractMimeType(value)))
+  if (mimes.size !== 1) return false
+
+  const [mime] = mimes
+  const separator = mime.indexOf('/')
+  if (separator < 1) return false
+
+  if (JSON_MIME_TYPES.has(mime)) return true
+
+  const subtype = mime.slice(separator + 1)
+
+  return subtype !== '+json' && subtype.endsWith('+json')
 }
 
 /**

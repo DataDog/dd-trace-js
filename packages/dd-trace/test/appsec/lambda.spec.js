@@ -607,6 +607,33 @@ describe('AppSec Lambda handler', () => {
         assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
       })
 
+      it('should parse the body when a repeated content type resolves to a single value', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json, application/json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should reject an ambiguous content type list instead of trusting the last value', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain, application/problem+json' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should reject a json suffix that is not carried by a media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'bogus+json' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
       it('should not parse the body when the content type is not JSON', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',
