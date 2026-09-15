@@ -1,0 +1,41 @@
+# How to configure:
+#
+# When no team is frozen, set `frozen-teams` to an empty string:
+# frozen-teams: ""
+#
+# When one or more teams are frozen, add them one per line with the @DataDog prefix:
+#
+# frozen-teams: |
+#   @DataDog/team-a
+#   @DataDog/team-b
+
+name: Team freeze guard
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  team-freeze-guard:
+    name: Team freeze guard
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: DataDog/team-freeze-guard@d28a2e357903b426122feaae225629bd63fcd2c5 # v0.0.5
+        with:
+          # subset of pattern defined here:
+          # .github/workflows/pr-title.yml#L22C85-L23C128
+          bypass-title-pattern: '^(revert(!)?: .+|(fix|test|ci)(\(([^)]+)\))?(!)?: .+)'
+          frozen-teams: |
+            @DataDog/apm-idm-js
+            @DataDog/ml-observability
+            @DataDog/lang-platform-js
