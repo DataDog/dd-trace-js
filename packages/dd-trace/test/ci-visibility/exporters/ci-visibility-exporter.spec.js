@@ -33,7 +33,7 @@ const {
   uploadTestVideo: actualUploadTestVideoRequest,
 } = require('../../../src/ci-visibility/requests/upload-test-screenshot')
 
-const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sketches-js')
+require('@datadog/libdatadog')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
@@ -79,13 +79,7 @@ describe('CI Visibility Exporter', () => {
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
-    const readFileSync = fs.readFileSync
-    sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
-      if (filename === sketchesJsPath) {
-        return readFileSync.call(fs, filename, ...args)
-      }
-      return ''
-    })
+    sinon.stub(fs, 'readFileSync').returns('')
     const config = getConfig()
     originalApiKey = config.DD_API_KEY
     config.DD_API_KEY = '1'
