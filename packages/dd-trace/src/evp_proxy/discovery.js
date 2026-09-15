@@ -2,7 +2,7 @@
 
 const { fetchAgentInfo } = require('../agent/info')
 const log = require('../log')
-const { stripTrailingSlashes } = require('./path')
+const { joinAgentURLPath, stripTrailingSlashes } = require('./path')
 
 /**
  * Receiver discovery contract
@@ -25,13 +25,12 @@ const { stripTrailingSlashes } = require('./path')
  * serverless-init image or deployment type.
  *
  * This module only discovers a candidate route. A missing or unresponsive
- * `/info` endpoint returns an error through the shared request timeout and
- * retry policy. A valid response without a compatible path returns no route.
+ * `/info` endpoint returns an error through a bounded send-once request. A
+ * valid response without a compatible path returns no route.
  * Discovery sends no events, so the caller can safely select direct intake
  * after either result. The caller also owns later delivery failures. Exposure
- * delivery uses retries and can therefore produce duplicates. After local
- * retries fail, the caller can retry through direct intake and use that route
- * for future batches.
+ * delivery decides whether a failed batch can be replayed and which route
+ * future batches use.
  *
  * Reference implementations:
  *
@@ -62,17 +61,17 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
   }
 
   const allowedHeaders = agentInfo.evp_proxy_allowed_headers
-  if (allowedHeaders !== undefined) {
+  if (requiredHeaders.length > 0 || allowedHeaders !== undefined) {
     if (!Array.isArray(allowedHeaders)) return
 
     const normalizedHeaders = new Set()
     for (const header of allowedHeaders) {
       if (typeof header === 'string') {
-        normalizedHeaders.add(header.toLowerCase())
+        normalizedHeaders.add(header.trim().toLowerCase())
       }
     }
 
-    if (requiredHeaders.some(header => !normalizedHeaders.has(header.toLowerCase()))) {
+    if (requiredHeaders.some(header => !normalizedHeaders.has(header.trim().toLowerCase()))) {
       return
     }
   }
@@ -122,7 +121,10 @@ function discoverEVPProxy (url, options, callback) {
     }
 
     log.debug('EVP proxy route %s discovered through the configured local receiver', basePath)
-    callback(null, { url, basePath })
+    callback(null, { url, basePath: joinAgentURLPath(url, basePath) })
+  }, {
+    path: joinAgentURLPath(url, '/info'),
+    retry: false,
   })
 }
 
