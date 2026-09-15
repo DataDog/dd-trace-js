@@ -89,13 +89,11 @@ describe('AppSec Index', function () {
         DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: 'anon',
         DD_API_SECURITY_ENABLED: false,
         DD_API_SECURITY_SAMPLE_DELAY: 10,
+        DD_APPSEC_COLLECT_ALL_HEADERS: true,
+        DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: false,
+        DD_APPSEC_MAX_COLLECTED_HEADERS: 42,
+        DD_APPSEC_RASP_COLLECT_REQUEST_BODY: true,
         DD_APPSEC_RASP_ENABLED: true,
-        rasp: { bodyCollection: true },
-        extendedHeadersCollection: {
-          enabled: true,
-          redaction: false,
-          maxHeaders: 42,
-        },
       },
     }
 
