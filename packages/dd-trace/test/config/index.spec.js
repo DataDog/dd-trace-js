@@ -1912,6 +1912,33 @@ describe('Config', () => {
     })
   })
 
+  it('should accept numeric and automatic OOM heap limit extension sizes', () => {
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = '1000000'
+
+    let config = getConfig()
+
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 1000000)
+
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = 'auto'
+    config = getConfig()
+
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
+  })
+
+  it('should reject invalid OOM heap limit extension sizes', () => {
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = 'automatic'
+
+    const config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Heap limit extension size must be an integer or "auto": \'automatic\' for ' +
+        'DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE (source: env_var), picked default'
+    )
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
+    assert.strictEqual(config.getOrigin('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'), 'env_var')
+  })
+
   it('should transform safe programmatic option types', () => {
     const config = getConfig({
       startupLogs: 'False',
