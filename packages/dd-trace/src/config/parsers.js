@@ -135,7 +135,6 @@ const transformers = {
     const parsed = parsers.INT(value)
     if (parsed === undefined) {
       warnInvalidValue(value, optionName, source, 'Heap limit extension size must be an integer or "auto"')
-      return 'auto'
     }
     return parsed
   },
