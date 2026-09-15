@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const workerThreads = require('node:worker_threads')
 
 const { beforeEach, describe, it } = require('mocha')
@@ -50,6 +51,8 @@ describe('onPause', function () {
   let onPaused
   /** @type {sinon.SinonSpy} */
   let ackEmitting
+  /** @type {sinon.SinonStub} */
+  let refreshBreakpoints
   /** @type {import('../../../src/debugger/devtools_client/state')} */
   let state
   /** @type {Int32Array} */
@@ -59,6 +62,7 @@ describe('onPause', function () {
 
   beforeEach(async function () {
     ackEmitting = sinon.spy()
+    refreshBreakpoints = sinon.stub().resolves()
     log = {
       error: sinon.spy(),
       debug: sinon.spy(),
@@ -123,6 +127,7 @@ describe('onPause', function () {
       './log': log,
       './send': send,
       './status': { ackEmitting },
+      './breakpoints': { refreshBreakpoints, '@noCallThru': true },
       './remote_config': { '@noCallThru': true },
     })
 
@@ -240,6 +245,7 @@ describe('onPause', function () {
     })
     assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
     assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.DEPTH)
+    sinon.assert.notCalled(refreshBreakpoints)
   })
 
   it('should record a runtime error when the snapshot cannot be collected', async function () {
@@ -271,6 +277,90 @@ describe('onPause', function () {
     assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
     assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.RUNTIME_ERROR)
     assert.strictEqual(probe.captureSnapshot, false, 'should disable future snapshots for the probe')
+    sinon.assert.calledOnceWithExactly(refreshBreakpoints, [probe])
+  })
+
+  it('should refresh every breakpoint whose probes stopped capturing', async function () {
+    const probe1 = genProcessedProbe('probe-1')
+    const probe2 = genProcessedProbe('probe-2')
+    // V8 refuses a second breakpoint at a location that already has one, and probes asking for the same location are
+    // merged into a single breakpoint anyway. Two breakpoints are therefore only hit in the same pause when they
+    // asked for slightly different locations that snapped to the same one, so probe-2 asks for the next line.
+    probe2.location.lines = ['2']
+    for (const probe of [probe1, probe2]) {
+      probe.captureSnapshot = true
+      probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+    }
+
+    const otherBreakpointId = 'other-breakpoint-id'
+    state.breakpointToProbes.set(breakpointId, new Map([[probe1.id, probe1]]))
+    state.breakpointToProbes.set(otherBreakpointId, new Map([[probe2.id, probe2]]))
+    state.samplingIndexToProbe.set(1, probe1)
+    state.samplingIndexToProbe.set(2, probe2)
+    Atomics.store(sampledProbeIndexes, 0, 2)
+    Atomics.store(sampledProbeIndexes, 2, 1)
+    Atomics.store(sampledProbeIndexes, 3, 2)
+
+    session.post = sinon.stub().callsFake((method) => {
+      if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}] } })
+      if (method === 'Runtime.getProperties') return Promise.reject(new Error('boom'))
+      return Promise.resolve({})
+    })
+    const eventWithScope = {
+      params: {
+        ...event.params,
+        hitBreakpoints: [breakpointId, otherBreakpointId],
+        callFrames: [{
+          ...event.params.callFrames[0],
+          scopeChain: [{ type: 'local', object: { objectId: 'scope-object-id' } }],
+        }],
+      },
+    }
+
+    await onPaused(eventWithScope)
+
+    assert.strictEqual(probe1.captureSnapshot, false)
+    assert.strictEqual(probe2.captureSnapshot, false)
+    sinon.assert.calledOnceWithExactly(refreshBreakpoints, [probe1, probe2])
+  })
+
+  it('should log errors from refreshing the breakpoints after disabling the snapshot', async function () {
+    const probe = genProcessedProbe('probe-1')
+    probe.captureSnapshot = true
+    probe.capture = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+    sampleProbe(probe)
+
+    session.post = sinon.stub().callsFake((method) => {
+      if (method === 'Debugger.evaluateOnCallFrame') return Promise.resolve({ result: { value: [{}] } })
+      if (method === 'Runtime.getProperties') return Promise.reject(new Error('boom'))
+      return Promise.resolve({})
+    })
+    const cause = new Error('inspector failure')
+    refreshBreakpoints.rejects(cause)
+    const eventWithScope = {
+      params: {
+        ...event.params,
+        callFrames: [{
+          ...event.params.callFrames[0],
+          scopeChain: [{ type: 'local', object: { objectId: 'scope-object-id' } }],
+        }],
+      },
+    }
+
+    await onPaused(eventWithScope)
+    await setImmediatePromise() // The refresh is not awaited by the pause handler
+
+    sinon.assert.calledOnce(send)
+    const logError = /** @type {sinon.SinonSpy} */ (/** @type {{ error: sinon.SinonSpy }} */ (log).error)
+    sinon.assert.calledOnce(logError)
+    const [message, loggedError] = logError.firstCall.args
+    // The message is only built if the log is actually emitted, so the logger receives a callback, not a string
+    assert.strictEqual(typeof message, 'function')
+    assert.strictEqual(
+      message(),
+      '[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: probe-1'
+    )
+    assert.strictEqual(loggedError, cause)
   })
 
   it('should not record a runtime error when the large object safety threshold disables the snapshot',
@@ -317,6 +407,7 @@ describe('onPause', function () {
       assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
       assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.FIELD_COUNT, 'should not count it as a runtime error')
       assert.strictEqual(probe.captureSnapshot, false, 'should disable future snapshots for the probe')
+      sinon.assert.calledOnceWithExactly(refreshBreakpoints, [probe])
     })
 
   it('should send capture expression results as snapshot events', async function () {
@@ -377,6 +468,36 @@ describe('onPause', function () {
     assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
     assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.RUNTIME_ERROR)
   })
+
+  it('should disable capture expressions and refresh the breakpoint when they cannot be evaluated at all',
+    async function () {
+      const probe = genProcessedProbe('probe-1')
+      probe.compiledCaptureExpressions = [{
+        name: 'foo',
+        expression: 'foo',
+        limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+      }]
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          return params.expression === 'foo'
+            ? Promise.reject(new Error('boom'))
+            : Promise.resolve({ result: { value: [{}] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      const [, , , snapshot, , eventType, incompleteReasons] = send.firstCall.args
+      assert.strictEqual(snapshot.evaluationErrors.length, 1)
+      assert.strictEqual(eventType, EVENT_TYPE.SNAPSHOT)
+      assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.RUNTIME_ERROR)
+      assert.strictEqual(probe.compiledCaptureExpressions, undefined, 'should disable future captures for the probe')
+      sinon.assert.calledOnceWithExactly(refreshBreakpoints, [probe])
+    })
 
   it('should log sampler overflow', async function () {
     state.breakpointToProbes.set(breakpointId, new Map())
