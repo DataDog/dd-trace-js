@@ -28,6 +28,47 @@ const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
 
+function createIdentityRefreshError () {
+  const error = new log.NoTransmitError('Pending request retry cancelled on identity refresh.')
+  error.code = 'ERR_DD_IDENTITY_REFRESH'
+  return error
+}
+
+/**
+ * An encoder reset cannot reach a payload already handed to request(). On a MicroVM clone resume,
+ * this controller cancels retry timers and active requests so stale pre-refresh buffers cannot be
+ * sent under the clone's new runtime ID. Only MicroVM-aware writers pass this controller, so
+ * ordinary non-MicroVM requests keep their existing lifecycle.
+ * @returns {{ generation: number, pendingRetryTimers: Set<object>,
+ *   activeRequests: Set<() => void>, reset: () => void }}
+ */
+function createResetController () {
+  const controller = {
+    generation: 0,
+    pendingRetryTimers: new Set(),
+    activeRequests: new Set(),
+    reset () {
+      // Identity-refresh handlers call reset() when a MicroVM clone starts. Active requests must be
+      // aborted in addition to clearing buffers because they may still be connecting and send later.
+      controller.generation++
+
+      const pendingRetryTimers = [...controller.pendingRetryTimers]
+      controller.pendingRetryTimers.clear()
+      for (const retry of pendingRetryTimers) {
+        retry.cancel()
+      }
+
+      const activeRequests = [...controller.activeRequests]
+      controller.activeRequests.clear()
+      for (const cancel of activeRequests) {
+        cancel()
+      }
+    },
+  }
+
+  return controller
+}
+
 /**
  * @typedef {Omit<import('node:http').RequestOptions, 'agent'> & {
  *   agent?: import('node:http').Agent|false,
@@ -128,6 +169,10 @@ function request (data, options, callback) {
   const timeout = options.timeout || 2000
   const dataArray = Array.isArray(data) ? data : [data]
   const contentLength = byteLength(dataArray)
+  // Captured once per logical request; if the writer resets before a retry fires, this Buffer may
+  // carry the old runtime-id and must be discarded instead of sent under the clone's identity.
+  const resetController = options.resetController
+  const capturedRequestGeneration = resetController?.generation
   let connectionOptions
   try {
     connectionOptions = prepareRequestOptions(options, contentLength)
@@ -135,6 +180,7 @@ function request (data, options, callback) {
     callback(error)
     return
   }
+  delete connectionOptions.resetController
   const client = connectionOptions.protocol === 'https:' ? https : http
 
   /**
@@ -225,10 +271,12 @@ function request (data, options, callback) {
       let finished = false
       let settled = false
       let timeoutImmediate
+      let cancelActiveRequest
       const finalize = () => {
         if (finished) return
         finished = true
         activeBufferSize -= contentLength
+        resetController?.activeRequests.delete(cancelActiveRequest)
       }
 
       /**
@@ -252,15 +300,34 @@ function request (data, options, callback) {
         if (settled) return
         clearImmediate(timeoutImmediate)
 
+        if (resetController && capturedRequestGeneration !== resetController.generation) {
+          complete(createIdentityRefreshError())
+          return
+        }
+
         if (connectionOptions.retry !== false &&
             attemptIndex < getMaxAttempts(connectionOptions) &&
             isRetriableNetworkError(error)) {
           settled = true
           finalize()
-          const retryTimer = setTimeout(attempt, getRetryDelay(connectionOptions, attemptIndex), attemptIndex + 1)
+          const retry = {
+            cancel () {
+              clearTimeout(timer)
+              callback(createIdentityRefreshError())
+            },
+          }
+          const timer = setTimeout(() => {
+            resetController?.pendingRetryTimers.delete(retry)
+            if (resetController && capturedRequestGeneration !== resetController.generation) {
+              callback(createIdentityRefreshError())
+              return
+            }
+            attempt(attemptIndex + 1)
+          }, getRetryDelay(connectionOptions, attemptIndex))
+          resetController?.pendingRetryTimers.add(retry)
           // Background retries must not keep the host process alive. Lifecycle-owned
           // requests can opt in when their final result must be observed.
-          if (!connectionOptions.keepProcessAlive) retryTimer.unref?.()
+          if (!connectionOptions.keepProcessAlive) timer.unref?.()
         } else {
           complete(error)
         }
@@ -272,8 +339,8 @@ function request (data, options, callback) {
       if (!connectionOptions.deferTimeoutAbort) req.once('timeout', finalize)
       req.once('error', handleError)
 
-      const abortRequest = () => {
-        if (settled) return
+      const abortRequest = (force = false) => {
+        if (settled && !force) return
         try {
           if (typeof req.abort === 'function') {
             req.abort()
@@ -283,6 +350,20 @@ function request (data, options, callback) {
         } catch {
           // ignore
         }
+      }
+
+      if (resetController) {
+        // Only reset-aware writers track active requests; non-MicroVM writers do not pass a
+        // controller, so their request path has no additional tracking or cancellation work.
+        cancelActiveRequest = () => {
+          if (settled) return
+          settled = true
+          abortRequest(true)
+          clearImmediate(timeoutImmediate)
+          finalize()
+          callback(createIdentityRefreshError())
+        }
+        resetController.activeRequests.add(cancelActiveRequest)
       }
 
       req.setTimeout(timeout, () => {
@@ -315,5 +396,7 @@ Object.defineProperty(request, 'writable', {
     return activeBufferSize < maxActiveBufferSize
   },
 })
+
+request.createResetController = createResetController
 
 module.exports = request
