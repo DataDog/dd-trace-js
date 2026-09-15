@@ -2,7 +2,7 @@
 
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
-const { pathToFileURL } = require('node:url')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 
 const log = require('../../../../dd-trace/src/log')
 const { getDisabledInstrumentations } = require('../instrumentation-utils')
@@ -52,6 +52,18 @@ let matcherEsm
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 /**
+ * Loader hooks hand `file://` URLs to the rewriter while CommonJS and bundler
+ * callers pass plain paths. `fileURLToPath` is the only correct conversion: a
+ * plain scheme strip leaves Windows paths rooted at `/C:/` and keeps
+ * percent-encoded characters undecoded, which breaks version resolution.
+ *
+ * @param {string} filename
+ */
+function toAbsolutePath (filename) {
+  return filename.startsWith('file://') ? fileURLToPath(filename) : filename
+}
+
+/**
  * @param {string|Buffer|ArrayBuffer|Uint8Array} content
  * @param {string} filename
  * @param {string} [format]
@@ -64,7 +76,7 @@ function rewrite (content, filename, format, target) {
   target ||= getRewriteTarget(filename)
   if (!target) return content
 
-  filename = filename.replace('file://', '')
+  filename = toAbsolutePath(filename)
 
   const moduleType = format === 'module' ? 'esm' : 'cjs'
   const { moduleName, filePath } = target
@@ -117,7 +129,7 @@ function createBundlerRewriter (dcModule) {
     target ||= getRewriteTarget(filename)
     if (!target) return { code: content, map: sourceMap }
 
-    filename = filename.replace('file://', '')
+    filename = toAbsolutePath(filename)
     const moduleType = format === 'module' ? 'esm' : 'cjs'
     const { moduleName, filePath } = target
     const transformer = matcher.getTransformer(moduleName, getVersion(filename, filePath), filePath)
@@ -267,7 +279,8 @@ function disable (instrumentation) {
 }
 
 function getVersion (filename, filePath) {
-  const [basename] = filename.split(filePath)
+  // Rewrite-target file paths use forward slashes; Windows loader paths use backslashes.
+  const [basename] = filename.replaceAll('\\', '/').split(filePath)
 
   if (!moduleVersions[basename]) {
     try {

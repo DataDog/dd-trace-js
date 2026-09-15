@@ -1450,6 +1450,27 @@ describe('check-require-cache', () => {
     }
   })
 
+  it('resolves module versions from file URLs with encoded characters', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter url-'))
+    const packageDirectory = join(dir, 'node_modules', 'bullmq')
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ version: '5.66.0' }))
+
+    try {
+      const filename = join(packageDirectory, 'activation.js')
+      const source = "'use strict'\nfunction work () { return true }\nmodule.exports = work\n"
+      const rewritten = rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+      })
+
+      assert.notStrictEqual(rewritten, source)
+      assert.match(rewritten, /dd-trace:instrumentation:load/)
+    } finally {
+      rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
   it('activates a successfully rewritten pure ESM module without CommonJS syntax', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
     const source = "'use strict'\nexport const ddTraceOrchestrionDc = 'application binding'\n" +
