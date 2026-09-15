@@ -359,7 +359,7 @@ describe('Turbopack loader', () => {
     sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.has('code', 'ENOENT'))
   })
 
-  it('ignores rewrite targets without an activation hook', () => {
+  it('discovers and activates rewrite targets without a hook registration', () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'rewrite-only-package', { version: '1.0.0' })
     const source = 'module.exports = true\n'
@@ -371,13 +371,48 @@ describe('Turbopack loader', () => {
       instrumentations: {},
       rewrite,
       rewriteTarget: () => rewriteTarget,
+      rewriteTargetNames: new Set(['rewrite-only-package']),
     })
 
     const result = runLoader(loader, resourcePath, source)
 
-    assert.equal(result.code, source)
-    sinon.assert.notCalled(rewrite)
-    sinon.assert.notCalled(rewriteFactory)
+    assert.match(result.code, /\/\/ rewritten/)
+    assert.match(result.code, /"activate":true,"package":"rewrite-only-package"/)
+    sinon.assert.calledOnce(rewrite)
+    sinon.assert.calledOnce(rewriteFactory)
+  })
+
+  it('rewrites and activates real hookless targets through bundler-register', () => {
+    for (const esm of [false, true]) {
+      assert.deepStrictEqual(runRealHooklessPipeline({ esm, version: '5.66.0' }), {
+        activations: 1,
+        bundlerEvents: 1,
+        errors: 0,
+        hasHook: false,
+        result: 'added',
+        sequence: ['activation', 'start'],
+        starts: 1,
+      })
+    }
+
+    assert.deepStrictEqual(runRealHooklessPipeline({ esm: false, version: '5.65.0' }), {
+      activations: 0,
+      bundlerEvents: 0,
+      errors: 0,
+      hasHook: false,
+      result: 'added',
+      sequence: [],
+      starts: 0,
+    })
+    assert.deepStrictEqual(runRealHooklessPipeline({ disabled: true, esm: false, version: '5.66.0' }), {
+      activations: 0,
+      bundlerEvents: 1,
+      errors: 0,
+      hasHook: false,
+      result: 'added',
+      sequence: [],
+      starts: 0,
+    })
   })
 
   it('fails open when a supported rewrite target has no package metadata', () => {
@@ -436,6 +471,7 @@ describe('Turbopack loader', () => {
     assert.match(result.code, new RegExp(`import ddTraceTurbopackDc from ${escapeRegExp(JSON.stringify(dcModule))}`))
     assert.match(result.code, /channel\.hasSubscribers/)
     assert.match(result.code, /"activate":true,"package":"rewrite-package"/)
+    assert.equal(result.code.match(/"activate":true/g)?.length, 1)
     assert.match(result.code, /"path":"rewrite-package\/dist\/index\.mjs","version":"4\.0\.0"/)
     assert.strictEqual(result.sourceMap, outputMap)
     const outputPath = write(packageDir, 'output.mjs', result.code)
@@ -469,6 +505,7 @@ describe('Turbopack loader', () => {
 
     assert.match(result.code, /const dc = require\("\.\.\//)
     assert.match(result.code, /"activate":true,"package":"rewrite-package"/)
+    assert.equal(result.code.match(/"activate":true/g)?.length, 1)
 
     const publishedPackageDir = createPackage(projectDir, 'published-rewrite-package', { version: '2.0.0' })
     const publishedPath = write(
@@ -618,7 +655,8 @@ describe('Turbopack loader', () => {
  *   instrumentations: Record<string, object[]>,
  *   relativePath?: string,
  *   rewrite?: Function,
- *   rewriteTarget?: (path: string) => object|undefined
+ *   rewriteTarget?: (path: string) => object|undefined,
+ *   rewriteTargetNames?: Set<string>
  * }} options
  * @returns {{ loader: Function, rewriteFactory: import('sinon').SinonStub }}
  */
@@ -628,6 +666,7 @@ function loadLoader ({
   relativePath,
   rewrite = sinon.stub().callsFake((source, _path, _format, _target, map) => ({ code: source, map })),
   rewriteTarget = () => undefined,
+  rewriteTargetNames = new Set(Object.keys(hooks)),
 }) {
   const originalRequire = Module.prototype.require
   const rewriteFactory = sinon.stub().returns(rewrite)
@@ -637,7 +676,10 @@ function loadLoader ({
         '../../datadog-instrumentations/src/helpers/hooks': hooks,
         '../../datadog-instrumentations/src/helpers/instrumentations': instrumentations,
         '../../datadog-instrumentations/src/helpers/rewriter': { createBundlerRewriter: rewriteFactory },
-        '../../datadog-instrumentations/src/helpers/rewriter/targets': { getRewriteTarget: rewriteTarget },
+        '../../datadog-instrumentations/src/helpers/rewriter/targets': {
+          getRewriteTarget: rewriteTarget,
+          getRewriteTargetNames: () => rewriteTargetNames.values(),
+        },
         'node:path': relativePath ? { ...path, relative: () => relativePath } : path,
       }
       if (stubs[request]) return stubs[request]
@@ -687,6 +729,95 @@ function executeCommonJs (code, publish, hasSubscribers = true, context = {}) {
   const wrapper = vm.runInNewContext(Module.wrap(code), context)
   wrapper.call(module.exports, module.exports, require, module, 'fixture.js', '/')
   return module.exports
+}
+
+function runRealHooklessPipeline ({ disabled = false, esm, version }) {
+  const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-turbopack-real-'))
+  directories.push(projectDir)
+  const packageDir = createPackage(projectDir, 'bullmq', { type: esm ? 'module' : 'commonjs', version })
+  const relativePath = `dist/${esm ? 'esm' : 'cjs'}/classes/queue.js`
+  const resourcePath = write(packageDir, relativePath, esm
+    ? 'export class Queue { async add () { return "added" } }\n'
+    : 'class Queue { async add () { return "added" } }\nmodule.exports = { Queue }\n')
+  const tracingSubscription = disabled || version === '5.65.0'
+    ? ''
+    : `dc.tracingChannel('orchestrion:bullmq:Queue_add').subscribe({
+      start () {
+        starts++
+        sequence.push('start')
+      }
+    })`
+  const mainPath = write(projectDir, `main-${disabled}-${esm}-${version}.cjs`, `
+    const fs = require('node:fs')
+    const Module = require('node:module')
+    const path = require('node:path')
+    const { pathToFileURL } = require('node:url')
+    const dc = require(${JSON.stringify(require.resolve('dc-polyfill'))})
+    const hooks = require(${JSON.stringify(require.resolve('../../datadog-instrumentations/src/helpers/hooks'))})
+    const log = require(${JSON.stringify(require.resolve('../../dd-trace/src/log'))})
+    const errors = []
+    log.error = (...args) => errors.push(args)
+    require(${JSON.stringify(require.resolve('../../datadog-instrumentations/src/helpers/bundler-register'))})
+
+    let activations = 0
+    let bundlerEvents = 0
+    let starts = 0
+    const sequence = []
+    dc.channel('dd-trace:instrumentation:load').subscribe(({ name }) => {
+      if (name !== 'bullmq') return
+      activations++
+      sequence.push('activation')
+    })
+    dc.channel('dd-trace:bundler:load').subscribe(() => bundlerEvents++)
+    ${tracingSubscription}
+
+    const loader = require(${JSON.stringify(loaderPath)})
+    const resourcePath = ${JSON.stringify(resourcePath)}
+    const source = fs.readFileSync(resourcePath, 'utf8')
+    let output
+    loader.call({
+      resourcePath,
+      callback (error, code) {
+        if (error) throw error
+        output = code
+      }
+    }, source)
+
+    async function run () {
+      let Queue
+      if (${esm}) {
+        const outputPath = path.join(path.dirname(resourcePath), 'output.mjs')
+        fs.writeFileSync(outputPath, output)
+        ;({ Queue } = await import(pathToFileURL(outputPath).href))
+      } else {
+        const mod = new Module(resourcePath, module)
+        mod.filename = resourcePath
+        mod.paths = Module._nodeModulePaths(path.dirname(resourcePath))
+        mod._compile(output, resourcePath)
+        ;({ Queue } = mod.exports)
+      }
+      const result = await new Queue().add()
+      console.log(JSON.stringify({
+        activations,
+        bundlerEvents,
+        errors: errors.length,
+        hasHook: hooks.bullmq !== undefined,
+        result,
+        sequence,
+        starts,
+      }))
+    }
+    run()
+  `)
+
+  const stdout = execFileSync(process.execPath, [mainPath], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      DD_TRACE_DISABLED_INSTRUMENTATIONS: disabled ? 'bullmq' : undefined,
+    },
+  })
+  return JSON.parse(stdout.trim())
 }
 
 function createProject () {
