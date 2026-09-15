@@ -1255,6 +1255,76 @@ describe('breakpoints', function () {
       sinon.assert.notCalled(sessionMock.post)
     })
 
+    it('should keep refreshing the remaining locations when one of them fails', async function () {
+      await addProbe({ captureSnapshot: true })
+      await addProbe({ id: 'probe-2', captureSnapshot: true, where: { sourceFile: 'test.js', lines: ['20'] } })
+      const probe = stateMock.breakpointToProbes.get(breakpointId)?.get('probe-1')
+      const otherProbe = stateMock.breakpointToProbes.get('bp-script-1:19:0')?.get('probe-2')
+      assert(probe !== undefined && otherProbe !== undefined)
+      sessionMock.post.resetHistory()
+
+      probe.captureSnapshot = false
+      otherProbe.captureSnapshot = false
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.setBreakpoint') {
+          return location.lineNumber === 9
+            ? Promise.reject(cause)
+            : Promise.resolve({
+              breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+            })
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        breakpoints.refreshBreakpoints([probe, otherProbe]),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error setting breakpoint while refreshing script-1:10:0')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+
+      // The failure at the first location must not leave the second one with its stale condition
+      sinon.assert.calledWith(sessionMock.post, 'Debugger.setBreakpoint', {
+        location: { scriptId: 'script-1', lineNumber: 19, columnNumber: 0 },
+        condition: compileBreakpointCondition([
+          { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 1000000000n, captureSnapshot: false },
+        ]),
+      })
+      assert.strictEqual(stateMock.breakpointToProbes.get('bp-script-1:19:0')?.get('probe-2'), otherProbe)
+    })
+
+    it('should report every location that failed', async function () {
+      await addProbe({ captureSnapshot: true })
+      await addProbe({ id: 'probe-2', captureSnapshot: true, where: { sourceFile: 'test.js', lines: ['20'] } })
+      const probe = stateMock.breakpointToProbes.get(breakpointId)?.get('probe-1')
+      const otherProbe = stateMock.breakpointToProbes.get('bp-script-1:19:0')?.get('probe-2')
+      assert(probe !== undefined && otherProbe !== undefined)
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method) => {
+        if (method === 'Debugger.setBreakpoint') return Promise.reject(cause)
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        breakpoints.refreshBreakpoints([probe, otherProbe]),
+        (err) => {
+          assert(err instanceof AggregateError)
+          assert.deepStrictEqual(err.errors.map(({ message }) => message), [
+            'Error setting breakpoint while refreshing script-1:10:0',
+            'Error setting breakpoint while refreshing script-1:20:0',
+          ])
+          return true
+        }
+      )
+    })
+
     it('should wrap errors when setting the replacement breakpoint fails', async function () {
       await addProbe()
       sessionMock.post.resetHistory()

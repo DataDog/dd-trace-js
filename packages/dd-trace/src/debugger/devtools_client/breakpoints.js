@@ -253,6 +253,9 @@ async function modifyBreakpoint (probe) {
  * Probes sharing a location share a breakpoint, so each location is only refreshed once. A probe that has been removed
  * in the meantime is ignored: its location no longer needs the update.
  *
+ * The locations are independent, so one that fails does not stop the others from being refreshed. Any failure is
+ * thrown once every location has been attempted.
+ *
  * @param {{ id: string }[]} probes - Probes attached to the breakpoints to refresh.
  * @returns {Promise<void>}
  */
@@ -267,9 +270,23 @@ async function refreshBreakpoints (probes) {
     if (locationKey !== undefined) locationKeys.add(locationKey)
   }
 
+  /** @type {Error[] | undefined} */
+  let errors
   for (const locationKey of locationKeys) {
-    // eslint-disable-next-line no-await-in-loop
-    await updateBreakpointInternal(locationToBreakpoint.get(locationKey), undefined, `while refreshing ${locationKey}`)
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      await updateBreakpointInternal(
+        locationToBreakpoint.get(locationKey), undefined, `while refreshing ${locationKey}`
+      )
+    } catch (err) {
+      // Keep going: the remaining locations would otherwise hold on to the condition this refresh exists to replace
+      errors ??= []
+      errors.push(err)
+    }
+  }
+
+  if (errors !== undefined) {
+    throw errors.length === 1 ? errors[0] : new AggregateError(errors, 'Error refreshing breakpoints')
   }
 }
 
