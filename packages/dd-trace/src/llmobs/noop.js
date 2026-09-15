@@ -16,6 +16,15 @@ class NoopLLMObs {
     return new NoopExperiments('LLM Observability is not enabled')
   }
 
+  /**
+   * Built-in evaluators for experiments. Pure local computation, so they are
+   * available whether or not LLM Observability is enabled.
+   * @returns {typeof import('./evaluators')}
+   */
+  get evaluators () {
+    return require('./evaluators')
+  }
+
   enable (options) {}
 
   disable () {}
