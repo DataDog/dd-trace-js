@@ -1,7 +1,7 @@
 'use strict'
 
 const { spawnSync } = require('node:child_process')
-const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
@@ -11,8 +11,11 @@ const vm = require('node:vm')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { tracingChannel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
+const { SourceMapConsumer } = require('../../../../../vendor/node_modules/@datadog/source-map')
 const { parse, query } = require('../../../src/helpers/rewriter/compiler')
+
+const SOURCE_MAP_MARKER = '//# sourceMappingURL=data:application/json;base64,'
 
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
@@ -612,6 +615,54 @@ describe('check-require-cache', () => {
           },
           transform: 'configureGraphqlFastPath',
           channelName: 'execute',
+        },
+        {
+          module: {
+            name: 'bullmq',
+            versionRange: '>=0.1',
+            filePath: 'activation.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: 'bullmq',
+            versionRange: '>=0.1',
+            filePath: 'mapped.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: '@azure/cosmos',
+            versionRange: '>=1',
+            filePath: 'unsupported.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: 'hybrid-test',
+            versionRange: '>=0.1',
+            filePath: 'hybrid.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
         },
       ],
     })
@@ -1366,6 +1417,168 @@ describe('check-require-cache', () => {
     await iter.next()
 
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
+  })
+
+  it('activates a successfully rewritten pure CommonJS module at evaluation', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+    const source = "#!/usr/bin/env node\n'use strict'\nfunction work () { return true }\nmodule.exports = work\n"
+    const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+    })
+    const activations = []
+    const activationChannel = channel('dd-trace:instrumentation:load')
+    const subscriber = message => activations.push(message)
+    activationChannel.subscribe(subscriber)
+
+    try {
+      const mod = new Module(filename, module.parent)
+      mod.filename = filename
+      mod.paths = Module._nodeModulePaths(dirname(filename))
+      mod._compile(rewritten, filename)
+
+      assert.equal(mod.exports(), true)
+      assert.deepStrictEqual(activations, [{ name: 'bullmq' }])
+      assert.match(rewritten, /^#!\/usr\/bin\/env node\n['"]use strict['"]/)
+      const activationIndex = rewritten.indexOf("channel('dd-trace:instrumentation:load')")
+      const sourceMapIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+      assert.notStrictEqual(activationIndex, -1)
+      assert.match(rewritten, /module\.exports = work;\s*\nrequire\(/)
+      assert.ok(sourceMapIndex === -1 || activationIndex < sourceMapIndex)
+    } finally {
+      activationChannel.unsubscribe(subscriber)
+    }
+  })
+
+  it('resolves module versions from file URLs with encoded characters', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter url-'))
+    const packageDirectory = join(dir, 'node_modules', 'bullmq')
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ version: '5.66.0' }))
+
+    try {
+      const filename = join(packageDirectory, 'activation.js')
+      const source = "'use strict'\nfunction work () { return true }\nmodule.exports = work\n"
+      const rewritten = rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+      })
+
+      assert.notStrictEqual(rewritten, source)
+      assert.match(rewritten, /dd-trace:instrumentation:load/)
+    } finally {
+      rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
+  it('activates a successfully rewritten pure ESM module without CommonJS syntax', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+    const source = "'use strict'\nexport const ddTraceOrchestrionDc = 'application binding'\n" +
+      "export const ddTraceOrchestrionDc1 = 'application binding 1'\n" +
+      'export function work () { return true }\n'
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+    })
+    const activations = []
+    const activationChannel = channel('dd-trace:instrumentation:load')
+    const subscriber = message => activations.push(message)
+    activationChannel.subscribe(subscriber)
+
+    let dir
+    try {
+      assert.doesNotMatch(rewritten, /\brequire\s*\(/)
+      assert.match(rewritten, /import ddTraceOrchestrionDc2 from "file:\/\//)
+      assert.equal(parse(rewritten, { isModule: true }).body[0].directive, 'use strict')
+
+      dir = mkdtempSync(join(tmpdir(), 'dd-rewriter-activation-'))
+      const outFile = join(dir, 'activation.mjs')
+      writeFileSync(outFile, rewritten)
+      const namespace = await import(pathToFileURL(outFile).href)
+
+      assert.equal(namespace.work(), true)
+      assert.equal(namespace.ddTraceOrchestrionDc, 'application binding')
+      assert.equal(namespace.ddTraceOrchestrionDc1, 'application binding 1')
+      assert.deepStrictEqual(activations, [{ name: 'bullmq' }])
+    } finally {
+      activationChannel.unsubscribe(subscriber)
+      if (dir) rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
+  it('maps transformed pure source positions correctly after restoring a shebang', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'mapped.js')
+    const source = "#!/usr/bin/env node\n'use strict'\nfunction work () {\n" +
+      "  throw new Error('mapped')\n}\nmodule.exports = work\n"
+    const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'mapped.js',
+    })
+    const markerIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+
+    assert.notStrictEqual(markerIndex, -1)
+    const parsedMap = JSON.parse(Buffer.from(
+      rewritten.slice(markerIndex + SOURCE_MAP_MARKER.length).trim(),
+      'base64'
+    ).toString())
+    assert.equal(parsedMap.version, 3)
+
+    const generatedIndex = rewritten.indexOf('function work')
+    const generatedPrefix = rewritten.slice(0, generatedIndex)
+    const generatedLine = generatedPrefix.split('\n').length
+    const generatedColumn = generatedPrefix.length - generatedPrefix.lastIndexOf('\n') - 1
+    const consumer = new SourceMapConsumer(parsedMap)
+    const mapped = consumer.generatedPositionFor({
+      source: 'bullmq/mapped.js',
+      line: 3,
+      column: 9,
+    })
+
+    assert.equal(mapped.line, generatedLine)
+    assert.equal(mapped.column, generatedColumn)
+  })
+
+  it('does not activate a shebang-only restoration when no function matches or transformation fails', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+    const noMatch = "#!/usr/bin/env node\n'use strict'\nfunction other () {}\n"
+    const invalid = '#!/usr/bin/env node\nfunction work ('
+
+    assert.strictEqual(rewriter.rewrite(noMatch, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+    }), noMatch)
+    assert.strictEqual(rewriter.rewrite(invalid, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+    }), invalid)
+  })
+
+  it('does not activate unsupported, disabled, or hybrid rewrites', () => {
+    const source = 'function work () { return true }\n'
+    const unsupported = rewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'unsupported.js'),
+      'commonjs',
+      { moduleName: '@azure/cosmos', filePath: 'unsupported.js' }
+    )
+    const hybrid = rewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'hybrid.js'),
+      'commonjs',
+      { moduleName: 'hybrid-test', filePath: 'hybrid.js' }
+    )
+
+    rewriter.disable('bullmq')
+    const disabled = rewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'activation.js'),
+      'commonjs',
+      { moduleName: 'bullmq', filePath: 'activation.js' }
+    )
+
+    assert.strictEqual(unsupported, source)
+    assert.doesNotMatch(hybrid, /dd-trace:instrumentation:load/)
+    assert.strictEqual(disabled, source)
   })
 })
 

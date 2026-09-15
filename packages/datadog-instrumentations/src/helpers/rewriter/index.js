@@ -2,9 +2,10 @@
 
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
-const { pathToFileURL } = require('node:url')
+const { fileURLToPath, pathToFileURL } = require('node:url')
 
 const log = require('../../../../dd-trace/src/log')
+const { getDisabledInstrumentations } = require('../instrumentation-utils')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
 
@@ -26,7 +27,15 @@ const { getRewriteTarget } = require('./targets')
  * @type {Record<string, string>} map of module base name to version
  */
 const moduleVersions = {}
-const disabled = new Set()
+// Asynchronous loader workers have their own module graph and cannot receive disable() calls made on the main thread.
+const disabled = getDisabledInstrumentations()
+const hooklessInstrumentations = new Set([
+  '@azure/cosmos',
+  '@langchain/core',
+  '@langchain/langgraph',
+  'bullmq',
+  'mercurius',
+])
 
 // Matchers are built on the first module that actually needs rewriting. The
 // vendored transformer is a quarter megabyte of bundle that an application
@@ -43,6 +52,18 @@ let matcherEsm
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
 
 /**
+ * Loader hooks hand `file://` URLs to the rewriter while CommonJS and bundler
+ * callers pass plain paths. `fileURLToPath` is the only correct conversion: a
+ * plain scheme strip leaves Windows paths rooted at `/C:/` and keeps
+ * percent-encoded characters undecoded, which breaks version resolution.
+ *
+ * @param {string} filename
+ */
+function toAbsolutePath (filename) {
+  return filename.startsWith('file://') ? fileURLToPath(filename) : filename
+}
+
+/**
  * @param {string|Buffer|ArrayBuffer|Uint8Array} content
  * @param {string} filename
  * @param {string} [format]
@@ -55,7 +76,7 @@ function rewrite (content, filename, format, target) {
   target ||= getRewriteTarget(filename)
   if (!target) return content
 
-  filename = filename.replace('file://', '')
+  filename = toAbsolutePath(filename)
 
   const moduleType = format === 'module' ? 'esm' : 'cjs'
   const { moduleName, filePath } = target
@@ -71,11 +92,21 @@ function rewrite (content, filename, format, target) {
     const source = getSourceText(content)
 
     // TODO: pass existing sourcemap as input for remapping
-    const { code, map } = transformer.transform(source, moduleType)
+    const transformed = transformer.transform(source, moduleType)
+    let { code, map } = transformed
+
+    if (source.startsWith('#!') && !code.startsWith('#!')) {
+      code = source.slice(0, source.indexOf('\n')) + '\n' + code
+      map = shiftSourceMapLine(map)
+    }
+
+    if (code !== source && isHooklessInstrumentation(moduleName)) {
+      code = appendActivation(code, moduleName, moduleType)
+    }
 
     if (!map) return code
 
-    const inlineMap = Buffer.from(map).toString('base64')
+    const inlineMap = Buffer.from(typeof map === 'string' ? map : JSON.stringify(map)).toString('base64')
 
     return code + '\n' + SOURCE_MAP_PREFIX + inlineMap
   } catch (e) {
@@ -98,7 +129,7 @@ function createBundlerRewriter (dcModule) {
     target ||= getRewriteTarget(filename)
     if (!target) return { code: content, map: sourceMap }
 
-    filename = filename.replace('file://', '')
+    filename = toAbsolutePath(filename)
     const moduleType = format === 'module' ? 'esm' : 'cjs'
     const { moduleName, filePath } = target
     const transformer = matcher.getTransformer(moduleName, getVersion(filename, filePath), filePath)
@@ -200,12 +231,56 @@ function getSourceText (source) {
   return Buffer.from(source).toString('utf8')
 }
 
+/**
+ * Publish plugin activation on the application thread when the rewritten module is evaluated.
+ *
+ * @param {string} source
+ * @param {string} name
+ * @param {'cjs'|'esm'} moduleType
+ */
+function appendActivation (source, name, moduleType) {
+  const dcModule = JSON.stringify(getDcPolyfillSpecifier(moduleType) ?? 'diagnostics_channel')
+  const payload = JSON.stringify({ name })
+
+  if (moduleType === 'esm') {
+    let binding = 'ddTraceOrchestrionDc'
+    let suffix = 0
+    while (source.includes(binding)) binding = `ddTraceOrchestrionDc${++suffix}`
+
+    return `${source}\nimport ${binding} from ${dcModule}\n` +
+      `${binding}.channel('dd-trace:instrumentation:load').publish(${payload})\n`
+  }
+
+  return `${source}\nrequire(${dcModule}).channel('dd-trace:instrumentation:load').publish(${payload})\n`
+}
+
+/**
+ * Account for a shebang restored ahead of the generated program. The transformer already maps original positions
+ * past the input shebang, so only the generated side needs an additional empty line.
+ *
+ * @param {string|object|undefined} map
+ */
+function shiftSourceMapLine (map) {
+  if (!map) return map
+  const sourceMap = typeof map === 'string' ? JSON.parse(map) : map
+  const shifted = { ...sourceMap, mappings: `;${sourceMap.mappings}` }
+  return typeof map === 'string' ? JSON.stringify(shifted) : shifted
+}
+
+/**
+ * @param {string} name
+ */
+function isHooklessInstrumentation (name) {
+  return hooklessInstrumentations.has(name)
+}
+
 function disable (instrumentation) {
   disabled.add(instrumentation)
 }
 
 function getVersion (filename, filePath) {
-  const [basename] = filename.split(filePath)
+  // Rewrite-target file paths use forward slashes; Windows loader paths use backslashes.
+  const [basename] = filename.replaceAll('\\', '/').split(filePath)
 
   if (!moduleVersions[basename]) {
     try {
@@ -220,4 +295,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { createBundlerRewriter, disable, rewrite }
+module.exports = { createBundlerRewriter, disable, isHooklessInstrumentation, rewrite }

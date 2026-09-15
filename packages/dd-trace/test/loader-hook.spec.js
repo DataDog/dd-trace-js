@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { spawnSync } = require('node:child_process')
-const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -41,6 +41,24 @@ describe('loader hook', () => {
       console.log(JSON.stringify({
         loadedConfigDefaults: require.cache[${JSON.stringify(configDefaultsPath)}] !== undefined,
         includesSecurityControl: data.shouldInclude(${JSON.stringify(sanitizerUrl)}, './sanitizer/index.js'),
+        includesHooklessOrchestrion: data.shouldInclude(
+          'file:///app/node_modules/bullmq/dist/esm/classes/queue.js',
+          'bullmq'
+        ),
+        includesHybridOrchestrion: data.shouldInclude(
+          'file:///app/node_modules/ai/dist/index.js',
+          'ai'
+        ),
+        pureIncludes: Object.fromEntries(${JSON.stringify([
+          '@azure/cosmos',
+          '@langchain/core',
+          '@langchain/langgraph',
+          'bullmq',
+          'mercurius',
+        ])}.map(name => [name, data.shouldInclude(
+          'file:///app/node_modules/' + name + '/dist/index.js',
+          name
+        )])),
       }))
     `], {
       encoding: 'utf8',
@@ -62,6 +80,15 @@ describe('loader hook', () => {
     assert.deepStrictEqual(initializeLoaderHook(), {
       loadedConfigDefaults: false,
       includesSecurityControl: false,
+      includesHooklessOrchestrion: false,
+      includesHybridOrchestrion: true,
+      pureIncludes: {
+        '@azure/cosmos': false,
+        '@langchain/core': false,
+        '@langchain/langgraph': false,
+        bullmq: false,
+        mercurius: false,
+      },
     })
   })
 
@@ -87,4 +114,89 @@ describe('loader hook', () => {
 
     assert.strictEqual(initializeLoaderHook().includesSecurityControl, true)
   })
+
+  it('activates pure modules across the asynchronous loader-worker boundary', () => {
+    assert.deepStrictEqual(runPureLoaderPipeline({ version: '5.66.0' }), {
+      activations: 1,
+      iitmCalls: 0,
+      result: 'added',
+      sequence: ['activation', 'start'],
+      starts: 1,
+    })
+  })
+
+  it('does not rewrite or activate disabled and unsupported pure modules in the asynchronous loader', () => {
+    assert.deepStrictEqual(runPureLoaderPipeline({ disabled: true, version: '5.66.0' }), {
+      activations: 0,
+      iitmCalls: 0,
+      result: 'added',
+      sequence: [],
+      starts: 0,
+    })
+    assert.deepStrictEqual(runPureLoaderPipeline({ version: '5.65.0' }), {
+      activations: 0,
+      iitmCalls: 0,
+      result: 'added',
+      sequence: [],
+      starts: 0,
+    })
+  })
+
+  function runPureLoaderPipeline ({ disabled = false, version }) {
+    const packageDirectory = join(temporaryDirectory, 'node_modules', 'bullmq')
+    const fixturePath = join(packageDirectory, 'dist', 'esm', 'classes', 'queue.js')
+    const mainPath = join(temporaryDirectory, `main-${disabled}-${version}.cjs`)
+    mkdirSync(join(packageDirectory, 'dist', 'esm', 'classes'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ type: 'module', version }))
+    writeFileSync(fixturePath, 'export class Queue { async add () { return "added" } }\n')
+    writeFileSync(mainPath, `
+      const { register } = require('node:module')
+      const { pathToFileURL } = require('node:url')
+      const dc = require(${JSON.stringify(require.resolve('dc-polyfill'))})
+      const Hook = require(${JSON.stringify(join(
+        repositoryRoot,
+        'packages/datadog-instrumentations/src/helpers/hook.js'
+      ))})
+
+      require(${JSON.stringify(join(
+        repositoryRoot,
+        'packages/datadog-instrumentations/src/helpers/register.js'
+      ))})
+      let iitmCalls = 0
+      Hook(['bullmq'], { internals: true }, exports => {
+        iitmCalls++
+        return exports
+      })
+      register(${JSON.stringify(loaderHookUrl)}, pathToFileURL(__filename))
+
+      let activations = 0
+      let starts = 0
+      const sequence = []
+      dc.channel('dd-trace:instrumentation:load').subscribe(() => {
+        activations++
+        sequence.push('activation')
+      })
+      dc.tracingChannel('orchestrion:bullmq:Queue_add').subscribe({
+        start () {
+          starts++
+          sequence.push('start')
+        }
+      })
+
+      import(${JSON.stringify(pathToFileURL(fixturePath).href)}).then(async ({ Queue }) => {
+        const result = await new Queue().add()
+        console.log(JSON.stringify({ activations, iitmCalls, result, sequence, starts }))
+      })
+    `)
+
+    const result = spawnSync(process.execPath, [mainPath], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        DD_TRACE_DISABLED_INSTRUMENTATIONS: disabled ? 'bullmq' : undefined,
+      },
+    })
+    assert.strictEqual(result.status, 0, result.stderr)
+    return JSON.parse(result.stdout.trim())
+  }
 })

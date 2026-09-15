@@ -149,7 +149,6 @@ function formatKnuthRate (rate) {
  * @param {string} value
  * @param {number} maxLength
  * @param {string} [suffix]
- * @returns {string}
  */
 function truncateString (value, maxLength, suffix = '') {
   // V8 flattens this bounded concatenation before creating the slice.

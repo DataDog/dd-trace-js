@@ -34,28 +34,17 @@ module.exports = [{
 
 To find `filePath`, inspect the installed package to locate where the target method is defined. **Many libraries duplicate classes across separate CJS and ESM builds** (e.g., `dist/cjs/client.js` and `dist/esm/client.js`). Add a separate entry for each file path with the same `functionQuery` and `channelName` — otherwise the uninstrumented module format will silently fail.
 
-**2. Hooks file** — `packages/datadog-instrumentations/src/<name>.js`:
-
-```javascript
-'use strict'
-
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('<npm-package>').values()) {
-  addHook(hook, exports => exports)
-}
-```
-
-`getHooks` reads the orchestrion config and generates `addHook` entries automatically. This file is needed so the module hooks are registered for the rewriter to process.
-
-**3. Config registry entry** —
+**2. Config registry entry** —
 `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js`:
 
 ```javascript
 ...require('./<name>'),
 ```
 
-**4. hooks.js entry** — (see Register in hooks.js below)
+Pure Orchestrion integrations need no instrumentation file or `hooks.js` entry. Add those only for a hybrid
+integration that also needs runtime setup or export modification (see Register in hooks.js below). For a pure
+integration, also add the npm package name to `hooklessInstrumentations` in `helpers/rewriter/index.js`, then run
+`npm run generate:rewriter:targets` after registering the config.
 
 See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery support, and channel naming.
 
@@ -124,11 +113,12 @@ For other shimmer patterns, refer to existing shimmer-based instrumentations in 
 
 ### Register in hooks.js
 
-Both orchestrion and shimmer paths require an entry in `packages/datadog-instrumentations/src/helpers/hooks.js`:
+Shimmer and hybrid Orchestrion paths require an entry in
+`packages/datadog-instrumentations/src/helpers/hooks.js`; pure Orchestrion paths do not:
 
 ```javascript
 module.exports = {
-  // Orchestrion or CJS-only shimmer:
+  // Hybrid Orchestrion or CJS-only shimmer:
   '<name>': () => require('../<name>'),
 
   // Shimmer with ESM/dual packages (orchestrion handles ESM automatically):

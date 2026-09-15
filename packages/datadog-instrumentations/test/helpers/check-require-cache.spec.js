@@ -7,7 +7,11 @@ const Module = require('node:module')
 
 const { describe, it } = require('mocha')
 
-const { checkForRequiredModules, flushFrameworkWarnings } = require('../../src/helpers/check-require-cache')
+const {
+  checkForRequiredModules,
+  flushFrameworkWarnings,
+  flushLoadOrderWarnings,
+} = require('../../src/helpers/check-require-cache')
 
 describe('check-require-cache', () => {
   const opts = {
@@ -83,6 +87,22 @@ describe('check-require-cache', () => {
         done()
       })
     })
+  })
+
+  it('warns when a pure Orchestrion target was loaded before the tracer', () => {
+    const modulePath = path.join('/app', 'node_modules', 'bullmq', 'dist', 'cjs', 'classes', 'queue.js')
+    const fakeModule = new Module(modulePath)
+    require.cache[modulePath] = fakeModule
+    const warnings = []
+
+    try {
+      flushLoadOrderWarnings(() => {})
+      checkForRequiredModules()
+      flushLoadOrderWarnings(message => warnings.push(message))
+      assert.ok(warnings.some(message => message.includes("Package 'bullmq' was loaded before dd-trace")))
+    } finally {
+      delete require.cache[modulePath]
+    }
   })
 
   describe('checkForRequiredModules framework detection', () => {
