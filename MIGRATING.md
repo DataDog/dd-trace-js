@@ -14,6 +14,11 @@ and its instrumentation remain in dd-trace-js for backward compatibility, but
 are now disabled by default. Set `DD_TRACE_ELECTRON_ENABLED=true` to keep
 using the built-in plugin.
 
+### OpenTelemetry meter provider shutdown removed
+
+`metrics.getMeterProvider()` no longer exposes the Datadog-specific
+`shutdown(callback)` method. It has no public replacement in v7.
+
 ## 5.0 to 6.0
 
 ### Node 18 and 20 are no longer supported
