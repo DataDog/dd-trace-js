@@ -13,7 +13,6 @@ const maxRetainedValueLength = maxValueLength * 2
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function truncateValue (value) {
   return value.length > maxRetainedValueLength
