@@ -78,7 +78,7 @@ class PostgresPlugin extends DatabasePlugin {
     }
 
     span.setTag('db.pid', result.pid)
-    this.finishSpan(span)
+    this.finish({ currentStore: { span } })
   }
 }
 

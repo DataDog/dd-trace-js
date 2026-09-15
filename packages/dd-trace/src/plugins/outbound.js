@@ -110,13 +110,6 @@ class OutboundPlugin extends TracingPlugin {
    */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
-    this.finishSpan(span)
-  }
-
-  /**
-   * @param {import('../../../..').Span | undefined} span
-   */
-  finishSpan (span) {
     this.tagPeerService(span)
 
     if (IS_SERVERLESS) {
@@ -124,7 +117,7 @@ class OutboundPlugin extends TracingPlugin {
       if (peerHostname) span.setTag('peer.service', peerHostname)
     }
 
-    super.finishSpan(span)
+    super.finish(...arguments)
   }
 
   /**
