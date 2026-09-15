@@ -190,8 +190,9 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
     if (parsed === null || typeof parsed !== 'object') return
 
     return parsed
-  } catch (err) {
-    log.debug('[ASM] Failed to parse Lambda response body', err)
+  } catch {
+    // The SyntaxError message embeds a fragment of the body, which is customer data.
+    log.debug('[ASM] Failed to parse Lambda response body')
   }
 }
 

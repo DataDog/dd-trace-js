@@ -627,6 +627,14 @@ describe('AppSec Lambda handler', () => {
 
         assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
         sinon.assert.notCalled(log.error)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/Failed to parse/))
+      })
+
+      it('should not log the body when it fails to parse', () => {
+        invokeWithBody({ responseBody: '{"secret-token-123' })
+
+        // The SyntaxError message embeds a fragment of the body, so the error must not be logged.
+        sinon.assert.neverCalledWithMatch(log.debug, sinon.match(/secret-token-123/))
       })
 
       it('should ignore a JSON scalar, which carries no schema', () => {
@@ -670,12 +678,15 @@ describe('AppSec Lambda handler', () => {
       })
 
       it('should not set the body when the invocation is not sampled', () => {
-        // The first invocation takes the TTL slot, so the second one is skipped.
+        // The first invocation takes the TTL slot, so the second one is skipped. Its body is
+        // malformed on purpose: parsing it would fail and log, so the absence of that log is
+        // what makes the laziness observable instead of assumed.
         invokeWithBody({ responseBody: '{"payload":1}' })
-        const persistent = invokeWithBody({ responseBody: '{"payload":1}' })
+        const persistent = invokeWithBody({ responseBody: '{not json' })
 
         assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
         assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.neverCalledWithMatch(log.debug, sinon.match(/Failed to parse/))
       })
     })
   })
