@@ -3,6 +3,8 @@
 # Shared repository tooling
 /.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.cursor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.gemini/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -76,6 +78,7 @@
 # IDM
 /.agents/skills/apm-integrations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.claude/skills/apm-integrations @DataDog/dd-trace-js @DataDog/apm-idm-js
+/.cursor/skills/apm-integrations @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 /benchmark/sirun/child_process/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/dd-trace-js @DataDog/apm-idm-js
