@@ -313,11 +313,12 @@ session.on('Debugger.paused', async ({ params }) => {
     // changed. The disabled probes can be spread over more than one breakpoint, but each affected location is only
     // refreshed once.
     refreshBreakpoints(captureDisabledProbes).catch((err) => {
-      let ids = captureDisabledProbes[0].id
-      for (let i = 1; i < captureDisabledProbes.length; i++) ids += `, ${captureDisabledProbes[i].id}`
-      log.error(
-        '[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: %s', ids, err
-      )
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.error(() => {
+        let ids = captureDisabledProbes[0].id
+        for (let i = 1; i < captureDisabledProbes.length; i++) ids += `, ${captureDisabledProbes[i].id}`
+        return `[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: ${ids}`
+      }, err)
     })
   }
 })

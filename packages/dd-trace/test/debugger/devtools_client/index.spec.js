@@ -347,11 +347,16 @@ describe('onPause', function () {
     await new Promise((resolve) => setImmediate(resolve)) // The refresh is not awaited by the pause handler
 
     sinon.assert.calledOnce(send)
-    sinon.assert.calledWith(
-      /** @type {sinon.SinonSpy} */ (/** @type {{ error: sinon.SinonSpy }} */ (log).error),
-      '[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: %s',
-      'probe-1', cause
+    const logError = /** @type {sinon.SinonSpy} */ (/** @type {{ error: sinon.SinonSpy }} */ (log).error)
+    sinon.assert.calledOnce(logError)
+    const [message, loggedError] = logError.firstCall.args
+    // The message is only built if the log is actually emitted, so the logger receives a callback, not a string
+    assert.strictEqual(typeof message, 'function')
+    assert.strictEqual(
+      message(),
+      '[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: probe-1'
     )
+    assert.strictEqual(loggedError, cause)
   })
 
   it('should not record a runtime error when the large object safety threshold disables the snapshot',
