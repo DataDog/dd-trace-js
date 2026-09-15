@@ -304,6 +304,32 @@ describe('console instrumentation', () => {
     ])
   })
 
+  it('does not read non-configurable accessor-backed stream writes while instrumenting', () => {
+    const originalWrite = sinon.stub()
+    let writeReads = 0
+    const stream = {}
+    Object.defineProperty(stream, 'write', {
+      configurable: false,
+      get () {
+        if (++writeReads > 1) throw new Error('unexpected write read')
+        return originalWrite
+      },
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.strictEqual(writeReads, 1)
+    sinon.assert.calledOnceWithExactly(originalWrite, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('restores a stream write when descriptor verification fails', () => {
     const originalWrite = sinon.stub()
     let descriptorReads = 0

@@ -77,7 +77,6 @@ function getPropertyDescriptor (target, property) {
  * @param {Record<string, unknown>} stream
  * @param {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>} writeDescriptor
  * @param {Function} [expectedWrite]
- * @returns {void}
  */
 function restoreStreamWrite (stream, writeDescriptor, expectedWrite) {
   try {
@@ -92,7 +91,6 @@ function restoreStreamWrite (stream, writeDescriptor, expectedWrite) {
 
 /**
  * @param {ConsoleRecord[]} records
- * @returns {void}
  */
 function publishRecords (records) {
   if (records.length === 0) return
@@ -128,7 +126,6 @@ function publishRecords (records) {
 /**
  * @param {Record<string, unknown> | undefined} target
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
- * @returns {void}
  */
 function wrapConsole (target, captureLogHolder) {
   if (!target || wrappedTargets.has(target)) return
@@ -163,13 +160,18 @@ function wrapConsole (target, captureLogHolder) {
           // console accessors, but preserve capture for the built-in global console.
           if (!stream && target === globalThis.console) stream = target._stderr
           writeDescriptor = stream && Object.getOwnPropertyDescriptor(stream, 'write')
-          let originalWriteDescriptor = writeDescriptor
-          if (!originalWriteDescriptor && stream) {
-            originalWriteDescriptor = getPropertyDescriptor(Object.getPrototypeOf(stream), 'write')
+          const isUnwrappableAccessor = writeDescriptor &&
+            !Object.hasOwn(writeDescriptor, 'value') &&
+            !writeDescriptor.configurable
+          if (!isUnwrappableAccessor) {
+            let originalWriteDescriptor = writeDescriptor
+            if (!originalWriteDescriptor && stream) {
+              originalWriteDescriptor = getPropertyDescriptor(Object.getPrototypeOf(stream), 'write')
+            }
+            originalWrite = originalWriteDescriptor && Object.hasOwn(originalWriteDescriptor, 'value')
+              ? originalWriteDescriptor.value
+              : stream?.write
           }
-          originalWrite = originalWriteDescriptor && Object.hasOwn(originalWriteDescriptor, 'value')
-            ? originalWriteDescriptor.value
-            : stream?.write
           if (typeof originalWrite === 'function') {
             wrappedWrite = function (chunk) {
               if (!captureActive || writeActive) return originalWrite.apply(this, arguments)
@@ -257,7 +259,6 @@ function wrapConsole (target, captureLogHolder) {
 /**
  * @param {JestBufferedConsole | undefined} BufferedConsole
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
- * @returns {void}
  */
 function wrapJestBufferedConsole (BufferedConsole, captureLogHolder) {
   if (!BufferedConsole || wrappedTargets.has(BufferedConsole)) return
