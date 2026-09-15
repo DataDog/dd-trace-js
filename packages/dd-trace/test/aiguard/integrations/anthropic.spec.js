@@ -14,12 +14,46 @@ const messagesInterceptChannel = channel('dd-trace:anthropic:messages:intercept'
 
 const EVAL_OPTS = { block: true, source: SOURCE_AUTO, integration: 'anthropic' }
 
+class FakeStream {
+  constructor (chunks) {
+    this.chunks = chunks
+  }
+
+  tee () {
+    return [new FakeStream(this.chunks), new FakeStream(this.chunks)]
+  }
+
+  [Symbol.asyncIterator] () {
+    let index = 0
+    return {
+      next: () => Promise.resolve(index < this.chunks.length
+        ? { done: false, value: this.chunks[index++] }
+        : { done: true, value: undefined }),
+    }
+  }
+}
+
+function readStream (stream) {
+  const chunks = []
+  const iterator = stream[Symbol.asyncIterator]()
+
+  function readAll () {
+    return iterator.next().then(({ done, value }) => {
+      if (done) return chunks
+      chunks.push(value)
+      return readAll()
+    })
+  }
+
+  return readAll()
+}
+
 describe('AIGuard Anthropic integration', () => {
   let evaluate
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves()
-    anthropicIntegration.enable({ evaluate }, true)
+    anthropicIntegration.enable({ evaluate }, true, true)
   })
 
   afterEach(() => {
@@ -263,5 +297,65 @@ describe('AIGuard Anthropic integration', () => {
 
     assert.strictEqual(ctx.beforeResult, undefined)
     assert.strictEqual(ctx.onResult, undefined)
+  })
+
+  describe('streamed output', () => {
+    const chunks = [
+      { type: 'message_start', message: { role: 'assistant', content: [] } },
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: ' world' } },
+      { type: 'message_stop' },
+    ]
+
+    it('can disable After Model evaluation', () => {
+      anthropicIntegration.disable()
+      anthropicIntegration.enable({ evaluate }, true, false)
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      assert.strictEqual(typeof ctx.beforeResult, 'function')
+      assert.strictEqual(ctx.onResult, undefined)
+    })
+
+    it('evaluates the reconstructed message and returns the other stream branch', async () => {
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      const result = await ctx.onResult(new FakeStream(chunks))
+
+      assert.deepStrictEqual(await readStream(result), chunks)
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello world' },
+      ], EVAL_OPTS)
+    })
+
+    it('rejects before returning the stream when After Model denies it', async () => {
+      const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      evaluate.rejects(error)
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      await assert.rejects(() => ctx.onResult(new FakeStream(chunks)), candidate => candidate === error)
+
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello world' },
+      ], EVAL_OPTS)
+    })
+
+    it('passes through streams without tee()', () => {
+      const stream = { [Symbol.asyncIterator]: () => {} }
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      assert.strictEqual(ctx.onResult(stream), stream)
+      sinon.assert.notCalled(evaluate)
+    })
+
+    it('passes through a stream when tee() throws', () => {
+      const stream = { tee () { throw new Error('already consumed') } }
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      assert.strictEqual(ctx.onResult(stream), stream)
+      sinon.assert.notCalled(evaluate)
+    })
   })
 })
