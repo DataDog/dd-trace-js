@@ -86,6 +86,20 @@ function send (message, logger, dd, snapshot, processTags, eventType, incomplete
       json = JSON.stringify(payload)
     }
     size = Buffer.byteLength(json)
+
+    if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
+      // Trimming is best-effort: the pruner can only replace leaf nodes deep inside the snapshot and the fallback only
+      // drops captures, so a payload whose bytes sit elsewhere - a very deep stack, say - can stay over the cap. There
+      // is nothing to gain from sending it: the intake truncates the log message, then throws the snapshot away, and
+      // drops the event anyway if that still doesn't fit.
+      log.debug(
+        '[debugger:devtools_client] Dropping probe result for probe %s: payload is too large (%d bytes)',
+        snapshot.probe.id,
+        size
+      )
+      guardrailMetrics.eventDropped(DROPPED_REASON.PAYLOAD_TOO_LARGE, eventType)
+      return
+    }
   }
 
   if (jsonBuffer.write(json, size)) {
