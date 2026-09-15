@@ -7,18 +7,21 @@ const pkg = require('../../../../../package.json')
 const BaseWriter = require('../common/writer')
 const request = require('../common/request')
 const log = require('../../log')
+const { IS_AWS_LAMBDA_MICROVM } = require('../../serverless')
 
 class Writer extends BaseWriter {
   constructor ({ url }) {
     super(...arguments)
     this._url = url
     this._encoder = new SpanStatsEncoder(this)
+    // Identity refresh is published only for Lambda MicroVM clones. Keep normal retry handling unchanged.
+    this._identityRefreshController = IS_AWS_LAMBDA_MICROVM ? this._resetController : undefined
   }
 
   _sendPayload (data, _, done) {
-    makeRequest(data, this._url, (err, res) => {
+    makeRequest(data, this._url, this._identityRefreshController, (err, res) => {
       if (err) {
-        log.error('Error sending span stats', err)
+        if (err.code !== 'ERR_DD_IDENTITY_REFRESH') log.error('Error sending span stats', err)
         done()
         return
       }
@@ -28,7 +31,7 @@ class Writer extends BaseWriter {
   }
 }
 
-function makeRequest (data, url, cb) {
+function makeRequest (data, url, resetController, cb) {
   const options = {
     path: '/v0.6/stats',
     method: 'PUT',
@@ -39,6 +42,7 @@ function makeRequest (data, url, cb) {
     },
     url,
   }
+  if (resetController) options.resetController = resetController
 
   log.debug('Request to the intake: %j', options)
 

@@ -19,6 +19,9 @@ class Writer {
     this._beforeFirstFlush = beforeFirstFlush
     this.#retainOnBackpressure = retainOnBackpressure
     this.#deliveryTracker = deliveryTracker
+    // resetPendingBatch() clears encoder-owned spans. It also needs to cancel retries for Buffers
+    // already returned by makePayload(), because those Buffers can contain the old runtime-id.
+    this._resetController = request.createResetController?.()
   }
 
   #isFirstFlush = true
@@ -98,6 +101,17 @@ class Writer {
 
   setUrl (url) {
     this._url = url
+  }
+
+  /**
+   * Discards whatever's queued in the encoder. Used on a MicroVM clone resume, where anything
+   * buffered before the snapshot would otherwise flush under every clone's identity.
+   * @returns {void}
+   */
+  resetPendingBatch () {
+    this._encoder.reset()
+    // Encoder reset cannot reach payload Buffers already owned by request retry timers.
+    this._resetController?.reset()
   }
 }
 
