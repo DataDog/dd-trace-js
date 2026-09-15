@@ -4845,6 +4845,15 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       sampleRate?: number,
+
+      /**
+       * Selects the backend track that receives LLM Observability span events.
+       * Defaults to `auto`, which sends spans tagged with `experiment_id` to Experiments and
+       * all other spans to LLM Observability.
+       * @env DD_LLMOBS_SPAN_TRACK
+       * Programmatic configuration takes precedence over the environment variable listed above.
+       */
+      spanTrack?: 'auto' | 'llmobs' | 'experiments',
     }
 
     /** Options accepted by the deprecated runtime `llmobs.enable()` method. */
