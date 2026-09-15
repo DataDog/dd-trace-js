@@ -308,15 +308,21 @@ function missingApiMember (ns) {
 // Install and detach one throwaway context, to establish that this process can
 // actually do it before any span depends on it.
 //
-// @datadog/pprof decides whether AsyncContextFrame is available by inspecting
-// `process.execArgv`, and throws from enter() when it concludes it isn't. That
-// disagrees with the feature detection behind `isACFActive` whenever the flag
-// reached Node by another route: `NODE_OPTIONS=--experimental-async-context-frame`
-// is accepted on Node 22 and 23 and leaves `execArgv` empty, and a worker thread
-// created with an explicit `execArgv` loses it too. Since our subscribers run
-// inline with `storage.enterWith`, letting that throw would put the exception in
-// application code on the first span activation, so find out here instead, where
-// declining to start is still an option.
+// @datadog/pprof throws from enter() when it concludes AsyncContextFrame is not
+// active. It reaches that conclusion by its own feature detection, asking the
+// addon what is in the CPED slot during a `run()` — direct evidence about the
+// exact slot the out-of-process reader walks. `isACFActive` above tests the same
+// property through a weaker proxy: whether `run()` delegates to `enterWith()`,
+// which holds today but relies on unspecified dispatch that anything patching
+// `AsyncLocalStorage` can break. So the two can disagree, and pprof's answer is
+// the one that governs whether a record ever gets written. Its enter() can also
+// fail for reasons `isACFActive` says nothing about, such as an addon that
+// loaded but whose TLS block is unusable.
+//
+// Since our subscribers run inline with `storage.enterWith`, letting enter()
+// throw would put the exception in application code on the first span
+// activation, so find out here instead, where declining to start is still an
+// option.
 function canInstallContext (ns) {
   try {
     // Zero-filled ids: the record is only readable while it is installed, which
