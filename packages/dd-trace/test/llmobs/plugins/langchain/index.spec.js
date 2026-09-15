@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const path = require('node:path')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
 const semifies = require('semifies')
@@ -437,7 +438,6 @@ describe('integrations', () => {
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
               inputDocuments: [{ text: 'Hello, world!' }],
               outputValue: '[1 embedding(s) returned with size 1536]',
-              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
@@ -457,7 +457,6 @@ describe('integrations', () => {
               modelProvider: 'openai',
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
               inputDocuments: [{ text: 'Hello, world!' }],
-              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
@@ -481,7 +480,6 @@ describe('integrations', () => {
               name: 'langchain.embeddings.openai.OpenAIEmbeddings',
               inputDocuments: [{ text: 'Hello, world!' }, { text: 'Goodbye, world!' }],
               outputValue: '[2 embedding(s) returned with size 1536]',
-              metadata: MOCK_NOT_NULLISH,
               tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
@@ -893,6 +891,188 @@ describe('integrations', () => {
           })
         })
 
+        describe('streaming', () => {
+          it('submits an llm span with the joined output for a chat model stream', async () => {
+            const chat = getLangChainOpenAiClient('chat', { model: 'gpt-4o-mini', temperature: 0, maxTokens: 16 })
+
+            const chunks = []
+            for await (const chunk of await chat.stream('Stream a short reply.')) {
+              chunks.push(chunk)
+            }
+            assert.ok(chunks.length > 1, 'expected more than one streamed chunk')
+
+            const { apmSpans, llmobsSpans } = await getEvents()
+            assertLlmObsSpanEvent(llmobsSpans[0], {
+              span: apmSpans[0],
+              spanKind: 'llm',
+              modelName: 'gpt-4o-mini',
+              modelProvider: 'openai',
+              name: 'langchain.chat_models.openai.ChatOpenAI',
+              inputMessages: [{ content: 'Stream a short reply.', role: 'user' }],
+              outputMessages: [{ content: 'Streamed parity.', role: 'assistant' }],
+              metadata: { temperature: 0, max_tokens: 16 },
+              // the pinned `@langchain/openai` fixture predates `usage_metadata` on streamed chunks
+              metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+              tags: { ml_app: 'test', integration: 'langchain' },
+            })
+          })
+
+          it('propagates streamed usage_metadata to token metrics', async function () {
+            if (!semifies(realVersion, '>=1.0')) this.skip()
+
+            // resolve a `@langchain/openai` that emits a trailing usage chunk (`stream_options.include_usage`)
+            const classic = require('../../../../../../versions/@langchain/classic@1')
+            const classicRoot = path.dirname(classic.getPath('@langchain/classic'))
+            const { ChatOpenAI } = require(require.resolve('@langchain/openai', { paths: [classicRoot] }))
+            const chat = new ChatOpenAI({
+              model: 'gpt-4o-mini',
+              temperature: 0,
+              configuration: { baseURL: 'http://127.0.0.1:9126/vcr/openai' },
+            })
+
+            let output = ''
+            for await (const chunk of await chat.stream('Stream a short reply.')) {
+              output += chunk.content
+            }
+            assert.equal(output, 'Streamed parity.')
+
+            const { apmSpans, llmobsSpans } = await getEvents()
+            assertLlmObsSpanEvent(llmobsSpans[0], {
+              span: apmSpans[0],
+              spanKind: 'llm',
+              modelName: 'gpt-4o-mini',
+              modelProvider: 'openai',
+              name: 'langchain.chat_models.openai.ChatOpenAI',
+              inputMessages: [{ content: 'Stream a short reply.', role: 'user' }],
+              outputMessages: [{ content: 'Streamed parity.', role: 'assistant' }],
+              metadata: MOCK_NOT_NULLISH,
+              metrics: { input_tokens: 9, output_tokens: 3, total_tokens: 12 },
+              tags: { ml_app: 'test', integration: 'langchain' },
+            })
+          })
+
+          it('submits an llm span with the joined output for an llm stream', async () => {
+            const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
+
+            let output = ''
+            for await (const chunk of await llm.stream('What is 2 + 2?')) {
+              output += chunk
+            }
+            assert.equal(output, '\n\n4')
+
+            const { apmSpans, llmobsSpans } = await getEvents()
+            assertLlmObsSpanEvent(llmobsSpans[0], {
+              span: apmSpans[0],
+              spanKind: 'llm',
+              modelName: 'gpt-3.5-turbo-instruct',
+              modelProvider: 'openai',
+              name: 'langchain.llms.openai.OpenAI',
+              inputMessages: [{ content: 'What is 2 + 2?', role: '' }],
+              outputMessages: [{ content: '\n\n4', role: '' }],
+              metadata: MOCK_NOT_NULLISH,
+              metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+              tags: { ml_app: 'test', integration: 'langchain' },
+            })
+          })
+
+          it('submits workflow and llm spans for a streamed chain', async () => {
+            const prompt = langchainPrompts.ChatPromptTemplate.fromMessages([
+              ['system', 'You are a parity assistant.'],
+              ['user', '{input}'],
+            ])
+            const chat = getLangChainOpenAiClient('chat', { model: 'gpt-4o-mini' })
+            const chain = prompt.pipe(chat).pipe(new langchainOutputParsers.StringOutputParser())
+
+            let output = ''
+            for await (const chunk of await chain.stream({ input: 'Stream a short reply.' })) {
+              output += chunk
+            }
+            assert.equal(output, 'Streamed parity.')
+
+            const { apmSpans, llmobsSpans } = await getEvents(2)
+
+            const workflowSpan = apmSpans[0]
+            const llmSpan = apmSpans[1]
+
+            assertLlmObsSpanEvent(llmobsSpans[0], {
+              span: workflowSpan,
+              spanKind: 'workflow',
+              name: 'langchain_core.runnables.RunnableSequence',
+              inputValue: JSON.stringify({ input: 'Stream a short reply.' }),
+              outputValue: 'Streamed parity.',
+              tags: { ml_app: 'test', integration: 'langchain' },
+            })
+
+            assertLlmObsSpanEvent(llmobsSpans[1], {
+              span: llmSpan,
+              parentId: workflowSpan.span_id,
+              spanKind: 'llm',
+              modelName: 'gpt-4o-mini',
+              modelProvider: 'openai',
+              name: 'langchain.chat_models.openai.ChatOpenAI',
+              inputMessages: [
+                { content: 'You are a parity assistant.', role: 'system' },
+                { content: 'Stream a short reply.', role: 'user' },
+              ],
+              outputMessages: [{ content: 'Streamed parity.', role: 'assistant' }],
+              metadata: MOCK_NOT_NULLISH,
+              metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+              tags: { ml_app: 'test', integration: 'langchain' },
+            })
+          })
+
+          it('tags the error and no output when a chat model stream fails', async () => {
+            const chat = getLangChainOpenAiClient('chat', { model: 'gpt-invalid-model', maxRetries: 0 })
+
+            await assert.rejects(async () => {
+              for await (const chunk of await chat.stream('Hello!')) {
+                assert.fail(`unexpected chunk ${JSON.stringify(chunk)}`)
+              }
+            })
+
+            const { apmSpans, llmobsSpans } = await getEvents()
+            assertLlmObsSpanEvent(llmobsSpans[0], {
+              span: apmSpans[0],
+              spanKind: 'llm',
+              modelName: 'gpt-invalid-model',
+              modelProvider: 'openai',
+              name: 'langchain.chat_models.openai.ChatOpenAI',
+              inputMessages: [{ content: 'Hello!', role: 'user' }],
+              outputMessages: [{ content: '', role: '' }],
+              metadata: MOCK_NOT_NULLISH,
+              tags: { ml_app: 'test', integration: 'langchain' },
+              error: {
+                type: 'Error',
+                message: MOCK_STRING,
+                stack: MOCK_NOT_NULLISH,
+              },
+            })
+          })
+
+          it('finishes the span with the partial output when the consumer stops early', async () => {
+            const chat = getLangChainOpenAiClient('chat', { model: 'gpt-4o-mini' })
+
+            const stream = await chat.stream('Stream a short reply.')
+            const { value: first } = await stream.next()
+            await stream.return()
+            assert.ok(first)
+
+            const { apmSpans, llmobsSpans } = await getEvents()
+            assertLlmObsSpanEvent(llmobsSpans[0], {
+              span: apmSpans[0],
+              spanKind: 'llm',
+              modelName: 'gpt-4o-mini',
+              modelProvider: 'openai',
+              name: 'langchain.chat_models.openai.ChatOpenAI',
+              inputMessages: [{ content: 'Stream a short reply.', role: 'user' }],
+              outputMessages: [{ content: first.content, role: 'assistant' }],
+              metadata: MOCK_NOT_NULLISH,
+              metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
+              tags: { ml_app: 'test', integration: 'langchain' },
+            })
+          })
+        })
+
         describe('tools', () => {
           it('submits a tool call span', async function () {
             if (!tool) this.skip()
@@ -919,6 +1099,7 @@ describe('integrations', () => {
               name: 'add',
               inputValue: JSON.stringify({ a: 1, b: 2 }),
               outputValue: JSON.stringify(3),
+              metadata: { tool_info: { name: 'add', description: 'A tool that adds two numbers' } },
               tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
@@ -951,6 +1132,7 @@ describe('integrations', () => {
               spanKind: 'tool',
               name: 'add',
               inputValue: JSON.stringify({ a: 1, b: 2 }),
+              metadata: { tool_info: { name: 'add', description: 'A tool that adds two numbers' } },
               tags: { ml_app: 'test', integration: 'langchain' },
               error: {
                 type: 'Error',
@@ -970,7 +1152,7 @@ describe('integrations', () => {
 
             const document = {
               pageContent: 'The powerhouse of the cell is the mitochondria',
-              metadata: { source: 'https://example.com' },
+              metadata: { name: 'https://example.com', source: 'https://example.com' },
             }
 
             await vectorstore.addDocuments([document])

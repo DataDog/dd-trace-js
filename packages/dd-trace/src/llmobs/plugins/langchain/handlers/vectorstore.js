@@ -7,7 +7,7 @@ const LangChainLLMObsHandler = require('.')
 class LangChainLLMObsVectorStoreHandler extends LangChainLLMObsHandler {
   setMetaTags ({ span, inputs, results }) {
     const input = formatIO(inputs)
-    if (spanHasError(span)) {
+    if (spanHasError(span) || !Array.isArray(results)) {
       this._tagger.tagRetrievalIO(span, input)
       return
     }
@@ -25,7 +25,7 @@ class LangChainLLMObsVectorStoreHandler extends LangChainLLMObsHandler {
       documents.push({
         text: document.pageContent,
         id: document.id,
-        name: document.metadata?.source,
+        name: document.metadata?.name ?? document.id,
         score,
       })
     }

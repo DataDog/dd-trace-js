@@ -1,0 +1,38 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.18.0.1:9911/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "x-stainless-retry-count": "0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "7.10.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.12.0",
+      "User-Agent": "langchainjs-openai/1.0.0 ((node/v22.12.0; linux; x64))",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "156"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"temperature\":0,\"stream\":true,\"stream_options\":{\"include_usage\":true},\"messages\":[{\"role\":\"user\",\"content\":\"Stream a short reply.\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "text/event-stream",
+      "Date": "Tue, 08 Sep 2026 17:22:26 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "data: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Streamed\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" parity.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":3,\"total_tokens\":12}}\n\ndata: [DONE]\n\n"
+  }
+}
