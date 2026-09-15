@@ -3260,6 +3260,13 @@ declare namespace tracer {
      */
     interface oracledb extends Instrumentation {
       /**
+       * Whether to trace calls to `Pool#getConnection()`.
+       *
+       * @default true
+       */
+      poolAcquire?: boolean;
+
+      /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
       service?: string | ((params: any) => string);

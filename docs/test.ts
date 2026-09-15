@@ -409,6 +409,7 @@ tracer.use('openai', { llmobs: false });
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
+tracer.use('oracledb', { poolAcquire: false });
 tracer.use('oracledb', { service: params => `${params.host}-${params.database}` });
 tracer.use('playwright');
 tracer.use('pg');
