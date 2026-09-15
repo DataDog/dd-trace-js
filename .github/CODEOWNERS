@@ -101,11 +101,13 @@
 /index.electron.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/integration-tests/turbopack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/pino/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 /packages/datadog-esbuild/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/packages/datadog-turbopack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-webpack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
@@ -470,6 +472,7 @@
 /integration-tests/mocha-parallel-files.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+/integration-tests/process-lifecycle.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/tsconfig.json @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -545,6 +548,8 @@
 /packages/dd-trace/test/tagger.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/tracer.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+
+/.llm-validation/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 # Multiple teams
 /devdocs/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js

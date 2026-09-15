@@ -1274,6 +1274,7 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 1, origin: 'default' },
       { name: 'DD_ENV', value: null, origin: 'default' },
+      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
@@ -1325,7 +1326,7 @@ describe('Config', () => {
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
       { name: 'DD_PROFILING_ENABLED', value: 'false', origin: 'default' },
-      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_PROFILING_EXPORTERS', value: 'agent', origin: 'default' },
       { name: 'DD_PROFILING_SOURCE_MAP', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'default' },
@@ -1431,6 +1432,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED = 'true'
     process.env.DD_AI_GUARD_BLOCK = 'true'
     process.env.DD_AI_GUARD_ENABLED = 'true'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
@@ -1760,6 +1762,7 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'env_var' },
       { name: 'DD_ENV', value: 'test', origin: 'env_var' },
+      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
@@ -1767,6 +1770,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
+      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'env_var' },
@@ -1906,6 +1910,33 @@ describe('Config', () => {
         enabled: false,
       },
     })
+  })
+
+  it('should accept numeric and automatic OOM heap limit extension sizes', () => {
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = '1000000'
+
+    let config = getConfig()
+
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 1000000)
+
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = 'auto'
+    config = getConfig()
+
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
+  })
+
+  it('should reject invalid OOM heap limit extension sizes', () => {
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = 'automatic'
+
+    const config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Heap limit extension size must be an integer or "auto": \'automatic\' for ' +
+        'DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE (source: env_var), picked default'
+    )
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
+    assert.strictEqual(config.getOrigin('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'), 'default')
   })
 
   it('should transform safe programmatic option types', () => {
@@ -2659,6 +2690,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED = 'false'
     process.env.DD_AI_GUARD_BLOCK = 'false'
     process.env.DD_AI_GUARD_ENABLED = 'false'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
@@ -5356,7 +5388,7 @@ rules:
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.OTEL_TRACES_SPAN_METRICS_ENABLED, true)
       assert.strictEqual(config.logInjection, false)
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, true)
@@ -5382,18 +5414,18 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       assert.strictEqual(config.sampleRate, 0.25)
     })
 
-    it('should not infer an OTel sample rate from a disabled trace exporter', () => {
+    it('should infer an OTel sample rate from the OTLP trace exporter in agentless mode', () => {
       process.env.DD_AGENTLESS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
       const config = getConfig()
 
-      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
-      assert.strictEqual(config.sampleRate, undefined)
+      assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
+      assert.strictEqual(config.sampleRate, 1)
     })
 
     it('should preserve explicit OTel span metrics', () => {
@@ -5521,6 +5553,7 @@ rules:
 
     it('should disable stats computation when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_STATS_COMPUTATION_ENABLED = 'true'
       const config = getConfig()
       assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
     })
@@ -5558,6 +5591,34 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+
+    it('should default OTLP logs/metrics endpoints to the per-site intake and add the API key ' +
+      'header when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_API_KEY = 'agentless-api-key'
+      process.env.DD_SITE = 'datadoghq.eu'
+      const config = getConfig()
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/logs')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'https://otlp.datadoghq.eu/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://otlp.datadoghq.eu/v1/traces')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS['dd-api-key'], 'agentless-api-key')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
+    })
+
+    it('should preserve an explicit OTLP endpoint when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://custom-collector:4318'
+      const config = getConfig()
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://custom-collector:4318/v1/logs')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://custom-collector:4318/v1/metrics')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://custom-collector:4318/v1/traces')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_HEADERS, undefined)
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_HEADERS, undefined)
     })
   })
 

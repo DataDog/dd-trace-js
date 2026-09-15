@@ -613,7 +613,11 @@ function extractRequestParamsConverse (params) {
   const prompt = []
   if (params.system) {
     for (const block of params.system) {
-      if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+      if (typeof block?.text === 'string') {
+        prompt.push({ content: block.text, role: 'system' })
+      } else if (typeof block?.guardContent?.text?.text === 'string') {
+        prompt.push({ content: block.guardContent.text.text, role: 'system' })
+      }
     }
   }
   if (params.messages) {

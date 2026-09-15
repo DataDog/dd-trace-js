@@ -143,6 +143,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -229,6 +230,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
@@ -518,7 +520,8 @@ dd-trace-js includes experimental support for OpenTelemetry metrics, designed as
 require('dd-trace').init()
 const { metrics } = require('@opentelemetry/api')
 
-const meter = metrics.getMeter('my-service', '1.0.0')
+const meterProvider = metrics.getMeterProvider()
+const meter = meterProvider.getMeter('my-service', '1.0.0')
 
 // Counter - monotonically increasing values
 const requestCounter = meter.createCounter('http.requests', {
@@ -552,6 +555,11 @@ cpuGauge.addCallback((result) => {
   result.observe(cpuUsage.system / 1000000, { core: '0' })
 })
 ```
+
+Short-lived processes can call `meterProvider.shutdown(callback)` after the final measurement to export once more and
+stop collection. The optional callback receives `null` on success or an error on failure. This method isn't part of the
+OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
+`import('dd-trace').opentelemetry.MeterProvider` to use it.
 
 #### Supported Configuration
 

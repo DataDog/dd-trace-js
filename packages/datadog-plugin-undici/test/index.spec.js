@@ -178,6 +178,7 @@ describe('Plugin', () => {
 
         it('should keep the caller span active while creating a request', async function () {
           if (!hasNativeDiagnostics) {
+            // Native diagnostics are unavailable before undici 4.7.0 and in undici 5.0.
             this.skip()
             return
           }
@@ -203,6 +204,7 @@ describe('Plugin', () => {
 
         it('should finish the request span when the server accepts an upgrade', async function () {
           if (!satisfies(resolvedVersion, '>=4.7.0')) {
+            // Upgrade diagnostics are unavailable before undici 4.7.0.
             this.skip()
             return
           }
@@ -254,6 +256,7 @@ describe('Plugin', () => {
 
         it('should not use the accepted-upgrade fallback when the server rejects an upgrade', async function () {
           if (!satisfies(resolvedVersion, '>=4.7.0')) {
+            // Upgrade diagnostics are unavailable before undici 4.7.0.
             this.skip()
             return
           }
@@ -279,6 +282,7 @@ describe('Plugin', () => {
 
         it('should finish the request span when an accepted-upgrade handler throws', async function () {
           if (!hasNativeDiagnostics) {
+            // Native diagnostics are unavailable before undici 4.7.0 and in undici 5.0.
             this.skip()
             return
           }

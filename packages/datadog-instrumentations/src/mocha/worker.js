@@ -39,6 +39,7 @@ const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const config = {
   earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
 }
+const patchedRunners = new WeakSet()
 const runnerToFiles = new WeakMap()
 const runnerToFailedHooks = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
@@ -449,7 +450,12 @@ addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
-}, function (Runner) {
+}, function (runnerPackage) {
+  const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
+  if (typeof Runner !== 'function') return
+  if (patchedRunners.has(Runner)) return
+
+  patchedRunners.add(Runner)
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
@@ -512,7 +518,7 @@ addHook({
 
     return run.apply(this, args)
   })
-  return Runner
+  return runnerPackage
 })
 
 // Used both in serial and parallel mode, and by both the main process and the workers
