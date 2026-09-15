@@ -3,6 +3,8 @@
 const { storage } = require('../../datadog-core')
 const { storage: llmobsStorage } = require('../../dd-trace/src/llmobs/storage')
 const LLMObsTagger = require('../../dd-trace/src/llmobs/tagger')
+const { PARENT_ID_KEY } = require('../../dd-trace/src/llmobs/constants/tags')
+const log = require('../../dd-trace/src/log')
 const { getOpenAIModelProvider } = require('../../dd-trace/src/llmobs/plugins/openai/utils')
 const {
   extractInputMessages,
@@ -18,7 +20,10 @@ const DEFAULT_MODEL_PROVIDER = 'openai'
 // Bounds the agents-core parent-chain walk so a cyclic chain from a future
 // agents-core version can't spin on the span-start hot path.
 const MAX_ANCESTOR_WALK = 32
+const MAX_MANIFEST_DEPTH = 20
+const MAX_MANIFEST_NODES = 10_000
 const MODEL_BASE_URL_STORE_KEY = Symbol('openai-agents.model-base-url')
+const MODEL_CALL_STORE_KEY = Symbol('openai-agents.model-call')
 const legacyStorage = storage('legacy')
 
 const KIND_TO_SPAN_KIND = {
@@ -29,6 +34,14 @@ const KIND_TO_SPAN_KIND = {
 }
 
 /**
+ * @typedef {import('../../dd-trace/src/opentracing/span')} DatadogSpan
+ * @typedef {{
+ *   agentsCoreSpanId: string,
+ *   agentDdSpan: DatadogSpan,
+ *   providerSpans: DatadogSpan[],
+ *   responseDdSpan?: DatadogSpan
+ * }} ModelCallHolder
+ *
  * @typedef {{
  *   spanId: string,
  *   traceId: string,
@@ -74,6 +87,8 @@ class OpenAIAgentsIntegration {
   #tagger
   /** @type {Map<string, import('../../dd-trace/src/opentracing/span')>} */
   #oaiToDdSpan = new Map()
+  /** @type {Map<string, ModelCallHolder>} */
+  #modelCallHolders = new Map()
   /**
    * agents-core spans we deliberately don't trace (`task` / `turn`). Ended
    * nodes stay walkable only while an observed child callback is still active.
@@ -82,6 +97,7 @@ class OpenAIAgentsIntegration {
   #untracedSpans = new Map()
   /** @type {Map<string, LLMObsTraceInfo>} */
   #traceInfo = new Map()
+  #manifestTagged = new WeakSet()
 
   constructor ({ tracer, config } = {}) {
     this.#tracer = tracer
@@ -115,6 +131,53 @@ class OpenAIAgentsIntegration {
    */
   getDDSpan (spanId) {
     return this.#oaiToDdSpan.get(this.#nearestTracedAncestorId(spanId))
+  }
+
+  /**
+   * @param {string} agentsCoreSpanId
+   * @param {DatadogSpan} agentDdSpan
+   * @returns {ModelCallHolder}
+   */
+  getOrCreateModelCallHolder (agentsCoreSpanId, agentDdSpan) {
+    let holder = this.#modelCallHolders.get(agentsCoreSpanId)
+    if (!holder) {
+      holder = { agentsCoreSpanId, agentDdSpan, providerSpans: [] }
+      this.#modelCallHolders.set(agentsCoreSpanId, holder)
+    }
+    return holder
+  }
+
+  getModelCallHolderForProviderSpan (span) {
+    const parentId = span?.context()._parentId?.toString(10)
+    if (!parentId) return
+
+    for (const holder of this.#modelCallHolders.values()) {
+      if (holder.agentDdSpan.context().toSpanId().toString() === parentId) return holder
+    }
+  }
+
+  /**
+   * @param {ModelCallHolder} holder
+   * @param {DatadogSpan | undefined} span
+   */
+  trackProviderSpan (holder, span) {
+    if (!span) return
+    for (const ownedSpan of this.#oaiToDdSpan.values()) {
+      if (ownedSpan === span) return
+    }
+    if (span.context()._parentId?.toString(10) !== holder.agentDdSpan.context().toSpanId().toString()) return
+    holder.providerSpans.push(span)
+    this.reparentProviderSpans(holder)
+  }
+
+  reparentProviderSpans (holder) {
+    const responseSpan = holder.responseDdSpan
+    if (!responseSpan || !this.#isLLMObsEnabled()) return
+    const parentId = responseSpan.context().toSpanId()
+    for (const providerSpan of holder.providerSpans) {
+      if (providerSpan === responseSpan || !LLMObsTagger.tagMap.has(providerSpan)) continue
+      this.#tagger._setTag(providerSpan, PARENT_ID_KEY, parentId)
+    }
   }
 
   /**
@@ -175,6 +238,26 @@ class OpenAIAgentsIntegration {
     return this.#oaiToDdSpan.get(oaiSpan.spanId)
   }
 
+  /**
+   * Attach the declared agent configuration to the corresponding LLMObs span.
+   *
+   * @param {object | undefined} agentsCoreSpan
+   * @param {object | undefined} agent
+   */
+  tagAgentManifest (agentsCoreSpan, agent) {
+    if (!this.#isLLMObsEnabled() || !agentsCoreSpan || !agent) return
+    const ddSpan = this.getDDSpan(agentsCoreSpan.spanId)
+    if (!ddSpan || this.#manifestTagged.has(ddSpan)) return
+
+    try {
+      const manifest = buildAgentManifest(agent)
+      this.#tagger.tagMetadata(ddSpan, { _dd: { agent_manifest: manifest } })
+      this.#manifestTagged.add(ddSpan)
+    } catch (error) {
+      log.debug('[openai-agents] agent manifest tagging failed: %s', error)
+    }
+  }
+
   clearState () {
     // Finish any dd-trace spans still in-flight so we don't leak open traces
     // when agents-core's TracingProcessor.shutdown() runs (e.g., process
@@ -183,6 +266,7 @@ class OpenAIAgentsIntegration {
       ddSpan.finish()
     }
     this.#oaiToDdSpan.clear()
+    this.#modelCallHolders.clear()
     this.#untracedSpans.clear()
     this.#traceInfo.clear()
   }
@@ -199,7 +283,6 @@ class OpenAIAgentsIntegration {
       childOf: parentSpan,
       tags: this.#getSpanTags('internal'),
     })
-
     const llmobsParentStore = this.#isLLMObsEnabled() ? llmobsStorage.getStore() : undefined
     this.#oaiToDdSpan.set(traceId, ddSpan)
     this.#traceInfo.set(traceId, {
@@ -293,10 +376,21 @@ class OpenAIAgentsIntegration {
       childOf: parentSpan,
       tags: this.#getSpanTags(KIND_TO_SPAN_KIND[llmobsKind] ?? 'internal'),
     })
-
     this.#oaiToDdSpan.set(spanId, ddSpan)
     this.#retainUntracedParent(oaiSpan.parentId)
     this.#spanStarted(oaiSpan.traceId)
+
+    if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
+      const holder = this.#modelCallHolders.get(oaiSpan.parentId)
+      if (holder) {
+        holder.responseDdSpan = ddSpan
+        this.reparentProviderSpans(holder)
+        const store = /** @type {Record<string | symbol, unknown> | undefined} */ (llmobsStorage.getStore())
+        if (store?.[MODEL_CALL_STORE_KEY] === holder) {
+          llmobsStorage.enterWith({ ...store, span: ddSpan })
+        }
+      }
+    }
 
     if (this.#isLLMObsEnabled()) {
       const llmobsOptions = {
@@ -360,6 +454,11 @@ class OpenAIAgentsIntegration {
         }
       }
 
+      if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
+        const holder = this.#modelCallHolders.get(oaiSpan.parentId)
+        if (holder) this.reparentProviderSpans(holder)
+      }
+
       // agents-core's withTrace skips Trace.end() when its callback throws, so
       // an errored top-level span is our last chance to finalize the workflow.
       if (oaiSpan.error && this.#isTopLevelSpan(oaiSpan)) {
@@ -370,6 +469,9 @@ class OpenAIAgentsIntegration {
         ddSpan.finish()
       } finally {
         this.#oaiToDdSpan.delete(spanId)
+        if (oaiSpan.spanData?.type === 'response' || oaiSpan.spanData?.type === 'generation') {
+          this.#modelCallHolders.delete(oaiSpan.parentId)
+        }
         this.#releaseUntracedParent(oaiSpan.parentId)
         this.#spanEnded(oaiSpan.traceId)
       }
@@ -400,6 +502,7 @@ class OpenAIAgentsIntegration {
     // when their source is absent.
     const inputMessages = extractInputMessages(input, response?.instructions)
     this.#tagger.tagLLMIO(ddSpan, inputMessages, extractOutputMessages(response))
+    this.#tagToolDefinitions(ddSpan, oaiSpan.spanData)
 
     // Cache messages for the workflow span's trace-level input (Python
     // parity: last message of the first response under the top-level agent).
@@ -437,6 +540,7 @@ class OpenAIAgentsIntegration {
 
     const inputMessages = extractInputMessages(spanData?.input)
     this.#tagger.tagLLMIO(ddSpan, inputMessages, extractGenerationOutputMessages(spanData?.output))
+    this.#tagToolDefinitions(ddSpan, spanData)
 
     const info = this.#traceInfo.get(oaiSpan.traceId)
     if (info && info.inputOaiSpan === oaiSpan) {
@@ -448,6 +552,23 @@ class OpenAIAgentsIntegration {
     })
     if (metrics) this.#tagger.tagMetrics(ddSpan, metrics)
     if (spanData?.model_config) this.#tagger.tagMetadata(ddSpan, spanData.model_config)
+  }
+
+  /**
+   * @param {import('../../dd-trace/src/opentracing/span')} ddSpan
+   * @param {object | undefined} spanData
+   */
+  #tagToolDefinitions (ddSpan, spanData) {
+    const tools = spanData?.tools ?? spanData?._response?.tools
+    if (!Array.isArray(tools)) return
+    const definitions = tools
+      .filter(tool => tool?.type === 'function')
+      .map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        schema: tool.parameters,
+      }))
+    if (definitions.length > 0) this.#tagger.tagToolDefinitions(ddSpan, definitions)
   }
 
   /**
@@ -494,7 +615,7 @@ class OpenAIAgentsIntegration {
     const lastInputMessage = info.inputMessages?.at(-1)
     const inputValue = typeof lastInputMessage?.content === 'string' ? lastInputMessage.content : ''
     const outputSpanData = info.outputOaiSpan?.spanData
-    let outputValue = outputSpanData?._response?.output_text ?? ''
+    let outputValue = getResponseOutputText(outputSpanData)
     if (outputSpanData?.type === 'generation') {
       const outputMessages = extractGenerationOutputMessages(outputSpanData.output)
       outputValue = outputMessages.at(-1)?.content ?? ''
@@ -714,4 +835,145 @@ class OpenAIAgentsIntegration {
   }
 }
 
-module.exports = { MODEL_BASE_URL_STORE_KEY, OpenAIAgentsIntegration }
+function getResponseOutputText (spanData) {
+  const response = spanData?._response ?? spanData?.response
+  if (typeof response?.output_text === 'string') return response.output_text
+  if (typeof spanData?.output_text === 'string') return spanData.output_text
+  const output = response?.output ?? spanData?.output
+  if (!Array.isArray(output)) return ''
+
+  let text = ''
+  for (const item of output) {
+    if (item?.type === 'message' && Array.isArray(item.content)) {
+      for (const content of item.content) {
+        if (content?.type === 'output_text') text += content.text ?? ''
+      }
+    } else if (item?.type === 'output_text') {
+      text += item.text ?? ''
+    }
+  }
+  return text
+}
+
+function buildAgentManifest (agent) {
+  const manifest = { framework: 'OpenAI' }
+  setDefined(manifest, 'name', agent.name)
+  setDefined(manifest, 'instructions', typeof agent.instructions === 'string' ? agent.instructions : undefined)
+  setDefined(manifest, 'handoff_description', agent.handoffDescription ?? null)
+
+  const model = typeof agent.model === 'string' ? agent.model : agent.model?.model
+  setDefined(manifest, 'model', model)
+
+  const modelSettings = wireValue(agent.modelSettings)
+  if (modelSettings) manifest.model_settings = modelSettings
+
+  if (Array.isArray(agent.tools) && agent.tools.length > 0) {
+    manifest.tools = agent.tools.map(buildToolManifest).filter(Boolean)
+  }
+  if (Array.isArray(agent.handoffs) && agent.handoffs.length > 0) {
+    manifest.handoffs = agent.handoffs.map(buildHandoffManifest).filter(Boolean)
+  }
+
+  const guardrails = [
+    ...(Array.isArray(agent.inputGuardrails) ? agent.inputGuardrails : []),
+    ...(Array.isArray(agent.outputGuardrails) ? agent.outputGuardrails : []),
+  ].map(guardrail => guardrail?.name).filter(Boolean)
+  if (guardrails.length > 0) manifest.guardrails = guardrails
+
+  return manifest
+}
+
+function buildToolManifest (tool) {
+  if (!tool || typeof tool !== 'object') return
+  const name = tool.name ?? tool.type
+  if (!name) return
+
+  if (tool.type === 'function' || tool.parameters || tool.params_json_schema) {
+    const schema = tool.parameters ?? tool.params_json_schema
+    const result = { name }
+    setDefined(result, 'description', tool.description)
+    setDefined(result, 'strict_json_schema', tool.strict ?? tool.strictJsonSchema ?? tool.strict_json_schema)
+    if (schema?.properties && typeof schema.properties === 'object') {
+      const parameters = {}
+      for (const [propertyName, property] of Object.entries(schema.properties)) {
+        if (!property || typeof property !== 'object') continue
+        const parameter = {}
+        setDefined(parameter, 'type', property.type)
+        setDefined(parameter, 'title', property.title)
+        parameter.required = schema.required?.includes(propertyName) ?? false
+        parameters[propertyName] = parameter
+      }
+      result.parameters = parameters
+    }
+    return result
+  }
+
+  const result = { name }
+  const providerData = tool.providerData
+  if (providerData && typeof providerData === 'object') {
+    for (const key of [
+      'user_location',
+      'search_context_size',
+      'vector_store_ids',
+      'max_num_results',
+      'include_search_results',
+      'ranking_options',
+      'filters',
+      'computer',
+      'tool_config',
+    ]) {
+      setDefined(result, key, wireValue(providerData[key]))
+    }
+  }
+  return result
+}
+
+function buildHandoffManifest (handoff) {
+  if (!handoff || typeof handoff !== 'object') return
+  const result = {}
+  setDefined(result, 'handoff_description', handoff.handoffDescription ?? handoff.toolDescription ?? null)
+  setDefined(result, 'agent_name', handoff.name ?? handoff.agentName)
+  setDefined(result, 'tool_name', handoff.toolName)
+  return result.handoff_description !== undefined ||
+    result.agent_name !== undefined ||
+    result.tool_name !== undefined
+    ? result
+    : undefined
+}
+
+function setDefined (target, key, value) {
+  if (value !== undefined) target[key] = value
+}
+
+function wireValue (value, depth = 0, ancestors = [], budget) {
+  budget ??= { remaining: MAX_MANIFEST_NODES }
+  if (budget.remaining-- <= 0 || depth > MAX_MANIFEST_DEPTH) return
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined
+  }
+  if (!value || typeof value !== 'object' || ancestors.includes(value)) return
+  const nextAncestors = [...ancestors, value]
+
+  if (Array.isArray(value)) {
+    const result = []
+    for (const item of value) {
+      const wired = wireValue(item, depth + 1, nextAncestors, budget)
+      if (wired !== undefined) result.push(wired)
+    }
+    return result
+  }
+
+  const result = {}
+  let hasValue = false
+  for (const [key, item] of Object.entries(value)) {
+    const wired = wireValue(item, depth + 1, nextAncestors, budget)
+    if (wired !== undefined) {
+      result[key] = wired
+      hasValue = true
+    }
+  }
+  return hasValue ? result : undefined
+}
+
+module.exports = { MODEL_BASE_URL_STORE_KEY, MODEL_CALL_STORE_KEY, OpenAIAgentsIntegration }

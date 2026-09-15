@@ -99,8 +99,58 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
 
     if (cwd) metadata.cwd = cwd
     if (permissionMode) metadata.permissionMode = permissionMode
+    const options = ctx.arguments?.[0]?.options
+    if (options?.maxTurns) metadata.max_turns = options.maxTurns
+    if (options?.maxThinkingTokens) metadata.max_thinking_tokens = options.maxThinkingTokens
+    if (options?.maxBudgetUsd) metadata.max_budget_usd = options.maxBudgetUsd
+    if (ctx.resultChunk?.stop_reason) metadata.stop_reason = ctx.resultChunk.stop_reason
 
-    this._tagger.tagMetadata(span, metadata)
+    const initChunk = ctx.initChunk
+    const model = initChunk?.model ?? options?.model
+    if (initChunk) {
+      const manifest = { framework: 'Claude Agent SDK' }
+      if (model) manifest.model = model
+      if (Array.isArray(initChunk.tools)) manifest.tools = initChunk.tools.map(name => ({ name }))
+      if (initChunk.mcp_servers) manifest.dependencies = { mcp_servers: initChunk.mcp_servers }
+      if (options?.maxTurns) manifest.max_iterations = options.maxTurns
+      metadata._dd = { agent_manifest: manifest }
+    }
+
+    const usage = ctx.resultChunk?.usage
+    if (usage) {
+      const inputTokens = usage.input_tokens
+      const cacheWriteTokens = usage.cache_creation_input_tokens
+      const cacheReadTokens = usage.cache_read_input_tokens
+      const totalInputTokens = inputTokens
+        ? inputTokens + (cacheWriteTokens || 0) + (cacheReadTokens || 0)
+        : undefined
+      const outputTokens = usage.output_tokens
+      const metrics = {}
+      let hasMetrics = false
+      if (inputTokens) {
+        metrics.inputTokens = totalInputTokens
+        hasMetrics = true
+      }
+      if (outputTokens) {
+        metrics.outputTokens = outputTokens
+        hasMetrics = true
+      }
+      if (inputTokens && outputTokens) {
+        metrics.totalTokens = totalInputTokens + outputTokens
+        hasMetrics = true
+      }
+      if (cacheWriteTokens) {
+        metrics.cacheWriteTokens = cacheWriteTokens
+        hasMetrics = true
+      }
+      if (cacheReadTokens) {
+        metrics.cacheReadTokens = cacheReadTokens
+        hasMetrics = true
+      }
+      if (hasMetrics) this._tagger.tagMetrics(span, metrics)
+    }
+
+    if (Object.getOwnPropertyNames(metadata).length > 0) this._tagger.tagMetadata(span, metadata)
   }
 }
 
