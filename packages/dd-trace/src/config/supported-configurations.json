@@ -3054,6 +3054,14 @@
         "default": "400-499"
       }
     ],
+    "DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "description": "Append a quantized request path to HTTP client span resource names, eg. `GET /users/?`."
+      }
+    ],
     "DD_TRACE_HTTP_ENABLED": [
       {
         "implementation": "A",

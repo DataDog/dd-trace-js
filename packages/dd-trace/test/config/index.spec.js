@@ -1076,6 +1076,25 @@ describe('Config', () => {
     })
   })
 
+  describe('HTTP client resource name quantization', () => {
+    it('should default to false', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE, false)
+    })
+
+    it('should initialize from DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE', () => {
+      process.env.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE = 'true'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE, true)
+      assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+        { name: 'DD_TRACE_HTTP_CLIENT_RESOURCE_NAME_QUANTIZE', value: true, origin: 'env_var' },
+      ])
+    })
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
