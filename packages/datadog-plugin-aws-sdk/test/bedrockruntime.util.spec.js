@@ -34,9 +34,10 @@ describe('bedrockruntime utils', () => {
     }])
   })
 
-  it('combines Anthropic text blocks from the InvokeModel request body', () => {
+  it('preserves Anthropic messages for LLMObs conversion', () => {
     const requestParams = extractRequestParams({
       body: JSON.stringify({
+        system: [{ type: 'text', text: 'Be concise.' }],
         messages: [{
           role: 'user',
           content: [
@@ -49,7 +50,15 @@ describe('bedrockruntime utils', () => {
       modelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
     }, PROVIDER.ANTHROPIC)
 
-    assert.strictEqual(requestParams.prompt, 'Describe this image.')
+    assert.deepStrictEqual(requestParams.prompt, [{
+      role: 'user',
+      content: [
+        { type: 'text', text: 'Describe' },
+        { type: 'image' },
+        { type: 'text', text: ' this image.' },
+      ],
+    }])
+    assert.deepStrictEqual(requestParams.system, [{ type: 'text', text: 'Be concise.' }])
   })
 
   it('combines Converse tool-result blocks', () => {
@@ -63,15 +72,23 @@ describe('bedrockruntime utils', () => {
       },
     }])
 
-    assert.deepStrictEqual(message, {
+    assert.deepStrictEqual(message, [{
       role: 'user',
       toolResults: [{
         name: '',
-        result: 'Current weather: {"temperature":24}',
+        result: 'Current weather: ',
         toolId: 'tool-1',
-        type: 'tool_result',
+        type: 'toolResult',
       }],
-    })
+    }, {
+      role: 'user',
+      toolResults: [{
+        name: '',
+        result: '{"temperature":24}',
+        toolId: 'tool-1',
+        type: 'toolResult',
+      }],
+    }])
   })
 
   it('reads the text of Converse guardContent blocks', () => {
@@ -81,10 +98,10 @@ describe('bedrockruntime utils', () => {
       { text: ' Cite sources.' },
     ])
 
-    assert.deepStrictEqual(message, {
+    assert.deepStrictEqual(message, [{
       role: 'user',
-      content: 'Context: What is the dose? Cite sources.',
-    })
+      content: 'Context:  What is the dose?  Cite sources.',
+    }])
   })
 
   it('reads guarded text from Converse system blocks', () => {
@@ -98,8 +115,8 @@ describe('bedrockruntime utils', () => {
     })
 
     assert.deepStrictEqual(requestParams.prompt, [
-      { content: 'Follow the policy. ', role: 'system' },
-      { content: 'Do not expose secrets.', role: 'system' },
+      { content: 'Follow the policy.  Do not expose secrets.', role: 'system' },
+      { content: '[Unsupported content type: guardContent]', role: 'system' },
       { content: 'Summarize the document.', role: 'user' },
     ])
   })

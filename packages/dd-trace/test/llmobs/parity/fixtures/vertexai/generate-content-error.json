@@ -1,0 +1,1 @@
+{"responses":[{"match":{"method":"POST","path":"/v1/projects/parity-project/locations/us-central1/publishers/google/models/gemini-1.5-flash:generateContent"},"status":400,"headers":{"Content-Type":"application/json"},"body":"{\"error\":{\"code\":400,\"message\":\"bad request\",\"status\":\"INVALID_ARGUMENT\"}}"}]}

@@ -1,0 +1,1 @@
+{"responses":[{"match":{"method":"POST","path":"/model/mistral.mistral-7b-instruct-v0%3A2/invoke"},"status":200,"headers":{"Content-Type":"application/json","Content-Length":134},"body":"{\"outputs\":[{\"text\":\"Distributed tracing connects services.\",\"stop_reason\":\"stop\"}],\"prompt_token_count\":8,\"generation_token_count\":6}"}]}

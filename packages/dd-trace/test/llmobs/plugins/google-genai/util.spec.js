@@ -3,7 +3,12 @@
 const assert = require('node:assert')
 const { describe, it } = require('mocha')
 
-const { extractMetrics, formatOutputMessages } = require('../../../../src/llmobs/plugins/genai/util')
+const {
+  extractEmbeddingMetrics,
+  extractMetrics,
+  formatInputMessages,
+  formatOutputMessages,
+} = require('../../../../src/llmobs/plugins/genai/util')
 
 describe('google-genai llmobs util', () => {
   describe('extractMetrics', () => {
@@ -25,6 +30,48 @@ describe('google-genai llmobs util', () => {
 
     it('returns no metrics when usageMetadata is missing', () => {
       assert.deepStrictEqual(extractMetrics({}), {})
+    })
+
+    it('preserves cache and reasoning token counts including zero', () => {
+      assert.deepStrictEqual(extractMetrics({
+        usageMetadata: {
+          promptTokenCount: 0,
+          candidatesTokenCount: 2,
+          thoughtsTokenCount: 3,
+          cachedContentTokenCount: 0,
+          totalTokenCount: 0,
+        },
+      }), {
+        inputTokens: 0,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        totalTokens: 5,
+        reasoningOutputTokens: 3,
+      })
+    })
+  })
+
+  describe('extractEmbeddingMetrics', () => {
+    it('sums positive embedding token counts and preserves billable characters', () => {
+      assert.deepStrictEqual(extractEmbeddingMetrics({
+        metadata: { billableCharacterCount: 12 },
+        embeddings: [
+          { statistics: { tokenCount: 3 } },
+          { statistics: { tokenCount: 0 } },
+          { statistics: { tokenCount: 4 } },
+        ],
+      }), {
+        billable_character_count: 12,
+        inputTokens: 7,
+      })
+    })
+  })
+
+  describe('formatInputMessages', () => {
+    it('uses the requested default role for role-less content', () => {
+      assert.deepStrictEqual(formatInputMessages({
+        parts: [{ text: 'Be concise.' }],
+      }, 'system'), [{ role: 'system', content: 'Be concise.' }])
     })
   })
 
