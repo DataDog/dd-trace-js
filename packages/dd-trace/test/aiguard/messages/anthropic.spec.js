@@ -9,6 +9,7 @@ const {
   convertAnthropicMessage,
   getMessagesInputMessages,
   getMessagesOutputMessages,
+  getStreamedMessagesOutputMessages,
 } = require('../../../src/aiguard/messages/anthropic')
 
 describe('aiguard/messages/anthropic', () => {
@@ -1266,6 +1267,53 @@ describe('aiguard/messages/anthropic', () => {
         { role: 'tool', tool_call_id: 'call_1', content: 'x=42' },
         { role: 'assistant', content: 'x is 42' },
       ])
+    })
+  })
+
+  describe('streamed output', () => {
+    it('concatenates text deltas', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: ' world' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_stop' },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [
+        { role: 'assistant', content: 'Hello world' },
+      ])
+    })
+
+    it('combines text and parallel tool input deltas', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Searching' } },
+        {
+          type: 'content_block_start',
+          index: 1,
+          content_block: { type: 'tool_use', id: 'call_1', name: 'search', input: {} },
+        },
+        { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"q":' } },
+        { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '"unsafe"}' } },
+        {
+          type: 'content_block_start',
+          index: 2,
+          content_block: { type: 'tool_use', id: 'call_2', name: 'search', input: {} },
+        },
+        { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '{"q":"safe"}' } },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [{
+        role: 'assistant',
+        content: 'Searching',
+        tool_calls: [
+          { id: 'call_1', function: { name: 'search', arguments: '{"q":"unsafe"}' } },
+          { id: 'call_2', function: { name: 'search', arguments: '{"q":"safe"}' } },
+        ],
+      }])
     })
   })
 })

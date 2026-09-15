@@ -127,10 +127,11 @@ function wrapStreamIterator (iterator, ctx) {
 function wrapCreate (create) {
   return function (...args) {
     const stream = args[0]?.stream
-    const preparing = !stream && messagesPrepareChannel.hasSubscribers
-    const intercepting = !stream && messagesInterceptChannel.hasSubscribers
+    const tracing = anthropicTracingChannel.start.hasSubscribers
+    const preparing = messagesPrepareChannel.hasSubscribers
+    const intercepting = messagesInterceptChannel.hasSubscribers
 
-    if (!anthropicTracingChannel.start.hasSubscribers && !preparing && !intercepting) {
+    if (!tracing && !preparing && !intercepting) {
       return create.apply(this, args)
     }
 
@@ -167,8 +168,23 @@ function wrapCreate (create) {
         parseResult = heldUntil(parse.apply(this, parseArgs), interceptCtx?.beforeResult?.())
           .then(response => {
             if (stream) {
-              shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
-              return response
+              if (!interceptCtx?.onResult) {
+                if (tracing) {
+                  shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
+                }
+                return response
+              }
+
+              return Promise.resolve(interceptCtx.onResult(response)).then(deliveredResponse => {
+                if (tracing) {
+                  shimmer.wrap(
+                    deliveredResponse,
+                    Symbol.asyncIterator,
+                    iterator => wrapStreamIterator(iterator, ctx)
+                  )
+                }
+                return deliveredResponse
+              })
             }
 
             if (!interceptCtx?.onResult) {

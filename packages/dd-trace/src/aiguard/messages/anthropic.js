@@ -433,10 +433,66 @@ function getMessagesOutputMessages (body) {
   return convertAnthropicMessage({ role, content: body.content })
 }
 
+/**
+ * Combines Anthropic message stream events into regular output messages.
+ *
+ * @param {Array<object>} events
+ * @returns {Array<object>}
+ */
+function getStreamedMessagesOutputMessages (events) {
+  let message
+  const inputJson = []
+
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue
+
+    if (event.type === 'message_start' && event.message && typeof event.message === 'object') {
+      const content = Array.isArray(event.message.content)
+        ? event.message.content.map(block => ({ ...block }))
+        : []
+      message = { role: event.message.role || 'assistant', content }
+      continue
+    }
+
+    if (event.type === 'content_block_start' && event.content_block && typeof event.content_block === 'object') {
+      message ??= { role: 'assistant', content: [] }
+      message.content[event.index ?? 0] = { ...event.content_block }
+      continue
+    }
+
+    if (event.type !== 'content_block_delta' || !event.delta || typeof event.delta !== 'object') continue
+
+    const index = event.index ?? 0
+    const block = message?.content[index]
+    if (!block) continue
+
+    if (event.delta.type === 'text_delta' && block.type === 'text' && typeof event.delta.text === 'string') {
+      block.text = (block.text || '') + event.delta.text
+    } else if (event.delta.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
+      inputJson[index] = (inputJson[index] || '') + event.delta.partial_json
+    }
+  }
+
+  if (!message) return []
+
+  for (let index = 0; index < inputJson.length; index++) {
+    if (inputJson[index] === undefined || !message.content[index]) continue
+    try {
+      message.content[index].input = JSON.parse(inputJson[index])
+    } catch {
+      message.content[index].input = inputJson[index]
+    }
+  }
+
+  message.content = message.content.filter(Boolean)
+  return getMessagesOutputMessages(message)
+}
+
 module.exports = {
   convertAnthropicSystem,
   convertAnthropicBlocksToContent,
   convertAnthropicMessage,
   getMessagesInputMessages,
   getMessagesOutputMessages,
+  getStreamedMessagesOutputMessages,
 }
