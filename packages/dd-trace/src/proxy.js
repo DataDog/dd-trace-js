@@ -297,7 +297,7 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      if (config.iast.enabled) {
+      if (config.iast.DD_IAST_ENABLED) {
         this._modules.rewriter.enable(config)
       }
 
@@ -428,7 +428,7 @@ class Tracer extends NoopProxy {
    */
   #updateTracing (config) {
     if (config.DD_TRACE_ENABLED !== false) {
-      if (config.appsec.enabled) {
+      if (config.appsec.DD_APPSEC_ENABLED) {
         this._modules.appsec.enable(config)
       }
       if (config.llmobs.DD_LLMOBS_ENABLED) {
@@ -451,7 +451,7 @@ class Tracer extends NoopProxy {
       if (config.experimental?.aiguard?.enabled) {
         this._modules.aiguard.enable(this._tracer, config)
       }
-      if (config.iast.enabled) {
+      if (config.iast.DD_IAST_ENABLED) {
         this._modules.iast.enable(config, this._tracer)
       }
       // This needs to be after the IAST module is enabled
