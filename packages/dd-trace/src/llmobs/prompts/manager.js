@@ -49,11 +49,14 @@ function isPlainObject (value) {
 function promptRequest (promptId, { version, env, targetingKey, attributes = {} } = {}) {
   const requestAttributes = { ...attributes }
   let selector
-  if (version !== undefined) selector = ['version', version]
-  else if (env) {
+  if (version !== undefined) {
+    selector = ['version', version]
+  } else if (env) {
     const attributesSelector = Object.keys(requestAttributes).sort().map(key => [key, requestAttributes[key]])
     selector = ['resolve', env, targetingKey ?? null, attributesSelector]
-  } else selector = ['latest']
+  } else {
+    selector = ['latest']
+  }
 
   return {
     promptId,
@@ -299,13 +302,13 @@ class PromptManager {
    * @returns {Promise<PromptFetchResult>}
    */
   async #fetchAndCache (request, { hot = true, signal } = {}) {
-    const generation = this.cacheGeneration
+    const generationAtStart = this.cacheGeneration
     const token = Symbol(request.key)
     this.fetchTokens.set(request.key, token)
     const result = await this.#fetchHttp(request, signal)
     const latest = this.fetchTokens.get(request.key) === token
     if (latest) this.fetchTokens.delete(request.key)
-    const cacheable = generation === this.cacheGeneration && latest
+    const cacheable = generationAtStart === this.cacheGeneration && latest
     if (result.prompt) {
       if (cacheable) {
         const cached = withSource(result.prompt, SOURCE_CACHE)
@@ -401,7 +404,8 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt>}
    */
   async getPrompt (promptId, options = {}) {
-    const { version, fallback, targetingKey, attributes = {} } = options
+    const { fallback, targetingKey, attributes = {} } = options
+    const version = options.version ?? undefined
     if (version !== undefined) {
       return this.#getHttpPrompt(promptRequest(promptId, { version }), fallback)
     }

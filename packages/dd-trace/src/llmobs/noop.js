@@ -1,7 +1,8 @@
 'use strict'
 
+const NoopPrompts = require('./prompts/noop')
+
 let NoopExperiments
-let NoopPrompts
 
 class NoopLLMObs {
   constructor (noopTracer) {
@@ -22,7 +23,6 @@ class NoopLLMObs {
    * @returns {import('../../../../index').llmobs.Prompts}
    */
   get prompts () {
-    NoopPrompts ??= require('./prompts/noop')
     return new NoopPrompts()
   }
 

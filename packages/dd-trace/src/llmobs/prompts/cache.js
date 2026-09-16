@@ -10,13 +10,19 @@ const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
 const log = require('../../log')
 const ManagedPrompt = require('./prompt')
 
+const CACHE_SUBPATH = path.join('datadog', 'llmobs', 'prompts')
 const MAX_HOT_ENTRIES = 1024
 const PROMPT_SOURCES = new Set(['registry', 'cache', 'fallback', 'ff', 'resolve'])
 
+/** @param {string} key */
 function promptIdFromKey (key) {
   return key.slice(0, key.lastIndexOf(':'))
 }
 
+/**
+ * @param {string} promptId
+ * @param {Array<unknown>} selector
+ */
 function cacheKey (promptId, selector) {
   const hash = createHash('sha1').update(JSON.stringify(selector)).digest('hex').slice(0, 16)
   return `${promptId}:${hash}`
@@ -25,9 +31,9 @@ function cacheKey (promptId, selector) {
 function defaultCacheDir () {
   try {
     const home = os.homedir()
-    if (home) return path.join(home, '.cache', 'datadog', 'llmobs', 'prompts')
+    if (home) return path.join(home, '.cache', CACHE_SUBPATH)
   } catch {}
-  return path.join(os.tmpdir(), 'datadog', 'llmobs', 'prompts')
+  return path.join(os.tmpdir(), CACHE_SUBPATH)
 }
 
 class HotCache {
@@ -210,6 +216,7 @@ class WarmCache {
     try {
       this.#ensureDir(path.dirname(file))
       if (!this.enabled) return
+      // Rename atomically so concurrent readers never observe partial JSON.
       fs.writeFileSync(temporary, JSON.stringify({ prompt, timestamp: Date.now() }), {
         encoding: 'utf8',
         mode: 0o600,

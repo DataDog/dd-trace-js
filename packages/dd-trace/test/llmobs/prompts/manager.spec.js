@@ -170,6 +170,17 @@ describe('PromptManager', () => {
     sinon.assert.notCalled(fallback)
   })
 
+  it('treats a null version as absent', async () => {
+    provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1' }) })
+    const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
+
+    const prompt = await manager.getPrompt('greeting', { version: null })
+
+    assert.strictEqual(prompt.source, 'ff')
+    sinon.assert.calledOnce(provider.resolveObjectEvaluation)
+    sinon.assert.notCalled(fetchStub)
+  })
+
   it('snapshots targeting attributes before provider evaluation', async () => {
     let resolveProvider
     provider.resolveObjectEvaluation.returns(new Promise(resolve => { resolveProvider = resolve }))
