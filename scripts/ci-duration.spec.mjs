@@ -9,6 +9,7 @@ import {
   createMarkdownReport,
   createSlackReport,
   formatDuration,
+  getReportDateRange,
   parseWorkflowTeams,
 } from './ci-duration.mjs'
 
@@ -52,10 +53,10 @@ function job ({ id, name, start, end, steps = [] }) {
 }
 
 /**
- * @param {{ id: number, name: string, path: string, duration: number }} value
+ * @param {{ id: number, name: string, path: string, duration: number, sha?: string }} value
  * @returns {object}
  */
-function run ({ id, name, path, duration }) {
+function run ({ id, name, path, duration, sha = '1234567890abcdef' }) {
   return {
     id,
     name,
@@ -63,7 +64,7 @@ function run ({ id, name, path, duration }) {
     event: 'push',
     status: 'completed',
     conclusion: 'success',
-    head_sha: '1234567890abcdef',
+    head_sha: sha,
     run_attempt: 1,
     run_started_at: timestamp(0),
     updated_at: timestamp(duration),
@@ -79,6 +80,14 @@ describe('CI duration report', () => {
     assert.strictEqual(classifyDuration(9 * MINUTE - 1), 'warning')
     assert.strictEqual(classifyDuration(9 * MINUTE), 'hard')
     assert.strictEqual(formatDuration(9 * MINUTE + 31 * 1000), '9m31s')
+  })
+
+  it('uses the same UTC date range as the flakiness report', () => {
+    const now = new Date('2026-09-10T23:59:59.000Z')
+
+    assert.strictEqual(getReportDateRange('1', undefined, now), '2026-09-10..2026-09-10')
+    assert.strictEqual(getReportDateRange('3', undefined, now), '2026-09-08..2026-09-10')
+    assert.strictEqual(getReportDateRange('2', '2026-09-05', now), '2026-09-04..2026-09-05')
   })
 
   it('gets specialist workflow teams from CODEOWNERS', () => {
@@ -139,38 +148,93 @@ describe('CI duration report', () => {
     assert.strictEqual(result.scenarios[0].durationMs, 571 * 1000)
   })
 
-  it('fetches jobs only for workflows over the warning threshold', async () => {
-    const anchor = {
-      ...run({ id: 1, name: 'All Green', path: '.github/workflows/all-green.yml', duration: 60 }),
+  it('selects the fastest workflow runs from the three newest green commits', async () => {
+    const newestAnchor = {
+      ...run({
+        id: 1,
+        name: 'All Green',
+        path: '.github/workflows/all-green.yml',
+        duration: 60,
+        sha: 'newest1234567890',
+      }),
       created_at: '2026-09-10T12:00:00.000Z',
       updated_at: '2026-09-10T12:00:00.000Z',
     }
-    const olderAnchor = {
-      ...anchor,
-      id: 0,
-      head_sha: 'older1234567890',
+    const middleAnchor = {
+      ...newestAnchor,
+      id: 2,
+      head_sha: 'middle1234567890',
       created_at: '2026-09-09T12:00:00.000Z',
     }
-    const systemTests = run({
-      id: 2,
-      name: 'System Tests',
-      path: '.github/workflows/system-tests.yml',
-      duration: 601,
-    })
-    const appsec = run({ id: 3, name: 'AppSec', path: '.github/workflows/appsec.yml', duration: 420 })
+    const oldestAnchor = {
+      ...newestAnchor,
+      id: 3,
+      head_sha: 'oldest1234567890',
+      created_at: '2026-09-08T12:00:00.000Z',
+    }
+    const runsBySha = {
+      [newestAnchor.head_sha]: [
+        newestAnchor,
+        run({
+          id: 11,
+          name: 'System Tests',
+          path: '.github/workflows/system-tests.yml',
+          duration: 601,
+          sha: newestAnchor.head_sha,
+        }),
+        run({
+          id: 12,
+          name: 'AppSec',
+          path: '.github/workflows/appsec.yml',
+          duration: 420,
+          sha: newestAnchor.head_sha,
+        }),
+      ],
+      [middleAnchor.head_sha]: [
+        middleAnchor,
+        run({
+          id: 21,
+          name: 'System Tests',
+          path: '.github/workflows/system-tests.yml',
+          duration: 541,
+          sha: middleAnchor.head_sha,
+        }),
+        run({
+          id: 22,
+          name: 'AppSec',
+          path: '.github/workflows/appsec.yml',
+          duration: 430,
+          sha: middleAnchor.head_sha,
+        }),
+      ],
+      [oldestAnchor.head_sha]: [
+        oldestAnchor,
+        run({
+          id: 31,
+          name: 'System Tests',
+          path: '.github/workflows/system-tests.yml',
+          duration: 481,
+          sha: oldestAnchor.head_sha,
+        }),
+      ],
+    }
     const jobRequests = []
+    const commitRequests = []
     const api = {
       actions: {
         listWorkflowRuns: options => {
           assert.strictEqual(options.per_page, 10)
           assert.strictEqual(options.workflow_id, 'all-green.yml')
           assert.deepStrictEqual(options.headers, { 'cache-control': 'no-cache' })
-          return Promise.resolve({ data: { workflow_runs: [olderAnchor, anchor] } })
+          assert.strictEqual(options.created, '2026-09-08..2026-09-10')
+          return Promise.resolve({
+            data: { workflow_runs: [middleAnchor, oldestAnchor, newestAnchor] },
+          })
         },
         listWorkflowRunsForRepo: options => {
-          assert.strictEqual(options.head_sha, anchor.head_sha)
           assert.strictEqual(options.branch, 'master')
-          return Promise.resolve({ data: { workflow_runs: [anchor, systemTests, appsec] } })
+          commitRequests.push(options.head_sha)
+          return Promise.resolve({ data: { workflow_runs: runsBySha[options.head_sha] } })
         },
         listJobsForWorkflowRunAttempt: options => {
           jobRequests.push(options.run_id)
@@ -179,12 +243,48 @@ describe('CI duration report', () => {
       },
     }
     const codeowners = '/.github/workflows/appsec.yml @DataDog/dd-trace-js @DataDog/asm-js\n'
-    const snapshot = await collectSnapshot(api, codeowners, new Date('2026-09-10T13:00:00.000Z'))
+    const snapshot = await collectSnapshot(
+      api,
+      codeowners,
+      new Date('2026-09-10T13:00:00.000Z'),
+      '2026-09-08..2026-09-10'
+    )
 
-    assert.deepStrictEqual(jobRequests, [2])
+    assert.deepStrictEqual(commitRequests, [newestAnchor.head_sha, middleAnchor.head_sha, oldestAnchor.head_sha])
+    assert.deepStrictEqual(jobRequests, [31])
+    assert.deepStrictEqual(snapshot.anchors, [newestAnchor, middleAnchor, oldestAnchor])
     assert.deepStrictEqual(snapshot.workflows.map(workflow => workflow.name), ['System Tests', 'AppSec'])
+    assert.strictEqual(snapshot.workflows[0].id, 31)
+    assert.strictEqual(snapshot.workflows[0].durationMs, 481 * 1000)
+    assert.strictEqual(snapshot.workflows[0].sampleCount, 3)
     assert.strictEqual(snapshot.workflows[0].team, 'multiple teams')
+    assert.strictEqual(snapshot.workflows[1].id, 12)
+    assert.strictEqual(snapshot.workflows[1].sampleCount, 2)
     assert.strictEqual(snapshot.workflows[1].team, 'asm-js')
+  })
+
+  it('uses only the green runs returned for the requested timeframe', async () => {
+    const anchor = {
+      ...run({ id: 1, name: 'All Green', path: '.github/workflows/all-green.yml', duration: 60 }),
+      created_at: '2026-09-10T12:00:00.000Z',
+    }
+    const api = {
+      actions: {
+        listWorkflowRuns: options => {
+          assert.strictEqual(options.created, '2026-09-10..2026-09-10')
+          return Promise.resolve({ data: { workflow_runs: [anchor] } })
+        },
+        listWorkflowRunsForRepo: () => Promise.resolve({ data: { workflow_runs: [anchor] } }),
+      },
+    }
+    const snapshot = await collectSnapshot(
+      api,
+      '',
+      new Date('2026-09-10T13:00:00.000Z'),
+      '2026-09-10..2026-09-10'
+    )
+
+    assert.deepStrictEqual(snapshot.anchors, [anchor])
   })
 
   it('uses the original run creation time for the stale warning', async () => {
@@ -222,10 +322,12 @@ describe('CI duration report', () => {
     ])
     const snapshot = {
       anchor,
+      anchors: [anchor],
       stale: false,
       workflows: [{
         ...run({ id: 2, name: 'System Tests', path: '.github/workflows/system-tests.yml', duration: 823 }),
         durationMs: 823 * 1000,
+        sampleCount: 1,
         team: 'multiple teams',
         analysis: jobs,
       }],
@@ -242,6 +344,8 @@ describe('CI duration report', () => {
     assert.doesNotMatch(slack, /multiple teams/)
     assert.ok(slack.length < 3000)
     assert.match(markdown, /Workflow durations/)
+    assert.match(markdown, /Fastest duration/)
+    assert.match(markdown, /1\/1/)
     assert.match(markdown, /Slowest unique scenarios across the matrix/)
     assert.match(markdown, /76%/)
   })

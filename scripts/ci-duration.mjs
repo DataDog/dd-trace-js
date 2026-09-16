@@ -17,6 +17,8 @@ const SLACK_WORKFLOW_LIMIT = 5
 const SLACK_DETAIL_LIMIT = 3
 const MARKDOWN_DETAIL_LIMIT = 10
 const MAX_GREEN_AGE_DAYS = 7
+const SAMPLE_SIZE = 3
+const ONE_DAY = 24 * 60 * 60 * 1000
 
 const genericOwners = new Set(['dd-trace-js', 'dd-octo-sts'])
 
@@ -261,10 +263,27 @@ function statusIcon (durationMs) {
 }
 
 /**
- * @param {{ actions: Record<string, Function> }} api
- * @returns {Promise<WorkflowRun | undefined>}
+ * @param {string} days
+ * @param {string | undefined} until
+ * @param {Date} [now]
+ * @returns {string}
  */
-async function getLatestGreenRun (api) {
+export function getReportDateRange (days, until, now = new Date()) {
+  const untilMatch = until?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0]
+  const endDate = untilMatch ?? now.toISOString().slice(0, 10)
+  const startDate = new Date(new Date(endDate).getTime() - (Number(days) - 1) * ONE_DAY)
+    .toISOString()
+    .slice(0, 10)
+
+  return `${startDate}..${endDate}`
+}
+
+/**
+ * @param {{ actions: Record<string, Function> }} api
+ * @param {string} created
+ * @returns {Promise<WorkflowRun[]>}
+ */
+async function getRecentGreenRuns (api, created) {
   const response = await api.actions.listWorkflowRuns({
     owner: OWNER,
     repo: REPO,
@@ -272,21 +291,14 @@ async function getLatestGreenRun (api) {
     branch: 'master',
     event: 'push',
     status: 'success',
+    created,
     per_page: 10,
     headers: { 'cache-control': 'no-cache' },
   })
 
-  let latest
-  for (const run of response.data.workflow_runs) {
-    if (!latest) {
-      latest = run
-      continue
-    }
-    const createdAt = Date.parse(run.created_at ?? '')
-    const latestCreatedAt = Date.parse(latest.created_at ?? '')
-    if (createdAt > latestCreatedAt) latest = run
-  }
-  return latest
+  const runs = [...response.data.workflow_runs]
+  runs.sort((a, b) => Date.parse(b.created_at ?? '') - Date.parse(a.created_at ?? ''))
+  return runs.slice(0, SAMPLE_SIZE)
 }
 
 /**
@@ -354,28 +366,64 @@ function selectRuns (runs) {
 }
 
 /**
+ * @param {WorkflowRun[]} runs
+ * @returns {Array<WorkflowRun & { durationMs?: number, sampleCount: number }>}
+ */
+function selectFastestRuns (runs) {
+  const selected = new Map()
+  const sampleCounts = new Map()
+
+  for (const run of runs) {
+    const workflowPath = normalizeWorkflowPath(run.path)
+    const durationMs = getDurationMs(run.run_started_at, run.updated_at)
+    const previous = selected.get(workflowPath)
+    sampleCounts.set(workflowPath, (sampleCounts.get(workflowPath) ?? 0) + 1)
+
+    if (!previous || (durationMs ?? Infinity) < (previous.durationMs ?? Infinity)) {
+      selected.set(workflowPath, { ...run, durationMs, sampleCount: 0 })
+    }
+  }
+
+  for (const [workflowPath, run] of selected) {
+    run.sampleCount = sampleCounts.get(workflowPath)
+  }
+
+  return [...selected.values()]
+}
+
+/**
  * @param {{ actions: Record<string, Function> }} api
  * @param {string} codeowners
  * @param {Date} [now]
+ * @param {string} [created]
  * @returns {Promise<{
  *   anchor: WorkflowRun,
+ *   anchors: WorkflowRun[],
  *   stale: boolean,
  *   workflows: Array<WorkflowRun & {
  *     durationMs?: number,
+ *     sampleCount: number,
  *     team: string,
  *     analysis?: ReturnType<typeof analyzeJobs>,
  *   }>,
  * }>}
  */
-export async function collectSnapshot (api, codeowners, now = new Date()) {
-  const anchor = await getLatestGreenRun(api)
+export async function collectSnapshot (
+  api,
+  codeowners,
+  now = new Date(),
+  created = getReportDateRange('1', undefined, now)
+) {
+  const anchors = await getRecentGreenRuns(api, created)
+  const anchor = anchors[0]
   if (!anchor) throw new Error('No successful All Green push was found on master.')
 
   const workflowTeams = parseWorkflowTeams(codeowners)
-  const runs = selectRuns(await getRunsForCommit(api, anchor.head_sha))
-  const workflows = runs.map(run => ({
+  const runsByCommit = await Promise.all(anchors.map(async anchor => {
+    return selectRuns(await getRunsForCommit(api, anchor.head_sha))
+  }))
+  const workflows = selectFastestRuns(runsByCommit.flat()).map(run => ({
     ...run,
-    durationMs: getDurationMs(run.run_started_at, run.updated_at),
     team: getTeam(run, workflowTeams),
   }))
 
@@ -392,7 +440,7 @@ export async function collectSnapshot (api, codeowners, now = new Date()) {
   const maxAgeMs = MAX_GREEN_AGE_DAYS * 24 * 60 * 60 * 1000
   const stale = Number.isFinite(anchorDate) && now.getTime() - anchorDate > maxAgeMs
 
-  return { anchor, stale, workflows }
+  return { anchor, anchors, stale, workflows }
 }
 
 /**
@@ -400,20 +448,23 @@ export async function collectSnapshot (api, codeowners, now = new Date()) {
  * @returns {string}
  */
 export function createMarkdownReport (snapshot) {
-  const { anchor, stale, workflows } = snapshot
-  const sha = anchor.head_sha.slice(0, 7)
+  const { anchors, stale, workflows } = snapshot
+  const commits = anchors.map(anchor => {
+    return `[\`${anchor.head_sha.slice(0, 7)}\`](${anchor.html_url})`
+  }).join(', ')
   let markdown = '\n\n# CI duration report\n\n'
 
-  markdown += `Latest green master commit: [\`${sha}\`](${anchor.html_url})\n\n`
+  markdown += `Green master commits sampled (newest first): ${commits}\n\n`
   markdown += [
     'Warning: over 7 minutes. Hard limit: 9 minutes or longer.',
+    `Each duration is the fastest available workflow run across ${anchors.length} commits.`,
     'All Green is not measured.\n',
   ].join(' ')
   if (stale) markdown += `\n> Warning: this green commit is more than ${MAX_GREEN_AGE_DAYS} days old.\n`
 
   markdown += '\n## Workflow durations\n\n'
-  markdown += '| Result | Workflow | Team | Duration | Slowest job |\n'
-  markdown += '| --- | --- | --- | ---: | --- |\n'
+  markdown += '| Result | Workflow | Team | Fastest duration | Samples | Slowest job |\n'
+  markdown += '| --- | --- | --- | ---: | ---: | --- |\n'
 
   for (const workflow of workflows) {
     const slowestJob = workflow.analysis?.jobs[0]
@@ -424,7 +475,8 @@ export function createMarkdownReport (snapshot) {
 
     markdown += `| ${statusIcon(workflow.durationMs)} | `
     markdown += `[${markdownText(workflow.name)}](${workflow.html_url}) | `
-    markdown += `${markdownText(workflow.team)} | ${formatDuration(workflow.durationMs)} | ${slowest} |\n`
+    markdown += `${markdownText(workflow.team)} | ${formatDuration(workflow.durationMs)} | `
+    markdown += `${workflow.sampleCount}/${anchors.length} | ${slowest} |\n`
   }
 
   const offenders = workflows.filter(workflow => {
@@ -476,13 +528,15 @@ export function createMarkdownReport (snapshot) {
  * @returns {string}
  */
 export function createSlackReport (snapshot, reportUrl) {
-  const { anchor, stale, workflows } = snapshot
+  const { anchor, anchors, stale, workflows } = snapshot
   const offenders = workflows.filter(workflow => {
     const status = classifyDuration(workflow.durationMs)
     return status === 'warning' || status === 'hard'
   })
   const hardLimitCount = offenders.filter(workflow => classifyDuration(workflow.durationMs) === 'hard').length
-  const lines = [`*CI duration — master \`${anchor.head_sha.slice(0, 7)}\`*`]
+  const lines = [
+    `*CI duration — master \`${anchor.head_sha.slice(0, 7)}\` (fastest of ${anchors.length})*`,
+  ]
 
   if (stale) lines.push(`⚠️ Latest green commit is more than ${MAX_GREEN_AGE_DAYS} days old.`)
 
@@ -524,13 +578,13 @@ export function createSlackReport (snapshot, reportUrl) {
 }
 
 async function main () {
-  const { GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_TOKEN } = process.env
+  const { DAYS = '1', GITHUB_REPOSITORY, GITHUB_RUN_ID, GITHUB_TOKEN, UNTIL } = process.env
   if (!GITHUB_TOKEN) throw new Error('GITHUB_TOKEN is required.')
 
   const { Octokit } = await import('octokit')
   const octokit = new Octokit({ auth: GITHUB_TOKEN })
   const codeowners = readFileSync(new URL('../.github/CODEOWNERS', import.meta.url), 'utf8')
-  const snapshot = await collectSnapshot(octokit.rest, codeowners)
+  const snapshot = await collectSnapshot(octokit.rest, codeowners, new Date(), getReportDateRange(DAYS, UNTIL))
   const reportUrl = GITHUB_REPOSITORY && GITHUB_RUN_ID
     ? `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
     : snapshot.anchor.html_url
