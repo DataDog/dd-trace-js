@@ -787,6 +787,5 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         )
       })
     })
-
   })
 })

@@ -19,8 +19,14 @@ const latest = getLatestPlaywrightSpecifier()
 const versions = [oldest, latest]
 
 /**
+ * @callback ContextNewVersions
+ * @param {string} name
+ * @param {() => void} fn
+ */
+
+/**
  * @param {(options: {
- *   contextNewVersions: Mocha.SuiteFunction | Mocha.PendingSuiteFunction,
+ *   contextNewVersions: ContextNewVersions,
  *   it: ReturnType<typeof createParallelIt>,
  *   latest: string,
  *   runtime: { cwd?: string, webAppPort?: number },
