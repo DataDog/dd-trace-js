@@ -17,6 +17,9 @@ const logSubmissionCh = channel('ci:log-submission:console')
 // Keep routine test output local while submitting diagnostics that can explain failures.
 const methods = ['error', 'warn']
 const methodSet = new Set(methods)
+const nodeConsoleMethods = new Map(methods.map(method => {
+  return [method, Object.getOwnPropertyDescriptor(Console.prototype, method)?.value]
+}))
 const disabledStreams = new WeakSet()
 /** @type {WeakMap<object, symbol | false>} */
 const nodeConsoleGroupIndentKeys = new WeakMap()
@@ -192,46 +195,82 @@ function combineRecords (records, lastOnly) {
 }
 
 /**
+ * @param {object} target
+ * @param {string} message
+ */
+function formatNodeConsoleMessage (target, message) {
+  let groupIndentKey = nodeConsoleGroupIndentKeys.get(target)
+  if (groupIndentKey === undefined) {
+    groupIndentKey = Reflect.ownKeys(target).find(key => {
+      return typeof key === 'symbol' &&
+        (key.description === 'kGroupIndent' || key.description === 'kGroupIndentationString')
+    }) || false
+    nodeConsoleGroupIndentKeys.set(target, groupIndentKey)
+  }
+  const groupIndent = groupIndentKey && target[groupIndentKey]
+  if (groupIndent) return groupIndent + message.replaceAll('\n', `\n${groupIndent}`)
+  return message
+}
+
+/**
+ * @param {object | Function} target
+ * @param {string} method
+ * @param {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>} descriptor
+ */
+function usesNodeConsoleWrite (target, method, descriptor) {
+  if (target === Console.prototype) return descriptor?.value === nodeConsoleMethods.get(method)
+
+  try {
+    const name = descriptor?.value?.name
+    return (name === method || name === `bound ${method}`) &&
+      Function.prototype.toString.call(descriptor.value) === 'function () { [native code] }'
+  } catch {
+    return false
+  }
+}
+
+/**
  * @param {object | Function} target
  */
 function wrapNodeConsoleWrite (target) {
   if (!nodeConsoleWrite) return false
 
-  const owner = Object.hasOwn(target, nodeConsoleWrite) ? target : Console.prototype
-  if (nodeConsoleWriteOwners.has(owner)) return true
-
-  const descriptor = Object.getOwnPropertyDescriptor(owner, nodeConsoleWrite)
-  if (typeof descriptor?.value !== 'function') return false
-
+  let owner
   try {
+    owner = Object.hasOwn(target, nodeConsoleWrite) ? target : Console.prototype
+    if (nodeConsoleWriteOwners.has(owner)) return true
+
+    const descriptor = Object.getOwnPropertyDescriptor(owner, nodeConsoleWrite)
+    if (typeof descriptor?.value !== 'function') return false
+
     // Node formats arguments before this internal writer runs. Capturing here preserves the exact output
     // without making a temporary stream.write replacement visible to custom inspectors.
     descriptor.value = shimmer.wrapFunction(descriptor.value, original => function (streamSymbol, message) {
       const capture = activeCapture
-      if (!isPublishing && capture?.nodeConsole && streamSymbol?.description === 'kUseStderr' &&
-        typeof message === 'string') {
+      let record
+      if (!isPublishing && streamSymbol?.description === 'kUseStderr' && typeof message === 'string') {
         try {
-          let groupIndentKey = nodeConsoleGroupIndentKeys.get(this)
-          if (groupIndentKey === undefined) {
-            groupIndentKey = Reflect.ownKeys(this).find(key => {
-              return typeof key === 'symbol' &&
-                (key.description === 'kGroupIndent' || key.description === 'kGroupIndentationString')
-            }) || false
-            nodeConsoleGroupIndentKeys.set(this, groupIndentKey)
+          message = formatNodeConsoleMessage(this, message)
+          if (capture?.nodeConsole) {
+            record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
+            capture.observedRecords.push(record)
+            capture.ownRecords.push(record)
+            record = undefined
+          } else if (!capture && shouldCaptureLogs()) {
+            // Console instances bind their methods during construction. Instances created before instrumentation
+            // cannot be wrapped afterward, and the shared writer does not receive the original method name.
+            record = createRecord('error', message, ++nextWriteId)
           }
-          const groupIndent = groupIndentKey && this[groupIndentKey]
-          if (groupIndent) message = groupIndent + message.replaceAll('\n', `\n${groupIndent}`)
-          const record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
-          capture.observedRecords.push(record)
-          capture.ownRecords.push(record)
         } catch {}
       }
-      return original.apply(this, arguments)
+      const result = original.apply(this, arguments)
+      if (record) publishRecords([record])
+      return result
     })
     Object.defineProperty(owner, nodeConsoleWrite, descriptor)
     nodeConsoleWriteOwners.add(owner)
   } catch {}
-  return nodeConsoleWriteOwners.has(owner)
+  return Boolean(owner && nodeConsoleWriteOwners.has(owner))
 }
 
 /**
@@ -250,7 +289,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
       isNodeConsoleTarget = Object.getPrototypeOf(target) === Console.prototype
     }
   } catch {}
-  const useNodeConsoleWrite = isNodeConsoleTarget && wrapNodeConsoleWrite(target)
+  const hasNodeConsoleWrite = isNodeConsoleTarget && wrapNodeConsoleWrite(target)
 
   wrappedTargets.add(target)
   for (const method of methods) {
@@ -258,6 +297,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
     // Accessor-backed replacements cannot be inspected without running user
     // code, so leave them untouched.
     if (typeof descriptor?.value !== 'function') continue
+    const useNodeConsoleWrite = hasNodeConsoleWrite && usesNodeConsoleWrite(target, method, descriptor)
 
     // Console methods are bound onto instances at runtime, so Orchestrion cannot
     // rewrite every receiver that test frameworks create or replace.

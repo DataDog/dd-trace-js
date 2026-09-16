@@ -166,6 +166,46 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('captures native Console instances created before prototype instrumentation', () => {
+    const stream = { write: sinon.stub() }
+    const useStderr = Symbol('kUseStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    class FakeConsole {
+      constructor (stream) {
+        this._stderr = stream
+        this._stderrErrorHandler = () => {}
+        this.error = this.error.bind(this)
+        this.warn = this.warn.bind(this)
+      }
+
+      error (message) {
+        this[writeToConsole](useStderr, message)
+      }
+
+      warn (message) {
+        this[writeToConsole](useStderr, message)
+      }
+    }
+    Object.defineProperty(FakeConsole.prototype, writeToConsole, {
+      configurable: true,
+      value (streamSymbol, message) {
+        this._stderr.write(`${message}\n`)
+      },
+      writable: true,
+    })
+    const target = new FakeConsole(stream)
+    const fakeNodeConsole = { Console: FakeConsole, '@noCallThru': true }
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      'node:console': fakeNodeConsole,
+    })
+
+    wrapIsolatedConsole(FakeConsole.prototype)
+    target.error('existing error')
+
+    sinon.assert.calledOnceWithExactly(stream.write, 'existing error\n')
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'existing error' }])
+  })
+
   it('does not expose a temporary stream writer while formatting a native console record', () => {
     const output = []
     const stream = new Writable({
@@ -210,6 +250,26 @@ describe('console instrumentation', () => {
 
     assert.deepStrictEqual(output, ['  first\n  second\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: '  first\n  second' }])
+  })
+
+  it('captures a replaced method on a native Console instance', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    target.warn = function (message) {
+      this._stderr.write(`[custom] ${message}\n`)
+    }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.deepStrictEqual(output, ['[custom] hello\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: '[custom] hello' }])
   })
 
   it('does not publish direct stream writes made while formatting a record', () => {
@@ -529,6 +589,29 @@ describe('console instrumentation', () => {
 
     assert.strictEqual(warnReads, 1)
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+  })
+
+  it('does not throw when a proxy rejects private console symbol inspection', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const proxy = new Proxy(target, {
+      getOwnPropertyDescriptor (target, property) {
+        if (typeof property === 'symbol') throw new Error('private symbol unavailable')
+        return Reflect.getOwnPropertyDescriptor(target, property)
+      },
+    })
+
+    wrapConsole(proxy)
+    proxy.error('hello')
+
+    assert.deepStrictEqual(output, ['hello\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'hello' }])
   })
 
   it('preserves accessor-backed stream writes', () => {
