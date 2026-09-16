@@ -76,6 +76,19 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx, spanKind) {
+    // langchain-openai calls an untraced beta client when `response_format` is set, so this span is
+    // the only model span for the call. `handlers/chat_model.js` applies the same correction through
+    // `changeKind` while building the LLMObs payload.
+    if (spanKind !== WORKFLOW || ctx.type !== 'chat_model' || !ctx.arguments?.[1]?.response_format) return {}
+
+    const provider = ctx.currentStore?.span?.context().getTags()['langchain.request.provider']
+    return this.getIntegrationName(ctx.type, provider) === OPENAI_PROVIDER_NAME ? { spanKind: LLM } : {}
+  }
+
   setLLMObsTags (ctx) {
     ctx.args = ctx.arguments
     ctx.instance = ctx.self
