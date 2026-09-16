@@ -3158,6 +3158,7 @@ describe('Config', () => {
       DD_APPSEC_MAX_STACK_TRACES: 2,
       DD_APPSEC_MAX_STACK_TRACE_DEPTH: 32,
       DD_APPSEC_WAF_TIMEOUT: 42,
+      DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: false,
     })
 
     assert.deepStrictEqual(config.iast, {
