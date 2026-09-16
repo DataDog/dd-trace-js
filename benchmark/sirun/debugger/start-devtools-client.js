@@ -72,17 +72,25 @@ assert.equal(
 
 const breakpoint = { sourceFile, line }
 // WARNING: Keep this fixture aligned with dd-trace's default config, apart from benchmark-specific overrides.
+const captureTimeoutMs = Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000')
+const redactedIdentifiers = []
+const redactionExcludedIdentifiers = []
 const config = {
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
   DD_TRACE_GIT_METADATA_ENABLED: false,
   debug: false,
   dynamicInstrumentation: {
-    DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS:
-      Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000'),
+    captureTimeoutMs,
+    DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: captureTimeoutMs,
+    enabled: true,
     DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+    probeFile: undefined,
     DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
-    DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
-    DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
+    redactedIdentifiers,
+    DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: redactedIdentifiers,
+    redactionExcludedIdentifiers,
+    DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: redactionExcludedIdentifiers,
+    uploadIntervalSeconds: 1,
     DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
   },
   env: undefined,
