@@ -216,7 +216,7 @@ class WarmCache {
     try {
       this.#ensureDir(path.dirname(file))
       if (!this.enabled) return
-      // Rename atomically so concurrent readers never observe partial JSON.
+      // Write separately, then rename so other processes see either the old file or the complete new one.
       fs.writeFileSync(temporary, JSON.stringify({ prompt, timestamp: Date.now() }), {
         encoding: 'utf8',
         mode: 0o600,
