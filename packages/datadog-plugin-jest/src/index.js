@@ -113,12 +113,16 @@ class JestPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       error,
+      isTestSessionEmpty,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       onDone,
     }) => {
       const finishSession = () => {
+        if (isTestSessionEmpty && !isSuitesSkipped) {
+          this.testSessionSpan.context()._trace.isRecording = false
+        }
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 

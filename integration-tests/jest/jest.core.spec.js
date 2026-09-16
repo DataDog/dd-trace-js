@@ -621,6 +621,37 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
+      it('does not report a native session when Jest finds no tests', async () => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+
+        childProcess = exec(
+          `${runTestsCommand} --passWithNoTests`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              TESTS_TO_RUN: 'sanitized-no-matching-test',
+              USE_JEST_RUN: 'true',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(childProcess, undefined, payloads => {
+          const events = payloads
+            .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+            .flatMap(({ payload }) => payload.events)
+
+          assert.ok(!events.some(({ type }) => type === 'test_session_end'))
+          assert.ok(!events.some(({ type }) => type === 'test_module_end'))
+        })
+        assert.strictEqual(childProcess.exitCode, 0)
+      })
+
       const assertCustomEnvironmentReportsTests = async (customTestEnvironment) => {
         const envVars = reportingOption === 'agentless'
           ? getCiVisAgentlessConfig(receiver.port)

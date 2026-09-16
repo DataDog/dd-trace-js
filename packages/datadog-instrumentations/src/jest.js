@@ -3223,15 +3223,18 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       // Determine session status after EFD and quarantine checks have potentially modified success
+      const hasNoTests = numTotalTests === 0 && numTotalTestSuites === 0
+      const isTestSessionEmpty = result.results.success && hasNoTests
       let status, error
       if (result.results.success) {
-        status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
+        status = isTestSessionEmpty ? 'skip' : 'pass'
       } else {
         status = 'fail'
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
+        isTestSessionEmpty,
         ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
       }))
 
@@ -3241,7 +3244,7 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       recordTestManagementExecutionsFromJestResults(result, quarantineIgnoredNames)
-      const allTestsSkipped = isSuitesSkipped && numTotalTests === 0 && numTotalTestSuites === 0
+      const allTestsSkipped = isSuitesSkipped && hasNoTests
       logSessionSummary(
         ignoredFailuresSummary,
         getAttemptToFixExecutionsFromJestResults(result),
