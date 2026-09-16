@@ -10,6 +10,14 @@ const ManagedPrompt = require('./prompt')
 
 const PROMPTS_PATH = '/api/unstable/llm-obs/v1/prompts'
 const SOURCE_CACHE = 'cache'
+const ERROR_NAMES = {
+  API: 'PromptAPIError',
+  AUTH: 'PromptAuthError',
+  CONFLICT: 'PromptConflictError',
+  NOT_FOUND: 'PromptNotFoundError',
+  SERVER: 'PromptServerError',
+  VALIDATION: 'PromptValidationError',
+}
 
 /**
  * @typedef {object} PromptRequest
@@ -102,12 +110,12 @@ function detailFromBody (body) {
 }
 
 function errorName (status) {
-  if (status === 400) return 'PromptValidationError'
-  if (status === 401 || status === 403) return 'PromptAuthError'
-  if (status === 404) return 'PromptNotFoundError'
-  if (status === 409) return 'PromptConflictError'
-  if (status >= 500) return 'PromptServerError'
-  return 'PromptAPIError'
+  if (status === 400) return ERROR_NAMES.VALIDATION
+  if (status === 401 || status === 403) return ERROR_NAMES.AUTH
+  if (status === 404) return ERROR_NAMES.NOT_FOUND
+  if (status === 409) return ERROR_NAMES.CONFLICT
+  if (status >= 500) return ERROR_NAMES.SERVER
+  return ERROR_NAMES.API
 }
 
 class PromptAPIError extends Error {
@@ -178,11 +186,11 @@ class PromptManager {
 
   #requireOrigin () {
     if (!this.origin) {
-      throw new PromptAPIError(0, 'DD_SITE is invalid for prompt operations', 'PromptAuthError')
+      throw new PromptAPIError(0, 'DD_SITE is invalid for prompt operations', ERROR_NAMES.AUTH)
     }
     const { hostname, protocol } = new URL(this.origin)
     if (protocol !== 'https:' && !(protocol === 'http:' && isLoopbackHost(hostname))) {
-      throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', 'PromptAuthError')
+      throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', ERROR_NAMES.AUTH)
     }
     return this.origin
   }
@@ -192,7 +200,7 @@ class PromptManager {
    */
   #requireApiKey () {
     if (!this.config.DD_API_KEY) {
-      throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', 'PromptAuthError')
+      throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', ERROR_NAMES.AUTH)
     }
     return this.config.DD_API_KEY
   }
@@ -487,7 +495,7 @@ class PromptManager {
       const origin = this.#requireOrigin()
       const apiKey = this.#requireApiKey()
       if (requireAppKey && !this.config.DD_APP_KEY) {
-        throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', 'PromptAuthError')
+        throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', ERROR_NAMES.AUTH)
       }
 
       const headers = {
@@ -512,7 +520,7 @@ class PromptManager {
         const data = JSON.parse(responseBody)
         return Array.isArray(data) ? data.map(normalizeItem) : normalizeItem(data)
       } catch {
-        throw new PromptAPIError(response.status, 'invalid JSON in response body', 'PromptServerError')
+        throw new PromptAPIError(response.status, 'invalid JSON in response body', ERROR_NAMES.SERVER)
       }
     } catch (error) {
       const promptError = error instanceof PromptAPIError ? error : new PromptAPIError(0, error.message)
@@ -570,7 +578,7 @@ class PromptManager {
     }
     if (options.title === undefined && options.description === undefined) {
       const error = new PromptAPIError(0, 'At least one of title or description must be provided',
-        'PromptValidationError')
+        ERROR_NAMES.VALIDATION)
       throw this.#recordCrudError('PATCH', error)
     }
     const body = {}
@@ -596,7 +604,7 @@ class PromptManager {
     }
     if (options.description === undefined && options.envIds === undefined) {
       const error = new PromptAPIError(0, 'At least one of description or envIds must be provided',
-        'PromptValidationError')
+        ERROR_NAMES.VALIDATION)
       throw this.#recordCrudError('PATCH', error)
     }
     const body = {}
