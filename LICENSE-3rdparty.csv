@@ -35,7 +35,7 @@
 "@oxc-parser/binding-linux-ppc64-gnu","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-linux-riscv64-gnu","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-linux-riscv64-musl","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
-"@oxc-parser/binding-linux-s390x-gnu","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
+"@oxc-parser/binding-linux-s390x-gnu","npm:@oxc-parser/binding-linux-s390x-gnu","[]","[]"
 "@oxc-parser/binding-linux-x64-gnu","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-linux-x64-musl","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
 "@oxc-parser/binding-openharmony-arm64","https://github.com/oxc-project/oxc","['MIT']","['Boshen and oxc contributors']"
