@@ -140,7 +140,7 @@ versions.forEach((version) => {
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createParallelIt(global.it, { concurrency: 4, withReceiver: true })
 
     let cwd, webAppPort, webAppServer
 
