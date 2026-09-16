@@ -3,6 +3,7 @@
 const nodeConsole = require('node:console')
 
 const { Console } = nodeConsole
+const nativeStderrDescriptor = Object.getOwnPropertyDescriptor(nodeConsole, '_stderr')
 
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('./helpers/instrument')
@@ -148,15 +149,13 @@ function publishRecords (records) {
 
 /**
  * @param {ConsoleRecord[]} records
+ * @param {boolean} lastOnly
  * @returns {ConsoleRecord | undefined}
  */
-function combineLastRecord (records) {
+function combineRecords (records, lastOnly) {
   if (records.length === 0) return
 
-  let start = 0
-  for (let i = 0; i < records.length - 1; i++) {
-    if (records[i].message.endsWith('\n')) start = i + 1
-  }
+  const start = lastOnly ? records.length - 1 : 0
   let message = ''
   for (let i = start; i < records.length; i++) {
     message += records[i].message
@@ -173,6 +172,11 @@ function wrapConsole (target, captureLogHolder) {
   const targetType = typeof target
   if ((targetType !== 'object' && targetType !== 'function') || target === null) return
   if (wrappedTargets.has(target)) return
+
+  let lastRecordOnly = target === nodeConsole || target === Console.prototype
+  try {
+    lastRecordOnly ||= Boolean(Object.getOwnPropertyDescriptor(target, '_stderrErrorHandler'))
+  } catch {}
 
   wrappedTargets.add(target)
   for (const method of methods) {
@@ -203,7 +207,10 @@ function wrapConsole (target, captureLogHolder) {
           stream = streamDescriptor?.value
           // Node's global console owns a known lazy accessor. Avoid invoking arbitrary replacement
           // console accessors, but preserve capture for the built-in global console.
-          if (!stream && target === nodeConsole) stream = target._stderr
+          if (!stream && target === nodeConsole && typeof nativeStderrDescriptor?.get === 'function' &&
+            descriptorsMatch(streamDescriptor, nativeStderrDescriptor)) {
+            stream = nativeStderrDescriptor.get.call(target)
+          }
           writeDescriptor = stream && Object.getOwnPropertyDescriptor(stream, 'write')
           const isUnwrappableAccessor = writeDescriptor &&
             !Object.hasOwn(writeDescriptor, 'value') &&
@@ -293,12 +300,12 @@ function wrapConsole (target, captureLogHolder) {
 
           let consoleRecord
           if (completed) {
-            // A replacement console may split one record across writes. Combine the final
-            // newline-delimited group, excluding earlier output produced while formatting.
+            // A replacement console may split one record across writes. Node's Console instead
+            // uses one final write, after any unrelated writes produced while formatting.
             if (capture.ownRecords.length > 0) {
-              consoleRecord = combineLastRecord(capture.ownRecords)
+              consoleRecord = combineRecords(capture.ownRecords, lastRecordOnly)
             } else if (capture.observedRecords.length > 0) {
-              consoleRecord = combineLastRecord(capture.observedRecords)
+              consoleRecord = combineRecords(capture.observedRecords, lastRecordOnly)
             }
           }
           if (consoleRecord) capture.records.push(consoleRecord)
@@ -307,7 +314,8 @@ function wrapConsole (target, captureLogHolder) {
       }
     }
     try {
-      shimmer.wrap(target, method, wrapMethod)
+      descriptor.value = shimmer.wrapFunction(descriptor.value, wrapMethod)
+      Object.defineProperty(target, method, descriptor)
     } catch {}
   }
 }
@@ -326,7 +334,9 @@ function wrapJestBufferedConsole (BufferedConsole, captureLogHolder) {
     const shouldPublish = !isPublishing && methodSet.has(method) && logSubmissionCh.hasSubscribers
     if (shouldPublish) {
       const activeRecord = activeCapture?.observedRecords.at(-1)
-      const isActiveWrite = activeRecord?.writeId === activeWriteId && activeRecord.method === method
+      const isActiveWrite = activeRecord?.writeId === activeWriteId &&
+        activeRecord.method === method &&
+        (activeRecord.message === message || activeRecord.message === `${message}\n`)
       const writeId = isActiveWrite ? activeWriteId : ++nextWriteId
       const record = createRecord(method, message, writeId, captureLogHolder)
       if (activeCapture) {
