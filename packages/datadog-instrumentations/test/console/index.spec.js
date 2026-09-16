@@ -365,6 +365,33 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [])
   })
 
+  it('does not read inherited accessors when the stream cannot be wrapped', () => {
+    const originalWrite = sinon.stub()
+    let writeReads = 0
+    const streamPrototype = {}
+    Object.defineProperty(streamPrototype, 'write', {
+      configurable: true,
+      get () {
+        if (++writeReads > 1) throw new Error('unexpected write read')
+        return originalWrite
+      },
+    })
+    const stream = Object.preventExtensions(Object.create(streamPrototype))
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.strictEqual(writeReads, 1)
+    sinon.assert.calledOnceWithExactly(originalWrite, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('restores a stream write when descriptor verification fails', () => {
     const originalWrite = sinon.stub()
     let descriptorReads = 0

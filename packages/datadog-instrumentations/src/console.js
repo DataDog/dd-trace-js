@@ -167,7 +167,8 @@ function wrapConsole (target, captureLogHolder) {
           const isUnwrappableAccessor = writeDescriptor &&
             !Object.hasOwn(writeDescriptor, 'value') &&
             !writeDescriptor.configurable
-          if (!isUnwrappableAccessor) {
+          const canInstallWrite = Boolean(stream && (writeDescriptor || Object.isExtensible(stream)))
+          if (!isUnwrappableAccessor && canInstallWrite) {
             let originalWriteDescriptor = writeDescriptor
             if (!originalWriteDescriptor && stream) {
               originalWriteDescriptor = getPropertyDescriptor(Object.getPrototypeOf(stream), 'write')
