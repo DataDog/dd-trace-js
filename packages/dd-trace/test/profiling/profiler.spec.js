@@ -263,14 +263,50 @@ describe('profiler', function () {
       assert.match(consoleLogger.error.firstCall.args[0].message, /No profile types configured/)
     })
 
-    it('should stop when starting failed', async () => {
-      wallProfiler.start.throws()
+    it('should stop a partial start and not retry when starting failed', async () => {
+      spaceProfiler.start.throws()
 
-      await profiler.start(makeStartOptions({ logger }))
+      const firstResult = await profiler.start(makeStartOptions({ logger }))
+      const secondResult = await profiler.start(makeStartOptions({ logger }))
 
+      assert.strictEqual(firstResult, false)
+      assert.strictEqual(secondResult, false)
+      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
       sinon.assert.calledOnce(consoleLogger.error)
+    })
+
+    it('should report an early setup failure as stopped and not retry', () => {
+      const setupError = new Error('boom')
+      buildProfilingRuntimeError = setupError
+
+      const firstResult = profiler.start(makeStartOptions({ logger }))
+      const secondResult = profiler.start(makeStartOptions({ logger }))
+
+      assert.strictEqual(firstResult, false)
+      assert.strictEqual(secondResult, false)
+      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+      sinon.assert.calledOnceWithExactly(consoleLogger.error, setupError)
+    })
+
+    it('should contain cleanup errors after a partial start failure', () => {
+      const startError = new Error('start failed')
+      const stopError = new Error('stop failed')
+      spaceProfiler.start.throws(startError)
+      wallProfiler.stop.throws(stopError)
+
+      const result = profiler.start(makeStartOptions({ logger }))
+
+      assert.strictEqual(result, false)
+      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.calledTwice(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], startError)
+      assert.strictEqual(consoleLogger.error.secondCall.args[0], stopError)
     })
 
     it('should stop when capturing failed', async () => {
@@ -411,8 +447,7 @@ describe('profiler', function () {
       await Promise.resolve()
 
       // The deferred restart calls start() again once the shutdown collection settles; make that
-      // call fail during setup, outside of start()'s own try/catch, the way buildProfilingRuntime()
-      // or the pprof initialization could.
+      // call fail during setup.
       const setupError = new Error('boom')
       buildProfilingRuntimeError = setupError
 
@@ -422,6 +457,12 @@ describe('profiler', function () {
 
       sinon.assert.calledOnce(consoleLogger.error)
       assert.strictEqual(consoleLogger.error.firstCall.args[0], setupError)
+      assert.strictEqual(profiler.enabled, false)
+
+      const retryResult = profiler.start(makeStartOptions())
+      assert.strictEqual(retryResult, false)
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
     })
 
     async function shouldExportProfiles (compression, magicBytes) {
