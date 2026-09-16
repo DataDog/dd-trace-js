@@ -253,6 +253,11 @@ function patchRealtimeTransport (prototype) {
     try {
       return close.apply(this, arguments)
     } finally {
+      // In a `finally` deliberately. Every realtime transport wraps `socket.close()` in its own
+      // try/catch and routes a failure to `_onError` (which rejects a promise rather than
+      // rethrowing), so this call does not throw and the two placements are equivalent today —
+      // but if that ever changes, finalizing is what keeps the session from leaking. The socket's
+      // close event is the other half of that guarantee.
       connection?.finalize()
     }
   })
