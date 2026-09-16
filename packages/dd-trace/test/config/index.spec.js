@@ -79,6 +79,7 @@ describe('Config', () => {
     const loadHelper = proxyquire.noPreserveCache()
     const configHelper = loadHelper('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
+      '../../../../version': { DD_MAJOR: ddMajor },
     })
     const loadServerless = proxyquire.noPreserveCache()
     const serverless = loadServerless('../../src/serverless', {})
@@ -4432,20 +4433,22 @@ describe('Config', () => {
   })
 
   context('standalone', () => {
-    const itLegacyStandalone = DD_MAJOR < 6 ? it : it.skip
     const itV6Standalone = DD_MAJOR < 6 ? it.skip : it
 
-    itLegacyStandalone('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
+    it('should disable apm tracing with legacy DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '1'
 
-      const config = getConfig()
+      const config = getConfig(undefined, { ddMajor: 5 })
       assert.strictEqual(config.apmTracingEnabled, false)
     })
 
-    itLegacyStandalone('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
+    it('should disable apm tracing with legacy experimental.appsec.standalone.enabled option', () => {
       process.env.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = '0'
 
-      const config = getConfig({ experimental: { appsec: { standalone: { enabled: true } } } })
+      const config = getConfig(
+        { experimental: { appsec: { standalone: { enabled: true } } } },
+        { ddMajor: 5 }
+      )
       assert.strictEqual(config.apmTracingEnabled, false)
     })
 
