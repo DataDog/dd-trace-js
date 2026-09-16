@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const { createPrompts } = require('./prompts')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -73,6 +74,11 @@ class LLMObs extends NoopLLMObs {
     return createExperiments(this._config, this)
   }
 
+  get prompts () {
+    this._prompts ??= createPrompts(this._config)
+    return this._prompts
+  }
+
   enable (options = {}) {
     logger.warn(
       'Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. ' +
@@ -85,6 +91,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     logger.debug('Enabling LLMObs')
+    this._prompts = undefined
 
     // skipDefault: only an explicit DD_LLMOBS_ENABLED=false blocks enable(); an unset value
     // (its default is false) must still allow this programmatic opt-in.
@@ -116,6 +123,7 @@ class LLMObs extends NoopLLMObs {
     }
 
     logger.debug('Disabling LLMObs')
+    this._prompts = undefined
 
     this._config.llmobs.DD_LLMOBS_ENABLED = false
 

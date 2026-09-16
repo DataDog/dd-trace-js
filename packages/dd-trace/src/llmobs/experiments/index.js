@@ -1,13 +1,42 @@
 'use strict'
 
+const fs = require('node:fs')
+
 const log = require('../../log')
+const { PromptOptimization } = require('../prompt-optimization')
 const { ExperimentsClient } = require('./client')
-const { Dataset } = require('./dataset')
+const { readCsvRecords } = require('./csv')
+const { Dataset, DatasetRecord } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
+const { experimentSummaryFromResource, parseExperimentEvents } = require('./pull')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
 const DEFAULT_PROJECT_NAME = 'default-project'
+
+/**
+ * @param {string[] | undefined} columns
+ * @param {string} label
+ * @returns {string[]}
+ */
+function normalizeColumns (columns, label) {
+  if (columns === undefined || columns === null) return []
+  if (!Array.isArray(columns) || columns.some(column => typeof column !== 'string')) {
+    throw new TypeError(`${label} must be an array of column names`)
+  }
+  return columns
+}
+
+/**
+ * @param {Record<string, string>} row
+ * @param {string[]} columns
+ * @returns {Record<string, string>}
+ */
+function pickColumns (row, columns) {
+  const picked = {}
+  for (const column of columns) picked[column] = row[column]
+  return picked
+}
 
 // Poll `attempt` with exponential backoff until it returns true or the time
 // budget is spent. Used for eventually-consistent reads (pullDataset).
@@ -189,6 +218,29 @@ class Experiments {
   }
 
   /**
+   * Build a prompt optimization that iteratively improves `options.config.prompt`
+   * by running experiments over `options.dataset`. Call `run()` to execute it.
+   *
+   * Experimental: the API may change in a future minor release.
+   *
+   * @param {object} options
+   * @returns {PromptOptimization}
+   */
+  optimizePrompt (options) {
+    const datasetProjectName = options?.dataset?.projectName?.()
+    if (options?.projectName !== undefined &&
+        datasetProjectName !== undefined &&
+        options.projectName !== datasetProjectName) {
+      throw new Error(
+        `Prompt optimization project '${options.projectName}' does not match dataset project '${datasetProjectName}'`
+      )
+    }
+    const projectName = options?.projectName ?? datasetProjectName ?? this.#projectName
+    const client = this.#clientForOperation(projectName)
+    return new PromptOptimization(options, { experiments: this, client, projectName })
+  }
+
+  /**
    * Start an externally-driven experiment for eval frameworks that already own
    * task execution. Call submitSpan() once per completed row, then
    * submitEvaluationMetrics() with the generated span id.
@@ -203,6 +255,189 @@ class Experiments {
       : options
     return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
+  }
+
+  /**
+   * Publish an LLM-as-a-judge evaluator as a custom evaluator configuration so it
+   * can run server-side. The evaluator is published disabled.
+   *
+   * @param {{ buildPublishPayload: (mlApp: string, evalName?: string,
+   *   variableMapping?: Record<string, string>) => Record<string, unknown> }} evaluator
+   * @param {object} [options]
+   * @param {string} [options.agentService] Agent service (ML app) the evaluator is attached to.
+   *   Defaults to the tracer's `llmobs.mlApp` / `service`.
+   * @param {string} [options.mlApp] Deprecated alias of `agentService`.
+   * @param {string} [options.evalName] Published name; defaults to `evaluator.name`.
+   * @param {Record<string, string>} [options.variableMapping] Renames `{{placeholders}}` in the prompt.
+   * @returns {Promise<{ uiUrl: string }>}
+   */
+  async publishEvaluator (evaluator, { agentService, mlApp, evalName, variableMapping } = {}) {
+    if (evaluator === null || typeof evaluator !== 'object' || typeof evaluator.buildPublishPayload !== 'function') {
+      throw new TypeError('evaluator must be a publishable evaluator such as LLMJudge')
+    }
+    if (mlApp !== undefined && agentService === undefined) {
+      log.warn('LLMObs experiments: publishEvaluator option `mlApp` is deprecated, use `agentService`')
+    }
+    const resolved = agentService ?? mlApp ?? this.#config.llmobs?.mlApp ?? this.#config.service
+    if (typeof resolved !== 'string' || resolved.trim() === '') {
+      throw new Error('`agentService` must be provided as a non-empty string.')
+    }
+    const application = resolved.trim()
+    const evaluation = evaluator.buildPublishPayload(application, evalName, variableMapping)
+    const client = this.#clientForOperation()
+    await client.publishCustomEvaluator(evaluation)
+    const query = new URLSearchParams({ evalName: evaluation.eval_name, applicationName: application })
+    return { uiUrl: `${client.appBase}/llm/evaluations/custom?${query.toString()}` }
+  }
+
+  /**
+   * Fetch a previously-run experiment by id, including its rows and evaluation metrics.
+   *
+   * @param {string} experimentId
+   * @returns {Promise<import('./pull').PulledExperiment>}
+   */
+  async pullExperiment (experimentId) {
+    if (typeof experimentId !== 'string' || experimentId === '') throw new Error('experimentId is required.')
+    const client = this.#clientForOperation()
+    const [meta, events] = await Promise.all([
+      client.getExperiment(experimentId),
+      client.getExperimentEvents(experimentId),
+    ])
+    const summary = experimentSummaryFromResource(meta)
+    const url = `${client.appBase}/llm/experiments/${summary.id}`
+    const taggedProjectName = summary.tags.project_name
+    return {
+      ...summary,
+      projectName: typeof taggedProjectName === 'string' ? taggedProjectName : this.#projectName,
+      url,
+      result: parseExperimentEvents(events, summary.id, url),
+    }
+  }
+
+  /**
+   * List experiments in a project, newest first.
+   *
+   * @param {object} [options]
+   * @param {string} [options.experimentName]
+   * @param {Record<string, unknown>} [options.metadataFilter] e.g. `{ tags: ['git.commit.sha:abc'] }`.
+   * @param {string[]} [options.parentExperimentIds]
+   * @param {string} [options.projectName] Defaults to the configured project.
+   * @param {number} [options.pageLimit] Page size (1-5000, default 100).
+   * @param {number} [options.maxResults] Stop after this many experiments (default: all pages).
+   * @returns {Promise<import('./pull').ExperimentSummary[]>}
+   */
+  async listExperiments ({
+    experimentName,
+    metadataFilter,
+    parentExperimentIds,
+    projectName,
+    pageLimit = 100,
+    maxResults,
+  } = {}) {
+    if (maxResults !== undefined && maxResults !== null && maxResults < 1) {
+      throw new Error(`max_results must be at least 1, got ${maxResults}`)
+    }
+    const client = this.#clientForOperation(projectName)
+    const resolvedProjectName = projectName ?? this.#projectName
+    let projectId
+    try {
+      projectId = await client.ensureProjectId()
+    } catch (err) {
+      throw new Error(`Failed to resolve project '${resolvedProjectName}' for listExperiments(): ${err.message}`)
+    }
+    if (!projectId) throw new Error(`Got no project ID for project '${resolvedProjectName}' in listExperiments()`)
+    const resources = await client.listExperiments({
+      experimentName,
+      metadataFilter,
+      parentExperimentIds,
+      projectId,
+      pageLimit,
+      maxResults,
+    })
+    return resources.map(experimentSummaryFromResource)
+  }
+
+  /**
+   * Create a dataset from a CSV file and bulk-upload its rows in one request.
+   *
+   * @param {object} options
+   * @param {string} options.csvPath
+   * @param {string} options.datasetName
+   * @param {string[]} options.inputDataColumns
+   * @param {string[]} [options.expectedOutputColumns]
+   * @param {string[]} [options.metadataColumns]
+   * @param {string} [options.csvDelimiter] Default `,`.
+   * @param {string} [options.description]
+   * @param {string} [options.projectName]
+   * @param {boolean} [options.deduplicate] Default `true`.
+   * @param {string} [options.idColumn] Column used as the record id.
+   * @returns {Promise<Dataset>}
+   */
+  async createDatasetFromCsv ({
+    csvPath,
+    datasetName,
+    inputDataColumns,
+    expectedOutputColumns,
+    metadataColumns,
+    csvDelimiter = ',',
+    description = '',
+    projectName,
+    deduplicate = true,
+    idColumn,
+  } = {}) {
+    if (typeof csvPath !== 'string' || csvPath === '') throw new Error('csvPath is required')
+    if (typeof datasetName !== 'string' || datasetName === '') throw new Error('datasetName is required')
+    const inputColumns = normalizeColumns(inputDataColumns, 'inputDataColumns')
+    if (inputColumns.length === 0) throw new Error('inputDataColumns must contain at least one column')
+    const outputColumns = normalizeColumns(expectedOutputColumns, 'expectedOutputColumns')
+    const metaColumns = normalizeColumns(metadataColumns, 'metadataColumns')
+
+    const { header, rows } = readCsvRecords(await fs.promises.readFile(csvPath, 'utf8'), csvDelimiter)
+    const headerSet = new Set(header)
+    const missingInput = inputColumns.filter(column => !headerSet.has(column))
+    if (missingInput.length > 0) {
+      throw new Error(`Input columns not found in CSV header: ${JSON.stringify(missingInput)}`)
+    }
+    const missingOutput = outputColumns.filter(column => !headerSet.has(column))
+    if (missingOutput.length > 0) {
+      throw new Error(`Expected output columns not found in CSV header: ${JSON.stringify(missingOutput)}`)
+    }
+    const missingMeta = metaColumns.filter(column => !headerSet.has(column))
+    if (missingMeta.length > 0) {
+      throw new Error(`Metadata columns not found in CSV header: ${JSON.stringify(missingMeta)}`)
+    }
+    if (idColumn && !headerSet.has(idColumn)) throw new Error(`ID column '${idColumn}' not found in CSV header`)
+
+    const records = rows.map(row => new DatasetRecord(
+      pickColumns(row, inputColumns),
+      pickColumns(row, outputColumns),
+      pickColumns(row, metaColumns),
+      idColumn ? row[idColumn] : null,
+      []
+    ))
+
+    const client = this.#clientForOperation(projectName)
+    const projectId = await client.ensureProjectId()
+    let created
+    try {
+      created = await client.createDataset(projectId, { name: datasetName, description })
+    } catch (err) {
+      throw new Error(`Failed to create dataset '${datasetName}': ${err.message}`)
+    }
+    const datasetId = created.id()
+    if (!datasetId) throw new Error(`Failed to create dataset '${datasetName}': backend response is missing dataset id`)
+    if (records.length > 0) await client.bulkUploadDatasetRecords(datasetId, records, deduplicate)
+
+    return Dataset.fromExisting(
+      client,
+      datasetName,
+      description,
+      datasetId,
+      projectId,
+      records,
+      created.latestVersion(),
+      created.latestVersion()
+    )
   }
 }
 

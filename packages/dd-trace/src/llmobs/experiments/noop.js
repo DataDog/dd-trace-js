@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../../log')
+const { NoopPromptOptimization } = require('../prompt-optimization/noop')
 const { ExternalExperiment } = require('./experiment')
 
 const NOOP_EXPERIMENT_ID = '00000000-0000-0000-0000-000000000000'
@@ -261,6 +262,11 @@ class NoopExperiments {
     return new NoopExperiment(options.name)
   }
 
+  optimizePrompt (options = {}) {
+    this.#warn()
+    return new NoopPromptOptimization(options)
+  }
+
   /**
    * @param {object} options
    * @returns {Promise<ExternalExperiment>}
@@ -268,6 +274,60 @@ class NoopExperiments {
   startExperiment (options = {}) {
     this.#warn()
     return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
+  }
+
+  /**
+   * @returns {Promise<{ uiUrl: null }>}
+   */
+  publishEvaluator () {
+    this.#warn()
+    return Promise.resolve({ uiUrl: null })
+  }
+
+  /**
+   * @param {string} experimentId
+   * @returns {Promise<object>}
+   */
+  pullExperiment (experimentId = '') {
+    this.#warn()
+    return Promise.resolve({
+      id: experimentId,
+      name: '',
+      experiment: '',
+      projectId: '',
+      projectName: '',
+      datasetId: '',
+      datasetVersion: 0,
+      description: '',
+      config: {},
+      runCount: 0,
+      tags: {},
+      parentExperimentId: null,
+      aggregateData: null,
+      status: null,
+      error: null,
+      createdAt: null,
+      updatedAt: null,
+      url: null,
+      result: { experimentId: null, rows: [], summaryEvaluations: {}, runs: [], url: null },
+    })
+  }
+
+  /**
+   * @returns {Promise<never[]>}
+   */
+  listExperiments () {
+    this.#warn()
+    return Promise.resolve([])
+  }
+
+  /**
+   * @param {{ datasetName?: string, description?: string }} [options]
+   * @returns {Promise<NoopDataset>}
+   */
+  createDatasetFromCsv (options = {}) {
+    this.#warn()
+    return Promise.resolve(new NoopDataset(options.datasetName, { description: options.description }))
   }
 }
 
