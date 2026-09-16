@@ -19,7 +19,8 @@ class AgentlessExporter {
   #timer
   #config
 
-  computesClientStats = false
+  /** @type {'disabled'|'javascript'|'native'} */
+  clientStatsMode = 'disabled'
 
   /**
    * @param {object} config - Configuration object
@@ -33,6 +34,10 @@ class AgentlessExporter {
     const site = config.site ?? 'datadoghq.com'
     let stats
 
+    if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      this.clientStatsMode = 'javascript'
+    }
+
     try {
       // Agentless traffic carries the Datadog API key, so the intake is always an https endpoint
       // derived from the site; never config.url (the agent's cleartext http) or the key leaks.
@@ -40,14 +45,14 @@ class AgentlessExporter {
       if (
         supportsAgentlessStats &&
         config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
-        !config.appsec?.standalone?.enabled &&
+        !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED &&
         !config.OTEL_TRACES_SPAN_METRICS_ENABLED
       ) {
         stats = {
           endpoint: computeStatsIntakeUrl(site),
           intervalMs: (config.stats.interval ?? 10) * 1000,
         }
-        this.computesClientStats = true
+        this.clientStatsMode = 'native'
       }
     } catch (err) {
       log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, err.message)
@@ -136,7 +141,7 @@ class AgentlessExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
     try {
-      this._writer.flush(done)
+      this._writer.flushAndDrainStats(done)
     } catch (err) {
       log.error('Failed to flush traces: %s', err.message)
       done()

@@ -182,7 +182,7 @@ describe('AgentlessWriter data pipeline', () => {
     await new Promise(resolve => writer.flush(resolve))
     metadata.env = 'next-env'
     writer.append([])
-    await new Promise(resolve => writer.flush(resolve))
+    await new Promise(resolve => writer.flushAndDrainStats(resolve))
     const received = await request
     const traceRequest = received.find(({ path }) => path === '/api/v2/spans')
     const statsRequest = received.find(({ path }) => path === '/api/v0.2/stats')

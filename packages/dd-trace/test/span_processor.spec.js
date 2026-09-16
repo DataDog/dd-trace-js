@@ -121,12 +121,28 @@ describe('SpanProcessor', () => {
       './span_sampler': SpanSampler,
     })
     config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
-    exporter.computesClientStats = true
+    exporter.clientStatsMode = 'native'
 
     const nativeProcessor = new NativeSpanProcessor(exporter, prioritySampler, config)
 
     sinon.assert.notCalled(SpanStatsProcessor)
     assert.strictEqual(nativeProcessor._stats, undefined)
+  })
+
+  it('should leave client stats disabled when requested by the exporter', () => {
+    const SpanStatsProcessor = sinon.stub()
+    const DisabledSpanProcessor = proxyquire('../src/span_processor', {
+      './span_stats': { SpanStatsProcessor },
+      './span_format': spanFormat,
+      './span_sampler': SpanSampler,
+    })
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    exporter.clientStatsMode = 'disabled'
+
+    const disabledProcessor = new DisabledSpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    assert.strictEqual(disabledProcessor._stats, undefined)
   })
 
   it('should retain JavaScript client stats for other exporters', () => {
@@ -143,22 +159,6 @@ describe('SpanProcessor', () => {
 
     sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, undefined)
     assert.strictEqual(agentProcessor._stats, statsProcessor)
-  })
-
-  it('should leave client stats disabled in AppSec standalone mode', () => {
-    const SpanStatsProcessor = sinon.stub()
-    const StandaloneSpanProcessor = proxyquire('../src/span_processor', {
-      './span_stats': { SpanStatsProcessor },
-      './span_format': spanFormat,
-      './span_sampler': SpanSampler,
-    })
-    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
-    config.appsec.standalone = { enabled: true }
-
-    const standaloneProcessor = new StandaloneSpanProcessor(exporter, prioritySampler, config)
-
-    sinon.assert.notCalled(SpanStatsProcessor)
-    assert.strictEqual(standaloneProcessor._stats, undefined)
   })
 
   it('should generate sampling priority when sampling manually', () => {

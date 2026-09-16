@@ -119,6 +119,51 @@ describe('Tracer', () => {
     sinon.assert.calledWith(SpanProcessor, agentExporter, prioritySampler, config)
   })
 
+  it('should not send agentless client stats to the Agent when native stats are unavailable', () => {
+    const SpanStatsProcessor = sinon.stub()
+    const ActualSpanProcessor = proxyquire('../../src/span_processor', {
+      './span_stats': { SpanStatsProcessor },
+    })
+    const writer = {
+      append: sinon.stub(),
+      flush: sinon.stub(),
+      flushAndDrainStats: sinon.stub(),
+      setUrl: sinon.stub(),
+    }
+    const AgentlessExporter = proxyquire('../../src/exporters/agentless', {
+      '@datadog/libdatadog': { supportsAgentlessStats: false },
+      './writer': sinon.stub().returns(writer),
+    })
+    const AgentlessTracer = proxyquire('../../src/opentracing/tracer', {
+      './span': Span,
+      './span_context': SpanContext,
+      '../priority_sampler': PrioritySampler,
+      '../span_processor': ActualSpanProcessor,
+      './propagation/text_map': TextMapPropagator,
+      './propagation/http': HttpPropagator,
+      './propagation/binary': BinaryPropagator,
+      './propagation/log': LogPropagator,
+      '../log': log,
+      '../exporter': sinon.stub().returns(AgentlessExporter),
+    })
+    const ddTrace = globalThis[Symbol.for('dd-trace')]
+    const beforeExitHandlers = ddTrace.beforeExitHandlers
+    ddTrace.beforeExitHandlers = new Set()
+    config.appsec = {}
+    config.flushMinSpans = 1
+    config.sampler = {}
+    config.stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+
+    try {
+      tracer = new AgentlessTracer(config, prioritySampler)
+    } finally {
+      ddTrace.beforeExitHandlers = beforeExitHandlers
+    }
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    assert.strictEqual(tracer._exporter.clientStatsMode, 'disabled')
+  })
+
   it('should allow to configure an alternative prioritySampler', () => {
     const sampler = {}
     tracer = new Tracer(config, sampler)

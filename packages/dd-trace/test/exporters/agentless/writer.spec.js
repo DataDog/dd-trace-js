@@ -161,6 +161,61 @@ describe('AgentlessWriter', () => {
     assert.strictEqual(flushed, true)
   })
 
+  it('drains native stats after pending traces complete', async () => {
+    exporter.sendV04.resetBehavior()
+    exporter.flush.resetBehavior()
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    let drained = false
+    const flush = new Promise(resolve => writer.flushAndDrainStats(() => {
+      drained = true
+      resolve()
+    }))
+
+    sinon.assert.notCalled(exporter.flush)
+    exporter.sendV04.firstCall.args[1]()
+    sinon.assert.calledOnceWithExactly(exporter.flush, sinon.match.func, log)
+    assert.strictEqual(drained, false)
+    exporter.flush.firstCall.args[0]()
+    await flush
+    assert.strictEqual(drained, true)
+  })
+
+  it('drains native stats when no traces are pending', async () => {
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    await new Promise(resolve => writer.flush(resolve))
+    exporter.flush.resetHistory()
+    encoder.count.returns(0)
+
+    await new Promise(resolve => writer.flushAndDrainStats(resolve))
+
+    sinon.assert.calledOnceWithExactly(exporter.flush, sinon.match.func, log)
+    sinon.assert.calledOnce(exporter.sendV04)
+  })
+
+  it('waits for in-flight trace deliveries before draining native stats', async () => {
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+    await new Promise(resolve => writer.flush(resolve))
+    exporter.flush.resetHistory()
+    exporter.flush.resetBehavior()
+    exporter.sendV04.resetBehavior()
+
+    writer.flush()
+    encoder.count.returns(0)
+    let drained = false
+    const flush = new Promise(resolve => writer.flushAndDrainStats(() => {
+      drained = true
+      resolve()
+    }))
+
+    sinon.assert.notCalled(exporter.flush)
+    exporter.sendV04.secondCall.args[1]()
+    sinon.assert.calledOnceWithExactly(exporter.flush, sinon.match.func, log)
+    assert.strictEqual(drained, false)
+    exporter.flush.firstCall.args[0]()
+    await flush
+    assert.strictEqual(drained, true)
+  })
+
   it('contains synchronous data-pipeline construction failures', async () => {
     const error = { toString: () => 'exporter unavailable' }
     createAgentlessExporter.callsFake(() => { throw error })
@@ -230,6 +285,8 @@ describe('AgentlessWriter', () => {
   })
 
   it('reuses the pipeline exporter while its endpoint and API key are unchanged', async () => {
+    const URLConstructor = sinon.spy(globalThis.URL)
+    sinon.replace(globalThis, 'URL', URLConstructor)
     writer = new AgentlessWriter({ url: new URL('https://intake.example') })
 
     await new Promise(resolve => writer.flush(resolve))
@@ -237,6 +294,7 @@ describe('AgentlessWriter', () => {
 
     sinon.assert.calledOnce(createAgentlessExporter)
     sinon.assert.calledTwice(exporter.sendV04)
+    sinon.assert.calledOnce(URLConstructor)
   })
 
   it('recreates the pipeline exporter when the intake URL changes', async () => {
