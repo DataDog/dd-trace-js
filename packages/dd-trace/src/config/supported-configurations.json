@@ -247,6 +247,7 @@
       {
         "implementation": "E",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.eventTracking.mode",
           "experimental.appsec.eventTracking.mode"
@@ -261,6 +262,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.enabled",
           "experimental.appsec.extendedHeadersCollection.enabled"
@@ -273,6 +275,7 @@
       {
         "implementation": "C",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.enabled",
           "appsec",
@@ -286,6 +289,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateGraphql",
           "experimental.appsec.blockedTemplateGraphql"
@@ -298,6 +302,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.redaction",
           "experimental.appsec.extendedHeadersCollection.redaction"
@@ -310,6 +315,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateHtml",
           "experimental.appsec.blockedTemplateHtml"
@@ -322,6 +328,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateJson",
           "experimental.appsec.blockedTemplateJson"
@@ -334,6 +341,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.maxHeaders",
           "experimental.appsec.extendedHeadersCollection.maxHeaders"
@@ -346,6 +354,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.maxStackTraces",
           "experimental.appsec.stackTrace.maxStackTraces"
@@ -360,6 +369,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.maxDepth",
           "experimental.appsec.stackTrace.maxDepth"
@@ -374,6 +384,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.obfuscatorKeyRegex",
           "experimental.appsec.obfuscatorKeyRegex"
@@ -385,6 +396,7 @@
       {
         "implementation": "G",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.obfuscatorValueRegex",
           "experimental.appsec.obfuscatorValueRegex"
@@ -396,6 +408,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rasp.bodyCollection",
           "experimental.appsec.rasp.bodyCollection"
@@ -408,6 +421,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rasp.enabled",
           "experimental.appsec.rasp.enabled"
@@ -419,6 +433,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rules",
           "experimental.appsec.rules"
@@ -438,6 +453,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.enabled",
           "experimental.appsec.stackTrace.enabled"
@@ -449,6 +465,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rateLimit",
           "experimental.appsec.rateLimit"
@@ -460,6 +477,7 @@
       {
         "implementation": "E",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.wafTimeout",
           "experimental.appsec.wafTimeout"
@@ -837,6 +855,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "appsec",
         "default": "false",
         "configurationNames": [
           "experimental.appsec.standalone.enabled"
@@ -1123,6 +1142,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.dbRowsToTaint",
           "experimental.iast.dbRowsToTaint"
@@ -1134,6 +1154,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.deduplicationEnabled",
           "experimental.iast.deduplicationEnabled"
@@ -1145,6 +1166,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.enabled",
           "iast",
@@ -1158,6 +1180,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.maxConcurrentRequests",
           "experimental.iast.maxConcurrentRequests"
@@ -1169,6 +1192,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.maxContextOperations",
           "experimental.iast.maxContextOperations"
@@ -1180,6 +1204,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionEnabled",
           "experimental.iast.redactionEnabled"
@@ -1191,6 +1216,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionNamePattern",
           "experimental.iast.redactionNamePattern"
@@ -1202,6 +1228,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionValuePattern",
           "experimental.iast.redactionValuePattern"
@@ -1213,6 +1240,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.requestSampling",
           "experimental.iast.requestSampling"
@@ -1234,6 +1262,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.stackTrace.enabled",
           "experimental.iast.stackTrace.enabled"
@@ -1245,6 +1274,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.telemetryVerbosity",
           "experimental.iast.telemetryVerbosity"

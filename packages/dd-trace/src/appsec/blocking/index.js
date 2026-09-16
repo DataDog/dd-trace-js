@@ -204,9 +204,9 @@ function handleResults (actions, req, res, rootSpan, abortController) {
  * @param {import('../../config/config-base')} [config] - Tracer configuration
  */
 function setTemplates (config) {
-  templates.html.body = config?.appsec?.blockedTemplateHtml
-  templates.json.body = config?.appsec?.blockedTemplateJson
-  templates.graphqlJson.body = config?.appsec?.blockedTemplateGraphql
+  templates.html.body = config?.appsec?.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
+  templates.json.body = config?.appsec?.DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+  templates.graphqlJson.body = config?.appsec?.DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON
 
   for (const type of Object.keys(templates)) {
     const template = templates[type]
