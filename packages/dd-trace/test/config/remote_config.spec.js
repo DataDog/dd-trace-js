@@ -125,11 +125,11 @@ describe('Tracing Remote Config', () => {
         sinon.assert.calledOnce(onConfigUpdated)
       })
 
-      it('should filter out unsupported keys without affecting allowlisted ones', () => {
+      it('should pass backend-validated settings through without a client allowlist', () => {
         enable(rc, config, onConfigUpdated)
 
         const handler = batchHandlers.get('APM_TRACING')
-        const sdkConfig = buildPayloadWithKeyCount(1000)
+        const sdkConfig = { DD_PROFILING_ENABLED: 'true' }
 
         const transaction = createTransaction([
           { id: 'config-1', file: { sdk_config: sdkConfigPayload(sdkConfig) } },
@@ -137,30 +137,7 @@ describe('Tracing Remote Config', () => {
 
         handler(transaction)
 
-        // A large number of unsupported keys must not crowd out an allowlisted one
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_ENABLED: 'true' })
-      })
-
-      it('should drop non-string allowlisted values instead of forwarding them', () => {
-        enable(rc, config, onConfigUpdated)
-
-        const handler = batchHandlers.get('APM_TRACING')
-
-        const transaction = createTransaction([
-          {
-            id: 'config-1',
-            file: {
-              sdk_config: sdkConfigPayload({
-                DD_TRACE_ENABLED: null,
-                DD_TRACE_SAMPLE_RATE: '0.5',
-              }),
-            },
-          },
-        ])
-
-        handler(transaction)
-
-        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, { DD_TRACE_SAMPLE_RATE: '0.5' })
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, sdkConfig)
       })
     })
   })
@@ -306,14 +283,6 @@ describe('Tracing Remote Config', () => {
     })
   })
 })
-
-function buildPayloadWithKeyCount (keyCount) {
-  const payload = { DD_TRACE_ENABLED: 'true' }
-  for (let i = 1; i < keyCount; i++) {
-    payload[`KEY_${i}`] = 'value'
-  }
-  return payload
-}
 
 // Mirrors the wire shape RC actually delivers: { service_name, env, config: { KEY: value, ... } }
 function sdkConfigPayload (values) {

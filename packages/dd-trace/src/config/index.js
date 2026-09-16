@@ -328,8 +328,6 @@ class Config extends ConfigBase {
   /**
    * Set the configuration with SDK_CONFIGURATION remote config settings.
    * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
-   * The caller (`RCClientManager`) is expected to have already filtered `options` to the
-   * SDK_CONFIGURATION allowlist.
    *
    * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration

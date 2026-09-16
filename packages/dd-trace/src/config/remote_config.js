@@ -2,7 +2,6 @@
 
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
-const { sdkConfigAllowlist } = require('./sdk-config-allowlist')
 
 module.exports = {
   enable,
@@ -96,23 +95,7 @@ class RCClientManager {
       return
     }
 
-    const rawEntries = conf.sdk_config?.config
-    let sdkConfig
-    if (rawEntries != null) {
-      // The flat object shape is keyed by env-var name, so bound the scan by the allowlist
-      // (fixed, small) instead of the payload (backend-controlled, potentially large).
-      sdkConfig = {}
-      for (const key of sdkConfigAllowlist) {
-        const value = rawEntries[key]
-
-        // The schema pins config values to strings (additionalProperties: {type: 'string'}), so a
-        // non-string value can never reach this code from a real RC payload; drop it defensively only
-        // for malformed entries rather than let it reach setRemoteConfig.
-        if (typeof value === 'string') {
-          sdkConfig[key] = value
-        }
-      }
-    }
+    const sdkConfig = conf.sdk_config?.config
 
     const priority = this.calculatePriority(conf)
     this.configs.set(configId, { priority, sdkConfig })
