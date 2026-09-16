@@ -4282,6 +4282,44 @@ describe('Config', () => {
         name: 'DD_LLMOBS_ENABLED', value: false, origin: 'env_var',
       }])
     })
+
+    it('should default DD_LLMOBS_SPAN_TRACK to auto', () => {
+      const config = getConfig()
+      assert.strictEqual(config.llmobs.spanTrack, 'auto')
+
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+        name: 'DD_LLMOBS_SPAN_TRACK', value: 'auto', origin: 'default',
+      }])
+    })
+
+    it('should set DD_LLMOBS_SPAN_TRACK from the environment and enable llmobs', () => {
+      process.env.DD_LLMOBS_SPAN_TRACK = 'EXPERIMENTS'
+      const config = getConfig()
+      assert.strictEqual(config.llmobs.spanTrack, 'experiments')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_LLMOBS_SPAN_TRACK', value: 'EXPERIMENTS', origin: 'env_var' },
+        { name: 'DD_LLMOBS_ENABLED', value: true, origin: 'calculated' },
+      ])
+    })
+
+    it('should set DD_LLMOBS_SPAN_TRACK from options and enable llmobs', () => {
+      const config = getConfig({ llmobs: { spanTrack: 'experiments' } })
+      assert.strictEqual(config.llmobs.spanTrack, 'experiments')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_LLMOBS_SPAN_TRACK', value: 'experiments', origin: 'code' },
+        { name: 'DD_LLMOBS_ENABLED', value: true, origin: 'calculated' },
+      ])
+    })
+
+    it('should ignore invalid DD_LLMOBS_SPAN_TRACK values', () => {
+      process.env.DD_LLMOBS_SPAN_TRACK = 'invalid'
+      const config = getConfig()
+      assert.strictEqual(config.llmobs.spanTrack, 'auto')
+    })
   })
 
   context('payload tagging', () => {

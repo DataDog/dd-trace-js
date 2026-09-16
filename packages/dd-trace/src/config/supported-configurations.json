@@ -1390,6 +1390,18 @@
         "default": "1.0"
       }
     ],
+    "DD_LLMOBS_SPAN_TRACK": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.spanTrack"
+        ],
+        "default": "auto",
+        "allowed": "auto|llmobs|experiments",
+        "transform": "toLowerCase"
+      }
+    ],
     "DD_LOGS_INJECTION": [
       {
         "implementation": "B",

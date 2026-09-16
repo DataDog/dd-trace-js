@@ -107,13 +107,32 @@ describe('sdk', () => {
 
       disabledLLMObs.enable({
         mlApp: 'mlApp',
+        spanTrack: 'experiments',
       })
 
       assert.strictEqual(disabledLLMObs.enabled, true)
       assert.strictEqual(disabledLLMObs._config.llmobs.mlApp, 'mlApp')
       assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
+      assert.strictEqual(disabledLLMObs._config.llmobs.spanTrack, 'experiments')
 
       sinon.assert.called(llmobsModule.enable)
+
+      disabledLLMObs.disable() // unsubscribe
+    })
+
+    it('preserves the configured span track when enabling llmobs without an override', () => {
+      const config = getConfigFresh({})
+      config.llmobs.spanTrack = 'experiments'
+      const llmobsModule = {
+        enable: sinon.stub(),
+        disable () {},
+      }
+
+      const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+
+      disabledLLMObs.enable({ mlApp: 'mlApp' })
+
+      assert.strictEqual(disabledLLMObs._config.llmobs.spanTrack, 'experiments')
 
       disabledLLMObs.disable() // unsubscribe
     })

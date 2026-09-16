@@ -297,7 +297,7 @@ class LLMObsSpanProcessor {
       sampling_decision: mlObsTags[SAMPLING_DECISION],
       apm_trace_id: apmTraceId,
     }
-    if (tags.experiment_id) dd.scope = 'experiments'
+    if (this.#spanTrack(tags) === 'experiments') dd.scope = 'experiments'
 
     const llmObsSpanEvent = {
       trace_id: llmobsTraceId,
@@ -405,6 +405,17 @@ class LLMObsSpanProcessor {
       metadata._dd = {}
     }
     return metadata._dd
+  }
+
+  /**
+   * Resolve which backend track receives this LLM Observability span event.
+   * @param {Record<string, unknown>} tags
+   * @returns {'llmobs' | 'experiments'}
+   */
+  #spanTrack (tags) {
+    const spanTrack = this.#config.llmobs.spanTrack
+    if (spanTrack === 'llmobs' || spanTrack === 'experiments') return spanTrack
+    return tags.experiment_id ? 'experiments' : 'llmobs'
   }
 
   #getTags (span, mlApp, sessionId, error) {

@@ -531,7 +531,8 @@ class Config extends ConfigBase {
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
         trackedConfigOrigins.has('llmobs.mlApp') ||
-        trackedConfigOrigins.has('llmobs.projectName'))) {
+        trackedConfigOrigins.has('llmobs.projectName') ||
+        trackedConfigOrigins.has('llmobs.spanTrack'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
