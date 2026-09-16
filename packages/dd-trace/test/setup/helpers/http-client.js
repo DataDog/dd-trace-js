@@ -65,10 +65,20 @@ function defaultValidateStatus (status) {
 
 async function request (config) {
   const method = (config.method ?? 'GET').toUpperCase()
-  const headers = { ...config.headers }
+  // Unlike axios (backed by Node's http.Agent, which defaults to keepAlive: false), undici's
+  // fetch() pools and reuses connections by default. Test servers routinely restart on a port a
+  // prior test already used, and a pooled connection surviving that restart causes late-firing
+  // 'close' events to leak into a later test's execution window. Forcing the connection closed
+  // per-request avoids that class of cross-test timing bug.
+  const headers = { Connection: 'close', ...config.headers }
   // fetch forbids a body on GET/HEAD requests, even a present-but-empty stream, so it must be
   // omitted entirely rather than merely left unserialized.
   const body = method === 'GET' || method === 'HEAD' ? undefined : serializeBody(config.data, headers)
+
+  if (config.auth) {
+    const { username, password } = config.auth
+    headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+  }
 
   const url = config.baseURL ? new URL(config.url, config.baseURL) : config.url
 

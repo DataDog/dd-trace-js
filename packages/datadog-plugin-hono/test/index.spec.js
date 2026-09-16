@@ -299,7 +299,7 @@ describe('Plugin', () => {
           httpRequest.get(`http://localhost:${port}/error`),
           {
             message: 'Request failed with status code 500',
-            name: 'AxiosError',
+            name: 'Error',
           }
         )
 

@@ -121,4 +121,10 @@ describe('http-client test helper', () => {
     const res = await httpClient.get(`${baseURL}/echo-headers`, { headers: { 'x-request-id': 'abc' } })
     assert.equal(res.data['x-request-id'], 'abc')
   })
+
+  it('supports auth: { username, password } as a Basic Authorization header', async () => {
+    const res = await httpClient.get(`${baseURL}/echo-headers`, { auth: { username: 'user', password: 'pass' } })
+    const expected = `Basic ${Buffer.from('user:pass').toString('base64')}`
+    assert.equal(res.data.authorization, expected)
+  })
 })
