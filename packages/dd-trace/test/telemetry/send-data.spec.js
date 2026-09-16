@@ -16,6 +16,7 @@ describe('sendData', () => {
     tracer_version: 'version',
   }
   const host = { hostname: 'test-host' }
+  const tracing = { DD_TRACE_EXPERIMENTAL_EXPORTER: '' }
 
   let sendDataModule
   let request
@@ -32,6 +33,7 @@ describe('sendData', () => {
       hostname: '',
       port: '12345',
       tags: { 'runtime-id': '123' },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -59,6 +61,7 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
       tags: { 'runtime-id': '123' },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -86,6 +89,7 @@ describe('sendData', () => {
       DD_API_KEY: 'secret-key',
       url: new URL('https://agent.example:8126'),
       tags: { 'runtime-id': '123' },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -99,6 +103,7 @@ describe('sendData', () => {
       url: '/test',
       tags: { 'runtime-id': '123' },
       telemetry: { DD_TELEMETRY_DEBUG: true },
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -112,6 +117,7 @@ describe('sendData', () => {
       url: '/test',
       tags: { 'runtime-id': 'child-runtime-id' },
       DD_ROOT_JS_SESSION_ID: 'root-runtime-id',
+      tracing,
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -128,7 +134,7 @@ describe('sendData', () => {
       tags: {},
       serviceMapping: {},
     }
-    sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, application, host, 'req-type', payload)
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' }, tracing }, application, host, 'req-type', payload)
 
     sinon.assert.calledOnce(request)
     const data = JSON.parse(request.getCall(0).args[0])
@@ -150,7 +156,7 @@ describe('sendData', () => {
 
     }, retryObjData]
 
-    sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
+    sendDataModule.sendData({ tags: { 'runtime-id': '123' }, tracing },
       application, host, 'message-batch', payload)
 
     sinon.assert.calledOnce(request)
@@ -179,6 +185,7 @@ describe('sendData', () => {
         isCiVisibility: true,
         testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
         tags: { 'runtime-id': '123' },
+        tracing,
         site: 'datadoghq.eu',
       },
       application,
@@ -207,6 +214,7 @@ describe('sendData', () => {
           DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
         },
         tags: { 'runtime-id': '123' },
+        tracing,
         site: 'datadoghq.eu',
       },
       application,
@@ -228,6 +236,7 @@ describe('sendData', () => {
         isCiVisibility: true,
         testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: false },
         tags: { 'runtime-id': '123' },
+        tracing,
         url,
       },
       application,
@@ -253,6 +262,7 @@ describe('sendData', () => {
         site: 'datadoghq.eu',
         tags: { 'runtime-id': '123' },
         testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: false },
+        tracing,
         url,
       },
       application,
@@ -270,7 +280,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -290,7 +300,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datad0g.com',
       },
@@ -308,7 +318,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.com@evil.example',
       },
@@ -326,7 +336,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         DD_API_KEY: 'secret-key',
-        DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless',
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agentless' },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -346,6 +356,7 @@ describe('sendData', () => {
         DD_API_KEY: 'secret-key',
         site: 'datadoghq.eu',
         tags: { 'runtime-id': '123' },
+        tracing,
       },
       application,
       host,
@@ -373,6 +384,7 @@ describe('sendData', () => {
       DD_API_KEY: 'secret-key',
       site: 'datadoghq.eu',
       tags: { 'runtime-id': '123' },
+      tracing,
     }
 
     sendDataModule.sendData(config, application, host, 'req-type')
@@ -390,6 +402,7 @@ describe('sendData', () => {
         DD_API_KEY: 'secret-key',
         site: 'x:notaport',
         tags: { 'runtime-id': '123' },
+        tracing,
       },
       application,
       host,

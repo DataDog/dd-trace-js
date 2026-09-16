@@ -788,7 +788,7 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    const exporter = this.config.DD_TRACE_EXPERIMENTAL_EXPORTER
+    const exporter = this.config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)

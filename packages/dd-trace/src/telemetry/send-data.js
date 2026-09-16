@@ -138,7 +138,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
 
   const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
   const isApmTracingAgentlessMode =
-    config.DD_TRACE_EXPERIMENTAL_EXPORTER === 'agentless'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === 'agentless'
   const isAgentlessMode = isCiVisibilityAgentlessMode || isApmTracingAgentlessMode
 
   if (isCiVisibility && getTestOptimizationAgent === undefined) {

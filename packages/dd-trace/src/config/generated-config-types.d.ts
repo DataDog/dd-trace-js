@@ -242,8 +242,6 @@ export interface GeneratedConfig {
   DD_TRACE_ELECTRON_ENABLED: boolean;
   DD_TRACE_ENABLED: boolean;
   DD_TRACE_ENCODING_DEBUG: boolean;
-  DD_TRACE_EXPERIMENTAL_EXPORTER: string;
-  DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_SPAN_COUNTS: boolean;
   DD_TRACE_EXPERIMENTAL_STATE_TRACKING: boolean;
@@ -513,6 +511,9 @@ export interface GeneratedConfig {
     pollInterval: number;
   };
   reportHostname: boolean;
+  rum: {
+    DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: boolean;
+  };
   runtimeMetrics: {
     enabled: boolean;
     eventLoop: boolean;
@@ -583,6 +584,9 @@ export interface GeneratedConfig {
   traceWebsocketMessagesEnabled: boolean;
   traceWebsocketMessagesInheritSampling: boolean;
   traceWebsocketMessagesSeparateTraces: boolean;
+  tracing: {
+    DD_TRACE_EXPERIMENTAL_EXPORTER: string;
+  };
   url: string | URL;
   version: string | undefined;
   vertexai: {

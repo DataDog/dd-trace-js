@@ -93,6 +93,8 @@ describe('Tracer', () => {
       tags: {},
       debug: true,
       experimental: {},
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
     }
 
     log = {
@@ -128,7 +130,7 @@ describe('Tracer', () => {
 
   it('should preserve the Electron exporter when the OTLP exporter is enabled', () => {
     config.OTEL_TRACES_EXPORTER = 'otlp'
-    config.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
 
     tracer = new Tracer(config)
 
@@ -138,7 +140,7 @@ describe('Tracer', () => {
 
   it('should use the OTLP exporter with a non-Electron trace exporter', () => {
     config.OTEL_TRACES_EXPORTER = 'otlp'
-    config.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
 
     tracer = new Tracer(config)
 

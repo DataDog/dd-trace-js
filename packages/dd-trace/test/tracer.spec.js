@@ -417,14 +417,14 @@ describe('Tracer', () => {
       let previousEnableGetRumData
 
       beforeEach(() => {
-        previousEnableGetRumData = config.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
-        config.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = true
+        previousEnableGetRumData = config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
+        config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = true
         tracer = new Tracer(config)
         tracer._exporter.export = sinon.stub()
       })
 
       afterEach(() => {
-        config.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = previousEnableGetRumData
+        config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED = previousEnableGetRumData
       })
 
       it('should return an empty string without an active span', () => {

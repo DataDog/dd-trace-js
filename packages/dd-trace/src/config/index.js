@@ -500,7 +500,8 @@ class Config extends ConfigBase {
     // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
         (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
+          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
+            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -633,7 +634,7 @@ class Config extends ConfigBase {
     }
 
     const isTestOptimizationWorker = this.isCiVisibility &&
-      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.DD_TRACE_EXPERIMENTAL_EXPORTER)
+      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
@@ -662,7 +663,7 @@ class Config extends ConfigBase {
     }
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless')
+      setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting

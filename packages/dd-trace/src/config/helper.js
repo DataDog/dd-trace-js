@@ -10,8 +10,7 @@
  * @property {string[]} [aliases]
  * @property {string[]} [configurationNames]
  * @property {string} [internalPropertyName]
- * @property {string} [namespace] Nests the canonical env name under this property path (e.g. `telemetry`). An empty
- *   string keeps the canonical name at the top level.
+ * @property {string} [namespace] Nests the canonical env name under this property path (e.g. `telemetry`).
  * @property {string} [transform]
  * @property {string} [allowed]
  * @property {string} [description]

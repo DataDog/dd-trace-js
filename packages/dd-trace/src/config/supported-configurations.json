@@ -2821,7 +2821,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
-        "namespace": "",
+        "namespace": "tracing",
         "default": ""
       }
     ],
@@ -2832,7 +2832,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
-        "namespace": "",
+        "namespace": "rum",
         "default": "false"
       }
     ],

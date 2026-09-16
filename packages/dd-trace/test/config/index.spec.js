@@ -1187,9 +1187,8 @@ describe('Config', () => {
         DD_AI_GUARD_TIMEOUT: 10_000,
         DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
       },
-      experimental: {},
-      DD_TRACE_EXPERIMENTAL_EXPORTER: '',
-      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false,
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
       flushInterval: 2000,
       flushMinSpans: 1000,
       DD_HEAP_SNAPSHOT_COUNT: 0,
@@ -1674,9 +1673,8 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: false,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
-      experimental: {},
-      DD_TRACE_EXPERIMENTAL_EXPORTER: 'log',
-      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true,
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
       hostname: 'agent',
       DD_HEAP_SNAPSHOT_COUNT: 1,
       DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
@@ -2326,9 +2324,8 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
-      experimental: {},
-      DD_TRACE_EXPERIMENTAL_EXPORTER: 'log',
-      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true,
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
       flushInterval: 5000,
       flushMinSpans: 500,
       hostname: 'agent',
@@ -3001,9 +2998,8 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
-      experimental: {},
-      DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent',
-      DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false,
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent' },
       flushMinSpans: 500,
       flushInterval: 500,
       iast: {
@@ -3866,11 +3862,13 @@ describe('Config', () => {
     }
   })
 
-  it('should use canonical experimental control names internally', () => {
+  it('should use domain namespaces for experimental controls internally', () => {
     const config = getConfig()
 
-    assert.strictEqual(config.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
-    assert.strictEqual(config.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED, false)
+    assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+    assert.strictEqual(config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED, false)
+    assert.strictEqual(Object.hasOwn(config, 'DD_TRACE_EXPERIMENTAL_EXPORTER'), false)
+    assert.strictEqual(Object.hasOwn(config, 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED'), false)
     assert.strictEqual(Object.hasOwn(config.experimental, 'exporter'), false)
     assert.strictEqual(Object.hasOwn(config.experimental, 'enableGetRumData'), false)
   })
@@ -5508,7 +5506,7 @@ rules:
   context('agentless mode', () => {
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
-      assert.notStrictEqual(config.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
     })
 
     it('should configure all supported features for agentless mode', () => {
@@ -5528,7 +5526,7 @@ rules:
       process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
       const config = getConfig()
 
-      assert.strictEqual(config.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
       assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, true)
@@ -5677,7 +5675,7 @@ rules:
           experimental: { exporter },
         })
 
-        assert.strictEqual(config.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
         assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
@@ -5694,7 +5692,7 @@ rules:
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
     })
 
@@ -5742,7 +5740,7 @@ rules:
     it('should not affect other config when agentless is disabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
       const config = getConfig()
-      assert.notStrictEqual(config.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
     })
 
