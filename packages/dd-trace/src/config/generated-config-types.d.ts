@@ -479,6 +479,10 @@ export interface GeneratedConfig {
     DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
     projectName: string | undefined;
+    promptsCacheTtl: number;
+    promptsFileCacheDir: string | undefined;
+    promptsFileCacheEnabled: boolean;
+    promptsTimeout: number;
     sampleRate: number;
   };
   logInjection: boolean;
@@ -769,6 +773,10 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
   DD_LLMOBS_PROJECT_NAME: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_TTL: number;
+  DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
