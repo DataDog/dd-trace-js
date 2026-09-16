@@ -80,13 +80,22 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
    * @override
    */
   getGenAiApmEndTags (ctx, spanKind) {
+    // the helper reports zeros when the result carries no usage, and zeroed token metrics would
+    // read as a real measurement
+    const tokens = this._handlers[ctx.type]?.checkTokenUsageChatOrLLMResult(ctx.result ?? {})
+    const metrics = tokens?.totalTokens ? tokens : undefined
+
     // langchain-openai calls an untraced beta client when `response_format` is set, so this span is
     // the only model span for the call. `handlers/chat_model.js` applies the same correction through
     // `changeKind` while building the LLMObs payload.
-    if (spanKind !== WORKFLOW || ctx.type !== 'chat_model' || !ctx.arguments?.[1]?.response_format) return {}
+    if (spanKind !== WORKFLOW || ctx.type !== 'chat_model' || !ctx.arguments?.[1]?.response_format) {
+      return { metrics }
+    }
 
     const provider = ctx.currentStore?.span?.context().getTags()['langchain.request.provider']
-    return this.getIntegrationName(ctx.type, provider) === OPENAI_PROVIDER_NAME ? { spanKind: LLM } : {}
+    const isOpenAI = this.getIntegrationName(ctx.type, provider) === OPENAI_PROVIDER_NAME
+
+    return isOpenAI ? { spanKind: LLM, metrics } : { metrics }
   }
 
   setLLMObsTags (ctx) {
