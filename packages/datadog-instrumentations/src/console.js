@@ -22,11 +22,13 @@ const logSubmissionCh = channel('ci:log-submission:console')
 const methods = ['error', 'warn']
 const unsupportedMethods = new Set(['assert', 'trace'])
 const methodSet = new Set(methods)
-const nodeConsoleMethodPattern = /\bat (?:console|[^\s.]*Console)\.(error|warn) \(/
-const unsupportedNodeConsoleMethodPattern = /\bat (?:console|[^\s.]*Console)\.(assert|trace) \(/
+const nodeConsoleMethodPattern = /\bat ([^\s.]+)\.(error|warn|assert|trace) \(/
 const nodeConsoleMethods = new Map(methods.map(method => {
   return [method, Object.getOwnPropertyDescriptor(Console.prototype, method)?.value]
 }))
+const unsupportedNodeConsoleMethods = new Set([...unsupportedMethods].map(method => {
+  return Object.getOwnPropertyDescriptor(Console.prototype, method)?.value
+}).filter(method => typeof method === 'function'))
 const nodeConsoleBoundMethods = new Map(methods.map(method => {
   return [method, Object.getOwnPropertyDescriptor(nodeConsole, method)?.value]
 }))
@@ -40,7 +42,15 @@ const wrappedTargets = new WeakSet()
 const pendingNodeConsoleCalls = []
 
 /** @typedef {{ dd: object }} LogHolder */
-/** @typedef {{ logHolder?: LogHolder, method: string, message: string, writeId: number }} ConsoleRecord */
+/**
+ * @typedef {{
+ *   formatting?: boolean,
+ *   logHolder?: LogHolder,
+ *   method: string,
+ *   message: string,
+ *   writeId: number
+ * }} ConsoleRecord
+ */
 /**
  * @typedef {{
  *   captureLogHolder?: () => LogHolder | undefined,
@@ -240,26 +250,38 @@ function publishRecords (records) {
 function combineRecords (records, lastOnly) {
   if (records.length === 0) return
 
-  let start = lastOnly ? records.length - 1 : 0
-  const lastMessage = records.at(-1).message
-  if (!lastOnly && (lastMessage === '\n' || lastMessage === '\r\n')) {
-    // A common replacement-console shape formats first and then writes the
-    // message and terminator separately. A complete line emitted before that
-    // pair came from formatting (for example, a custom inspector), not from
-    // the console record itself.
-    for (let i = records.length - 2; i >= 0; i--) {
-      if (records[i].message.endsWith('\n')) {
-        start = i + 1
-        break
-      }
-    }
-  }
+  let firstRecord
   let message = ''
-  for (let i = start; i < records.length; i++) {
-    message += records[i].message
+  for (let i = lastOnly ? records.length - 1 : 0; i < records.length; i++) {
+    const record = records[i]
+    if (record.formatting) continue
+    firstRecord ||= record
+    message += record.message
   }
+  if (!firstRecord) return
   if (message.endsWith('\n')) message = message.slice(0, -1)
-  return { ...records[start], message }
+  return { ...firstRecord, message }
+}
+
+/**
+ * @param {Function} skipFunction
+ */
+function isCustomInspectWrite (skipFunction) {
+  try {
+    // Replacement consoles can write while util.inspect is formatting their arguments. Mark only that
+    // direct custom-inspector frame so multiline ownership is not guessed from newline boundaries.
+    const error = {}
+    Error.captureStackTrace(error, skipFunction)
+    const stack = error.stack
+    if (Array.isArray(stack)) {
+      const method = stack[0]?.getMethodName?.() || stack[0]?.getFunctionName?.()
+      return String(method).includes('nodejs.util.inspect.custom')
+    }
+    if (typeof stack === 'string') {
+      return stack.split('\n', 2)[1]?.includes('[nodejs.util.inspect.custom]') === true
+    }
+  } catch {}
+  return false
 }
 
 /**
@@ -292,7 +314,17 @@ function formatNodeConsoleMessage (target, message) {
     }) || false
     nodeConsoleGroupIndentKeys.set(target, groupIndentKey)
   }
-  const groupIndent = groupIndentKey && target[groupIndentKey]
+  if (!groupIndentKey) return message
+
+  let descriptor
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(target, groupIndentKey)
+  } catch {
+    return
+  }
+  if (!descriptor || !Object.hasOwn(descriptor, 'value')) return
+
+  const groupIndent = descriptor.value
   if (groupIndent) return groupIndent + message.replaceAll('\n', `\n${groupIndent}`)
   return message
 }
@@ -300,9 +332,10 @@ function formatNodeConsoleMessage (target, message) {
 /**
  * @param {Function} skipFunction
  * @param {object} target
+ * @param {string | undefined} pendingMethod
  * @returns {string | false | undefined}
  */
-function getNodeConsoleMethod (skipFunction, target) {
+function getNodeConsoleMethod (skipFunction, target, pendingMethod) {
   try {
     const error = {}
     Error.captureStackTrace(error, skipFunction)
@@ -311,18 +344,27 @@ function getNodeConsoleMethod (skipFunction, target) {
       let supportedMethod
       for (const callSite of stack) {
         const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
-        const receiver = callSite?.getThis?.()
-        if (receiver && receiver !== target) continue
+        const fn = callSite?.getFunction?.()
+        if (unsupportedNodeConsoleMethods.has(fn)) return false
+        if (!supportedMethod && methodSet.has(method)) supportedMethod = method
+      }
+      return pendingMethod || supportedMethod
+    } else if (typeof stack === 'string') {
+      const targetName = getPropertyDescriptor(target, 'constructor')?.value?.name
+      let supportedMethod
+      for (const line of stack.split('\n')) {
+        const match = nodeConsoleMethodPattern.exec(line)
+        if (!match) continue
+
+        const [, frameTarget, method] = match
+        if (frameTarget !== 'Console' && frameTarget !== 'console' && frameTarget !== targetName) continue
         if (unsupportedMethods.has(method)) return false
         if (!supportedMethod && methodSet.has(method)) supportedMethod = method
       }
-      return supportedMethod
-    } else if (typeof stack === 'string') {
-      if (unsupportedNodeConsoleMethodPattern.test(stack)) return false
-      const method = nodeConsoleMethodPattern.exec(stack)?.[1]
-      if (method) return method
+      return pendingMethod || supportedMethod
     }
   } catch {}
+  return pendingMethod
 }
 
 /**
@@ -418,36 +460,49 @@ function wrapNodeConsoleWrite (target) {
       const isNestedNodeConsoleCall = Boolean(capture &&
         (activeNodeConsoleFormatCapture === capture || activeNodeConsoleWriteCapture === capture))
       let record
+      let observedRecordIndex = -1
+      let ownRecordIndex = -1
       if (!isPublishing && suppressedConsoleDepth === 0 && isStderr && typeof message === 'string') {
         try {
-          message = formatNodeConsoleMessage(this, message)
-          const isCaptureWrite = !isNestedNodeConsoleCall && capture?.nodeConsole && capture.receiver === this &&
-            (!pendingCall || pendingCall.capture === capture)
-          if (isCaptureWrite) {
-            record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
-            capture.observedRecords.push(record)
-            capture.ownRecords.push(record)
-            record = undefined
-          } else {
-            // Console instances bind their methods during construction. Instances created before instrumentation
-            // cannot be wrapped afterward. Newer Node versions publish the
-            // method before formatting; older versions retain the stack-based
-            // fallback.
-            const detectedMethod = getNodeConsoleMethod(nodeConsoleWriteWithTrace, this)
-            const method = detectedMethod === false ? undefined : detectedMethod || pendingCall?.method
-            const isActiveCall = !isNestedNodeConsoleCall && capture && !capture.nodeConsole && capture.nativeTarget
-            if (!isActiveCall && method && shouldCaptureLogs()) {
-              record = createRecord(method, message, ++nextWriteId)
+          const formattedMessage = formatNodeConsoleMessage(this, message)
+          if (formattedMessage !== undefined) {
+            message = formattedMessage
+            const isCaptureWrite = !isNestedNodeConsoleCall && capture?.nodeConsole && capture.receiver === this &&
+              (!pendingCall || pendingCall.capture === capture)
+            if (isCaptureWrite) {
+              record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
+              observedRecordIndex = capture.observedRecords.length
+              capture.observedRecords.push(record)
+              ownRecordIndex = capture.ownRecords.length
+              capture.ownRecords.push(record)
+              record = undefined
+            } else {
+              // Console instances bind their methods during construction. Instances created before instrumentation
+              // cannot be wrapped afterward. Newer Node versions publish the
+              // method before formatting; older versions retain the stack-based
+              // fallback.
+              const detectedMethod = getNodeConsoleMethod(nodeConsoleWriteWithTrace, this, pendingCall?.method)
+              const method = detectedMethod === false ? undefined : detectedMethod
+              const isActiveCall = !isNestedNodeConsoleCall && capture && !capture.nodeConsole && capture.nativeTarget
+              if (!isActiveCall && method && shouldCaptureLogs()) {
+                record = createRecord(method, message, ++nextWriteId)
+              }
             }
           }
         } catch {}
       }
       let result
+      let writeCompleted = false
       const previousWriteCapture = activeNodeConsoleWriteCapture
       activeNodeConsoleWriteCapture = capture
       try {
         result = original.apply(this, arguments)
+        writeCompleted = true
       } finally {
+        if (!writeCompleted) {
+          if (ownRecordIndex >= 0) capture.ownRecords.splice(ownRecordIndex, 1)
+          if (observedRecordIndex >= 0) capture.observedRecords.splice(observedRecordIndex, 1)
+        }
         activeNodeConsoleWriteCapture = previousWriteCapture
       }
       if (record) {
@@ -570,6 +625,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
                 const message = decodeChunk(chunk, arguments[1])
                 if (message !== undefined) {
                   const record = createRecord(method, message, writeId, captureLogHolder)
+                  if (isCustomInspectWrite(wrappedWrite)) record.formatting = true
                   // Nested calls pass through outer write wrappers. Keep all
                   // observations for delegation, but only claim writes that
                   // started while this console call was active.

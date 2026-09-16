@@ -119,6 +119,25 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'header\ndetails' }])
   })
 
+  it('preserves a multiline record with a split final terminator', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      warn () {
+        stream.write('header\n')
+        stream.write('details')
+        stream.write('\n')
+      },
+    }
+    wrapConsole(target)
+
+    target.warn()
+
+    assert.deepStrictEqual(output, ['header\n', 'details', '\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'header\ndetails' }])
+  })
+
   it('captures buffer-backed replacement console writes', () => {
     const output = []
     const stream = { write: chunk => output.push(chunk) }
@@ -248,6 +267,17 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('does not submit a native record when its stream write throws', () => {
+    const error = new Error('write failure')
+    const stream = { write: sinon.stub().throws(error) }
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false, ignoreErrors: false })
+    wrapConsole(target)
+
+    assert.throws(() => target.warn('not written'), error)
+
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('captures native Console instances created before prototype instrumentation', () => {
     const stream = { write: sinon.stub() }
     const useStderr = Symbol('kUseStderr')
@@ -347,6 +377,9 @@ describe('console instrumentation', () => {
       },
     })
     const target = new FakeConsole(stream)
+    class AuditConsole {
+      trace () { target.warn('warning from audit trace') }
+    }
     const fakeNodeConsole = { Console: FakeConsole, '@noCallThru': true }
     const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
       'node:console': fakeNodeConsole,
@@ -360,9 +393,15 @@ describe('console instrumentation', () => {
     } finally {
       Error.stackTraceLimit = stackTraceLimit
     }
+    new AuditConsole().trace()
 
-    sinon.assert.calledOnceWithExactly(stream.write, 'existing warning\n')
-    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'existing warning' }])
+    sinon.assert.calledTwice(stream.write)
+    sinon.assert.calledWithExactly(stream.write.firstCall, 'existing warning\n')
+    sinon.assert.calledWithExactly(stream.write.secondCall, 'warning from audit trace\n')
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'existing warning' },
+      { method: 'warn', message: 'warning from audit trace' },
+    ])
   })
 
   it('keeps nested pre-instrumentation Console calls as independent records', () => {
@@ -510,6 +549,36 @@ describe('console instrumentation', () => {
 
     assert.deepStrictEqual(output, ['  first\n  second\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: '  first\n  second' }])
+  })
+
+  it('does not read an accessor-backed native group indentation property twice', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const groupIndentKey = Reflect.ownKeys(target).find(key => {
+      return typeof key === 'symbol' &&
+        (key.description === 'kGroupIndent' || key.description === 'kGroupIndentationString')
+    })
+    let reads = 0
+    Object.defineProperty(target, groupIndentKey, {
+      configurable: true,
+      get () {
+        if (++reads > 1) throw new Error('group indentation read twice')
+        return ''
+      },
+    })
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.strictEqual(reads, 1)
+    assert.deepStrictEqual(output, ['hello\n'])
+    assert.deepStrictEqual(payloads, [])
   })
 
   it('captures a replaced method on a native Console instance', () => {
