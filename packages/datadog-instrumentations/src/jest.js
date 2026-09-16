@@ -3715,9 +3715,9 @@ addHook({
   versions: [MINIMUM_JEST_VERSION],
 }, (jestConsole) => {
   if (!disabledJestInstrumentations.has('console') && consoleLogSubmissionCh.hasSubscribers) {
-    const { wrapConsole, wrapJestBufferedConsole } = require('./console')
+    const { wrapJestBufferedConsole, wrapJestCustomConsole } = require('./console')
     wrapJestBufferedConsole(jestConsole.BufferedConsole)
-    wrapConsole(jestConsole.CustomConsole?.prototype)
+    wrapJestCustomConsole(jestConsole.CustomConsole)
   }
   return jestConsole
 })

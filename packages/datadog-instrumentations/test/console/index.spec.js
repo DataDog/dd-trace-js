@@ -9,7 +9,7 @@ const { inspect } = require('node:util')
 const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
 
-const { wrapConsole, wrapJestBufferedConsole } = require('../../src/console')
+const { wrapConsole, wrapJestBufferedConsole, wrapJestCustomConsole } = require('../../src/console')
 
 const logSubmissionCh = channel('ci:log-submission:console')
 
@@ -79,6 +79,25 @@ describe('console instrumentation', () => {
       { method: 'error', message: 'hello error' },
       { method: 'warn', message: 'hello warn' },
     ])
+  })
+
+  it('combines sequential stream writes from one console record', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write('[warn] ')
+        stream.write(message)
+        stream.write('\n')
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.deepStrictEqual(output, ['[warn] ', 'hello', '\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: '[warn] hello' }])
   })
 
   it('publishes once when one wrapped console delegates to another', () => {
@@ -465,6 +484,32 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'second' }])
   })
 
+  it('stops wrapping a stream when restoration fails', () => {
+    const originalWrite = sinon.stub()
+    let defineCalls = 0
+    const stream = new Proxy({ write: originalWrite }, {
+      defineProperty (target, property, descriptor) {
+        if (property === 'write' && ++defineCalls % 2 === 0) throw new Error('restore failed')
+        return Reflect.defineProperty(target, property, descriptor)
+      },
+    })
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('first')
+    target.warn('second')
+    target.warn('third')
+
+    assert.strictEqual(defineCalls, 2)
+    sinon.assert.calledThrice(originalWrite)
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'first' }])
+  })
+
   it('captures only Jest buffered warnings and errors without wrapping public methods', () => {
     class BufferedConsole {
       static write (buffer, method, message) {
@@ -493,12 +538,15 @@ describe('console instrumentation', () => {
       }
     }
     const buffer = []
-    const stream = { write: sinon.stub() }
+    const stream = {
+      write (message) {
+        BufferedConsole.write(buffer, 'error', message.trimEnd())
+      },
+    }
     const target = {
       _stderr: stream,
       error (message) {
-        BufferedConsole.write(buffer, 'error', message)
-        stream.write(`console.error\n  ${message}\n`)
+        stream.write(`${message}\n`)
       },
     }
     wrapJestBufferedConsole(BufferedConsole)
@@ -507,7 +555,43 @@ describe('console instrumentation', () => {
     target.error('boom')
 
     assert.deepStrictEqual(buffer, ['boom'])
-    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'console.error\n  boom' }])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
+  })
+
+  it('publishes a Jest custom console record without resubmitting its rendering', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+        return buffer
+      }
+    }
+    const buffer = []
+    const output = []
+    const stream = { write: message => output.push(message) }
+    class CustomConsole {
+      constructor () {
+        this._stderr = stream
+      }
+
+      _logError (method, message) {
+        BufferedConsole.write(buffer, method, message)
+        stream.write(`console.${method}\n  ${message}\n`)
+      }
+
+      error (message) {
+        this._logError('error', message)
+      }
+    }
+    const target = new CustomConsole()
+    wrapConsole(target)
+    wrapJestBufferedConsole(BufferedConsole)
+    wrapJestCustomConsole(CustomConsole)
+
+    target.error('boom')
+
+    assert.deepStrictEqual(buffer, ['boom'])
+    assert.deepStrictEqual(output, ['console.error\n  boom\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
   })
 
   it('preserves nested Jest buffered records emitted while formatting', () => {
@@ -539,6 +623,37 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [
       { method: 'warn', message: 'nested warning' },
       { method: 'error', message: 'nested error' },
+      { method: 'error', message: 'outer formatted value' },
+    ])
+  })
+
+  it('preserves an identical nested Jest buffered record emitted while formatting', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+        return buffer
+      }
+    }
+    const buffer = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const value = {
+      [inspect.custom] () {
+        BufferedConsole.write(buffer, 'error', 'outer formatted value')
+        return 'formatted value'
+      },
+    }
+    wrapJestBufferedConsole(BufferedConsole)
+    wrapConsole(target)
+
+    target.error('outer %o', value)
+
+    assert.deepStrictEqual(payloads, [
+      { method: 'error', message: 'outer formatted value' },
       { method: 'error', message: 'outer formatted value' },
     ])
   })
