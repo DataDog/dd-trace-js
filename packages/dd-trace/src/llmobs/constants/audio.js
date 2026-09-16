@@ -11,6 +11,10 @@ module.exports = {
   // Budget for inline audio, measured on the *base64-encoded* size, since that is what actually
   // rides the span event. Kept below the 5 MB per-span-event limit with headroom for the rest of the
   // event, whose whole I/O is dropped backend-side when oversize. 4 MiB encoded is ~3 MiB of audio.
+  //
+  // Per *event*, not per audio part. An event carrying audio on more than one message — a realtime
+  // turn has both the user's and the agent's — has to divide this between them, or two individually
+  // accepted clips sum past the limit and cost the event all of its I/O.
   LLMOBS_AUDIO_INLINE_MAX_BYTES: 4 * 1024 * 1024,
 
   // Cap on the raw audio buffered per side of a realtime turn: the point at which base64 encoding

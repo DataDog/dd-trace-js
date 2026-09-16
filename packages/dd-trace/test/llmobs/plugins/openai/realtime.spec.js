@@ -855,6 +855,71 @@ describe('integrations', () => {
             assert.strictEqual(llm.meta.output.messages[0].content, 'Ok.')
           })
 
+          // A turn normally carries audio on both sides. Offering each the full budget lets two
+          // individually accepted clips sum past the per-span-event limit, and the writer's response
+          // to an oversize event is to truncate *all* of its input and output — losing the
+          // transcripts too. One budget, spent across both sides.
+          it('spends one audio budget across both sides of a turn', async () => {
+            sessionCreated({ transcription: false })
+
+            // ~2 MiB raw per side: each fits the 4 MiB encoded budget alone (~2.8 MiB encoded), but
+            // together they would be ~5.6 MiB — past the 5 MiB event limit.
+            const bigMs = Math.floor(2 * 1024 * 1024 / 48)
+
+            realtime.send({ type: 'input_audio_buffer.append', audio: pcm16(bigMs) })
+            socket.deliver({ type: 'input_audio_buffer.committed', item_id: 'item_1' })
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            clock.tick(20)
+            socket.deliver({
+              type: 'response.output_audio.delta',
+              response_id: 'resp_1',
+              item_id: 'out_1',
+              delta: pcm16(bigMs),
+            })
+            socket.deliver({
+              type: 'response.output_audio_transcript.done',
+              response_id: 'resp_1',
+              transcript: 'Here you go.',
+            })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } })
+
+            const { llmobsSpans } = await getEvents(4)
+            const llm = byName(llmobsSpans, LLM)
+            const inputAudio = llm.meta.input.messages[0].audio_parts?.[0]?.content?.length ?? 0
+            const outputAudio = llm.meta.output.messages[0].audio_parts?.[0]?.content?.length ?? 0
+
+            assert.ok(inputAudio > 0, 'the first side keeps its audio')
+            assert.strictEqual(outputAudio, 0, 'the second side yields rather than overrun the event')
+            assert.ok(
+              inputAudio + outputAudio <= 4 * 1024 * 1024,
+              `combined audio ${inputAudio + outputAudio} should stay within the event budget`
+            )
+            // Yielding costs the clip, not the turn: the transcript still describes what was said.
+            assert.strictEqual(llm.meta.output.messages[0].content, 'Here you go.')
+          })
+
+          it('still gives one side the whole budget when the other has no audio', async () => {
+            sessionCreated({ transcription: false })
+
+            const bigMs = Math.floor(2 * 1024 * 1024 / 48)
+            socket.deliver({ type: 'input_audio_buffer.committed', item_id: 'item_1' })
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            clock.tick(20)
+            socket.deliver({
+              type: 'response.output_audio.delta',
+              response_id: 'resp_1',
+              item_id: 'out_1',
+              delta: pcm16(bigMs),
+            })
+            socket.deliver({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } })
+
+            const { llmobsSpans } = await getEvents(3)
+            const llm = byName(llmobsSpans, LLM)
+
+            assert.ok(llm.meta.output.messages[0].audio_parts?.[0]?.content?.length > 0,
+              'sharing the budget must not shrink a one-sided turn')
+          })
+
           it('flags a failed response on both the llm span and the turn root', async () => {
             sessionCreated({ transcription: false })
             spokenTurn({ status: 'failed', transcript: '' })

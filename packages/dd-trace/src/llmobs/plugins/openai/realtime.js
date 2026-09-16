@@ -10,6 +10,7 @@ const { fitsInlineAudioBudget, formatAudioPartWithGuard } = require('../../audio
 const {
   AUDIO_FALLBACK,
   G711_SAMPLE_RATE,
+  LLMOBS_AUDIO_INLINE_MAX_BYTES,
   PCM16_BYTES_PER_SAMPLE,
   WAV_HEADER_BYTES,
 } = require('../../constants/audio')
@@ -45,23 +46,36 @@ const { getModelProviderAndClient } = require('./utils')
  * @param {Buffer} audio
  * @param {string} mimeType
  * @param {number} sampleRate
+ * @param {number} maxBytes - Encoded bytes still available to this turn. See `setLLMObsTags`.
  * @returns {AudioPart | undefined}
  */
-function buildAudioPart (audio, mimeType, sampleRate) {
+function buildAudioPart (audio, mimeType, sampleRate, maxBytes) {
   if (!audio.length) return
 
   if (isPcm16AudioMime(mimeType)) {
-    if (!fitsInlineAudioBudget(audio.length + WAV_HEADER_BYTES)) return
-    return formatAudioPartWithGuard(pcm16ToWav(audio, sampleRate), 'audio/wav')
+    if (!fitsInlineAudioBudget(audio.length + WAV_HEADER_BYTES, maxBytes)) return
+    return formatAudioPartWithGuard(pcm16ToWav(audio, sampleRate), 'audio/wav', maxBytes)
   }
 
   const variant = g711Variant(mimeType)
   if (variant !== undefined) {
-    if (!fitsInlineAudioBudget(audio.length * PCM16_BYTES_PER_SAMPLE + WAV_HEADER_BYTES)) return
-    return formatAudioPartWithGuard(pcm16ToWav(g711ToPcm16(audio, variant), G711_SAMPLE_RATE), 'audio/wav')
+    if (!fitsInlineAudioBudget(audio.length * PCM16_BYTES_PER_SAMPLE + WAV_HEADER_BYTES, maxBytes)) return
+    return formatAudioPartWithGuard(
+      pcm16ToWav(g711ToPcm16(audio, variant), G711_SAMPLE_RATE), 'audio/wav', maxBytes
+    )
   }
 
-  return formatAudioPartWithGuard(audio, mimeType)
+  return formatAudioPartWithGuard(audio, mimeType, maxBytes)
+}
+
+/**
+ * Encoded size an already-built message contributes to the span event, which for audio is the
+ * base64 content itself.
+ *
+ * @param {Message | undefined} message
+ */
+function audioBytesOf (message) {
+  return message?.audioParts?.[0]?.content?.length ?? 0
 }
 
 /**
@@ -77,10 +91,11 @@ function parseToolCallArguments (toolCalls) {
  *
  * @param {string} role
  * @param {import('../../../../../datadog-instrumentations/src/openai-realtime/session').TurnSide} side
+ * @param {number} maxAudioBytes - Encoded audio bytes still available to this turn.
  * @returns {Message | undefined}
  */
-function buildMessage (role, side) {
-  const audioPart = buildAudioPart(side.audio, side.mimeType, side.sampleRate)
+function buildMessage (role, side, maxAudioBytes) {
+  const audioPart = buildAudioPart(side.audio, side.mimeType, side.sampleRate, maxAudioBytes)
 
   let content = side.transcript || side.text
   if (!content && audioPart === undefined && side.audioPresent) {
@@ -223,8 +238,16 @@ class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
     if (!span) return
 
     const { turn } = ctx
-    const inputMessage = buildMessage('user', turn.input)
-    const outputMessage = buildMessage('assistant', turn.output)
+
+    // One budget for the whole event, spent across both sides rather than offered to each.
+    // A turn normally carries audio on both sides, so a per-message budget lets two individually
+    // accepted clips add up to twice the limit — and `writers/spans.js` responds by truncating the
+    // event's *entire* input and output, losing the transcripts too. Input is served first and the
+    // output falls back to its transcript when nothing is left, which is the same graceful
+    // degradation an oversize single clip already gets.
+    const inputMessage = buildMessage('user', turn.input, LLMOBS_AUDIO_INLINE_MAX_BYTES)
+    const remainingAudioBytes = LLMOBS_AUDIO_INLINE_MAX_BYTES - audioBytesOf(inputMessage)
+    const outputMessage = buildMessage('assistant', turn.output, remainingAudioBytes)
 
     this._tagger.tagLLMIO(span, inputMessage ? [inputMessage] : [], outputMessage ? [outputMessage] : [])
     this._tagger.tagMetadata(span, turn.metadata)
