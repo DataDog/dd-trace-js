@@ -1,6 +1,8 @@
 'use strict'
 
-const { Console } = require('node:console')
+const nodeConsole = require('node:console')
+
+const { Console } = nodeConsole
 
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('./helpers/instrument')
@@ -124,11 +126,13 @@ function publishRecords (records) {
 }
 
 /**
- * @param {Record<string, unknown> | undefined} target
+ * @param {unknown} target
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
  */
 function wrapConsole (target, captureLogHolder) {
-  if (!target || wrappedTargets.has(target)) return
+  const targetType = typeof target
+  if ((targetType !== 'object' && targetType !== 'function') || target === null) return
+  if (wrappedTargets.has(target)) return
 
   wrappedTargets.add(target)
   for (const method of methods) {
@@ -158,7 +162,7 @@ function wrapConsole (target, captureLogHolder) {
           stream = streamDescriptor?.value
           // Node's global console owns a known lazy accessor. Avoid invoking arbitrary replacement
           // console accessors, but preserve capture for the built-in global console.
-          if (!stream && target === globalThis.console) stream = target._stderr
+          if (!stream && target === nodeConsole) stream = target._stderr
           writeDescriptor = stream && Object.getOwnPropertyDescriptor(stream, 'write')
           const isUnwrappableAccessor = writeDescriptor &&
             !Object.hasOwn(writeDescriptor, 'value') &&

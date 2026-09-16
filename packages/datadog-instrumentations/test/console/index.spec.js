@@ -27,6 +27,12 @@ describe('console instrumentation', () => {
     logSubmissionCh.unsubscribe(subscriber)
   })
 
+  it('ignores primitive console replacements', () => {
+    for (const target of ['console', 1, true]) {
+      wrapConsole(target)
+    }
+  })
+
   it('publishes warnings and errors and preserves all console methods', () => {
     const stream = { write: sinon.stub() }
     const target = { _stderr: stream }
@@ -243,6 +249,35 @@ describe('console instrumentation', () => {
     wrapConsole(target)
 
     target.warn('hello')
+
+    assert.strictEqual(stderrReads, 1)
+    sinon.assert.calledOnceWithExactly(stream.write, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
+  })
+
+  it('does not treat a replacement global console as the built-in console', () => {
+    const stream = { write: sinon.stub() }
+    let stderrReads = 0
+    const target = {
+      warn (message) {
+        this._stderr.write(`${message}\n`)
+      },
+    }
+    Object.defineProperty(target, '_stderr', {
+      configurable: true,
+      get () {
+        if (++stderrReads > 1) throw new Error('unexpected stderr read')
+        return stream
+      },
+    })
+    const originalConsole = globalThis.console
+    try {
+      globalThis.console = target
+      wrapConsole(target)
+      target.warn('hello')
+    } finally {
+      globalThis.console = originalConsole
+    }
 
     assert.strictEqual(stderrReads, 1)
     sinon.assert.calledOnceWithExactly(stream.write, 'hello\n')
