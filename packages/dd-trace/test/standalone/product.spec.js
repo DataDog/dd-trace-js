@@ -42,13 +42,13 @@ describe('Disabled APM Tracing or Standalone - Product', () => {
     })
 
     it('should return a 1req/min rateLimiter when appsec is enabled', () => {
-      const rateLimiter = getProductRateLimiter({ appsec: { enabled: true } })
+      const rateLimiter = getProductRateLimiter({ appsec: { DD_APPSEC_ENABLED: true } })
       assert.strictEqual(rateLimiter.limit, 1)
       assert.strictEqual(rateLimiter.interval, 'minute')
     })
 
     it('should return a 1req/min rateLimiter when iast is enabled', () => {
-      const rateLimiter = getProductRateLimiter({ iast: { enabled: true } })
+      const rateLimiter = getProductRateLimiter({ iast: { DD_IAST_ENABLED: true } })
       assert.strictEqual(rateLimiter.limit, 1)
       assert.strictEqual(rateLimiter.interval, 'minute')
     })
