@@ -105,25 +105,31 @@ configUpdateChannel.subscribe((config) => {
   } else if (enabled === 'false') {
     disarmSSIHeuristics()
     stop()
-  } else if (!isStarted() && !armedSSIHeuristics) {
-    // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
-    // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
-    // rather than stopping and re-arming it on every subsequent config publication. Also guard
-    // against re-arming while already armed; each SSIHeuristics instance owns listeners and a
-    // timer until the heuristic makes its decision or is explicitly disabled.
-    const { SSIHeuristics } = getSSIHeuristicsModule()
-    const heuristics = new SSIHeuristics(config)
-    armedSSIHeuristics = heuristics
-    heuristics.start()
-    heuristics.onTriggered(() => {
-      // Since disarmSSIHeuristics() runs on every non-auto publish, reaching this callback
-      // guarantees the latest published value is still 'auto'.
-      if (!isStarted()) start(config)
-      // The heuristic has made its decision, so release the callback and the module-level
-      // reference without treating the successful trigger as a configuration-driven disable.
-      heuristics.onTriggered()
-      if (armedSSIHeuristics === heuristics) armedSSIHeuristics = undefined
-    })
+  } else if (enabled === 'auto') {
+    if (!isStarted() && !armedSSIHeuristics) {
+      // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
+      // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
+      // rather than stopping and re-arming it on every subsequent config publication. Also guard
+      // against re-arming while already armed; each SSIHeuristics instance owns listeners and a
+      // timer until the heuristic makes its decision or is explicitly disabled.
+      const { SSIHeuristics } = getSSIHeuristicsModule()
+      const heuristics = new SSIHeuristics(config)
+      armedSSIHeuristics = heuristics
+      heuristics.start()
+      heuristics.onTriggered(() => {
+        // Explicit true/false publishes disarm the heuristics, so reaching this callback guarantees
+        // the latest valid published value is still 'auto'.
+        if (!isStarted()) start(config)
+        // The heuristic has made its decision, so release the callback and the module-level
+        // reference without treating the successful trigger as a configuration-driven disable.
+        heuristics.onTriggered()
+        if (armedSSIHeuristics === heuristics) armedSSIHeuristics = undefined
+      })
+    }
+  } else {
+    // Invalid config should preserve the last valid profiling decision, not accidentally behave
+    // like 'auto' or crash the customer application.
+    log.warn('Unexpected DD_PROFILING_ENABLED value: %o', enabled)
   }
 })
 
