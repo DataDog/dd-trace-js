@@ -207,7 +207,6 @@ class DogStatsDClient {
   /**
    * @param {boolean|(() => void)} [forceTelemetry] - Whether to ignore the telemetry interval, or completion callback
    * @param {() => void} [done] - Called after serverless deliveries complete
-   * @returns {void}
    */
   flush (forceTelemetry = false, done) {
     if (typeof forceTelemetry === 'function') {
@@ -238,7 +237,6 @@ class DogStatsDClient {
   /**
    * @param {boolean} force - Whether to ignore the telemetry interval
    * @param {((send: (done?: () => void) => void) => void)} [track] - Tracks a non-serverless delivery
-   * @returns {void}
    */
   #flushTelemetry (force, track) {
     const telemetry = this.telemetry
@@ -291,7 +289,6 @@ class DogStatsDClient {
    * @param {DogStatsDBufferState} state - Payload state to flush
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {((send: (done?: () => void) => void) => void)} [track] - Tracks a non-serverless delivery
-   * @returns {void}
    */
   #flush (state, recordTelemetry, track) {
     const queue = this._enqueue(state)
@@ -314,7 +311,6 @@ class DogStatsDClient {
 
   /**
    * @param {number} bytes - Number of bytes sent
-   * @returns {void}
    */
   #recordSent (bytes) {
     const telemetry = this.telemetry
@@ -326,7 +322,6 @@ class DogStatsDClient {
   /**
    * @param {number} bytes - Number of bytes dropped
    * @param {number} [packets] - Number of packets dropped
-   * @returns {void}
    */
   #recordDropped (bytes, packets = 1) {
     const telemetry = this.telemetry
@@ -341,7 +336,6 @@ class DogStatsDClient {
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after delivery completes
-   * @returns {void}
    * @memberof DogStatsDClient
    */
   _sendHttp (queue, recordTelemetry, done) {
@@ -375,7 +369,6 @@ class DogStatsDClient {
    * @param {Buffer[]} queue - The metrics to send
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after delivery completes
-   * @returns {void}
    * @memberof DogStatsDClient
    */
   _sendUdp (queue, recordTelemetry, done) {
@@ -411,7 +404,6 @@ class DogStatsDClient {
    * @param {number} family - The family of the address
    * @param {boolean} recordTelemetry - Whether to record the transport outcome
    * @param {() => void} [done] - Called after every packet completes
-   * @returns {void}
    * @memberof DogStatsDClient
    */
   _sendUdpFromQueue (queue, address, family, recordTelemetry, done) {
@@ -457,7 +449,6 @@ class DogStatsDClient {
    * @param {string[]} tags - The metric tags
    * @param {string} [tagsPrefix] - Serialized global tags
    * @param {DogStatsDBufferState} [state] - Payload state receiving the metric
-   * @returns {void}
    * @memberof DogStatsDClient
    */
   _add (stat, value, type, tags, tagsPrefix = this.#tagsPrefix, state = this.#metrics) {
@@ -482,7 +473,6 @@ class DogStatsDClient {
    * @param {string} stat - Telemetry metric name
    * @param {number} value - Telemetry metric value
    * @param {string} [typeLabel] - Submitted or aggregated metric type
-   * @returns {void}
    */
   #addTelemetry (stat, value, typeLabel) {
     const tags = typeLabel === undefined ? undefined : [`metrics_type:${typeLabel}`]
@@ -496,7 +486,6 @@ class DogStatsDClient {
    *
    * @param {string} message - The message to write
    * @param {DogStatsDBufferState} [state] - Payload state receiving the message
-   * @returns {void}
    * @memberof DogStatsDClient
    */
   _write (message, state = this.#metrics) {
@@ -605,7 +594,6 @@ class MetricsAggregationClient {
   /**
    * @param {boolean|(() => void)} [forceTelemetry] - Whether to ignore the telemetry interval, or completion callback
    * @param {() => void} [done] - Called after serverless deliveries complete
-   * @returns {void}
    */
   flush (forceTelemetry = false, done) {
     if (typeof forceTelemetry === 'function') {
@@ -680,9 +668,6 @@ class MetricsAggregationClient {
     this.count(name, -count, tags)
   }
 
-  /**
-   * @returns {number} Number of gauge contexts flushed
-   */
   _captureGauges () {
     let metrics = 0
     const contexts = this._captureTree(this._gauges, (node, name, tags) => {
@@ -696,9 +681,6 @@ class MetricsAggregationClient {
     return contexts
   }
 
-  /**
-   * @returns {number} Number of counter contexts flushed
-   */
   _captureCounters () {
     let metrics = 0
     const contexts = this._captureTree(this._counters, (node, name, tags) => {
@@ -712,9 +694,6 @@ class MetricsAggregationClient {
     return contexts
   }
 
-  /**
-   * @returns {number} Number of histogram contexts flushed
-   */
   _captureHistograms () {
     let metrics = 0
     const contexts = this._captureTree(this._histograms, (node, name, tags) => {
@@ -740,7 +719,6 @@ class MetricsAggregationClient {
   /**
    * @param {Map<string, MetricNode>} tree - Metric context tree
    * @param {CaptureMetric} fn - Called for every context with submissions
-   * @returns {number} Number of contexts with submissions
    */
   _captureTree (tree, fn) {
     let contexts = 0
@@ -757,7 +735,6 @@ class MetricsAggregationClient {
    * @param {string} name - Metric name
    * @param {string[]} tags - Current metric tags
    * @param {CaptureMetric} fn - Called for every context with submissions
-   * @returns {number} Number of contexts with submissions
    */
   _captureNode (node, name, tags, fn) {
     let contexts = 0

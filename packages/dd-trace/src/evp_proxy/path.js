@@ -1,7 +1,15 @@
 'use strict'
 
 const LEADING_SLASHES = /^\/+/
-const TRAILING_SLASHES = /\/+$/
+
+/**
+ * @param {string} value
+ */
+function stripTrailingSlashes (value) {
+  let end = value.length
+  while (end > 0 && value[end - 1] === '/') end--
+  return end === value.length ? value : value.slice(0, end)
+}
 
 /**
  * Joins a caller-supplied EVP proxy path and product endpoint.
@@ -10,13 +18,12 @@ const TRAILING_SLASHES = /\/+$/
  *
  * @param {string} basePath - EVP proxy base path
  * @param {string} endpoint - Product intake endpoint
- * @returns {string} Joined request path
  */
 function joinEVPProxyPath (basePath, endpoint) {
-  const normalizedBasePath = basePath.replace(TRAILING_SLASHES, '')
+  const normalizedBasePath = stripTrailingSlashes(basePath)
   const normalizedEndpoint = endpoint.replace(LEADING_SLASHES, '')
 
   return `${normalizedBasePath}/${normalizedEndpoint}`
 }
 
-module.exports = { joinEVPProxyPath }
+module.exports = { joinEVPProxyPath, stripTrailingSlashes }

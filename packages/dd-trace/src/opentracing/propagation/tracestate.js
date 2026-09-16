@@ -63,7 +63,6 @@ function toString (map, pairSeparator, fieldSeparator) {
  * @param {string} value
  * @param {string} separator
  * @param {number} maxBytes
- * @returns {string}
  */
 function limitValue (value, separator, maxBytes) {
   if (value.length <= maxBytes / 4 || Buffer.byteLength(value) <= maxBytes) return value
@@ -94,7 +93,6 @@ function limitValue (value, separator, maxBytes) {
  * @param {string} value
  * @param {string} separator
  * @param {number} maxBytes
- * @returns {string}
  */
 function limitInputValue (value, separator, maxBytes) {
   if (value.length <= maxBytes / 4) return value
@@ -122,7 +120,6 @@ function limitInputValue (value, separator, maxBytes) {
  * Keeps the 32 leftmost members allowed by W3C Trace Context.
  *
  * @param {string} value
- * @returns {string}
  */
 function limitTraceState (value) {
   let end = 0
@@ -196,7 +193,6 @@ class TraceStateData {
 
   /**
    * @param {number} [maxBytes]
-   * @returns {string}
    */
   toString (maxBytes) {
     const value = toString(this, ':', ';')

@@ -184,7 +184,6 @@ function getVitestCoverageOptions () {
 /**
  * Check whether the current Vitest worker reuses its module cache across test suites.
  *
- * @returns {boolean}
  */
 function isNonIsolatedRun () {
   const config = globalThis.__vitest_worker__?.config
@@ -287,7 +286,6 @@ function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
  * Return the normalized test suite path prepared by the main process for a Vitest task.
  *
  * @param {{ file: { filepath: string } }} task
- * @returns {string}
  */
 function getTaskTestSuite (task) {
   return taskToTestProperties.get(task)?.testSuite || task.file.filepath
@@ -343,7 +341,6 @@ function wrapBeforeEachCleanupResult (task, result) {
  * Returns whether a Vitest task tree includes any concurrent task.
  *
  * @param {Array<{ type?: string, concurrent?: boolean, tasks?: object[] }>|undefined} tasks
- * @returns {boolean}
  */
 function hasConcurrentTask (tasks) {
   if (!tasks) return false
@@ -360,7 +357,6 @@ function hasConcurrentTask (tasks) {
  * Returns whether a Vitest file includes any concurrent test.
  *
  * @param {{ tasks?: object[] }} file
- * @returns {boolean}
  */
 function hasConcurrentTests (file) {
   const cached = fileToHasConcurrentTests.get(file)
@@ -376,7 +372,6 @@ function hasConcurrentTests (file) {
  *
  * @param {{ filepath: string, tasks?: object[] }} file
  * @param {object} providedContext
- * @returns {boolean}
  */
 function hasRunnableNewTest (file, providedContext) {
   for (const task of getTypeTasks(file.tasks)) {
@@ -395,7 +390,6 @@ function hasRunnableNewTest (file, providedContext) {
  *
  * @param {number} requestId
  * @param {boolean} allowed
- * @returns {void}
  */
 function finishEfdSuiteAdmissionRequest (requestId, allowed) {
   const request = pendingEfdSuiteAdmissionRequests.get(requestId)
@@ -410,7 +404,6 @@ function finishEfdSuiteAdmissionRequest (requestId, allowed) {
  * Handles an EFD suite admission response from the Vitest main process.
  *
  * @param {unknown} message
- * @returns {void}
  */
 function handleEfdSuiteAdmissionResponse (message) {
   if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
@@ -718,7 +711,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
-    const shouldFlipStatus = isEfd || isAtf
+    const shouldResetStatus = isEfd || isAtf
     const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -738,13 +731,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         if (shouldTrackStatuses && statuses) {
           statuses.push(lastExecutionStatus)
         }
-        if (shouldFlipStatus) {
-          // If we don't "reset" the result.state to "pass", once a repetition fails,
-          // vitest will always consider the test as failed, so we can't read the actual status
-          // This means that we change vitest's behavior:
-          // if the last attempt passes, vitest would consider the test as failed
-          // but after this change, it will consider the test as passed
-          task.result.state = 'pass'
+        if (shouldResetStatus) {
+          // Reset to Vitest's neutral state so a previous failure does not affect the next repetition.
+          // A terminal pass state can leak into reporters before the next repetition determines its status.
+          task.result.state = 'run'
         }
       }
     } else if (numRepetition === task.repeats) {
@@ -759,8 +749,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
       }
-      if (shouldFlipStatus) {
-        task.result.state = 'pass'
+      if (shouldResetStatus) {
+        task.result.state = 'run'
       }
     }
 

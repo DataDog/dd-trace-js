@@ -45,7 +45,6 @@ const defaultSampler = new Sampler(AUTO_KEEP)
  * Returns whether a product has already force-kept the trace.
  *
  * @param {import('./opentracing/span_context')} context
- * @returns {boolean}
  */
 function isProductForceKeep (context) {
   const { priority, mechanism } = context._sampling
@@ -100,7 +99,6 @@ class PrioritySampler {
 
   /**
    * @param {DatadogSpan} span
-   * @returns {boolean} True if the trace should be sampled based on priority.
    */
   isSampled (span) {
     const priority = this._getPriorityFromAuto(span)
@@ -113,7 +111,6 @@ class PrioritySampler {
    *
    * @param {DatadogSpan} span
    * @param {boolean} [auto] - Whether to use automatic sampling if no manual tags are present.
-   * @returns {void}
    */
   sample (span, auto = true) {
     if (!span) return
@@ -147,7 +144,6 @@ class PrioritySampler {
    * @param {DatadogSpan} span
    * @param {string} key
    * @param {unknown} value
-   * @returns {void}
    */
   setPriorityFromTag (span, key, value) {
     if (!span) return
@@ -164,7 +160,6 @@ class PrioritySampler {
    *
    * @param {DatadogSpan} span
    * @param {Record<string, unknown>} tags
-   * @returns {void}
    */
   setPriorityFromTags (span, tags) {
     if (!span) return
@@ -180,7 +175,6 @@ class PrioritySampler {
    * Updates agent-provided sampling rates keyed by `service:,env:`.
    *
    * @param {Record<string, number>} rates
-   * @returns {void}
    */
   update (rates) {
     const samplers = {}
@@ -200,7 +194,6 @@ class PrioritySampler {
    * Validates that a sampling priority value is one of the allowed constants.
    *
    * @param {SamplingPriority|undefined} samplingPriority
-   * @returns {boolean}
    */
   validate (samplingPriority) {
     switch (samplingPriority) {
@@ -395,7 +388,6 @@ class PrioritySampler {
    * records the effective rate on the trace.
    *
    * @param {DatadogSpanContext} context
-   * @returns {boolean}
    */
   _isSampledByRateLimit (context) {
     // TODO: Change underscored properties to private ones.
@@ -435,7 +427,6 @@ class PrioritySampler {
    * Records that a sampling decision does not represent a probability.
    *
    * @param {DatadogSpanContext} context
-   * @returns {void}
    */
   _recordDecisionMetadata (context) {
     context._sampling.isProbabilityDecision = false
@@ -459,7 +450,6 @@ class PrioritySampler {
    *
    * @param {DatadogSpan} span
    * @param {boolean} [overwrite]
-   * @returns {void}
    */
   #addDecisionMaker (span, overwrite = false) {
     const context = span.context()

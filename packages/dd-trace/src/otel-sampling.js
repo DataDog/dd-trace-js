@@ -30,7 +30,6 @@ function isLowerHex (value, minLength, maxLength) {
  * Derives the OTel 56-bit random value from Datadog's sampling hash.
  *
  * @param {bigint} traceId
- * @returns {bigint}
  */
 function randomValueFor (traceId) {
   return ((~knuthHash(traceId)) & UINT64_MASK) >> 8n
@@ -40,7 +39,6 @@ function randomValueFor (traceId) {
  * Converts a sample rate to an OTel 56-bit rejection threshold.
  *
  * @param {number} sampleRate
- * @returns {bigint}
  */
 function thresholdFor (sampleRate) {
   if (sampleRate === 1) return 0n
@@ -56,10 +54,12 @@ function thresholdFor (sampleRate) {
  * Formats an OTel threshold with trailing zero nibbles removed.
  *
  * @param {bigint} threshold
- * @returns {string}
  */
 function formatThreshold (threshold) {
-  return threshold.toString(16).padStart(14, '0').replace(/0+$/, '') || '0'
+  const value = threshold.toString(16).padStart(14, '0')
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 48) end--
+  return end === 0 ? '0' : value.slice(0, end)
 }
 
 /**
@@ -127,7 +127,6 @@ function sanitizeFields (state) {
  * Sanitizes inherited OTel sampling fields without changing valid state.
  *
  * @param {import('./opentracing/propagation/tracestate')} traceState
- * @returns {void}
  */
 function normalizeOtelTraceState (traceState) {
   if (traceState.get('ot') === undefined) return
@@ -139,7 +138,6 @@ function normalizeOtelTraceState (traceState) {
  *
  * @param {import('./opentracing/span_context')} context
  * @param {import('./opentracing/propagation/tracestate')} traceState
- * @returns {void}
  */
 function updateOtelTraceState (context, traceState) {
   const otelMember = traceState.get('ot')

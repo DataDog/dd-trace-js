@@ -25,9 +25,6 @@ class Sampler {
     this.#threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
   }
 
-  /**
-   * @returns {number}
-   */
   rate () {
     return this._rate
   }
@@ -40,7 +37,6 @@ class Sampler {
    * Determines whether a trace/span should be sampled based on the configured sampling rate.
    *
    * @param {import("../../..").Span|import("../../..").SpanContext} span - The span or span context to evaluate.
-   * @returns {boolean} `true` if the trace/span should be sampled, otherwise `false`.
    */
   isSampled (span) {
     if (this._rate === 1) {
