@@ -57,8 +57,12 @@ function start (config) {
 }
 
 function stop () {
+  // A stop command for a profiler that has never been loaded is already satisfied. Once loaded,
+  // always forward it so the profiling layer can also cancel a restart queued during shutdown.
+  if (profilingModule === undefined) return
+
   try {
-    getProfilingModule().profiler.stop()
+    profilingModule.profiler.stop()
   } catch (error) {
     log.error(
       'Error stopping profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
@@ -100,9 +104,7 @@ configUpdateChannel.subscribe((config) => {
     if (!isStarted()) start(config)
   } else if (enabled === 'false') {
     disarmSSIHeuristics()
-    // Only touch the profiling layer if it was actually running, so a disabled profiler never
-    // forces the profiling engine (and its native crashtracker binding) to load.
-    if (isStarted()) stop()
+    stop()
   } else if (!isStarted() && !armedSSIHeuristics) {
     // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
     // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
@@ -125,6 +127,6 @@ configUpdateChannel.subscribe((config) => {
   }
 })
 
-globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => { if (isStarted()) stop() })
+globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(stop)
 
 module.exports = { isStarted, start, stop, setCustomLabelKeys, runWithLabels }

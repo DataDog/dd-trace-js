@@ -103,7 +103,7 @@ describe('profiler', () => {
       publishConfig('true')
       assert.strictEqual(profiler.isStarted(), true)
 
-      // e.g. a collection error stopping the native profilers directly, bypassing module.stop()
+      // e.g. a collection error stopping the native profilers directly, bypassing profiler.stop()
       profilingModule.profiler.enabled = false
 
       assert.strictEqual(profiler.isStarted(), false)
@@ -128,6 +128,39 @@ describe('profiler', () => {
 
       sinon.assert.calledOnce(profilingModule.profiler.stop)
       assert.strictEqual(profiler.isStarted(), false)
+    })
+
+    it('cancels a queued restart when disabled again before shutdown settles', () => {
+      let stopping = false
+      let pendingStart = false
+      profilingModule.profiler.start.callsFake(() => {
+        if (stopping) {
+          pendingStart = true
+          return true
+        }
+        profilingModule.profiler.enabled = true
+        return true
+      })
+      profilingModule.profiler.stop.callsFake(() => {
+        pendingStart = false
+        if (!profilingModule.profiler.enabled) return
+        stopping = true
+        profilingModule.profiler.enabled = false
+      })
+
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('true')
+      publishConfig('false')
+
+      // Model the shutdown export settling. The last false publish must have canceled the start
+      // queued by the intervening true publish.
+      stopping = false
+      if (pendingStart) profilingModule.profiler.start({})
+
+      sinon.assert.calledTwice(profilingModule.profiler.start)
+      sinon.assert.calledTwice(profilingModule.profiler.stop)
+      assert.strictEqual(profilingModule.profiler.enabled, false)
     })
 
     it('logs and does not propagate when stopping the profiler throws', () => {
@@ -249,7 +282,9 @@ describe('profiler', () => {
       sinon.assert.calledOnceWithExactly(profilingModule.profiler.start, config)
     })
 
-    it('stop delegates to the profiling layer', () => {
+    it('stop delegates to a loaded profiling layer', () => {
+      profiler.start({})
+
       profiler.stop()
 
       sinon.assert.calledOnce(profilingModule.profiler.stop)
