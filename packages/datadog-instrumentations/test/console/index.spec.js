@@ -256,12 +256,22 @@ describe('console instrumentation', () => {
       constructor (stream) {
         this._stderr = stream
         this._stderrErrorHandler = () => {}
+        this.assert = this.assert.bind(this)
         this.error = this.error.bind(this)
+        this.trace = this.trace.bind(this)
         this.warn = this.warn.bind(this)
+      }
+
+      assert (expression, message) {
+        if (!expression) this.warn(message)
       }
 
       error (message) {
         this[writeToConsole](useStderr, message)
+      }
+
+      trace (message) {
+        this.error(message)
       }
 
       warn (message) {
@@ -280,17 +290,27 @@ describe('console instrumentation', () => {
     const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
       'node:console': fakeNodeConsole,
     })
+    const caller = {
+      assert () { target.error('error from assert caller') },
+      trace () { target.warn('warning from trace caller') },
+    }
 
     wrapIsolatedConsole(FakeConsole.prototype)
     target.warn('existing warning')
     target.error('existing error')
+    caller.trace()
+    caller.assert()
+    target.trace('ignored trace')
+    target.assert(false, 'ignored assertion')
 
-    sinon.assert.calledTwice(stream.write)
+    sinon.assert.callCount(stream.write, 6)
     sinon.assert.calledWithExactly(stream.write.firstCall, 'existing warning\n')
     sinon.assert.calledWithExactly(stream.write.secondCall, 'existing error\n')
     assert.deepStrictEqual(payloads, [
       { method: 'warn', message: 'existing warning' },
       { method: 'error', message: 'existing error' },
+      { method: 'warn', message: 'warning from trace caller' },
+      { method: 'error', message: 'error from assert caller' },
     ])
   })
 
@@ -345,6 +365,63 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'existing warning' }])
   })
 
+  it('keeps nested pre-instrumentation Console calls as independent records', () => {
+    const output = []
+    const useStderr = Symbol('kUseStderr')
+    const formatForStderr = Symbol('kFormatForStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    class FakeConsole {
+      constructor (stream) {
+        this._stderr = stream
+        this._stderrErrorHandler = () => {}
+        this.error = this.error.bind(this)
+        this.warn = this.warn.bind(this)
+      }
+
+      error (...args) {
+        this[writeToConsole](useStderr, this[formatForStderr](args))
+      }
+
+      warn (...args) {
+        this[writeToConsole](useStderr, this[formatForStderr](args))
+      }
+    }
+    Object.defineProperties(FakeConsole.prototype, {
+      [formatForStderr]: {
+        configurable: true,
+        value: args => args.join(' '),
+        writable: true,
+      },
+      [writeToConsole]: {
+        configurable: true,
+        value (streamSymbol, message) {
+          this._stderr.write(`${message}\n`)
+        },
+        writable: true,
+      },
+    })
+    const nestedConsole = new FakeConsole({ write: message => output.push(message) })
+    const fakeNodeConsole = { Console: FakeConsole, '@noCallThru': true }
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      'node:console': fakeNodeConsole,
+    })
+    wrapIsolatedConsole(FakeConsole.prototype)
+    const outerConsole = new FakeConsole({
+      write (message) {
+        output.push(message)
+        nestedConsole.error('nested error')
+      },
+    })
+
+    outerConsole.error('outer error')
+
+    assert.deepStrictEqual(output, ['outer error\n', 'nested error\n'])
+    assert.deepStrictEqual(payloads, [
+      { method: 'error', message: 'outer error' },
+      { method: 'error', message: 'nested error' },
+    ])
+  })
+
   it('does not expose a temporary stream writer while formatting a native console record', () => {
     const output = []
     const stream = new Writable({
@@ -370,6 +447,50 @@ describe('console instrumentation', () => {
     assert.strictEqual(stream.write, originalWrite)
     assert.deepStrictEqual(output, ['formatted stream\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'formatted stream' }])
+  })
+
+  it('does not expose a temporary stream writer for native Console subclasses', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    class CustomConsole extends Console {}
+    const target = new CustomConsole({ stdout: stream, stderr: stream, colorMode: false })
+    let hadOwnWrite
+    const value = {
+      [inspect.custom] () {
+        hadOwnWrite = Object.hasOwn(stream, 'write')
+        return 'formatted subclass'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn(value)
+
+    assert.strictEqual(hadOwnWrite, false)
+    assert.deepStrictEqual(output, ['formatted subclass\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'formatted subclass' }])
+  })
+
+  it('does not capture native trace or assertion output', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    wrapConsole(target)
+
+    target.trace('ignored trace')
+    target.assert(false, 'ignored assertion')
+
+    assert.strictEqual(output.length, 2)
+    assert.deepStrictEqual(payloads, [])
   })
 
   it('preserves native console group indentation', () => {

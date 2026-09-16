@@ -20,8 +20,10 @@ const configureCh = channel('ci:log-submission:console:configure')
 const logSubmissionCh = channel('ci:log-submission:console')
 // Keep routine test output local while submitting diagnostics that can explain failures.
 const methods = ['error', 'warn']
+const unsupportedMethods = new Set(['assert', 'trace'])
 const methodSet = new Set(methods)
-const nodeConsoleMethodPattern = /\bat [^\n]*\.(error|warn) \(/
+const nodeConsoleMethodPattern = /\bat (?:console|[^\s.]*Console)\.(error|warn) \(/
+const unsupportedNodeConsoleMethodPattern = /\bat (?:console|[^\s.]*Console)\.(assert|trace) \(/
 const nodeConsoleMethods = new Map(methods.map(method => {
   return [method, Object.getOwnPropertyDescriptor(Console.prototype, method)?.value]
 }))
@@ -32,8 +34,10 @@ const disabledStreams = new WeakSet()
 /** @type {WeakMap<object, symbol | false>} */
 const nodeConsoleGroupIndentKeys = new WeakMap()
 const nodeConsoleWriteOwners = new WeakSet()
+const suppressionWrappedTargets = new WeakSet()
 const wrappedTargets = new WeakSet()
-const pendingNodeConsoleMethods = []
+/** @type {{ capture?: ConsoleCapture, method: string }[]} */
+const pendingNodeConsoleCalls = []
 
 /** @typedef {{ dd: object }} LogHolder */
 /** @typedef {{ logHolder?: LogHolder, method: string, message: string, writeId: number }} ConsoleRecord */
@@ -41,15 +45,22 @@ const pendingNodeConsoleMethods = []
  * @typedef {{
  *   captureLogHolder?: () => LogHolder | undefined,
  *   method: string,
+ *   methodSignaled?: boolean,
+ *   nativeTarget: boolean,
  *   nodeConsole: boolean,
  *   observedRecords: ConsoleRecord[],
  *   ownRecords: ConsoleRecord[],
+ *   receiver?: object | Function,
  *   records: ConsoleRecord[]
  * }} ConsoleCapture
  */
 
 /** @type {ConsoleCapture | undefined} */
 let activeCapture
+/** @type {ConsoleCapture | undefined} */
+let activeNodeConsoleFormatCapture
+/** @type {ConsoleCapture | undefined} */
+let activeNodeConsoleWriteCapture
 let activeWriteId = 0
 let expectedWrite
 /** @type {(() => LogHolder | undefined) | undefined} */
@@ -58,15 +69,21 @@ let getLogHolder
 let isLogSubmissionAllowed
 let isPublishing = false
 let nextWriteId = 0
+let suppressedConsoleDepth = 0
 
 for (const method of methods) {
   // Newer Node versions publish these channels before formatting, allowing
   // pre-existing bound Console methods to retain their severity without
   // depending on application-controlled stack traces.
   channel(`console.${method}`).subscribe(() => {
-    if (!activeCapture && shouldCaptureLogs()) {
-      pendingNodeConsoleMethods.push(method)
+    if (!shouldCaptureLogs()) return
+
+    let capture
+    if (activeCapture && !activeCapture.methodSignaled && activeCapture.method === method) {
+      capture = activeCapture
+      capture.methodSignaled = true
     }
+    pendingNodeConsoleCalls.push({ capture, method })
   })
 }
 
@@ -99,7 +116,7 @@ function createRecord (method, message, writeId, captureLogHolder) {
  * @param {(() => boolean) | undefined} captureAllowed
  */
 function shouldCaptureLogs (captureAllowed) {
-  if (isPublishing || !logSubmissionCh.hasSubscribers) return false
+  if (isPublishing || suppressedConsoleDepth > 0 || !logSubmissionCh.hasSubscribers) return false
 
   captureAllowed ||= isLogSubmissionAllowed
   if (!captureAllowed) return true
@@ -129,6 +146,24 @@ function getPropertyDescriptor (target, property) {
     }
   } catch {}
   return descriptor
+}
+
+/**
+ * @param {object | Function} target
+ * @param {object} expectedPrototype
+ */
+function inheritsFrom (target, expectedPrototype) {
+  try {
+    let prototype = Object.getPrototypeOf(target)
+    let prototypes
+    while (prototype && !prototypes?.has(prototype)) {
+      if (prototype === expectedPrototype) return true
+      prototypes ||= new Set()
+      prototypes.add(prototype)
+      prototype = Object.getPrototypeOf(prototype)
+    }
+  } catch {}
+  return false
 }
 
 /**
@@ -264,21 +299,30 @@ function formatNodeConsoleMessage (target, message) {
 
 /**
  * @param {Function} skipFunction
+ * @param {object} target
+ * @returns {string | false | undefined}
  */
-function getNodeConsoleMethod (skipFunction) {
+function getNodeConsoleMethod (skipFunction, target) {
   try {
     const error = {}
     Error.captureStackTrace(error, skipFunction)
     const stack = error.stack
     if (Array.isArray(stack)) {
-      const method = stack[0]?.getMethodName?.() || stack[0]?.getFunctionName?.()
-      if (methodSet.has(method)) return method
+      let supportedMethod
+      for (const callSite of stack) {
+        const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
+        const receiver = callSite?.getThis?.()
+        if (receiver && receiver !== target) continue
+        if (unsupportedMethods.has(method)) return false
+        if (!supportedMethod && methodSet.has(method)) supportedMethod = method
+      }
+      return supportedMethod
     } else if (typeof stack === 'string') {
+      if (unsupportedNodeConsoleMethodPattern.test(stack)) return false
       const method = nodeConsoleMethodPattern.exec(stack)?.[1]
       if (method) return method
     }
   } catch {}
-  return 'error'
 }
 
 /**
@@ -302,6 +346,33 @@ function usesNodeConsoleWrite (target, method, descriptor) {
 /**
  * @param {object | Function} target
  */
+function wrapUnsupportedNodeConsoleMethods (target) {
+  if (suppressionWrappedTargets.has(target)) return
+
+  suppressionWrappedTargets.add(target)
+  for (const method of unsupportedMethods) {
+    const descriptor = getPropertyDescriptor(target, method)
+    if (typeof descriptor?.value !== 'function') continue
+
+    try {
+      // Console methods are bound onto instances at runtime, so Orchestrion cannot
+      // bracket every receiver that test frameworks create or replace.
+      descriptor.value = shimmer.wrapFunction(descriptor.value, original => function () {
+        suppressedConsoleDepth++
+        try {
+          return original.apply(this, arguments)
+        } finally {
+          suppressedConsoleDepth--
+        }
+      })
+      Object.defineProperty(target, method, descriptor)
+    } catch {}
+  }
+}
+
+/**
+ * @param {object | Function} target
+ */
 function wrapNodeConsoleWrite (target) {
   if (!nodeConsoleWrite) return false
 
@@ -317,13 +388,18 @@ function wrapNodeConsoleWrite (target) {
       const formatDescriptor = Object.getOwnPropertyDescriptor(owner, nodeConsoleFormatForStderr)
       if (typeof formatDescriptor?.value === 'function') {
         formatDescriptor.value = shimmer.wrapFunction(formatDescriptor.value, original => function () {
+          const previousFormatCapture = activeNodeConsoleFormatCapture
+          activeNodeConsoleFormatCapture = activeCapture
           try {
             return original.apply(this, arguments)
           } catch (error) {
             // The console diagnostics channel runs before formatting. Do not
             // leave its method behind when formatting aborts before a write.
-            if (!activeCapture) pendingNodeConsoleMethods.pop()
+            const pendingCall = pendingNodeConsoleCalls.at(-1)
+            if (!pendingCall?.capture || pendingCall.capture === activeCapture) pendingNodeConsoleCalls.pop()
             throw error
+          } finally {
+            activeNodeConsoleFormatCapture = previousFormatCapture
           }
         })
         Object.defineProperty(owner, nodeConsoleFormatForStderr, formatDescriptor)
@@ -338,28 +414,49 @@ function wrapNodeConsoleWrite (target) {
     ) {
       const capture = activeCapture
       const isStderr = streamSymbol?.description === 'kUseStderr'
-      const pendingMethod = isStderr && !capture ? pendingNodeConsoleMethods.pop() : undefined
+      const pendingCall = isStderr ? pendingNodeConsoleCalls.pop() : undefined
+      const isNestedNodeConsoleCall = Boolean(capture &&
+        (activeNodeConsoleFormatCapture === capture || activeNodeConsoleWriteCapture === capture))
       let record
-      if (!isPublishing && isStderr && typeof message === 'string') {
+      if (!isPublishing && suppressedConsoleDepth === 0 && isStderr && typeof message === 'string') {
         try {
           message = formatNodeConsoleMessage(this, message)
-          if (capture?.nodeConsole) {
+          const isCaptureWrite = !isNestedNodeConsoleCall && capture?.nodeConsole && capture.receiver === this &&
+            (!pendingCall || pendingCall.capture === capture)
+          if (isCaptureWrite) {
             record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
             capture.observedRecords.push(record)
             capture.ownRecords.push(record)
             record = undefined
-          } else if (!capture && shouldCaptureLogs()) {
+          } else {
             // Console instances bind their methods during construction. Instances created before instrumentation
             // cannot be wrapped afterward. Newer Node versions publish the
             // method before formatting; older versions retain the stack-based
             // fallback.
-            const method = pendingMethod || getNodeConsoleMethod(nodeConsoleWriteWithTrace)
-            record = createRecord(method, message, ++nextWriteId)
+            const detectedMethod = getNodeConsoleMethod(nodeConsoleWriteWithTrace, this)
+            const method = detectedMethod === false ? undefined : detectedMethod || pendingCall?.method
+            const isActiveCall = !isNestedNodeConsoleCall && capture && !capture.nodeConsole && capture.nativeTarget
+            if (!isActiveCall && method && shouldCaptureLogs()) {
+              record = createRecord(method, message, ++nextWriteId)
+            }
           }
         } catch {}
       }
-      const result = original.apply(this, arguments)
-      if (record) publishRecords([record])
+      let result
+      const previousWriteCapture = activeNodeConsoleWriteCapture
+      activeNodeConsoleWriteCapture = capture
+      try {
+        result = original.apply(this, arguments)
+      } finally {
+        activeNodeConsoleWriteCapture = previousWriteCapture
+      }
+      if (record) {
+        if (capture) {
+          capture.records.push(record)
+        } else {
+          publishRecords([record])
+        }
+      }
       return result
     })
     Object.defineProperty(owner, nodeConsoleWrite, descriptor)
@@ -381,10 +478,11 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
   let isNodeConsoleTarget = target === nodeConsole || target === Console.prototype
   try {
     if (!isNodeConsoleTarget && Object.getOwnPropertyDescriptor(target, '_stderrErrorHandler')) {
-      isNodeConsoleTarget = Object.getPrototypeOf(target) === Console.prototype
+      isNodeConsoleTarget = inheritsFrom(target, Console.prototype)
     }
   } catch {}
   const hasNodeConsoleWrite = isNodeConsoleTarget && wrapNodeConsoleWrite(target)
+  if (isNodeConsoleTarget) wrapUnsupportedNodeConsoleMethods(target)
 
   wrappedTargets.add(target)
   for (const method of methods) {
@@ -414,10 +512,12 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
         capture = {
           captureLogHolder,
           method,
+          nativeTarget: isNodeConsoleTarget,
           nodeConsole: true,
           records: parentCapture?.records || [],
           observedRecords: [],
           ownRecords: [],
+          receiver: target === Console.prototype ? this : target,
         }
         activeCapture = capture
         captureActive = true
@@ -509,6 +609,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
               capture = {
                 captureLogHolder,
                 method,
+                nativeTarget: isNodeConsoleTarget,
                 nodeConsole: false,
                 records: parentCapture?.records || [],
                 observedRecords: [],
