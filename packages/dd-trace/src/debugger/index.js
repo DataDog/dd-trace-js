@@ -13,6 +13,7 @@ const {
   DEBUGGER_DIAGNOSTICS_V1,
   DEBUGGER_INPUT_DIRECT,
   DEBUGGER_INPUT_V2,
+  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
@@ -25,10 +26,6 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
 /**
  * @typedef {import('../remote_config')} RemoteConfig
  */
-
-// Guardrail counters are aggregated in shared memory and only converted into telemetry metrics at this interval, so
-// the interval bounds the delay before a guardrail hit becomes visible, not the cost of recording it.
-const GUARDRAIL_METRICS_FLUSH_INTERVAL_MS = 10_000
 
 // Published by telemetry right before it sends its final metrics on process exit. The flush interval timer is unref'ed
 // and the worker does not keep the process alive, so without this hook everything counted since the last tick would
@@ -58,7 +55,6 @@ module.exports = {
 /**
  * Check if the Debugger worker is currently running
  *
- * @returns {boolean} True if the worker is started, false otherwise
  */
 function isStarted () {
   return worker !== null

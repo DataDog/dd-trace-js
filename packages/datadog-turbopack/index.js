@@ -74,7 +74,6 @@ function normalizeConfig (config) {
 
 /**
  * @param {unknown} value
- * @returns {boolean}
  */
 function isObject (value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -146,7 +145,6 @@ function createLoader () {
 
 /**
  * @param {unknown} value
- * @returns {boolean}
  */
 function hasDatadogLoader (value) {
   if (Array.isArray(value)) return value.some(hasDatadogLoader)
@@ -169,15 +167,11 @@ function createPackagePathPattern () {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function escapeRegExp (value) {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
-/**
- * @returns {number}
- */
 function getNextMajor () {
   const entrypoints = []
   if (require.main?.filename) entrypoints.push(require.main.filename)

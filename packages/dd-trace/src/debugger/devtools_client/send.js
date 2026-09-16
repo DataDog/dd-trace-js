@@ -78,7 +78,7 @@ function send (message, logger, dd, snapshot, processTags, eventType, incomplete
 
     if (pruned) {
       json = pruned
-    } else {
+    } else if (snapshot.captures !== undefined) {
       // Fallback if pruning fails
       const line = Object.keys(snapshot.captures.lines)[0]
       snapshot.captures.lines[line] = { pruned: true }
@@ -108,7 +108,6 @@ function onFlush (payload) {
 /**
  * @param {number} statusCode - The status code of the response
  * @param {string} payload - The payload to send
- * @returns {boolean} True if the fallback was needed, false otherwise
  */
 function handleV2FallbackIfNeeded (statusCode, payload) {
   if (statusCode !== 404 || config.inputPath !== DEBUGGER_INPUT_V2) {

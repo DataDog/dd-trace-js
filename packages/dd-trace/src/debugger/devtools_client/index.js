@@ -13,6 +13,7 @@ const {
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
+const { refreshBreakpoints } = require('./breakpoints')
 const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
@@ -190,6 +191,10 @@ session.on('Debugger.paused', async ({ params }) => {
   const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
   let messageIndex = 1
 
+  // The probes whose capture got permanently disabled during this pause, if any
+  /** @type {object[] | undefined} */
+  let captureDisabledProbes
+
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
     const snapshot = {
@@ -221,6 +226,8 @@ session.on('Debugger.paused', async ({ params }) => {
           expr: '',
           message: error.message,
         }))
+        captureDisabledProbes ??= []
+        captureDisabledProbes.push(probe)
       }
       snapshot.captures = {
         lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
@@ -237,6 +244,8 @@ session.on('Debugger.paused', async ({ params }) => {
             expr: '',
             message: error.message,
           }))
+          captureDisabledProbes ??= []
+          captureDisabledProbes.push(probe)
         }
 
         snapshot.captures = {
@@ -296,6 +305,21 @@ session.on('Debugger.paused', async ({ params }) => {
     send(message, logger, dd, snapshot,
       config.propagateProcessTags.enabled ? processTags.serialized : undefined,
       eventType, incompleteReasons)
+  }
+
+  if (captureDisabledProbes !== undefined) {
+    // The breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against
+    // the global snapshot rate limit and how a skipped hit is classified. Rebuild the conditions now that this
+    // changed. The disabled probes can be spread over more than one breakpoint, but each affected location is only
+    // refreshed once.
+    refreshBreakpoints(captureDisabledProbes).catch((err) => {
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.error(() => {
+        let ids = captureDisabledProbes[0].id
+        for (let i = 1; i < captureDisabledProbes.length; i++) ids += `, ${captureDisabledProbes[i].id}`
+        return `[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: ${ids}`
+      }, err)
+    })
   }
 })
 

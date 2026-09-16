@@ -27,7 +27,6 @@ const Sampler = require('./sampler')
 class AlwaysMatcher {
   /**
    * @param {DatadogSpan} span
-   * @returns {boolean}
    */
   match (span) {
     return true
@@ -42,7 +41,6 @@ class AlwaysMatcher {
 class NeverMatcher {
   /**
    * @param {DatadogSpan} span
-   * @returns {boolean}
    */
   match (span) {
     return false
@@ -64,7 +62,6 @@ class GlobMatcher {
 
   /**
    * @param {DatadogSpan} span
-   * @returns {boolean}
    */
   match (span) {
     const subject = this.locator(span)
@@ -91,7 +88,6 @@ class RegExpMatcher {
 
   /**
    * @param {DatadogSpan} span
-   * @returns {boolean}
    */
   match (span) {
     const subject = this.locator(span)
@@ -235,7 +231,6 @@ class SamplingRule {
 
   /**
    * Deterministic sampling rate in [0, 1].
-   * @returns {number}
    */
   get sampleRate () {
     return this._sampler.rate()
@@ -261,7 +256,6 @@ class SamplingRule {
    * Checks whether the provided span matches all configured criteria.
    *
    * @param {DatadogSpan} span
-   * @returns {boolean}
    */
   match (span) {
     for (const matcher of this.matchers) {
@@ -280,7 +274,6 @@ class SamplingRule {
    * Determines whether a span should be sampled based on the configured sampling rule.
    *
    * @param {DatadogSpan|DatadogSpanContext} span - The span or span context to evaluate.
-   * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
    */
   sample (span) {
     if (!this._sampler.isSampled(span)) {

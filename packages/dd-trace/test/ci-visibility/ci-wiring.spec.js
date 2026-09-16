@@ -756,7 +756,6 @@ describe('test optimization validation CI audit', () => {
    * @param {boolean} [input.reviewComplete] whether relevant review is complete
    * @param {string} input.transport transport mode
    * @param {string[]} [input.unresolved] unresolved CI evidence
-   * @returns {void}
    */
   function completeReview ({
     command: selectedCommand = command,
@@ -792,7 +791,6 @@ describe('test optimization validation CI audit', () => {
  * @param {object} input workflow values
  * @param {string} input.command test command
  * @param {string[]} [input.env] job environment lines
- * @returns {string} workflow source
  */
 function workflowSource ({ command, env = [] }) {
   return [

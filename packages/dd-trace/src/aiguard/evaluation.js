@@ -9,6 +9,7 @@ const { keepTrace } = require('../priority_sampler')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { AI_GUARD } = require('../standalone/product')
 const telemetryMetrics = require('../telemetry/metrics')
+const { truncateString } = require('../util')
 const { normalizeRedactionReplacements, redactMessages } = require('./redaction')
 const TAGS = require('./tags')
 
@@ -96,7 +97,6 @@ function parseEvaluationResponse (body) {
  *
  * @param {boolean} block
  * @param {{ action: string, blockingEnabled: boolean }} evaluation
- * @returns {boolean}
  */
 function shouldBlockEvaluation (block, evaluation) {
   return block && evaluation.blockingEnabled && evaluation.action !== ALLOW
@@ -211,7 +211,6 @@ class EvaluationReporter {
    *
    * @param {EvaluationReport} report
    * @param {string} errorType
-   * @returns {void}
    */
   fail (report, errorType) {
     report.metaStruct.messages = this.#buildMessagesForMetaStruct(report.messages, report.telemetryTags)
@@ -224,7 +223,6 @@ class EvaluationReporter {
    *
    * @param {EvaluationReport} report
    * @param {EvaluationOutcome} outcome
-   * @returns {void}
    */
   finish (report, outcome) {
     const { result, redaction, shouldBlock } = outcome
@@ -299,14 +297,13 @@ class EvaluationReporter {
    * Truncates text in a cloned message to one shared content-size limit.
    *
    * @param {{ content?: string|ContentPart[] }} message
-   * @returns {boolean}
    */
   #truncateMessageContent (message) {
     const { content } = message
     if (typeof content === 'string') {
       if (content.length <= this.#maxContentSize) return false
 
-      message.content = content.slice(0, this.#maxContentSize)
+      message.content = truncateString(content, this.#maxContentSize)
       return true
     }
 
@@ -319,7 +316,7 @@ class EvaluationReporter {
       if (typeof text !== 'string') continue
 
       if (text.length > remainingContentSize) {
-        part.text = text.slice(0, remainingContentSize)
+        part.text = truncateString(text, remainingContentSize)
         truncated = true
         remainingContentSize = 0
       } else {
@@ -333,7 +330,6 @@ class EvaluationReporter {
    * Returns whether a message represents a tool call or tool output.
    *
    * @param {Message} message
-   * @returns {boolean}
    */
   #isToolCall (message) {
     return Boolean(message.tool_calls || message.tool_call_id)
@@ -370,7 +366,6 @@ class EvaluationReporter {
    * Adds missing client IP tags to the service entry span.
    *
    * @param {Span} rootSpan
-   * @returns {void}
    */
   #setRootSpanClientIpTags (rootSpan) {
     const currentTags = rootSpan.context().getTags()
@@ -411,7 +406,6 @@ class EvaluationReporter {
    *
    * @param {Span} guardSpan
    * @param {Span} rootSpan
-   * @returns {void}
    */
   #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
     const rootTags = rootSpan.context().getTags()

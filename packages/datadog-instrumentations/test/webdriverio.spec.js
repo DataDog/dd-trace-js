@@ -4882,7 +4882,6 @@ function createJasmineResult (id, file, status) {
  *
  * @param {object} result
  * @param {string} file
- * @returns {void}
  */
 function reportJasmineSpecStarted (result, file) {
   channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end').publish({
@@ -4897,7 +4896,6 @@ function reportJasmineSpecStarted (result, file) {
  * @param {object} localRunner
  * @param {object} worker
  * @param {string|string[]} file
- * @returns {void}
  */
 function registerWorker (localRunner, worker, file) {
   const specs = Array.isArray(file) ? file : [file]
@@ -4931,7 +4929,6 @@ function finishLocalRunner (localRunner, error) {
  * @param {EventEmitter} worker
  * @param {string|string[]} file
  * @param {string} requestId
- * @returns {void}
  */
 function requestConfiguration (worker, file, requestId) {
   const files = Array.isArray(file) ? file : [file]
@@ -4956,7 +4953,6 @@ function requestConfiguration (worker, file, requestId) {
  * @param {string} file
  * @param {string} [status]
  * @param {{message?: string, stack?: string}} [error]
- * @returns {void}
  */
 function reportSuiteFinish (worker, file, status = 'pass', error) {
   worker.emit('message', {

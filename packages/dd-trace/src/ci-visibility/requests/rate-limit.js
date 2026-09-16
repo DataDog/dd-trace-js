@@ -6,7 +6,6 @@ const EPOCH_SECONDS_THRESHOLD = 1_000_000_000
  * Returns the delay requested by a Test Optimization intake rate-limit response.
  *
  * @param {import('node:http').IncomingHttpHeaders} [headers]
- * @returns {number}
  */
 function getRateLimitResetDelay (headers) {
   let retryAfter = headers?.['retry-after']
