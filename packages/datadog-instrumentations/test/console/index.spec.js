@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 const { Console } = require('node:console')
 const { Writable } = require('node:stream')
-const { inspect } = require('node:util')
+const { format, inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -119,6 +119,88 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'header\ndetails' }])
   })
 
+  it('captures buffer-backed replacement console writes', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(new Uint8Array(Buffer.from(`${message}\n`)))
+      },
+      warn (message) {
+        stream.write(Buffer.from(`${message}\n`))
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('warning')
+    target.error('error')
+
+    assert.strictEqual(output.length, 2)
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'warning' },
+      { method: 'error', message: 'error' },
+    ])
+  })
+
+  it('excludes complete lines written while a replacement console formats arguments', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      warn (...args) {
+        stream.write(format(...args))
+        stream.write('\n')
+      },
+    }
+    const value = {
+      [inspect.custom] () {
+        stream.write('unrelated output\n')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello %o', value)
+
+    assert.deepStrictEqual(output, ['unrelated output\n', 'hello formatted value', '\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
+  it('publishes a completed replacement-console write when the method later throws', () => {
+    const error = new Error('console failure')
+    const stream = { write: sinon.stub() }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+        throw error
+      },
+    }
+    wrapConsole(target)
+
+    assert.throws(() => target.warn('before failure'), error)
+
+    sinon.assert.calledOnceWithExactly(stream.write, 'before failure\n')
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'before failure' }])
+  })
+
+  it('does not publish a replacement-console write that throws', () => {
+    const error = new Error('write failure')
+    const stream = { write: sinon.stub().throws(error) }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    wrapConsole(target)
+
+    assert.throws(() => target.warn('not written'), error)
+
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('publishes once when one wrapped console delegates to another', () => {
     const stream = { write: sinon.stub() }
     const innerError = sinon.stub().callsFake((message) => {
@@ -210,6 +292,57 @@ describe('console instrumentation', () => {
       { method: 'warn', message: 'existing warning' },
       { method: 'error', message: 'existing error' },
     ])
+  })
+
+  it('preserves warning severity without relying on stack traces', () => {
+    const stream = { write: sinon.stub() }
+    const useStderr = Symbol('kUseStderr')
+    const formatForStderr = Symbol('kFormatForStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    const warningCh = channel('console.warn')
+    class FakeConsole {
+      constructor (stream) {
+        this._stderr = stream
+        this._stderrErrorHandler = () => {}
+        this.warn = this.warn.bind(this)
+      }
+
+      warn (...args) {
+        warningCh.publish(args)
+        this[writeToConsole](useStderr, this[formatForStderr](args))
+      }
+    }
+    Object.defineProperties(FakeConsole.prototype, {
+      [formatForStderr]: {
+        configurable: true,
+        value: args => args.join(' '),
+        writable: true,
+      },
+      [writeToConsole]: {
+        configurable: true,
+        value (streamSymbol, message) {
+          this._stderr.write(`${message}\n`)
+        },
+        writable: true,
+      },
+    })
+    const target = new FakeConsole(stream)
+    const fakeNodeConsole = { Console: FakeConsole, '@noCallThru': true }
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      'node:console': fakeNodeConsole,
+    })
+    const stackTraceLimit = Error.stackTraceLimit
+
+    try {
+      Error.stackTraceLimit = 0
+      wrapIsolatedConsole(FakeConsole.prototype)
+      target.warn('existing warning')
+    } finally {
+      Error.stackTraceLimit = stackTraceLimit
+    }
+
+    sinon.assert.calledOnceWithExactly(stream.write, 'existing warning\n')
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'existing warning' }])
   })
 
   it('does not expose a temporary stream writer while formatting a native console record', () => {
@@ -531,6 +664,42 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
   })
 
+  it('captures a user-bound replacement on the global console', () => {
+    const stream = { write: sinon.stub() }
+    const useStderr = Symbol('kUseStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    class FakeConsole {}
+    FakeConsole.prototype[writeToConsole] = function (streamSymbol, message) {
+      this._stderr.write(message)
+    }
+    const fakeNodeConsole = {
+      Console: FakeConsole,
+      _stderr: stream,
+      error (message) {
+        this[writeToConsole](useStderr, `${message}\n`)
+      },
+      warn (message) {
+        this[writeToConsole](useStderr, `${message}\n`)
+      },
+    }
+    fakeNodeConsole[writeToConsole] = FakeConsole.prototype[writeToConsole]
+    fakeNodeConsole.error = fakeNodeConsole.error.bind(fakeNodeConsole)
+    fakeNodeConsole.warn = fakeNodeConsole.warn.bind(fakeNodeConsole)
+    fakeNodeConsole['@noCallThru'] = true
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      'node:console': fakeNodeConsole,
+    })
+    fakeNodeConsole.warn = function warn (message) {
+      this.write(`[custom] ${message}\n`)
+    }.bind(stream)
+
+    wrapIsolatedConsole(fakeNodeConsole)
+    fakeNodeConsole.warn('hello')
+
+    sinon.assert.calledOnceWithExactly(stream.write, '[custom] hello\n')
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: '[custom] hello' }])
+  })
+
   it('does not capture logs when the active context suppresses submission', () => {
     const stream = { write: sinon.stub() }
     const target = {
@@ -595,6 +764,39 @@ describe('console instrumentation', () => {
 
     assert.strictEqual(warnReads, 1)
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+  })
+
+  it('does not throw when the global console accessor cannot be read during configuration', () => {
+    let configureSubscriber
+    const fakeChannel = name => ({
+      hasSubscribers: true,
+      publish () {},
+      subscribe (subscriber) {
+        if (name === 'ci:log-submission:console:configure') configureSubscriber = subscriber
+      },
+    })
+    class FakeConsole {
+      error () {}
+      warn () {}
+    }
+    proxyquire('../../src/console', {
+      './helpers/instrument': { channel: fakeChannel, '@noCallThru': true },
+      'node:console': { Console: FakeConsole, '@noCallThru': true },
+    })
+    const consoleDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'console')
+
+    try {
+      Object.defineProperty(globalThis, 'console', {
+        configurable: true,
+        get () {
+          throw new Error('console unavailable')
+        },
+      })
+
+      configureSubscriber({})
+    } finally {
+      Object.defineProperty(globalThis, 'console', consoleDescriptor)
+    }
   })
 
   it('does not throw when a proxy rejects private console symbol inspection', () => {
