@@ -34,7 +34,6 @@ class LLMObsPlugin extends TracingPlugin {
    * Whether the LLMObs layer is active. When it is not, the plugin stays subscribed but only
    * emits the `gen_ai.*` APM attributes.
    *
-   * @returns {boolean}
    */
   get _llmobsEnabled () {
     return this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
@@ -128,7 +127,6 @@ class LLMObsPlugin extends TracingPlugin {
    * options, which every integration already builds for the LLMObs layer.
    *
    * @param {object} ctx
-   * @returns {void}
    */
   #setGenAiApmTagsFromRegisterOptions (ctx) {
     const span = ctx.currentStore?.span
@@ -155,7 +153,6 @@ class LLMObsPlugin extends TracingPlugin {
 
   /**
    * @param {object} ctx
-   * @returns {void}
    */
   #setGenAiApmEndTags (ctx) {
     const span = ctx.currentStore?.span
@@ -177,7 +174,6 @@ class LLMObsPlugin extends TracingPlugin {
    *
    * @param {import('../../opentracing/span')} span
    * @param {import('../gen-ai-tags').GenAiApmTags} tags
-   * @returns {void}
    */
   _setGenAiApmTags (span, tags) {
     const traceTags = span.context()._trace.tags

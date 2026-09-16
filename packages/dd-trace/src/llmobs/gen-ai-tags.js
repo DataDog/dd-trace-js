@@ -51,7 +51,6 @@ const GEN_AI_USAGE_METRIC_KEYS = Object.assign(Object.create(null), {
  *
  * @param {import('../opentracing/span')} span
  * @param {GenAiApmTags} tags
- * @returns {void}
  */
 function setGenAiApmTags (span, tags) {
   // mirrors the LLMObs span event: a model-backed span always reports a model and provider
@@ -66,7 +65,6 @@ function setGenAiApmTags (span, tags) {
  *
  * @param {import('../opentracing/span')} span
  * @param {GenAiApmTags} tags
- * @returns {void}
  */
 function updateGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, sessionId, metrics }) {
   const spanContext = span.context()
@@ -86,7 +84,6 @@ function updateGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, 
  * @param {import('../opentracing/span')} span
  * @param {string | undefined} spanKind LLMObs span kind
  * @param {Record<string, unknown>} metrics
- * @returns {void}
  */
 function setGenAiApmUsageMetrics (span, spanKind, metrics) {
   // Other kinds carry unrelated metrics that would be misleading under a `gen_ai.usage.*` key.
