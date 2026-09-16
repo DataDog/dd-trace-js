@@ -84,7 +84,6 @@ export function getDurationMs (startedAt, completedAt) {
 
 /**
  * @param {number | undefined} durationMs
- * @returns {string}
  */
 export function formatDuration (durationMs) {
   if (durationMs === undefined) return 'unknown'
@@ -109,7 +108,6 @@ export function classifyDuration (durationMs) {
 
 /**
  * @param {string} workflowPath
- * @returns {string}
  */
 function normalizeWorkflowPath (workflowPath) {
   return workflowPath.split('@', 1)[0]
@@ -149,7 +147,6 @@ export function parseWorkflowTeams (contents) {
 /**
  * @param {WorkflowRun} run
  * @param {{ defaultTeam?: string, teams: Map<string, string> }} workflowTeams
- * @returns {string}
  */
 function getTeam (run, workflowTeams) {
   const workflowPath = normalizeWorkflowPath(run.path)
@@ -222,7 +219,6 @@ export function analyzeJobs (jobs) {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function markdownText (value) {
   return value.replaceAll('|', String.raw`\|`).replaceAll(/\s+/g, ' ').trim()
@@ -230,7 +226,6 @@ function markdownText (value) {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function slackText (value) {
   return value
@@ -244,7 +239,6 @@ function slackText (value) {
 /**
  * @param {string} value
  * @param {number} maxLength
- * @returns {string}
  */
 function truncate (value, maxLength = 90) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value
@@ -252,7 +246,6 @@ function truncate (value, maxLength = 90) {
 
 /**
  * @param {number | undefined} durationMs
- * @returns {string}
  */
 function statusIcon (durationMs) {
   const status = classifyDuration(durationMs)
@@ -266,7 +259,6 @@ function statusIcon (durationMs) {
  * @param {string} days
  * @param {string | undefined} until
  * @param {Date} [now]
- * @returns {string}
  */
 export function getReportDateRange (days, until, now = new Date()) {
   const untilMatch = until?.match(/^\d{4}-\d{2}-\d{2}$/)?.[0]
@@ -445,7 +437,6 @@ export async function collectSnapshot (
 
 /**
  * @param {Awaited<ReturnType<typeof collectSnapshot>>} snapshot
- * @returns {string}
  */
 export function createMarkdownReport (snapshot) {
   const { anchors, stale, workflows } = snapshot
@@ -525,7 +516,6 @@ export function createMarkdownReport (snapshot) {
 /**
  * @param {Awaited<ReturnType<typeof collectSnapshot>>} snapshot
  * @param {string} reportUrl
- * @returns {string}
  */
 export function createSlackReport (snapshot, reportUrl) {
   const { anchor, anchors, stale, workflows } = snapshot

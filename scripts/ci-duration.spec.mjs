@@ -17,7 +17,6 @@ const MINUTE = 60 * 1000
 
 /**
  * @param {number} seconds
- * @returns {string}
  */
 function timestamp (seconds) {
   return new Date(seconds * 1000).toISOString()
