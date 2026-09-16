@@ -103,6 +103,15 @@ describe('get-known-tests', () => {
     })
   })
 
+  it('does not fetch known tests without an API key', (done) => {
+    getConfig().DD_API_KEY = undefined
+
+    getKnownTests(DEFAULT_PARAMS, (error) => {
+      assert.strictEqual(error.message, 'Known tests were not fetched because Datadog API key is not defined.')
+      done()
+    })
+  })
+
   it('should write to cache after a successful fetch', (done) => {
     nock(BASE_URL)
       .post('/api/v2/ci/libraries/tests')

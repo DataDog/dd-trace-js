@@ -3,11 +3,13 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const nock = require('nock')
 
 require('../../setup/core')
 
 const getConfig = require('../../../src/config')
 const {
+  getLibraryConfiguration,
   parseLibraryConfigurationResponse,
 } = require('../../../src/ci-visibility/requests/get-library-configuration')
 
@@ -37,15 +39,50 @@ const COMPLETE_SETTINGS_ATTRIBUTES = {
 
 describe('get-library-configuration', () => {
   beforeEach(() => {
+    getConfig().DD_API_KEY = 'test-api-key'
     getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = true
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
   })
 
   afterEach(() => {
+    getConfig().DD_API_KEY = undefined
     getConfig().testOptimization.DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED = true
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
     getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
+    nock.cleanAll()
+  })
+
+  it('fetches library configuration with an API key', (done) => {
+    nock('https://api.datadoghq.com')
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, { data: { attributes: COMPLETE_SETTINGS_ATTRIBUTES } })
+
+    getLibraryConfiguration({
+      url: new URL('https://api.datadoghq.com'),
+      isEvpProxy: false,
+      evpProxyPrefix: '',
+    }, (error, settings) => {
+      assert.strictEqual(error, null)
+      assert.strictEqual(settings.isCodeCoverageEnabled, true)
+      done()
+    })
+  })
+
+  it('does not fetch library configuration without an API key', (done) => {
+    getConfig().DD_API_KEY = undefined
+
+    getLibraryConfiguration({
+      url: new URL('https://api.datadoghq.com'),
+      isEvpProxy: false,
+      evpProxyPrefix: '',
+    }, (error) => {
+      assert.strictEqual(
+        error.message,
+        'Request to settings endpoint was not done because Datadog API key is not defined.'
+      )
+      done()
+    })
   })
 
   describe('parseLibraryConfigurationResponse', () => {
