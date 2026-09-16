@@ -207,7 +207,6 @@ function isJsonContentType (contentType) {
  *
  * @param {string} rawBody
  * @param {boolean | undefined} isBase64Encoded
- * @returns {boolean}
  */
 function isOverSizeCap (rawBody, isBase64Encoded) {
   if (isBase64Encoded) return Math.floor(rawBody.length * 3 / 4) >= MAX_RESPONSE_BODY_SIZE
