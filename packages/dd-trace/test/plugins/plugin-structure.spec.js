@@ -8,6 +8,10 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
+const {
+  getRewriteActivationName,
+  isRewriteTargetName,
+} = require('../../../datadog-instrumentations/src/helpers/rewriter/targets')
 const plugins = require('../../src/plugins')
 
 const abstractPlugins = [
@@ -45,8 +49,14 @@ const missingPlugins = [
 
 // instrumentations that do not have a hook, but are still instrumented
 const missingInstrumentationHooks = [
+  'azure-cosmos',
+  'bullmq',
   'fetch', // fetch is provided by Node.js, and is automatically instrumented if it exists
+  'langchain',
+  'langgraph',
 ]
+
+const hooklessOrchestrionPlugins = new Set(['azure-cosmos', 'bullmq', 'langchain', 'langgraph'])
 
 function extractPluginIds (source, re, index) {
   const ids = new Set()
@@ -117,7 +127,7 @@ describe('Plugin Structure Validation', () => {
       })
 
       it('should have a corresponding instrumentation file', () => {
-        if (abstractPlugins.includes(pluginId)) {
+        if (abstractPlugins.includes(pluginId) || hooklessOrchestrionPlugins.has(pluginId)) {
           return
         }
 
@@ -142,7 +152,8 @@ describe('Plugin Structure Validation', () => {
     const missingInstrumentations = []
 
     allPluginIds.forEach(pluginId => {
-      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId)) {
+      if (!instrumentationFiles.has(pluginId) && !abstractPlugins.includes(pluginId) &&
+        !hooklessOrchestrionPlugins.has(pluginId)) {
         missingInstrumentations.push(pluginId)
       }
     })
@@ -174,6 +185,18 @@ describe('Plugin Structure Validation', () => {
     })
 
     assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
+  })
+
+  it('registers pure Orchestrion integrations only as rewrite targets', () => {
+    const names = ['@azure/cosmos', '@langchain/core', '@langchain/langgraph', 'bullmq', 'mercurius']
+
+    for (const name of names) {
+      assert.equal(hooks[name], undefined)
+      assert.equal(isRewriteTargetName(name), true)
+      assert.equal(getRewriteActivationName(name), name)
+    }
+    assert.equal(getRewriteActivationName('graphql'), undefined)
+    assert.equal(typeof hooks.graphql, 'function')
   })
 
   it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {
