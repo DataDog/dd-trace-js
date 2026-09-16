@@ -12,6 +12,7 @@ const { storage } = require('../../../datadog-core')
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
 
 const legacyStorage = storage('legacy')
+const consoleConfigureCh = channel('ci:log-submission:console:configure')
 const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
@@ -140,6 +141,21 @@ describe('LogSubmissionPlugin', () => {
       status: 'error',
     }])
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=nodejs&service=my+service')
+  })
+
+  it('configures console instrumentation to suppress tracer diagnostic contexts', () => {
+    let canCapture
+    const subscriber = payload => { canCapture = payload.canCapture }
+    consoleConfigureCh.subscribe(subscriber)
+    try {
+      plugin.configure(false)
+      plugin.configure(pluginConfig)
+    } finally {
+      consoleConfigureCh.unsubscribe(subscriber)
+    }
+
+    assert.strictEqual(canCapture(), true)
+    legacyStorage.run({ noop: true }, () => assert.strictEqual(canCapture(), false))
   })
 
   it('submits console logs without trace correlation when no span is active', () => {

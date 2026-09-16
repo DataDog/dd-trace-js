@@ -4,6 +4,7 @@ const { Writable } = require('node:stream')
 
 const { channel } = require('dc-polyfill')
 
+const { storage } = require('../../../datadog-core')
 const FinalFlushRequestTracker = require('../exporters/common/final-flush-request-tracker')
 const request = require('../exporters/common/request')
 const log = require('../log')
@@ -19,6 +20,7 @@ const CONSOLE_METHOD_TO_STATUS = {
   warn: 'warn',
 }
 const consoleConfigureCh = channel('ci:log-submission:console:configure')
+const legacyStorage = storage('legacy')
 
 /**
  * @returns {Error & { code: string }}
@@ -86,6 +88,7 @@ class LogSubmissionPlugin extends Plugin {
   #timer
   #beforeExitHandler = () => this.#flushLogs()
   #createWinstonJsonFormat
+  #canCaptureConsole = () => !legacyStorage.getHandle()?.noop
   #getLogHolder = () => buildLogHolder(this.tracer)
   #winstonStreamClass
   // Winston formats records inside its transports, not at logger.write time, so (unlike Bunyan/Pino)
@@ -178,7 +181,9 @@ class LogSubmissionPlugin extends Plugin {
       ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
-    if (this._enabled) consoleConfigureCh.publish({ getLogHolder: this.#getLogHolder })
+    if (this._enabled) {
+      consoleConfigureCh.publish({ canCapture: this.#canCaptureConsole, getLogHolder: this.#getLogHolder })
+    }
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     if (this._enabled) {

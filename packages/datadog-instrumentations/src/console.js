@@ -4,6 +4,10 @@ const nodeConsole = require('node:console')
 
 const { Console } = nodeConsole
 const nativeStderrDescriptor = Object.getOwnPropertyDescriptor(nodeConsole, '_stderr')
+const nodeConsoleKeys = Reflect.ownKeys(Console.prototype)
+const nodeConsoleWrite = nodeConsoleKeys.find(key => {
+  return typeof key === 'symbol' && key.description === 'kWriteToConsole'
+})
 
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('./helpers/instrument')
@@ -14,12 +18,18 @@ const logSubmissionCh = channel('ci:log-submission:console')
 const methods = ['error', 'warn']
 const methodSet = new Set(methods)
 const disabledStreams = new WeakSet()
+/** @type {WeakMap<object, symbol | false>} */
+const nodeConsoleGroupIndentKeys = new WeakMap()
+const nodeConsoleWriteOwners = new WeakSet()
 const wrappedTargets = new WeakSet()
 
 /** @typedef {{ dd: object }} LogHolder */
 /** @typedef {{ logHolder?: LogHolder, method: string, message: string, writeId: number }} ConsoleRecord */
 /**
  * @typedef {{
+ *   captureLogHolder?: () => LogHolder | undefined,
+ *   method: string,
+ *   nodeConsole: boolean,
  *   observedRecords: ConsoleRecord[],
  *   ownRecords: ConsoleRecord[],
  *   records: ConsoleRecord[]
@@ -32,6 +42,8 @@ let activeWriteId = 0
 let expectedWrite
 /** @type {(() => LogHolder | undefined) | undefined} */
 let getLogHolder
+/** @type {(() => boolean) | undefined} */
+let isLogSubmissionAllowed
 let isPublishing = false
 let nextWriteId = 0
 
@@ -58,6 +70,21 @@ function createRecord (method, message, writeId, captureLogHolder) {
     record.logHolder = logHolder
   }
   return record
+}
+
+/**
+ * @param {(() => boolean) | undefined} captureAllowed
+ */
+function shouldCaptureLogs (captureAllowed) {
+  if (isPublishing || !logSubmissionCh.hasSubscribers) return false
+
+  captureAllowed ||= isLogSubmissionAllowed
+  if (!captureAllowed) return true
+  try {
+    return captureAllowed() !== false
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -165,18 +192,65 @@ function combineRecords (records, lastOnly) {
 }
 
 /**
+ * @param {object | Function} target
+ */
+function wrapNodeConsoleWrite (target) {
+  if (!nodeConsoleWrite) return false
+
+  const owner = Object.hasOwn(target, nodeConsoleWrite) ? target : Console.prototype
+  if (nodeConsoleWriteOwners.has(owner)) return true
+
+  const descriptor = Object.getOwnPropertyDescriptor(owner, nodeConsoleWrite)
+  if (typeof descriptor?.value !== 'function') return false
+
+  try {
+    // Node formats arguments before this internal writer runs. Capturing here preserves the exact output
+    // without making a temporary stream.write replacement visible to custom inspectors.
+    descriptor.value = shimmer.wrapFunction(descriptor.value, original => function (streamSymbol, message) {
+      const capture = activeCapture
+      if (!isPublishing && capture?.nodeConsole && streamSymbol?.description === 'kUseStderr' &&
+        typeof message === 'string') {
+        try {
+          let groupIndentKey = nodeConsoleGroupIndentKeys.get(this)
+          if (groupIndentKey === undefined) {
+            groupIndentKey = Reflect.ownKeys(this).find(key => {
+              return typeof key === 'symbol' &&
+                (key.description === 'kGroupIndent' || key.description === 'kGroupIndentationString')
+            }) || false
+            nodeConsoleGroupIndentKeys.set(this, groupIndentKey)
+          }
+          const groupIndent = groupIndentKey && this[groupIndentKey]
+          if (groupIndent) message = groupIndent + message.replaceAll('\n', `\n${groupIndent}`)
+          const record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
+          capture.observedRecords.push(record)
+          capture.ownRecords.push(record)
+        } catch {}
+      }
+      return original.apply(this, arguments)
+    })
+    Object.defineProperty(owner, nodeConsoleWrite, descriptor)
+    nodeConsoleWriteOwners.add(owner)
+  } catch {}
+  return nodeConsoleWriteOwners.has(owner)
+}
+
+/**
  * @param {unknown} target
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
+ * @param {(() => boolean) | undefined} [captureAllowed]
  */
-function wrapConsole (target, captureLogHolder) {
+function wrapConsole (target, captureLogHolder, captureAllowed) {
   const targetType = typeof target
   if ((targetType !== 'object' && targetType !== 'function') || target === null) return
   if (wrappedTargets.has(target)) return
 
-  let lastRecordOnly = target === nodeConsole || target === Console.prototype
+  let isNodeConsoleTarget = target === nodeConsole || target === Console.prototype
   try {
-    lastRecordOnly ||= Boolean(Object.getOwnPropertyDescriptor(target, '_stderrErrorHandler'))
+    if (!isNodeConsoleTarget && Object.getOwnPropertyDescriptor(target, '_stderrErrorHandler')) {
+      isNodeConsoleTarget = Object.getPrototypeOf(target) === Console.prototype
+    }
   } catch {}
+  const useNodeConsoleWrite = isNodeConsoleTarget && wrapNodeConsoleWrite(target)
 
   wrappedTargets.add(target)
   for (const method of methods) {
@@ -188,7 +262,7 @@ function wrapConsole (target, captureLogHolder) {
     // Console methods are bound onto instances at runtime, so Orchestrion cannot
     // rewrite every receiver that test frameworks create or replace.
     const wrapMethod = original => function () {
-      const shouldCapture = !isPublishing && logSubmissionCh.hasSubscribers
+      const shouldCapture = shouldCaptureLogs(captureAllowed)
       let capture
       let parentCapture
       let stream
@@ -200,10 +274,23 @@ function wrapConsole (target, captureLogHolder) {
       let writeActive = false
       let wrappedWrite
 
-      if (shouldCapture) {
+      if (shouldCapture && useNodeConsoleWrite) {
+        parentCapture = activeCapture
+        capture = {
+          captureLogHolder,
+          method,
+          nodeConsole: true,
+          records: parentCapture?.records || [],
+          observedRecords: [],
+          ownRecords: [],
+        }
+        activeCapture = capture
+        captureActive = true
+      } else if (shouldCapture) {
         try {
-          const streamDescriptor = getPropertyDescriptor(this, '_stderr') ||
-            getPropertyDescriptor(target, '_stderr')
+          const streamTarget = target === nodeConsole ? target : this
+          const streamDescriptor = getPropertyDescriptor(streamTarget, '_stderr') ||
+            (streamTarget === target ? undefined : getPropertyDescriptor(target, '_stderr'))
           stream = streamDescriptor?.value
           // Node's global console owns a known lazy accessor. Avoid invoking arbitrary replacement
           // console accessors, but preserve capture for the built-in global console.
@@ -271,6 +358,9 @@ function wrapConsole (target, captureLogHolder) {
             if (wrappedWrite) {
               parentCapture = activeCapture
               capture = {
+                captureLogHolder,
+                method,
+                nodeConsole: false,
                 records: parentCapture?.records || [],
                 observedRecords: [],
                 ownRecords: [],
@@ -293,9 +383,9 @@ function wrapConsole (target, captureLogHolder) {
         completed = true
         return result
       } finally {
-        if (wrappedWrite) {
+        if (capture) {
           captureActive = false
-          if (!restoreStreamWrite(stream, writeDescriptor, wrappedWrite)) disabledStreams.add(stream)
+          if (wrappedWrite && !restoreStreamWrite(stream, writeDescriptor, wrappedWrite)) disabledStreams.add(stream)
           activeCapture = parentCapture
 
           let consoleRecord
@@ -303,9 +393,9 @@ function wrapConsole (target, captureLogHolder) {
             // A replacement console may split one record across writes. Node's Console instead
             // uses one final write, after any unrelated writes produced while formatting.
             if (capture.ownRecords.length > 0) {
-              consoleRecord = combineRecords(capture.ownRecords, lastRecordOnly)
+              consoleRecord = combineRecords(capture.ownRecords, isNodeConsoleTarget)
             } else if (capture.observedRecords.length > 0) {
-              consoleRecord = combineRecords(capture.observedRecords, lastRecordOnly)
+              consoleRecord = combineRecords(capture.observedRecords, isNodeConsoleTarget)
             }
           }
           if (consoleRecord) capture.records.push(consoleRecord)
@@ -323,15 +413,16 @@ function wrapConsole (target, captureLogHolder) {
 /**
  * @param {JestBufferedConsole | undefined} BufferedConsole
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
+ * @param {(() => boolean) | undefined} [captureAllowed]
  */
-function wrapJestBufferedConsole (BufferedConsole, captureLogHolder) {
+function wrapJestBufferedConsole (BufferedConsole, captureLogHolder, captureAllowed) {
   if (!BufferedConsole || wrappedTargets.has(BufferedConsole)) return
 
   wrappedTargets.add(BufferedConsole)
   // Jest buffers records through this static method without calling Node's
   // Console methods. Wrapping it also preserves Jest's user-facing callsite.
   shimmer.wrap(BufferedConsole, 'write', original => function (buffer, method, message) {
-    const shouldPublish = !isPublishing && methodSet.has(method) && logSubmissionCh.hasSubscribers
+    const shouldPublish = methodSet.has(method) && shouldCaptureLogs(captureAllowed)
     if (shouldPublish) {
       const activeRecord = activeCapture?.observedRecords.at(-1)
       const isActiveWrite = activeRecord?.writeId === activeWriteId &&
@@ -362,8 +453,9 @@ function wrapJestBufferedConsole (BufferedConsole, captureLogHolder) {
 /**
  * @param {JestCustomConsole | undefined} CustomConsole
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
+ * @param {(() => boolean) | undefined} [captureAllowed]
  */
-function wrapJestCustomConsole (CustomConsole, captureLogHolder) {
+function wrapJestCustomConsole (CustomConsole, captureLogHolder, captureAllowed) {
   if (!CustomConsole || wrappedTargets.has(CustomConsole)) return
 
   wrappedTargets.add(CustomConsole)
@@ -371,7 +463,7 @@ function wrapJestCustomConsole (CustomConsole, captureLogHolder) {
   // so splitting the interception across Orchestrion channel subscribers would not preserve the contract.
   try {
     shimmer.wrap(CustomConsole.prototype, '_logError', original => function (method, message) {
-      const shouldPublish = !isPublishing && methodSet.has(method) && logSubmissionCh.hasSubscribers
+      const shouldPublish = methodSet.has(method) && shouldCaptureLogs(captureAllowed)
       if (!shouldPublish) return original.apply(this, arguments)
 
       const record = createRecord(method, message, ++nextWriteId, captureLogHolder)
@@ -392,8 +484,9 @@ function wrapJestCustomConsole (CustomConsole, captureLogHolder) {
   } catch {}
 }
 
-configureCh.subscribe(({ getLogHolder: configuredGetLogHolder } = {}) => {
+configureCh.subscribe(({ canCapture, getLogHolder: configuredGetLogHolder } = {}) => {
   getLogHolder = configuredGetLogHolder
+  isLogSubmissionAllowed = canCapture
   // The global console has bound own methods, while Console.prototype covers
   // instances that are created after log submission is enabled.
   wrapConsole(globalThis.console)

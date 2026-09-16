@@ -166,6 +166,52 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('does not expose a temporary stream writer while formatting a native console record', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const originalWrite = stream.write
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    let hadOwnWrite
+    const value = {
+      [inspect.custom] () {
+        hadOwnWrite = Object.hasOwn(stream, 'write')
+        return 'formatted stream'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn(value)
+
+    assert.strictEqual(hadOwnWrite, false)
+    assert.strictEqual(stream.write, originalWrite)
+    assert.deepStrictEqual(output, ['formatted stream\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'formatted stream' }])
+  })
+
+  it('preserves native console group indentation', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    wrapConsole(target)
+
+    target.group()
+    target.warn('first\nsecond')
+    target.groupEnd()
+
+    assert.deepStrictEqual(output, ['  first\n  second\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: '  first\n  second' }])
+  })
+
   it('does not publish direct stream writes made while formatting a record', () => {
     const output = []
     const stream = new Writable({
@@ -380,6 +426,60 @@ describe('console instrumentation', () => {
     assert.strictEqual(stderrReads, 1)
     sinon.assert.calledOnceWithExactly(stream.write, 'hello\n')
     sinon.assert.notCalled(nativeStream.write)
+    assert.deepStrictEqual(payloads, [])
+  })
+
+  it('captures the bound global console stream when its method is borrowed', () => {
+    const globalStream = { write: sinon.stub() }
+    const otherStream = { write: sinon.stub() }
+    const useStderr = Symbol('kUseStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    class FakeConsole {}
+    FakeConsole.prototype[writeToConsole] = function (stream, message) {
+      this._stderr.write(message)
+    }
+    const fakeNodeConsole = {
+      Console: FakeConsole,
+      _stderr: globalStream,
+      error (message) {
+        this[writeToConsole](useStderr, `${message}\n`)
+      },
+      warn (message) {
+        this[writeToConsole](useStderr, `${message}\n`)
+      },
+    }
+    fakeNodeConsole[writeToConsole] = FakeConsole.prototype[writeToConsole]
+    fakeNodeConsole.error = fakeNodeConsole.error.bind(fakeNodeConsole)
+    fakeNodeConsole.warn = fakeNodeConsole.warn.bind(fakeNodeConsole)
+    fakeNodeConsole['@noCallThru'] = true
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      'node:console': fakeNodeConsole,
+    })
+    wrapIsolatedConsole(fakeNodeConsole)
+    const logger = { _stderr: otherStream, warn: fakeNodeConsole.warn }
+
+    logger.warn('hello')
+
+    sinon.assert.calledOnceWithExactly(globalStream.write, 'hello\n')
+    sinon.assert.notCalled(otherStream.write)
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+  })
+
+  it('does not capture logs when the active context suppresses submission', () => {
+    const stream = { write: sinon.stub() }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(`${message}\n`)
+      },
+    }
+    const canCapture = sinon.stub().returns(false)
+    wrapConsole(target, undefined, canCapture)
+
+    target.error('tracer diagnostic')
+
+    sinon.assert.calledOnce(canCapture)
+    sinon.assert.calledOnceWithExactly(stream.write, 'tracer diagnostic\n')
     assert.deepStrictEqual(payloads, [])
   })
 
