@@ -71,8 +71,10 @@ module.exports = {
   CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
 
-  // integrations build metric objects with these camelCase spellings
-  METRIC_KEY_ALIASES: {
+  // integrations build metric objects with these camelCase spellings. Null prototype: metric names
+  // come from `LLMObs.annotate()` too, so a custom metric named after an `Object.prototype` member
+  // must not resolve to an inherited property.
+  METRIC_KEY_ALIASES: Object.assign(Object.create(null), {
     inputTokens: INPUT_TOKENS_METRIC_KEY,
     outputTokens: OUTPUT_TOKENS_METRIC_KEY,
     totalTokens: TOTAL_TOKENS_METRIC_KEY,
@@ -81,7 +83,7 @@ module.exports = {
     cacheWrite5mTokens: CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
     cacheWrite1hTokens: CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
     reasoningOutputTokens: REASONING_OUTPUT_TOKENS_METRIC_KEY,
-  },
+  }),
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
 

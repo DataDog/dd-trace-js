@@ -568,6 +568,14 @@ function resolveToolResultItem (item) {
   return `[Unsupported content type(s): ${getContentBlockType(item)}]`
 }
 
+/**
+ * Normalize a Converse usage object onto the LLMObs metric names.
+ *
+ * @param {object} [usage]
+ * @returns {{
+ *   inputTokens?: number, outputTokens?: number, cacheReadTokens?: number, cacheWriteTokens?: number
+ * }}
+ */
 function buildUsage (usage = {}) {
   return {
     inputTokens: usage.inputTokens,
@@ -714,6 +722,7 @@ function extractTextAndResponseReasonConverseFromStream (chunks) {
 
 module.exports = {
   Generation,
+  buildUsage,
   RequestParams,
   extractTextAndResponseReasonFromStream,
   parseModelId,

@@ -3,6 +3,7 @@
 const { storage } = require('../../../../datadog-core')
 const telemetry = require('../telemetry')
 const {
+  buildUsage,
   extractRequestParams,
   extractTextAndResponseReason,
   parseModelId,
@@ -61,13 +62,20 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (!span) return
 
       if (!this._llmobsEnabled) {
-        // no LLMObs payload to build, so token usage comes from the response headers rather than
-        // from parsing the response body
+        // no LLMObs payload to build, so the usage comes from the response headers and, for
+        // Converse (which sends no token headers), the usage the response reports directly
+        const converseUsage = CONVERSE_OPERATIONS.has(operation)
+          ? response.usage ?? ctx.streamedUsage
+          : undefined
+
         this._setGenAiApmTags(span, {
           spanKind: 'llm',
           modelName: request.params.modelId.toLowerCase(),
           modelProvider: 'amazon_bedrock',
-          metrics: extractTokens({ tokensFromHeaders, usage: {} }),
+          // reporting zeros for every metric would be worse than reporting none
+          metrics: tokensFromHeaders || converseUsage
+            ? extractTokens({ tokensFromHeaders, usage: buildUsage(converseUsage) })
+            : undefined,
         })
         return
       }
@@ -93,9 +101,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       })
     })
 
-    // the accumulated chunks are only used to build the LLMObs payload
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
-      if (!this._llmobsEnabled) return
+      if (!this._llmobsEnabled) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies are
+        // left to the LLMObs path
+        const usage = chunk?.metadata?.usage
+        if (usage) ctx.streamedUsage = usage
+        return
+      }
 
       if (!ctx.chunks) ctx.chunks = []
 

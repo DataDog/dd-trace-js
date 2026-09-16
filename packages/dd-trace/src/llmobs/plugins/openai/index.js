@@ -78,7 +78,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
    */
   getGenAiApmEndTags (ctx) {
     const response = ctx.result?.data
-    return { metrics: response && this._extractMetrics(response) }
+
+    return {
+      // the response model is the resolved one, e.g. the dated version behind an alias
+      modelName: response?.model,
+      metrics: response && this._extractMetrics(response),
+    }
   }
 
   setLLMObsTags (ctx) {

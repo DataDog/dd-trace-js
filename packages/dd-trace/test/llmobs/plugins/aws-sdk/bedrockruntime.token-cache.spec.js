@@ -15,6 +15,7 @@ require('../../../setup/core')
 describe('BedrockRuntime LLMObs plugin pending token headers', () => {
   const deserializeCh = dc.channel('apm:aws:response:deserialize:bedrockruntime')
   const completeCh = dc.channel('apm:aws:request:complete:bedrockruntime')
+  const streamedChunkCh = dc.channel('apm:aws:response:streamed-chunk:bedrockruntime')
 
   let BedrockRuntimePlugin
   let plugin
@@ -151,6 +152,62 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.usage.cache_write_input_tokens': 1,
       })
       sinon.assert.notCalled(tagMetricsSpy)
+    })
+
+    it('reads Converse usage off the response, which carries no token headers', () => {
+      completeCh.publish({
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'converse', params: { modelId: 'amazon.titan' } },
+          $metadata: { requestId: 'req-converse' },
+          usage: { inputTokens: 7, outputTokens: 2, cacheReadInputTokens: 1, cacheWriteInputTokens: 3 },
+        },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+        // input tokens are normalized to also count cached tokens
+        'gen_ai.usage.input_tokens': 11,
+        'gen_ai.usage.output_tokens': 2,
+        'gen_ai.usage.total_tokens': 13,
+        'gen_ai.usage.cache_read_input_tokens': 1,
+        'gen_ai.usage.cache_write_input_tokens': 3,
+      })
+    })
+
+    it('reads Converse stream usage off the metadata event', () => {
+      const ctx = {
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'converseStream', params: { modelId: 'amazon.titan' } },
+          $metadata: { requestId: 'req-converse-stream' },
+        },
+      }
+
+      streamedChunkCh.publish({ ctx, chunk: { contentBlockDelta: { delta: { text: 'ignored' } } } })
+      streamedChunkCh.publish({ ctx, chunk: { metadata: { usage: { inputTokens: 4, outputTokens: 6 } } } })
+      completeCh.publish(ctx)
+
+      assert.deepStrictEqual(apmTags['gen_ai.usage.input_tokens'], 4)
+      assert.deepStrictEqual(apmTags['gen_ai.usage.output_tokens'], 6)
+      assert.deepStrictEqual(apmTags['gen_ai.usage.total_tokens'], 10)
+    })
+
+    it('omits token usage entirely when neither headers nor the response report any', () => {
+      completeCh.publish({
+        ...buildLlmComplete('req-no-usage', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+      })
     })
 
     it('emits nothing for an embedding model', () => {
