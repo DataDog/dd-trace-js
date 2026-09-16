@@ -17,6 +17,7 @@ const logSubmissionCh = channel('ci:log-submission:console')
 // Keep routine test output local while submitting diagnostics that can explain failures.
 const methods = ['error', 'warn']
 const methodSet = new Set(methods)
+const nodeConsoleMethodPattern = /\bat [^\n]*\.(error|warn) \(/
 const nodeConsoleMethods = new Map(methods.map(method => {
   return [method, Object.getOwnPropertyDescriptor(Console.prototype, method)?.value]
 }))
@@ -213,6 +214,25 @@ function formatNodeConsoleMessage (target, message) {
 }
 
 /**
+ * @param {Function} skipFunction
+ */
+function getNodeConsoleMethod (skipFunction) {
+  try {
+    const error = {}
+    Error.captureStackTrace(error, skipFunction)
+    const stack = error.stack
+    if (Array.isArray(stack)) {
+      const method = stack[0]?.getMethodName?.() || stack[0]?.getFunctionName?.()
+      if (methodSet.has(method)) return method
+    } else if (typeof stack === 'string') {
+      const method = nodeConsoleMethodPattern.exec(stack)?.[1]
+      if (method) return method
+    }
+  } catch {}
+  return 'error'
+}
+
+/**
  * @param {object | Function} target
  * @param {string} method
  * @param {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>} descriptor
@@ -245,7 +265,10 @@ function wrapNodeConsoleWrite (target) {
 
     // Node formats arguments before this internal writer runs. Capturing here preserves the exact output
     // without making a temporary stream.write replacement visible to custom inspectors.
-    descriptor.value = shimmer.wrapFunction(descriptor.value, original => function (streamSymbol, message) {
+    descriptor.value = shimmer.wrapFunction(descriptor.value, original => function nodeConsoleWriteWithTrace (
+      streamSymbol,
+      message
+    ) {
       const capture = activeCapture
       let record
       if (!isPublishing && streamSymbol?.description === 'kUseStderr' && typeof message === 'string') {
@@ -258,8 +281,8 @@ function wrapNodeConsoleWrite (target) {
             record = undefined
           } else if (!capture && shouldCaptureLogs()) {
             // Console instances bind their methods during construction. Instances created before instrumentation
-            // cannot be wrapped afterward, and the shared writer does not receive the original method name.
-            record = createRecord('error', message, ++nextWriteId)
+            // cannot be wrapped afterward, so recover the method from the writer's immediate caller.
+            record = createRecord(getNodeConsoleMethod(nodeConsoleWriteWithTrace), message, ++nextWriteId)
           }
         } catch {}
       }

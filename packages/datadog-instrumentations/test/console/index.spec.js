@@ -200,10 +200,16 @@ describe('console instrumentation', () => {
     })
 
     wrapIsolatedConsole(FakeConsole.prototype)
+    target.warn('existing warning')
     target.error('existing error')
 
-    sinon.assert.calledOnceWithExactly(stream.write, 'existing error\n')
-    assert.deepStrictEqual(payloads, [{ method: 'error', message: 'existing error' }])
+    sinon.assert.calledTwice(stream.write)
+    sinon.assert.calledWithExactly(stream.write.firstCall, 'existing warning\n')
+    sinon.assert.calledWithExactly(stream.write.secondCall, 'existing error\n')
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'existing warning' },
+      { method: 'error', message: 'existing error' },
+    ])
   })
 
   it('does not expose a temporary stream writer while formatting a native console record', () => {
