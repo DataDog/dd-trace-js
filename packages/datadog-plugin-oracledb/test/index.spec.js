@@ -471,6 +471,79 @@ describe('Plugin', () => {
             await connection.close()
           })
         })
+
+        describe('with pool used via oracledb.getConnection() with no arguments', () => {
+          before(async () => {
+            await agent.load('oracledb', {
+              service (connAttrs) {
+                assert.strictEqual(connAttrs.connectString, config.connectString)
+                return connAttrs.connectString
+              },
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          after(async () => {
+            await agent.close()
+          })
+
+          it('should use the pool connection attributes instead of the undefined outer call attributes', async () => {
+            // node-oracledb delegates a no-argument getConnection() call to the cached default pool.
+            const pool = await oracledb.createPool(config)
+            const connection = await oracledb.getConnection()
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  service: config.connectString,
+                }),
+                connection.execute(dbQuery),
+              ])
+            } finally {
+              await connection.close()
+              await pool.close()
+            }
+          })
+        })
+
+        describe('with pool used via oracledb.getConnection(callback) with no connAttrs', () => {
+          before(async () => {
+            await agent.load('oracledb', {
+              service (connAttrs) {
+                assert.strictEqual(connAttrs.connectString, config.connectString)
+                return connAttrs.connectString
+              },
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            tracer = require('../../dd-trace')
+          })
+
+          after(async () => {
+            await agent.close()
+          })
+
+          it('should not crash and should use the pool connection attributes', async () => {
+            // node-oracledb delegates a callback-only getConnection(callback) call to the cached
+            // default pool, the same way a no-argument getConnection() call does for the promise API.
+            const pool = await oracledb.createPool(config)
+            const connection = await new Promise((resolve, reject) => {
+              oracledb.getConnection((error, conn) => error ? reject(error) : resolve(conn))
+            })
+
+            try {
+              await Promise.all([
+                agent.assertFirstTraceSpan({
+                  service: config.connectString,
+                }),
+                connection.execute(dbQuery),
+              ])
+            } finally {
+              await connection.close()
+              await pool.close()
+            }
+          })
+        })
       })
 
       // oracledb has no stable JS-side queue across v5 thick / v6 thin, so the DBM tests below capture
