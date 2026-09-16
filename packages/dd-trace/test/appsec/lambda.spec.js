@@ -580,31 +580,32 @@ describe('AppSec Lambda handler', () => {
         assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
-      it('should reject a subtype that merely contains json', () => {
+      it('should accept a subtype that merely contains json, trading precision for a cheap gate', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',
           responseHeaders: { 'content-type': 'application/notjson' },
         })
 
-        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
-      it('should reject a JSON sequence, which is not a single document', () => {
+      it('should still drop a real JSON sequence body at JSON.parse, not at the content type gate', () => {
+        // RFC 7464: each document is prefixed with RS (0x1E), which JSON.parse rejects outright.
         const persistent = invokeWithBody({
-          responseBody: '{"payload":1}',
+          responseBody: '\x1E{"a":1}\x1E{"b":2}\n',
           responseHeaders: { 'content-type': 'application/json-seq' },
         })
 
         assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
       })
 
-      it('should not be fooled by json appearing in a media type parameter', () => {
+      it('should accept json appearing only in a media type parameter', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',
           responseHeaders: { 'content-type': 'text/plain; filename=data.json' },
         })
 
-        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
       it('should parse the body when a repeated content type resolves to a single value', () => {
@@ -616,22 +617,22 @@ describe('AppSec Lambda handler', () => {
         assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
-      it('should reject an ambiguous content type list instead of trusting the last value', () => {
+      it('should accept an ambiguous content type list if any value mentions json', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',
           responseHeaders: { 'content-type': 'text/plain, application/problem+json' },
         })
 
-        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
-      it('should reject a json suffix that is not carried by a media type', () => {
+      it('should accept a bare json suffix with no type/subtype shape', () => {
         const persistent = invokeWithBody({
           responseBody: '{"payload":1}',
           responseHeaders: { 'content-type': 'bogus+json' },
         })
 
-        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
       })
 
       it('should not parse the body when the content type is not JSON', () => {

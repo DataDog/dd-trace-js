@@ -6,15 +6,12 @@ const log = require('../log')
 const { isEmpty } = require('../util')
 const addresses = require('./addresses')
 const apiSecurity = require('./api_security')
-const { extractMimeType } = require('./downstream_requests')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
 const activeInvocations = new WeakMap()
 
 const MAX_RESPONSE_BODY_SIZE = 16 * 1024 * 1024
-
-const JSON_MIME_TYPES = new Set(['application/json', 'text/json'])
 
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
@@ -196,29 +193,10 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
 }
 
 /**
- * Tells whether the response content type is unambiguously a JSON media type
- *
- * The Lambda layer joins repeated headers with ', ', so a content type can reach here as a list.
- * A list of differing values does not say what the client received, so it is rejected rather
- * than guessed; identical repetitions are not. The '+json' suffix is checked on the subtype of a
- * well formed type/subtype, so a bare 'bogus+json' does not pass.
- *
  * @param {string | undefined} contentType
- * @returns {boolean}
  */
 function isJsonContentType (contentType) {
-  const mimes = new Set(String(contentType ?? '').split(',').map((value) => extractMimeType(value)))
-  if (mimes.size !== 1) return false
-
-  const [mime] = mimes
-  const separator = mime.indexOf('/')
-  if (separator < 1) return false
-
-  if (JSON_MIME_TYPES.has(mime)) return true
-
-  const subtype = mime.slice(separator + 1)
-
-  return subtype !== '+json' && subtype.endsWith('+json')
+  return typeof contentType === 'string' && contentType.toLowerCase().includes('json')
 }
 
 /**
