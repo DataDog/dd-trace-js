@@ -44,7 +44,6 @@ function disarmSSIHeuristics () {
 
 /**
  * @param {import('./config/config-base')} config - Tracer configuration
- * @returns {boolean} whether the profiler is running after this call
  */
 module.start = function (config) {
   try {
