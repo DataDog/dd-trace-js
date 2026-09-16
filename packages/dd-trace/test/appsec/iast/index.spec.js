@@ -14,8 +14,8 @@ const { IAST_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-const { testInRequest } = require('./utils')
 const httpRequest = require('../../setup/helpers/http-client')
+const { testInRequest } = require('./utils')
 
 describe('IAST Index', () => {
   beforeEach(() => {

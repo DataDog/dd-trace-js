@@ -54,7 +54,7 @@ describe('Attacker fingerprinting', () => {
           Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'),
           `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
         )
-        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000011-74c2908f-2-9c90564e')
+        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0100000000-74c2908f-3-98425651')
         assert.ok(
           Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'),
           `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
@@ -80,7 +80,7 @@ describe('Attacker fingerprinting', () => {
           Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.header'),
           `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
         )
-        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0110000011-74c2908f-2-9c90564e')
+        assert.strictEqual(traces[0][0].meta['_dd.appsec.fp.http.header'], 'hdr-0100000000-74c2908f-3-98425651')
         assert.ok(
           Object.hasOwn(traces[0][0].meta, '_dd.appsec.fp.http.network'),
           `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`

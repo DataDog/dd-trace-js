@@ -71,7 +71,7 @@ withVersions('fastify', 'fastify', fastifyVersion => {
           Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'),
           `Available keys: ${inspect(Object.keys(span.meta))}`
         )
-        assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000111-74c2908f-4-701f4e60')
+        assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0100000100-74c2908f-5-55682ec1')
         assert.ok(
           Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'),
           `Available keys: ${inspect(Object.keys(span.meta))}`

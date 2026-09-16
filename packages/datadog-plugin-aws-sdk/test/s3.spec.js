@@ -8,9 +8,9 @@ const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/cons
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const { rawExpectedSchema } = require('./s3-naming')
 const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
-const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const bucketName = 's3-bucket-name-test'
 

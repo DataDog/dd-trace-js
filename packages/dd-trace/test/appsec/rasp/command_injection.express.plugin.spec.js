@@ -10,8 +10,8 @@ const appsec = require('../../../src/appsec')
 const { getConfigFresh } = require('../../helpers/config')
 const { withVersions } = require('../../setup/mocha')
 const { temporaryWarningExceptions } = require('../../setup/core')
-const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
 const HttpRequest = require('../../setup/helpers/http-client')
+const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
 
 describe('RASP - command_injection', () => {
   withVersions('express', 'express', expressVersion => {

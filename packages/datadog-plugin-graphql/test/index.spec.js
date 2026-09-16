@@ -16,8 +16,8 @@ const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const legacyStorage = storage('legacy')
 

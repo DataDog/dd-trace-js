@@ -10,8 +10,8 @@ const { DYNAMODB_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/sr
 const agent = require('../../dd-trace/test/plugins/agent')
 const DynamoDb = require('../src/services/dynamodb')
 const { generatePointerHash } = require('../src/util')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const LOCALSTACK_TIMEOUT_MS = 5000
 

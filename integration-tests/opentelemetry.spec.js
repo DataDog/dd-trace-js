@@ -4,8 +4,8 @@ const assert = require('node:assert/strict')
 
 const { fork } = require('child_process')
 const { join } = require('path')
-const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 const httpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
+const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics

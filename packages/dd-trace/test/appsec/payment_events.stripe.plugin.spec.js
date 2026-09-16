@@ -1,5 +1,3 @@
-
-const HttpRequest = require('../setup/helpers/http-client')
 'use strict'
 
 /* eslint-disable camelcase */
@@ -16,6 +14,7 @@ const appsec = require('../../src/appsec')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
+const HttpRequest = require('../setup/helpers/http-client')
 
 withVersions('stripe', 'stripe', version => {
   describe('Stripe Payment Events', () => {

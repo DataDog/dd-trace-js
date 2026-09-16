@@ -9,9 +9,9 @@ const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_VERSION } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const httpRequest = require('../setup/helpers/http-client')
 const { initApp, startServer } = require('./next.utils')
 const { createDeepObject, getWebSpan } = require('./utils')
-const httpRequest = require('../setup/helpers/http-client')
 
 describe('extended data collection', () => {
   withVersions('next', 'next', '>=11.1', version => {

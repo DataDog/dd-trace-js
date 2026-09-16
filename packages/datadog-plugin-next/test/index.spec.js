@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
 const path = require('node:path')
@@ -13,6 +12,7 @@ const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 

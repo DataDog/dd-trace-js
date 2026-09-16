@@ -8,8 +8,8 @@ const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 const HttpRequest = require('../../setup/helpers/http-client')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
   withVersions('mysql2', 'express', expressVersion => {

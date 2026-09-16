@@ -15,8 +15,8 @@ const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 
-const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 const HttpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {

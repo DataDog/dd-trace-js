@@ -15,8 +15,8 @@ const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
 const { getConfigFresh } = require('../../helpers/config')
-const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 const HttpRequest = require('../../setup/helpers/http-client')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - lfi', () => {
   let httpRequest

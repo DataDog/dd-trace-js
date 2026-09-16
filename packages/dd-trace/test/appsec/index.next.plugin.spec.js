@@ -5,8 +5,8 @@ const { satisfies } = require('semver')
 const agent = require('../plugins/agent')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../../../version')
 const { withVersions } = require('../setup/mocha')
-const { initApp, startServer } = require('./next.utils')
 const httpRequest = require('../setup/helpers/http-client')
+const { initApp, startServer } = require('./next.utils')
 
 describe('test suite', () => {
   withVersions('next', 'next', '>=11.1', version => {

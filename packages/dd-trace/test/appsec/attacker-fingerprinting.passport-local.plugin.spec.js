@@ -13,7 +13,7 @@ const HttpRequest = require('../setup/helpers/http-client')
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
   assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'), `Available keys: ${inspect(Object.keys(span.meta))}`)
-  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-4-c348f529')
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0100000100-74c2908f-4-c348f529')
   assert.ok(
     Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'),
     `Available keys: ${inspect(Object.keys(span.meta))}`

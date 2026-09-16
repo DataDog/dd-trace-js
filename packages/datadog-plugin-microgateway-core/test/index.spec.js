@@ -11,8 +11,8 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const proxy = require('./proxy')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
+const proxy = require('./proxy')
 
 describe('Plugin', () => {
   let Gateway

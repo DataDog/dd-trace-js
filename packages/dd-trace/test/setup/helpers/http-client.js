@@ -1,18 +1,23 @@
 'use strict'
 
-const { Readable } = require('stream')
+const http = require('node:http')
+const https = require('node:https')
+const { Readable } = require('node:stream')
 
-// axios-compatible HTTP client test helper backed by native `fetch`
-// provides a subset of functionality based on what the test suite uses
+// Axios-compatible HTTP client test helper backed by Node's http/https modules — not `fetch` —
+// so that using it doesn't (a) implicitly activate dd-trace's separate `fetch` instrumentation
+// plugin, which auto-enables the moment `fetch()` is called and can interfere with tests that
+// assert on which integrations/spans are active, and (b) require Node 18+, since the couchbase
+// plugin's oldest supported version ranges are still tested against Node 16.
+
+const MAX_REDIRECTS = 21
 
 function isPlainObject (value) {
   return value !== null && typeof value === 'object' && !(
-    value instanceof FormData ||
-    value instanceof Buffer ||
+    Buffer.isBuffer(value) ||
     value instanceof Readable ||
-    value instanceof ReadableStream ||
-    value instanceof ArrayBuffer ||
-    value instanceof URLSearchParams
+    (typeof FormData !== 'undefined' && value instanceof FormData) ||
+    (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams)
   )
 }
 
@@ -28,33 +33,40 @@ function serializeBody (data, headers) {
   return JSON.stringify(data)
 }
 
-function headersToObject (fetchHeaders) {
-  const headers = {}
-
-  for (const [key, value] of fetchHeaders.entries()) {
-    headers[key] = value
-  }
-
-  return headers
+// Reuses the Fetch API's own multipart/form-data boundary encoding (via a `Response` wrapping
+// the FormData) rather than reimplementing it, since Node's http module has no built-in support
+// for serializing FormData directly.
+async function serializeFormData (formData) {
+  const res = new Response(formData)
+  const body = Buffer.from(await res.arrayBuffer())
+  return { body, contentType: res.headers.get('content-type') }
 }
 
-async function parseResponseBody (res, responseType) {
+function collectBody (res) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    res.on('data', chunk => chunks.push(chunk))
+    res.on('end', () => resolve(Buffer.concat(chunks)))
+    res.on('error', reject)
+  })
+}
+
+function parseBody (buffer, responseType) {
   switch (responseType) {
     case 'arraybuffer':
-      return res.arrayBuffer()
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
     case 'text':
-      return res.text()
-    case 'stream':
-      return Readable.fromWeb(res.body)
+      return buffer.toString('utf8')
     default: {
-      const text = await res.text()
-      const contentType = res.headers.get('content-type') ?? ''
-
-      if (text && contentType.includes('json')) {
+      // Axios always attempts JSON.parse on the response text regardless of Content-Type,
+      // silently falling back to the raw string if parsing throws (e.g. `res.send('3')` on
+      // Express defaults to `text/html` but is still expected to parse as the number 3).
+      const text = buffer.toString('utf8')
+      try {
         return JSON.parse(text)
+      } catch {
+        return text
       }
-
-      return text
     }
   }
 }
@@ -63,59 +75,104 @@ function defaultValidateStatus (status) {
   return status >= 200 && status < 300
 }
 
-async function request (config) {
-  const method = (config.method ?? 'GET').toUpperCase()
-  // Unlike axios (backed by Node's http.Agent, which defaults to keepAlive: false), undici's
-  // fetch() pools and reuses connections by default. Test servers routinely restart on a port a
-  // prior test already used, and a pooled connection surviving that restart causes late-firing
-  // 'close' events to leak into a later test's execution window. Forcing the connection closed
-  // per-request avoids that class of cross-test timing bug.
-  const headers = { Connection: 'close', ...config.headers }
-  // fetch forbids a body on GET/HEAD requests, even a present-but-empty stream, so it must be
-  // omitted entirely rather than merely left unserialized.
-  const body = method === 'GET' || method === 'HEAD' ? undefined : serializeBody(config.data, headers)
+function handleResponse (res, config, url, redirectCount, resolve, reject) {
+  const status = res.statusCode
+  const location = res.headers.location
 
-  if (config.auth) {
-    const { username, password } = config.auth
-    headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+  if (status >= 300 && status < 400 && location && config.maxRedirects !== 0) {
+    res.resume()
+    if (redirectCount >= MAX_REDIRECTS) {
+      reject(new Error('Maximum number of redirects exceeded'))
+      return
+    }
+    const redirectUrl = new URL(location, url)
+    request({ ...config, url: redirectUrl.href, baseURL: undefined, method: 'GET', data: undefined }, redirectCount + 1)
+      .then(resolve, reject)
+    return
   }
 
-  const url = config.baseURL ? new URL(config.url, config.baseURL) : config.url
+  if (config.responseType === 'stream') {
+    finish(res, config, status, res)
+    return
+  }
 
-  // `AbortSignal.any` (Node 20.3+) isn't used here since no call site combines `signal` and
-  // `timeout` together, and this helper must stay compatible with Node 18.
-  const signal = config.signal ?? (config.timeout ? AbortSignal.timeout(config.timeout) : undefined)
+  collectBody(res).then(buffer => {
+    finish(res, config, status, parseBody(buffer, config.responseType))
+  }, reject)
 
-  const res = await fetch(url, {
-    method,
-    headers,
-    body,
-    // Required by undici/fetch when streaming a Node/web stream as the request body.
-    duplex: body instanceof Readable || body instanceof ReadableStream ? 'half' : undefined,
-    redirect: config.maxRedirects === 0 ? 'manual' : 'follow',
-    signal,
+  function finish (rawRes, cfg, statusCode, data) {
+    const response = {
+      data,
+      status: statusCode,
+      statusText: rawRes.statusMessage,
+      headers: { ...rawRes.headers },
+      config: cfg,
+    }
+
+    // Axios treats an explicit falsy `validateStatus` (`null`/`false`) as "never reject",
+    // distinct from not specifying it at all (`undefined`), so `??` alone would wrongly restore
+    // the default.
+    const validateStatus = cfg.validateStatus === undefined ? defaultValidateStatus : cfg.validateStatus
+    if (validateStatus && !validateStatus(response.status)) {
+      const err = new Error(`Request failed with status code ${response.status}`)
+      err.response = response
+      reject(err)
+      return
+    }
+
+    resolve(response)
+  }
+}
+
+function request (config, redirectCount = 0) {
+  return new Promise((resolve, reject) => {
+    (async () => {
+      const method = (config.method ?? 'GET').toUpperCase()
+      const headers = { ...config.headers }
+
+      let body
+      if (method !== 'GET' && method !== 'HEAD') {
+        if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+          const serialized = await serializeFormData(config.data)
+          body = serialized.body
+          if (!('content-type' in headers) && !('Content-Type' in headers)) {
+            headers['Content-Type'] = serialized.contentType
+          }
+        } else {
+          body = serializeBody(config.data, headers)
+        }
+      }
+
+      if (config.auth) {
+        const { username, password } = config.auth
+        headers.Authorization = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`
+      }
+
+      const url = new URL(config.url, config.baseURL)
+      const transport = url.protocol === 'https:' ? https : http
+
+      const options = { method, headers }
+      if (config.signal) options.signal = config.signal
+
+      const req = transport.request(url, options, res => {
+        handleResponse(res, config, url, redirectCount, resolve, reject)
+      })
+
+      req.on('error', reject)
+
+      if (config.timeout) {
+        req.setTimeout(config.timeout, () => {
+          req.destroy(new Error(`timeout of ${config.timeout}ms exceeded`))
+        })
+      }
+
+      if (body && typeof body.pipe === 'function') {
+        body.pipe(req)
+      } else {
+        req.end(body)
+      }
+    })().catch(reject)
   })
-
-  const data = await parseResponseBody(res, config.responseType)
-
-  const response = {
-    data,
-    status: res.status,
-    statusText: res.statusText,
-    headers: headersToObject(res.headers),
-    config,
-  }
-
-  // Axios treats an explicit falsy `validateStatus` (`null`/`false`) as "never reject", distinct
-  // from not specifying it at all (`undefined`), so `??` alone would wrongly restore the default.
-  const validateStatus = config.validateStatus === undefined ? defaultValidateStatus : config.validateStatus
-  if (validateStatus && !validateStatus(response.status)) {
-    const err = new Error(`Request failed with status code ${response.status}`)
-    err.response = response
-    throw err
-  }
-
-  return response
 }
 
 function normalizeConfig (urlOrConfig, dataOrConfig, maybeConfig, method) {

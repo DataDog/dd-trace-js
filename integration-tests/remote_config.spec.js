@@ -5,8 +5,8 @@ const { once } = require('node:events')
 const path = require('node:path')
 const { inspect } = require('node:util')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
 const HttpRequest = require('../packages/dd-trace/test/setup/helpers/http-client')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
 
 describe('Remote config client id', () => {
   let httpRequest, cwd, appFile

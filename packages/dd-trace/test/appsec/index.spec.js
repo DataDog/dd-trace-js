@@ -35,8 +35,8 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
-const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 const httpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 
 const blockedTemplate = {
   html: blockedTemplateHtml,

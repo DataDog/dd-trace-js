@@ -20,6 +20,9 @@ describe('http-client test helper', () => {
         } else if (req.url === '/text') {
           res.writeHead(200, { 'Content-Type': 'text/plain' })
           res.end('hello')
+        } else if (req.url === '/number-as-text') {
+          res.writeHead(200, { 'Content-Type': 'text/html' })
+          res.end('3')
         } else if (req.url === '/binary') {
           res.writeHead(200, { 'Content-Type': 'application/octet-stream' })
           res.end(Buffer.from([1, 2, 3]))
@@ -82,9 +85,15 @@ describe('http-client test helper', () => {
     assert.deepEqual(res.data, { ok: true, body: { hello: 'world' } })
   })
 
-  it('returns text bodies as-is', async () => {
+  it('returns non-JSON text bodies as-is', async () => {
     const res = await httpClient.get(`${baseURL}/text`)
     assert.equal(res.data, 'hello')
+  })
+
+  it('parses a JSON-shaped body even when Content-Type is not JSON, matching axios', async () => {
+    const res = await httpClient.get(`${baseURL}/number-as-text`)
+    assert.equal(res.data, 3)
+    assert.equal(typeof res.data, 'number')
   })
 
   it('supports responseType: text', async () => {

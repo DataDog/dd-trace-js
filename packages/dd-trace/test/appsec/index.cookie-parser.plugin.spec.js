@@ -10,8 +10,8 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
-const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 const httpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('Suspicious request blocking - cookie-parser', () => {

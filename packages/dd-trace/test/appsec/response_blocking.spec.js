@@ -12,8 +12,8 @@ const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
 
-const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 const HttpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 const blockingResponse = JSON.parse(blockedTemplateJson)
 
 describe('HTTP Response Blocking', () => {

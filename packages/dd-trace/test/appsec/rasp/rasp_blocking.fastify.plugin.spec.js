@@ -12,8 +12,8 @@ const appsec = require('../../../src/appsec')
 
 const { withVersions } = require('../../setup/mocha')
 const { blockedTemplateJson: blockedJson, setTestBlockingTemplates } = require('../utils')
-const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 const HttpRequest = require('../../setup/helpers/http-client')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
   // The WAF is driven by a static rasp_rules.json here, so Remote Configuration is not under test.

@@ -9,8 +9,8 @@ const semver = require('semver')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // mercurius 15+ requires Node 20.9+ (it ships fastify 5, which enforces it).
 // Skip those versions on older Node so the oldest-LTS CI leg exercises the 13/14

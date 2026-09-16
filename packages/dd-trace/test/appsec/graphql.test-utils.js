@@ -9,8 +9,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
-const { blockedTemplateJson: json, blockedTemplateGraphql: graphqlJson, setTestBlockingTemplates } = require('./utils')
 const httpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateJson: json, blockedTemplateGraphql: graphqlJson, setTestBlockingTemplates } = require('./utils')
 
 const schema = `
 directive @case(format: String) on FIELD

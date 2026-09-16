@@ -11,8 +11,8 @@ const { wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 const HttpRequest = require('../../setup/helpers/http-client')
+const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
   withVersions('pg', 'express', expressVersion => {

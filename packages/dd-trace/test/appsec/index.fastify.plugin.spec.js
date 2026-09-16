@@ -14,8 +14,8 @@ const appsec = require('../../src/appsec')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
-const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 const HttpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 /**
  * @param {string} cookieVersion

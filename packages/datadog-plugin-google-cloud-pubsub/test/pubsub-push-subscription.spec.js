@@ -1,5 +1,3 @@
-
-const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 'use strict'
 
 // Set K_SERVICE before any modules load to enable push subscription plugin
@@ -11,6 +9,7 @@ const { setTimeout: wait } = require('node:timers/promises')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 if (typeof global.gc !== 'function') {
   throw new Error('requires --expose-gc flag')

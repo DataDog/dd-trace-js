@@ -10,9 +10,9 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent.js')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 const accounts = require('./fixtures.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
-const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 const fixtures = [accounts]
 const typeDefs = accounts.typeDefs

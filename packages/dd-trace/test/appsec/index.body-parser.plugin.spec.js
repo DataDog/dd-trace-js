@@ -10,8 +10,8 @@ const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const { withVersions } = require('../setup/mocha')
-const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 const httpRequest = require('../setup/helpers/http-client')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {

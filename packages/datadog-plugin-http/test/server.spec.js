@@ -11,8 +11,8 @@ const { storage } = require('../../datadog-core')
 const { getRequest } = require('../../dd-trace/src/appsec/store')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
-const { rawExpectedSchema } = require('./naming')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
+const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let http
