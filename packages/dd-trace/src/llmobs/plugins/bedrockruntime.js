@@ -57,7 +57,11 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       // avoids instrumenting other non supported runtime operations
       if (!ENABLED_OPERATIONS.has(operation)) return
 
-      const { modelProvider, modelName } = parseModelId(request.params.modelId)
+      // the SDK rejects a request with no model id, and the parser assumes a string
+      const modelId = request.params?.modelId
+      if (typeof modelId !== 'string') return
+
+      const { modelProvider, modelName } = parseModelId(modelId)
 
       // avoids instrumenting non llm type
       if (modelName.includes('embed')) return
@@ -74,7 +78,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
         this._setGenAiApmTags(span, {
           spanKind: 'llm',
-          modelName: request.params.modelId.toLowerCase(),
+          modelName: modelId.toLowerCase(),
           modelProvider: 'amazon_bedrock',
           // reporting zeros for every metric would be worse than reporting none
           metrics: tokensFromHeaders || converseUsage
@@ -96,6 +100,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const outputTokenCount = headers['x-amzn-bedrock-output-token-count']
       const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
+
+      // Responses that report no counts at all, error responses included, would otherwise cache a
+      // record of undefined fields that reads as a measurement of zero.
+      if (!inputTokenCount && !outputTokenCount && !cacheReadTokenCount && !cacheWriteTokenCount) return
 
       cacheTokenHeaders(requestId, {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount, 10),

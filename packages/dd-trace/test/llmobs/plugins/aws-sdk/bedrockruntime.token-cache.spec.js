@@ -123,6 +123,15 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
   })
 
+  it('caches nothing when the response reports no token counts', () => {
+    deserializeCh.publish({ headers: { 'x-amzn-requestid': 'req-no-counts' } })
+
+    completeCh.publish(buildLlmComplete('req-no-counts', 'amazon.titan'))
+
+    sinon.assert.calledOnce(tagMetricsSpy)
+    assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
   it('evicts the oldest pending headers instead of growing without bound', () => {
     publishDeserialize('req-oldest', { input: 9, output: 9 })
 
@@ -240,6 +249,41 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.provider.name': 'amazon_bedrock',
         'gen_ai.application.name': 'test',
       })
+    })
+
+    it('omits token usage when the response carries no token-count headers', () => {
+      deserializeCh.publish({ headers: { 'x-amzn-requestid': 'req-headerless' } })
+      completeCh.publish({
+        ...buildLlmComplete('req-headerless', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+      })
+    })
+
+    it('skips a request whose model id the SDK never accepted', () => {
+      completeCh.publish({
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'invokeModel', params: {} },
+          error: new Error('ValidationException: modelId is required'),
+        },
+      })
+
+      assert.deepStrictEqual(apmTags, {})
+
+      // a throw here would have disabled the plugin, so the next request must still be tagged
+      completeCh.publish({
+        ...buildLlmComplete('req-after-invalid', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.equal(apmTags['gen_ai.operation.name'], 'llm')
     })
 
     it('emits nothing for an embedding model', () => {

@@ -227,7 +227,13 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
  * @returns {Record<string, number> | undefined}
  */
 function mergeChunkUsage (usage, chunk) {
-  if (chunk.type === 'message_start') return chunk.message?.usage ?? usage
+  if (chunk.type === 'message_start') {
+    // copied: the `message_delta` counts are merged into this object, and the chunk is handed back
+    // to the application
+    const startUsage = chunk.message?.usage
+    return startUsage ? { ...startUsage } : usage
+  }
+
   if (chunk.type !== 'message_delta' || !chunk.usage) return usage
 
   const mergedUsage = usage ?? { input_tokens: 0, output_tokens: 0 }
