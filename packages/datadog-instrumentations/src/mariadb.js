@@ -208,7 +208,6 @@ function wrapPoolQuery (method) {
 
 /**
  * @param {Function} Pool
- * @returns {boolean}
  */
 function claimPoolWrap (Pool) {
   if (wrappedPools.has(Pool)) return false
@@ -267,7 +266,6 @@ function startPoolAcquireTiming (timing) {
 
 /**
  * @param {PoolAcquireTiming} timing
- * @returns {number}
  */
 function finishPoolAcquireTiming (timing) {
   const poolWaitTime = (timing.poolWaitTime ?? 0) + acquireWait(timing.poolAcquireStart)

@@ -122,7 +122,6 @@ function sampleRequest (req, res, record = false) {
  *
  * @param {string|undefined} route
  * @param {boolean} record
- * @returns {boolean}
  */
 function isRoutelessRecord (route, record) {
   return record && route === undefined
@@ -130,7 +129,6 @@ function isRoutelessRecord (route, record) {
 
 /**
  * @param {number|string} statusCode
- * @returns {boolean}
  */
 function isNotFound (statusCode) {
   return Number(statusCode) === 404
@@ -141,7 +139,6 @@ function isNotFound (statusCode) {
  * @param {string|undefined} route A route string, an empty string (still a valid route), or
  *   `undefined`
  * @param {number|string} statusCode
- * @returns {string}
  */
 function buildSamplingKey (method, route, statusCode) {
   return method + (route ?? '') + statusCode
@@ -176,7 +173,6 @@ function getRouteOrEndpoint (context, statusCode) {
  * regardless of the APM sampling decision.
  *
  * @param {DatadogSpan} rootSpan
- * @returns {boolean}
  */
 function isRejected (rootSpan) {
   if (asmStandaloneEnabled) return false

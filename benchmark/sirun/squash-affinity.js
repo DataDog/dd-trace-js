@@ -25,7 +25,6 @@ prepareMeta(metaJson)
  * Resolves runner-only metadata before Sirun reads the generated file.
  *
  * @param {BenchmarkMeta} meta
- * @returns {void}
  */
 function prepareMeta (meta) {
   const operations = meta.operations_by_node?.[nodeMajor]
@@ -48,7 +47,6 @@ function prepareMeta (meta) {
  * Selects commands that pin the benchmark to its allocated CPU cores.
  *
  * @param {BenchmarkMeta} meta
- * @returns {void}
  */
 function squashAffinity (meta) {
   if (meta.run_with_affinity) {

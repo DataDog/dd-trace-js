@@ -122,6 +122,23 @@ const transformers = {
     return configValue
   },
   /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {number | 'auto' | undefined}
+   */
+  normalizeProfilingHeapLimitExtensionSize (value, optionName, source) {
+    if (value.toLowerCase() === 'auto') {
+      return 'auto'
+    }
+
+    const parsed = parsers.INT(value)
+    if (parsed === undefined) {
+      warnInvalidValue(value, optionName, source, 'Heap limit extension size must be an integer or "auto"')
+    }
+    return parsed
+  },
+  /**
    * Parses DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ('on' | 'off' | 'gzip[-1..9]' | 'zstd[-1..22]')
    * into the codec and level the profiler uploads with. The value's shape is already range-checked
    * by the `allowed` pattern, so no validation is needed here.
@@ -198,6 +215,17 @@ const transformers = {
     try {
       return new URL(value)
     } catch {}
+  },
+  /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {string | undefined}
+   */
+  validateHttpUrl (value, optionName, source) {
+    const url = transformers.toURL(value)
+    if (url?.protocol === 'http:' || url?.protocol === 'https:') return value
+    warnInvalidValue(value, optionName, source, 'Invalid HTTP URL')
   },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)

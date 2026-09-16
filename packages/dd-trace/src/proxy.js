@@ -553,7 +553,6 @@ class Tracer extends NoopProxy {
 /**
  * Checks the private filesystem-only Test Optimization validation mode.
  *
- * @returns {boolean} whether network-capable tracer side channels must stay disabled
  */
 function isOfflineTestOptimizationValidation () {
   return isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV)) &&
@@ -565,7 +564,6 @@ function isOfflineTestOptimizationValidation () {
  * Checks whether initialization selected a filesystem-only Test Optimization exporter.
  *
  * @param {import('../../../index').TracerOptions} [options] tracer initialization options
- * @returns {boolean} whether the selected exporter is safe for offline validation
  */
 function isOfflineValidationExporter (options) {
   return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)

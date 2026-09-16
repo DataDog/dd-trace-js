@@ -7,7 +7,6 @@ const failedUploadCommands = new Set()
 
 /**
  * @param {string} command
- * @returns {boolean} whether a `runUpload`/`runUploadWithRetry` call for this command has failed.
  */
 export function hasUploadFailed (command) {
   return failedUploadCommands.has(command)
@@ -111,7 +110,6 @@ export async function runUploadWithRetry (command, args, retries = 2, delayMs = 
  *
  * @param {string} label
  * @param {UploadResult[]} results
- * @returns {void}
  */
 export function logUploads (label, results) {
   if (results.length === 0) {

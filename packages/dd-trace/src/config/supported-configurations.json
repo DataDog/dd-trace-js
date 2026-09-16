@@ -1519,9 +1519,9 @@
     ],
     "DD_PROFILING_ALLOCATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -1636,9 +1636,10 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": [
       {
-        "implementation": "A",
-        "type": "int",
-        "default": "0"
+        "implementation": "B",
+        "type": "string",
+        "transform": "normalizeProfilingHeapLimitExtensionSize",
+        "default": "auto"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": [
@@ -1878,6 +1879,7 @@
         "implementation": "C",
         "type": "string",
         "default": "datadoghq.com",
+        "transform": "toLowerCase",
         "configurationNames": [
           "site"
         ]
@@ -4238,6 +4240,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4253,6 +4256,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4273,6 +4277,7 @@
         "type": "string",
         "default": "http/json",
         "allowed": "http/json",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4292,6 +4297,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4311,6 +4317,8 @@
         "implementation": "D",
         "type": "string",
         "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4331,6 +4339,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4350,6 +4359,8 @@
         "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4379,7 +4390,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http/protobuf"
+        "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase"
       }
     ],
     "OTEL_EXPORTER_OTLP_TIMEOUT": [

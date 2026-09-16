@@ -188,7 +188,6 @@ function recordSubmitEvaluation (options, err, value = 1) {
  * @param {string} targetType - The payload key the feedback was attached to, `'other'` if unresolved.
  * @param {string} err - The telemetry error tag, empty when the submission succeeded.
  * @param {number} [value]
- * @returns {void}
  */
 function recordSubmitFeedback (metricType, targetType, err, value = 1) {
   const tags = {
