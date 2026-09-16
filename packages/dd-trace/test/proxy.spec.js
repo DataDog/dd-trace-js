@@ -212,7 +212,7 @@ describe('TracerProxy', () => {
     flushServerlessTelemetry = sinon.spy()
 
     profiler = {
-      started: true,
+      isStarted: sinon.stub().returns(true),
       start: sinon.stub().returns(true),
       stop: sinon.spy(),
       setCustomLabelKeys: sinon.spy(),
@@ -942,11 +942,10 @@ describe('TracerProxy', () => {
       })
 
       it('should resolve profilerStarted() from the profiler module', async () => {
-        profiler.started = true
-
         proxy.init()
 
         assert.strictEqual(await proxy.profilerStarted(), true)
+        sinon.assert.calledOnce(profiler.isStarted)
       })
 
       it('should throw when profilerStarted() is called before init()', () => {

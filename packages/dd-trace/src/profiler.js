@@ -17,16 +17,13 @@ function getProfilingModule () {
   return profilingModule
 }
 
-// The profiling engine can stop itself (e.g. a collection error) without going through
-// module.stop(), so `started` is read from it directly rather than cached in a local flag that
-// could drift out of sync. Checking `profilingModule` first avoids forcing the profiling engine
-// (and its native crashtracker binding) to load just to read this.
-Object.defineProperty(module, 'started', {
-  enumerable: true,
-  get () {
-    return profilingModule !== undefined && profilingModule.profiler.enabled
-  },
-})
+// The profiling engine can stop itself (e.g. a collection error) without going through stop(), so
+// read its state directly rather than caching a flag that could drift out of sync. Checking
+// `profilingModule` first avoids forcing the profiling engine (and its native crashtracker binding)
+// to load just to read this.
+function isStarted () {
+  return profilingModule !== undefined && profilingModule.profiler.enabled
+}
 
 /** @type {typeof import('./profiling/ssi-heuristics') | undefined} */
 let ssiHeuristicsModule
@@ -45,7 +42,7 @@ function disarmSSIHeuristics () {
 /**
  * @param {import('./config/config-base')} config - Tracer configuration
  */
-module.start = function (config) {
+function start (config) {
   try {
     // Forward the full tracer config to the profiling layer.
     // Profiling code is responsible for deriving the specific options it needs.
@@ -59,7 +56,7 @@ module.start = function (config) {
   }
 }
 
-module.stop = function () {
+function stop () {
   try {
     getProfilingModule().profiler.stop()
   } catch (error) {
@@ -76,7 +73,7 @@ module.stop = function () {
  *
  * @param {Iterable<string>} keys - Custom label key names
  */
-module.setCustomLabelKeys = function (keys) {
+function setCustomLabelKeys (keys) {
   getProfilingModule().profiler.setCustomLabelKeys(keys)
 }
 
@@ -88,7 +85,7 @@ module.setCustomLabelKeys = function (keys) {
  * @returns {T} The return value of fn
  * @template T
  */
-module.runWithLabels = function (labels, fn) {
+function runWithLabels (labels, fn) {
   return getProfilingModule().profiler.runWithLabels(labels, fn)
 }
 
@@ -100,13 +97,13 @@ configUpdateChannel.subscribe((config) => {
     disarmSSIHeuristics()
     // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
     // (e.g. an unrelated sampling-rate change) would restart it on every update.
-    if (!module.started) module.start(config)
+    if (!isStarted()) start(config)
   } else if (enabled === 'false') {
     disarmSSIHeuristics()
     // Only touch the profiling layer if it was actually running, so a disabled profiler never
     // forces the profiling engine (and its native crashtracker binding) to load.
-    if (module.started) module.stop()
-  } else if (!module.started && !armedSSIHeuristics) {
+    if (isStarted()) stop()
+  } else if (!isStarted() && !armedSSIHeuristics) {
     // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
     // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
     // rather than stopping and re-arming it on every subsequent config publication. Also guard
@@ -118,12 +115,12 @@ configUpdateChannel.subscribe((config) => {
     armedSSIHeuristics.onTriggered(() => {
       // Since disarmSSIHeuristics() runs on every non-auto publish, reaching this callback
       // guarantees the latest published value is still 'auto'.
-      if (!module.started) module.start(config)
+      if (!isStarted()) start(config)
       disarmSSIHeuristics()
     })
   }
 })
 
-globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => { if (module.started) module.stop() })
+globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(() => { if (isStarted()) stop() })
 
-module.exports = module
+module.exports = { isStarted, start, stop, setCustomLabelKeys, runWithLabels }

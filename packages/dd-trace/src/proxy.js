@@ -507,7 +507,7 @@ class Tracer extends NoopProxy {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return Promise.resolve(profiler.started)
+    return Promise.resolve(profiler.isStarted())
   }
 
   /**

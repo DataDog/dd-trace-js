@@ -86,24 +86,24 @@ describe('profiler', () => {
 
       sinon.assert.notCalled(profilingModule.profiler.start)
       sinon.assert.notCalled(profilingModule.profiler.stop)
-      assert.strictEqual(profiler.started, false)
+      assert.strictEqual(profiler.isStarted(), false)
     })
 
     it('starts the profiler when enabled', () => {
       publishConfig('true')
 
       sinon.assert.calledOnce(profilingModule.profiler.start)
-      assert.strictEqual(profiler.started, true)
+      assert.strictEqual(profiler.isStarted(), true)
     })
 
-    it('reflects the profiling layer self-stopping outside of module.stop()', () => {
+    it('reflects the profiling layer self-stopping outside of profiler.stop()', () => {
       publishConfig('true')
-      assert.strictEqual(profiler.started, true)
+      assert.strictEqual(profiler.isStarted(), true)
 
       // e.g. a collection error stopping the native profilers directly, bypassing module.stop()
       profilingModule.profiler.enabled = false
 
-      assert.strictEqual(profiler.started, false)
+      assert.strictEqual(profiler.isStarted(), false)
 
       publishConfig('true')
 
@@ -124,7 +124,7 @@ describe('profiler', () => {
       publishConfig('false')
 
       sinon.assert.calledOnce(profilingModule.profiler.stop)
-      assert.strictEqual(profiler.started, false)
+      assert.strictEqual(profiler.isStarted(), false)
     })
 
     it('logs and does not propagate when stopping the profiler throws', () => {
@@ -137,7 +137,7 @@ describe('profiler', () => {
 
       publishConfig('false')
 
-      assert.strictEqual(profiler.started, false)
+      assert.strictEqual(profiler.isStarted(), false)
       sinon.assert.calledOnce(log.error)
     })
 
@@ -145,14 +145,14 @@ describe('profiler', () => {
       publishConfig('auto')
 
       sinon.assert.notCalled(profilingModule.profiler.start)
-      assert.strictEqual(profiler.started, false)
+      assert.strictEqual(profiler.isStarted(), false)
       sinon.assert.calledOnceWithExactly(FakeSSIHeuristics, { profiling: { DD_PROFILING_ENABLED: 'auto' } })
       sinon.assert.calledOnce(ssiHeuristics.start)
 
       ssiHeuristics.triggeredCallback()
 
       sinon.assert.calledOnce(profilingModule.profiler.start)
-      assert.strictEqual(profiler.started, true)
+      assert.strictEqual(profiler.isStarted(), true)
       // deregisters the trigger callback once it has fired
       sinon.assert.calledTwice(ssiHeuristics.onTriggered)
       assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
@@ -199,12 +199,12 @@ describe('profiler', () => {
       publishConfig('auto')
       ssiHeuristics.triggeredCallback()
       sinon.assert.calledOnce(profilingModule.profiler.start)
-      assert.strictEqual(profiler.started, true)
+      assert.strictEqual(profiler.isStarted(), true)
 
       publishConfig('auto')
 
       sinon.assert.notCalled(profilingModule.profiler.stop)
-      assert.strictEqual(profiler.started, true)
+      assert.strictEqual(profiler.isStarted(), true)
     })
 
     it('does not stop or restart a profiler unconditionally enabled before an auto publish', () => {
@@ -215,7 +215,7 @@ describe('profiler', () => {
 
       sinon.assert.notCalled(profilingModule.profiler.stop)
       sinon.assert.calledOnce(profilingModule.profiler.start)
-      assert.strictEqual(profiler.started, true)
+      assert.strictEqual(profiler.isStarted(), true)
     })
 
     it('re-arms the SSI heuristics after a prior arming has already triggered', () => {
@@ -234,7 +234,7 @@ describe('profiler', () => {
 
       publishConfig('true')
 
-      assert.strictEqual(profiler.started, false)
+      assert.strictEqual(profiler.isStarted(), false)
       sinon.assert.calledOnce(log.error)
     })
   })
