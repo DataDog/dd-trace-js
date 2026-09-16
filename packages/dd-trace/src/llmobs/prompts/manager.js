@@ -4,20 +4,10 @@ const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
 const request = require('../../exporters/common/request')
 const { createSiteUrl, isLoopbackHost } = require('../../exporters/common/url')
+const { ERROR_NAMES, PROMPTS_PATH, SOURCE_CACHE } = require('../constants/prompts')
 const telemetry = require('../telemetry')
 const { HotCache, WarmCache, cacheKey, promptIdFromKey } = require('./cache')
 const ManagedPrompt = require('./prompt')
-
-const PROMPTS_PATH = '/api/unstable/llm-obs/v1/prompts'
-const SOURCE_CACHE = 'cache'
-const ERROR_NAMES = {
-  API: 'PromptAPIError',
-  AUTH: 'PromptAuthError',
-  CONFLICT: 'PromptConflictError',
-  NOT_FOUND: 'PromptNotFoundError',
-  SERVER: 'PromptServerError',
-  VALIDATION: 'PromptValidationError',
-}
 
 /**
  * @typedef {object} PromptRequest
