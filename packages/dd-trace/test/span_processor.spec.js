@@ -9,7 +9,8 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { APM_TRACING_ENABLED_KEY, TOP_LEVEL_KEY } = require('../src/constants')
+const id = require('../src/id')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 
 describe('SpanProcessor', () => {
@@ -24,6 +25,7 @@ describe('SpanProcessor', () => {
   let spanFormat
   let config
   let SpanSampler
+  let SpanStatsProcessor
   let sample
 
   before(() => {
@@ -73,12 +75,74 @@ describe('SpanProcessor', () => {
     SpanSampler = sinon.stub().returns({
       sample,
     })
+    SpanStatsProcessor = sinon.stub()
 
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './span_stats': { SpanStatsProcessor },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
+  })
+
+  it('should route local span stats through an exporter-provided sender', () => {
+    const payload = Buffer.from('stats')
+    const done = sinon.stub()
+    exporter.sendStats = sinon.stub()
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    processor = new SpanProcessor(exporter, prioritySampler, config)
+    const sendStats = SpanStatsProcessor.lastCall.args[2]
+    sendStats(payload, done)
+
+    sinon.assert.calledOnceWithExactly(exporter.sendStats, payload, done)
+  })
+
+  it('should compute top-level spans before recording stats when required by the exporter', () => {
+    exporter.requiresClientComputedTopLevel = true
+    processor = new SpanProcessor(exporter, prioritySampler, config)
+    processor._stats = { onSpanFinished: sinon.stub() }
+
+    const formattedSpans = [
+      { span_id: id('1'), parent_id: id('0'), service: 'web', metrics: {} },
+      { span_id: id('2'), parent_id: id('1'), service: 'web', metrics: {} },
+      { span_id: id('3'), parent_id: id('2'), service: 'database', metrics: {} },
+      { span_id: id('4'), parent_id: id('5'), service: 'worker', metrics: {} },
+    ]
+    for (const [index, formattedSpan] of formattedSpans.entries()) {
+      spanFormat.onCall(index).returns(formattedSpan)
+    }
+
+    const finishedSpans = formattedSpans.map(() => ({ ...finishedSpan }))
+    trace.started = finishedSpans
+    trace.finished = finishedSpans
+
+    processor.process(finishedSpans[0])
+
+    assert.strictEqual(formattedSpans[0].metrics[TOP_LEVEL_KEY], 1)
+    assert.ok(!Object.hasOwn(formattedSpans[1].metrics, TOP_LEVEL_KEY))
+    assert.strictEqual(formattedSpans[2].metrics[TOP_LEVEL_KEY], 1)
+    assert.strictEqual(formattedSpans[3].metrics[TOP_LEVEL_KEY], 1)
+    sinon.assert.callCount(processor._stats.onSpanFinished, 4)
+    assert.strictEqual(processor._stats.onSpanFinished.getCall(2).args[0].metrics[TOP_LEVEL_KEY], 1)
+  })
+
+  it('should keep OTLP span stats on the OTLP exporter', () => {
+    const otlpStatsExporter = {}
+    exporter.sendStats = sinon.stub()
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    processor = new SpanProcessor(exporter, prioritySampler, config, otlpStatsExporter)
+
+    sinon.assert.calledWithExactly(SpanStatsProcessor, config, otlpStatsExporter, undefined)
+  })
+
+  it('should keep local span stats on the agent exporter', () => {
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+
+    processor = new SpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.calledWithExactly(SpanStatsProcessor, config, undefined, undefined)
   })
 
   it('should generate sampling priority', () => {

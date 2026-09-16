@@ -193,25 +193,23 @@ class SpanStatsProcessor {
   #config
 
   /**
-   * @param {import('./config/config-base')} config
+   * @param {import('./config/config-base') & { stats: { interval?: number } }} config
    * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpExporter]
+   * @param {(payload: Buffer, done: () => void) => void} [sendStats]
    */
-  constructor (config, otlpExporter) {
+  constructor (config, otlpExporter, sendStats) {
     const {
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
         interval = 10,
       } = {},
-      hostname,
-      port,
       url,
       env,
-      tags,
       version: appVersion,
       _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
     } = config
     if (!otlpExporter) {
-      this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
+      this.exporter = new SpanStatsExporter({ url, sendStats })
     }
     const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
