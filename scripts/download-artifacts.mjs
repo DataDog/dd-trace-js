@@ -22,6 +22,7 @@ const execFileAsync = promisify(execFile)
 // `downloadArtifacts` call, not just within one of them — a per-call limit still lets N concurrent
 // runs each open their own 10, recreating the exact burst this exists to prevent.
 const MAX_CONCURRENT_DOWNLOADS = 10
+const RETRY_PATTERN = /-retry-\d+$/
 
 // Shared (not per-call) so every concurrently processed sibling workflow's downloads draw from the
 // same pool of permits — see the comment above `MAX_CONCURRENT_DOWNLOADS`.
@@ -89,11 +90,18 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs, re
     )
   )
 
-  const toDownload = artifactLists.flatMap(({ runId, artifacts }) =>
-    artifacts
-      .filter(a => a.name.startsWith('junit-') || a.name.startsWith('coverage-'))
-      .map(a => ({ runId, artifact: a }))
-  )
+  const toDownload = artifactLists.flatMap(({ runId, artifacts }) => {
+    const artifactsByName = new Map()
+    for (const artifact of artifacts) {
+      if (!artifact.name.startsWith('junit-') && !artifact.name.startsWith('coverage-')) continue
+
+      const retry = artifact.name.match(RETRY_PATTERN)
+      const name = retry ? artifact.name.slice(0, -retry[0].length) : artifact.name
+      const existing = artifactsByName.get(name)
+      if (!existing || artifact.id > existing.id) artifactsByName.set(name, artifact)
+    }
+    return Array.from(artifactsByName.values(), artifact => ({ runId, artifact }))
+  })
 
   let failed = 0
   await Promise.all(
