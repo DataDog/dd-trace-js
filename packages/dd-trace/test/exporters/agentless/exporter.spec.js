@@ -27,6 +27,7 @@ describe('AgentlessExporter', () => {
     writer = {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
+      flushAndDrainStats: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
     }
 
@@ -87,7 +88,7 @@ describe('AgentlessExporter', () => {
         endpoint: 'https://trace.agent.us3.datadoghq.com/api/v0.2/stats',
         intervalMs: 15_000,
       })
-      assert.strictEqual(exporter.computesClientStats, true)
+      assert.strictEqual(exporter.clientStatsMode, 'native')
     })
 
     it('should use the default native stats interval', () => {
@@ -99,7 +100,7 @@ describe('AgentlessExporter', () => {
       assert.strictEqual(writerOptions.stats.intervalMs, 10_000)
     })
 
-    it('should keep JavaScript stats when native stats are unsupported', () => {
+    it('should disable client stats when native stats are unsupported', () => {
       Exporter = proxyquire('../../../src/exporters/agentless', {
         '@datadog/libdatadog': { supportsAgentlessStats: false },
         './writer': Writer,
@@ -111,27 +112,35 @@ describe('AgentlessExporter', () => {
       })
 
       assert.strictEqual(writerOptions.stats, undefined)
-      assert.strictEqual(exporter.computesClientStats, false)
+      assert.strictEqual(exporter.clientStatsMode, 'disabled')
     })
 
     for (const [name, config] of [
       ['client stats are disabled', { stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false } }],
       ['AppSec standalone mode is enabled', {
-        appsec: { standalone: { enabled: true } },
+        appsec: { DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: true },
         stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
-      }],
-      ['OTLP span metrics are enabled', {
-        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
-        OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       }],
     ]) {
       it(`should leave native client stats disabled when ${name}`, () => {
         exporter = new Exporter({ site: 'datadoghq.com', tags: {}, ...config })
 
         assert.strictEqual(writerOptions.stats, undefined)
-        assert.strictEqual(exporter.computesClientStats, false)
+        assert.strictEqual(exporter.clientStatsMode, 'disabled')
       })
     }
+
+    it('should retain JavaScript client stats when OTLP span metrics are enabled', () => {
+      exporter = new Exporter({
+        site: 'datadoghq.com',
+        tags: {},
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        OTEL_TRACES_SPAN_METRICS_ENABLED: true,
+      })
+
+      assert.strictEqual(writerOptions.stats, undefined)
+      assert.strictEqual(exporter.clientStatsMode, 'javascript')
+    })
 
     it('should register beforeExit handler', () => {
       exporter = new Exporter({})
@@ -271,6 +280,7 @@ describe('AgentlessExporter', () => {
       clock.tick(1000)
 
       sinon.assert.calledOnce(writer.flush)
+      sinon.assert.notCalled(writer.flushAndDrainStats)
     })
 
     it('should batch multiple exports into one flush', () => {
@@ -314,6 +324,7 @@ describe('AgentlessExporter', () => {
 
       sinon.assert.calledWith(writer.append, spans)
       sinon.assert.calledOnce(writer.flush)
+      sinon.assert.notCalled(writer.flushAndDrainStats)
     })
   })
 
@@ -325,19 +336,22 @@ describe('AgentlessExporter', () => {
     it('should flush writer immediately', () => {
       exporter.flush()
 
-      sinon.assert.called(writer.flush)
+      sinon.assert.calledOnce(writer.flushAndDrainStats)
+      sinon.assert.notCalled(writer.flush)
     })
 
     it('should clear pending timer on explicit flush', () => {
       exporter.export([{ name: 'test' }])
       exporter.flush()
 
-      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnce(writer.flushAndDrainStats)
+      sinon.assert.notCalled(writer.flush)
 
       // Timer should be cleared, so ticking should not trigger another flush
       clock.tick(1000)
 
-      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnce(writer.flushAndDrainStats)
+      sinon.assert.notCalled(writer.flush)
     })
 
     it('should call callback when done', (done) => {

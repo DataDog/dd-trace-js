@@ -44,7 +44,6 @@ function computeIntakeUrl (site = 'datadoghq.com') {
 
 /**
  * @param {string} [site] - The Datadog site. Defaults to 'datadoghq.com'.
- * @returns {string} The client stats intake endpoint.
  */
 function computeStatsIntakeUrl (site = 'datadoghq.com') {
   const url = createSiteUrl(site, 'trace.agent')
