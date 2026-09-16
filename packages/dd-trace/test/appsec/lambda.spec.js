@@ -665,6 +665,28 @@ describe('AppSec Lambda handler', () => {
         sinon.assert.neverCalledWithMatch(log.debug, sinon.match(/secret-token-123/))
       })
 
+      it('should not attempt to parse a gzip-encoded body', () => {
+        // The gzip of {"payload":1}. Without the content-encoding check this would reach
+        // JSON.parse as garbage and fail silently, instead of being skipped up front.
+        const persistent = invokeWithBody({
+          responseBody: 'H4sIAAAAAAAAE6tWKkiszMlPTFGyMqwFALsByqQNAAAA',
+          responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+          isBase64Encoded: true,
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.notCalled(log.debug)
+      })
+
+      it('should still parse a body whose content-encoding is identity', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'IDENTITY' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
       it('should ignore a JSON scalar, which carries no schema', () => {
         const persistent = invokeWithBody({ responseBody: '"just a string"' })
 

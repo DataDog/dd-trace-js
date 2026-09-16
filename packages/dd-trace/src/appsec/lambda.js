@@ -179,6 +179,9 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
     return
   }
 
+  const contentEncoding = headers?.['content-encoding']?.toLowerCase()
+  if (contentEncoding && contentEncoding !== 'identity') return
+
   try {
     const parsed = JSON.parse(isBase64Encoded ? Buffer.from(rawBody, 'base64').toString('utf8') : rawBody)
 
