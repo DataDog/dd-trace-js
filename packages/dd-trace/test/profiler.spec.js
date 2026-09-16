@@ -37,6 +37,9 @@ describe('profiler', () => {
       ssiHeuristics = {
         config,
         start: sinon.spy(),
+        disable: sinon.stub().callsFake(() => {
+          ssiHeuristics.triggeredCallback = undefined
+        }),
         onTriggered: sinon.stub().callsFake((callback) => {
           ssiHeuristics.triggeredCallback = callback
         }),
@@ -73,7 +76,7 @@ describe('profiler', () => {
     log.error.resetHistory()
 
     // profiler.js tracks armed heuristics at module scope; reset it so a prior test's state
-    // doesn't leak in. Disarming here calls the fake's onTriggered() against whichever
+    // doesn't leak in. Disarming here calls the fake's disable() against whichever
     // `ssiHeuristics` instance is still current, so null the test-local variable only afterwards.
     publishConfig('false')
     ssiHeuristics = undefined
@@ -156,6 +159,7 @@ describe('profiler', () => {
       // deregisters the trigger callback once it has fired
       sinon.assert.calledTwice(ssiHeuristics.onTriggered)
       assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
+      sinon.assert.notCalled(ssiHeuristics.disable)
     })
 
     it('disarms the SSI heuristics when a later publish disables the profiler', () => {
@@ -164,10 +168,7 @@ describe('profiler', () => {
 
       publishConfig('false')
 
-      // deregisters the trigger callback (registered when arming) so a heuristic that fires
-      // later can't start the profiler behind this decision's back
-      sinon.assert.calledTwice(ssiHeuristics.onTriggered)
-      assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
+      sinon.assert.calledOnce(ssiHeuristics.disable)
       assert.strictEqual(ssiHeuristics.triggeredCallback, undefined)
     })
 
@@ -177,8 +178,7 @@ describe('profiler', () => {
 
       publishConfig('true')
 
-      sinon.assert.calledTwice(ssiHeuristics.onTriggered)
-      assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
+      sinon.assert.calledOnce(ssiHeuristics.disable)
       assert.strictEqual(ssiHeuristics.triggeredCallback, undefined)
       // the profiler was already started by the unconditional 'true' publish
       sinon.assert.calledOnce(profilingModule.profiler.start)
