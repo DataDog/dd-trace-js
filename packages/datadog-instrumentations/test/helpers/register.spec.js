@@ -136,6 +136,68 @@ describe('register', () => {
     })
   })
 
+  it('should report unsupported pure Orchestrion targets at flush', () => {
+    loadRegisterWithEnv()
+
+    channel('dd-trace:instrumentation:load:orchestrion').publish({
+      activationName: 'bullmq',
+      moduleName: 'bullmq',
+      result: 'unsupported',
+      version: '5.65.0',
+    })
+    channel('dd-trace:instrumentation:load:orchestrion').publish({
+      activationName: 'bullmq',
+      moduleName: 'bullmq',
+      result: 'unsupported',
+      version: '5.65.0',
+    })
+    channel('dd-trace:exporter:first-flush').publish()
+    channel('dd-trace:instrumentation:load:orchestrion').publish({
+      activationName: 'bullmq',
+      moduleName: 'bullmq',
+      result: 'unsupported',
+      version: '5.65.0',
+    })
+    channel('dd-trace:exporter:first-flush').publish()
+
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'abort.integration', [
+      'integration:bullmq',
+      'integration_version:5.65.0',
+    ], {
+      result: 'abort',
+      result_class: 'incompatible_library',
+      result_reason: 'Incompatible integration version: bullmq@5.65.0',
+    })
+  })
+
+  it('should keep pure Orchestrion compatibility success monotonic and activate only rewritten targets', () => {
+    loadRegisterWithEnv()
+    const activations = []
+    const loadChannel = channel('dd-trace:instrumentation:load')
+    const subscriber = message => activations.push(message)
+    loadChannel.subscribe(subscriber)
+    const orchestrionChannel = channel('dd-trace:instrumentation:load:orchestrion')
+    const message = { activationName: '@langchain/core', moduleName: '@langchain/core', version: '1.0.0' }
+
+    try {
+      orchestrionChannel.publish({ ...message, result: 'unsupported' })
+      orchestrionChannel.publish({ ...message, result: 'matched' })
+      orchestrionChannel.publish({ ...message, result: 'unsupported' })
+      assert.deepStrictEqual(activations, [])
+
+      orchestrionChannel.publish({ ...message, result: 'rewritten' })
+      assert.ok(activations.length > 0)
+      assert.ok(activations.every(({ name }) => name === '@langchain/core'))
+      channel('dd-trace:exporter:first-flush').publish()
+      orchestrionChannel.publish({ ...message, result: 'unsupported' })
+      channel('dd-trace:exporter:first-flush').publish()
+
+      sinon.assert.notCalled(telemetryMock)
+    } finally {
+      loadChannel.unsubscribe(subscriber)
+    }
+  })
+
   it('should only unwrap an IITM default export after its instrumentation matches', () => {
     const patch = sinon.stub()
     hooksMock.mariadb = { esmFirst: true, fn: sinon.stub() }

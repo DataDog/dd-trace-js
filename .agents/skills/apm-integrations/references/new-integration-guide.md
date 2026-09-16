@@ -12,7 +12,7 @@ Step-by-step checklist for creating a new dd-trace-js integration from scratch.
 
 ### Orchestrion (Default)
 
-Orchestrion requires four files:
+Start by adding the rewrite config and its registry entry:
 
 **1. JavaScript config** — `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`:
 
@@ -34,28 +34,17 @@ module.exports = [{
 
 To find `filePath`, inspect the installed package to locate where the target method is defined. **Many libraries duplicate classes across separate CJS and ESM builds** (e.g., `dist/cjs/client.js` and `dist/esm/client.js`). Add a separate entry for each file path with the same `functionQuery` and `channelName` — otherwise the uninstrumented module format will silently fail.
 
-**2. Hooks file** — `packages/datadog-instrumentations/src/<name>.js`:
+**2. Config registry entry** —
+`packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js`:
 
 ```javascript
-'use strict'
-
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('<npm-package>').values()) {
-  addHook(hook, exports => exports)
-}
+{ instrumentations: require('./instrumentations/<name>') },
 ```
 
-`getHooks` reads the orchestrion config and generates `addHook` entries automatically. This file is needed so the module hooks are registered for the rewriter to process.
-
-**3. Config registry entry** —
-`packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js`:
-
-```javascript
-...require('./<name>'),
-```
-
-**4. hooks.js entry** — (see Register in hooks.js below)
+Pure Orchestrion integrations need no identity instrumentation entrypoint or `hooks.js` entry. Add those only for a
+hybrid integration that also needs runtime setup or export modification (see Register in hooks.js below). For a pure
+integration, set `activationName` to its npm package name in the registry entry, then run
+`npm run generate:rewriter:targets`.
 
 See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery support, and channel naming.
 
@@ -124,11 +113,12 @@ For other shimmer patterns, refer to existing shimmer-based instrumentations in 
 
 ### Register in hooks.js
 
-Both orchestrion and shimmer paths require an entry in `packages/datadog-instrumentations/src/helpers/hooks.js`:
+Shimmer and hybrid Orchestrion paths require an entry in
+`packages/datadog-instrumentations/src/helpers/hooks.js`; pure Orchestrion paths do not:
 
 ```javascript
 module.exports = {
-  // Orchestrion or CJS-only shimmer:
+  // Hybrid Orchestrion or CJS-only shimmer:
   '<name>': () => require('../<name>'),
 
   // Shimmer with ESM/dual packages (orchestrion handles ESM automatically):
@@ -297,9 +287,9 @@ PLUGINS="<name>" npm run test:plugins:ci
 
 ## Checklist
 
-- [ ] Instrumentation created (orchestrion JavaScript config + hooks file, or shimmer with justification comment)
-- [ ] Orchestrion config registered in `rewriter/instrumentations/index.js` (orchestrion only)
-- [ ] Registered in hooks.js (required for both orchestrion and shimmer paths)
+- [ ] Instrumentation created (Orchestrion config, or shimmer file with justification comment)
+- [ ] Orchestrion config registered in `rewriter/instrumentation-registry.js` (Orchestrion only)
+- [ ] Registered in hooks.js (shimmer and hybrid Orchestrion integrations only)
 - [ ] Plugin created with correct base class
 - [ ] Plugin registered in `packages/dd-trace/src/plugins/index.js`
 - [ ] TypeScript definitions added to every supported public TypeScript surface
