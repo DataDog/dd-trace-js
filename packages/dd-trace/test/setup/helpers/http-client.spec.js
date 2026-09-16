@@ -35,6 +35,9 @@ describe('http-client test helper', () => {
         } else if (req.url === '/echo-headers') {
           res.writeHead(200, { 'Content-Type': 'application/json', 'x-custom': 'yes' })
           res.end(JSON.stringify(req.headers))
+        } else if (req.url === '/echo-body') {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ contentType: req.headers['content-type'], body }))
         } else {
           res.writeHead(404)
           res.end()
@@ -83,6 +86,12 @@ describe('http-client test helper', () => {
     const res = await httpClient.post(`${baseURL}/json`, { hello: 'world' })
     assert.equal(res.status, 200)
     assert.deepEqual(res.data, { ok: true, body: { hello: 'world' } })
+  })
+
+  it('serializes a URLSearchParams request body as application/x-www-form-urlencoded', async () => {
+    const res = await httpClient.post(`${baseURL}/echo-body`, new URLSearchParams({ key: 'value' }))
+    assert.equal(res.data.contentType, 'application/x-www-form-urlencoded')
+    assert.equal(res.data.body, 'key=value')
   })
 
   it('returns non-JSON text bodies as-is', async () => {

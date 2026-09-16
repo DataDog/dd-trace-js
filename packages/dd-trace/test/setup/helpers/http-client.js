@@ -16,12 +16,18 @@ function isPlainObject (value) {
   return value !== null && typeof value === 'object' && !(
     Buffer.isBuffer(value) ||
     value instanceof Readable ||
-    (typeof FormData !== 'undefined' && value instanceof FormData) ||
-    (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams)
+    (typeof FormData !== 'undefined' && value instanceof FormData)
   )
 }
 
 function serializeBody (data, headers) {
+  if (typeof URLSearchParams !== 'undefined' && data instanceof URLSearchParams) {
+    if (!('content-type' in headers) && !('Content-Type' in headers)) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded'
+    }
+    return data.toString()
+  }
+
   if (data === undefined || typeof data === 'string' || isPlainObject(data) === false) {
     return data
   }
