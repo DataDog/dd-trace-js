@@ -18,9 +18,7 @@ function wrapCreateCommand (createCommand) {
 
     if (!CommandClass) return CommandClass
 
-    if (typeof CommandClass.prototype.executeWithCallback === 'function') {
-      shimmer.wrap(CommandClass.prototype, 'executeWithCallback', wrapExecuteWithCallback)
-    }
+    shimmer.wrap(CommandClass.prototype, 'executeWithCallback', wrapExecuteWithCallback)
     shimmer.wrap(CommandClass.prototype, 'process', wrapProcess)
 
     return CommandClass
@@ -30,7 +28,7 @@ function wrapCreateCommand (createCommand) {
 function wrapExecuteWithCallback (executeWithCallback) {
   return function (...args) {
     const cb = args[0]
-    if (typeof cb !== 'function') return executeWithCallback.apply(this, args)
+    if (!ch.start.hasSubscribers || typeof cb !== 'function') return executeWithCallback.apply(this, args)
 
     this[kTracingCallbackCommand] = true
     try {
@@ -44,7 +42,7 @@ function wrapExecuteWithCallback (executeWithCallback) {
 function wrapProcess (process) {
   return function (...args) {
     const cb = args[0]
-    if (typeof cb !== 'function') return process.apply(this, args)
+    if (!ch.start.hasSubscribers || typeof cb !== 'function') return process.apply(this, args)
 
     if (this[kTracingCallbackCommand]) return process.apply(this, args)
 
