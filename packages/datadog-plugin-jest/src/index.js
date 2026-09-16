@@ -113,7 +113,6 @@ class JestPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       error,
-      isTestSessionFinalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
@@ -124,9 +123,6 @@ class JestPlugin extends CiPlugin {
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
         if (error) {
-          if (isTestSessionFinalizationError) {
-            this.tracer._exporter.setDeferredTestSuiteError?.(error)
-          }
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
         }
@@ -163,7 +159,6 @@ class JestPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
-        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
@@ -334,7 +329,6 @@ class JestPlugin extends CiPlugin {
       this.pendingTestSuiteFinishes.add(pendingFinish)
 
       const finish = () => {
-        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
         // Suites potentially run in a different process than the session,

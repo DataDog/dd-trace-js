@@ -44,10 +44,19 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
   }
 
   /**
+   * Recomputes the resource attributes baked into the transformer (e.g. after a MicroVM clone
+   * resume regenerates `runtime-id`).
+   *
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   */
+  updateResourceAttributes (resourceAttributes) {
+    this.#transformer.updateResourceAttributes(resourceAttributes)
+  }
+
+  /**
    * Exports DD-formatted spans via OTLP over HTTP.
    *
    * @param {import('./otlp_transformer').DDFormattedSpan[]} spans - Array of DD-formatted spans to export
-   * @returns {void}
    */
   export (spans) {
     if (spans.length === 0) {

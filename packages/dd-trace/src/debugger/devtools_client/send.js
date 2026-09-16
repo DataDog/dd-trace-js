@@ -5,12 +5,15 @@ const { stringify } = require('querystring')
 
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
-const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
+const { INCOMPLETE_REASON } = require('../guardrail-metrics')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
 const config = require('./config')
+const guardrailMetrics = require('./guardrail-metrics')
+const getRequestOptions = require('./request-options')
 const { pruneSnapshot } = require('./snapshot-pruner')
+const buildTags = require('./tags')
 
 module.exports = send
 
@@ -22,14 +25,7 @@ const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
 
-const ddtags = buildTags([
-  ['env', config.env],
-  ['version', config.version],
-  ['debugger_version', version],
-  ['host_name', hostname],
-  [GIT_COMMIT_SHA, config.commitSHA],
-  [GIT_REPOSITORY_URL, config.repositoryUrl],
-])
+const ddtags = buildTags(config, hostname, version, log)
 
 let path
 setInputPath(config.inputPath)
@@ -40,14 +36,28 @@ const jsonBuffer = new JSONBuffer({
   onFlush,
 })
 
-function send (message, logger, dd, snapshot, processTags) {
+/**
+ * Queue a probe result for upload.
+ *
+ * @param {string} message - The evaluated log message
+ * @param {object} logger - The logger metadata
+ * @param {object | undefined} dd - The trace and span ids of the active trace, if any
+ * @param {object} snapshot - The snapshot payload
+ * @param {string | undefined} processTags - The serialized process tags, if enabled
+ * @param {number} eventType - The guardrail event type, one of `EVENT_TYPE`
+ * @param {number} incompleteReasons - Bitmask of `INCOMPLETE_REASON` flags enforced while capturing the snapshot
+ */
+function send (message, logger, dd, snapshot, processTags, eventType, incompleteReasons) {
+  if (message?.length > MAX_MESSAGE_LENGTH) {
+    message = message.slice(0, MAX_MESSAGE_LENGTH) + '…'
+    incompleteReasons |= INCOMPLETE_REASON.STRING_LENGTH
+  }
+
   const payload = {
     ddsource,
     hostname,
     service,
-    message: message?.length > MAX_MESSAGE_LENGTH
-      ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
-      : message,
+    message,
     logger,
     dd,
     process_tags: processTags,
@@ -58,6 +68,7 @@ function send (message, logger, dd, snapshot, processTags) {
   let size = Buffer.byteLength(json)
 
   if (size > MAX_LOG_PAYLOAD_SIZE_BYTES) {
+    incompleteReasons |= INCOMPLETE_REASON.PAYLOAD_TOO_LARGE
     let pruned
     try {
       pruned = pruneSnapshot(json, size, MAX_LOG_PAYLOAD_SIZE_BYTES)
@@ -67,7 +78,7 @@ function send (message, logger, dd, snapshot, processTags) {
 
     if (pruned) {
       json = pruned
-    } else {
+    } else if (snapshot.captures !== undefined) {
       // Fallback if pruning fails
       const line = Object.keys(snapshot.captures.lines)[0]
       snapshot.captures.lines[line] = { pruned: true }
@@ -77,6 +88,8 @@ function send (message, logger, dd, snapshot, processTags) {
   }
 
   jsonBuffer.write(json, size)
+
+  if (incompleteReasons !== 0) guardrailMetrics.captureIncomplete(incompleteReasons, eventType)
 }
 
 /**
@@ -85,7 +98,7 @@ function send (message, logger, dd, snapshot, processTags) {
 function onFlush (payload) {
   log.debug('[debugger:devtools_client] Flushing probe payload buffer')
 
-  request(payload, buildRequestOpts(), (err, res, statusCode) => {
+  request(payload, buildRequestOptions(), (err, res, statusCode) => {
     if (!handleV2FallbackIfNeeded(statusCode, payload) && err) {
       log.error('[debugger:devtools_client] Error sending probe payload', err)
     }
@@ -95,7 +108,6 @@ function onFlush (payload) {
 /**
  * @param {number} statusCode - The status code of the response
  * @param {string} payload - The payload to send
- * @returns {boolean} True if the fallback was needed, false otherwise
  */
 function handleV2FallbackIfNeeded (statusCode, payload) {
   if (statusCode !== 404 || config.inputPath !== DEBUGGER_INPUT_V2) {
@@ -108,7 +120,7 @@ function handleV2FallbackIfNeeded (statusCode, payload) {
 
   setInputPath(DEBUGGER_DIAGNOSTICS_V1)
 
-  request(payload, buildRequestOpts(), (err) => {
+  request(payload, buildRequestOptions(), (err) => {
     if (err) {
       log.error('[debugger:devtools_client] Error sending probe payload after fallback to %s',
         DEBUGGER_DIAGNOSTICS_V1,
@@ -119,13 +131,8 @@ function handleV2FallbackIfNeeded (statusCode, payload) {
   return true
 }
 
-function buildRequestOpts () {
-  return {
-    method: 'POST',
-    url: config.url,
-    path,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  }
+function buildRequestOptions () {
+  return getRequestOptions(config, path, { 'Content-Type': 'application/json; charset=utf-8' })
 }
 
 /**
@@ -134,25 +141,4 @@ function buildRequestOpts () {
 function setInputPath (newPath) {
   config.inputPath = newPath
   path = `${newPath}?${stringify({ ddtags })}`
-}
-
-/**
- * @param {Array<[string, unknown]>} tags - The tags to serialize.
- * @returns {string} The serialized tags.
- */
-function buildTags (tags) {
-  const serializedTags = []
-
-  for (const [key, rawValue] of tags) {
-    if (rawValue === undefined) continue
-
-    if (String(rawValue).includes(',')) {
-      log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
-      continue
-    }
-
-    serializedTags.push(`${key}:${rawValue}`)
-  }
-
-  return serializedTags.join(',')
 }

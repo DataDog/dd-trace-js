@@ -5,8 +5,6 @@ const assert = require('node:assert')
 const { on } = require('node:events')
 const { setTimeout: delay } = require('node:timers/promises')
 
-const Axios = require('axios')
-
 const { sandboxCwd, useSandbox, FakeAgent, assertObjectContains, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 
@@ -41,7 +39,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
 
   function genTestsForSourceFile (sourceFile) {
     return function () {
-      let rcConfig, agent, proc, axios
+      let rcConfig, agent, proc
 
       beforeEach(async function () {
         rcConfig = {
@@ -56,7 +54,6 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
       afterEach(async function () {
         proc?.kill()
         await agent?.stop()
-        axios = undefined
       })
 
       for (let attempt = 1; attempt <= 5; attempt++) {
@@ -104,7 +101,6 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
             },
           })
           assert(proc, 'proc must be spawned successfully')
-          axios = Axios.create({ baseURL: proc.url })
 
           try {
             for await (const [{ payload }] of diagnostics) {
@@ -119,8 +115,9 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
                 assertObjectContains(event, expected)
 
                 if (event.debugger.diagnostics.status === 'INSTALLED') {
-                  const response = await axios.get('/')
+                  const response = await fetch(proc.url)
                   assert.strictEqual(response.status, 200)
+                  await response.arrayBuffer()
                 }
               }
 

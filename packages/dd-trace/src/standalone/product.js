@@ -6,11 +6,11 @@ const RateLimiter = require('../rate_limiter')
 /**
  * Returns a rate limiter tuned for the provided product configuration.
  *
- * @param {{ appsec?: { enabled?: boolean }, iast?: { enabled?: boolean } } | undefined} config
+ * @param {{ appsec?: { DD_APPSEC_ENABLED?: boolean }, iast?: { DD_IAST_ENABLED?: boolean } } | undefined} config
  * @returns {import('../rate_limiter')}
  */
 function getProductRateLimiter (config) {
-  if (config?.appsec?.enabled || config?.iast?.enabled) {
+  if (config?.appsec?.DD_APPSEC_ENABLED || config?.iast?.DD_IAST_ENABLED) {
     return new RateLimiter(1, 'minute') // onePerMinute
   }
 

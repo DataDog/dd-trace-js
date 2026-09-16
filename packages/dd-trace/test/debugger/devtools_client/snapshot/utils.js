@@ -15,7 +15,8 @@ const session = require('./stub-session')
 const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
   '../session': session,
 })
-const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
+const loadRedaction = proxyquire.noCallThru()
+const redactionWithStub = loadRedaction('../../../../src/debugger/devtools_client/snapshot/redaction', {
   '../config': {
     dynamicInstrumentation: {
       redactedIdentifiers: [],
@@ -100,15 +101,21 @@ async function teardown () {
   await session.post('Debugger.disable')
 }
 
-async function setAndTriggerBreakpoint (path, line) {
-  const { run, scriptId } = require(path)
+/**
+ * @param {string} path - The target code file
+ * @param {number} line - The line to break on
+ * @param {() => void} [trigger] - The function hitting the breakpoint. Defaults to the target's `run` export.
+ */
+async function setAndTriggerBreakpoint (path, line, trigger) {
+  const target = require(path)
+  trigger ??= target.run
   await session.post('Debugger.setBreakpoint', {
     location: {
-      scriptId: await scriptId,
+      scriptId: await target.scriptId,
       lineNumber: line - 1, // Beware! lineNumber is zero-indexed
     },
   })
-  run()
+  trigger()
 }
 
 function assertOnBreakpoint (done, snapshotConfig, callback) {
@@ -122,8 +129,9 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   session.once('Debugger.paused', ({ params }) => {
     assert.strictEqual(params.hitBreakpoints.length, 1)
 
-    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then(({ processLocalState }) => {
-      callback(processLocalState())
+    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then(({ processLocalState, incomplete }) => {
+      const state = processLocalState()
+      callback(state, incomplete)
       done()
     }).catch(done)
   })

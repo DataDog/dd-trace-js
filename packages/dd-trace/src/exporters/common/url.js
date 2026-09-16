@@ -1,12 +1,12 @@
 'use strict'
 
 const net = require('node:net')
+const { format } = require('node:url')
 
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 
 /**
  * @param {string} hostname
- * @returns {boolean}
  */
 function isLoopbackHost (hostname) {
   // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
@@ -14,6 +14,43 @@ function isLoopbackHost (hostname) {
     hostname === '::1' ||
     hostname === '[::1]' ||
     (hostname.startsWith('127.') && net.isIPv4(hostname))
+}
+
+/**
+ * @param {string|undefined} protocol
+ * @param {string|undefined} hostname
+ */
+function canSendApiKey (protocol, hostname) {
+  return protocol === 'https:' || protocol === 'unix:' ||
+    typeof hostname === 'string' && isLoopbackHost(hostname)
+}
+
+/**
+ * @param {string} site
+ * @param {string} [intake]
+ * @returns {URL | undefined}
+ */
+function createSiteUrl (site, intake) {
+  const hostname = `${intake === undefined ? '' : `${intake}.`}${site}`.toLowerCase()
+
+  try {
+    const url = new URL(format({
+      protocol: 'https:',
+      hostname,
+    }))
+    if (
+      url.hostname !== hostname ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      return
+    }
+    return url
+  } catch {}
 }
 
 /**
@@ -43,4 +80,4 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
-module.exports = { isLoopbackHost, parseUrl }
+module.exports = { canSendApiKey, createSiteUrl, isLoopbackHost, parseUrl }

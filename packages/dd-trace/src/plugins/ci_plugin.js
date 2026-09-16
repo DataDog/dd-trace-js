@@ -593,7 +593,6 @@ module.exports = class CiPlugin extends Plugin {
    * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
    * @param {Array<{ pattern: string, owners: string[] }>|null|undefined} codeOwnersEntries
    * Parsed CODEOWNERS entries discovered by the coordinator process.
-   * @returns {void}
    */
   _setRepositoryRoot (repositoryRoot, codeOwnersEntries) {
     if (codeOwnersEntries !== undefined) {
@@ -728,12 +727,7 @@ module.exports = class CiPlugin extends Plugin {
       this._bufferWorkerTrace(missingTestSuite, trace)
       return
     }
-    const exporter = this.tracer._exporter
-    if (exporter.exportTraceWithDeferredTestSuite) {
-      exporter.exportTraceWithDeferredTestSuite(trace)
-    } else {
-      exporter.export(trace)
-    }
+    this.tracer._exporter.export(trace)
   }
 
   /**

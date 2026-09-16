@@ -45,7 +45,9 @@ function parseEmailAndName (emailAndName) {
   }
   let name = ''
   let email = ''
-  const matchNameAndEmail = emailAndName.match(/(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)/)
+  // Untrusted git author metadata (a fork PR controls it). The anchor fixes the start position, the
+  // email classes cannot overlap around `@`, and the slice bounds the optional name part.
+  const matchNameAndEmail = emailAndName.slice(0, 1024).match(/^(?:"?([^"]*)"?\s)?<?([^\s@]+@[^\s>]+)>?/)
   if (matchNameAndEmail) {
     name = matchNameAndEmail[1]
     email = matchNameAndEmail[2]

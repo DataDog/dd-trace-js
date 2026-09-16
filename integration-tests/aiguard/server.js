@@ -495,8 +495,7 @@ app.get('/openai-aiguard-down', async (req, res) => {
 })
 
 app.get('/openai-stream', async (req, res) => {
-  // Streaming requests must skip AI Guard entirely (per openai.js:307); the
-  // stream consumption itself must not be affected by the wrapping.
+  // Streamed responses are out of AI Guard's scope; consuming the stream must still work.
   try {
     const stream = await openaiClient.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -507,9 +506,12 @@ app.get('/openai-stream', async (req, res) => {
       stream: true,
     })
     let chunks = 0
-    // eslint-disable-next-line no-unused-vars
-    for await (const _chunk of stream) chunks++
-    res.status(200).json({ blocked: false, streamed: true, chunks })
+    let text = ''
+    for await (const chunk of stream) {
+      chunks++
+      text += chunk.choices?.[0]?.delta?.content ?? ''
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks, text })
   } catch (error) {
     handleOpenAIError(error, res)
   }

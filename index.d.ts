@@ -306,6 +306,7 @@ interface Plugins {
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
+  "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -356,6 +357,16 @@ declare namespace tracer {
     links?: { context: SpanContext, attributes?: Object }[]
   }
 
+  export interface Exception {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export type SpanEventAttributeValue =
+    string | number | boolean | Array<string> | Array<number> | Array<boolean>;
+  export type SpanEventAttributes = Record<string, SpanEventAttributeValue>;
+
   /**
    * Span represents a logical unit of work as part of a broader Trace.
    * Examples of span might include remote procedure calls or a in-process
@@ -365,6 +376,14 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Adds a single link to the span.
@@ -448,6 +467,13 @@ declare namespace tracer {
      * Maximum number of traces matching this rule to sample per second.
      */
     maxPerSecond?: number
+
+    /**
+     * When `true`, a trace chunk rejected by this rule is fully dropped:
+     * it is excluded from client-side stats and never sent to the Agent.
+     * @default false
+     */
+    discard?: boolean
   }
 
   /**
@@ -632,6 +658,7 @@ declare namespace tracer {
      * Sampling rules to apply to priority sampling. Each rule matches against a trace's
      * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
      * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * Specify `"discard": true` to fully drop it from stats as well.
      * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
@@ -2240,7 +2267,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [Vercel AI SDK](https://ai-sdk.dev/docs/introduction) module.
      */
-    interface ai extends Instrumentation {}
+    interface ai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -2258,13 +2285,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
-    interface anthropic extends Instrumentation {}
+    interface anthropic extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
      * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
      */
-    interface claude_agent_sdk extends Instrumentation {}
+    interface claude_agent_sdk extends Instrumentation, LLMObsIntegration {}
 
     /**
      * Currently this plugin automatically instruments
@@ -2325,7 +2352,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
-    interface aws_sdk extends Instrumentation {
+    interface aws_sdk extends Instrumentation, LLMObsIntegration {
       /**
        * The service name to be used for this plugin. When a function is used it is called with the AWS
        * request parameters (e.g. `{ TableName }` for DynamoDB, `{ Bucket }` for S3) and its return value
@@ -2554,13 +2581,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-  interface google_cloud_vertexai extends Integration {}
+  interface google_cloud_vertexai extends Integration, LLMObsIntegration {}
 
   /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-  interface google_genai extends Integration {}
+  interface google_genai extends Integration, LLMObsIntegration {}
 
   /** @hidden */
   interface ExecutionArgs {
@@ -2882,7 +2909,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [langgraph](https://github.com/npmjs/package/langgraph) library.
      */
-    interface langgraph extends Instrumentation {}
+    interface langgraph extends Instrumentation, LLMObsIntegration {}
 
       /**
      * This plugin automatically instruments the
@@ -3042,13 +3069,13 @@ declare namespace tracer {
      * [DogStatsD](https://docs.datadoghq.com/developers/dogstatsd/?tab=hostagent#setup)
      * in the agent.
      */
-    interface openai extends Instrumentation {}
+    interface openai extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
      * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
      */
-    interface openai_agents extends Instrumentation {}
+    interface openai_agents extends Instrumentation, LLMObsIntegration {}
 
     /**
      * This plugin automatically instruments the
@@ -3217,6 +3244,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Supabase JavaScript client](https://github.com/supabase/supabase-js).
+     */
+    interface supabase extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
@@ -3261,6 +3294,10 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider {
+      shutdown(callback?: (error: Error | null) => void): void;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */
@@ -3849,17 +3886,27 @@ declare namespace tracer {
       metadata?: Array<Record<string, any>>
     ) => any | Promise<any>
 
+    interface DatasetRecord {
+      id: string | null
+      input: JSONType
+      expectedOutput: JSONType
+      metadata: Record<string, JSONType>
+      tags: string[]
+    }
+
+    interface DatasetRecordNew {
+      id?: string
+      inputData: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: string[]
+    }
+
     interface CreateDatasetOptions {
       /** Override the configured project for this dataset. */
       projectName?: string
       description?: string
-      records?: Array<{
-        id?: string,
-        inputData: JSONType,
-        expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>,
-        tags?: string[]
-      }>
+      records?: DatasetRecordNew[]
     }
 
     interface ExperimentOptions {
@@ -3875,6 +3922,8 @@ declare namespace tracer {
       description?: string
       config?: Record<string, JSONType>
       tags?: Record<string, string>
+      /** Number of full experiment runs to execute. Default 1. */
+      runs?: number
     }
 
     interface ExperimentRunOptions {
@@ -3884,6 +3933,8 @@ declare namespace tracer {
       retryDelay?: (attempt: number) => number
       /** Reject on the first task/evaluator error instead of capturing it. Default false. */
       throwOnErrors?: boolean
+      /** Maximum number of task/evaluator executions to process concurrently. Default 10. */
+      concurrency?: number
     }
 
     interface PullDatasetOptions {
@@ -3917,17 +3968,21 @@ declare namespace tracer {
 
     interface ExperimentRun {
       runId: string
+      /** 1-based run iteration. */
       runIteration: number
+      /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
+      hasError: boolean
       rows: ExperimentResultRow[]
       summaryEvaluations: Record<string, { value: any, error: string | null }>
     }
 
     interface ExperimentResult {
       experimentId: string
+      /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
-      /** Single-run summary evaluator results. */
+      /** Summary evaluator results from the first run, kept as a compatibility alias. */
       summaryEvaluations: Record<string, { value: any, error: string | null }>
-      /** Experiment runs. P0 Node experiments currently return one run. */
+      /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
       url: string
@@ -4020,6 +4075,8 @@ declare namespace tracer {
         metadata?: Record<string, JSONType>,
         tags?: string[]
       ): Dataset
+      /** Add multiple records to the dataset. */
+      addRecords (records: DatasetRecordNew[]): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType
@@ -4044,13 +4101,7 @@ declare namespace tracer {
       projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
-      records (): Array<{
-        id: string | null,
-        input: JSONType,
-        expectedOutput: JSONType,
-        metadata: Record<string, JSONType>,
-        tags: string[]
-      }>
+      records (): DatasetRecord[]
       /** Return the tags used to filter this dataset. */
       filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */

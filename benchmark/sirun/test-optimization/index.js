@@ -1,7 +1,8 @@
 'use strict'
 
-const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
+// eslint-disable-next-line import/order -- The startup guard must run before every other require.
+const assert = require('node:assert/strict')
 
 const {
   AgentlessCiVisibilityEncoder,
@@ -128,7 +129,7 @@ assert.ok(shape, `unknown VARIANT: ${VARIANT}`)
 const trace = buildTrace(shape.tests, shape.suites, shape.wide)
 const encoder = new AgentlessCiVisibilityEncoder(
   { flush () {} },
-  { runtimeId: 'a1b2c3d4-0000-0000-0000-000000000000', service: 'my-service', env: 'ci' }
+  { tags: { 'runtime-id': 'a1b2c3d4-0000-0000-0000-000000000000', service: 'my-service', env: 'ci' } }
 )
 
 // Preflight: encode once and confirm the encoder buffered bytes and counted the

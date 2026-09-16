@@ -70,6 +70,7 @@ const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
+const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomaticVideo')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
 const testToCtx = new WeakMap()
@@ -80,9 +81,12 @@ const testsToTestStatuses = new Map()
 const activeRumPages = new Set()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
+const isPlaywrightWorker = getValueFromEnvSources('DD_PLAYWRIGHT_WORKER') === '1'
 const DD_PROPERTIES_TIMEOUT = 5000
 const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
+const isFailureVideoUploadEnabled =
+  getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') === true
 
 let applyRepeatEachIndex = null
 let reporterError
@@ -91,7 +95,7 @@ let hasReporterError = false
 let startedSuites = []
 
 // Browser-side callbacks live in a coverage-excluded file so coverage counters can't reach chromium.
-const { detectRum, stopRumSession } = require('./playwright-browser-scripts')
+const { detectRum, stopRumSession } = require('./rum-browser-scripts')
 
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -134,27 +138,39 @@ let rootDir = ''
 let sessionProjects = []
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
+const MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE = '>=1.38.0'
 const EFD_RETRY_COUNT_REQUEST = 'ddEfdRetryCountRequest'
 const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
 const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
+const kDdPlaywrightFailureVideos = Symbol('ddPlaywrightFailureVideos')
 const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 const instrumentedPlaywrightReporters = new WeakSet()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
+const PLAYWRIGHT_FAILURE_VIDEO_PATH_RE = /(?:^|[\\/])video(?:-\d+)?\.webm$/
 const automaticFailureScreenshotPaths = new Set()
+const automaticFailureVideoPaths = new Set()
 
 /**
  * Returns whether Playwright's internal screenshot recorder created an attachment.
  *
  * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
  */
 function isAutomaticFailureScreenshotAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
+}
+
+/**
+ * Returns whether Playwright's internal video recorder created an attachment.
+ *
+ * @param {object} attachment - Playwright attachment payload
+ */
+function isAutomaticFailureVideoAttachment (attachment) {
+  return typeof attachment?.path === 'string' && automaticFailureVideoPaths.delete(attachment.path)
 }
 
 function isValidKnownTests (receivedKnownTests) {
@@ -212,7 +228,6 @@ function getTestRepeatEachKey (test) {
 
 /**
  * @param {object} test
- * @returns {string}
  */
 function getTestEfdKey (test) {
   const projectKey = getTestProjectKey(test)
@@ -245,9 +260,6 @@ function registerEfdRetryTest (test) {
   })
 }
 
-/**
- * @returns {boolean}
- */
 function shouldRunEarlyFlakeDetection () {
   return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
@@ -371,7 +383,6 @@ function sendDdPropertiesToWorkerWhenAvailable (workerProcess, testId) {
 
 /**
  * @param {object} test
- * @returns {boolean}
  */
 function shouldRequestEfdRetryCount (test) {
   // The main process remains the source of truth. repeatEachIndex is only used as
@@ -540,7 +551,6 @@ function getProjectsFromRunner (runner, configArg) {
  * Returns whether at least one Playwright project captures automatic screenshots for failed tests.
  *
  * @param {Array<object>} projects - Playwright projects with resolved use options
- * @returns {boolean} Whether failure screenshot capture is enabled
  */
 function isFailureScreenshotCaptureEnabled (projects) {
   for (const project of projects) {
@@ -549,6 +559,20 @@ function isFailureScreenshotCaptureEnabled (projects) {
     if (mode === 'on' || mode === 'only-on-failure' || mode === 'on-first-failure') {
       return true
     }
+  }
+  return false
+}
+
+/**
+ * Returns whether at least one Playwright project records videos that can be retained for failures.
+ *
+ * @param {Array<object>} projects - Playwright projects with resolved use options
+ */
+function isFailureVideoCaptureEnabled (projects) {
+  for (const project of projects) {
+    const video = project.use?.video
+    const mode = typeof video === 'object' && video !== null ? video.mode : video
+    if (mode === 'on' || mode === 'retain-on-failure') return true
   }
   return false
 }
@@ -614,7 +638,15 @@ function getTestSuiteError (testSuiteAbsolutePath) {
   if (errors.length === 1) {
     return errors[0]
   }
-  return new Error(`${errors.length} errors in this test suite:\n${errors.map(e => e.message).join('\n------\n')}`)
+  let errorMessages = ''
+  let isFirstError = true
+  for (const error of errors) {
+    if (!isFirstError) errorMessages += '\n------\n'
+    errorMessages += error.message || error.value || ''
+    isFirstError = false
+  }
+
+  return new Error(`${errors.length} errors in this test suite:\n${errorMessages}`)
 }
 
 function getTestByTestId (dispatcher, testId) {
@@ -748,7 +780,6 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
  *
  * @param {object} test
  * @param {string} testSuiteAbsolutePath
- * @returns {void}
  */
 function recordSkippedTestOptimizationExecution (test, testSuiteAbsolutePath) {
   if (recordedTestOptimizationExecutions.has(test) ||
@@ -1087,6 +1118,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
   const projects = getProjectsFromDispatcher(dispatcher)
   sessionProjects = projects
   const automaticFailureScreenshotsByTestId = new Map()
+  const failureVideosByTestId = new Map()
 
   if (disabledTestIds.size && !worker[kDdPlaywrightWorkerHostInstrumented] &&
       typeof worker.runTestGroup === 'function') {
@@ -1112,20 +1144,28 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     if (!test) return
 
     automaticFailureScreenshotsByTestId.clear()
+    failureVideosByTestId.clear()
     const browser = getBrowserNameFromProjects(projects, test)
     const shouldCreateTestSpan = test.expectedStatus === 'skipped'
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
   worker.on('attach', (attachment) => {
-    const { testId, _ddIsAutomaticFailureScreenshot } = attachment
-    if (!_ddIsAutomaticFailureScreenshot) return
-
-    let screenshots = automaticFailureScreenshotsByTestId.get(testId)
-    if (!screenshots) {
-      screenshots = []
-      automaticFailureScreenshotsByTestId.set(testId, screenshots)
+    const { testId, _ddIsAutomaticFailureScreenshot, _ddIsAutomaticFailureVideo } = attachment
+    if (_ddIsAutomaticFailureScreenshot) {
+      let screenshots = automaticFailureScreenshotsByTestId.get(testId)
+      if (!screenshots) {
+        screenshots = []
+        automaticFailureScreenshotsByTestId.set(testId, screenshots)
+      }
+      screenshots.push(attachment)
+    } else if (isFailureVideoUploadEnabled && _ddIsAutomaticFailureVideo) {
+      let videos = failureVideosByTestId.get(testId)
+      if (!videos) {
+        videos = []
+        failureVideosByTestId.set(testId, videos)
+      }
+      videos.push(attachment)
     }
-    screenshots.push(attachment)
   })
   worker.on('testEnd', ({ testId, status, errors, annotations }) => {
     const test = getTestByTestId(dispatcher, testId)
@@ -1163,6 +1203,14 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
       worker[kDdPlaywrightFailureScreenshots] ??= []
       worker[kDdPlaywrightFailureScreenshots].push(screenshots)
+    }
+    if (isFailureVideoUploadEnabled &&
+        !shouldCreateTestSpan &&
+        !test._ddShouldSkipEfdRetry &&
+        !disabledTestIds.has(testId)) {
+      const videos = testStatus === 'fail' ? failureVideosByTestId.get(testId) : undefined
+      worker[kDdPlaywrightFailureVideos] ??= []
+      worker[kDdPlaywrightFailureVideos].push(videos)
     }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
@@ -1278,6 +1326,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
+    const isFailureVideoEnabled = isFailureVideoCaptureEnabled(projects)
+    const isFailureVideoUploadSupported = satisfies(playwrightVersion, MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE)
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
     testSessionStartCh.publish({
@@ -1285,6 +1335,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       frameworkVersion: playwrightVersion,
       rootDir,
       isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
     })
 
     try {
@@ -1311,7 +1363,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    testSessionConfigurationCh.publish({ isFailureScreenshotEnabled })
+    testSessionConfigurationCh.publish({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    })
 
     const isTestOptimizationSupported = satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)
     const shouldGetKnownTests = isKnownTestsEnabled && isTestOptimizationSupported
@@ -1647,6 +1703,9 @@ createRootSuiteCh.subscribe({
 
 pageGotoCh.subscribe({
   asyncEnd (ctx) {
+    // Playwright library consumers such as Vitest have no Playwright test span and may navigate during page startup.
+    if (!isPlaywrightWorker) return
+
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
     const rumDetectionPromise = handlePageGoto(ctx.self)
     ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
@@ -1665,7 +1724,6 @@ reporterRunSummaryCh.subscribe((runSummary) => {
  * Records a reporter failure even when the reporter throws a falsy value.
  *
  * @param {unknown} error
- * @returns {void}
  */
 function recordReporterError (error) {
   if (hasReporterError) return
@@ -1687,7 +1745,6 @@ function recordReporterError (error) {
  * Records a path created by Playwright's automatic screenshot recorder.
  *
  * @param {object} ctx - Orchestrion context
- * @returns {void}
  */
 function recordAutomaticFailureScreenshotPath (ctx) {
   if (isFailureScreenshotUploadEnabled &&
@@ -1697,8 +1754,32 @@ function recordAutomaticFailureScreenshotPath (ctx) {
   }
 }
 
+/**
+ * Records only the destination used by Playwright's automatic video recorder.
+ *
+ * @param {object} ctx - Orchestrion context
+ */
+function recordAutomaticFailureVideoPath (ctx) {
+  const video = ctx.arguments?.[0]
+  if (!isFailureVideoUploadEnabled || typeof video?.saveAs !== 'function') return
+
+  const saveAs = video.saveAs
+  ctx.arguments[0] = new Proxy(video, {
+    get (target, property, receiver) {
+      if (property !== 'saveAs') return Reflect.get(target, property, receiver)
+      return function (filePath) {
+        if (typeof filePath === 'string' && PLAYWRIGHT_FAILURE_VIDEO_PATH_RE.test(filePath)) {
+          automaticFailureVideoPaths.add(filePath)
+        }
+        return Reflect.apply(saveAs, target, arguments)
+      }
+    },
+  })
+}
+
 artifactsRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
 snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
+saveAutomaticVideoCh.subscribe({ start: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
   addHook({
@@ -2061,6 +2142,7 @@ function finishProcessHostStartRunner (processHost) {
       workerReportCh.publish({
         serializedTraces: message[1],
         screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
+        videos: processHost[kDdPlaywrightFailureVideos]?.shift(),
       })
     } else if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE) {
       workerReportTelemetryCh.publish(message[1])
@@ -2409,6 +2491,7 @@ function instrumentWorkerMainMethods (workerMain) {
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
     if (event === 'testBegin') {
       automaticFailureScreenshotPaths.clear()
+      automaticFailureVideoPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
@@ -2425,8 +2508,12 @@ function instrumentWorkerMainMethods (workerMain) {
         duration: payload.wallTime - stepInfo.startTime,
         error: payload.error,
       })
-    } else if (event === 'attach' && isAutomaticFailureScreenshotAttachment(payload)) {
-      payload._ddIsAutomaticFailureScreenshot = true
+    } else if (event === 'attach') {
+      if (isAutomaticFailureScreenshotAttachment(payload)) {
+        payload._ddIsAutomaticFailureScreenshot = true
+      } else if (isAutomaticFailureVideoAttachment(payload)) {
+        payload._ddIsAutomaticFailureVideo = true
+      }
     }
     return dispatchEvent.apply(this, arguments)
   })

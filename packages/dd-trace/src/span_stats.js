@@ -136,19 +136,8 @@ class SpanAggKey {
   }
 
   toString () {
-    return [
-      this.name,
-      this.service,
-      this.resource,
-      this.type,
-      this.statusCode,
-      this.synthetics,
-      this.method,
-      this.endpoint,
-      this.srvSrc,
-      this.spanKind,
-      this.rpcStatusCode,
-    ].join(',')
+    return `${this.name},${this.service},${this.resource},${this.type},${this.statusCode},${this.synthetics},` +
+      `${this.method},${this.endpoint},${this.srvSrc},${this.spanKind},${this.rpcStatusCode}`
   }
 }
 
@@ -201,19 +190,26 @@ class TimeBuckets extends Map {
 }
 
 class SpanStatsProcessor {
-  constructor ({
-    stats: {
-      DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
-      interval = 10,
-    } = {},
-    hostname,
-    port,
-    url,
-    env,
-    tags,
-    version: appVersion,
-    _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
-  } = {}, otlpExporter) {
+  #config
+
+  /**
+   * @param {import('./config/config-base')} config
+   * @param {import('./opentelemetry/metrics/otlp_span_stats_exporter').OtlpStatsExporter} [otlpExporter]
+   */
+  constructor (config, otlpExporter) {
+    const {
+      stats: {
+        DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
+        interval = 10,
+      } = {},
+      hostname,
+      port,
+      url,
+      env,
+      tags,
+      version: appVersion,
+      _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
+    } = config
     if (!otlpExporter) {
       this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
     }
@@ -225,7 +221,7 @@ class SpanStatsProcessor {
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
     this.env = env
-    this.tags = tags || {}
+    this.#config = config
     this.sequence = 0
     this.version = appVersion
 
@@ -258,7 +254,7 @@ class SpanStatsProcessor {
         Stats: this.#toV06Payload(drained),
         Lang: 'javascript',
         TracerVersion: pkg.version,
-        RuntimeID: this.tags['runtime-id'],
+        RuntimeID: this.#config.tags['runtime-id'],
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
       }, done)

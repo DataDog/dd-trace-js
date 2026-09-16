@@ -15,7 +15,6 @@ const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
  * interpreting identical user console output as a framework error.
  *
  * @param {unknown} message - First console.error argument
- * @returns {boolean}
  */
 function isPlaywrightReporterError (message) {
   if (message !== PLAYWRIGHT_REPORTER_ERROR_MESSAGE) return false
@@ -34,7 +33,6 @@ function isPlaywrightReporterError (message) {
  * Returns whether a finalized Playwright result contains a failed suite hook.
  *
  * @param {Array<object>} steps
- * @returns {boolean}
  */
 function hasFailedSuiteHook (steps) {
   if (!steps) return false
@@ -71,7 +69,6 @@ class DatadogPlaywrightReporter {
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
    * @param {object} config
-   * @returns {void}
    */
   onConfigure (config) {
     this.failOnFlakyTests = config.failOnFlakyTests
@@ -80,7 +77,6 @@ class DatadogPlaywrightReporter {
   /**
    * Restores console error after Playwright completes the reporter lifecycle.
    *
-   * @returns {void}
    */
   static restoreConsoleError () {
     // eslint-disable-next-line no-console
@@ -99,7 +95,6 @@ class DatadogPlaywrightReporter {
    *
    * @param {object} configOrSuite
    * @param {object} [suite]
-   * @returns {void}
    */
   onBegin (configOrSuite, suite) {
     this.suite = suite || configOrSuite
@@ -110,49 +105,42 @@ class DatadogPlaywrightReporter {
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onTestBegin () {}
 
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onStdOut () {}
 
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onStdErr () {}
 
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onTestEnd () {}
 
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onStepBegin () {}
 
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onStepEnd () {}
 
   /**
    * Marks the beginning of reporter finalization so later reporter errors can be identified.
    *
-   * @returns {void}
    */
   onEnd () {
     let failureCount = this.fatalErrorCount
@@ -212,7 +200,6 @@ class DatadogPlaywrightReporter {
   /**
    * Implements the reporter v2 lifecycle hook required by older Playwright versions.
    *
-   * @returns {void}
    */
   onExit () {}
 
@@ -220,7 +207,6 @@ class DatadogPlaywrightReporter {
    * Reports errors emitted by Playwright while later reporters are finalizing.
    *
    * @param {unknown} error
-   * @returns {void}
    */
   onError (error) {
     if (this.isFinalizing) {
@@ -233,7 +219,6 @@ class DatadogPlaywrightReporter {
   /**
    * Keeps the internal reporter from affecting Playwright's output reporter selection.
    *
-   * @returns {boolean}
    */
   printsToStdio () {
     return false

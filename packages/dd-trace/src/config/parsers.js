@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const { isRegExp } = require('node:util').types
 
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
@@ -72,6 +73,9 @@ const transformers = {
   toUpperCase (value) {
     return toCase(value, 'toUpperCase')
   },
+  /**
+   * @param {unknown} value
+   */
   toCamelCase (value) {
     if (Array.isArray(value)) {
       return value.map(item => {
@@ -79,6 +83,10 @@ const transformers = {
       })
     }
     if (typeof value === 'object' && value !== null) {
+      // RegExp matchers are supported configuration leaves and need their own clone.
+      if (isRegExp(value)) {
+        return new RegExp(value)
+      }
       const result = {}
       for (const [key, innerValue] of Object.entries(value)) {
         const camelCaseKey = key.replaceAll(/_(\w)/g, (_, letter) => letter.toUpperCase())
@@ -90,8 +98,10 @@ const transformers = {
   },
   parseOtelTags (object) {
     const tags = {}
+    const environment = object['deployment.environment.name'] ?? object['deployment.environment']
     for (const [key, value] of Object.entries(object)) {
-      tags[RENAMED_OTEL_TAGS.get(key) ?? key] = value
+      const renamedKey = RENAMED_OTEL_TAGS.get(key)
+      tags[renamedKey ?? key] = renamedKey === 'env' ? environment : value
     }
     return tags
   },
@@ -110,6 +120,23 @@ const transformers = {
       return transformers.normalizeProfilingEnabled(lowercased)
     }
     return configValue
+  },
+  /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {number | 'auto' | undefined}
+   */
+  normalizeProfilingHeapLimitExtensionSize (value, optionName, source) {
+    if (value.toLowerCase() === 'auto') {
+      return 'auto'
+    }
+
+    const parsed = parsers.INT(value)
+    if (parsed === undefined) {
+      warnInvalidValue(value, optionName, source, 'Heap limit extension size must be an integer or "auto"')
+    }
+    return parsed
   },
   /**
    * Parses DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ('on' | 'off' | 'gzip[-1..9]' | 'zstd[-1..22]')
@@ -188,6 +215,17 @@ const transformers = {
     try {
       return new URL(value)
     } catch {}
+  },
+  /**
+   * @param {string} value
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {string | undefined}
+   */
+  validateHttpUrl (value, optionName, source) {
+    const url = transformers.toURL(value)
+    if (url?.protocol === 'http:' || url?.protocol === 'https:') return value
+    warnInvalidValue(value, optionName, source, 'Invalid HTTP URL')
   },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
