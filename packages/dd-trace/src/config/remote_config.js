@@ -96,28 +96,9 @@ class RCClientManager {
       return
     }
 
-    // sdk_config is delivered as { service_name, env, config: { KEY: value, ... } }, or as the
-    // legacy { config: [{ key, value }, ...] } array shape for a config stored before dd-go#14029
-    // and not updated since (stored bytes aren't rewritten on deploy). Only the allowlisted subset
-    // of config is ever retained.
     const rawEntries = conf.sdk_config?.config
     let sdkConfig
-    if (Array.isArray(rawEntries)) {
-      // Entries can only be matched against the allowlist by scanning the array, so this scan is
-      // O(payload size), not O(allowlist size).
-      sdkConfig = {}
-      for (const entry of rawEntries) {
-        if (entry == null || !sdkConfigAllowlist.has(entry.key)) continue
-
-        // The backend's SDKConfigEntry.value is typed as a string with no custom unmarshaling, so a
-        // non-string value can never reach this code from a real RC payload; drop it defensively only
-        // for malformed entries rather than let it reach setRemoteConfig.
-        const { value } = entry
-        if (typeof value === 'string') {
-          sdkConfig[entry.key] = value
-        }
-      }
-    } else if (rawEntries != null) {
+    if (rawEntries != null) {
       // The flat object shape is keyed by env-var name, so bound the scan by the allowlist
       // (fixed, small) instead of the payload (backend-controlled, potentially large).
       sdkConfig = {}

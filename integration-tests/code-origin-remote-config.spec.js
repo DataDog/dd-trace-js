@@ -66,7 +66,7 @@ describe('Code Origin Remote Config', function () {
         config: {
           service_target: { service: 'node', env: '*' },
           sdk_config: {
-            config: Object.entries(sdkConfig).map(([key, value]) => ({ key, value })),
+            config: sdkConfig,
           },
         },
       })

@@ -335,8 +335,8 @@ class Config extends ConfigBase {
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
-    // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCClientManager` class
+    // Replace the complete RC layer so omitted fields fall back to their previous source.
+    // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
