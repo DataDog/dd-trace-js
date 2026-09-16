@@ -176,7 +176,6 @@ class PromptManager {
     })
   }
 
-  /** @returns {string} */
   #requireOrigin () {
     if (!this.origin) {
       throw new PromptAPIError(0, 'DD_SITE is invalid for prompt operations', 'PromptAuthError')
