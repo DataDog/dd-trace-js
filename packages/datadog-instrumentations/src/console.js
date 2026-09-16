@@ -18,7 +18,7 @@ const wrappedTargets = new WeakSet()
 /** @typedef {{ logHolder?: LogHolder, method: string, message: string, writeId: number }} ConsoleRecord */
 /**
  * @typedef {{
- *   fallbackRecord?: ConsoleRecord,
+ *   bufferedRecords: ConsoleRecord[],
  *   observedRecords: ConsoleRecord[],
  *   ownRecords: ConsoleRecord[],
  *   records: ConsoleRecord[]
@@ -67,8 +67,12 @@ function getPropertyDescriptor (target, property) {
   let descriptor
   try {
     let owner = target
-    while (owner && !descriptor) {
+    let owners
+    while (owner && !owners?.has(owner)) {
       descriptor = Object.getOwnPropertyDescriptor(owner, property)
+      if (descriptor) break
+      owners ||= new Set()
+      owners.add(owner)
       owner = Object.getPrototypeOf(owner)
     }
   } catch {}
@@ -126,6 +130,28 @@ function publishRecords (records) {
 }
 
 /**
+ * @param {ConsoleRecord} consoleRecord
+ * @param {ConsoleRecord} bufferedRecord
+ */
+function isRenderedBufferedRecord (consoleRecord, bufferedRecord) {
+  if (consoleRecord.method !== bufferedRecord.method) return false
+
+  const consoleLines = consoleRecord.message.split('\n')
+  const bufferedLines = bufferedRecord.message.split('\n')
+  for (let i = 0; i <= consoleLines.length - bufferedLines.length; i++) {
+    let matches = true
+    for (let j = 0; j < bufferedLines.length; j++) {
+      if (consoleLines[i + j].trim() !== bufferedLines[j].trim()) {
+        matches = false
+        break
+      }
+    }
+    if (matches) return true
+  }
+  return false
+}
+
+/**
  * @param {unknown} target
  * @param {(() => LogHolder | undefined) | undefined} [captureLogHolder]
  */
@@ -150,6 +176,7 @@ function wrapConsole (target, captureLogHolder) {
       let stream
       let writeDescriptor
       let writeInstallationAttempted = false
+      let getOriginalWrite
       let originalWrite
       let captureActive = false
       let writeActive = false
@@ -173,13 +200,16 @@ function wrapConsole (target, captureLogHolder) {
             if (!originalWriteDescriptor && stream) {
               originalWriteDescriptor = getPropertyDescriptor(Object.getPrototypeOf(stream), 'write')
             }
-            originalWrite = originalWriteDescriptor && Object.hasOwn(originalWriteDescriptor, 'value')
-              ? originalWriteDescriptor.value
-              : stream?.write
+            if (originalWriteDescriptor && Object.hasOwn(originalWriteDescriptor, 'value')) {
+              originalWrite = originalWriteDescriptor.value
+            } else {
+              getOriginalWrite = originalWriteDescriptor?.get
+            }
           }
-          if (typeof originalWrite === 'function') {
+          if (typeof originalWrite === 'function' || typeof getOriginalWrite === 'function') {
             wrappedWrite = function (chunk) {
-              if (!captureActive || writeActive) return originalWrite.apply(this, arguments)
+              const write = getOriginalWrite ? getOriginalWrite.call(stream) : originalWrite
+              if (!captureActive || writeActive) return Reflect.apply(write, this, arguments)
 
               writeActive = true
               const previousWriteId = activeWriteId
@@ -187,7 +217,7 @@ function wrapConsole (target, captureLogHolder) {
               const isNewWrite = expectedWrite !== wrappedWrite
               const writeId = isNewWrite ? ++nextWriteId : activeWriteId
               activeWriteId = writeId
-              expectedWrite = originalWrite
+              expectedWrite = write
               try {
                 if (typeof chunk === 'string') {
                   const message = chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk
@@ -198,7 +228,7 @@ function wrapConsole (target, captureLogHolder) {
                   capture.observedRecords.push(record)
                   if (activeCapture === capture) capture.ownRecords.push(record)
                 }
-                return originalWrite.apply(this, arguments)
+                return Reflect.apply(write, this, arguments)
               } finally {
                 activeWriteId = previousWriteId
                 expectedWrite = previousExpectedWrite
@@ -218,7 +248,12 @@ function wrapConsole (target, captureLogHolder) {
             }
             if (wrappedWrite) {
               parentCapture = activeCapture
-              capture = { records: parentCapture?.records || [], observedRecords: [], ownRecords: [] }
+              capture = {
+                bufferedRecords: [],
+                records: parentCapture?.records || [],
+                observedRecords: [],
+                ownRecords: [],
+              }
               activeCapture = capture
               captureActive = true
             }
@@ -240,17 +275,22 @@ function wrapConsole (target, captureLogHolder) {
           restoreStreamWrite(stream, writeDescriptor, wrappedWrite)
           activeCapture = parentCapture
 
+          let consoleRecord
           if (completed) {
             // Formatting may write unrelated output to the same stream. The console method's own
             // output is the final write; observed writes are the fallback for delegated methods.
             if (capture.ownRecords.length > 0) {
-              capture.records.push(capture.ownRecords.at(-1))
+              consoleRecord = capture.ownRecords.at(-1)
             } else if (capture.observedRecords.length > 0) {
-              capture.records.push(capture.observedRecords.at(-1))
-            } else if (capture.fallbackRecord) {
-              capture.records.push(capture.fallbackRecord)
+              consoleRecord = capture.observedRecords.at(-1)
             }
           }
+          for (const bufferedRecord of capture.bufferedRecords) {
+            if (!consoleRecord || !isRenderedBufferedRecord(consoleRecord, bufferedRecord)) {
+              capture.records.push(bufferedRecord)
+            }
+          }
+          if (consoleRecord) capture.records.push(consoleRecord)
           if (!parentCapture) publishRecords(capture.records)
         }
       }
@@ -276,7 +316,7 @@ function wrapJestBufferedConsole (BufferedConsole, captureLogHolder) {
     if (shouldPublish) {
       const record = createRecord(method, message, ++nextWriteId, captureLogHolder)
       if (activeCapture) {
-        activeCapture.fallbackRecord = record
+        activeCapture.bufferedRecords.push(record)
       } else {
         publishRecords([record])
       }
