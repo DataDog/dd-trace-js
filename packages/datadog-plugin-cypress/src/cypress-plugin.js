@@ -230,9 +230,9 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
   return specScreenshots.filter(screenshot => isScreenshotForTestAttempt(screenshot, titleParts, attemptIndex))
 }
 
-function getSessionStatus (summary) {
+function getSessionStatus (summary, hasFailedTestSuites) {
   if (!summary) {
-    return 'pass'
+    return hasFailedTestSuites ? 'fail' : 'pass'
   }
   if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
     return 'fail'
@@ -468,6 +468,8 @@ class CypressPlugin {
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   finishedTestsByFile = {}
+  hasTestsReported = false
+  hasFailedTestSuites = false
   testStatuses = {}
   hasLibraryConfiguration = false
   isItrEnabled = false
@@ -559,6 +561,7 @@ class CypressPlugin {
     this._isInit = false
     this.finishedTestsByFile = {}
     this.hasTestsReported = false
+    this.hasFailedTestSuites = false
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
     this.isItrEnabled = false
@@ -1332,7 +1335,7 @@ class CypressPlugin {
    */
   #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats, this.hasFailedTestSuites)
       const hasNoTests = suiteStats?.totalTests === 0 ||
         (suiteStats?.totalTests === undefined && !this.hasTestsReported)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
@@ -1685,7 +1688,10 @@ class CypressPlugin {
     }
 
     const testSuiteFinishTime = this._now()
-    const suiteFailed = error || latestError || getSuiteStatus(stats) === 'fail'
+    const suiteFailed = error || latestError ||
+      cypressTests.some(test => CYPRESS_STATUS_TO_TEST_STATUS[test.state] === 'fail') ||
+      getSuiteStatus(stats) === 'fail'
+    if (suiteFailed) this.hasFailedTestSuites = true
     const testSuiteSpan = this.testSuiteSpan
     const uploadOptions = {
       filePath: video,

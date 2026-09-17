@@ -2130,6 +2130,7 @@ moduleTypes.forEach(({
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       hasTestsReported: cypressPlugin.hasTestsReported,
+      hasFailedTestSuites: cypressPlugin.hasFailedTestSuites,
       testsToSkip: cypressPlugin.testsToSkip,
       testSessionSpan: cypressPlugin.testSessionSpan,
       testModuleSpan: cypressPlugin.testModuleSpan,
@@ -2149,6 +2150,7 @@ moduleTypes.forEach(({
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.hasTestsReported = originalState.hasTestsReported
+      cypressPlugin.hasFailedTestSuites = originalState.hasFailedTestSuites
       cypressPlugin.testsToSkip = originalState.testsToSkip
       cypressPlugin.testSessionSpan = originalState.testSessionSpan
       cypressPlugin.testModuleSpan = originalState.testModuleSpan
@@ -2260,6 +2262,20 @@ moduleTypes.forEach(({
 
       for (const span of [testSessionSpan, testModuleSpan]) {
         assert.strictEqual(span.tags[TEST_STATUS], 'pass')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves a failed interactive Cypress run without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.hasTestsReported = true
+      cypressPlugin.hasFailedTestSuites = true
+
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
         assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
         assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
       }
