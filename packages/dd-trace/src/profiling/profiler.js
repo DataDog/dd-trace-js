@@ -295,6 +295,11 @@ class Profiler extends EventEmitter {
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
     this.#stopping = this._collect(snapshotKinds.ON_SHUTDOWN, false)
+      .catch(error => {
+        // _collect() contains its own failures, but its cleanup can still throw. Nothing awaits
+        // this shutdown chain, so consume and log that failure instead of leaking a rejection.
+        log.error(error)
+      })
       .finally(() => {
         this.#stopping = undefined
         if (this.#pendingStart) {

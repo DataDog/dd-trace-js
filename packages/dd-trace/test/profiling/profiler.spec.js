@@ -465,6 +465,23 @@ describe('profiler', function () {
       sinon.assert.calledOnce(spaceProfiler.start)
     })
 
+    it('logs shutdown cleanup failures without leaking a rejection', async () => {
+      await profiler.start(makeStartOptions())
+
+      const collectionError = new Error('collection failed')
+      const stopError = new Error('stop failed')
+      wallProfiler.profile.throws(collectionError)
+      wallProfiler.stop.throws(stopError)
+
+      profiler.stop()
+      for (let i = 0; i < 5; i++) await Promise.resolve()
+
+      sinon.assert.calledTwice(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], collectionError)
+      assert.strictEqual(consoleLogger.error.secondCall.args[0], stopError)
+      assert.strictEqual(profiler.enabled, false)
+    })
+
     async function shouldExportProfiles (compression, magicBytes) {
       wallProfile = Buffer.from('uncompressed profile - wall')
       wallProfilePromise = Promise.resolve(wallProfile)
