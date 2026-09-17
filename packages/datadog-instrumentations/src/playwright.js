@@ -1510,8 +1510,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
+    const isExpectedEmptyShard = finalStatus === 'pass' &&
+      Boolean(config?.config?.shard) && startedSuites.length === 0
     await getChannelPromise(testSessionFinishCh, {
-      status: finalStatus,
+      status: isExpectedEmptyShard ? 'skip' : finalStatus,
+      isExpectedEmptyShard,
       error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,

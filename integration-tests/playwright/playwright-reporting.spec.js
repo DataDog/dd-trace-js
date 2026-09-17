@@ -36,6 +36,8 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_NAME,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   DD_CAPABILITIES_IMPACTED_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
@@ -63,6 +65,7 @@ const VIDEO_CAPTURE_DISABLED_WARNING =
   'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video capture is disabled.'
 const VIDEO_UPLOAD_UNSUPPORTED_VERSION_WARNING =
   'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.'
+const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -84,6 +87,9 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
     const deferredFailureScreenshotTest = satisfies(version, '>=1.60.0') || version === 'latest'
+      ? it
+      : global.it.skip
+    const emptyShardTest = satisfies(version, '>=1.55.0') || version === 'latest'
       ? it
       : global.it.skip
 
@@ -137,6 +143,101 @@ versions.forEach((version) => {
       const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
       assert.strictEqual(exitCode, 0)
     }
+
+    emptyShardTest('reports successful zero-test shards as skipped', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.ok(!events.some(({ type }) => type === 'test'))
+          assert.ok(!events.some(({ type }) => type === 'test_suite_end'))
+
+          for (const eventType of ['test_session_end', 'test_module_end']) {
+            const event = events.find(({ type }) => type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], EMPTY_SHARD_SKIP_REASON)
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'zero_test_shard')
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    })
+
+    emptyShardTest('does not classify non-empty shards as empty', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js --shard=1/2',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.ok(events.some(({ type }) => type === 'test'))
+          assert.ok(events.some(({ type }) => type === 'test_suite_end'))
+
+          for (const eventType of ['test_session_end', 'test_module_end']) {
+            const event = events.find(({ type }) => type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    })
+
+    emptyShardTest('does not classify failed zero-test shards as expected empty', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            PLAYWRIGHT_THROWING_REPORTER: '1',
+            TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          for (const eventType of ['test_session_end', 'test_module_end']) {
+            const event = events.find(({ type }) => type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.notStrictEqual(exitCode, 0)
+    })
 
     contextOldVersions('failure videos', () => {
       it('warns that video uploads require Playwright 1.38.0 or later', async (receiver, run) => {
