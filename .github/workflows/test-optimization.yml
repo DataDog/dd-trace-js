@@ -158,7 +158,8 @@ jobs:
           - playwright-reporting
           - playwright-efd
           - playwright-atr
-          - playwright-test-management
+          - playwright-test-management-attempt-to-fix
+          - playwright-test-management-disabled-quarantine
           - playwright-active-test-span
           - playwright-impacted-tests
           - playwright-final-status
