@@ -1178,16 +1178,16 @@ describe('Config', () => {
         uploadIntervalSeconds: 1,
       },
       env: undefined,
+      aiguard: {
+        DD_AI_GUARD_BLOCK: true,
+        DD_AI_GUARD_ENABLED: false,
+        DD_AI_GUARD_ENDPOINT: undefined,
+        DD_AI_GUARD_MAX_MESSAGES_LENGTH: 16,
+        DD_AI_GUARD_REDACTION_ENABLED: true,
+        DD_AI_GUARD_TIMEOUT: 10_000,
+        DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
+      },
       experimental: {
-        aiguard: {
-          block: true,
-          enabled: false,
-          endpoint: undefined,
-          maxMessagesLength: 16,
-          redactionEnabled: true,
-          timeout: 10_000,
-          maxContentSize: 512 * 1024,
-        },
         exporter: '',
         enableGetRumData: false,
       },
@@ -1211,9 +1211,11 @@ describe('Config', () => {
       instrumentationSource: 'manual',
       DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
-        agentlessEnabled: undefined,
+        DD_LLMOBS_AGENTLESS_ENABLED: undefined,
         DD_LLMOBS_ENABLED: false,
-        mlApp: undefined,
+        DD_LLMOBS_ML_APP: undefined,
+        DD_LLMOBS_PROJECT_NAME: undefined,
+        DD_LLMOBS_SAMPLE_RATE: 1,
       },
       logLevel: 'debug',
       middlewareTracingEnabled: true,
@@ -1661,16 +1663,16 @@ describe('Config', () => {
         uploadIntervalSeconds: 0.1,
       },
       env: 'test',
+      aiguard: {
+        DD_AI_GUARD_BLOCK: true,
+        DD_AI_GUARD_ENABLED: true,
+        DD_AI_GUARD_ENDPOINT: 'https://dd.datad0g.com/api/unstable/ai-guard',
+        DD_AI_GUARD_MAX_CONTENT_SIZE: 1024 * 1024,
+        DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
+        DD_AI_GUARD_REDACTION_ENABLED: false,
+        DD_AI_GUARD_TIMEOUT: 2000,
+      },
       experimental: {
-        aiguard: {
-          block: true,
-          enabled: true,
-          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
-          maxContentSize: 1024 * 1024,
-          maxMessagesLength: 32,
-          redactionEnabled: false,
-          timeout: 2000,
-        },
         enableGetRumData: true,
         exporter: 'log',
       },
@@ -1694,8 +1696,8 @@ describe('Config', () => {
       },
       DD_INSTRUMENTATION_CONFIG_ID: 'abcdef123',
       llmobs: {
-        agentlessEnabled: true,
-        mlApp: 'myMlApp',
+        DD_LLMOBS_AGENTLESS_ENABLED: true,
+        DD_LLMOBS_ML_APP: 'myMlApp',
       },
       middlewareTracingEnabled: false,
       protocolVersion: '0.5',
@@ -1973,6 +1975,17 @@ describe('Config', () => {
     )
     assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
     assert.strictEqual(config.getOrigin('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'), 'default')
+  })
+
+  it('should use the canonical OpenAI logs name internally', () => {
+    const config = getConfig({ openAiLogsEnabled: true })
+
+    assert.strictEqual(config.openai.DD_OPENAI_LOGS_ENABLED, true)
+    assert.strictEqual(Object.hasOwn(config, 'openAiLogsEnabled'), false)
+    assert.strictEqual(config.getOrigin('openai.DD_OPENAI_LOGS_ENABLED'), 'code')
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_OPENAI_LOGS_ENABLED', value: true, origin: 'code' },
+    ])
   })
 
   it('should transform safe programmatic option types', () => {
@@ -2303,16 +2316,16 @@ describe('Config', () => {
         uploadIntervalSeconds: 0.1,
       },
       env: 'test',
+      aiguard: {
+        DD_AI_GUARD_BLOCK: true,
+        DD_AI_GUARD_ENABLED: true,
+        DD_AI_GUARD_ENDPOINT: 'https://dd.datad0g.com/api/unstable/ai-guard',
+        DD_AI_GUARD_MAX_CONTENT_SIZE: 1024 * 1024,
+        DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
+        DD_AI_GUARD_REDACTION_ENABLED: true,
+        DD_AI_GUARD_TIMEOUT: 2000,
+      },
       experimental: {
-        aiguard: {
-          block: true,
-          enabled: true,
-          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
-          maxContentSize: 1024 * 1024,
-          maxMessagesLength: 32,
-          redactionEnabled: true,
-          timeout: 2000,
-        },
         enableGetRumData: true,
         exporter: 'log',
       },
@@ -2333,8 +2346,8 @@ describe('Config', () => {
         DD_IAST_TELEMETRY_VERBOSITY: 'DEBUG',
       },
       llmobs: {
-        agentlessEnabled: true,
-        mlApp: 'myMlApp',
+        DD_LLMOBS_AGENTLESS_ENABLED: true,
+        DD_LLMOBS_ML_APP: 'myMlApp',
       },
       logLevel,
       logger,
@@ -2374,6 +2387,7 @@ describe('Config', () => {
     assert.strictEqual(config.appsec.extendedHeadersCollection, undefined)
     assert.strictEqual(config.appsec.rasp, undefined)
     assert.strictEqual(config.appsec.stackTrace, undefined)
+    assert.strictEqual(config.experimental.aiguard, undefined)
     if (DD_MAJOR < 6) {
       assert.strictEqual(
         config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
@@ -2972,16 +2986,16 @@ describe('Config', () => {
         uploadIntervalSeconds: 0.2,
       },
       env: 'development',
+      aiguard: {
+        DD_AI_GUARD_BLOCK: true,
+        DD_AI_GUARD_ENABLED: true,
+        DD_AI_GUARD_ENDPOINT: 'https://dd.datad0g.com/api/unstable/ai-guard',
+        DD_AI_GUARD_MAX_CONTENT_SIZE: 1024 * 1024,
+        DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
+        DD_AI_GUARD_REDACTION_ENABLED: true,
+        DD_AI_GUARD_TIMEOUT: 2000,
+      },
       experimental: {
-        aiguard: {
-          block: true,
-          enabled: true,
-          endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
-          maxContentSize: 1024 * 1024,
-          maxMessagesLength: 32,
-          redactionEnabled: true,
-          timeout: 2000,
-        },
         enableGetRumData: false,
         exporter: 'agent',
       },
@@ -3002,8 +3016,8 @@ describe('Config', () => {
         DD_IAST_STACK_TRACE_ENABLED: false,
       },
       llmobs: {
-        agentlessEnabled: false,
-        mlApp: 'myOtherMlApp',
+        DD_LLMOBS_AGENTLESS_ENABLED: false,
+        DD_LLMOBS_ML_APP: 'myOtherMlApp',
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
@@ -4217,6 +4231,27 @@ describe('Config', () => {
   })
 
   context('llmobs config', () => {
+    it('should use canonical LLMObs names internally', () => {
+      const config = getConfig({
+        llmobs: {
+          agentlessEnabled: true,
+          mlApp: 'test-app',
+          projectName: 'test-project',
+          sampleRate: 0.5,
+        },
+      })
+
+      assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ML_APP, 'test-app')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_PROJECT_NAME, 'test-project')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_SAMPLE_RATE, 0.5)
+      assert.strictEqual(Object.hasOwn(config.llmobs, 'agentlessEnabled'), false)
+      assert.strictEqual(Object.hasOwn(config.llmobs, 'mlApp'), false)
+      assert.strictEqual(Object.hasOwn(config.llmobs, 'projectName'), false)
+      assert.strictEqual(Object.hasOwn(config.llmobs, 'sampleRate'), false)
+    })
+
     it('should disable llmobs by default', () => {
       const config = getConfig()
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
@@ -4259,9 +4294,18 @@ describe('Config', () => {
       }])
     })
 
+    it('should enable llmobs with an ML app and DD_LLMOBS_ENABLED is not set', () => {
+      const config = getConfig({ llmobs: { mlApp: 'test-app' } })
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
+        name: 'DD_LLMOBS_ENABLED', value: true, origin: 'calculated',
+      }])
+    })
+
     it('should configure the experiments project name from options and enable llmobs', () => {
       const config = getConfig({ llmobs: { projectName: 'experiments-project' } })
-      assert.strictEqual(config.llmobs.projectName, 'experiments-project')
+      assert.strictEqual(config.llmobs.DD_LLMOBS_PROJECT_NAME, 'experiments-project')
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
     })
 
@@ -4279,7 +4323,7 @@ describe('Config', () => {
 
       it('should configure the experiments project name from the environment', () => {
         const config = getConfig()
-        assert.strictEqual(config.llmobs.projectName, 'env-project')
+        assert.strictEqual(config.llmobs.DD_LLMOBS_PROJECT_NAME, 'env-project')
         assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
 
         assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -4746,7 +4790,7 @@ apm_configuration_default:
           DD_TELEMETRY_METRICS_ENABLED: false,
         },
         llmobs: {
-          mlApp: 'my-llm-app',
+          DD_LLMOBS_ML_APP: 'my-llm-app',
         },
         DD_PROFILING_EXPORTERS: ['agent'],
         profiling: {},
@@ -5482,7 +5526,7 @@ rules:
       assert.strictEqual(config.experimental.exporter, 'agentless')
       assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
-      assert.strictEqual(config.llmobs.agentlessEnabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, true)
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
