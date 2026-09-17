@@ -28,10 +28,11 @@ describe('Dynamic Instrumentation', function () {
         capture: { maxLength: 512 * 1024 },
         sampling: { snapshotsPerSecond: 1000 },
       })
-      const uploadSizes = []
+      const uploadSizes = new Map()
 
-      t.agent.on('debugger-input-stalled', ({ headers }) => {
-        uploadSizes.push(Number(headers['content-length']))
+      t.agent.on('debugger-input-stalled', ({ headers, payload }) => {
+        const snapshotIds = payload.map(({ debugger: { snapshot } }) => snapshot.id).join(',')
+        uploadSizes.set(snapshotIds, Number(headers['content-length']))
       })
 
       const installed = new Promise((/** @type {(value?: void) => void} */ resolve) => {
@@ -66,8 +67,8 @@ describe('Dynamic Instrumentation', function () {
 
       await checkMetrics
 
-      assert.ok(uploadSizes.length >= 1, `Expected at least one upload attempt, got ${uploadSizes.length}`)
-      const uploadedBytes = uploadSizes.reduce((total, size) => total + size, 0)
+      assert.ok(uploadSizes.size >= 1, `Expected at least one unique upload, got ${uploadSizes.size}`)
+      const uploadedBytes = [...uploadSizes.values()].reduce((total, size) => total + size, 0)
       assert.ok(
         uploadedBytes <= DEFAULT_QUEUE_MAX_BYTES,
         `Expected uploads totaling ${uploadedBytes} bytes to be within the ${DEFAULT_QUEUE_MAX_BYTES} byte queue bound`
