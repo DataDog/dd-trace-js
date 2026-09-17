@@ -3,6 +3,7 @@
 const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const NamingCache = require('./naming-cache')
 
 let parser
 
@@ -29,6 +30,8 @@ class OracledbQueryPlugin extends DatabasePlugin {
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
 
+  #naming = new NamingCache(this)
+
   constructor (...args) {
     super(...args)
     this.addBind('apm:oracledb:pool:session:start', bindPoolAttributes)
@@ -42,7 +45,7 @@ class OracledbQueryPlugin extends DatabasePlugin {
       connAttrs = storage('legacy').getStore()?.oracledbPoolAttrs
     }
 
-    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
+    const { operationName, service } = this.#naming.get(connAttrs)
 
     if (hostname === undefined) {
       // Lazy load for performance. This is not needed in v6 and up
@@ -59,7 +62,7 @@ class OracledbQueryPlugin extends DatabasePlugin {
     // the caller's binds.
     const sql = query?.statement ?? query
 
-    const span = this.startSpan(this.operationName(), {
+    const span = this.startSpan(operationName, {
       service,
       resource: sql,
       type: 'sql',
@@ -78,6 +81,16 @@ class OracledbQueryPlugin extends DatabasePlugin {
     ctx.injected = query?.statement ? { ...query, statement: injected } : injected
 
     return ctx.currentStore
+  }
+
+  /**
+   * @override
+   * @param {boolean | Record<string, unknown>} config
+   */
+  configure (config) {
+    const result = super.configure(config)
+    this.#naming.configure()
+    return result
   }
 }
 

@@ -217,13 +217,13 @@ describe('oracledb pool acquisition without a database service', () => {
       await agent.close()
     })
 
-    it('resolves the service for every acquisition', async () => {
-      for (const expected of ['first', 'second']) {
-        service = expected
+    it('caches the service for the pool', async () => {
+      for (const current of ['first', 'second']) {
+        service = current
         await Promise.all([
           agent.assertFirstTraceSpan({
             name: 'oracle.pool.acquire',
-            service: expected,
+            service: 'first',
           }, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
           assert.rejects(pool.getConnection(null), { code: 'NJS-005' }),
         ])

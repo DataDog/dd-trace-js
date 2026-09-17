@@ -21,6 +21,22 @@ const poolAcquireFinishChannel = channel('apm:oracledb:pool:acquire:finish')
 const poolSessionStartChannel = channel('apm:oracledb:pool:session:start')
 const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
 
+/**
+ * @param {{
+ *   connectionAttrs: { homogeneous: boolean, user?: string },
+ *   poolAttrs: object,
+ *   user?: string
+ * }} acquireCtx
+ * @param {{ user?: string }} connection
+ */
+function setAcquiredConnection (acquireCtx, connection) {
+  connectionAttributes.set(connection, acquireCtx.poolAttrs)
+  if (!acquireCtx.connectionAttrs.homogeneous) {
+    const user = connection.user
+    if (user !== undefined) acquireCtx.user = user
+  }
+}
+
 function finish (ctx) {
   if (ctx.error) {
     errorChannel.publish(ctx)
@@ -48,7 +64,11 @@ function wrapPoolGetConnection (getConnection) {
     if (callback) {
       args[args.length - 1] = shimmer.wrapFunction(callback, callback => function (error, connection) {
         if (connection) {
-          connectionAttributes.set(connection, poolAttrs)
+          if (acquireCtx === undefined) {
+            connectionAttributes.set(connection, poolAttrs)
+          } else {
+            setAcquiredConnection(acquireCtx, connection)
+          }
         }
         if (acquireCtx === undefined) {
           return callPoolCallback(sessionCtx, callback, this, arguments)
@@ -57,7 +77,6 @@ function wrapPoolGetConnection (getConnection) {
           acquireCtx.error = error
           poolAcquireErrorChannel.publish(acquireCtx)
         }
-        acquireCtx.result = connection
         return poolAcquireFinishChannel.runStores(
           acquireCtx,
           callPoolCallback,
@@ -103,8 +122,7 @@ function wrapPoolGetConnection (getConnection) {
 
     return promise.then(
       connection => {
-        connectionAttributes.set(connection, poolAttrs)
-        acquireCtx.result = connection
+        setAcquiredConnection(acquireCtx, connection)
         poolAcquireFinishChannel.publish(acquireCtx)
         return connection
       },
@@ -120,13 +138,20 @@ function wrapPoolGetConnection (getConnection) {
 
 /**
  * @param {object} pool
- * @param {{ connectString?: string, connectionString?: string, sessionCallback?: Function, user?: string }} poolAttrs
+ * @param {{
+ *   connectString?: string,
+ *   connectionString?: string,
+ *   homogeneous?: boolean,
+ *   sessionCallback?: Function,
+ *   user?: string
+ * }} poolAttrs
  */
 function storePoolAttributes (pool, poolAttrs) {
   poolAttributes.set(pool, poolAttrs)
   poolConnectionAttributes.set(pool, {
     connectString: pool.connectString ?? poolAttrs.connectString ?? poolAttrs.connectionString,
     hasSessionCallback: typeof pool.sessionCallback === 'function',
+    homogeneous: pool.homogeneous ?? poolAttrs.homogeneous ?? true,
     user: pool.user ?? poolAttrs.user,
   })
   if (Object.hasOwn(pool, 'getConnection')) {

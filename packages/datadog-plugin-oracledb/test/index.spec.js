@@ -286,6 +286,68 @@ describe('Plugin', () => {
             await lifecyclePool.close()
           })
 
+          if (semver.gte(version, '6.0.0')) {
+            describe('with a heterogeneous pool', () => {
+              let heterogeneousPool
+
+              before(async () => {
+                heterogeneousPool = await oracledb.createPool({
+                  connectString: config.connectString,
+                  homogeneous: false,
+                  poolMin: 0,
+                })
+              })
+
+              after(async () => {
+                await heterogeneousPool.close()
+              })
+
+              it('uses the requested user for Promise acquisitions', async () => {
+                let acquiredConnection
+
+                try {
+                  await Promise.all([
+                    agent.assertFirstTraceSpan(expectedPoolAcquireSpan, {
+                      spanResourceMatch: /^oracle\.pool\.acquire$/,
+                    }),
+                    (async () => {
+                      acquiredConnection = await heterogeneousPool.getConnection({
+                        password: config.password,
+                        user: config.user,
+                      })
+                    })(),
+                  ])
+                } finally {
+                  if (acquiredConnection !== undefined) await acquiredConnection.close()
+                }
+              })
+
+              it('uses the requested username for callback acquisitions', async () => {
+                let acquiredConnection
+
+                try {
+                  await Promise.all([
+                    agent.assertFirstTraceSpan(expectedPoolAcquireSpan, {
+                      spanResourceMatch: /^oracle\.pool\.acquire$/,
+                    }),
+                    new Promise((resolve, reject) => {
+                      heterogeneousPool.getConnection({
+                        password: config.password,
+                        username: config.user,
+                      }, (error, connection) => {
+                        if (error) return reject(error)
+                        acquiredConnection = connection
+                        resolve()
+                      })
+                    }),
+                  ])
+                } finally {
+                  if (acquiredConnection !== undefined) await acquiredConnection.close()
+                }
+              })
+            })
+          }
+
           it('traces an idle acquisition that is released without a query', async () => {
             const idlePool = await oracledb.createPool({
               ...config,
@@ -676,10 +738,13 @@ describe('Plugin', () => {
         })
 
         describe('with service function', () => {
+          let serviceCalls = 0
+
           before(async () => {
             await agent.load('oracledb', {
               service (connAttrs) {
                 assert.strictEqual(connAttrs.connectString, config.connectString)
+                serviceCalls++
                 return connAttrs.poolAlias ?? connAttrs.connectString
               },
             })
@@ -720,6 +785,23 @@ describe('Plugin', () => {
               }),
               connection.execute(dbQuery),
             ])
+          })
+
+          it('should cache the service name for the connection', async () => {
+            const cachedConnection = await oracledb.getConnection({ ...config })
+            const initialCalls = serviceCalls
+
+            try {
+              for (let count = 0; count < 2; count++) {
+                await Promise.all([
+                  agent.assertFirstTraceSpan({ service: config.connectString }),
+                  cachedConnection.execute(dbQuery),
+                ])
+              }
+              assert.strictEqual(serviceCalls, initialCalls + 1)
+            } finally {
+              await cachedConnection.close()
+            }
           })
 
           it('should use pool parameters for the acquisition service name', async () => {

@@ -2,6 +2,7 @@
 
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
+const NamingCache = require('./naming-cache')
 
 let parser
 const poolMetadata = new WeakMap()
@@ -13,20 +14,11 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
 
-  /** @type {boolean} */
-  #isServiceDynamic = false
-  /**
-   * @type {{
-   *   nomenclatureConfig: object,
-   *   operationName: string,
-   *   service: { name: string, source: string | undefined }
-   * } | undefined}
-   */
-  #naming
+  #naming = new NamingCache(this, this.operation)
 
   /**
    * @param {{
-   *   connectionAttrs: { connectString?: string, user?: string },
+   *   connectionAttrs: { connectString?: string, homogeneous: boolean, user?: string },
    *   pool: object,
    *   poolAttrs: object
    * }} ctx
@@ -40,25 +32,7 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
       poolMetadata.set(pool, dbInfo)
     }
     const { hostname, port, dbInstance } = dbInfo
-    let operationName
-    let service
-    if (this.#isServiceDynamic) {
-      operationName = this.operationName({ operation: this.operation })
-      service = this.serviceName({ pluginConfig: this.config, params: poolAttrs })
-    } else {
-      const nomenclatureConfig = this._tracer._nomenclature.config
-      let naming = this.#naming
-      if (naming?.nomenclatureConfig !== nomenclatureConfig) {
-        naming = {
-          nomenclatureConfig,
-          operationName: this.operationName({ operation: this.operation }),
-          service: this.serviceName({ pluginConfig: this.config }),
-        }
-        this.#naming = naming
-      }
-      operationName = naming.operationName
-      service = naming.service
-    }
+    const { operationName, service } = this.#naming.get(poolAttrs)
 
     this.startSpan(operationName, {
       service,
@@ -66,7 +40,7 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
       type: 'sql',
       kind: 'client',
       meta: {
-        'db.user': connectionAttrs.user,
+        'db.user': connectionAttrs.homogeneous ? connectionAttrs.user : undefined,
         'db.instance': dbInstance,
         'db.name': dbInstance,
         'db.hostname': hostname,
@@ -79,12 +53,24 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
   }
 
   /**
+   * @param {{
+   *   currentStore?: { span: import('../../dd-trace').Span },
+   *   user?: string
+   * }} ctx
+   */
+  finish (ctx) {
+    if (ctx.user !== undefined) {
+      ctx.currentStore?.span.setTag('db.user', ctx.user)
+    }
+    super.finish(ctx)
+  }
+
+  /**
    * @param {boolean | Record<string, unknown>} config
    */
   configure (config) {
     const result = super.configure(config)
-    this.#isServiceDynamic = typeof this.config.service === 'function'
-    this.#naming = undefined
+    this.#naming.configure()
     return result
   }
 }
