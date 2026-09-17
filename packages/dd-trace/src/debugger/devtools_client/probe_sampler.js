@@ -29,7 +29,6 @@ function isSnapshotProducingProbe (probe) {
  * devtools worker and evaluated on the debuggee.
  *
  * @param {string} id - The probe id.
- * @returns {string}
  */
 function getEvaluationTimedOutExpression (id) {
   return `${SAMPLER_EXPRESSION}?.evaluationTimedOut(${JSON.stringify(id)})`
