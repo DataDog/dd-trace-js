@@ -342,7 +342,7 @@ function handle () {
 const handleWithTrace = tracer.wrap('web.request', handle)
 ```
 
-Similar to `tracer.trace()`, it handles synchronous calls, callbacks, promises and async/await. The only difference being that if the last argument of the wrapped function is a callback, the span will only be finished when that callback is called.
+Similar to `tracer.trace()`, it handles synchronous calls, callbacks, promises and async/await. If the last argument of the wrapped function is a callback, the span finishes when that callback runs. A four-argument HTTP error handler also finishes when its response ends or closes.
 
 For example:
 

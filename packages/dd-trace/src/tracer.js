@@ -1,5 +1,7 @@
 'use strict'
 
+const { ServerResponse } = require('node:http')
+
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const {
@@ -119,6 +121,7 @@ class DatadogTracer extends Tracer {
 
   wrap (name, options, fn) {
     const tracer = this
+    const finishOnHttpResponse = fn.length === 4
 
     return shimmer.wrapFunction(fn, original => function (...args) {
       let optionsObj = options
@@ -131,6 +134,46 @@ class DatadogTracer extends Tracer {
 
       if (typeof cb === 'function') {
         const scopeBoundCb = tracer.scope().bind(cb)
+        const response = finishOnHttpResponse && args[2] instanceof ServerResponse ? args[2] : undefined
+
+        if (response) {
+          return tracer.trace(name, optionsObj, (span, done) => {
+            let finished = false
+            let listening = false
+
+            /** @param {unknown} [error] */
+            const finish = error => {
+              if (finished) return
+              finished = true
+
+              if (listening) {
+                response.removeListener('finish', finish)
+                response.removeListener('close', finish)
+              }
+              done(error)
+            }
+
+            args[lastArgId] = function (error) {
+              finish(error)
+              return scopeBoundCb.apply(this, arguments)
+            }
+
+            const result = original.apply(this, args)
+
+            if (!finished) {
+              if (response.writableEnded || response.destroyed) {
+                finish()
+              } else {
+                listening = true
+                response.once('finish', finish)
+                response.once('close', finish)
+              }
+            }
+
+            return result
+          })
+        }
+
         return tracer.trace(name, optionsObj, (span, done) => {
           args[lastArgId] = function (err) {
             done(err)

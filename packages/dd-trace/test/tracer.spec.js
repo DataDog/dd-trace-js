@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { ServerResponse } = require('node:http')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -543,6 +544,131 @@ describe('Tracer', () => {
       sinon.spy(tracer, 'trace')
 
       fn(() => {})
+    })
+
+    it('should finish HTTP error handlers when they end the response', () => {
+      const response = new ServerResponse({ method: 'GET' })
+      let span
+
+      const fn = tracer.wrap('name', {}, function (_error, _request, response, _next) {
+        span = tracer.scope().active()
+        sinon.spy(span, 'finish')
+        response.end()
+      })
+
+      fn(undefined, {}, response, () => {})
+
+      sinon.assert.calledOnce(span.finish)
+    })
+
+    it('should finish HTTP error handlers when they destroy the response', () => {
+      const response = new ServerResponse({ method: 'GET' })
+      let span
+
+      const fn = tracer.wrap('name', {}, function (_error, _request, response, _next) {
+        span = tracer.scope().active()
+        sinon.spy(span, 'finish')
+        response.destroyed = true
+      })
+
+      fn(undefined, {}, response, () => {})
+
+      sinon.assert.calledOnce(span.finish)
+    })
+
+    for (const event of ['finish', 'close']) {
+      it(`should finish HTTP error handlers on response ${event}`, () => {
+        const response = new ServerResponse({ method: 'GET' })
+        const next = sinon.spy()
+        let span
+        let wrappedNext
+
+        const fn = tracer.wrap('name', {}, function (_error, _request, _response, callback) {
+          span = tracer.scope().active()
+          sinon.spy(span, 'finish')
+          wrappedNext = callback
+        })
+
+        fn(undefined, {}, response, next)
+        response.emit(event)
+        wrappedNext()
+
+        sinon.assert.calledOnce(span.finish)
+        sinon.assert.calledOnce(next)
+        assert.strictEqual(response.listenerCount('finish'), 0)
+        assert.strictEqual(response.listenerCount('close'), 0)
+      })
+    }
+
+    it('should finish HTTP error handlers on next and remove response listeners', () => {
+      const response = new ServerResponse({ method: 'GET' })
+      const error = new Error('boom')
+      const next = sinon.spy()
+      let span
+      let wrappedNext
+
+      const fn = tracer.wrap('name', {}, function (_error, _request, _response, callback) {
+        span = tracer.scope().active()
+        sinon.spy(span, 'finish')
+        wrappedNext = callback
+      })
+
+      fn(undefined, {}, response, next)
+      wrappedNext(error)
+      response.emit('finish')
+
+      sinon.assert.calledOnceWithExactly(next, error)
+      sinon.assert.calledOnce(span.finish)
+      assert.strictEqual(response.listenerCount('finish'), 0)
+      assert.strictEqual(response.listenerCount('close'), 0)
+    })
+
+    it('should not add response listeners when HTTP error handlers call next synchronously', () => {
+      const response = new ServerResponse({ method: 'GET' })
+      const next = sinon.spy()
+      let span
+
+      const fn = tracer.wrap('name', {}, function (_error, _request, _response, callback) {
+        span = tracer.scope().active()
+        sinon.spy(span, 'finish')
+        callback()
+      })
+
+      fn(undefined, {}, response, next)
+
+      sinon.assert.calledOnce(next)
+      sinon.assert.calledOnce(span.finish)
+      assert.strictEqual(response.listenerCount('finish'), 0)
+      assert.strictEqual(response.listenerCount('close'), 0)
+    })
+
+    it('should keep waiting for callbacks of four-argument non-HTTP functions', () => {
+      let span
+      let wrappedCallback
+
+      const fn = tracer.wrap('name', {}, function (_one, _two, _three, callback) {
+        span = tracer.scope().active()
+        sinon.spy(span, 'finish')
+        wrappedCallback = callback
+      })
+
+      fn(undefined, undefined, {}, () => {})
+
+      sinon.assert.notCalled(span.finish)
+      wrappedCallback()
+      sinon.assert.calledOnce(span.finish)
+    })
+
+    it('should not retain response listeners when HTTP error handlers throw', () => {
+      const response = new ServerResponse({ method: 'GET' })
+      const error = new Error('boom')
+      const fn = tracer.wrap('name', {}, function (_error, _request, _response, _next) {
+        throw error
+      })
+
+      assert.throws(() => fn(undefined, {}, response, () => {}), value => value === error)
+      assert.strictEqual(response.listenerCount('finish'), 0)
+      assert.strictEqual(response.listenerCount('close'), 0)
     })
 
     it('should handle rejected promises', done => {

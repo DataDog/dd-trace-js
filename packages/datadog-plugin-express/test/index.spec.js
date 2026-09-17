@@ -371,14 +371,12 @@ describe('Plugin', () => {
 
           app.use(() => { throw new Error('boom') })
 
-          function errorMiddleware (error, request, response, next) {
-            next()
+          function errorMiddleware (error, request, response, _next) {
             response.status(418).send(`${error.message}:${request.path}`)
           }
 
           const middleware = tracer.wrap('error.middleware', errorMiddleware)
           app.use(middleware)
-          app.use((_request, _response, _next) => {})
 
           appListener = app.listen(0, 'localhost')
           await once(appListener, 'listening')
