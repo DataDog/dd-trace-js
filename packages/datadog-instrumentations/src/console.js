@@ -107,6 +107,7 @@ let getLogHolder
 /** @type {(() => boolean) | undefined} */
 let isLogSubmissionAllowed
 let areNodeConsoleDiagnosticsSubscribed = false
+let hasNodeConsoleWriteConsumer = false
 let isPublishing = false
 let nextWriteId = 0
 let suppressedConsoleDepth = 0
@@ -127,6 +128,9 @@ function subscribeNodeConsoleDiagnostics () {
         capture = activeCapture
         capture.methodSignaled = true
       }
+      // Active method wrappers remove their tagged entry after stream interception. Untagged entries require an
+      // installed private writer wrapper; otherwise they can never be consumed.
+      if (!capture && !hasNodeConsoleWriteConsumer) return
       pendingNodeConsoleCalls.push({ capture, method })
     })
   }
@@ -502,7 +506,10 @@ function wrapNodeConsoleWrite (target) {
   let owner
   try {
     owner = Object.hasOwn(target, nodeConsoleWrite) ? target : nodeConsolePrototype
-    if (nodeConsoleWriteOwners.has(owner)) return true
+    if (nodeConsoleWriteOwners.has(owner)) {
+      hasNodeConsoleWriteConsumer = true
+      return true
+    }
 
     const descriptor = Object.getOwnPropertyDescriptor(owner, nodeConsoleWrite)
     if (typeof descriptor?.value !== 'function') return false
@@ -597,6 +604,7 @@ function wrapNodeConsoleWrite (target) {
     })
     Object.defineProperty(owner, nodeConsoleWrite, descriptor)
     nodeConsoleWriteOwners.add(owner)
+    hasNodeConsoleWriteConsumer = true
   } catch {}
   return Boolean(owner && nodeConsoleWriteOwners.has(owner))
 }

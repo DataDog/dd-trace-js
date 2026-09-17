@@ -608,6 +608,76 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'captured warning' }])
   })
 
+  it('does not retain native diagnostics without an installed writer consumer', () => {
+    const output = []
+    const stream = { write: message => output.push(message) }
+    const useStderr = Symbol('kUseStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    const { fakeChannel, state } = createIsolatedConsoleChannels()
+    class FakeConsole {
+      constructor (stream) {
+        this._stderr = stream
+        this._stderrErrorHandler = () => {}
+      }
+
+      error (message) {
+        state.diagnosticSubscribers['console.error']?.()
+        this[writeToConsole](useStderr, message)
+      }
+
+      warn (message) {
+        state.diagnosticSubscribers['console.warn']?.()
+        this[writeToConsole](useStderr, message)
+      }
+    }
+    Object.defineProperty(FakeConsole.prototype, writeToConsole, {
+      configurable: true,
+      value (streamSymbol, message) {
+        this._stderr.write(`${message}\n`)
+      },
+      writable: true,
+    })
+    const orphanConsole = new FakeConsole(stream)
+    const probeConsole = new FakeConsole(stream)
+    for (const target of [orphanConsole, probeConsole]) {
+      target.error = target.error.bind(target)
+      target.warn = target.warn.bind(target)
+    }
+    Object.defineProperty(
+      probeConsole,
+      writeToConsole,
+      Object.getOwnPropertyDescriptor(FakeConsole.prototype, writeToConsole)
+    )
+    Object.freeze(FakeConsole.prototype)
+    const ignoredConsoleMethod = sinon.stub()
+    const fakeNodeConsole = {
+      _stderr: stream,
+      Console: FakeConsole,
+      error: ignoredConsoleMethod,
+      warn: ignoredConsoleMethod,
+      '@noCallThru': true,
+    }
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      './helpers/instrument': { channel: fakeChannel, '@noCallThru': true },
+      'node:console': fakeNodeConsole,
+    })
+    const consoleDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'console')
+
+    try {
+      Object.defineProperty(globalThis, 'console', { configurable: true, value: fakeNodeConsole })
+      state.configureSubscriber({})
+      orphanConsole.warn('orphan warning')
+      orphanConsole.error('orphan error')
+      wrapIsolatedConsole(probeConsole)
+      probeConsole[writeToConsole](useStderr, 'direct writer')
+    } finally {
+      Object.defineProperty(globalThis, 'console', consoleDescriptor)
+    }
+
+    assert.deepStrictEqual(output, ['orphan warning\n', 'orphan error\n', 'direct writer\n'])
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('keeps nested pre-instrumentation Console calls as independent records', () => {
     const output = []
     const useStderr = Symbol('kUseStderr')
