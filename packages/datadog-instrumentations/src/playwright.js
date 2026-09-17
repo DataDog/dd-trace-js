@@ -121,6 +121,7 @@ let modifiedFiles = {}
 let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
+let hasTestsAssignedToShard = false
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -1040,6 +1041,12 @@ function testEndHandler ({
 function dispatcherRunWrapper (run) {
   return function (...args) {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
+    for (const tests of Object.values(remainingTestsByFile)) {
+      if (tests.length > 0) {
+        hasTestsAssignedToShard = true
+        break
+      }
+    }
     return run.apply(this, args)
   }
 }
@@ -1079,6 +1086,13 @@ function deferEfdRetryGroups (testGroups) {
 
 function prepareDispatcherRun (dispatcher, args) {
   let testGroups = args[0]
+
+  for (const group of testGroups) {
+    if (group.tests.length > 0) {
+      hasTestsAssignedToShard = true
+      break
+    }
+  }
 
   // Filter out disabled tests from testGroups before they get scheduled,
   // unless they have attemptToFix (in which case they should still run and be retried)
@@ -1314,6 +1328,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined
+    hasTestsAssignedToShard = false
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1323,6 +1338,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         config.config.reporter.unshift([require.resolve('./playwright-reporter')])
       }
     }
+    const runnerConfig = getPlaywrightConfig(this)
+    const playwrightConfig = config?.config || runnerConfig.config || runnerConfig
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
@@ -1511,7 +1528,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     const isExpectedEmptyShard = finalStatus === 'pass' &&
-      Boolean(config?.config?.shard) && startedSuites.length === 0
+      Boolean(playwrightConfig.shard) &&
+      !hasTestsAssignedToShard &&
+      testsReportedInGenerateSummary.size === 0
     await getChannelPromise(testSessionFinishCh, {
       status: isExpectedEmptyShard ? 'skip' : finalStatus,
       isExpectedEmptyShard,
@@ -1530,6 +1549,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     playwrightRunSummary = undefined
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
+    hasTestsAssignedToShard = false
     efdManagedTestKeys.clear()
     efdRetryCountByTestKey.clear()
     efdRetryCountRequestsByTestKey.clear()

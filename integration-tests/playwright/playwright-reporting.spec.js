@@ -89,7 +89,7 @@ versions.forEach((version) => {
     const deferredFailureScreenshotTest = satisfies(version, '>=1.60.0') || version === 'latest'
       ? it
       : global.it.skip
-    const emptyShardTest = satisfies(version, '>=1.55.0') || version === 'latest'
+    const emptyShardTest = satisfies(version, '>=1.38.0') || version === 'latest'
       ? it
       : global.it.skip
 
