@@ -14,6 +14,7 @@ module.exports = [
   ...require('./modelcontextprotocol-sdk'),
   ...require('./openai-agents'),
   ...require('./playwright'),
+  ...require('./postgres'),
   ...require('./webdriverio'),
   ...require('./aws-durable-execution-sdk-js'),
   ...require('./supabase'),

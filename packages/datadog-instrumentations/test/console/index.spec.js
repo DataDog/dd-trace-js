@@ -14,6 +14,20 @@ const { wrapConsole, wrapJestBufferedConsole, wrapJestCustomConsole } = require(
 
 const logSubmissionCh = channel('ci:log-submission:console')
 
+function createIsolatedConsoleChannels () {
+  const state = { diagnosticSubscribers: {} }
+  const fakeChannel = name => {
+    if (name === 'ci:log-submission:console:configure') {
+      return { subscribe: subscriber => { state.configureSubscriber = subscriber } }
+    }
+    if (name === 'console.error' || name === 'console.warn') {
+      return { subscribe: subscriber => { state.diagnosticSubscribers[name] = subscriber } }
+    }
+    return channel(name)
+  }
+  return { fakeChannel, state }
+}
+
 describe('console instrumentation', () => {
   let payloads
   let subscriber
@@ -267,6 +281,23 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('preserves trailing newlines in native console messages', () => {
+    const output = []
+    const stream = new Writable({
+      write (chunk, encoding, callback) {
+        output.push(chunk.toString())
+        callback()
+      },
+    })
+    const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    wrapConsole(target)
+
+    target.warn('hello\n')
+
+    assert.deepStrictEqual(output, ['hello\n\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello\n' }])
+  })
+
   it('does not submit a native record when its stream write throws', () => {
     const error = new Error('write failure')
     const stream = { write: sinon.stub().throws(error) }
@@ -349,7 +380,7 @@ describe('console instrumentation', () => {
     const useStderr = Symbol('kUseStderr')
     const formatForStderr = Symbol('kFormatForStderr')
     const writeToConsole = Symbol('kWriteToConsole')
-    const warningCh = channel('console.warn')
+    const { fakeChannel, state } = createIsolatedConsoleChannels()
     class FakeConsole {
       constructor (stream) {
         this._stderr = stream
@@ -358,7 +389,7 @@ describe('console instrumentation', () => {
       }
 
       warn (...args) {
-        warningCh.publish(args)
+        state.diagnosticSubscribers['console.warn']?.()
         this[writeToConsole](useStderr, this[formatForStderr](args))
       }
     }
@@ -381,17 +412,21 @@ describe('console instrumentation', () => {
       trace () { target.warn('warning from audit trace') }
     }
     const fakeNodeConsole = { Console: FakeConsole, '@noCallThru': true }
-    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+    proxyquire('../../src/console', {
+      './helpers/instrument': { channel: fakeChannel, '@noCallThru': true },
       'node:console': fakeNodeConsole,
     })
+    const consoleDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'console')
     const stackTraceLimit = Error.stackTraceLimit
 
     try {
+      Object.defineProperty(globalThis, 'console', { configurable: true, value: target })
+      state.configureSubscriber({})
       Error.stackTraceLimit = 0
-      wrapIsolatedConsole(FakeConsole.prototype)
       target.warn('existing warning')
     } finally {
       Error.stackTraceLimit = stackTraceLimit
+      Object.defineProperty(globalThis, 'console', consoleDescriptor)
     }
     new AuditConsole().trace()
 
@@ -402,6 +437,64 @@ describe('console instrumentation', () => {
       { method: 'warn', message: 'existing warning' },
       { method: 'warn', message: 'warning from audit trace' },
     ])
+  })
+
+  it('clears native diagnostics after falling back to stream interception', () => {
+    const stream = { write: sinon.stub() }
+    const useStderr = Symbol('kUseStderr')
+    const writeToConsole = Symbol('kWriteToConsole')
+    const { fakeChannel, state } = createIsolatedConsoleChannels()
+    class FakeConsole {
+      constructor (stream) {
+        this._stderr = stream
+        this._stderrErrorHandler = () => {}
+      }
+
+      warn (message) {
+        state.diagnosticSubscribers['console.warn']?.()
+        this[writeToConsole](useStderr, message)
+      }
+
+      write (message) {
+        this[writeToConsole](useStderr, message)
+      }
+    }
+    Object.defineProperty(FakeConsole.prototype, writeToConsole, {
+      configurable: true,
+      value (streamSymbol, message) {
+        this._stderr.write(`${message}\n`)
+      },
+      writable: true,
+    })
+    const fallbackConsole = new FakeConsole(stream)
+    fallbackConsole.warn = fallbackConsole.warn.bind(fallbackConsole)
+    Object.defineProperty(fallbackConsole, writeToConsole, {
+      configurable: false,
+      value: FakeConsole.prototype[writeToConsole],
+      writable: false,
+    })
+    const nativeConsole = new FakeConsole(stream)
+    const fakeNodeConsole = Object.assign(fallbackConsole, { Console: FakeConsole, '@noCallThru': true })
+    proxyquire('../../src/console', {
+      './helpers/instrument': { channel: fakeChannel, '@noCallThru': true },
+      'node:console': fakeNodeConsole,
+    })
+    const consoleDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'console')
+    const stackTraceLimit = Error.stackTraceLimit
+
+    try {
+      Object.defineProperty(globalThis, 'console', { configurable: true, value: fallbackConsole })
+      state.configureSubscriber({})
+      Error.stackTraceLimit = 0
+      fallbackConsole.warn('captured warning')
+      nativeConsole.write('not a console diagnostic')
+    } finally {
+      Error.stackTraceLimit = stackTraceLimit
+      Object.defineProperty(globalThis, 'console', consoleDescriptor)
+    }
+
+    sinon.assert.calledTwice(stream.write)
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'captured warning' }])
   })
 
   it('keeps nested pre-instrumentation Console calls as independent records', () => {
@@ -825,16 +918,16 @@ describe('console instrumentation', () => {
     const writeToConsole = Symbol('kWriteToConsole')
     class FakeConsole {}
     FakeConsole.prototype[writeToConsole] = function (stream, message) {
-      this._stderr.write(message)
+      this._stderr.write(`${message}\n`)
     }
     const fakeNodeConsole = {
       Console: FakeConsole,
       _stderr: globalStream,
       error (message) {
-        this[writeToConsole](useStderr, `${message}\n`)
+        this[writeToConsole](useStderr, message)
       },
       warn (message) {
-        this[writeToConsole](useStderr, `${message}\n`)
+        this[writeToConsole](useStderr, message)
       },
     }
     fakeNodeConsole[writeToConsole] = FakeConsole.prototype[writeToConsole]
@@ -984,6 +1077,56 @@ describe('console instrumentation', () => {
       })
 
       configureSubscriber({})
+    } finally {
+      Object.defineProperty(globalThis, 'console', consoleDescriptor)
+    }
+  })
+
+  it('subscribes to native console diagnostics only after configuration', () => {
+    const channelNames = []
+    const subscribers = {}
+    const fakeChannel = name => {
+      channelNames.push(name)
+      return {
+        hasSubscribers: true,
+        publish () {},
+        subscribe (subscriber) {
+          subscribers[name] = subscriber
+        },
+      }
+    }
+    class FakeConsole {
+      error () {}
+      warn () {}
+    }
+    const stream = { write () {} }
+    const fakeNodeConsole = {
+      _stderr: stream,
+      Console: FakeConsole,
+      error () {},
+      warn () {},
+      '@noCallThru': true,
+    }
+    const consoleDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'console')
+
+    try {
+      Object.defineProperty(globalThis, 'console', { configurable: true, value: fakeNodeConsole })
+      proxyquire('../../src/console', {
+        './helpers/instrument': { channel: fakeChannel, '@noCallThru': true },
+        'node:console': fakeNodeConsole,
+      })
+
+      assert.deepStrictEqual(channelNames, [
+        'ci:log-submission:console:configure',
+        'ci:log-submission:console',
+      ])
+      subscribers['ci:log-submission:console:configure']({})
+      assert.deepStrictEqual(channelNames, [
+        'ci:log-submission:console:configure',
+        'ci:log-submission:console',
+        'console.error',
+        'console.warn',
+      ])
     } finally {
       Object.defineProperty(globalThis, 'console', consoleDescriptor)
     }
@@ -1253,6 +1396,27 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(buffer, ['boom'])
     assert.deepStrictEqual(output, ['console.error\n  boom\n'])
     assert.deepStrictEqual(payloads, [{ method: 'error', message: 'boom' }])
+  })
+
+  it('does not publish Jest records when their output paths throw', () => {
+    const bufferError = new Error('buffer failure')
+    const customError = new Error('custom console failure')
+    class BufferedConsole {
+      static write () {
+        throw bufferError
+      }
+    }
+    class CustomConsole {
+      _logError () {
+        throw customError
+      }
+    }
+    wrapJestBufferedConsole(BufferedConsole)
+    wrapJestCustomConsole(CustomConsole)
+
+    assert.throws(() => BufferedConsole.write([], 'warn', 'not buffered'), bufferError)
+    assert.throws(() => new CustomConsole()._logError('error', 'not rendered'), customError)
+    assert.deepStrictEqual(payloads, [])
   })
 
   it('preserves nested Jest buffered records emitted while formatting', () => {

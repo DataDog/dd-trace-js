@@ -41,7 +41,11 @@ const { NODE_MAJOR } = require('../../version')
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const requestedVersion = process.env.VITEST_VERSION
+const versions = requestedVersion && requestedVersion !== 'all'
+  ? [requestedVersion === 'oldest' ? supportedVersions[0] : supportedVersions.at(-1)]
+  : supportedVersions
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {

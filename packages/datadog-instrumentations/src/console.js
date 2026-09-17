@@ -77,24 +77,30 @@ let expectedWrite
 let getLogHolder
 /** @type {(() => boolean) | undefined} */
 let isLogSubmissionAllowed
+let areNodeConsoleDiagnosticsSubscribed = false
 let isPublishing = false
 let nextWriteId = 0
 let suppressedConsoleDepth = 0
 
-for (const method of methods) {
-  // Newer Node versions publish these channels before formatting, allowing
-  // pre-existing bound Console methods to retain their severity without
-  // depending on application-controlled stack traces.
-  channel(`console.${method}`).subscribe(() => {
-    if (!shouldCaptureLogs()) return
+function subscribeNodeConsoleDiagnostics () {
+  if (areNodeConsoleDiagnosticsSubscribed) return
 
-    let capture
-    if (activeCapture && !activeCapture.methodSignaled && activeCapture.method === method) {
-      capture = activeCapture
-      capture.methodSignaled = true
-    }
-    pendingNodeConsoleCalls.push({ capture, method })
-  })
+  areNodeConsoleDiagnosticsSubscribed = true
+  for (const method of methods) {
+    // Newer Node versions publish these channels before formatting, allowing
+    // pre-existing bound Console methods to retain their severity without
+    // depending on application-controlled stack traces.
+    channel(`console.${method}`).subscribe(() => {
+      if (!shouldCaptureLogs()) return
+
+      let capture
+      if (activeCapture && !activeCapture.methodSignaled && activeCapture.method === method) {
+        capture = activeCapture
+        capture.methodSignaled = true
+      }
+      pendingNodeConsoleCalls.push({ capture, method })
+    })
+  }
 }
 
 /** @typedef {{ write: (buffer: unknown, method: string, message: string) => unknown }} JestBufferedConsole */
@@ -245,9 +251,10 @@ function publishRecords (records) {
 /**
  * @param {ConsoleRecord[]} records
  * @param {boolean} lastOnly
+ * @param {boolean} [trimTerminator]
  * @returns {ConsoleRecord | undefined}
  */
-function combineRecords (records, lastOnly) {
+function combineRecords (records, lastOnly, trimTerminator = true) {
   if (records.length === 0) return
 
   let firstRecord
@@ -259,8 +266,20 @@ function combineRecords (records, lastOnly) {
     message += record.message
   }
   if (!firstRecord) return
-  if (message.endsWith('\n')) message = message.slice(0, -1)
+  if (trimTerminator && message.endsWith('\n')) message = message.slice(0, -1)
   return { ...firstRecord, message }
+}
+
+/**
+ * @param {ConsoleCapture} capture
+ */
+function removePendingNodeConsoleCall (capture) {
+  for (let i = pendingNodeConsoleCalls.length - 1; i >= 0; i--) {
+    if (pendingNodeConsoleCalls[i].capture !== capture) continue
+
+    pendingNodeConsoleCalls.splice(i, 1)
+    return
+  }
 }
 
 /**
@@ -689,15 +708,16 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
         if (capture) {
           captureActive = false
           if (wrappedWrite && !restoreStreamWrite(stream, writeDescriptor, wrappedWrite)) disabledStreams.add(stream)
+          if (!capture.nodeConsole) removePendingNodeConsoleCall(capture)
           activeCapture = parentCapture
 
           let consoleRecord
           // A replacement console may split one record across writes. Node's Console instead
           // uses one final write, after any unrelated writes produced while formatting.
           if (capture.ownRecords.length > 0) {
-            consoleRecord = combineRecords(capture.ownRecords, isNodeConsoleTarget)
+            consoleRecord = combineRecords(capture.ownRecords, isNodeConsoleTarget, !capture.nodeConsole)
           } else if (capture.observedRecords.length > 0) {
-            consoleRecord = combineRecords(capture.observedRecords, isNodeConsoleTarget)
+            consoleRecord = combineRecords(capture.observedRecords, isNodeConsoleTarget, !capture.nodeConsole)
           }
           if (consoleRecord) capture.records.push(consoleRecord)
           if (!parentCapture) publishRecords(capture.records)
@@ -731,21 +751,25 @@ function wrapJestBufferedConsole (BufferedConsole, captureLogHolder, captureAllo
         (activeRecord.message === message || activeRecord.message === `${message}\n`)
       const writeId = isActiveWrite ? activeWriteId : ++nextWriteId
       const record = createRecord(method, message, writeId, captureLogHolder)
-      if (activeCapture) {
-        activeCapture.records.push(record)
-      } else {
-        publishRecords([record])
-      }
+      const capture = activeCapture
 
       // Some Jest versions render the buffered record through another wrapped
       // console method. The buffered message is already the logical record, so
       // suppress that internal rendering path.
+      const wasPublishing = isPublishing
       isPublishing = true
+      let result
       try {
-        return original.apply(this, arguments)
+        result = original.apply(this, arguments)
       } finally {
-        isPublishing = false
+        isPublishing = wasPublishing
       }
+      if (capture) {
+        capture.records.push(record)
+      } else {
+        publishRecords([record])
+      }
+      return result
     }
     return original.apply(this, arguments)
   })
@@ -768,19 +792,22 @@ function wrapJestCustomConsole (CustomConsole, captureLogHolder, captureAllowed)
       if (!shouldPublish) return original.apply(this, arguments)
 
       const record = createRecord(method, message, ++nextWriteId, captureLogHolder)
-      if (activeCapture) {
-        activeCapture.records.push(record)
-      } else {
-        publishRecords([record])
-      }
+      const capture = activeCapture
 
       const wasPublishing = isPublishing
       isPublishing = true
+      let result
       try {
-        return original.apply(this, arguments)
+        result = original.apply(this, arguments)
       } finally {
         isPublishing = wasPublishing
       }
+      if (capture) {
+        capture.records.push(record)
+      } else {
+        publishRecords([record])
+      }
+      return result
     })
   } catch {}
 }
@@ -788,6 +815,7 @@ function wrapJestCustomConsole (CustomConsole, captureLogHolder, captureAllowed)
 configureCh.subscribe(({ canCapture, getLogHolder: configuredGetLogHolder } = {}) => {
   getLogHolder = configuredGetLogHolder
   isLogSubmissionAllowed = canCapture
+  subscribeNodeConsoleDiagnostics()
   // The global console has bound own methods, while Console.prototype covers
   // instances that are created after log submission is enabled.
   let globalConsole
