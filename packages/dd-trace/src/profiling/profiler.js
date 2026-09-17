@@ -200,6 +200,9 @@ class Profiler extends EventEmitter {
       this.#flushInterval = flushInterval
       this.#profilers = profilers
       this.#currentSnapshotTags = snapshotTags
+      // A restart is installed only after the prior shutdown collection settles, so any endpoint
+      // counts left behind by a collection that produced no encodable profiles belong to the old run.
+      this.#endpointCounts.clear()
       // Compression is initialized lazily and cached for a profiling run. A restarted profiler
       // must derive it again from the newly built runtime instead of retaining the prior method
       // or options.

@@ -3,11 +3,14 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
 
 require('../setup/core')
+
+const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
 describe('profiler', function () {
   let Profiler
@@ -251,6 +254,40 @@ describe('profiler', function () {
 
       sinon.assert.calledOnce(wallProfiler.start)
       profiler.stop()
+    })
+
+    it('should not retain endpoint counts across a restart when shutdown encoding fails', async () => {
+      await profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: true }))
+
+      const context = {
+        _parentId: undefined,
+        _trace: { started: [] },
+        getTags: () => ({
+          'span.type': 'web',
+          'resource.name': 'GET /before-restart',
+        }),
+      }
+      spanFinishedChannel.publish({ context: () => context })
+
+      wallProfiler.encode.rejects(new Error('wall encoding failed'))
+      spaceProfiler.encode.rejects(new Error('space encoding failed'))
+      profiler.stop()
+      profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false }))
+
+      for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+      assert.strictEqual(profiler.enabled, true)
+
+      wallProfiler.encode.resolves(wallProfile)
+      spaceProfiler.encode.resolves(spaceProfile)
+      const exported = new Promise(resolve => {
+        exporter.export.callsFake(exportSpec => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        })
+      })
+      clock.tick(interval)
+
+      assert.deepStrictEqual((await exported).endpointCounts, {})
     })
 
     it('should log an error when collecting with no profile types configured', async () => {
