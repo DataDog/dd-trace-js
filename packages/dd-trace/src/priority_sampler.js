@@ -139,23 +139,6 @@ class PrioritySampler {
   }
 
   /**
-   * Applies one manual sampling tag without rereading the span's complete tag map.
-   *
-   * @param {DatadogSpan} span
-   * @param {string} key
-   * @param {unknown} value
-   */
-  setPriorityFromTag (span, key, value) {
-    if (!span) return
-
-    const context = this._getContext(span)
-    if (isProductForceKeep(context)) return
-
-    const priority = this._getPriorityFromTag(key, value, context)
-    if (this.validate(priority)) this.setPriority(span, priority)
-  }
-
-  /**
    * Applies manual sampling tags from a supplied tag collection using their defined precedence.
    *
    * @param {DatadogSpan} span

@@ -598,12 +598,12 @@ describe('PrioritySampler', () => {
     })
   })
 
-  describe('setPriorityFromTag', () => {
+  describe('setPriorityFromTags', () => {
     it('should let a manual sampling tag override an automatic decision', () => {
       prioritySampler.sample(span)
       assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-0')
 
-      prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, `${USER_KEEP}`)
+      prioritySampler.setPriorityFromTags(span, { [SAMPLING_PRIORITY]: `${USER_KEEP}` })
 
       assert.strictEqual(context._sampling.priority, USER_KEEP)
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_MANUAL)
@@ -612,7 +612,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should ignore a disabled manual sampling tag', () => {
-      prioritySampler.setPriorityFromTag(span, MANUAL_KEEP, false)
+      prioritySampler.setPriorityFromTags(span, { [MANUAL_KEEP]: false })
 
       assert.strictEqual(context._sampling.priority, undefined)
     })
@@ -621,7 +621,7 @@ describe('PrioritySampler', () => {
       prioritySampler.sample(span)
 
       for (const value of [1n, Symbol('priority')]) {
-        prioritySampler.setPriorityFromTag(span, SAMPLING_PRIORITY, value)
+        prioritySampler.setPriorityFromTags(span, { [SAMPLING_PRIORITY]: value })
       }
 
       assert.strictEqual(context._sampling.priority, AUTO_KEEP)
@@ -631,15 +631,12 @@ describe('PrioritySampler', () => {
       prioritySampler.setPriority(span, USER_KEEP, ASM)
       prioritySampler.isSampled(span)
 
-      prioritySampler.setPriorityFromTag(span, MANUAL_DROP, true)
+      prioritySampler.setPriorityFromTags(span, { [MANUAL_DROP]: true })
 
       assert.strictEqual(context._sampling.priority, USER_KEEP)
       assert.strictEqual(context._sampling.mechanism, SAMPLING_MECHANISM_APPSEC)
       assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], '-5')
     })
-  })
-
-  describe('setPriorityFromTags', () => {
     it('should apply precedence within the supplied sampling tags', () => {
       prioritySampler.setPriorityFromTags(span, {
         [MANUAL_KEEP]: false,

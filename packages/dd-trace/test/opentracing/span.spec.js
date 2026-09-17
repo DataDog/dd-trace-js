@@ -46,7 +46,6 @@ describe('Span', () => {
 
     prioritySampler = {
       sample: sinon.stub(),
-      setPriorityFromTag: sinon.stub(),
       setPriorityFromTags: sinon.stub(),
     }
 
