@@ -84,11 +84,11 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
   const autoEnabled = !!config._env?.['llmobs.enabled']
   const tags = {
     error: 0,
-    agentless: Number(config.llmobs.agentlessEnabled),
+    agentless: Number(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED),
     site: config.site,
     auto: Number(autoEnabled),
-    ml_app: config.llmobs.mlApp,
-    sample_rate: config.llmobs.sampleRate,
+    ml_app: config.llmobs.DD_LLMOBS_ML_APP,
+    sample_rate: config.llmobs.DD_LLMOBS_SAMPLE_RATE,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)

@@ -158,9 +158,9 @@ class EvaluationReporter {
    */
   constructor (config) {
     this.#config = config
-    this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
-    this.#maxContentSize = config.experimental.aiguard.maxContentSize
-    this.#redactionEnabled = config.experimental.aiguard.redactionEnabled
+    this.#maxMessagesLength = config.aiguard.DD_AI_GUARD_MAX_MESSAGES_LENGTH
+    this.#maxContentSize = config.aiguard.DD_AI_GUARD_MAX_CONTENT_SIZE
+    this.#redactionEnabled = config.aiguard.DD_AI_GUARD_REDACTION_ENABLED
   }
 
   /**

@@ -170,9 +170,9 @@ describe('TracerProxy', () => {
       },
       experimental: {
         flaggingProvider: {},
-        aiguard: {
-          enabled: true,
-        },
+      },
+      aiguard: {
+        DD_AI_GUARD_ENABLED: true,
       },
       DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
