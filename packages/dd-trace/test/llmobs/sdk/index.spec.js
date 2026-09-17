@@ -110,8 +110,8 @@ describe('sdk', () => {
       })
 
       assert.strictEqual(disabledLLMObs.enabled, true)
-      assert.strictEqual(disabledLLMObs._config.llmobs.mlApp, 'mlApp')
-      assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
+      assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_ML_APP, 'mlApp')
+      assert.strictEqual(disabledLLMObs._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, undefined)
 
       sinon.assert.called(llmobsModule.enable)
 
@@ -1553,13 +1553,13 @@ describe('sdk', () => {
     })
 
     it('throws for a missing mlApp', () => {
-      const mlApp = tracer._tracer._config.llmobs.mlApp
-      delete tracer._tracer._config.llmobs.mlApp
+      const mlApp = tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
+      delete tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
 
       assert.throws(() => llmobs.submitEvaluation(spanCtx))
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
-      tracer._tracer._config.llmobs.mlApp = mlApp
+      tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = mlApp
     })
 
     it('throws for an invalid timestamp', () => {
@@ -2343,12 +2343,12 @@ describe('sdk', () => {
       let mlApp
 
       before(() => {
-        mlApp = tracer._tracer._config.llmobs.mlApp
-        delete tracer._tracer._config.llmobs.mlApp
+        mlApp = tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
+        delete tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
       })
 
       after(() => {
-        tracer._tracer._config.llmobs.mlApp = mlApp
+        tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = mlApp
       })
 
       it('throws', () => {
