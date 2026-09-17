@@ -7,9 +7,9 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 require('../../setup/mocha')
 
+const { DEBUGGER_DIAGNOSTICS_V1, DIAGNOSTICS_QUEUE_MAX_BYTES } = require('../../../src/debugger/constants')
 const { DROPPED_REASON, EVENT_TYPE } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
-const { DEBUGGER_DIAGNOSTICS_V1 } = require('../../../src/debugger/constants')
 const { getRequestOptions } = require('./utils')
 
 const ddsource = 'dd_debugger'
@@ -159,10 +159,9 @@ describe('diagnostic message http requests', function () {
 
   describe('diagnostics queue', function () {
     it('should bound the queue, release completed uploads, and retry a dropped status', function () {
-      const MAX_QUEUE_BYTES = 1024 * 1024
       let accepted = 0
 
-      assert.strictEqual(jsonBufferOptions.maxQueueBytes, MAX_QUEUE_BYTES)
+      assert.strictEqual(jsonBufferOptions.maxQueueBytes, DIAGNOSTICS_QUEUE_MAX_BYTES)
 
       // Flush a status per upload interval, without ever completing the uploads, until the queue is full
       while (!guardrailMetrics.eventDropped.called) {

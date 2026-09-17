@@ -7,7 +7,7 @@ const { version } = require('../../../../../package.json')
 const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
-const { DEBUGGER_DIAGNOSTICS_V1 } = require('../constants')
+const { DEBUGGER_DIAGNOSTICS_V1, DIAGNOSTICS_QUEUE_MAX_BYTES } = require('../constants')
 const { DROPPED_REASON, EVENT_TYPE } = require('../guardrail-metrics')
 const config = require('./config')
 const guardrailMetrics = require('./guardrail-metrics')
@@ -32,11 +32,9 @@ const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 
 // Diagnostics are queued separately from probe results so that large snapshots cannot starve them. Each diagnostic is
 // a few hundred bytes, so this bound leaves room for thousands of pending status updates.
-const MAX_QUEUE_BYTES = 1024 * 1024 // 1MB
-
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
-  maxQueueBytes: MAX_QUEUE_BYTES,
+  maxQueueBytes: DIAGNOSTICS_QUEUE_MAX_BYTES,
   timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
   onFlush,
 })
