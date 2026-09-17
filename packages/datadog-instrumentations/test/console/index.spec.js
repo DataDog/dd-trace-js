@@ -179,6 +179,8 @@ describe('console instrumentation', () => {
   it('excludes complete lines written while a replacement console formats arguments', () => {
     const output = []
     const stream = { write: chunk => output.push(chunk) }
+    const prepareStackTrace = sinon.stub().returns('application stack')
+    const prepareStackTraceDescriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')
     const target = {
       _stderr: stream,
       warn (...args) {
@@ -194,8 +196,22 @@ describe('console instrumentation', () => {
     }
     wrapConsole(target)
 
-    target.warn('hello %o', value)
+    try {
+      Object.defineProperty(Error, 'prepareStackTrace', {
+        configurable: true,
+        value: prepareStackTrace,
+        writable: true,
+      })
+      target.warn('hello %o', value)
+    } finally {
+      if (prepareStackTraceDescriptor) {
+        Object.defineProperty(Error, 'prepareStackTrace', prepareStackTraceDescriptor)
+      } else {
+        delete Error.prepareStackTrace
+      }
+    }
 
+    sinon.assert.notCalled(prepareStackTrace)
     assert.deepStrictEqual(output, ['unrelated output\n', 'hello formatted value', '\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
@@ -1080,6 +1096,23 @@ describe('console instrumentation', () => {
     } finally {
       Object.defineProperty(globalThis, 'console', consoleDescriptor)
     }
+  })
+
+  it('does not invoke an accessor-backed Console export during module load', () => {
+    const getConsole = sinon.stub().throws(new Error('Console export unavailable'))
+    const fakeNodeConsole = {
+      _stderr: { write () {} },
+      error () {},
+      warn () {},
+      '@noCallThru': true,
+    }
+    Object.defineProperty(fakeNodeConsole, 'Console', {
+      configurable: true,
+      get: getConsole,
+    })
+
+    proxyquire('../../src/console', { 'node:console': fakeNodeConsole })
+    sinon.assert.notCalled(getConsole)
   })
 
   it('subscribes to native console diagnostics only after configuration', () => {

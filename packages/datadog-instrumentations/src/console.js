@@ -3,15 +3,27 @@
 const { Buffer } = require('node:buffer')
 const nodeConsole = require('node:console')
 
-const { Console } = nodeConsole
-const nativeStderrDescriptor = Object.getOwnPropertyDescriptor(nodeConsole, '_stderr')
-const nodeConsoleKeys = Reflect.ownKeys(Console.prototype)
-const nodeConsoleWrite = nodeConsoleKeys.find(key => {
-  return typeof key === 'symbol' && key.description === 'kWriteToConsole'
-})
-const nodeConsoleFormatForStderr = nodeConsoleKeys.find(key => {
-  return typeof key === 'symbol' && key.description === 'kFormatForStderr'
-})
+let nativeStderrDescriptor
+let nodeConsoleFormatForStderr
+let nodeConsolePrototype
+let nodeConsoleWrite
+try {
+  nativeStderrDescriptor = Object.getOwnPropertyDescriptor(nodeConsole, '_stderr')
+} catch {}
+try {
+  const consoleDescriptor = Object.getOwnPropertyDescriptor(nodeConsole, 'Console')
+  if (typeof consoleDescriptor?.value === 'function') {
+    const prototype = consoleDescriptor.value.prototype
+    const keys = Reflect.ownKeys(prototype)
+    nodeConsolePrototype = prototype
+    nodeConsoleWrite = keys.find(key => {
+      return typeof key === 'symbol' && key.description === 'kWriteToConsole'
+    })
+    nodeConsoleFormatForStderr = keys.find(key => {
+      return typeof key === 'symbol' && key.description === 'kFormatForStderr'
+    })
+  }
+} catch {}
 
 const shimmer = require('../../datadog-shimmer')
 const { channel } = require('./helpers/instrument')
@@ -22,16 +34,25 @@ const logSubmissionCh = channel('ci:log-submission:console')
 const methods = ['error', 'warn']
 const unsupportedMethods = new Set(['assert', 'trace'])
 const methodSet = new Set(methods)
-const nodeConsoleMethodPattern = /\bat ([^\s.]+)\.(error|warn|assert|trace) \(/
-const nodeConsoleMethods = new Map(methods.map(method => {
-  return [method, Object.getOwnPropertyDescriptor(Console.prototype, method)?.value]
-}))
-const unsupportedNodeConsoleMethods = new Set([...unsupportedMethods].map(method => {
-  return Object.getOwnPropertyDescriptor(Console.prototype, method)?.value
-}).filter(method => typeof method === 'function'))
-const nodeConsoleBoundMethods = new Map(methods.map(method => {
-  return [method, Object.getOwnPropertyDescriptor(nodeConsole, method)?.value]
-}))
+const nodeConsoleMethods = new Map()
+const unsupportedNodeConsoleMethods = new Set()
+if (nodeConsolePrototype) {
+  try {
+    for (const method of methods) {
+      nodeConsoleMethods.set(method, Object.getOwnPropertyDescriptor(nodeConsolePrototype, method)?.value)
+    }
+    for (const method of unsupportedMethods) {
+      const fn = Object.getOwnPropertyDescriptor(nodeConsolePrototype, method)?.value
+      if (typeof fn === 'function') unsupportedNodeConsoleMethods.add(fn)
+    }
+  } catch {}
+}
+const nodeConsoleBoundMethods = new Map()
+try {
+  for (const method of methods) {
+    nodeConsoleBoundMethods.set(method, Object.getOwnPropertyDescriptor(nodeConsole, method)?.value)
+  }
+} catch {}
 const disabledStreams = new WeakSet()
 /** @type {WeakMap<object, symbol | false>} */
 const nodeConsoleGroupIndentKeys = new WeakMap()
@@ -42,6 +63,14 @@ const wrappedTargets = new WeakSet()
 const pendingNodeConsoleCalls = []
 
 /** @typedef {{ dd: object }} LogHolder */
+/**
+ * @typedef {{
+ *   getFunction?: () => Function | undefined,
+ *   getFunctionName?: () => string | null,
+ *   getMethodName?: () => string | null,
+ *   getTypeName?: () => string | null
+ * }} CallSite
+ */
 /**
  * @typedef {{
  *   formatting?: boolean,
@@ -282,6 +311,48 @@ function removePendingNodeConsoleCall (capture) {
   }
 }
 
+function prepareCallSites (_, callSites) {
+  return callSites
+}
+
+/**
+ * @param {Function} skipFunction
+ * @returns {CallSite[] | undefined}
+ */
+function getCallSites (skipFunction) {
+  let descriptor
+  let isReplaced = false
+  try {
+    // Reading error.stack normally invokes the application's formatter. Replace it only when its descriptor can be
+    // restored synchronously; otherwise degrade call-site detection without executing application code.
+    descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')
+    if (descriptor && !descriptor.configurable &&
+      (!Object.hasOwn(descriptor, 'value') || !descriptor.writable)) return
+
+    Object.defineProperty(Error, 'prepareStackTrace', {
+      configurable: descriptor?.configurable ?? true,
+      enumerable: descriptor?.enumerable ?? false,
+      value: prepareCallSites,
+      writable: true,
+    })
+    isReplaced = true
+    const error = {}
+    Error.captureStackTrace(error, skipFunction)
+    const callSites = error.stack
+    if (Array.isArray(callSites)) return callSites
+  } catch {} finally {
+    if (isReplaced) {
+      try {
+        if (descriptor) {
+          Object.defineProperty(Error, 'prepareStackTrace', descriptor)
+        } else {
+          delete Error.prepareStackTrace
+        }
+      } catch {}
+    }
+  }
+}
+
 /**
  * @param {Function} skipFunction
  */
@@ -289,16 +360,9 @@ function isCustomInspectWrite (skipFunction) {
   try {
     // Replacement consoles can write while util.inspect is formatting their arguments. Mark only that
     // direct custom-inspector frame so multiline ownership is not guessed from newline boundaries.
-    const error = {}
-    Error.captureStackTrace(error, skipFunction)
-    const stack = error.stack
-    if (Array.isArray(stack)) {
-      const method = stack[0]?.getMethodName?.() || stack[0]?.getFunctionName?.()
-      return String(method).includes('nodejs.util.inspect.custom')
-    }
-    if (typeof stack === 'string') {
-      return stack.split('\n', 2)[1]?.includes('[nodejs.util.inspect.custom]') === true
-    }
+    const callSite = getCallSites(skipFunction)?.[0]
+    const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
+    return String(method).includes('nodejs.util.inspect.custom')
   } catch {}
   return false
 }
@@ -356,28 +420,16 @@ function formatNodeConsoleMessage (target, message) {
  */
 function getNodeConsoleMethod (skipFunction, target, pendingMethod) {
   try {
-    const error = {}
-    Error.captureStackTrace(error, skipFunction)
-    const stack = error.stack
-    if (Array.isArray(stack)) {
-      let supportedMethod
-      for (const callSite of stack) {
-        const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
-        const fn = callSite?.getFunction?.()
-        if (unsupportedNodeConsoleMethods.has(fn)) return false
-        if (!supportedMethod && methodSet.has(method)) supportedMethod = method
-      }
-      return pendingMethod || supportedMethod
-    } else if (typeof stack === 'string') {
+    const callSites = getCallSites(skipFunction)
+    if (callSites) {
       const targetName = getPropertyDescriptor(target, 'constructor')?.value?.name
       let supportedMethod
-      for (const line of stack.split('\n')) {
-        const match = nodeConsoleMethodPattern.exec(line)
-        if (!match) continue
-
-        const [, frameTarget, method] = match
-        if (frameTarget !== 'Console' && frameTarget !== 'console' && frameTarget !== targetName) continue
-        if (unsupportedMethods.has(method)) return false
+      for (const callSite of callSites) {
+        const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
+        const fn = callSite?.getFunction?.()
+        const type = callSite?.getTypeName?.()
+        const isTargetMethod = type === 'Console' || type === 'console' || type === targetName
+        if (unsupportedNodeConsoleMethods.has(fn) || (isTargetMethod && unsupportedMethods.has(method))) return false
         if (!supportedMethod && methodSet.has(method)) supportedMethod = method
       }
       return pendingMethod || supportedMethod
@@ -392,7 +444,7 @@ function getNodeConsoleMethod (skipFunction, target, pendingMethod) {
  * @param {ReturnType<typeof globalThis.Object.getOwnPropertyDescriptor>} descriptor
  */
 function usesNodeConsoleWrite (target, method, descriptor) {
-  if (target === Console.prototype) return descriptor?.value === nodeConsoleMethods.get(method)
+  if (target === nodeConsolePrototype) return descriptor?.value === nodeConsoleMethods.get(method)
   if (target === nodeConsole) return descriptor?.value === nodeConsoleBoundMethods.get(method)
 
   try {
@@ -435,11 +487,11 @@ function wrapUnsupportedNodeConsoleMethods (target) {
  * @param {object | Function} target
  */
 function wrapNodeConsoleWrite (target) {
-  if (!nodeConsoleWrite) return false
+  if (!nodeConsoleWrite || !nodeConsolePrototype) return false
 
   let owner
   try {
-    owner = Object.hasOwn(target, nodeConsoleWrite) ? target : Console.prototype
+    owner = Object.hasOwn(target, nodeConsoleWrite) ? target : nodeConsolePrototype
     if (nodeConsoleWriteOwners.has(owner)) return true
 
     const descriptor = Object.getOwnPropertyDescriptor(owner, nodeConsoleWrite)
@@ -549,10 +601,11 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
   if ((targetType !== 'object' && targetType !== 'function') || target === null) return
   if (wrappedTargets.has(target)) return
 
-  let isNodeConsoleTarget = target === nodeConsole || target === Console.prototype
+  let isNodeConsoleTarget = target === nodeConsole || target === nodeConsolePrototype
   try {
-    if (!isNodeConsoleTarget && Object.getOwnPropertyDescriptor(target, '_stderrErrorHandler')) {
-      isNodeConsoleTarget = inheritsFrom(target, Console.prototype)
+    if (!isNodeConsoleTarget && nodeConsolePrototype &&
+      Object.getOwnPropertyDescriptor(target, '_stderrErrorHandler')) {
+      isNodeConsoleTarget = inheritsFrom(target, nodeConsolePrototype)
     }
   } catch {}
   const hasNodeConsoleWrite = isNodeConsoleTarget && wrapNodeConsoleWrite(target)
@@ -591,7 +644,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
           records: parentCapture?.records || [],
           observedRecords: [],
           ownRecords: [],
-          receiver: target === Console.prototype ? this : target,
+          receiver: target === nodeConsolePrototype ? this : target,
         }
         activeCapture = capture
         captureActive = true
@@ -823,7 +876,7 @@ configureCh.subscribe(({ canCapture, getLogHolder: configuredGetLogHolder } = {}
     globalConsole = globalThis.console
   } catch {}
   wrapConsole(globalConsole)
-  wrapConsole(Console.prototype)
+  wrapConsole(nodeConsolePrototype)
 })
 
 module.exports = { wrapConsole, wrapJestBufferedConsole, wrapJestCustomConsole }
