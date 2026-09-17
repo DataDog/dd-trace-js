@@ -69,7 +69,6 @@ describe('debugger/index', () => {
     config = {
       DD_AGENTLESS_ENABLED: false,
       DD_API_KEY: undefined,
-      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
       debug: false,
       dynamicInstrumentation: {
         enabled: true,

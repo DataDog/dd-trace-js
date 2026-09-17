@@ -13,7 +13,7 @@ describe('Dynamic Instrumentation', function () {
     testApp: 'target-app/basic.js',
     dependencies: ['fastify'],
     env: {
-      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: String(QUEUE_MAX_BYTES),
+      _DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: String(QUEUE_MAX_BYTES),
       DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
     },
     agentOptions: { stallDebuggerIntake: true },

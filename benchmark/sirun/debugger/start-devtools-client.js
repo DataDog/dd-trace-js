@@ -74,7 +74,6 @@ const breakpoint = { sourceFile, line }
 // WARNING: Keep this fixture aligned with dd-trace's default config, apart from benchmark-specific overrides.
 const config = {
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
-  DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
   DD_TRACE_GIT_METADATA_ENABLED: false,
   debug: false,
   dynamicInstrumentation: {

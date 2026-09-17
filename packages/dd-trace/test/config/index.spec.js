@@ -1167,7 +1167,6 @@ describe('Config', () => {
         },
       },
       DD_CRASHTRACKING_ENABLED: true,
-      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
       debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
@@ -1309,7 +1308,6 @@ describe('Config', () => {
       { name: 'DD_DATA_STREAMS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: null, origin: 'default' },
-      { name: 'DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES', value: 10 * 1024 * 1024, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 1, origin: 'default' },
@@ -1523,7 +1521,6 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
-    process.env.DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES = '1048576'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
@@ -1651,7 +1648,6 @@ describe('Config', () => {
         },
       },
       DD_CRASHTRACKING_ENABLED: false,
-      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 1024 * 1024,
       debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
@@ -1798,7 +1794,6 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: 5218, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'env_var' },
-      { name: 'DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES', value: 1024 * 1024, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'env_var' },
@@ -2454,7 +2449,6 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: '5218', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'code' },
-      { name: 'DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES', value: 10 * 1024 * 1024, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'code' },
@@ -2772,7 +2766,6 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
-    process.env.DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES = '1048576'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
     process.env.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS = '0.1'
@@ -2971,7 +2964,6 @@ describe('Config', () => {
         hostname: 'server',
         port: 8888,
       },
-      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 1024 * 1024,
       dynamicInstrumentation: {
         enabled: false,
         probeFile: 'probes2.json',

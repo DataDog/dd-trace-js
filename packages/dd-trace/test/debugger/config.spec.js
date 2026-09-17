@@ -13,11 +13,20 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const COMMIT_SHA = 'b7b5dfa992008c77ab3f8a10eb8711e0092445b0'
 const REPOSITORY_URL = 'git@github.com:DataDog/dd-trace-js.git'
 
+let queueMaxBytes
 const getDebuggerConfig = proxyquire('../../src/debugger/config', {
+  '../config/helper': {
+    getEnvironmentVariable: () => queueMaxBytes,
+    '@noCallThru': true,
+  },
   '../git_metadata': () => ({ commitSHA: COMMIT_SHA, repositoryUrl: REPOSITORY_URL }),
 })
 
 describe('getDebuggerConfig', function () {
+  beforeEach(function () {
+    queueMaxBytes = undefined
+  })
+
   it('should only contain the allowed properties', function () {
     const tracerConfig = getConfig({
       url: new URL('http://example.com:1234'),
@@ -47,7 +56,7 @@ describe('getDebuggerConfig', function () {
       debug: tracerConfig.debug,
       dynamicInstrumentation: {
         ...tracerConfig.dynamicInstrumentation,
-        queueMaxBytes: tracerConfig.DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES,
+        queueMaxBytes: 10 * 1024 * 1024,
       },
       env: tracerConfig.env,
       hostname: tracerConfig.hostname,
@@ -59,6 +68,24 @@ describe('getDebuggerConfig', function () {
       url: tracerConfig.url.toString(),
       version: tracerConfig.version,
     })
+  })
+
+  it('should support an internal queue size override', function () {
+    queueMaxBytes = '65536'
+
+    const config = getDebuggerConfig(getConfig())
+
+    assert.strictEqual(config.dynamicInstrumentation.queueMaxBytes, 64 * 1024)
+  })
+
+  it('should ignore invalid internal queue size overrides', function () {
+    for (const value of ['0', '-1', '1.5', 'invalid']) {
+      queueMaxBytes = value
+
+      const config = getDebuggerConfig(getConfig())
+
+      assert.strictEqual(config.dynamicInstrumentation.queueMaxBytes, 10 * 1024 * 1024)
+    }
   })
 
   it('should be able to send the config over a MessageChannel', function () {
