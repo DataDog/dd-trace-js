@@ -38,7 +38,6 @@ function getRemoveProbeExpression (id) {
  * evaluated on the paused frame of the debuggee.
  *
  * @param {string} id - The probe id.
- * @returns {string}
  */
 function getTakeConditionErrorExpression (id) {
   return `${SAMPLER_EXPRESSION}?.takeConditionError(${JSON.stringify(id)})`

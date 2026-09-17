@@ -96,7 +96,6 @@ function installProbeSampler (guardrailMetrics) {
      * Decide if a probe's condition should be evaluated, or skipped because a recent evaluation error throttled it.
      *
      * @param {string} probeId - The probe id.
-     * @returns {boolean} Whether the condition should be evaluated on this hit.
      */
     shouldEvaluateCondition (probeId) {
       const state = conditionErrorByProbeId.get(probeId)
@@ -112,7 +111,6 @@ function installProbeSampler (guardrailMetrics) {
      * @param {number} probeIndex - The worker-side probe sampling index.
      * @param {string} probeId - The probe id.
      * @param {unknown} error - The value thrown by the condition.
-     * @returns {boolean} Whether this probe should make the breakpoint condition pause.
      */
     conditionError (probeIndex, probeId, error) {
       conditionErrorByProbeId.set(probeId, {
@@ -151,7 +149,6 @@ function installProbeSampler (guardrailMetrics) {
    * Hand a sampled probe index over to the worker for the upcoming pause.
    *
    * @param {number} value - The probe sampling index, possibly with flags set.
-   * @returns {boolean} `false` if the shared buffer is full and the probe must be skipped.
    */
   function storeSampledProbeIndex (value) {
     const sampledProbeCount = Atomics.add(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 1)
@@ -178,7 +175,6 @@ function uninstallProbeSampler () {
  * not an error, since conditions can throw anything.
  *
  * @param {unknown} error - The thrown value.
- * @returns {string}
  */
 function describeError (error) {
   if (error instanceof Error) return `${error.name}: ${error.message}`
