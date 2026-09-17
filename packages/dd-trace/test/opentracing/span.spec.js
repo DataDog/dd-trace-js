@@ -10,10 +10,13 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-const { MANUAL_DROP, MANUAL_KEEP } = require('../../../../ext/tags')
+const { USER_KEEP, USER_REJECT } = require('../../../../ext/priority')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const DatadogSpan = require('../../src/opentracing/span')
+const PrioritySampler = require('../../src/priority_sampler')
 
 const startCh = channel('dd-trace:span:start')
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
@@ -651,7 +654,7 @@ describe('Span', () => {
       sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    it('only reapplies sampling tags parsed from the current legacy v5 input', () => {
+    it('reapplies live tags only when the legacy v5 input contains sampling tags', () => {
       const legacyTagger = { add: sinon.spy(require('../../src/tagger').add) }
       const LegacySpan = proxyquire('../../src/opentracing/span', {
         perf_hooks: { performance: { now } },
@@ -672,12 +675,16 @@ describe('Span', () => {
       )
 
       prioritySampler.setPriorityFromTags.resetHistory()
-      legacySpan.setTag(MANUAL_DROP, true)
+      legacySpan.addTags([{ [MANUAL_DROP]: true }])
       sinon.assert.calledOnceWithExactly(
         prioritySampler.setPriorityFromTags,
         legacySpan,
         legacySpan.context().getTags()
       )
+      assert.deepStrictEqual(prioritySampler.setPriorityFromTags.firstCall.args[1], {
+        [MANUAL_KEEP]: 'true',
+        [MANUAL_DROP]: true,
+      })
       prioritySampler.setPriorityFromTags.resetHistory()
       legacySpan.addTags('foo:bar')
       legacySpan.addTags([{ baz: 'qux' }])
@@ -705,6 +712,27 @@ describe('Span', () => {
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
       sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, tags)
     })
+
+    for (const [first, second, expected] of [
+      [{ [MANUAL_KEEP]: true }, { [MANUAL_DROP]: true }, USER_KEEP],
+      [{ [MANUAL_DROP]: true }, { [MANUAL_KEEP]: true }, USER_KEEP],
+      [{ [MANUAL_DROP]: true }, { [SAMPLING_PRIORITY]: USER_KEEP }, USER_REJECT],
+      [{ [MANUAL_KEEP]: true, [MANUAL_DROP]: true }, { [MANUAL_KEEP]: false }, USER_REJECT],
+    ]) {
+      it(`preserves priority ${expected} when adding ${JSON.stringify(second)} after ${JSON.stringify(first)}`, () => {
+        const sampler = new PrioritySampler('test', { sampleRate: 1 })
+        const batched = new DatadogSpan(tracer, processor, sampler, { operationName: 'batched' })
+        const combined = new DatadogSpan(tracer, processor, sampler, { operationName: 'combined' })
+
+        batched.addTags(first)
+        batched.addTags(second)
+        combined.addTags({ ...first, ...second })
+
+        assert.strictEqual(batched.context()._sampling.priority, expected)
+        assert.strictEqual(combined.context()._sampling.priority, expected)
+        assert.strictEqual(batched.context()._sampling.isProbabilityDecision, false)
+      })
+    }
 
     it('should ignore inherited sampling tags', () => {
       const tags = Object.create({ [MANUAL_DROP]: true })

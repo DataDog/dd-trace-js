@@ -232,11 +232,9 @@ class DatadogSpan {
     // `options.tags` callers that pass `'key:val,key:val'` strings.
     const tags = this._spanContext.getTags()
     let mayChangeSamplingPriority
-    let samplingTags
 
     if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
       Object.assign(tags, keyValueMap)
-      samplingTags = keyValueMap
       // Keep the common path to cheap property probes and verify ownership only when a sampling tag is present.
       mayChangeSamplingPriority =
         (MANUAL_KEEP in keyValueMap && Object.hasOwn(keyValueMap, MANUAL_KEEP)) ||
@@ -245,7 +243,7 @@ class DatadogSpan {
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
-        samplingTags = {}
+        const samplingTags = {}
         tagger.add(samplingTags, keyValueMap)
         Object.assign(tags, samplingTags)
         mayChangeSamplingPriority =
@@ -258,7 +256,7 @@ class DatadogSpan {
     }
 
     if (mayChangeSamplingPriority) {
-      this._prioritySampler.setPriorityFromTags(this, samplingTags)
+      this._prioritySampler.setPriorityFromTags(this, tags)
     }
 
     if (tagsUpdateCh.hasSubscribers) {
