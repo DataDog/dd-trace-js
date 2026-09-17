@@ -128,15 +128,16 @@ describe('LLMObs Experiments util', () => {
     assert.equal(timestampMs(null, fallback), fallback)
   })
 
-  it('normalizes durations to nanoseconds with non-negative fallbacks', () => {
+  it('normalizes durations to nanoseconds with positive fallbacks', () => {
     const startMs = Date.UTC(2026, 0, 1)
 
     assert.equal(durationNs({ durationMs: 1.5 }, startMs), 1_500_000)
-    assert.equal(durationNs({ durationMs: -1 }, startMs), 0)
+    assert.equal(durationNs({ durationMs: 0 }, startMs), 1)
+    assert.equal(durationNs({ durationMs: -1 }, startMs), 1)
     assert.equal(durationNs({ completedAt: '2026-01-01T00:00:02.000Z' }, startMs), 2_000_000_000)
-    assert.equal(durationNs({ completedAt: new Date('2025-12-31T23:59:59.000Z') }, startMs), 0)
-    assert.equal(durationNs({ completedAt: new Date('invalid') }, startMs), 0)
-    assert.equal(durationNs({}, startMs), 0)
+    assert.equal(durationNs({ completedAt: new Date('2025-12-31T23:59:59.000Z') }, startMs), 1)
+    assert.equal(durationNs({ completedAt: new Date('invalid') }, startMs), 1)
+    assert.equal(durationNs({}, startMs), 1)
   })
 
   it('normalizes JSON metric values into backend-safe objects', () => {

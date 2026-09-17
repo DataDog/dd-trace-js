@@ -279,16 +279,18 @@ function timestampMs (value, fallback = Date.now()) {
  * @param {number} startMs
  */
 function durationNs (row, startMs) {
+  // The Experiment Events API validates duration as required, which rejects
+  // zero even for spans that complete within the same millisecond.
   if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
-    return Math.max(0, Math.round(row.durationMs * 1e6))
+    return Math.max(1, Math.round(row.durationMs * 1e6))
   }
 
   if (row.completedAt !== undefined) {
     const completedMs = timestampMs(row.completedAt, startMs)
-    return Math.max(0, Math.round((completedMs - startMs) * 1e6))
+    return Math.max(1, Math.round((completedMs - startMs) * 1e6))
   }
 
-  return 0
+  return 1
 }
 
 /**

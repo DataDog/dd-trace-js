@@ -175,6 +175,30 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     )
   })
 
+  it('preserves runtime trace links in external experiment span metadata', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const experiment = await new Experiment(c, {
+      name: 'external-exp',
+      external: true,
+    }).start()
+    const metadata = {
+      experimentRuntimeTraceLinks: [{
+        relation: 'experiment_runtime',
+        traceId: '0123456789abcdef0123456789abcdef',
+        spanId: '0123456789abcdef',
+        sessionId: 'session-123',
+        primary: true,
+      }],
+    }
+
+    await experiment.submitSpan({ input: 'input', metadata, durationMs: 0 })
+
+    const spanRequest = requests.find(request => request.method === 'postExperimentEvents' &&
+      request.attributes.spans?.length > 0)
+    assert.deepEqual(spanRequest.attributes.spans[0].meta.metadata, metadata)
+    assert.equal(spanRequest.attributes.spans[0].duration, 1)
+  })
+
   it('surfaces backend failures', async () => {
     const createDatasetError = new Error(`POST ${API_BASE_PATH}/proj/datasets failed: HTTP 500 boom`)
     const { client: c } = clientWithMockBackend({ createDatasetError })

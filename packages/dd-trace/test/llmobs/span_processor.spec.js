@@ -9,6 +9,16 @@ const sinon = require('sinon')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
+const experimentRuntimeTraceLinksMetadata = {
+  experimentRuntimeTraceLinks: [{
+    relation: 'experiment_runtime',
+    traceId: '0123456789abcdef0123456789abcdef',
+    spanId: '0123456789abcdef',
+    sessionId: 'session-123',
+    primary: true,
+  }],
+}
+
 describe('span processor', () => {
   let LLMObsSpanProcessor
   let processor
@@ -180,6 +190,7 @@ describe('span processor', () => {
       }
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.metadata': experimentRuntimeTraceLinksMetadata,
         '_ml_obs.meta.ml_app': 'myApp',
         '_ml_obs.sample_rate': '1',
         '_ml_obs.sampling_decision': '1',
@@ -189,6 +200,7 @@ describe('span processor', () => {
       const payload = writer.append.getCall(0).firstArg
 
       assert.equal(payload._dd.scope, 'experiments')
+      assert.deepEqual(payload.meta.metadata, experimentRuntimeTraceLinksMetadata)
     })
 
     it('routes experiment-tagged spans to LLM Observability when spanTrack is llmobs', () => {
@@ -211,6 +223,7 @@ describe('span processor', () => {
       }
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'experiment',
+        '_ml_obs.meta.metadata': experimentRuntimeTraceLinksMetadata,
         '_ml_obs.meta.ml_app': 'myApp',
         '_ml_obs.tags': { experiment_id: 'exp-1' },
         '_ml_obs.sample_rate': '1',
@@ -222,6 +235,7 @@ describe('span processor', () => {
 
       assert.equal(payload._dd.scope, undefined)
       assert.ok(payload.tags.includes('experiment_id:exp-1'))
+      assert.deepEqual(payload.meta.metadata, experimentRuntimeTraceLinksMetadata)
     })
 
     it('removes problematic fields from the metadata', () => {
