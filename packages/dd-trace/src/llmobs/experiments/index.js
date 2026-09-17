@@ -35,8 +35,8 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
-    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
+    this.#llmobs = config.llmobs?.DD_LLMOBS_ML_APP || config.service ? llmobs : undefined
+    this.#projectName = config.llmobs?.DD_LLMOBS_PROJECT_NAME || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
   }
 
@@ -179,9 +179,9 @@ class Experiments {
     const projectName = options?.projectName ?? datasetProjectName
     const client = this.#clientForOperation(projectName)
     const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
-    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME
     const experimentOptions = options?.projectName === undefined &&
-      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      (usesDatasetOverride || this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined) &&
       resolvedProjectName !== undefined
       ? { ...options, projectName: resolvedProjectName }
       : options
@@ -198,8 +198,9 @@ class Experiments {
    */
   startExperiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
-      ? { ...options, projectName: this.#config.llmobs.projectName }
+    const experimentOptions = options?.projectName === undefined &&
+      this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined
+      ? { ...options, projectName: this.#config.llmobs.DD_LLMOBS_PROJECT_NAME }
       : options
     return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))
