@@ -295,7 +295,13 @@ function combineRecords (records, lastOnly, trimTerminator = true) {
     message += record.message
   }
   if (!firstRecord) return
-  if (trimTerminator && message.endsWith('\n')) message = message.slice(0, -1)
+  if (trimTerminator) {
+    if (message.endsWith('\r\n')) {
+      message = message.slice(0, -2)
+    } else if (message.endsWith('\n')) {
+      message = message.slice(0, -1)
+    }
+  }
   return { ...firstRecord, message }
 }
 
@@ -355,24 +361,28 @@ function getCallSites (skipFunction) {
 
 /**
  * @param {Function} skipFunction
+ * @param {Function} consoleMethod
  */
-function isCustomInspectWrite (skipFunction) {
+function isCustomInspectWrite (skipFunction, consoleMethod) {
   try {
-    // Replacement consoles can write while util.inspect is formatting their arguments. Mark only that
-    // direct custom-inspector frame so multiline ownership is not guessed from newline boundaries.
-    const callSite = getCallSites(skipFunction)?.[0]
-    const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
-    return String(method).includes('nodejs.util.inspect.custom')
+    // Replacement consoles can write while util.inspect is formatting their arguments. A custom inspector may
+    // delegate that write through helpers, so inspect frames up to the console method that owns the record.
+    const callSites = getCallSites(skipFunction)
+    if (!callSites) return false
+    for (const callSite of callSites) {
+      if (callSite?.getFunction?.() === consoleMethod) return false
+      const method = callSite?.getMethodName?.() || callSite?.getFunctionName?.()
+      if (String(method).includes('nodejs.util.inspect.custom')) return true
+    }
   } catch {}
   return false
 }
 
 /**
  * @param {unknown} chunk
- * @param {unknown} encoding
  * @returns {string | undefined}
  */
-function decodeChunk (chunk, encoding) {
+function decodeChunk (chunk) {
   if (typeof chunk === 'string') return chunk
   if (!Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) return
 
@@ -380,7 +390,7 @@ function decodeChunk (chunk, encoding) {
     const buffer = Buffer.isBuffer(chunk)
       ? chunk
       : Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
-    return buffer.toString(typeof encoding === 'string' && Buffer.isEncoding(encoding) ? encoding : 'utf8')
+    return buffer.toString()
   } catch {}
 }
 
@@ -694,10 +704,10 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
               let observedRecordIndex = -1
               let writeCompleted = false
               try {
-                const message = decodeChunk(chunk, arguments[1])
+                const message = decodeChunk(chunk)
                 if (message !== undefined) {
                   const record = createRecord(method, message, writeId, captureLogHolder)
-                  if (isCustomInspectWrite(wrappedWrite)) record.formatting = true
+                  if (isCustomInspectWrite(wrappedWrite, original)) record.formatting = true
                   // Nested calls pass through outer write wrappers. Keep all
                   // observations for delegation, but only claim writes that
                   // started while this console call was active.

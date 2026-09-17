@@ -152,6 +152,23 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'header\ndetails' }])
   })
 
+  it('removes a replacement console CRLF record terminator', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      warn (message) {
+        stream.write(`${message}\r\n`)
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello')
+
+    assert.deepStrictEqual(output, ['hello\r\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello' }])
+  })
+
   it('captures buffer-backed replacement console writes', () => {
     const output = []
     const stream = { write: chunk => output.push(chunk) }
@@ -162,6 +179,30 @@ describe('console instrumentation', () => {
       },
       warn (message) {
         stream.write(Buffer.from(`${message}\n`))
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('warning')
+    target.error('error')
+
+    assert.strictEqual(output.length, 2)
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'warning' },
+      { method: 'error', message: 'error' },
+    ])
+  })
+
+  it('ignores string encodings passed with binary replacement console writes', () => {
+    const output = []
+    const stream = { write: (...args) => output.push(args) }
+    const target = {
+      _stderr: stream,
+      error (message) {
+        stream.write(new Uint8Array(Buffer.from(`${message}\n`)), 'base64')
+      },
+      warn (message) {
+        stream.write(Buffer.from(`${message}\n`), 'hex')
       },
     }
     wrapConsole(target)
@@ -212,6 +253,31 @@ describe('console instrumentation', () => {
     }
 
     sinon.assert.notCalled(prepareStackTrace)
+    assert.deepStrictEqual(output, ['unrelated output\n', 'hello formatted value', '\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
+  it('excludes writes delegated through a helper while a replacement console formats arguments', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      warn (...args) {
+        stream.write(format(...args))
+        stream.write('\n')
+      },
+    }
+    const writeUnrelatedOutput = () => stream.write('unrelated output\n')
+    const value = {
+      [inspect.custom] () {
+        writeUnrelatedOutput()
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    target.warn('hello %o', value)
+
     assert.deepStrictEqual(output, ['unrelated output\n', 'hello formatted value', '\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
