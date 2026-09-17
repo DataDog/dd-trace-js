@@ -21,7 +21,8 @@ const PromptManager = proxyquire('../../../src/llmobs/prompts/manager', {
       .then(async response => {
         const responseBody = await response.text()
         if (response.ok) return callback(null, responseBody, response.status, {})
-        const error = Object.assign(new Error(), { responseBody })
+        const error = new Error()
+        if (options.includeErrorResponseBody) error.responseBody = responseBody
         callback(error, null, response.status, {})
       })
       .catch(callback)

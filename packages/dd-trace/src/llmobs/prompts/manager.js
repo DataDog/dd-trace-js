@@ -141,7 +141,7 @@ function requestSignal (timeoutMs, cacheSignal) {
 
 function httpRequest (body, options) {
   return new Promise((resolve, reject) => {
-    request(body || '', { ...options, retry: false }, (error, responseBody, status) => {
+    request(body || '', { ...options, retry: false, includeErrorResponseBody: true }, (error, responseBody, status) => {
       if (error && status === undefined) return reject(error)
       resolve({ ok: !error, status, body: error?.responseBody || responseBody || '' })
     })
