@@ -17,6 +17,7 @@ const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_load
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
+const OtlpHttpLogExporter = require('../../src/opentelemetry/logs/otlp_http_log_exporter')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
 
@@ -29,6 +30,18 @@ function getVercelBatchLogRecordProcessor () {
     '../../serverless': serverless,
   })
 }
+function getMicroVmOtlpHttpLogExporter () {
+  const loadBase = proxyquire.noPreserveCache()
+  const serverless = { ...require('../../src/serverless'), IS_AWS_LAMBDA_MICROVM: true }
+  const OtlpHttpExporterBase = loadBase('../../src/opentelemetry/otlp/otlp_http_exporter_base', {
+    '../../serverless': serverless,
+  })
+  const loadExporter = proxyquire.noPreserveCache()
+  return loadExporter('../../src/opentelemetry/logs/otlp_http_log_exporter', {
+    '../otlp/otlp_http_exporter_base': OtlpHttpExporterBase,
+  })
+}
+
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -178,6 +191,47 @@ describe('OpenTelemetry Logs', () => {
       sinon.assert.notCalled(done)
       flushDone()
       sinon.assert.calledOnce(done)
+    })
+    it('cancels an active OTLP export when pending state resets', () => {
+      let request
+      let requestError
+      sinon.stub(http, 'request').callsFake(() => {
+        request = {
+          write: sinon.stub(),
+          end: sinon.stub(),
+          on: sinon.stub().callsFake((event, handler) => {
+            if (event === 'error') requestError = handler
+            return request
+          }),
+          once: sinon.stub(),
+          destroy: sinon.spy(),
+        }
+        return request
+      })
+
+      const OtlpHttpLogExporterForMicroVm = getMicroVmOtlpHttpLogExporter()
+      const exporter = new OtlpHttpLogExporterForMicroVm(
+        'http://localhost:4318/v1/logs',
+        {},
+        1000,
+        'http/protobuf',
+        {},
+      )
+      const processor = new BatchLogRecordProcessor(exporter, 60_000, 1)
+      const callback = sinon.spy()
+
+      exporter.export(
+        [{ body: 'in flight', timestamp: [1700000000, 0], instrumentationScope: { name: 'test' } }],
+        callback,
+      )
+      processor.resetPendingState()
+
+      sinon.assert.calledOnce(request.destroy)
+      sinon.assert.calledOnce(callback)
+      assert.strictEqual(callback.firstCall.args[0].code, 1)
+
+      requestError(new Error('late socket error'))
+      sinon.assert.calledOnce(callback)
     })
 
     it('drains queued batches and waits for earlier size-triggered exports', () => {

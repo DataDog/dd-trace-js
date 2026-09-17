@@ -54,6 +54,8 @@ function createMetricsClient (config) {
  */
 function subscribeToIdentityRefresh (client, config, onRefresh) {
   const onIdentityRefresh = () => {
+    // updateTags() only retags the transport; reset the aggregation maps before the next flush.
+    client.reset()
     client.updateTags(buildClientConfig(config).tags)
     onRefresh?.()
   }

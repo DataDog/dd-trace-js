@@ -362,6 +362,44 @@ NATIVE_METRICS_VARIANTS.forEach((nativeMetrics) => {
           assert.ok(tags.includes('runtime-id:refreshed-id'), `expected tags to include refreshed-id: ${tags}`)
         })
 
+        it('should discard unflushed aggregated metrics on identity refresh', () => {
+          const staleMetricNames = [
+            'runtime.node.pre_refresh.counter',
+            'runtime.node.pre_refresh.gauge',
+            'runtime.node.pre_refresh.histogram',
+          ]
+          const postRefreshMetricNames = [
+            'runtime.node.post_refresh.counter',
+            'runtime.node.post_refresh.gauge',
+            'runtime.node.post_refresh.histogram',
+          ]
+          runtimeMetrics.count(staleMetricNames[0], 1, undefined, true)
+          runtimeMetrics.gauge(staleMetricNames[1], 2)
+          runtimeMetrics.histogram(staleMetricNames[2], 3)
+
+          identityRefreshChannel.publish(config)
+
+          runtimeMetrics.count(postRefreshMetricNames[0], 4, undefined, true)
+          runtimeMetrics.gauge(postRefreshMetricNames[1], 5)
+          runtimeMetrics.histogram(postRefreshMetricNames[2], 6)
+          runtimeMetrics.flush()
+
+          const calls = [...client.increment.getCalls(), ...client.gauge.getCalls()]
+          for (const name of staleMetricNames) {
+            assert.strictEqual(
+              calls.some(call => call.args[0] === name || call.args[0].startsWith(`${name}.`)),
+              false,
+              `expected ${name} to be discarded on identity refresh`,
+            )
+          }
+          for (const name of postRefreshMetricNames) {
+            assert.ok(
+              calls.some(call => call.args[0] === name || call.args[0].startsWith(`${name}.`)),
+              `expected ${name} to be exported after identity refresh`,
+            )
+          }
+        })
+
         it('should stop reacting to identity refresh after stop', () => {
           runtimeMetrics.stop()
           client.updateTags.resetHistory()
