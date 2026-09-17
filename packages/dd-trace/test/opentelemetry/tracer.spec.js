@@ -274,6 +274,47 @@ describe('OTel Tracer', () => {
       )
     }
 
+    for (const [name, ot, expected] of [
+      ['valid fields', 'rv:1234567890abcd;th:8;extra:value', 'rv:1234567890abcd;th:8;extra:value'],
+      ['invalid fields', 'rv:not-hex;th:not-hex', undefined],
+      ['invalid random value', 'rv:not-hex;th:8;extra:value', 'th:8;extra:value'],
+      ['invalid threshold', 'rv:1234567890abcd;th:not-hex', 'rv:1234567890abcd'],
+      ['threshold only', 'th:8', 'th:8'],
+      ['random value only', 'rv:1234567890abcd', 'rv:1234567890abcd'],
+      ['unknown fields', 'extra:value', 'extra:value'],
+      ['maximum-length member', `th:8;extra:${'x'.repeat(245)}`, `th:8;extra:${'x'.repeat(245)}`],
+    ]) {
+      for (const traceFlags of [api.TraceFlags.NONE, api.TraceFlags.SAMPLED]) {
+        it(`normalizes ${name} from a standard OTel parent with flags ${traceFlags}`, () => {
+          const otelTracer = new Tracer({}, {}, new TracerProvider())
+          const input = `vendor=value,ot=${ot}`
+          const traceState = api.createTraceState(input)
+          const parentContext = api.trace.setSpanContext(api.ROOT_CONTEXT, {
+            traceId: TRACE_ID,
+            spanId: SPAN_ID,
+            traceFlags,
+            traceState,
+            isRemote: true,
+          })
+          const span = otelTracer.startSpan('name', {}, parentContext)
+
+          try {
+            const childContext = span.spanContext()
+            assert.strictEqual(childContext.traceState.get('ot'), expected)
+            assert.strictEqual(childContext.traceState.get('vendor'), 'value')
+            assert.strictEqual(childContext.traceFlags, traceFlags)
+            assert.strictEqual(traceState.serialize(), input)
+
+            const carrier = {}
+            tracer.inject(span._ddSpan, 'text_map', carrier)
+            assert.strictEqual(api.createTraceState(carrier.tracestate).get('ot'), expected)
+          } finally {
+            span.end()
+          }
+        })
+      }
+    }
+
     it('writes sampling priority onto the wrapped Datadog context', () => {
       const spanContext = convert(1, 'other=bleh,dd=s:2;o:synthetics;t.dm:-4')
       assert.strictEqual(spanContext._ddContext._sampling.priority, USER_KEEP)

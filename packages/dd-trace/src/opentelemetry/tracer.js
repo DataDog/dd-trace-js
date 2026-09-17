@@ -8,6 +8,7 @@ const tracer = require('../../')
 
 const id = require('../id')
 const log = require('../log')
+const { normalizeOtelTraceState } = require('../otel-sampling')
 const TraceState = require('../opentracing/propagation/tracestate')
 const SpanContext = require('./span_context')
 const Span = require('./span')
@@ -77,6 +78,7 @@ class Tracer {
     let samplingMechanism
     const traceStateValue = typeof ts?.serialize === 'function' ? ts.serialize() : ts?.traceparent
     const traceState = TraceState.fromString(traceStateValue)
+    normalizeOtelTraceState(traceState)
 
     if (traceStateValue) {
       let ddTraceStateData = null
