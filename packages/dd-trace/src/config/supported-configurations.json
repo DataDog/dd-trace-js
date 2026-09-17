@@ -808,9 +808,6 @@
       {
         "implementation": "A",
         "type": "int",
-        "configurationNames": [
-          "dynamicInstrumentation.queueMaxBytes"
-        ],
         "default": "10485760"
       }
     ],

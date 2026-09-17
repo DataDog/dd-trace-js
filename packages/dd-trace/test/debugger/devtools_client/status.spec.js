@@ -17,7 +17,7 @@ const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let clock, statusproxy, request, jsonBuffer
+  let clock, statusproxy, request, jsonBuffer, jsonBufferOptions
   /** @type {{ eventDropped: sinon.SinonStub, '@noCallThru': boolean }} */
   let guardrailMetrics
 
@@ -40,9 +40,10 @@ describe('diagnostic message http requests', function () {
     guardrailMetrics = { eventDropped: sinon.stub(), '@noCallThru': true }
 
     class JSONBufferSpy extends JSONBuffer {
-      /** @param {ConstructorParameters<typeof JSONBuffer>} args */
-      constructor (...args) {
-        super(...args)
+      /** @param {ConstructorParameters<typeof JSONBuffer>[0]} options */
+      constructor (options) {
+        super(options)
+        jsonBufferOptions = options
         jsonBuffer = this
         sinon.spy(this, 'write')
       }
@@ -157,9 +158,11 @@ describe('diagnostic message http requests', function () {
   }
 
   describe('diagnostics queue', function () {
-    it('should bound the diagnostics queue to 1MB', function () {
+    it('should bound the diagnostics queue to 1MB and release completed uploads', function () {
       const MAX_QUEUE_BYTES = 1024 * 1024
       let accepted = 0
+
+      assert.strictEqual(jsonBufferOptions.maxQueueBytes, MAX_QUEUE_BYTES)
 
       // Flush a status per upload interval, without ever completing the uploads, until the queue is full
       while (!guardrailMetrics.eventDropped.called) {
@@ -172,19 +175,13 @@ describe('diagnostic message http requests', function () {
         guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.DIAGNOSTIC
       )
       sinon.assert.callCount(request, accepted - 1)
-      assert.ok(jsonBuffer.queuedBytes <= MAX_QUEUE_BYTES, `Expected ${jsonBuffer.queuedBytes} <= ${MAX_QUEUE_BYTES}`)
-      assert.ok(jsonBuffer.queuedBytes > MAX_QUEUE_BYTES - 1024, `Expected ${jsonBuffer.queuedBytes} to fill the queue`)
-    })
 
-    it('should release a payload from the queue once its upload completes', function () {
-      statusproxy.ackReceived({ id: 'foo', version: 0 })
+      const requestsBeforeRelease = request.callCount
+      request.firstCall.args[2](new Error('boom'))
+      statusproxy.ackReceived({ id: 'foo', version: accepted })
       clock.tick(1000)
-      sinon.assert.calledOnce(request)
-      assert.ok(jsonBuffer.queuedBytes > 0, `Expected ${jsonBuffer.queuedBytes} > 0`)
 
-      request.lastCall.args[2](new Error('boom'))
-
-      assert.strictEqual(jsonBuffer.queuedBytes, 0)
+      sinon.assert.callCount(request, requestsBeforeRelease + 1)
     })
   })
 

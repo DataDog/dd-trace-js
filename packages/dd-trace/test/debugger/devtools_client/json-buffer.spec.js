@@ -243,23 +243,17 @@ describe('JSONBuffer', () => {
       const jsonBuffer = new JSONBuffer({ size: 9, maxQueueBytes: 27, timeout: MAX_SAFE_SIGNED_INTEGER, onFlush })
 
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ a: 1 })), true)
-      assert.strictEqual(jsonBuffer.queuedBytes, 8, 'the closing bracket is only added when flushing')
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ b: 2 })), true, 'should flush the first document')
       assert.strictEqual(releases.length, 1)
-      assert.strictEqual(jsonBuffer.queuedBytes, 17)
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ c: 3 })), true, 'should flush the second document')
       assert.strictEqual(releases.length, 2)
-      assert.strictEqual(jsonBuffer.queuedBytes, 26)
 
       // The third document is flushed (26 -> 27 bytes in flight), but the fourth no longer fits
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ d: 4 })), false)
       assert.strictEqual(releases.length, 3)
-      assert.strictEqual(jsonBuffer.queuedBytes, 27)
 
       releases[0]()
-      assert.strictEqual(jsonBuffer.queuedBytes, 18)
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ d: 4 })), true, 'should accept documents again')
-      assert.strictEqual(jsonBuffer.queuedBytes, 26)
     })
 
     it('should accept a document that exactly fits within the bound', function () {
@@ -272,38 +266,40 @@ describe('JSONBuffer', () => {
       })
 
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ a: 1 })), true)
-      assert.strictEqual(jsonBuffer.queuedBytes, 8, 'the closing bracket is only added when flushing')
     })
 
     it('should reject a document that does not fit within the bound even when nothing is queued', function () {
+      const onFlush = sinon.spy()
       const jsonBuffer = new JSONBuffer({
         size: 100,
         maxQueueBytes: 8,
-        timeout: MAX_SAFE_SIGNED_INTEGER,
-        onFlush () {},
+        timeout: 100,
+        onFlush,
       })
 
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ a: 1 })), false)
-      assert.strictEqual(jsonBuffer.queuedBytes, 0)
+      clock.tick(100)
+      sinon.assert.notCalled(onFlush)
     })
 
     it('should not release a flushed payload twice', function () {
       const releases = []
       const jsonBuffer = new JSONBuffer({
         size: 9,
-        maxQueueBytes: 100,
+        maxQueueBytes: 27,
         timeout: MAX_SAFE_SIGNED_INTEGER,
         onFlush: (json, done) => releases.push(done),
       })
 
-      jsonBuffer.write(JSON.stringify({ a: 1 }))
-      jsonBuffer.write(JSON.stringify({ b: 2 }))
-      jsonBuffer.write(JSON.stringify({ c: 3 }))
-      assert.strictEqual(jsonBuffer.queuedBytes, 26)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ a: 1 })), true)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ b: 2 })), true)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ c: 3 })), true)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ d: 4 })), false)
 
       releases[0]()
       releases[0]()
-      assert.strictEqual(jsonBuffer.queuedBytes, 17)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ d: 4 })), true)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ e: 5 })), false)
     })
 
     it('should release the bytes of a payload flushed by the timeout', function () {
@@ -311,7 +307,7 @@ describe('JSONBuffer', () => {
       let release
       const jsonBuffer = new JSONBuffer({
         size: Infinity,
-        maxQueueBytes: 100,
+        maxQueueBytes: 29,
         timeout: 100,
         onFlush: (json, done) => { release = done },
       })
@@ -320,10 +316,10 @@ describe('JSONBuffer', () => {
       jsonBuffer.write(JSON.stringify({ message: 2 }))
       clock.tick(100)
 
-      assert.strictEqual(jsonBuffer.queuedBytes, 29)
       assert.ok(release, 'should have flushed')
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ message: 3 })), false)
       release()
-      assert.strictEqual(jsonBuffer.queuedBytes, 0)
+      assert.strictEqual(jsonBuffer.write(JSON.stringify({ message: 3 })), true)
     })
 
     it('should not keep a document that triggered a flush when the flushed payload fills the bound', function () {
@@ -340,7 +336,6 @@ describe('JSONBuffer', () => {
       assert.strictEqual(jsonBuffer.write(JSON.stringify({ c: 3 })), false) // flushes 17 bytes, 17 + 9 > 25
 
       assert.deepStrictEqual(flushedPayloads, ['[{"a":1},{"b":2}]'])
-      assert.strictEqual(jsonBuffer.queuedBytes, 17)
 
       clock.tick(100)
       assert.strictEqual(flushedPayloads.length, 1, 'should not flush an empty payload')

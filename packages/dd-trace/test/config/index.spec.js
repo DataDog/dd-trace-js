@@ -1167,6 +1167,7 @@ describe('Config', () => {
         },
       },
       DD_CRASHTRACKING_ENABLED: true,
+      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
       debug: false,
       dogstatsd: {
         hostname: '127.0.0.1',
@@ -1175,7 +1176,6 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: false,
         probeFile: undefined,
-        queueMaxBytes: 10 * 1024 * 1024,
         uploadIntervalSeconds: 1,
       },
       env: undefined,
@@ -1651,6 +1651,7 @@ describe('Config', () => {
         },
       },
       DD_CRASHTRACKING_ENABLED: false,
+      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 1024 * 1024,
       debug: true,
       dogstatsd: {
         hostname: 'dsd-agent',
@@ -1659,7 +1660,6 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: true,
         probeFile: 'probes.json',
-        queueMaxBytes: 1024 * 1024,
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
         uploadIntervalSeconds: 0.1,
@@ -2192,7 +2192,6 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: true,
         probeFile: 'probes.json',
-        queueMaxBytes: 2 * 1024 * 1024,
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
         uploadIntervalSeconds: 0.1,
@@ -2306,7 +2305,6 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: true,
         probeFile: 'probes.json',
-        queueMaxBytes: 2 * 1024 * 1024,
         uploadIntervalSeconds: 0.1,
       },
       env: 'test',
@@ -2456,7 +2454,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: '5218', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'code' },
-      { name: 'DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES', value: 2 * 1024 * 1024, origin: 'code' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES', value: 10 * 1024 * 1024, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'code' },
@@ -2869,7 +2867,6 @@ describe('Config', () => {
       dynamicInstrumentation: {
         enabled: false,
         probeFile: 'probes2.json',
-        queueMaxBytes: 2 * 1024 * 1024,
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
         uploadIntervalSeconds: 0.2,
@@ -2974,10 +2971,10 @@ describe('Config', () => {
         hostname: 'server',
         port: 8888,
       },
+      DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: 1024 * 1024,
       dynamicInstrumentation: {
         enabled: false,
         probeFile: 'probes2.json',
-        queueMaxBytes: 2 * 1024 * 1024,
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
         uploadIntervalSeconds: 0.2,

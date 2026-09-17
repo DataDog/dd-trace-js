@@ -45,7 +45,10 @@ describe('getDebuggerConfig', function () {
       agentless: false,
       commitSHA: COMMIT_SHA,
       debug: tracerConfig.debug,
-      dynamicInstrumentation: tracerConfig.dynamicInstrumentation,
+      dynamicInstrumentation: {
+        ...tracerConfig.dynamicInstrumentation,
+        queueMaxBytes: tracerConfig.DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES,
+      },
       env: tracerConfig.env,
       hostname: tracerConfig.hostname,
       logLevel: tracerConfig.logLevel,

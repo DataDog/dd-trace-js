@@ -23,6 +23,12 @@ Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
+<h2 id="dynamic-instrumentation">Dynamic Instrumentation</h2>
+
+Set `DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES` to limit the probe data held in memory while waiting to be uploaded.
+The default is 10485760 bytes (10 MiB). The limit includes both the batch being assembled and flushed uploads still
+in flight. Probe data produced while the queue is full is dropped.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:

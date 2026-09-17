@@ -33,15 +33,6 @@ class JSONBuffer {
     this.#onFlush = onFlush
   }
 
-  /**
-   * The number of bytes currently held by the buffer, including payloads still in flight.
-   *
-   * @returns {number}
-   */
-  get queuedBytes () {
-    return this.#partialBytes + this.#inFlightBytes
-  }
-
   #flush () {
     const json = `${this.#partialJson}]`
     const bytes = this.#partialBytes + 1
@@ -62,7 +53,6 @@ class JSONBuffer {
    *
    * @param {string} str - The JSON document
    * @param {number} [size] - The size of the document in bytes. Calculated if not provided.
-   * @returns {boolean} `false` if the document was rejected because the queue is full, `true` otherwise
    */
   write (str, size = Buffer.byteLength(str)) {
     // The document is prefixed by `[` or `,` and the payload is terminated by `]`, hence the extra 2 bytes

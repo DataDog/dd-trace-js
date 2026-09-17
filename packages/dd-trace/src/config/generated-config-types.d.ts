@@ -70,6 +70,7 @@ export interface GeneratedConfig {
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
   DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
+  DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: number;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: boolean;
@@ -404,7 +405,6 @@ export interface GeneratedConfig {
     captureTimeoutMs: number;
     enabled: boolean;
     probeFile: string | undefined;
-    queueMaxBytes: number;
     redactedIdentifiers: string[];
     redactionExcludedIdentifiers: string[];
     uploadIntervalSeconds: number;

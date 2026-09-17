@@ -116,7 +116,6 @@ function onFlush (payload, done) {
  * @param {number} statusCode - The status code of the response
  * @param {string} payload - The payload to send
  * @param {() => void} done - Releases the payload from the upload queue
- * @returns {boolean} True if the fallback was needed, false otherwise
  */
 function handleV2FallbackIfNeeded (statusCode, payload, done) {
   if (statusCode !== 404 || config.inputPath !== DEBUGGER_INPUT_V2) {

@@ -18,7 +18,10 @@ module.exports = function getDebuggerConfig (config, inputPath) {
     apiKey: agentless ? config.DD_API_KEY : undefined,
     commitSHA,
     debug: config.debug,
-    dynamicInstrumentation: config.dynamicInstrumentation,
+    dynamicInstrumentation: {
+      ...config.dynamicInstrumentation,
+      queueMaxBytes: config.DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES,
+    },
     env: config.env,
     hostname: config.hostname,
     logLevel: config.logLevel,

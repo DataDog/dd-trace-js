@@ -37,8 +37,6 @@ describe('input message http requests', function () {
   let request
   /** @type {sinon.SinonSpy} */
   let jsonBufferWrite
-  /** @type {JSONBuffer} */
-  let jsonBufferInstance
   /** @type {typeof JSONBuffer} */
   let JSONBufferSpy
   /** @type {sinon.SinonStub} */
@@ -63,7 +61,6 @@ describe('input message http requests', function () {
       /** @param {ConstructorParameters<typeof JSONBuffer>} args */
       constructor (...args) {
         super(...args)
-        jsonBufferInstance = this
         jsonBufferWrite = sinon.spy(this, 'write')
       }
     }
@@ -227,7 +224,11 @@ describe('input message http requests', function () {
   })
 
   it('should fallback to /debugger/v1/diagnostics on 404 from v2 endpoint', function (done) {
-    const configStub = createConfigMock({ inputPath: '/debugger/v2/input' })
+    const queueMaxBytes = Buffer.byteLength(JSON.stringify(getPayload())) + 2
+    const configStub = createConfigMock({
+      inputPath: '/debugger/v2/input',
+      dynamicInstrumentation: { queueMaxBytes, uploadIntervalSeconds: 1 },
+    })
 
     // Mock request to return 404 on first call (v2), then succeed on second call (diagnostics)
     let callCount = 0
@@ -273,8 +274,11 @@ describe('input message http requests', function () {
     // Verify config was updated to diagnostics
     assert.strictEqual(configStub.inputPath, '/debugger/v1/diagnostics')
 
-    // The payload is released from the upload queue once the fallback request completes
-    assert.strictEqual(jsonBufferInstance.queuedBytes, 0)
+    // The fallback completion releases the first payload, allowing another maximum-sized payload to be sent
+    sendV2(message, logger, dd, snapshot)
+    clock.tick(1000)
+    sinon.assert.calledThrice(requestWith404)
+    sinon.assert.notCalled(guardrailMetrics.eventDropped)
 
     done()
   })
@@ -522,14 +526,27 @@ describe('input message http requests', function () {
     })
 
     it('should release the payload from the queue when the upload fails', function () {
-      send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      const queueMaxBytes = Buffer.byteLength(JSON.stringify(getPayload())) + 2
+      const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
+        './config': createConfigMock({
+          dynamicInstrumentation: { queueMaxBytes, uploadIntervalSeconds: 1 },
+        }),
+        './json-buffer': JSONBufferSpy,
+        '../../exporters/common/request': request,
+        './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+        './guardrail-metrics': guardrailMetrics,
+      })
+
+      boundedSend(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
       clock.tick(1000)
       sinon.assert.calledOnce(request)
-      assert.ok(jsonBufferInstance.queuedBytes > 0, `Expected ${jsonBufferInstance.queuedBytes} > 0`)
 
       request.lastCall.args[2](new Error('boom'))
+      boundedSend(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
 
-      assert.strictEqual(jsonBufferInstance.queuedBytes, 0)
+      sinon.assert.calledTwice(request)
+      sinon.assert.notCalled(guardrailMetrics.eventDropped)
     })
   })
 
