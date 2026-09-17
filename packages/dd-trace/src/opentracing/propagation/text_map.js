@@ -884,7 +884,11 @@ class TextMapPropagator {
       spanContext._trace.tags = traceTags
       const decisionMaker = traceTags['_dd.p.dm']
       if (decisionMaker !== undefined) {
-        const mechanism = Math.abs(Number.parseInt(decisionMaker, 10))
+        // Avoid general integer parsing for the common single-digit mechanisms.
+        const digit = decisionMaker.length === 2 && decisionMaker[0] === '-'
+          ? decisionMaker.charCodeAt(1) - 48
+          : -1
+        const mechanism = digit >= 0 && digit <= 9 ? digit : Math.abs(Number.parseInt(decisionMaker, 10))
         if (Number.isInteger(mechanism)) spanContext._sampling.mechanism = mechanism
       }
     }

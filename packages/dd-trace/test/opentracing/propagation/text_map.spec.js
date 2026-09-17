@@ -1251,6 +1251,30 @@ describe('TextMapPropagator', () => {
       })
     }
 
+    for (const [value, expected] of [
+      ['-0', 0],
+      ['-9', 9],
+      ['-10', 10],
+      ['5', 5],
+      ['+5', 5],
+      [' -5', 5],
+      ['-1suffix', 1],
+      ['-/', undefined],
+      ['-:', undefined],
+      ['-x', undefined],
+      ['-', undefined],
+      ['', undefined],
+    ]) {
+      it(`preserves decision-maker parsing for ${JSON.stringify(value)}`, () => {
+        textMap['x-datadog-tags'] = `_dd.p.dm=${value}`
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._sampling.mechanism, expected)
+        assert.strictEqual(spanContext._trace.tags['_dd.p.dm'], value)
+      })
+    }
+
     it('should preserve separators and empty trace tag values', () => {
       textMap['x-datadog-tags'] = '_dd.p.empty,_dd.p.also_empty,_dd.p.foo=bar=baz'
 
