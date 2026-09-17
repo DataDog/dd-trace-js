@@ -341,13 +341,15 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(serviceByResource['GET /bar'], 'svc-other')
     })
 
-    it('sets timestamps from the bucket time and size', () => {
+    it('sets timestamps from the collection window', () => {
       const timeNs = 12340000000000
-      const dp = dataPointsOf(JSON.parse(transformer.transform(makeDrained(timeNs, [makeSpan()]), BUCKET_SIZE_NS)))[0]
+      const drained = makeDrained(timeNs, [makeSpan()])
+      drained[0].durationNs = 123456
+      const dp = dataPointsOf(JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS)))[0]
 
       assert.deepStrictEqual(
         { start: dp.startTimeUnixNano, end: dp.timeUnixNano },
-        { start: String(timeNs), end: String(timeNs + BUCKET_SIZE_NS) }
+        { start: String(timeNs), end: String(timeNs + drained[0].durationNs) }
       )
     })
 

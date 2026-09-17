@@ -634,27 +634,30 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
   })
 
-  it('should keep an open OTLP bucket until it is complete', () => {
+  it('uses continuous OTLP windows and restarts the interval after force flush', () => {
     const clock = sinon.useFakeTimers({ now: 12_345_000 })
     try {
-      otlpExporter.export.resetHistory()
-      const p = new SpanStatsProcessor(config, otlpExporter)
-      clearTimeout(p.timer)
-      p.onSpanFinished(topLevelSpan)
-
-      p.onInterval()
-
-      assert.ok(otlpExporter.export.notCalled)
-      assert.strictEqual(p.buckets.size, 1)
+      const localExporter = {
+        export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => done?.()),
+        flush: sinon.stub().callsFake(done => done?.()),
+      }
+      const p = new SpanStatsProcessor(config, localExporter)
 
       p.onSpanFinished(topLevelSpan)
-      clock.setSystemTime(12_350_000)
-      p.onInterval()
+      clock.tick(3_000)
+      p.forceFlush(() => {})
+      p.onSpanFinished(topLevelSpan)
 
-      assert.ok(otlpExporter.export.calledOnce)
-      assert.strictEqual(p.buckets.size, 0)
-      const [drained] = otlpExporter.export.firstCall.args
-      assert.strictEqual(drained[0].bucket.values().next().value.topLevelOkDistribution.count, 2)
+      clock.tick(7_000)
+      assert.ok(localExporter.export.calledOnce)
+
+      clock.tick(3_000)
+      assert.ok(localExporter.export.calledTwice)
+      const [first] = localExporter.export.firstCall.args[0]
+      const [second] = localExporter.export.secondCall.args[0]
+
+      assert.strictEqual(second.timeNs, first.timeNs + first.durationNs)
+      assert.strictEqual(second.durationNs, 10_000 * 1e6)
     } finally {
       clock.restore()
     }

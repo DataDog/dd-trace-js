@@ -68,7 +68,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
+   * @param {Array<{timeNs: number, durationNs?: number, bucket: import('../../span_stats').SpanBuckets}>} drained
    * @param {number} bucketSizeNs
    */
   transform (drained, bucketSizeNs) {
@@ -89,9 +89,9 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
     const dataPoints = []
 
-    for (const { timeNs, bucket } of drained) {
+    for (const { timeNs, durationNs = bucketSizeNs, bucket } of drained) {
       const distributions = new Map()
-      const endTimeNs = timeNs + bucketSizeNs
+      const endTimeNs = timeNs + durationNs
       const startNano = isJson ? String(timeNs) : timeNs
       const endNano = isJson ? String(endTimeNs) : endTimeNs
 
