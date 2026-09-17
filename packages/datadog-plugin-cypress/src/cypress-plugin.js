@@ -231,6 +231,9 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
 }
 
 function getSessionStatus (summary) {
+  if (!summary) {
+    return 'pass'
+  }
   if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
     return 'fail'
   }
@@ -555,6 +558,7 @@ class CypressPlugin {
   resetRunState () {
     this._isInit = false
     this.finishedTestsByFile = {}
+    this.hasTestsReported = false
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
     this.isItrEnabled = false
@@ -1329,12 +1333,14 @@ class CypressPlugin {
   #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
+      const hasNoTests = suiteStats?.totalTests === 0 ||
+        (suiteStats?.totalTests === undefined && !this.hasTestsReported)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
-      if (!error && suiteStats?.totalTests === 0) {
+      if (testStatus !== 'fail' && hasNoTests) {
         setExpectedEmptyTestSessionTags(
           this.testSessionSpan,
           this.testModuleSpan,
@@ -1457,6 +1463,7 @@ class CypressPlugin {
   afterSpec (spec, results, error) {
     const { tests, stats, screenshots, video } = results || {}
     const cypressTests = tests || []
+    if (cypressTests.length > 0) this.hasTestsReported = true
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
@@ -1952,6 +1959,7 @@ class CypressPlugin {
         return suitePayload
       },
       'dd:beforeEach': (test) => {
+        this.hasTestsReported = true
         const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }

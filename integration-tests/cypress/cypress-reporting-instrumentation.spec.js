@@ -32,6 +32,8 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_SESSION_NAME,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
@@ -2127,6 +2129,7 @@ moduleTypes.forEach(({
       originalCypressRetries: cypressPlugin.originalCypressRetries,
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
+      hasTestsReported: cypressPlugin.hasTestsReported,
       testsToSkip: cypressPlugin.testsToSkip,
       testSessionSpan: cypressPlugin.testSessionSpan,
       testModuleSpan: cypressPlugin.testModuleSpan,
@@ -2145,6 +2148,7 @@ moduleTypes.forEach(({
       cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
+      cypressPlugin.hasTestsReported = originalState.hasTestsReported
       cypressPlugin.testsToSkip = originalState.testsToSkip
       cypressPlugin.testSessionSpan = originalState.testSessionSpan
       cypressPlugin.testModuleSpan = originalState.testModuleSpan
@@ -2155,6 +2159,38 @@ moduleTypes.forEach(({
       cypressPlugin.screenshotUploadAbortControllers = originalState.screenshotUploadAbortControllers
       sinon.restore()
     })
+
+    function prepareRunFinalization () {
+      const createSpan = () => {
+        const tags = {}
+        return {
+          tags,
+          context: () => ({ _trace: { started: [] } }),
+          finish: sinon.stub(),
+          setTag: sinon.stub().callsFake((name, value) => { tags[name] = value }),
+        }
+      }
+      const testSessionSpan = createSpan()
+      const testModuleSpan = createSpan()
+
+      cypressPlugin.resetRunState()
+      cypressPlugin._isInit = true
+      cypressPlugin.testSessionSpan = testSessionSpan
+      cypressPlugin.testModuleSpan = testModuleSpan
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            flush: callback => callback(),
+          },
+        },
+      }
+      sinon.stub(cypressPlugin, 'applySkippedCoverageToTestSessionCoverage').returns(false)
+      sinon.stub(cypressPlugin, 'getTestCodeCoverageLinesTotal').returns(undefined)
+      sinon.stub(cypressPlugin, 'reportTestSessionCoverage')
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+
+      return { testModuleSpan, testSessionSpan }
+    }
 
     it('waits for the existing initialization before the first run', async () => {
       const initializationError = new Error('stop after existing initialization')
@@ -2185,6 +2221,48 @@ moduleTypes.forEach(({
       })
 
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
+    })
+
+    it('preserves a failed Cypress run that reports zero tests', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun({ totalFailed: 1, totalSkipped: 0, totalTests: 0 })
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('marks an interactive Cypress run with no statistics or tests as empty', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'skip')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were executed')
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+      }
+    })
+
+    it('does not mark an interactive Cypress run as empty after receiving a test', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.testsToSkip = [{ name: 'test name', suite: 'test suite' }]
+
+      cypressPlugin.getTasks()['dd:beforeEach']({
+        testId: 'test-id',
+        testName: 'test name',
+        testSuite: 'test suite',
+      })
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'pass')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
     })
 
     for (const [description, cypressConfig] of [
