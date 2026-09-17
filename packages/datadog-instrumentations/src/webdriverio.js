@@ -1852,9 +1852,10 @@ function finishCoordinator (state, error, onDone) {
     return
   }
 
+  const status = error ? 'fail' : getSessionStatus(state)
   testSessionFinishCh.publish({
-    status: error ? 'fail' : getSessionStatus(state),
-    isExpectedEmptySession: !error && isExpectedEmptySession(state),
+    status,
+    isExpectedEmptySession: status === 'skip' && isExpectedEmptySession(state),
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,

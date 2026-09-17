@@ -4539,6 +4539,53 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('does not mark an empty worker failure as expected empty', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const file = path.join(process.cwd(), 'empty.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, file)
+      requestConfiguration(worker, file, 'empty-request')
+      await new Promise(setImmediate)
+
+      worker.emit('message', {
+        name: 'testFrameworkInit',
+        content: { hasTests: false },
+      })
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].isExpectedEmptySession, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
   it('reports a worker failure before Mocha loads', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')
     const libraryConfigurationCh = channel('ci:mocha:library-configuration')
