@@ -149,6 +149,7 @@ function createMatcher (dcModule) {
   const {
     postgresQueryHandlers,
     postgresQueryLifecycle,
+    postgresQueryPreparation,
   } = require('./transforms/postgres')
 
   const matcher = create(instrumentations, dcModule)
@@ -164,6 +165,7 @@ function createMatcher (dcModule) {
   matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
   matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
   matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
+  matcher.addTransform('postgresQueryPreparation', postgresQueryPreparation)
 
   return matcher
 }
