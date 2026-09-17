@@ -113,11 +113,11 @@ function preserveModuleExports (moduleExports) {
 }
 
 const rewriteHooks = getHooks(['@wdio/runner', 'jasmine-core', 'webdriver'])
-for (const hook of rewriteHooks) {
+for (const hook of rewriteHooks.values()) {
   addHook(hook, preserveModuleExports)
 }
-const webdriverVersions = getHooks('webdriver')[0].versions
-addHook({ name: 'webdriver', versions: webdriverVersions, file: 'build/index.cjs' }, preserveModuleExports)
+const [webdriverHook] = getHooks('webdriver').values()
+addHook({ name: 'webdriver', versions: webdriverHook.versions, file: 'build/index.cjs' }, preserveModuleExports)
 
 addHook({
   name: '@wdio/local-runner',
