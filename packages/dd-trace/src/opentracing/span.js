@@ -235,11 +235,10 @@ class DatadogSpan {
 
     if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
       Object.assign(tags, keyValueMap)
-      // Keep the common path to cheap property probes and verify ownership only when a sampling tag is present.
       mayChangeSamplingPriority =
-        (MANUAL_KEEP in keyValueMap && Object.hasOwn(keyValueMap, MANUAL_KEEP)) ||
-        (MANUAL_DROP in keyValueMap && Object.hasOwn(keyValueMap, MANUAL_DROP)) ||
-        (SAMPLING_PRIORITY in keyValueMap && Object.hasOwn(keyValueMap, SAMPLING_PRIORITY))
+        keyValueMap[MANUAL_KEEP] !== undefined ||
+        keyValueMap[MANUAL_DROP] !== undefined ||
+        keyValueMap[SAMPLING_PRIORITY] !== undefined
     } else {
       /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
       if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
@@ -247,9 +246,9 @@ class DatadogSpan {
         tagger.add(samplingTags, keyValueMap)
         Object.assign(tags, samplingTags)
         mayChangeSamplingPriority =
-          (MANUAL_KEEP in samplingTags && Object.hasOwn(samplingTags, MANUAL_KEEP)) ||
-          (MANUAL_DROP in samplingTags && Object.hasOwn(samplingTags, MANUAL_DROP)) ||
-          (SAMPLING_PRIORITY in samplingTags && Object.hasOwn(samplingTags, SAMPLING_PRIORITY))
+          samplingTags[MANUAL_KEEP] !== undefined ||
+          samplingTags[MANUAL_DROP] !== undefined ||
+          samplingTags[SAMPLING_PRIORITY] !== undefined
       } else {
         return this
       }

@@ -734,15 +734,30 @@ describe('Span', () => {
       })
     }
 
-    it('should ignore inherited sampling tags', () => {
-      const tags = Object.create({ [MANUAL_DROP]: true })
-      tags.foo = 'bar'
+    for (const key of [MANUAL_KEEP, MANUAL_DROP, SAMPLING_PRIORITY]) {
+      it(`checks inherited ${key} while sampling only the live tag map`, () => {
+        const tags = Object.create({ [key]: true })
+        tags.foo = 'bar'
+
+        span.addTags(tags)
+
+        assert.deepStrictEqual(span.context().getTags(), { foo: 'bar' })
+        sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, span.context().getTags())
+      })
+
+      it(`does not reapply sampling for an undefined ${key}`, () => {
+        span.addTags({ [key]: undefined })
+
+        sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
+      })
+    }
+
+    it('checks falsy sampling values on prototype-free tag maps', () => {
+      const tags = Object.assign(Object.create(null), { [MANUAL_KEEP]: false })
 
       span.addTags(tags)
 
-      assert.strictEqual(span.context().getTag('foo'), 'bar')
-      assert.strictEqual(span.context().getTag(MANUAL_DROP), undefined)
-      sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, span.context().getTags())
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {
