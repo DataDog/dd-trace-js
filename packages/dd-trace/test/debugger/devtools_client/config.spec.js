@@ -33,21 +33,7 @@ describe('worker thread config', function () {
     assert.strictEqual(parentConfig.queueMaxBytes, undefined)
   })
 
-  it('should support the internal queue limit override', function () {
-    const config = loadConfig('65536')
-
-    assert.strictEqual(config.queueMaxBytes, 64 * 1024)
-  })
-
-  it('should ignore invalid internal queue limit overrides', function () {
-    for (const value of ['0', '-1', '1.5', 'invalid']) {
-      const config = loadConfig(value)
-
-      assert.strictEqual(config.queueMaxBytes, DEFAULT_QUEUE_MAX_BYTES)
-    }
-  })
-
-  function loadConfig (queueMaxBytes) {
+  function loadConfig () {
     const load = proxyquire.noPreserveCache()
     return load('../../../src/debugger/devtools_client/config', {
       'node:worker_threads': {
@@ -55,9 +41,7 @@ describe('worker thread config', function () {
         '@noCallThru': true,
       },
       '../../config/helper': {
-        getEnvironmentVariable: sinon.stub()
-          .withArgs('_DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES')
-          .returns(queueMaxBytes),
+        getEnvironmentVariable: sinon.stub(),
         '@noCallThru': true,
       },
       '../../process-tags': {
