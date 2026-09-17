@@ -81,6 +81,8 @@
   "postgres/cjs/src/query.js": "postgres",
   "postgres/src/index.js": "postgres",
   "postgres/src/query.js": "postgres",
+  "ts-jest/dist/legacy/ts-jest-transformer.js": "ts-jest",
+  "ts-jest/dist/utils/sha1.js": "ts-jest",
   "webdriver/build/index.js": "webdriver",
   "webdriver/build/node.js": "webdriver",
   "webdriverio/build/index.js": "webdriverio",

@@ -18,4 +18,5 @@ module.exports = [
   ...require('./webdriverio'),
   ...require('./aws-durable-execution-sdk-js'),
   ...require('./supabase'),
+  ...require('./ts-jest'),
 ]

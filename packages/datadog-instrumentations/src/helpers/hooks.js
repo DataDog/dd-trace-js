@@ -163,6 +163,7 @@ module.exports = {
   stripe: () => require('../stripe'),
   tedious: () => require('../tedious'),
   tinypool: { esmFirst: true, fn: () => require('../vitest') },
+  'ts-jest': () => require('../jest'),
   undici: () => require('../undici'),
   vitest: { esmFirst: true, fn: () => require('../vitest') },
   webdriverio: { esmFirst: true, fn: () => require('../webdriverio') },

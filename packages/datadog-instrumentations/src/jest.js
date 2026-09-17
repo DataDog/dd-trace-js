@@ -4,6 +4,7 @@
 const realClearTimeout = clearTimeout
 const realSetTimeout = setTimeout
 
+const { createHash } = require('node:crypto')
 const { readFileSync } = require('node:fs')
 const { builtinModules, createRequire } = require('node:module')
 const { performance } = require('node:perf_hooks')
@@ -59,7 +60,7 @@ const {
   getChannelPromise,
   publishWithCompletion,
 } = require('./helpers/channel')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, getHooks } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
 const testSessionFinishCh = channel('ci:jest:session:finish')
@@ -3619,6 +3620,62 @@ function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
       testEnvironmentOptions[key] = value
     }
   }
+}
+
+// ts-jest serializes the live Jest config separately and includes dependency
+// mtimes in its final key. Limit this experimental rewrite to the inspected
+// version and preserve its own dependency discovery and compiler settings.
+const tsJestCacheCalls = []
+channel('tracing:orchestrion:ts-jest:getCacheKey:start').subscribe(ctx => {
+  tsJestCacheCalls.push(ctx)
+})
+channel('tracing:orchestrion:ts-jest:getCacheKey:end').subscribe(() => {
+  tsJestCacheCalls.pop()
+})
+channel('tracing:orchestrion:ts-jest:cacheHash:start').subscribe(ctx => {
+  if (!testSessionStartCh.hasSubscribers) return
+
+  const active = tsJestCacheCalls.at(-1)
+  const args = ctx.arguments
+  if (!active || args[8] !== active.arguments[0] || args[10] !== active.arguments[1]) return
+  if (args.length < 11 || (args.length - 11) % 4 !== 0 || typeof args[0] !== 'string') return
+  for (let i = 1; i < 11; i += 2) {
+    if (args[i] !== '\0') return
+  }
+  for (let i = 11; i < args.length; i += 4) {
+    if (args[i] !== '\0' || args[i + 2] !== '\0' ||
+        typeof args[i + 1] !== 'string' || typeof args[i + 3] !== 'string') return
+  }
+
+  const suffix = args[0].slice(-40)
+  if (!/^[a-f0-9]{40}$/.test(suffix)) return
+
+  try {
+    const config = JSON.parse(args[0].slice(0, -40))
+    if (config.testEnvironmentOptions) {
+      for (const key of DD_TEST_ENVIRONMENT_OPTION_KEYS) delete config.testEnvironmentOptions[key]
+    }
+
+    // Read contents for every lookup: caching digests by mtime would reintroduce
+    // stale results when contents change but timestamps are preserved.
+    const digests = []
+    for (let i = 11; i < args.length; i += 4) {
+      digests.push(createHash('sha256').update(readFileSync(args[i + 1])).digest('hex'))
+    }
+    const serializedConfig = JSON.stringify(config) + suffix
+
+    // Commit only after all reads succeed, leaving the original key untouched
+    // on unsupported input or I/O failure. Never log source or configuration.
+    args[0] = serializedConfig
+    for (let i = 0; i < digests.length; i++) args[14 + i * 4] = digests[i]
+    args.push('\0', 'dd-ts-jest-content-cache-v1')
+  } catch {
+    log.debug('Unable to normalize ts-jest cache inputs; retaining the original cache key')
+  }
+})
+
+for (const hook of getHooks('ts-jest').values()) {
+  addHook(hook, exports => exports)
 }
 
 /**
