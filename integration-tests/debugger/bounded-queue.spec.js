@@ -3,17 +3,17 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { GUARDRAIL_METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
+const {
+  DEFAULT_QUEUE_MAX_BYTES,
+  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
+} = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
-
-const QUEUE_MAX_BYTES = 64 * 1024
 
 describe('Dynamic Instrumentation', function () {
   const t = setup({
-    testApp: 'target-app/basic.js',
+    testApp: 'target-app/bounded-queue.js',
     dependencies: ['fastify'],
     env: {
-      _DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES: String(QUEUE_MAX_BYTES),
       DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
     },
     agentOptions: { stallDebuggerIntake: true },
@@ -23,7 +23,11 @@ describe('Dynamic Instrumentation', function () {
     this.timeout(GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 3)
 
     it('should drop probe results instead of queueing them without bound when the intake stalls', async function () {
-      const rcConfig = t.generateRemoteConfig({ captureSnapshot: true, sampling: { snapshotsPerSecond: 1000 } })
+      const rcConfig = t.generateRemoteConfig({
+        captureSnapshot: true,
+        capture: { maxLength: 512 * 1024 },
+        sampling: { snapshotsPerSecond: 1000 },
+      })
       const uploadSizes = []
 
       t.agent.on('debugger-input-stalled', ({ headers }) => {
@@ -57,19 +61,17 @@ describe('Dynamic Instrumentation', function () {
       t.agent.addRemoteConfig(rcConfig)
       await installed
 
-      // Each snapshot of the request handler is a few KB. The global snapshot rate limit caps snapshots at 25 per
-      // second, so spread the requests over a few seconds to produce far more snapshot bytes than the queue can hold
-      for (let round = 0; round < 3; round++) {
-        await Promise.all(Array.from({ length: 30 }, () => t.request(t.breakpoint.url)))
-        await new Promise((resolve) => setTimeout(resolve, 1100))
-      }
+      // The first 25 snapshots allowed by the global rate limit contain a 512 KiB string, producing more than 10 MiB
+      await Promise.all(Array.from({ length: 30 }, () => t.request(t.breakpoint.url)))
 
       await checkMetrics
 
       assert.ok(uploadSizes.length >= 1, `Expected at least one upload attempt, got ${uploadSizes.length}`)
-      for (const size of uploadSizes) {
-        assert.ok(size <= QUEUE_MAX_BYTES, `Expected upload of ${size} bytes to be within the queue bound`)
-      }
+      const uploadedBytes = uploadSizes.reduce((total, size) => total + size, 0)
+      assert.ok(
+        uploadedBytes <= DEFAULT_QUEUE_MAX_BYTES,
+        `Expected uploads totaling ${uploadedBytes} bytes to be within the ${DEFAULT_QUEUE_MAX_BYTES} byte queue bound`
+      )
     })
   })
 })

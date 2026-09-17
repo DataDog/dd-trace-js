@@ -6,9 +6,9 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const { DEFAULT_QUEUE_MAX_BYTES } = require('../../../src/debugger/constants')
-
 require('../../setup/mocha')
+
+const QUEUE_MAX_BYTES = 64 * 1024
 
 describe('worker thread config', function () {
   let configPort
@@ -25,10 +25,10 @@ describe('worker thread config', function () {
     }
   })
 
-  it('should use the default queue limit', function () {
+  it('should get the queue limit from constants', function () {
     const config = loadConfig()
 
-    assert.strictEqual(config.queueMaxBytes, DEFAULT_QUEUE_MAX_BYTES)
+    assert.strictEqual(config.queueMaxBytes, QUEUE_MAX_BYTES)
     assert.strictEqual(config.dynamicInstrumentation.captureTimeoutNs, 15_000_000n)
     assert.strictEqual(parentConfig.queueMaxBytes, undefined)
   })
@@ -40,12 +40,12 @@ describe('worker thread config', function () {
         workerData: { config: parentConfig, parentThreadId: 1, configPort },
         '@noCallThru': true,
       },
-      '../../config/helper': {
-        getEnvironmentVariable: sinon.stub(),
-        '@noCallThru': true,
-      },
       '../../process-tags': {
         initialize: sinon.stub(),
+        '@noCallThru': true,
+      },
+      '../constants': {
+        DEFAULT_QUEUE_MAX_BYTES: QUEUE_MAX_BYTES,
         '@noCallThru': true,
       },
       './log': {
