@@ -78,7 +78,7 @@ describe('Dynamic Instrumentation', function () {
 
       assert.strictEqual(results.length, 1, `Expected exactly one probe result, got ${inspect(results)}`)
       const { message, debugger: { snapshot } } = results[0]
-      assert.match(message, /^Condition evaluation exceeded its time budget of 10ms \(took \d+\.\dms\)$/)
+      assert.match(message, /^Condition evaluation exceeded its time budget of 50ms \(took \d+\.\dms\)$/)
       assert.strictEqual(snapshot.evaluationErrors.length, 1)
       assert.strictEqual(snapshot.evaluationErrors[0].expr, REDOS_CONDITION.dsl)
       assert.strictEqual(snapshot.evaluationErrors[0].message, message)

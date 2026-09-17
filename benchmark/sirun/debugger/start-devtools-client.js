@@ -84,7 +84,7 @@ const config = {
     DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: captureTimeoutMs,
     enabled: true,
     DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
-    evaluationTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS || '10'),
+    evaluationTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS || '50'),
     probeFile: undefined,
     DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
     redactedIdentifiers,
