@@ -145,7 +145,6 @@ function getEnvNameFromSource (name, source) {
 
 /**
  * @param {string} name
- * @returns {boolean}
  */
 function isSupportedConfiguration (name) {
   return supportedConfigurations[name] !== undefined || aliasToCanonical[name] !== undefined

@@ -206,7 +206,6 @@ const REDACT_LEAF = '"?"'
 
 /**
  * @param {RegExp} value
- * @returns {string}
  */
 function stringifyRegExp (value) {
   return `{"$regex":${JSON.stringify(value.source)},"$options":${JSON.stringify(value.flags)}}`

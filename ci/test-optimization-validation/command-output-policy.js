@@ -162,7 +162,6 @@ function assertSafeOutputPath ({ outputPath, repositoryRoot, artifactRoot, comma
  *
  * @param {string} outputPath absolute output path
  * @param {string} repositoryRoot absolute repository root
- * @returns {void}
  */
 function assertPhysicalOutputPathInsideRepository (outputPath, repositoryRoot) {
   const physicalRoot = fs.realpathSync(repositoryRoot)

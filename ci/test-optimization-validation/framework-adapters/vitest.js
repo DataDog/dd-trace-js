@@ -208,7 +208,6 @@ function getProjectObject (source, nameIndex, workspaceConfig) {
  *
  * @param {string} source Vitest configuration source
  * @param {{end: number, start: number}} range candidate object range
- * @returns {boolean} whether the object is a standalone project
  */
 function isStandaloneProjectObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
@@ -222,7 +221,6 @@ function isStandaloneProjectObject (source, range) {
  * @param {string} source Vitest configuration source
  * @param {{end: number, start: number}} range candidate object range
  * @param {{end: number, start: number}[]} objectRanges source object ranges
- * @returns {boolean} whether the object is a bounded project entry
  */
 function isTestProjectsEntry (source, range, objectRanges) {
   const projectsArray = getDirectContainingArray(source, range)
@@ -253,7 +251,6 @@ function isTestProjectsEntry (source, range, objectRanges) {
  *
  * @param {string} source Vitest configuration source
  * @param {{end: number, start: number}} range candidate config object range
- * @returns {boolean} whether the object belongs to the exported configuration
  */
 function isExportedConfigObject (source, range) {
   const before = maskJavaScriptNonCode(source.slice(0, range.start))
@@ -267,7 +264,6 @@ function isExportedConfigObject (source, range) {
  *
  * @param {string} source Vitest workspace configuration source
  * @param {{end: number, start: number}} range candidate object range
- * @returns {boolean} whether the object is a bounded workspace project entry
  */
 function isWorkspaceProjectEntry (source, range) {
   const workspaceArray = getDirectContainingArray(source, range)

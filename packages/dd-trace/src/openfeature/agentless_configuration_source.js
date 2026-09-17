@@ -64,9 +64,6 @@ class AgentlessConfigurationSource {
     this.#applyConfiguration = applyConfiguration
   }
 
-  /**
-   * @returns {void}
-   */
   start () {
     if (this.#abortController) return
 
@@ -75,9 +72,6 @@ class AgentlessConfigurationSource {
     this.#poll(abortController)
   }
 
-  /**
-   * @returns {void}
-   */
   stop () {
     this.#abortController?.abort()
     this.#abortController = undefined
@@ -175,7 +169,6 @@ class AgentlessConfigurationSource {
 
   /**
    * @param {PollResponse} response
-   * @returns {void}
    */
   #apply (response) {
     const statusCode = response.statusCode
@@ -218,7 +211,6 @@ class AgentlessConfigurationSource {
    * @param {number | undefined} statusCode
    * @param {unknown} error
    * @param {number} attempts
-   * @returns {void}
    */
   #warnFailure (statusCode, error, attempts) {
     const category = statusCode === 401 || statusCode === 403
@@ -279,7 +271,6 @@ function parseConfiguration (body) {
 
 /**
  * @param {unknown} error
- * @returns {string}
  */
 function errorMessage (error) {
   return error instanceof Error ? error.message : String(error ?? 'request was not sent')
@@ -287,7 +278,6 @@ function errorMessage (error) {
 
 /**
  * @param {number | undefined} status
- * @returns {boolean}
  */
 function isRetryableStatus (status) {
   return status === 408 || status === 429 || (status >= 500 && status <= 599)
@@ -297,7 +287,6 @@ function isRetryableStatus (status) {
  * @param {number} pollIntervalMs
  * @param {number} attempt
  * @param {number} random
- * @returns {number}
  */
 function retryDelay (pollIntervalMs, attempt, random) {
   const base = attempt === 1
@@ -310,7 +299,6 @@ function retryDelay (pollIntervalMs, attempt, random) {
  * @param {number} value
  * @param {number} minimum
  * @param {number} maximum
- * @returns {number}
  */
 function clamp (value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value))
