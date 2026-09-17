@@ -81,15 +81,20 @@ function enable (config) {
   const retiredEvalWriter = evalWriter
   const isReinitializing = Boolean(retiredSpanWriter || retiredEvalWriter)
   unregisterTelemetryFlusher?.()
+  spanProcessor?.destroy()
   retireWriters(retiredSpanWriter, retiredEvalWriter)
 
   const startTime = performance.now()
-  // create writers and eval writer append and flush channels
-  // span writer append is handled by the span processor
+  // Register the processor's before-exit handler before the span writer's so cached events
+  // enter the writer buffer before that buffer is flushed.
+  spanProcessor = new LLMObsSpanProcessor(config)
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
   const currentEvalWriter = evalWriter
   const currentSpanWriter = spanWriter
+
+  spanProcessor.setWriter(spanWriter)
+
   unregisterTelemetryFlusher = registerTelemetryFlusher(done => {
     flushWriters(done, currentSpanWriter, currentEvalWriter)
   })
@@ -101,9 +106,6 @@ function enable (config) {
     traceSampledCh.subscribe(handleTraceSampled)
   }
 
-  // span processing
-  spanProcessor = new LLMObsSpanProcessor(config)
-  spanProcessor.setWriter(spanWriter)
   if (!isReinitializing) spanFinishCh.subscribe(handleSpanProcess)
 
   // distributed tracing for llmobs
@@ -139,10 +141,12 @@ function disable () {
 
   const retiredSpanWriter = spanWriter
   const retiredEvalWriter = evalWriter
+  spanProcessor?.destroy()
   spanProcessor?.setWriter(null)
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = undefined
 
+  spanProcessor = null
   spanWriter = null
   evalWriter = null
 
@@ -264,6 +268,7 @@ function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter =
 }
 
 function handleFlush () {
+  spanProcessor.processPending()
   const err = flushWriters() ? 'writer_flush_error' : ''
   telemetry.recordUserFlush(err)
 }

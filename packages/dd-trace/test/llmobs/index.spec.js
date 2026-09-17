@@ -676,6 +676,18 @@ describe('module', () => {
     sinon.assert.calledOnceWithExactly(processTrace, trace)
   })
 
+  it('routes pending spans before flushing the writers', () => {
+    const processPending = sinon.stub(LLMObsSpanProcessor.prototype, 'processPending')
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+    const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
+    const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
+
+    flushCh.publish()
+
+    sinon.assert.calledOnce(processPending)
+    sinon.assert.callOrder(processPending, spanWriter.flush, evalWriter.flush)
+  })
+
   it('registers both LLMObs writers for lifecycle flushing', () => {
     loadLlmobsModuleOnVercel()
     llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })

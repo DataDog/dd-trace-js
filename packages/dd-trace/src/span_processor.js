@@ -73,7 +73,11 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       if (traceSampledCh.hasSubscribers) {
-        traceSampledCh.publish({ spans: finished, samplingPriority: spanContext._sampling.priority })
+        traceSampledCh.publish({
+          spans: finished,
+          samplingPriority: spanContext._sampling.priority,
+          isRecording: trace.isRecording,
+        })
       }
 
       let isFirstSpanInChunk = true

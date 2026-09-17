@@ -527,7 +527,9 @@ function useLlmObs ({
      * @returns {Promise<void>}
      */
     assertNoLlmObsSpans: async function (windowMs = 100) {
-      await apmTracesPromise
+      const apmSpans = await apmTracesPromise
+      const llmobsSpansFromApm = getLlmObsSpansFromApmSpans(apmSpans)
+      assert.equal(llmobsSpansFromApm.length, 0, `expected no LLMObs spans, got ${llmobsSpansFromApm.length}`)
       resetTracesPromises()
 
       const deadline = Date.now() + windowMs

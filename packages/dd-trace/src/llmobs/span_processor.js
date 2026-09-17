@@ -45,7 +45,7 @@ const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
-const cachedEvents = new WeakMap()
+const cachedEvents = new Map()
 
 class LLMObservabilitySpan {
   /**
@@ -67,6 +67,8 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
+  #destroyer
+
   /** @type {import('../config/config-base')} */
   #config
 
@@ -78,6 +80,9 @@ class LLMObsSpanProcessor {
 
   constructor (config) {
     this.#config = config
+
+    this.#destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   setUserSpanProcessor (userSpanProcessor) {
@@ -123,9 +128,10 @@ class LLMObsSpanProcessor {
    * @param {{
    *   spans: import('../opentracing/span')[],
    *   samplingPriority?: number,
+   *   isRecording?: boolean,
    * }} trace
    */
-  processTrace ({ spans, samplingPriority }) {
+  processTrace ({ spans, samplingPriority, isRecording }) {
     for (const span of spans) {
       const cached = cachedEvents.get(span)
       if (!cached) continue
@@ -133,31 +139,37 @@ class LLMObsSpanProcessor {
 
       try {
         const { event, mlObsTags, routing } = cached
-        if (this.#shouldAttachMetaStruct(routing, event, samplingPriority)) {
+        if (this.#shouldAttachMetaStruct(routing, event, samplingPriority, isRecording)) {
           this.#attachMetaStruct(span, event, mlObsTags)
           continue
         }
 
-        const enqueued = this.#writer.append(event, routing)
-
-        // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
-        // gen_ai.* spans, the parent-chain walk stops at any span carrying this
-        // tag, preserving this span as the immediate LLMObs parent. Set only
-        // when the writer actually buffered the event — format may have dropped
-        // it (user processor returned null), thrown, or the writer may have
-        // dropped it silently when its buffer is full. Leaving this tag off in
-        // those cases avoids dd-go reparenting OTel children under a span that
-        // has no corresponding LLMObs event.
-        if (enqueued) {
-          span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
-        }
+        this.#appendToWriter(span, event, routing)
       } catch (e) {
-        logger.warn(`
-          Failed to append span to LLM Observability writer, likely due to an unserializable property.
-          Span won't be sent to LLM Observability: ${e.message}
-        `)
+        this.#logAppendError(e)
       }
     }
+  }
+
+  /** Routes events still awaiting an APM sampling decision through the LLMObs writer. */
+  processPending () {
+    for (const [span, cached] of cachedEvents) {
+      cachedEvents.delete(span)
+
+      try {
+        this.#appendToWriter(span, cached.event, cached.routing)
+      } catch (e) {
+        this.#logAppendError(e)
+      }
+    }
+  }
+
+  destroy () {
+    if (!this.#destroyer) return
+
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+    this.processPending()
+    this.#destroyer = undefined
   }
 
   format (span) {
@@ -324,11 +336,45 @@ class LLMObsSpanProcessor {
    * @param {{ apiKey?: string, site?: string }} routing
    * @param {object} event
    * @param {number | undefined} samplingPriority
+   * @param {boolean | undefined} isRecording
    */
-  #shouldAttachMetaStruct (routing, event, samplingPriority) {
-    return !routing.apiKey &&
+  #shouldAttachMetaStruct (routing, event, samplingPriority, isRecording) {
+    return !this.#config.isCiVisibility &&
+      isRecording !== false &&
+      !routing.apiKey &&
       !this.#hasRepeatedTagKeys(event.tags) &&
       (samplingPriority === undefined || samplingPriority >= AUTO_KEEP)
+  }
+
+  /**
+   * Routes an event through the LLMObs writer and marks the source span when it is buffered.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ apiKey?: string, site?: string }} routing
+   */
+  #appendToWriter (span, event, routing) {
+    const enqueued = this.#writer.append(event, routing)
+
+    // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
+    // gen_ai.* spans, the parent-chain walk stops at any span carrying this
+    // tag, preserving this span as the immediate LLMObs parent. Set only
+    // when the writer actually buffered the event — format may have dropped
+    // it (user processor returned null), thrown, or the writer may have
+    // dropped it silently when its buffer is full. Leaving this tag off in
+    // those cases avoids dd-go reparenting OTel children under a span that
+    // has no corresponding LLMObs event.
+    if (enqueued) {
+      span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+    }
+  }
+
+  /** @param {Error} error */
+  #logAppendError (error) {
+    logger.warn(`
+      Failed to append span to LLM Observability writer, likely due to an unserializable property.
+      Span won't be sent to LLM Observability: ${error.message}
+    `)
   }
 
   /**

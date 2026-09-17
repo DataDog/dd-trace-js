@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -14,6 +14,7 @@ describe('span processor', () => {
   let processor
   let writer
   let log
+  let beforeExitHandler
 
   beforeEach(() => {
     writer = {
@@ -29,8 +30,15 @@ describe('span processor', () => {
       '../log': log,
     })
 
+    const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
+    const existingHandlers = new Set(beforeExitHandlers)
     processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
+    beforeExitHandler = [...beforeExitHandlers].find(handler => !existingHandlers.has(handler))
     processor.setWriter(writer)
+  })
+
+  afterEach(() => {
+    processor.destroy()
   })
 
   describe('process', () => {
@@ -42,6 +50,7 @@ describe('span processor', () => {
     }
 
     it('should do nothing if llmobs is not enabled', () => {
+      processor.destroy()
       processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: false } })
 
       processSpan()
@@ -248,6 +257,108 @@ describe('span processor', () => {
       })
 
       processSpan()
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('uses the writer when the apm trace is not recording', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], samplingPriority: 1, isRecording: false })
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('uses the writer when the Test Optimization exporter is active', () => {
+      processor.destroy()
+      processor = new LLMObsSpanProcessor({
+        isCiVisibility: true,
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      })
+      processor.setWriter(writer)
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+
+      processSpan(1)
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('routes pending events through the writer when flushed', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+
+      processor.process(span)
+      processor.processPending()
+      processor.processTrace({ spans: [span], samplingPriority: 1 })
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('routes pending events through the writer before exit', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+      processor.process(span)
+
+      beforeExitHandler()
 
       sinon.assert.calledOnce(writer.append)
       assert.strictEqual(span.meta_struct, undefined)
