@@ -5273,9 +5273,9 @@ rules:
 
     it('should resolve dynamic instrumentation enablement to a nested property', () => {
       const config = getConfig()
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
       config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
-      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
     })
 
     it('should resolve code origin for spans enablement to a nested property', () => {
