@@ -2390,7 +2390,7 @@ describe('Config', () => {
     assert.strictEqual(config.appsec.extendedHeadersCollection, undefined)
     assert.strictEqual(config.appsec.rasp, undefined)
     assert.strictEqual(config.appsec.stackTrace, undefined)
-    assert.strictEqual(config.experimental.aiguard, undefined)
+    assert.strictEqual(config.experimental?.aiguard, undefined)
     if (DD_MAJOR < 6) {
       assert.strictEqual(
         config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
@@ -3869,8 +3869,8 @@ describe('Config', () => {
     assert.strictEqual(config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED, false)
     assert.strictEqual(Object.hasOwn(config, 'DD_TRACE_EXPERIMENTAL_EXPORTER'), false)
     assert.strictEqual(Object.hasOwn(config, 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED'), false)
-    assert.strictEqual(Object.hasOwn(config.experimental, 'exporter'), false)
-    assert.strictEqual(Object.hasOwn(config.experimental, 'enableGetRumData'), false)
+    assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'exporter'), false)
+    assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'enableGetRumData'), false)
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -5913,7 +5913,7 @@ rules:
       assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'calculated')
       assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
       assert.strictEqual(config.getOrigin('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED'), 'env_var')
-      assert.strictEqual(Object.hasOwn(config.experimental, 'flaggingProvider'), false)
+      assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
         { name: 'DD_FEATURE_FLAGS_ENABLED', value: false, origin: 'calculated' },
         {
@@ -5958,7 +5958,7 @@ rules:
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
         },
       })
-      assert.strictEqual(Object.hasOwn(config.experimental, 'flaggingProvider'), false)
+      assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
     })
 
     it('reads the configuration source environment variable', () => {

@@ -2679,7 +2679,7 @@ describe('webdriverio instrumentation', () => {
   it('configures the Mocha worker plugin with the WebdriverIO framework', () => {
     const plugin = new MochaPlugin({ _exporter: {} }, { testOptimization: {} })
     const logError = sinon.stub(log, 'error')
-    plugin.configure({ enabled: true })
+    plugin.configure({ enabled: true, tracing: {} })
 
     try {
       channel('ci:mocha:worker:configuration').publish({
@@ -2767,7 +2767,7 @@ describe('webdriverio instrumentation', () => {
     }
     const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization: {} })
     const errors = []
-    plugin.configure({ enabled: true })
+    plugin.configure({ enabled: true, tracing: {} })
 
     try {
       for (const screenshot of [
@@ -4848,7 +4848,7 @@ function createJasminePlugin (libraryConfig, options = {}) {
     spans.push(span)
     return span
   })
-  plugin.configure({ enabled: true })
+  plugin.configure({ enabled: true, tracing: {} })
   channel('ci:mocha:worker:configuration').publish({
     libraryConfig,
     repositoryRoot: process.cwd(),
