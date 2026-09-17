@@ -60,7 +60,14 @@ const DISABLED_MANAGEMENT_TESTS = {
           },
         },
       },
-      'all-disabled-test.js': {
+    },
+  },
+}
+
+const ALL_DISABLED_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      'managed-off-test.js': {
         tests: {
           'should be disabled': {
             properties: {
@@ -214,11 +221,11 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
       })
 
       it('does not classify a shard with only disabled tests as empty', async (receiver, run) => {
-        receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
+        receiver.setTestManagementTests(ALL_DISABLED_MANAGEMENT_TESTS)
         receiver.setSettings({ test_management: { enabled: true } })
 
         const proc = run(
-          './node_modules/.bin/playwright test -c playwright.config.js all-disabled-test.js --shard=1/1',
+          './node_modules/.bin/playwright test -c playwright.config.js managed-off-test.js --shard=1/1',
           {
             cwd: runtime.cwd,
             env: {
