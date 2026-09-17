@@ -3,7 +3,6 @@
 const assert = require('node:assert')
 const { inspect } = require('node:util')
 
-const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -16,8 +15,6 @@ const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
 const { removeDestroyHandler } = require('../util')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
   let LLMObsSDK
@@ -2407,6 +2404,112 @@ describe('sdk', () => {
     })
   })
 
+  describe('gen_ai APM attributes', () => {
+    const ALL_TOKEN_METRICS = {
+      input_tokens: 10,
+      output_tokens: 20,
+      total_tokens: 30,
+      cache_read_input_tokens: 4,
+      cache_write_input_tokens: 5,
+      reasoning_output_tokens: 6,
+    }
+
+    function apmTags (span) {
+      return span.context().getTags()
+    }
+
+    it('emits every scalar on an llm span', () => {
+      let span
+      llmobs.trace(
+        { kind: 'llm', name: 'myLLM', modelName: 'gpt-4', modelProvider: 'OpenAI', sessionId: 'sess-1' },
+        _span => {
+          span = _span
+          llmobs.annotate(span, { metrics: ALL_TOKEN_METRICS })
+        }
+      )
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'gpt-4',
+        'gen_ai.provider.name': 'openai',
+        'gen_ai.application.name': 'mlApp',
+        'gen_ai.conversation.id': 'sess-1',
+        'gen_ai.usage.input_tokens': 10,
+        'gen_ai.usage.output_tokens': 20,
+        'gen_ai.usage.total_tokens': 30,
+        'gen_ai.usage.cache_read_input_tokens': 4,
+        'gen_ai.usage.cache_write_input_tokens': 5,
+        'gen_ai.usage.reasoning_output_tokens': 6,
+      })
+    })
+
+    it('falls back to the custom model and provider on an llm span without them', () => {
+      let span
+      llmobs.trace({ kind: 'llm', name: 'myLLM' }, _span => {
+        span = _span
+      })
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.request.model': 'custom',
+        'gen_ai.provider.name': 'custom',
+      })
+    })
+
+    it('keeps annotated model fields on a non-model-backed kind', () => {
+      let span
+      llmobs.trace({ kind: 'agent', name: 'myAgent', modelName: 'gpt-4o', modelProvider: 'OpenAI' }, _span => {
+        span = _span
+      })
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'agent',
+        'gen_ai.request.model': 'gpt-4o',
+        'gen_ai.provider.name': 'openai',
+      })
+    })
+
+    it('omits token usage and model on a workflow span', () => {
+      let span
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _span => {
+        span = _span
+        llmobs.annotate(span, { metrics: ALL_TOKEN_METRICS })
+      })
+
+      const tags = apmTags(span)
+      assert.strictEqual(tags['gen_ai.operation.name'], 'workflow')
+      assert.strictEqual(tags['gen_ai.request.model'], undefined)
+      assert.strictEqual(tags['gen_ai.provider.name'], undefined)
+      for (const key of Object.keys(ALL_TOKEN_METRICS)) {
+        assert.strictEqual(tags[`gen_ai.usage.${key}`], undefined)
+      }
+    })
+
+    it('keeps the attributes when the user span processor drops the LLMObs event', () => {
+      let span
+      llmobs.registerProcessor(() => null)
+      try {
+        llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'gpt-4', modelProvider: 'OpenAI' }, _span => {
+          span = _span
+        })
+      } finally {
+        llmobs.deregisterProcessor()
+      }
+
+      assertObjectContains(apmTags(span), {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'gpt-4',
+        'gen_ai.provider.name': 'openai',
+      })
+    })
+
+    it('does not emit anything for a span that is not an LLMObs span', () => {
+      const span = tracer.startSpan('apm.only')
+      span.finish()
+
+      assert.strictEqual(apmTags(span)['gen_ai.operation.name'], undefined)
+    })
+  })
+
   describe('distributed', () => {
     it('adds the current llmobs span id and sampling decision to the injection context', () => {
       const carrier = { 'x-datadog-tags': '' }
@@ -2416,15 +2519,17 @@ describe('sdk', () => {
         parentId = span.context().toSpanId()
         traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
 
-        // simulate injection from http integration or from tracer
-        // something that triggers the text_map injection
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const wireTraceId = BigInt(`0x${traceId}`).toString(10)
+      const propagatedLlmobsTags = []
+      for (const tag of carrier['x-datadog-tags'].split(',')) {
+        if (tag.startsWith('_dd.p.llmobs_')) propagatedLlmobsTags.push(tag)
+      }
 
       assert.strictEqual(
-        carrier['x-datadog-tags'],
+        propagatedLlmobsTags.join(','),
         // eslint-disable-next-line @stylistic/max-len
         `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1,_dd.p.llmobs_trace_id=${wireTraceId}`
       )
@@ -2435,7 +2540,7 @@ describe('sdk', () => {
       let agentId
       llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2448,8 +2553,8 @@ describe('sdk', () => {
       let agentId
       llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
         agentId = span.context().toSpanId()
-        llmobs.trace({ kind: 'tool', name: 'my_tool' }, () => {
-          injectCh.publish({ carrier })
+        llmobs.trace({ kind: 'tool', name: 'my_tool' }, toolSpan => {
+          tracer.inject(toolSpan, 'text_map', carrier)
         })
       })
 
@@ -2460,8 +2565,8 @@ describe('sdk', () => {
 
     it('does not propagate agent attribution when there is no agent in the chain', () => {
       const carrier = { 'x-datadog-tags': '' }
-      llmobs.trace({ kind: 'workflow', name: 'my_workflow' }, () => {
-        injectCh.publish({ carrier })
+      llmobs.trace({ kind: 'workflow', name: 'my_workflow' }, span => {
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2474,7 +2579,7 @@ describe('sdk', () => {
       let agentId
       llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2484,8 +2589,8 @@ describe('sdk', () => {
 
     it('propagates an agent name containing "=" (legal in tagset values)', () => {
       const carrier = { 'x-datadog-tags': '' }
-      llmobs.trace({ kind: 'agent', name: 'model=gpt4' }, () => {
-        injectCh.publish({ carrier })
+      llmobs.trace({ kind: 'agent', name: 'model=gpt4' }, span => {
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2493,14 +2598,13 @@ describe('sdk', () => {
     })
 
     it('strips stale upstream pagent entries when a local agent overrides them', () => {
-      // Simulate `_injectTags` having already written upstream attribution into the carrier.
       let agentId
-      const carrier = {
-        'x-datadog-tags': '_dd.p.llmobs_pagent_span_id=upstream_id,_dd.p.llmobs_pagent_name=upstream_agent',
-      }
+      const carrier = {}
       llmobs.trace({ kind: 'agent', name: 'local_agent' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        span.context()._trace.tags['_dd.p.llmobs_pagent_span_id'] = 'upstream_id'
+        span.context()._trace.tags['_dd.p.llmobs_pagent_name'] = 'upstream_agent'
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2511,15 +2615,13 @@ describe('sdk', () => {
     })
 
     it('strips stale upstream pagent_name when local agent name is unsafe', () => {
-      // Even though the upstream name was safe, the downstream should see id-only when the
-      // local agent name is not wire-safe (decision: keep just the id, wipe the name).
       let agentId
-      const carrier = {
-        'x-datadog-tags': '_dd.p.llmobs_pagent_span_id=upstream_id,_dd.p.llmobs_pagent_name=upstream_agent',
-      }
+      const carrier = {}
       llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
         agentId = span.context().toSpanId()
-        injectCh.publish({ carrier })
+        span.context()._trace.tags['_dd.p.llmobs_pagent_span_id'] = 'upstream_id'
+        span.context()._trace.tags['_dd.p.llmobs_pagent_name'] = 'upstream_agent'
+        tracer.inject(span, 'text_map', carrier)
       })
 
       const tags = carrier['x-datadog-tags']
@@ -2531,16 +2633,16 @@ describe('sdk', () => {
       const originalMax = tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
       const carrier = { 'x-datadog-tags': '' }
 
-      llmobs.trace({ kind: 'agent', name: 'my_agent' }, () => {
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
         // First injection: measure the tags string length WITHOUT pagent entries.
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
         const baseLength = carrier['x-datadog-tags']
           .split(',').filter(e => !e.startsWith('_dd.p.llmobs_pagent')).join(',').length
 
         // Second injection: budget allows the base tags but not the id entry (so name is also dropped).
         carrier['x-datadog-tags'] = ''
         tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = baseLength
-        injectCh.publish({ carrier })
+        tracer.inject(span, 'text_map', carrier)
       })
       tracer._tracer._config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = originalMax
 

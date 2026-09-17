@@ -2,8 +2,7 @@
 
 const { fetchAgentInfo } = require('../agent/info')
 const log = require('../log')
-
-const TRAILING_SLASHES = /\/+$/
+const { stripTrailingSlashes } = require('./path')
 
 /**
  * Receiver discovery contract
@@ -81,14 +80,14 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
   const advertisedPaths = new Set()
   for (const endpoint of agentInfo.endpoints) {
     if (typeof endpoint === 'string') {
-      advertisedPaths.add(endpoint.replace(TRAILING_SLASHES, ''))
+      advertisedPaths.add(stripTrailingSlashes(endpoint))
     }
   }
 
   for (const supportedPath of supportedPaths) {
     if (typeof supportedPath !== 'string') continue
 
-    const normalizedPath = supportedPath.replace(TRAILING_SLASHES, '')
+    const normalizedPath = stripTrailingSlashes(supportedPath)
     if (advertisedPaths.has(normalizedPath)) {
       return normalizedPath
     }
@@ -107,7 +106,6 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
  * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
  * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
  * @param {(error: Error|null, route?: {url: URL, basePath: string}) => void} callback - Result callback
- * @returns {void}
  */
 function discoverEVPProxy (url, options, callback) {
   fetchAgentInfo(url, (error, agentInfo) => {

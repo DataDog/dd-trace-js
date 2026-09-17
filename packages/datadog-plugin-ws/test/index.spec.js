@@ -837,7 +837,7 @@ describe('Plugin', () => {
             const { attributes } = pointerLink
             assert.ok(Object.hasOwn(attributes, 'ptr.hash'), `Available keys: ${inspect(Object.keys(attributes))}`)
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
-            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{56}$/)
             assert.strictEqual(attributes['ptr.hash'].length, 57)
           })
 
@@ -883,7 +883,7 @@ describe('Plugin', () => {
             const { attributes } = pointerLink
             assert.ok(Object.hasOwn(attributes, 'ptr.hash'), `Available keys: ${inspect(Object.keys(attributes))}`)
             // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
-            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{56}$/)
             assert.strictEqual(attributes['ptr.hash'].length, 57)
           })
 

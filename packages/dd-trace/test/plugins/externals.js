@@ -45,7 +45,7 @@ module.exports = {
   apollo: [
     {
       name: '@apollo/subgraph',
-      versions: ['>=2.3.0'],
+      versions: ['>=2.3.0 <2.15.0', '>=2.15.0'],
     },
     {
       name: 'graphql',
@@ -384,6 +384,15 @@ module.exports = {
   ],
   knex: [
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
+      name: 'mysql2',
+      dep: true,
+    },
+    {
       name: 'sqlite3',
       versions: ['^5.0.8'],
     },
@@ -397,6 +406,7 @@ module.exports = {
     },
     {
       name: 'pg',
+      dep: true,
       versions: [
         '8.7.3',
       ],
@@ -649,6 +659,12 @@ module.exports = {
       versions: ['8.0.0'],
     },
   ],
+  postgres: [
+    {
+      name: 'pg',
+      versions: ['>=8.0.3'],
+    },
+  ],
   '@prisma/client': [
     {
       name: 'prisma',
@@ -719,8 +735,24 @@ module.exports = {
       versions: ['>=4'],
     },
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
       name: 'mysql2',
       dep: true,
+      versions: ['3.9.3', '>=3.9.4'],
+    },
+    {
+      name: 'mariadb',
+      dep: true,
+      versions: ['2.5.6'],
+    },
+    {
+      name: 'pg',
+      dep: true,
+      versions: ['8.7.3'],
     },
     {
       name: 'sqlite3',
@@ -739,6 +771,28 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
+    },
+  ],
+  '@supabase/supabase-js': [
+    {
+      name: '@supabase/auth-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/functions-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/postgrest-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/realtime-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/storage-js',
+      versions: ['>=2.112.2'],
     },
   ],
 }

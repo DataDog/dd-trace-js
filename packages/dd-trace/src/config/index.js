@@ -8,7 +8,6 @@ const { channel } = require('dc-polyfill')
 
 const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')
-const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
@@ -25,6 +24,7 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
+const { createSiteUrl } = require('../exporters/common/url')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -45,6 +45,12 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
+const rfdc = createRfdc({
+  proto: false,
+  circles: false,
+  constructorHandlers: [[RegExp, transformers.toCamelCase]],
+})
+
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.CUCUMBER_WORKER,
   exporters.JEST_WORKER,
@@ -61,7 +67,6 @@ channel('datadog:identity:update').subscribe(refreshRuntimeId)
  * Lazily generates the process-wide runtime ID on first access instead of at module load,
  * so modules that merely require this file without constructing a Config never pay for it.
  *
- * @returns {string}
  */
 function getRuntimeId () {
   runtimeId ??= uuid()
@@ -429,7 +434,7 @@ class Config extends ConfigBase {
     // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
     if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
-      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -465,8 +470,8 @@ class Config extends ConfigBase {
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
-        trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
-      setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
+        trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
+      setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     }
 
     if (this.cloudPayloadTagging?.request || this.cloudPayloadTagging?.response) {
@@ -486,9 +491,6 @@ class Config extends ConfigBase {
 
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
@@ -647,10 +649,7 @@ class Config extends ConfigBase {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
-      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
       setAndTrack(this, 'dsmEnabled', false)
-      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
-
       const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
       setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
       if (profilingExporters.length === 0) {
@@ -693,16 +692,33 @@ class Config extends ConfigBase {
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
     // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
-    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
-    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host. In agentless mode
+    // there is no agent to relay through, so OTLP goes straight to the per-site intake instead.
+    const otlpAgentlessOrigin = agentlessTracingEnabled && !this.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? createSiteUrl(this.site, 'otlp')?.origin
+      : undefined
+    const defaultOtlpBase = otlpAgentlessOrigin ??
+      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+
+    const assignOtlpHeaderApiKey = (configName) => {
+      if (otlpAgentlessOrigin) {
+        this[configName] ??= { ...this.OTEL_EXPORTER_OTLP_HEADERS }
+        this[configName]['dd-api-key'] = this.DD_API_KEY
+        setAndTrack(this, configName, this[configName])
+      }
+    }
+
     if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_LOGS_HEADERS')
     }
     if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_METRICS_HEADERS')
     }
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true

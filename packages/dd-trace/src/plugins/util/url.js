@@ -14,12 +14,11 @@ const INT_SEGMENT = /^[1-9][0-9]+$/ // Integer of size at least 2 (>=10)
 const INT_ID_SEGMENT = /^(?=.*[0-9])[0-9._-]{3,}$/ // Mixed string with digits and delimiters
 const HEX_SEGMENT = /^(?=.*[0-9])[A-Fa-f0-9]{6,}$/ // Hexadecimal digits of size at least 6 with at least one decimal digit
 const HEX_ID_SEGMENT = /^(?=.*[0-9])[A-Fa-f0-9._-]{6,}$/ // Mixed string with hex digits and delimiters
-const STRING_SEGMENT = /(?:^.{20,}|[%&'()*+,:=@])/ // Long string or a string containing special characters
+const SPECIAL_CHARACTER_SEGMENT = /[%&'()*+,:=@]/
 
 /**
  * Extract full URL from HTTP request
  * @param {import('http').IncomingMessage} req
- * @returns {string} Full URL
  */
 function extractURL (req) {
   const headers = req.headers
@@ -42,7 +41,6 @@ function getProtocol (req) {
  *
  * @param {object} config
  * @param {string} url
- * @returns {string} obfuscated URL
  */
 function obfuscateQs (config, url) {
   const { queryStringObfuscation } = config
@@ -114,7 +112,6 @@ function getQsObfuscator (config) {
  * @param {string} base `scheme://host[:port]`
  * @param {string} [pathname] raw request path, may include `?query`
  * @param {string} strippedUrl `base` + query-stripped path (used when there is no query)
- * @returns {string}
  */
 function buildClientHttpUrl (config, base, pathname, strippedUrl) {
   if (pathname?.includes('?')) {
@@ -133,7 +130,6 @@ function buildClientHttpUrl (config, base, pathname, strippedUrl) {
  * - Cross tracers compatibility
  *
  * @param {string} url
- * @returns {string} Url path
  */
 function extractPathFromUrl (url) {
   if (!url) return '/'
@@ -146,7 +142,6 @@ function extractPathFromUrl (url) {
  * Calculate http.endpoint from URL path
  *
  * @param {string} url
- * @returns {string} The normalized endpoint
  */
 function calculateHttpEndpoint (url) {
   const path = extractPathFromUrl(url)
@@ -167,7 +162,7 @@ function calculateHttpEndpoint (url) {
 
     if (HEX_ID_SEGMENT.test(element)) return '{param:hex_id}'
 
-    if (STRING_SEGMENT.test(element)) return '{param:str}'
+    if (element.length >= 20 || SPECIAL_CHARACTER_SEGMENT.test(element)) return '{param:str}'
 
     // No match
     return element

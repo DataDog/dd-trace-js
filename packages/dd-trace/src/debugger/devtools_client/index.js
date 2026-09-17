@@ -5,6 +5,7 @@ const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
+const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const {
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
@@ -12,6 +13,7 @@ const {
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
+const { refreshBreakpoints } = require('./breakpoints')
 const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
@@ -140,17 +142,14 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  let processLocalState
-  /** @type {Error[] | undefined} */
-  let fatalSnapshotErrors
+  /** @type {Awaited<ReturnType<typeof getLocalStateForCallFrame>> | undefined} */
+  let localState
   if (numberOfProbesWithSnapshots !== 0) {
-    const result = await getLocalStateForCallFrame(
+    localState = await getLocalStateForCallFrame(
       params.callFrames[0],
       { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength },
       start + config.dynamicInstrumentation.captureTimeoutNs
     )
-    processLocalState = result.processLocalState
-    fatalSnapshotErrors = result.fatalErrors
   }
 
   // Evaluate capture expressions for probes that have them
@@ -192,6 +191,10 @@ session.on('Debugger.paused', async ({ params }) => {
   const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
   let messageIndex = 1
 
+  // The probes whose capture got permanently disabled during this pause, if any
+  /** @type {object[] | undefined} */
+  let captureDisabledProbes
+
   // TODO: Send multiple probes in one HTTP request as an array (DEBUG-2848)
   for (const probe of probes) {
     const snapshot = {
@@ -206,19 +209,32 @@ session.on('Debugger.paused', async ({ params }) => {
       language: 'javascript',
     }
 
+    // Which guardrail bucket the event belongs to, and which capture limits were enforced while producing it. The
+    // snapshot module records the reasons, including runtime errors: a fatal error does not necessarily mean one, as
+    // the collector also raises a fatal error to disable capture when it hits its large object safety threshold.
+    /** @type {number} */
+    let eventType = EVENT_TYPE.LOG
+    let incompleteReasons = 0
+
     if (probe.captureSnapshot) {
-      if (fatalSnapshotErrors && fatalSnapshotErrors.length > 0) {
+      eventType = EVENT_TYPE.SNAPSHOT
+      const { processLocalState, fatalErrors, incomplete } = /** @type {NonNullable<typeof localState>} */ (localState)
+      if (fatalErrors.length > 0) {
         // There was an error collecting the snapshot for this probe, let's not try again
         probe.captureSnapshot = false
-        probe.permanentEvaluationErrors = fatalSnapshotErrors.map(error => ({
+        probe.permanentEvaluationErrors = fatalErrors.map(error => ({
           expr: '',
           message: error.message,
         }))
+        captureDisabledProbes ??= []
+        captureDisabledProbes.push(probe)
       }
       snapshot.captures = {
-        lines: { [probe.location.lines[0]]: { locals: /** @type {Function} */ (processLocalState)() } },
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
       }
+      incompleteReasons |= incomplete.reasons
     } else if (probe.compiledCaptureExpressions !== undefined) {
+      eventType = EVENT_TYPE.SNAPSHOT
       const expressionResult = /** @type {Map} */ (captureExpressionResults).get(probe.id)
       if (expressionResult) {
         // Handle fatal capture errors - disable capture expressions for this probe permanently
@@ -228,11 +244,14 @@ session.on('Debugger.paused', async ({ params }) => {
             expr: '',
             message: error.message,
           }))
+          captureDisabledProbes ??= []
+          captureDisabledProbes.push(probe)
         }
 
         snapshot.captures = {
           lines: { [probe.location.lines[0]]: { captureExpressions: expressionResult.processCaptureExpressions() } },
         }
+        incompleteReasons |= expressionResult.incomplete.reasons
 
         // Handle transient evaluation errors - include in snapshot for this capture
         if (expressionResult.evaluationErrors?.length > 0) {
@@ -249,6 +268,7 @@ session.on('Debugger.paused', async ({ params }) => {
           expr: '',
           message: 'Internal error: capture expression results not found',
         }]
+        incompleteReasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       }
     }
 
@@ -283,7 +303,23 @@ session.on('Debugger.paused', async ({ params }) => {
     ackEmitting(probe)
 
     send(message, logger, dd, snapshot,
-      config.propagateProcessTags.enabled ? processTags.serialized : undefined)
+      config.propagateProcessTags.enabled ? processTags.serialized : undefined,
+      eventType, incompleteReasons)
+  }
+
+  if (captureDisabledProbes !== undefined) {
+    // The breakpoint condition bakes in whether each probe produces snapshots, which decides if a hit counts against
+    // the global snapshot rate limit and how a skipped hit is classified. Rebuild the conditions now that this
+    // changed. The disabled probes can be spread over more than one breakpoint, but each affected location is only
+    // refreshed once.
+    refreshBreakpoints(captureDisabledProbes).catch((err) => {
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.error(() => {
+        let ids = captureDisabledProbes[0].id
+        for (let i = 1; i < captureDisabledProbes.length; i++) ids += `, ${captureDisabledProbes[i].id}`
+        return `[debugger:devtools_client] Error refreshing breakpoints after disabling capture for probes: ${ids}`
+      }, err)
+    })
   }
 })
 

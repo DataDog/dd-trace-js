@@ -35,7 +35,6 @@ const backpressureWaiters = new Set()
 /**
  * Keeps the shared polling timer alive only while an owned request is waiting.
  *
- * @returns {void}
  */
 function updateBackpressureTimerRef () {
   if (ownedBackpressureWaiters > 0) backpressureTimer.ref?.()
@@ -46,7 +45,6 @@ function updateBackpressureTimerRef () {
  * Schedules the next shared backpressure poll.
  *
  * @param {number} due
- * @returns {void}
  */
 function setBackpressureTimer (due) {
   clearTimeout(backpressureTimer)
@@ -61,7 +59,6 @@ function setBackpressureTimer (due) {
  * @param {BackpressureWaiter} waiter
  * @param {number} delay
  * @param {number} attemptIndex
- * @returns {void}
  */
 function scheduleBackpressureRetry (waiter, delay, attemptIndex) {
   waiter.attemptIndex = attemptIndex
@@ -81,7 +78,6 @@ function scheduleBackpressureRetry (waiter, delay, attemptIndex) {
  * Removes a settled request from the shared backpressure poll.
  *
  * @param {BackpressureWaiter} waiter
- * @returns {void}
  */
 function removeBackpressureWaiter (waiter) {
   if (!backpressureWaiters.delete(waiter)) return
@@ -99,7 +95,6 @@ function removeBackpressureWaiter (waiter) {
 /**
  * Retries every request whose shared backpressure delay has elapsed.
  *
- * @returns {void}
  */
 function runBackpressureWaiters () {
   const now = Date.now()
@@ -125,7 +120,6 @@ function runBackpressureWaiters () {
 
 /**
  * @param {Buffer|string|Array<Buffer|string>|(() => Readable)} data
- * @returns {number}
  */
 function getPayloadSize (data) {
   // Factory-backed payloads are streamed by their custom transport and enforce their own concurrency limit.
@@ -166,7 +160,6 @@ function createRequestTimeoutError () {
 
 /**
  * @param {number} statusCode
- * @returns {boolean}
  */
 function isRetriableHttpStatusCode (statusCode) {
   return statusCode === 408 || statusCode === 429 || (statusCode >= 500 && statusCode <= 599)
@@ -186,7 +179,6 @@ function getAbortError (signal) {
  * @param {Readable} data
  * @param {AbortSignal} [signal]
  * @param {(error: Error|null, data?: Buffer, payloadSize?: number) => void} callback
- * @returns {void}
  */
 function bufferReadable (data, signal, callback) {
   const chunks = []
@@ -256,7 +248,6 @@ function bufferReadable (data, signal, callback) {
  * @param {object} options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
- * @returns {void}
  */
 function request (data, options, callback) {
   const { signal } = options
@@ -281,7 +272,6 @@ function request (data, options, callback) {
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
  * @param {number} [reservedPayloadSize]
- * @returns {void}
  */
 function requestBuffered (data, options, callback, reservedPayloadSize) {
   const { signal } = options
@@ -344,7 +334,6 @@ function requestBuffered (data, options, callback, reservedPayloadSize) {
 
   /**
    * @param {number} attemptIndex
-   * @returns {void}
    */
   function attempt (attemptIndex) {
     if (settled) return

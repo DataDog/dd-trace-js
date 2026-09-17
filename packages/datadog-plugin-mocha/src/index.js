@@ -61,6 +61,10 @@ const {
   getFailedTestReplayPromise,
   getTestSuiteExecutionKey,
   isModifiedTest,
+  setRumTestCorrelation,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
+  TEST_IS_RUM_ACTIVE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -153,10 +157,33 @@ function getJasmineError (result) {
 }
 
 /**
+ * Applies WebdriverIO RUM correlation without replacing active-browser metadata with an inactive browser.
+ *
+ * @param {object} context
+ * @param {object|undefined} activeSpan
+ * @returns {object|undefined}
+ */
+function setWebdriverioRumTestCorrelation (context, activeSpan) {
+  const browserVersion = context.browserVersion
+  const correlationContext = {
+    isRumActive: context.isRumActive,
+    testExecutionId: context.testExecutionId,
+  }
+  const testSpan = setRumTestCorrelation(correlationContext, activeSpan)
+  context.testExecutionId = correlationContext.testExecutionId
+  if (!testSpan) return
+
+  const hasActiveRum = testSpan.context().getTag(TEST_IS_RUM_ACTIVE)
+  if (!context.isRumActive && hasActiveRum) return testSpan
+  if (context.browserName) testSpan.setTag(TEST_BROWSER_NAME, context.browserName)
+  if (browserVersion) testSpan.setTag(TEST_BROWSER_VERSION, browserVersion)
+  return testSpan
+}
+
+/**
  * Converts a screenshot capture failure into its upload result.
  *
  * @param {unknown} error
- * @returns {string}
  */
 function handleWebdriverioScreenshotError (error) {
   log.error('Error capturing WebdriverIO failure screenshot: %s', error?.message || String(error))
@@ -290,6 +317,14 @@ class MochaPlugin extends CiPlugin {
       }
     })
 
+    this.addSub('ci:webdriverio:rum:page-navigate', (ctx) => {
+      if (this.testFramework !== 'webdriverio') return
+      ctx.isTestOptimizationRunner = true
+
+      const activeSpan = storage('legacy').getStore()?.span
+      setWebdriverioRumTestCorrelation(ctx, activeSpan)
+    })
+
     this.addBind(jasmineTestFunctionStartCh, (ctx) => {
       if (this.testFrameworkAdapter !== WEBDRIVERIO_JASMINE_ADAPTER) {
         return storage('legacy').getStore()
@@ -312,7 +347,7 @@ class MochaPlugin extends CiPlugin {
 
       const functionType = currentStore[WEBDRIVERIO_JASMINE_FUNCTION_TYPE]
       if (functionType === 'Test') {
-        ctx.retryCallback = error => this.#retryWebdriverioJasmineTest(test, error)
+        ctx.retryCallback = this.#retryWebdriverioJasmineTestWithRumCorrelation.bind(this, ctx, test)
       }
       const nextStore = {
         ...test.currentStore,
@@ -1054,7 +1089,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {object|undefined} parentStore
-   * @returns {void}
    */
   #startWebdriverioJasmineAttempt (test, parentStore) {
     test.attemptStart = performance.now()
@@ -1085,7 +1119,6 @@ class MochaPlugin extends CiPlugin {
    * Delays Jasmine's parent runner until every Datadog-managed spec execution has completed.
    *
    * @param {object} context
-   * @returns {void}
    */
   #configureWebdriverioJasmineLifecycle (context) {
     const isLegacyJasmine = Boolean(context.self?.queueableFn)
@@ -1214,7 +1247,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {void}
    */
   #finishWebdriverioJasmineRetry (test, result) {
     const status = getJasmineStatus(test.reportedStatus || result.status)
@@ -1254,12 +1286,30 @@ class MochaPlugin extends CiPlugin {
    * Advances a Jasmine test and starts its next attempt span.
    *
    * @param {object} test
-   * @returns {void}
    */
   #startNextWebdriverioJasmineAttempt (test) {
     test.attempt++
     test.reportedStatus = undefined
     this.#startWebdriverioJasmineAttempt(test, test.currentStore)
+  }
+
+  /**
+   * Advances a native WebdriverIO retry without stopping its active RUM session.
+   *
+   * @param {object} context
+   * @param {object} test
+   * @param {Error|undefined} error
+   * @returns {Promise<void>}
+   */
+  async #retryWebdriverioJasmineTestWithRumCorrelation (context, test, error) {
+    const correlationContext = await context.rumRetryCallback?.() || {}
+    setWebdriverioRumTestCorrelation(correlationContext, test.span)
+
+    await this.#retryWebdriverioJasmineTest(test, error)
+
+    const testExecutionId = test.span.context().toTraceId()
+    await context.rumRetryCallback?.(testExecutionId)
+    setWebdriverioRumTestCorrelation(correlationContext, test.span)
   }
 
   /**
@@ -1349,7 +1399,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {void}
    */
   #completeWebdriverioJasmineTest (test, result) {
     const state = this._webdriverioJasmineState
@@ -1405,7 +1454,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} span - Failed test span
    * @param {() => void} [onDone] - Called after the screenshot upload finishes
-   * @returns {boolean} Whether a screenshot upload exists for the span
    */
   #startWebdriverioScreenshotUpload (span, onDone) {
     if (
@@ -1492,7 +1540,6 @@ class MochaPlugin extends CiPlugin {
    * @param {object} span - Failed test span
    * @param {{callbacks: Array<() => void>, finished: boolean}} upload - Upload state
    * @param {string} result - Aggregate screenshot upload result
-   * @returns {void}
    */
   #finishWebdriverioScreenshotUpload (span, upload, result) {
     if (upload.finished) return
@@ -1522,7 +1569,6 @@ class MochaPlugin extends CiPlugin {
    * @param {object} span - Failed test span
    * @param {string|string[]} screenshots - Base64-encoded PNG data
    * @param {(result: string) => void} onDone - Aggregate upload completion callback
-   * @returns {void}
    */
   #uploadWebdriverioScreenshots (span, screenshots, onDone) {
     const screenshotList = Array.isArray(screenshots) ? screenshots : [screenshots]
@@ -1592,7 +1638,6 @@ class MochaPlugin extends CiPlugin {
    *   resolveCallback?: (onDone: () => void) => void,
    *   rejectCallback?: (onDone: () => void) => void
    * }} context
-   * @returns {void}
    */
   #finishWebdriverioJasmineWorker (context) {
     const state = this._webdriverioJasmineState

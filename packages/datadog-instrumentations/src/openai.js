@@ -8,46 +8,28 @@ const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
 const responsePromiseContexts = new WeakMap()
 
-// Provider lifecycle channels. Payloads stay OpenAI-native:
-// before { args, parentSpan, abortController, pending }
-// after  { args, body, parentSpan, abortController, pending }
-const chatCompletionsBeforeChannel = dc.channel('dd-trace:openai:chat.completions:before')
-const chatCompletionsAfterChannel = dc.channel('dd-trace:openai:chat.completions:after')
-const responsesBeforeChannel = dc.channel('dd-trace:openai:responses:before')
-const responsesAfterChannel = dc.channel('dd-trace:openai:responses:after')
-
-const LIFECYCLE_CHANNELS = {
-  'chat.completions': {
-    before: chatCompletionsBeforeChannel,
-    after: chatCompletionsAfterChannel,
-  },
-  responses: {
-    before: responsesBeforeChannel,
-    after: responsesAfterChannel,
-  },
-}
+// Published synchronously with the native call data. A subscriber may set either callback and
+// this instrumentation applies it, so the wrapping stays here and only the policy lives outside:
+//   beforeResult () => Promise<void>|undefined   holds the result back until it settles
+//   onResult (body) => unknown|Promise<unknown>  inspects or replaces the delivered body
+const chatCompletionsInterceptChannel = dc.channel('dd-trace:openai:chat.completions:intercept')
+const responsesInterceptChannel = dc.channel('dd-trace:openai:responses:intercept')
 
 /**
- * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
+ * Returns `promise`, but not before `settled` settles, so a rejection from an interceptor
+ * reaches the caller instead of the SDK's value.
  *
- * Subscribers push async work into `pending` synchronously during publication and
- * abort `abortController` with an error before the pushed promise resolves to block.
- *
- * @param {object} channel
- * @param {object} payload
- * @returns {Promise<void>}
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {Promise<void>|undefined} settled
+ * @returns {Promise<T>}
  */
-function publishLifecycle (channel, payload) {
-  const abortController = new AbortController()
-  const ctx = { ...payload, abortController, pending: [] }
+function heldUntil (promise, settled) {
+  if (!settled) return promise
 
-  channel.publish(ctx)
-
-  return Promise.all(ctx.pending).then(() => {
-    if (abortController.signal.aborted) {
-      throw abortController.signal.reason
-    }
-  })
+  // The interceptor's rejection wins over an earlier SDK rejection, so keep that one handled.
+  promise.catch(() => {})
+  return settled.then(() => promise)
 }
 
 const V4_PACKAGE_SHIMS = [
@@ -57,6 +39,7 @@ const V4_PACKAGE_SHIMS = [
     baseResource: 'chat.completions',
     methods: ['create'],
     streamedResponse: true,
+    interceptChannel: chatCompletionsInterceptChannel,
   },
   {
     file: 'resources/completions',
@@ -72,6 +55,7 @@ const V4_PACKAGE_SHIMS = [
     methods: ['create'], // implicitly covers `parse` as well which calls `create` under the hood
     streamedResponse: true,
     versions: ['>=4.87.0'],
+    interceptChannel: responsesInterceptChannel,
   },
   {
     file: 'resources/embeddings',
@@ -185,6 +169,7 @@ const V4_PACKAGE_SHIMS = [
     methods: ['create'],
     streamedResponse: true,
     versions: ['>=4.85.0'],
+    interceptChannel: chatCompletionsInterceptChannel,
   },
 ]
 
@@ -287,13 +272,11 @@ for (const extension of extensions) {
         return handleUnwrappedAPIPromise(parsedPromise, state)
       })
 
+      // Raw-response callers bypass `parse`, so run the interceptor here too.
       shimmer.wrap(prototype, 'asResponse', asResponse => function (...args) {
         const state = responsePromiseContexts.get(this.responsePromise)
-        const responsePromise = asResponse.apply(this, args)
 
-        if (!state?.getBeforeVerdict) return responsePromise
-
-        return Promise.all([state.getBeforeVerdict(), responsePromise]).then(([, response]) => response)
+        return heldUntil(asResponse.apply(this, args), state?.interceptCtx?.beforeResult?.())
       })
 
       return exports
@@ -303,7 +286,7 @@ for (const extension of extensions) {
 
 for (const extension of extensions) {
   for (const shim of V4_PACKAGE_SHIMS) {
-    const { file, targetClass, baseResource, methods, versions, streamedResponse } = shim
+    const { file, targetClass, baseResource, methods, versions, streamedResponse, interceptChannel } = shim
     addHook({ name: 'openai', file: file + extension, versions: versions || ['>=4'] }, exports => {
       const targetPrototype = exports[targetClass].prototype
 
@@ -314,10 +297,9 @@ for (const extension of extensions) {
           // chat.completions and completions
           const stream = streamedResponse && getOption(args, 'stream', false)
 
-          const channels = stream ? null : LIFECYCLE_CHANNELS[baseResource]
-          const hasLifecycle = !!channels && (channels.before.hasSubscribers || channels.after.hasSubscribers)
+          const intercepted = !stream && interceptChannel?.hasSubscribers
 
-          if (!ch.start.hasSubscribers && !hasLifecycle) {
+          if (!ch.start.hasSubscribers && !intercepted) {
             return methodFn.apply(this, args)
           }
 
@@ -330,24 +312,21 @@ for (const extension of extensions) {
           }
 
           return ch.start.runStores(ctx, () => {
-            // Capture the parent span explicitly: the _thenUnwrap/parse path decouples
-            // the lazy evaluation from the active scope at call time.
-            const parentSpan = hasLifecycle ? ctx.currentStore?.span : undefined
-
             const apiProm = methodFn.apply(this, args)
 
-            const beforeChannel = hasLifecycle && channels.before.hasSubscribers ? channels.before : null
-            const afterChannel = hasLifecycle && channels.after.hasSubscribers ? channels.after : null
-            let beforeVerdict
-            const getBeforeVerdict = beforeChannel
-              ? function getBeforeVerdict () {
-                beforeVerdict ??= publishLifecycle(beforeChannel, { args, parentSpan })
-                return beforeVerdict
-              }
-              : null
+            let interceptCtx
+            if (intercepted) {
+              interceptCtx = { arguments: args, tracingContext: ctx }
+              interceptChannel.publish(interceptCtx)
+            }
 
-            const state = { ctx, stream, getBeforeVerdict, afterChannel, parentSpan }
-            responsePromiseContexts.set(apiProm.responsePromise, state)
+            // Keyed by the response promise rather than the APIPromise: `_thenUnwrap` builds a new
+            // APIPromise around the same response, which is how `responses.parse` and the
+            // pagination page types reach the prototype wrappers above. A method that resolves to
+            // a plain value has none, and a WeakMap rejects a non-object key.
+            if (apiProm?.responsePromise) {
+              responsePromiseContexts.set(apiProm.responsePromise, { ctx, stream, interceptCtx })
+            }
 
             ch.end.publish(ctx)
 
@@ -361,20 +340,17 @@ for (const extension of extensions) {
 }
 
 function handleUnwrappedAPIPromise (apiProm, state) {
-  const { ctx, stream, getBeforeVerdict, afterChannel, parentSpan } = state
-  const gatedApiProm = getBeforeVerdict
-    ? Promise.all([getBeforeVerdict(), apiProm]).then(([, result]) => result)
-    : apiProm
+  const { ctx, stream, interceptCtx } = state
 
-  return gatedApiProm
+  return heldUntil(apiProm, interceptCtx?.beforeResult?.())
     .then(([{ response, options }, body]) => {
       if (stream) {
+        const wrapIterator = wrapStreamIterator(response, options, ctx)
+
         if (body.iterator) {
-          shimmer.wrap(body, 'iterator', wrapStreamIterator(response, options, ctx))
+          shimmer.wrap(body, 'iterator', wrapIterator)
         } else {
-          shimmer.wrap(
-            body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, ctx)
-          )
+          shimmer.wrap(body.response.body, Symbol.asyncIterator, wrapIterator)
         }
         return body
       }
@@ -388,28 +364,29 @@ function handleUnwrappedAPIPromise (apiProm, state) {
         },
       }
 
-      if (!afterChannel) {
+      if (!interceptCtx?.onResult) {
         finish(ctx, responseData)
         return body
       }
 
-      // Finish after evaluation so a block propagates the error to openai.request
-      // and the span wraps its child instead of closing before it.
-      return publishLifecycle(afterChannel, { args: ctx.args, body, parentSpan }).then(() => {
+      // Finish after the callback settles so a rejection propagates to openai.request and the
+      // span wraps its child instead of closing before it.
+      return Promise.resolve(interceptCtx.onResult(body)).then(deliveredBody => {
         finish(ctx, responseData)
-        return body
+        return deliveredBody
       })
     })
     .catch(error => {
-      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in the success
-      // branch, Before Model block, After Model block, or openai error) — record the error now so
-      // the openai.request span is marked errored. If finish already ran, don't double-publish.
-      if (!ctx.result) finish(ctx, undefined, error)
+      finish(ctx, undefined, error)
       throw error
     })
 }
 
 function finish (ctx, response, error) {
+  // `parse` is re-entered on every await of the same APIPromise, and a stream may be iterated
+  // more than once, so the span must only close once.
+  if (ctx.finished) return
+
   if (error) {
     ctx.error = error
     ch.error.publish(ctx)
@@ -419,6 +396,7 @@ function finish (ctx, response, error) {
   // so we don't want to override it here
   ctx.result ??= {}
   Object.assign(ctx.result, response)
+  ctx.finished = true
 
   ch.asyncEnd.publish(ctx)
 }

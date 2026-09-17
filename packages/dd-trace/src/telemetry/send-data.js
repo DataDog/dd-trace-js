@@ -2,6 +2,7 @@
 
 const request = require('../exporters/common/request')
 const log = require('../log')
+const getAgentlessTelemetryUrl = require('./agentless-url')
 
 /**
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
@@ -75,9 +76,10 @@ let getTestOptimizationAgent
  * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  * @param {TelemetryRequestType} reqType
+ * @param {string} [apiKey]
  * @returns {Record<string, string>}
  */
-function getHeaders (config, application, reqType) {
+function getHeaders (config, application, reqType, apiKey) {
   const headers = {
     'DD-Client-Library-Language': application.language_name,
     'DD-Client-Library-Version': application.tracer_version,
@@ -93,20 +95,10 @@ function getHeaders (config, application, reqType) {
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
-  if (config.DD_API_KEY) {
-    headers['dd-api-key'] = config.DD_API_KEY
+  if (apiKey) {
+    headers['dd-api-key'] = apiKey
   }
   return headers
-}
-
-/**
- * @param {string | undefined} site
- */
-function getAgentlessTelemetryEndpoint (site) {
-  if (site === 'datad0g.com') { // staging
-    return 'https://all-http-intake.logs.datad0g.com'
-  }
-  return `https://instrumentation-telemetry-intake.${site}`
 }
 
 let seqId = 0
@@ -155,8 +147,8 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   if (isAgentlessMode) {
     try {
       url = isCiVisibilityAgentlessMode
-        ? testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
-        : new URL(getAgentlessTelemetryEndpoint(config.site))
+        ? testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? getAgentlessTelemetryUrl(config.site)
+        : getAgentlessTelemetryUrl(config.site)
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid
@@ -170,7 +162,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     port,
     method: 'POST',
     path: isAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
-    headers: getHeaders(config, application, reqType),
+    headers: getHeaders(config, application, reqType, isAgentlessMode ? config.DD_API_KEY : undefined),
   }
   if (isCiVisibility) options.agent = getTestOptimizationAgent(url)
 
@@ -195,7 +187,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       // figure out which data center to send to
       let backendUrl
       try {
-        backendUrl = new URL(getAgentlessTelemetryEndpoint(config.site))
+        backendUrl = getAgentlessTelemetryUrl(config.site)
       } catch {
         log.error('Invalid Telemetry URL')
         return

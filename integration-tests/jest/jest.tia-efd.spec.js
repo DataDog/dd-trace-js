@@ -3096,10 +3096,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       // Verify Datadog Test Optimization message is shown when exit code is flipped
       assert.match(testOutput, /Datadog Test Optimization/)
-      assert.match(testOutput, /\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
+      assert.match(testOutput, /(?<!\d)\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
       assert.match(testOutput, /Early Flake Detection/)
-      assert.match(testOutput, /two-occasionally-failing-tests.*›.*fail first occasionally fails/)
-      assert.match(testOutput, /two-occasionally-failing-tests.*›.*fail second occasionally fails/)
+      assert.match(testOutput, /two-occasionally-failing-tests[^\n\r\u2028\u2029›]*›.*fail first occasionally fails/)
+      assert.match(testOutput, /two-occasionally-failing-tests[^\n\r\u2028\u2029›]*›.*fail second occasionally fails/)
     })
 
     // resetting snapshot state logic only works in latest versions

@@ -86,7 +86,6 @@ const JAVASCRIPT_STRING_ESCAPES = Object.freeze({
  * directory would alter project test semantics, so those versions remain a validator limitation.
  *
  * @param {string|null|undefined} version installed Cucumber version
- * @returns {boolean} whether validator-owned config isolation is supported
  */
 function supportsConfigIsolation (version) {
   const match = /^[v=]?(\d+)(?:\.|$)/.exec(String(version || ''))
@@ -97,7 +96,6 @@ function supportsConfigIsolation (version) {
  * Reports whether a file follows the Cucumber feature convention.
  *
  * @param {string} filename candidate filename
- * @returns {boolean} whether the candidate can be selected by Cucumber
  */
 function isTestFile (filename) {
   return filename.endsWith('.feature')
@@ -107,7 +105,6 @@ function isTestFile (filename) {
  * Counts statically declared Cucumber scenarios in a feature.
  *
  * @param {string} source feature source
- * @returns {number} declared scenario count
  */
 function getScenarioCount (source) {
   return [...source.matchAll(/^[ \t]*(?:Example|Scenario(?: Outline| Template)?):[ \t]*\S/gm)].length
@@ -118,7 +115,6 @@ function getScenarioCount (source) {
  *
  * @param {object} input generated source input
  * @param {string} input.testName generated scenario name
- * @returns {string} canonical generated feature source
  */
 function getGeneratedTestContent ({ testName }) {
   return [
@@ -132,7 +128,6 @@ function getGeneratedTestContent ({ testName }) {
 /**
  * Returns the validator-owned Cucumber step definitions shared by generated scenarios.
  *
- * @returns {string} canonical generated step-definition source
  */
 function getGeneratedStepsContent () {
   return [
@@ -154,7 +149,6 @@ function getGeneratedStepsContent () {
  * Returns the generated Cucumber step-definition path for a feature directory.
  *
  * @param {string} testDirectory generated feature directory
- * @returns {string} generated step-definition path
  */
 function getGeneratedStepsPath (testDirectory) {
   return path.join(testDirectory, GENERATED_STEPS_FILENAME)
@@ -282,7 +276,9 @@ function readProfileDefinitions (filename) {
 
 function getJavascriptProfileDefinitions (source) {
   const syntax = maskJavascriptCommentsAndStrings(source)
-  const exports = [...syntax.matchAll(/^\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/gm)]
+  const exports = [...syntax.matchAll(
+    /(?:^|\S[\t\v\f\p{Zs}\uFEFF]*[\n\r\u2028\u2029])\s*(?:module\s*\.\s*exports\s*=|export\s+default)\s*\{/gu
+  )]
   if (exports.length === 0) return new Map()
   if (exports.length !== 1) throw new Error('configuration must export one literal profile object')
 
@@ -478,7 +474,7 @@ function getYamlStringProfileDefinitions (source) {
   const definitions = new Map()
   for (const line of source.split(/\r?\n/)) {
     if (!line.trim() || /^\s*#/.test(line)) continue
-    const match = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line)
+    const match = /^([A-Za-z0-9_-]+):(.*)$/.exec(line)
     const definition = match && !/^\s/.test(line) ? getYamlStringProfileDefinition(match[2]) : undefined
     if (definition === undefined) {
       throw new Error('YAML profiles must be literal one-line command strings')
@@ -492,7 +488,7 @@ function getYamlStringProfileDefinition (source) {
   const value = source.trimStart()
   const quote = value[0]
   if (quote !== '"' && quote !== "'") {
-    const comment = /\s+#/.exec(value)
+    const comment = /[ \t]#/.exec(value)
     const definition = value.slice(0, comment?.index ?? value.length).trimEnd()
     return definition || undefined
   }

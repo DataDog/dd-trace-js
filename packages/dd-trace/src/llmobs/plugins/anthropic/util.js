@@ -62,7 +62,6 @@ function formatAnthropicToolResultContent (content) {
  *
  * @param {AnthropicLlmObsMessage[]} messages
  * @param {{ role: string, content: string | Array<TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock> }} message
- * @returns {void}
  */
 function appendMessage (messages, { role, content }) {
   if (typeof content === 'string') {

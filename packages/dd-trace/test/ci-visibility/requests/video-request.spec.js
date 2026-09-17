@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const http = require('node:http')
+const https = require('node:https')
 const { PassThrough, Readable } = require('node:stream')
 
 const { afterEach, describe, it } = require('mocha')
@@ -186,6 +187,94 @@ describe('ci-visibility/requests/video-request', () => {
 
     assert.strictEqual(requestOptions.headers['DD-API-KEY'], undefined)
     req.emit('error', new Error('stop'))
+  })
+
+  it('selects a proxy agent for authenticated HTTPS video uploads', () => {
+    const directAgent = new https.Agent({ keepAlive: true, maxSockets: 16 })
+    const proxyAgent = new https.Agent()
+    const getHttpsProxyAgent = sinon.stub().returns(proxyAgent)
+    const req = new PassThrough()
+    req.setTimeout = sinon.stub()
+    let requestOptions
+    const requestVideo = proxyquire('../../../src/ci-visibility/requests/video-request', {
+      'node:https': {
+        ...https,
+        request: (options) => {
+          requestOptions = options
+          return req
+        },
+      },
+      '../../exporters/common/proxy': { getHttpsProxyAgent },
+    })
+
+    requestVideo(Readable.from('video-content'), getOptions({
+      agent: directAgent,
+      headers: {
+        'Content-Length': 13,
+        'DD-API-KEY': 'test-api-key',
+      },
+      url: new URL('https://intake.example'),
+    }), sinon.spy())
+
+    sinon.assert.calledOnceWithExactly(
+      getHttpsProxyAgent,
+      requestOptions,
+      directAgent
+    )
+    assert.strictEqual(requestOptions.agent, proxyAgent)
+    req.emit('error', new Error('stop'))
+    directAgent.destroy()
+    proxyAgent.destroy()
+  })
+
+  it('keeps Agent video uploads direct', () => {
+    const directAgent = new http.Agent()
+    const getHttpsProxyAgent = sinon.stub()
+    const req = new PassThrough()
+    req.setTimeout = sinon.stub()
+    let requestOptions
+    const requestVideo = proxyquire('../../../src/ci-visibility/requests/video-request', {
+      'node:http': {
+        ...http,
+        request: (options) => {
+          requestOptions = options
+          return req
+        },
+      },
+      '../../exporters/common/proxy': { getHttpsProxyAgent },
+    })
+
+    requestVideo(Readable.from('video-content'), getOptions({
+      agent: directAgent,
+    }), sinon.spy())
+
+    sinon.assert.notCalled(getHttpsProxyAgent)
+    assert.strictEqual(requestOptions.agent, directAgent)
+    req.emit('error', new Error('stop'))
+    directAgent.destroy()
+  })
+
+  it('reports proxy selection errors without consuming video capacity', () => {
+    const error = new Error('invalid proxy URL')
+    const body = Readable.from('video-content')
+    const callback = sinon.spy()
+    const requestVideo = proxyquire('../../../src/ci-visibility/requests/video-request', {
+      '../../exporters/common/proxy': {
+        getHttpsProxyAgent: () => { throw error },
+      },
+    })
+
+    requestVideo(body, getOptions({
+      headers: {
+        'Content-Length': 13,
+        'DD-API-KEY': 'test-api-key',
+      },
+      url: new URL('https://intake.example'),
+    }), callback)
+
+    sinon.assert.calledOnceWithExactly(callback, error)
+    assert.strictEqual(body.destroyed, true)
+    assert.strictEqual(requestVideo.writable, true)
   })
 
   it('limits active video requests independently', () => {

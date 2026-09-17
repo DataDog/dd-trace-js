@@ -306,7 +306,6 @@ function getFunctionArguments (fn, args = []) {
 // keys), so a name containing `=` is safe and must not be dropped.
 /**
  * @param {string} name
- * @returns {boolean}
  */
 function agentNameWireSafe (name) {
   // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
@@ -335,37 +334,6 @@ function resolveAgentAttribution (tags, span) {
     return { name: tags[NAME] || span._name, spanId: span.context().toSpanId() }
   }
   return { name: tags[PARENT_AGENT_NAME], spanId: tags[PARENT_AGENT_SPAN_ID] }
-}
-
-/**
- * Removes all `key=value` entries for the given key from a comma-separated tagset string.
- *
- * @param {string} tags - Existing tagset string (may be empty).
- * @param {string} key
- * @returns {string}
- */
-function stripTagsetEntry (tags, key) {
-  if (!tags.includes(key)) return tags
-  return tags.split(',').filter(entry => !entry.startsWith(`${key}=`)).join(',')
-}
-
-/**
- * Appends `key=value` to the tagset string with a comma separator, but only when `value` is
- * truthy, passes the optional `safeguard` predicate, and fits within `maxTagSetLength`. Returns
- * the original `tags` unchanged when the value is absent, unsafe, or would overflow the budget.
- *
- * @param {string} tags - Existing tagset string (may be empty).
- * @param {string} key
- * @param {string | undefined} value
- * @param {((v: string) => boolean) | null} [safeguard]
- * @param {number} [maxTagSetLength]
- * @returns {string}
- */
-function appendOptionalPropagatedTag (tags, key, value, safeguard, maxTagSetLength) {
-  if (!value || (safeguard && !safeguard(value))) return tags
-  const entry = `${tags ? ',' : ''}${key}=${value}`
-  if (maxTagSetLength != null && tags.length + entry.length > maxTagSetLength) return tags
-  return `${tags}${entry}`
 }
 
 function spanHasError (span) {
@@ -444,7 +412,6 @@ function findGenAIAncestorSpanId (span) {
 /**
  * Generate a 128-bit LLMObs trace ID with the span start time encoded in its high bits.
  * @param {number} startTime
- * @returns {string}
  */
 function generateLlmObsTraceId (startTime) {
   const identifier = id()
@@ -493,7 +460,6 @@ function normalizeLlmObsTraceId (traceId) {
 /**
  * @param {string} fmt
  * @param {Record<string, string>} [mimeTypeLookup]
- * @returns {string}
  */
 function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
   fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''
@@ -518,7 +484,6 @@ function formatAudioPart (data, mimeType) {
 
 module.exports = {
   agentNameWireSafe,
-  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
@@ -527,7 +492,6 @@ module.exports = {
   normalizeLlmObsTraceId,
   formatAudioPart,
   resolveAgentAttribution,
-  stripTagsetEntry,
   validateCostTags,
   validateKind,
   getFunctionArguments,

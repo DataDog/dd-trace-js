@@ -2,6 +2,12 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
+  '@supabase/auth-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/functions-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/postgrest-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/realtime-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/storage-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@supabase/supabase-js': { esmFirst: true, fn: () => require('../supabase') },
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
@@ -141,6 +147,7 @@ module.exports = {
   'pino-pretty': () => require('../pino'),
   playwright: () => require('../playwright'),
   'playwright-core': () => require('../playwright'),
+  postgres: { esmFirst: true, fn: () => require('../postgres') },
   'promise-js': () => require('../promise-js'),
   promise: () => require('../promise'),
   protobufjs: () => require('../protobufjs'),
@@ -158,6 +165,7 @@ module.exports = {
   tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),
   vitest: { esmFirst: true, fn: () => require('../vitest') },
+  webdriverio: { esmFirst: true, fn: () => require('../webdriverio') },
   when: () => require('../when'),
   winston: () => require('../winston'),
   workerpool: () => require('../mocha'),

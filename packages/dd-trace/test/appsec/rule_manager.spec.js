@@ -41,10 +41,10 @@ describe('AppSec Rule Manager', () => {
 
     it('should throw if null/undefined are passed', () => {
       // TODO: fix the exception thrown in the waf or catch it in rule_manager?
-      config.appsec.rules = './not/existing/file.json'
+      config.appsec.DD_APPSEC_RULES = './not/existing/file.json'
       assert.throws(() => { loadRules(config.appsec) })
 
-      config.appsec.rules = './bad-formatted-rules.json'
+      config.appsec.DD_APPSEC_RULES = './bad-formatted-rules.json'
       assert.throws(() => { loadRules(config.appsec) })
     })
 
@@ -52,7 +52,7 @@ describe('AppSec Rule Manager', () => {
       const rulesPath = path.join(__dirname, './blocking-actions-rules.json')
       const testRules = JSON.parse(fs.readFileSync(rulesPath))
 
-      config.appsec.rules = rulesPath
+      config.appsec.DD_APPSEC_RULES = rulesPath
 
       loadRules(config.appsec)
 

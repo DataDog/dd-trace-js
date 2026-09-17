@@ -177,8 +177,10 @@ class DatadogTracer extends Tracer {
     if (!this._enableGetRumData) {
       return ''
     }
-    const span = this.scope().active().context()
-    const traceId = span.toTraceId()
+    const span = this.scope().active()
+    if (!span) return ''
+
+    const traceId = span.context().toTraceId()
     const traceTime = Date.now()
     return `\
 <meta name="dd-trace-id" content="${traceId}" />\

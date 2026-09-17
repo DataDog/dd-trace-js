@@ -31,7 +31,6 @@ class RCClientManager {
    *   Service+Env (5) > Service (4) > Env (3) > Cluster (2) > Org (1)
    *
    * @param {object} conf - Remote config object with service_target and k8s_target_v2 properties
-   * @returns {number} Priority value from 1 (org-level) to 5 (service+env specific)
    */
   calculatePriority (conf) {
     const serviceTarget = conf.service_target
@@ -58,7 +57,6 @@ class RCClientManager {
    * Check if config matches current service/env
    *
    * @param {object} conf - Remote config object with service_target property
-   * @returns {boolean} True if config matches current service/env or has no filter
    */
   matchesCurrentServiceEnv (conf) {
     const serviceTarget = conf.service_target

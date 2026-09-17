@@ -13,6 +13,7 @@ const log = require('../../log')
 const { canSendApiKey, parseUrl } = require('./url')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
+const { getHttpsProxyAgent } = require('./proxy')
 const {
   getMaxAttempts,
   getRetryDelay,
@@ -94,10 +95,17 @@ function request (data, options, callback) {
 
   docker.inject(options.headers)
 
-  const connectionOptions = {
-    ...options,
-    agent: options.agent ?? (isSecure ? httpsAgent : httpAgent),
+  let agent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
+  if (hasApiKey && isSecure) {
+    try {
+      agent = getHttpsProxyAgent(options, agent)
+    } catch (error) {
+      callback(error)
+      return
+    }
   }
+
+  const connectionOptions = { ...options, agent }
 
   /**
    * @param {import('node:http').IncomingMessage} res

@@ -162,7 +162,7 @@ describe('Plugin (ESM)', () => {
     let agent
     let proc
 
-    withVersions('graphql', 'graphql-jit', '0.8.5 || 0.8.7 || 0.8.8', (version, moduleName, resolvedVersion) => {
+    withVersions('graphql', 'graphql-jit', '0.8.5 || >=0.8.7 <0.9.0', (version, moduleName, resolvedVersion) => {
       useSandbox([`'graphql-jit@${resolvedVersion}'`, "'graphql@17.0.2'"], false, [
         './packages/datadog-plugin-graphql/test/esm-test/*'])
 
@@ -183,7 +183,9 @@ describe('Plugin (ESM)', () => {
           assert.ok(jitTrace, 'expected the JIT execution trace')
           assert.strictEqual(checkSpansForServiceName([jitTrace], 'graphql.execute'), true)
           assert.strictEqual(checkSpansForServiceName([jitTrace], 'graphql.resolve'), true)
-          assert.strictEqual(jitTrace.some(span => span.resource === 'name:String'), true)
+          const nameSpan = jitTrace.find(span => span.resource === 'name:String')
+          assert.ok(nameSpan)
+          assert.strictEqual(nameSpan.meta['graphql.source'], 'name')
         })
 
         proc = await spawnPluginIntegrationTestProc(
