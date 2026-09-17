@@ -6,13 +6,11 @@ const { appendChangedPaths, createReleaseChangelog, isInternalOnly } = require('
 
 /**
  * @param {number} number
- * @returns {string}
  */
 const prLink = (number) => `[#${number}](https://github.com/DataDog/dd-trace-js/pull/${number})`
 
 /**
  * @param {string} login
- * @returns {string}
  */
 const avatar = (login) => `[<img src="https://github.com/${login}.png?size=48" width="24" height="24" ` +
   `alt="@${login}" title="@${login}" />](https://github.com/${login})`

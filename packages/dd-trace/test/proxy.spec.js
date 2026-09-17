@@ -457,7 +457,7 @@ describe('TracerProxy', () => {
       })
 
       it('should enable the IAST rewriter when IAST is enabled', () => {
-        config.iast.enabled = true
+        config.iast.DD_IAST_ENABLED = true
 
         proxy.init()
 
@@ -773,8 +773,8 @@ describe('TracerProxy', () => {
         })
 
         config.telemetry = {}
-        config.appsec.enabled = true
-        config.iast.enabled = true
+        config.appsec.DD_APPSEC_ENABLED = true
+        config.iast.DD_IAST_ENABLED = true
         config.setRemoteConfig = conf => {
           config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
         }
@@ -890,7 +890,7 @@ describe('TracerProxy', () => {
       })
 
       it('should enable appsec when explicitly configured to true', () => {
-        config.appsec = { enabled: true }
+        config.appsec = { DD_APPSEC_ENABLED: true }
 
         proxy.init()
 
@@ -898,7 +898,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not enable appsec when explicitly configured to false', () => {
-        config.appsec = { enabled: false }
+        config.appsec = { DD_APPSEC_ENABLED: false }
 
         proxy.init()
 
@@ -906,7 +906,7 @@ describe('TracerProxy', () => {
       })
 
       it('should enable iast when configured', () => {
-        config.iast = { enabled: true }
+        config.iast = { DD_IAST_ENABLED: true }
 
         proxy.init()
 
