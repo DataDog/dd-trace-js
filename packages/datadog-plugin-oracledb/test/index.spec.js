@@ -290,7 +290,9 @@ describe('Plugin', () => {
             describe('with a heterogeneous pool', () => {
               let heterogeneousPool
 
-              before(async () => {
+              before(async function () {
+                if (oracledb.thin) return this.skip()
+
                 heterogeneousPool = await oracledb.createPool({
                   connectString: config.connectString,
                   homogeneous: false,
@@ -299,7 +301,7 @@ describe('Plugin', () => {
               })
 
               after(async () => {
-                await heterogeneousPool.close()
+                await heterogeneousPool?.close()
               })
 
               it('uses the requested user for Promise acquisitions', async () => {
