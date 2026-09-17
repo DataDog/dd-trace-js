@@ -86,7 +86,7 @@ describe('AIGuard integration wiring', () => {
     integrations.disable()
 
     sinon.assert.calledOnceWithExactly(anthropicIntegration.enable, aiguard, true)
-    sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true, true)
     sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true, true)
     sinon.assert.calledOnce(anthropicIntegration.disable)
     sinon.assert.calledOnce(openaiIntegration.disable)
