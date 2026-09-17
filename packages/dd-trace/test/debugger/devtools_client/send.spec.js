@@ -228,7 +228,7 @@ describe('input message http requests', function () {
     const queueMaxBytes = Buffer.byteLength(JSON.stringify(getPayload())) + 2
     const configStub = createConfigMock({
       inputPath: '/debugger/v2/input',
-      dynamicInstrumentation: { queueMaxBytes, uploadIntervalSeconds: 1 },
+      queueMaxBytes,
     })
 
     // Mock request to return 404 on first call (v2), then succeed on second call (diagnostics)
@@ -483,7 +483,7 @@ describe('input message http requests', function () {
   describe('upload queue', function () {
     it('should bound the queue using the configured maximum', function () {
       const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
-        './config': createConfigMock({ dynamicInstrumentation: { queueMaxBytes: 1024, uploadIntervalSeconds: 1 } }),
+        './config': createConfigMock({ queueMaxBytes: 1024 }),
         './json-buffer': JSONBufferSpy,
         '../../exporters/common/request': request,
         './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
@@ -501,7 +501,7 @@ describe('input message http requests', function () {
 
     it('should drop probe results while uploads still in flight fill the queue', function () {
       const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
-        './config': createConfigMock({ dynamicInstrumentation: { queueMaxBytes: 1024, uploadIntervalSeconds: 1 } }),
+        './config': createConfigMock({ queueMaxBytes: 1024 }),
         './json-buffer': JSONBufferSpy,
         '../../exporters/common/request': request,
         './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
@@ -529,9 +529,7 @@ describe('input message http requests', function () {
     it('should release the payload from the queue when the upload fails', function () {
       const queueMaxBytes = Buffer.byteLength(JSON.stringify(getPayload())) + 2
       const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
-        './config': createConfigMock({
-          dynamicInstrumentation: { queueMaxBytes, uploadIntervalSeconds: 1 },
-        }),
+        './config': createConfigMock({ queueMaxBytes }),
         './json-buffer': JSONBufferSpy,
         '../../exporters/common/request': request,
         './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
@@ -622,8 +620,8 @@ function createConfigMock (overrides = {}) {
     url,
     inputPath: '/debugger/v2/input',
     maxTotalPayloadSize: 5 * 1024 * 1024,
+    queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
     dynamicInstrumentation: {
-      queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
       uploadIntervalSeconds: 1,
     },
     ...overrides,

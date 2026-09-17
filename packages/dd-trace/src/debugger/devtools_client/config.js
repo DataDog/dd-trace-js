@@ -15,12 +15,9 @@ const queueMaxBytes = Number.isSafeInteger(configuredQueueMaxBytes) && configure
 
 const config = module.exports = {
   ...parentConfig,
-  dynamicInstrumentation: {
-    ...parentConfig.dynamicInstrumentation,
-    queueMaxBytes,
-  },
   parentThreadId,
   maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+  queueMaxBytes,
 }
 
 updateConfig(parentConfig)

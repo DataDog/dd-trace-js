@@ -28,22 +28,22 @@ describe('worker thread config', function () {
   it('should use the default queue limit', function () {
     const config = loadConfig()
 
-    assert.strictEqual(config.dynamicInstrumentation.queueMaxBytes, DEFAULT_QUEUE_MAX_BYTES)
+    assert.strictEqual(config.queueMaxBytes, DEFAULT_QUEUE_MAX_BYTES)
     assert.strictEqual(config.dynamicInstrumentation.captureTimeoutNs, 15_000_000n)
-    assert.strictEqual(parentConfig.dynamicInstrumentation.queueMaxBytes, undefined)
+    assert.strictEqual(parentConfig.queueMaxBytes, undefined)
   })
 
   it('should support the internal queue limit override', function () {
     const config = loadConfig('65536')
 
-    assert.strictEqual(config.dynamicInstrumentation.queueMaxBytes, 64 * 1024)
+    assert.strictEqual(config.queueMaxBytes, 64 * 1024)
   })
 
   it('should ignore invalid internal queue limit overrides', function () {
     for (const value of ['0', '-1', '1.5', 'invalid']) {
       const config = loadConfig(value)
 
-      assert.strictEqual(config.dynamicInstrumentation.queueMaxBytes, DEFAULT_QUEUE_MAX_BYTES)
+      assert.strictEqual(config.queueMaxBytes, DEFAULT_QUEUE_MAX_BYTES)
     }
   })
 
