@@ -35,6 +35,7 @@ const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 const { llmObsTraceIdToWire } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -97,6 +98,7 @@ function enable (config) {
     evalMetricAppendCh.subscribe(handleEvalMetricAppend)
     flushCh.subscribe(handleFlush)
     registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+    traceSampledCh.subscribe(handleTraceSampled)
   }
 
   // span processing
@@ -131,6 +133,7 @@ function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
+  if (traceSampledCh.hasSubscribers) traceSampledCh.unsubscribe(handleTraceSampled)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
@@ -273,6 +276,10 @@ function handleRegisterProcessor (userSpanProcessor) {
 
 function handleSpanProcess (span) {
   spanProcessor.process(span)
+}
+
+function handleTraceSampled (trace) {
+  spanProcessor.processTrace(trace)
 }
 
 function handleEvalMetricAppend ({ payload, routing }) {

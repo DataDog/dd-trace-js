@@ -45,6 +45,8 @@ const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
+const cachedEvents = new WeakMap()
+
 class LLMObservabilitySpan {
   /**
    * @param {string} kind span kind
@@ -103,26 +105,7 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
-      // Custom-routed spans, rescued spans, and payloads that meta_struct cannot represent
-      // losslessly should go through the LLMObs writer.
-      if (this.#shouldAttachMetaStruct(span, routing, formattedEvent)) {
-        this.#attachMetaStruct(span, formattedEvent, mlObsTags)
-        return
-      }
-
-      const enqueued = this.#writer.append(formattedEvent, routing)
-
-      // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
-      // gen_ai.* spans, the parent-chain walk stops at any span carrying this
-      // tag, preserving this span as the immediate LLMObs parent. Set only
-      // when the writer actually buffered the event — format may have dropped
-      // it (user processor returned null), thrown, or the writer may have
-      // dropped it silently when its buffer is full. Leaving this tag off in
-      // those cases avoids dd-go reparenting OTel children under a span that
-      // has no corresponding LLMObs event.
-      if (enqueued) {
-        span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
-      }
+      cachedEvents.set(span, { event: formattedEvent, mlObsTags, routing })
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
@@ -131,6 +114,49 @@ class LLMObsSpanProcessor {
         Failed to append span to LLM Observability writer, likely due to an unserializable property.
         Span won't be sent to LLM Observability: ${e.message}
       `)
+    }
+  }
+
+  /**
+   * Routes cached LLMObs events after the APM sampling decision has been finalized for the trace chunk.
+   *
+   * @param {{
+   *   spans: import('../opentracing/span')[],
+   *   samplingPriority?: number,
+   * }} trace
+   */
+  processTrace ({ spans, samplingPriority }) {
+    for (const span of spans) {
+      const cached = cachedEvents.get(span)
+      if (!cached) continue
+      cachedEvents.delete(span)
+
+      try {
+        const { event, mlObsTags, routing } = cached
+        if (this.#shouldAttachMetaStruct(routing, event, samplingPriority)) {
+          this.#attachMetaStruct(span, event, mlObsTags)
+          continue
+        }
+
+        const enqueued = this.#writer.append(event, routing)
+
+        // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
+        // gen_ai.* spans, the parent-chain walk stops at any span carrying this
+        // tag, preserving this span as the immediate LLMObs parent. Set only
+        // when the writer actually buffered the event — format may have dropped
+        // it (user processor returned null), thrown, or the writer may have
+        // dropped it silently when its buffer is full. Leaving this tag off in
+        // those cases avoids dd-go reparenting OTel children under a span that
+        // has no corresponding LLMObs event.
+        if (enqueued) {
+          span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+        }
+      } catch (e) {
+        logger.warn(`
+          Failed to append span to LLM Observability writer, likely due to an unserializable property.
+          Span won't be sent to LLM Observability: ${e.message}
+        `)
+      }
     }
   }
 
@@ -293,15 +319,17 @@ class LLMObsSpanProcessor {
   }
 
   /**
-   * The meta_struct path replaces the EVP proxy path only when the APM trace is expected to reach the agent.
+   * The meta_struct path replaces the EVP proxy path only when the finalized APM sampling decision keeps the trace.
    *
-   * @param {import('../opentracing/span')} span
    * @param {{ apiKey?: string, site?: string }} routing
    * @param {object} event
+   * @param {number | undefined} samplingPriority
    * @returns {boolean}
    */
-  #shouldAttachMetaStruct (span, routing, event) {
-    return !routing.apiKey && !this.#hasRepeatedTagKeys(event.tags) && !this.#isPredictedAgentDrop(span)
+  #shouldAttachMetaStruct (routing, event, samplingPriority) {
+    return !routing.apiKey &&
+      !this.#hasRepeatedTagKeys(event.tags) &&
+      (samplingPriority === undefined || samplingPriority >= AUTO_KEEP)
   }
 
   /**
@@ -321,20 +349,6 @@ class LLMObsSpanProcessor {
       keys.add(key)
     }
     return false
-  }
-
-  /**
-   * Predicts whether the local agent would drop this trace by priority sampling.
-   *
-   * @param {import('../opentracing/span')} span
-   * @returns {boolean}
-   */
-  #isPredictedAgentDrop (span) {
-    const context = span.context()
-    context._ensureSamplingPriority?.()
-
-    const priority = context._sampling?.priority
-    return priority !== undefined && priority < AUTO_KEEP
   }
 
   /**

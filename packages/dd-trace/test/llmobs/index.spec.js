@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const LLMObsSpanProcessor = require('../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const {
@@ -24,6 +25,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -664,6 +666,16 @@ describe('module', () => {
     sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
+  it('routes sampled trace chunks through the LLMObs span processor', () => {
+    const processTrace = sinon.stub(LLMObsSpanProcessor.prototype, 'processTrace')
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const trace = { spans: [{}], samplingPriority: 1 }
+
+    traceSampledCh.publish(trace)
+
+    sinon.assert.calledOnceWithExactly(processTrace, trace)
+  })
+
   it('registers both LLMObs writers for lifecycle flushing', () => {
     loadLlmobsModuleOnVercel()
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
@@ -708,6 +720,7 @@ describe('module', () => {
     assert.strictEqual(injectCh.hasSubscribers, false)
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(traceSampledCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
     sinon.assert.calledOnce(unregisterTelemetryFlusher)
   })

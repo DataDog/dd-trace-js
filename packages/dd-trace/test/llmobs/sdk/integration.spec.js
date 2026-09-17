@@ -223,6 +223,18 @@ describe('end to end sdk integration tests', () => {
 
       assert.equal(llmobsSpans.length, 1)
     })
+
+    it('rescues a finished llmobs child when its apm trace is rejected later', async () => {
+      tracer.trace('rejected-root', root => {
+        llmobs.trace({ kind: 'workflow', name: 'rejected-child' }, () => {})
+        root.setTag(MANUAL_DROP, true)
+      })
+
+      const { llmobsSpans } = await getEvents(1, { writerOnly: true })
+
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsSpans[0].name, 'rejected-child')
+    })
   })
 
   describe('distributed', () => {
