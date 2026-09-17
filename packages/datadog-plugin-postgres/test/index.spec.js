@@ -96,6 +96,9 @@ describe('Plugin', () => {
     it('accepts boolean disable configuration', () => {
       const plugin = new PostgresPlugin({
         _env: 'tester',
+        _nomenclature: {
+          serviceName: () => ({ name: 'test-postgres', source: 'postgres' }),
+        },
         _service: 'test',
         _version: ddpv,
       }, {})
@@ -135,7 +138,10 @@ describe('Plugin', () => {
 
       withNamingSchema(
         () => sql`SELECT 1 AS value`,
-        rawExpectedSchema.outbound
+        rawExpectedSchema.outbound,
+        {
+          hooks: () => beforeEach(() => tracer.use('postgres', {})),
+        }
       )
 
       it('instruments tagged queries without changing their result', async () => {
@@ -768,11 +774,17 @@ describe('Plugin', () => {
         assert.strictEqual(result[0].query, `/*${dbmComment('postgres-dbm')}*/ ${resource}`)
       })
 
-      it('supports a configured service name', async () => {
-        tracer.use('postgres', { service: 'custom-postgres' })
-        const spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres' })
+      it('updates a configured service name', async () => {
+        tracer.use('postgres', { service: 'custom-postgres-1' })
+        let spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres-1' })
 
         await sql`SELECT 1 AS value`
+        await spanPromise
+
+        tracer.use('postgres', { service: 'custom-postgres-2' })
+        spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres-2' })
+
+        await sql`SELECT 2 AS value`
         await spanPromise
       })
 

@@ -57,6 +57,9 @@ class PostgresPlugin extends DatabasePlugin {
   /** @type {PostgresPreparationPlugin} */
   #preparation
 
+  /** @type {{ name: string, source: string | undefined }} */
+  #service
+
   /** @type {WeakMap<PostgresQuery, import('../../..').Span>} */
   #spans = new WeakMap()
 
@@ -76,6 +79,7 @@ class PostgresPlugin extends DatabasePlugin {
   configure (config) {
     super.configure(config)
 
+    this.#service = this.serviceName({ pluginConfig: this.config })
     const mode = this.config.dbmPropagationMode
     this.#dbmEnabled = mode === 'service' || mode === 'full' || mode === 'dynamic_service'
     this.#preparation.configure(this.config.enabled === true && this.#dbmEnabled)
@@ -87,7 +91,7 @@ class PostgresPlugin extends DatabasePlugin {
    */
   bindStart (ctx) {
     const { database, host, port, query, user } = ctx
-    const service = this.serviceName({ pluginConfig: this.config })
+    const service = this.#service
 
     const span = this.startSpan(this.operationName(), {
       service,
