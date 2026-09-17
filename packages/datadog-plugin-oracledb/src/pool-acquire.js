@@ -13,6 +13,17 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
 
+  /** @type {boolean} */
+  #isServiceDynamic = false
+  /**
+   * @type {{
+   *   nomenclatureConfig: object,
+   *   operationName: string,
+   *   service: { name: string, source: string | undefined }
+   * } | undefined}
+   */
+  #naming
+
   /**
    * @param {{
    *   connectionAttrs: { connectString?: string, user?: string },
@@ -29,8 +40,25 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
       poolMetadata.set(pool, dbInfo)
     }
     const { hostname, port, dbInstance } = dbInfo
-    const operationName = this.operationName({ operation: this.operation })
-    const service = this.serviceName({ pluginConfig: this.config, params: poolAttrs })
+    let operationName
+    let service
+    if (this.#isServiceDynamic) {
+      operationName = this.operationName({ operation: this.operation })
+      service = this.serviceName({ pluginConfig: this.config, params: poolAttrs })
+    } else {
+      const nomenclatureConfig = this._tracer._nomenclature.config
+      let naming = this.#naming
+      if (naming?.nomenclatureConfig !== nomenclatureConfig) {
+        naming = {
+          nomenclatureConfig,
+          operationName: this.operationName({ operation: this.operation }),
+          service: this.serviceName({ pluginConfig: this.config }),
+        }
+        this.#naming = naming
+      }
+      operationName = naming.operationName
+      service = naming.service
+    }
 
     this.startSpan(operationName, {
       service,
@@ -48,6 +76,16 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
     }, ctx)
 
     return ctx.currentStore
+  }
+
+  /**
+   * @param {boolean | Record<string, unknown>} config
+   */
+  configure (config) {
+    const result = super.configure(config)
+    this.#isServiceDynamic = typeof this.config.service === 'function'
+    this.#naming = undefined
+    return result
   }
 }
 

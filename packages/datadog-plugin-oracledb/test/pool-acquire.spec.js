@@ -202,6 +202,35 @@ describe('oracledb pool acquisition without a database service', () => {
     })
   })
 
+  describe('with a dynamic acquisition service', () => {
+    let service
+
+    before(async () => {
+      service = 'first'
+      await agent.load('oracledb', { service: () => service })
+      oracledb = require('../../../versions/oracledb').get()
+      pool = await oracledb.createPool(poolConfig)
+    })
+
+    after(async () => {
+      await pool.close(0)
+      await agent.close()
+    })
+
+    it('resolves the service for every acquisition', async () => {
+      for (const expected of ['first', 'second']) {
+        service = expected
+        await Promise.all([
+          agent.assertFirstTraceSpan({
+            name: 'oracle.pool.acquire',
+            service: expected,
+          }, { spanResourceMatch: /^oracle\.pool\.acquire$/ }),
+          assert.rejects(pool.getConnection(null), { code: 'NJS-005' }),
+        ])
+      }
+    })
+  })
+
   describe('with acquisition tracing disabled', () => {
     before(async () => {
       tracer = await agent.load('oracledb', { poolAcquire: false })
