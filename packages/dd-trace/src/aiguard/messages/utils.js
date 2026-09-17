@@ -22,7 +22,6 @@ function stringifyIfNeeded (value) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function stringifyOrEmpty (value) {
   return stringifyIfNeeded(value) ?? ''

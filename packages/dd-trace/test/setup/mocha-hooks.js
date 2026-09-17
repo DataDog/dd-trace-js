@@ -82,7 +82,6 @@ function markFailed (runnable) {
 
 /**
  * @param {Mocha.Runnable} runnable
- * @returns {boolean}
  */
 function shouldSuppress (runnable) {
   if (isAfterEach(runnable)) {
@@ -103,7 +102,6 @@ function currentTest (runnable) {
 
 /**
  * @param {Mocha.Runnable} runnable
- * @returns {boolean}
  */
 function isAfterAll (runnable) {
   return runnable.type === 'hook' && runnable.title.startsWith('"after all" hook')
@@ -111,7 +109,6 @@ function isAfterAll (runnable) {
 
 /**
  * @param {Mocha.Runnable} runnable
- * @returns {boolean}
  */
 function isAfterEach (runnable) {
   return runnable.type === 'hook' && runnable.title.startsWith('"after each" hook')

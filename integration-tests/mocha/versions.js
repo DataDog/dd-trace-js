@@ -11,7 +11,6 @@ const mocha12NodeRange = '^20.19.0 || >=22.12.0'
 
 /**
  * @param {string} [nodeVersion]
- * @returns {string}
  */
 function getLatestMochaSpecifier (nodeVersion = process.version) {
   if (semver.satisfies(nodeVersion, mocha12NodeRange)) return 'latest'

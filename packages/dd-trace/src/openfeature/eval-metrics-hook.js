@@ -72,7 +72,6 @@ class EvalMetricsHook {
    * @param {{ flagKey: string }} hookContext - Hook context containing the flag key
    * @param {{ variant?: string, reason?: string, errorCode?: string, flagMetadata?: object }} evaluationDetails
    *   - Full evaluation details
-   * @returns {void}
    */
   finally (hookContext, evaluationDetails) {
     if (!this.#enabled) return

@@ -184,7 +184,6 @@ function setWebdriverioRumTestCorrelation (context, activeSpan) {
  * Converts a screenshot capture failure into its upload result.
  *
  * @param {unknown} error
- * @returns {string}
  */
 function handleWebdriverioScreenshotError (error) {
   log.error('Error capturing WebdriverIO failure screenshot: %s', error?.message || String(error))
@@ -1090,7 +1089,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {object|undefined} parentStore
-   * @returns {void}
    */
   #startWebdriverioJasmineAttempt (test, parentStore) {
     test.attemptStart = performance.now()
@@ -1121,7 +1119,6 @@ class MochaPlugin extends CiPlugin {
    * Delays Jasmine's parent runner until every Datadog-managed spec execution has completed.
    *
    * @param {object} context
-   * @returns {void}
    */
   #configureWebdriverioJasmineLifecycle (context) {
     const isLegacyJasmine = Boolean(context.self?.queueableFn)
@@ -1250,7 +1247,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {void}
    */
   #finishWebdriverioJasmineRetry (test, result) {
     const status = getJasmineStatus(test.reportedStatus || result.status)
@@ -1290,7 +1286,6 @@ class MochaPlugin extends CiPlugin {
    * Advances a Jasmine test and starts its next attempt span.
    *
    * @param {object} test
-   * @returns {void}
    */
   #startNextWebdriverioJasmineAttempt (test) {
     test.attempt++
@@ -1404,7 +1399,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {void}
    */
   #completeWebdriverioJasmineTest (test, result) {
     const state = this._webdriverioJasmineState
@@ -1460,7 +1454,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} span - Failed test span
    * @param {() => void} [onDone] - Called after the screenshot upload finishes
-   * @returns {boolean} Whether a screenshot upload exists for the span
    */
   #startWebdriverioScreenshotUpload (span, onDone) {
     if (
@@ -1547,7 +1540,6 @@ class MochaPlugin extends CiPlugin {
    * @param {object} span - Failed test span
    * @param {{callbacks: Array<() => void>, finished: boolean}} upload - Upload state
    * @param {string} result - Aggregate screenshot upload result
-   * @returns {void}
    */
   #finishWebdriverioScreenshotUpload (span, upload, result) {
     if (upload.finished) return
@@ -1577,7 +1569,6 @@ class MochaPlugin extends CiPlugin {
    * @param {object} span - Failed test span
    * @param {string|string[]} screenshots - Base64-encoded PNG data
    * @param {(result: string) => void} onDone - Aggregate upload completion callback
-   * @returns {void}
    */
   #uploadWebdriverioScreenshots (span, screenshots, onDone) {
     const screenshotList = Array.isArray(screenshots) ? screenshots : [screenshots]
@@ -1647,7 +1638,6 @@ class MochaPlugin extends CiPlugin {
    *   resolveCallback?: (onDone: () => void) => void,
    *   rejectCallback?: (onDone: () => void) => void
    * }} context
-   * @returns {void}
    */
   #finishWebdriverioJasmineWorker (context) {
     const state = this._webdriverioJasmineState
