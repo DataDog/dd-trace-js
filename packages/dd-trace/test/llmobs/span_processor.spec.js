@@ -347,6 +347,34 @@ describe('span processor', () => {
       assert.ok(payload.tags.includes('run_id:run-1'))
     })
 
+    it('preserves experiment scope when attaching the llmobs payload to meta_struct', () => {
+      span = {
+        _name: 'experiment-row',
+        _startTime: 0,
+        _duration: 1,
+        context () {
+          return {
+            _tags: {},
+            _sampling: { priority: 1 },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'experiment',
+        '_ml_obs.tags': { experiment_id: 'exp-1', run_id: 'run-1' },
+      })
+
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      assert.equal(span.meta_struct._llmobs._dd.scope, 'experiments')
+    })
+
     it('removes problematic fields from the metadata', () => {
       // problematic fields are circular references or bigints
       const metadata = {
@@ -756,7 +784,7 @@ describe('span processor', () => {
       assertObjectContains(payload.tags, { source: 'mySource', hostname: 'localhost', foo: 'bar' })
     })
 
-    it('fans out array-valued user tags into one wire entry per element', () => {
+    it('uses the writer fallback to preserve every value of array-valued user tags', () => {
       // Regression for https://github.com/DataDog/dd-trace-js/issues/8662 — a single
       // `"key:v1,v2"` entry on the wire gets comma-split at intake, leaving every
       // value after the first orphaned (UI shows a bare `v2` token, `@key:v2` filter
@@ -767,7 +795,7 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
-            _sampling: { priority: 0 },
+            _sampling: { priority: 1 },
             getTags () { return this._tags },
             getTag (key) { return this._tags[key] },
             setTag (key, value) { this._tags[key] = value },
@@ -791,6 +819,7 @@ describe('span processor', () => {
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
+      assert.strictEqual(span.meta_struct, undefined)
       assertObjectContains(payload.tags, [
         'tool.shell.bin:grep',
         'tool.shell.bin:head',

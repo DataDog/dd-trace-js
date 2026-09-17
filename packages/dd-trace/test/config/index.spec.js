@@ -4190,6 +4190,7 @@ describe('Config', () => {
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
       assert.strictEqual(config.DD_AGENTLESS_ENABLED, true)
       assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.protocolVersion, '0.4')
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -4230,11 +4231,22 @@ describe('Config', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.DD_AGENTLESS_ENABLED, false)
+      assert.notStrictEqual(config.experimental.exporter, 'agentless')
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
         name: 'DD_LLMOBS_ENABLED', value: false, origin: 'env_var',
       }])
+    })
+
+    it('should force trace protocol 0.4 when llmobs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.protocolVersion, '0.4')
     })
   })
 

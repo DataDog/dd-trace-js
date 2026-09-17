@@ -103,8 +103,9 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
-      // any custom routed spans or rescued spans should go through custom writers
-      if (this.#shouldAttachMetaStruct(span, routing)) {
+      // Custom-routed spans, rescued spans, and payloads that meta_struct cannot represent
+      // losslessly should go through the LLMObs writer.
+      if (this.#shouldAttachMetaStruct(span, routing, formattedEvent)) {
         this.#attachMetaStruct(span, formattedEvent, mlObsTags)
         return
       }
@@ -296,10 +297,30 @@ class LLMObsSpanProcessor {
    *
    * @param {import('../opentracing/span')} span
    * @param {{ apiKey?: string, site?: string }} routing
+   * @param {object} event
    * @returns {boolean}
    */
-  #shouldAttachMetaStruct (span, routing) {
-    return !routing.apiKey && !this.#isPredictedAgentDrop(span)
+  #shouldAttachMetaStruct (span, routing, event) {
+    return !routing.apiKey && !this.#hasRepeatedTagKeys(event.tags) && !this.#isPredictedAgentDrop(span)
+  }
+
+  /**
+   * Checks whether the intake tag list contains keys that cannot be represented losslessly by the meta_struct map.
+   *
+   * @param {string[]} tags
+   * @returns {boolean}
+   */
+  #hasRepeatedTagKeys (tags) {
+    const keys = new Set()
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      const key = tag.slice(0, separatorIndex)
+      if (keys.has(key)) return true
+      keys.add(key)
+    }
+    return false
   }
 
   /**
@@ -341,6 +362,7 @@ class LLMObsSpanProcessor {
 
     if (mlObsTags[SAMPLE_RATE] !== undefined) dd.sample_rate = mlObsTags[SAMPLE_RATE]
     if (mlObsTags[SAMPLING_DECISION] !== undefined) dd.sampling_decision = mlObsTags[SAMPLING_DECISION]
+    if (event._dd?.scope !== undefined) dd.scope = event._dd.scope
 
     const metaStruct = {
       trace_id: event.trace_id,

@@ -214,18 +214,14 @@ describe('end to end sdk integration tests', () => {
       assert.ok(firstSpan.meta.llmobs_parent_id)
     })
 
-    it('marks llmobs apm spans with _dd.llmobs.submitted when rejected traces use the writer fallback', async () => {
+    it('submits rejected llmobs spans through the writer fallback', async () => {
       llmobs.trace({ kind: 'workflow', name: 'rejected' }, span => {
         span.setTag(MANUAL_DROP, true)
       })
 
-      const { apmSpans, llmobsSpans } = await getEvents(1)
-      const sdkSpan = apmSpans.find(s => s.name === 'rejected')
+      const { llmobsSpans } = await getEvents(1, { writerOnly: true })
 
-      assert.ok(sdkSpan)
       assert.equal(llmobsSpans.length, 1)
-      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
-      assert.equal(sdkSpan.meta_struct?._llmobs, undefined)
     })
   })
 

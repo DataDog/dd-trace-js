@@ -412,7 +412,10 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {object} options.tracerConfigOptions
  * @param {number} [options.traceTimeoutMs] - maximum time to wait for APM traces
  * @returns {{
- *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   getEvents: (
+ *     numLlmObsSpans?: number,
+ *     options?: { writerOnly?: boolean }
+ *   ) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
  *   assertNoLlmObsSpans: (windowMs?: number) => Promise<void>,
  *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
  * }}
@@ -466,7 +469,7 @@ function useLlmObs ({
   })
 
   return {
-    getEvents: async function (numLlmObsSpans = 1) {
+    getEvents: async function (numLlmObsSpans = 1, { writerOnly = false } = {}) {
       // LLMObs spans can arrive either on the sampled APM trace's meta_struct or through the
       // LLMObs writer fallback. Poll writer requests while waiting for APM so writer-only tests
       // do not block on an unrelated trace assertion.
@@ -490,7 +493,10 @@ function useLlmObs ({
         }
       }
 
-      await new Promise(resolve => setImmediate(resolve))
+      if (!writerOnly) {
+        await apmTraces
+        if (apmError) throw apmError
+      }
 
       return {
         apmSpans,
