@@ -1175,7 +1175,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
-        evaluationTimeoutMs: 10,
+        evaluationTimeoutMs: 50,
         probeFile: undefined,
         uploadIntervalSeconds: 1,
       },
@@ -1311,7 +1311,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: 8125, origin: 'default' },
       { name: 'DD_DATA_STREAMS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'default' },
-      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 10, origin: 'default' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 50, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: null, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },

@@ -809,7 +809,7 @@
         "configurationNames": [
           "dynamicInstrumentation.evaluationTimeoutMs"
         ],
-        "default": "10"
+        "default": "50"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [

@@ -1249,7 +1249,7 @@ declare namespace tracer {
        * Time budget in milliseconds for evaluating a probe's condition, log message template and capture expressions.
        * An evaluation that exceeds the budget is reported as an evaluation error and the probe is not evaluated again
        * for a while.
-       * @default 10
+       * @default 50
        * @env DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
