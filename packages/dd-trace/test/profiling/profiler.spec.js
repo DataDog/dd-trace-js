@@ -540,6 +540,93 @@ describe('profiler', function () {
       await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
     })
 
+    it('should refresh the compression method after a restart', async () => {
+      wallProfile = Buffer.from('uncompressed profile - wall')
+      wallProfilePromise = Promise.resolve(wallProfile)
+      wallProfiler.encode.returns(wallProfilePromise)
+      spaceProfile = Buffer.from('uncompressed profile - space')
+      spaceProfilePromise = Promise.resolve(spaceProfile)
+      spaceProfiler.encode.returns(spaceProfilePromise)
+
+      const nextExport = () => new Promise(resolve => {
+        exporter.export.callsFake(exportSpec => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        })
+      })
+
+      const env = process.env
+      try {
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off' }
+        profiler.start(makeStartOptions())
+        let exported = nextExport()
+        clock.tick(interval)
+        assert.strictEqual((await exported).profiles.wall.indexOf(wallProfile), 0)
+
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
+        exported = nextExport()
+        profiler.stop()
+        profiler.start(makeStartOptions())
+        await exported
+        for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+        assert.strictEqual(profiler.enabled, true)
+        exported = nextExport()
+        clock.tick(interval)
+        assert.strictEqual((await exported).profiles.wall.indexOf(Buffer.from([0x1f, 0x8b])), 0)
+
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off' }
+        exported = nextExport()
+        profiler.stop()
+        profiler.start(makeStartOptions())
+        await exported
+        for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+        assert.strictEqual(profiler.enabled, true)
+        exported = nextExport()
+        clock.tick(interval)
+        assert.strictEqual((await exported).profiles.wall.indexOf(wallProfile), 0)
+      } finally {
+        process.env = env
+      }
+    })
+
+    it('should refresh compression options after a restart', async () => {
+      const gzip = sinon.stub().callsFake((buffer, options, callback) => callback(undefined, buffer))
+      profiler.stop()
+      initProfiler({ zlib: { gzip } })
+
+      wallProfile = Buffer.from('profile - wall')
+      wallProfilePromise = Promise.resolve(wallProfile)
+      wallProfiler.encode.returns(wallProfilePromise)
+      spaceProfile = Buffer.from('profile - space')
+      spaceProfilePromise = Promise.resolve(spaceProfile)
+      spaceProfiler.encode.returns(spaceProfilePromise)
+
+      const env = process.env
+      try {
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip-3' }
+        profiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+        assert.deepStrictEqual(gzip.lastCall.args[1], { level: 3 })
+
+        profiler.stop()
+        await waitForExport()
+        for (let i = 0; i < 20; i++) await Promise.resolve()
+
+        gzip.resetHistory()
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
+        profiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+
+        sinon.assert.calledTwice(gzip)
+        assert.strictEqual(gzip.firstCall.args[1], undefined)
+        assert.strictEqual(gzip.secondCall.args[1], undefined)
+      } finally {
+        process.env = env
+      }
+    })
+
     it('should use the libdatadog zstd fallback', async () => {
       profiler.stop()
       const compressed = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])

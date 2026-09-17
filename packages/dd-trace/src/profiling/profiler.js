@@ -200,6 +200,12 @@ class Profiler extends EventEmitter {
       this.#flushInterval = flushInterval
       this.#profilers = profilers
       this.#currentSnapshotTags = snapshotTags
+      // Compression is initialized lazily and cached for a profiling run. A restarted profiler
+      // must derive it again from the newly built runtime instead of retaining the prior method
+      // or options.
+      this.#compressionFn = undefined
+      this.#compressionFnInitialized = false
+      this.#compressionOptions = undefined
       this.#uploadCompression = uploadCompression
       this.#systemInfoReport = systemInfoReport
       if (this.#customLabelKeys.size > 0) {
