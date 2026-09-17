@@ -359,13 +359,17 @@ describe('Turbopack loader', () => {
     sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.has('code', 'ENOENT'))
   })
 
-  it('discovers and activates rewrite targets without a hook registration', () => {
+  it('discovers and activates standalone rewrite targets without a hook registration', () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'rewrite-only-package', { version: '1.0.0' })
     const source = 'module.exports = true\n'
     const resourcePath = write(packageDir, 'index.js', source)
     const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: undefined })
-    const rewriteTarget = { filePath: 'index.js', moduleName: 'rewrite-only-package' }
+    const rewriteTarget = {
+      activationName: 'rewrite-only-package',
+      filePath: 'index.js',
+      moduleName: 'rewrite-only-package',
+    }
     const { loader, rewriteFactory } = loadLoader({
       hooks: {},
       instrumentations: {},
@@ -380,6 +384,29 @@ describe('Turbopack loader', () => {
     assert.match(result.code, /"activate":true,"package":"rewrite-only-package"/)
     sinon.assert.calledOnce(rewrite)
     sinon.assert.calledOnce(rewriteFactory)
+  })
+
+  it('rewrites child targets without appending standalone activation', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, '@wdio/runner', { version: '9.0.0' })
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'build/index.js', source)
+    const rewrittenSource = `${source}// rewritten\n`
+    const rewrite = sinon.stub().returns({ code: rewrittenSource, map: undefined })
+    const rewriteTarget = { filePath: 'build/index.js', moduleName: '@wdio/runner' }
+    const { loader } = loadLoader({
+      hooks: {},
+      instrumentations: {},
+      rewrite,
+      rewriteTarget: () => rewriteTarget,
+      rewriteTargetNames: new Set(['@wdio/runner']),
+    })
+
+    const result = runLoader(loader, resourcePath, source)
+
+    assert.equal(result.code, rewrittenSource)
+    assert.doesNotMatch(result.code, /"activate":true/)
+    sinon.assert.calledOnce(rewrite)
   })
 
   it('rewrites and activates real hookless targets through bundler-register', () => {

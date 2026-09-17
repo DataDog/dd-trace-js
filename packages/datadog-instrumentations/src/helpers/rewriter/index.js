@@ -98,7 +98,8 @@ function rewrite (content, filename, format, target) {
     let { code, map } = transformed
 
     if (source.startsWith('#!') && !code.startsWith('#!')) {
-      code = source.slice(0, source.indexOf('\n')) + '\n' + code
+      const shebangEnd = source.indexOf('\n')
+      code = (shebangEnd === -1 ? source : source.slice(0, shebangEnd)) + '\n' + code
       map = shiftSourceMapLine(map)
     }
 

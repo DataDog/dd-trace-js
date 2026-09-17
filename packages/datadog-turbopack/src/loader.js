@@ -101,7 +101,7 @@ module.exports = function loader (source, inputSourceMap) {
     }
 
     if (publications.length > 0) code = appendCommonJsPublications(code, publications, dcModule)
-    if (rewritten && publications.length === 0) {
+    if (rewritten && publications.length === 0 && (rewriteTarget.activationName || hooks[rewriteTarget.moduleName])) {
       if (!esm && hasUnsafeCommonJsBindings(code)) {
         this.emitWarning?.(new Error(`Skipped CommonJS activation for unsafe wrapper bindings in ${resourcePath}`))
         this.callback(undefined, source, inputSourceMap)
