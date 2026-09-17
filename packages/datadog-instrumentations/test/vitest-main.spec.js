@@ -123,6 +123,7 @@ describe('vitest main instrumentation', () => {
     const knownTestsCh = {}
     const noWorkerInitStates = []
     const providedContexts = []
+    const testSessionFinishPayloads = []
     const testSuiteFinishPayloads = []
     let reserveEarlyFlakeDetectionSuite
     let shouldUseNoWorkerInit = false
@@ -171,6 +172,9 @@ describe('vitest main instrumentation', () => {
           }
           if (currentChannel === testSuiteFinishCh) {
             testSuiteFinishPayloads.push(data)
+          }
+          if (currentChannel === testSessionFinishCh) {
+            testSessionFinishPayloads.push(data)
           }
           return Promise.resolve()
         },
@@ -234,10 +238,16 @@ describe('vitest main instrumentation', () => {
 
     const ctx = {
       close () {},
-      config: {},
+      config: { passWithNoTests: false },
       exit () {},
       getTestFilepaths () {
         return []
+      },
+      state: {
+        getFailedFilepaths () {
+          return []
+        },
+        pathsSet: new Set(),
       },
     }
     const sequencer = new BaseSequencer()
@@ -376,5 +386,11 @@ describe('vitest main instrumentation', () => {
     const efdAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
     assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))
     assert.strictEqual(efdAdmissionContexts[efdAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
+
+    await ctx.close()
+    assert.strictEqual(testSessionFinishPayloads.length, 1)
+    assert.strictEqual(testSessionFinishPayloads[0].status, 'fail')
+    assert.strictEqual(testSessionFinishPayloads[0].isExpectedEmptySession, false)
+    assert.match(testSessionFinishPayloads[0].error.message, /No test files were found/)
   })
 })
