@@ -30,7 +30,6 @@ function getStepDataForNext (ctxImpl) {
  * mirroring the SDK's internal calculation — is only added when a stepId exists.
  * @param {Record<string, string>} meta - The span meta/tags object to populate.
  * @param {{ stepId?: string, stepData?: object }} stepInfo - Resolved next stepId and checkpoint entry.
- * @returns {void}
  */
 function addOpMeta (meta, { stepId, stepData }) {
   if (!stepId) {
@@ -52,7 +51,6 @@ function addOpMeta (meta, { stepId, stepData }) {
  * 0 since the 1-indexing is observed server behavior, not an SDK guarantee.
  *
  * @param {object} [stepData] - The checkpoint entry for the next stepId.
- * @returns {number}
  */
 function getOperationAttempt (stepData) {
   const attempt = stepData?.StepDetails?.Attempt

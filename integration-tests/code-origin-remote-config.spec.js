@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const Axios = require('axios')
 const { FakeAgent, sandboxCwd, useSandbox, spawnProc } = require('./helpers')
 
 const ACKNOWLEDGED = 2
@@ -10,7 +9,7 @@ const ACKNOWLEDGED = 2
 describe('Code Origin Remote Config', function () {
   this.timeout(20000)
 
-  let cwd, agent, proc, axios
+  let cwd, agent, proc
 
   useSandbox(
     ['express', 'fastify'],
@@ -43,10 +42,15 @@ describe('Code Origin Remote Config', function () {
         ...envVars,
       },
     })
-    axios = Axios.create({
-      baseURL: proc.url,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  }
+
+  /**
+   * @param {string} url
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, proc.url))
+    assert.strictEqual(response.status, 200)
+    return response.json()
   }
 
   const addRemoteConfigAndWaitForAck = (libConfig) => {
@@ -81,7 +85,7 @@ describe('Code Origin Remote Config', function () {
         assert.ok(requestSpan.meta['_dd.code_origin.frames.0.file'])
         assert.ok(requestSpan.meta['_dd.code_origin.frames.0.line'])
       }, 3000),
-      axios.get(url),
+      request(url),
     ])
   }
 
@@ -94,7 +98,7 @@ describe('Code Origin Remote Config', function () {
         assert.strictEqual(requestSpan.meta['_dd.code_origin.type'], undefined)
         assert.strictEqual(requestSpan.meta['_dd.code_origin.frames.0.file'], undefined)
       }, 3000),
-      axios.get(url),
+      request(url),
     ])
   }
 
@@ -111,17 +115,17 @@ describe('Code Origin Remote Config', function () {
           await assertCodeOriginPresent(framework)
 
           // Verify config shows enabled
-          const configBefore = await axios.get('/config')
-          assert.strictEqual(configBefore.data.codeOriginEnabled, true)
-          assert.strictEqual(configBefore.data.remoteConfigEnabled, true)
+          const configBefore = await request('/config')
+          assert.strictEqual(configBefore.codeOriginEnabled, true)
+          assert.strictEqual(configBefore.remoteConfigEnabled, true)
 
           // Step 2: Disable code origin via remote config
           await addRemoteConfigAndWaitForAck({ code_origin_enabled: false })
 
           // Verify config shows disabled
-          const configAfter = await axios.get('/config')
-          assert.strictEqual(configAfter.data.codeOriginEnabled, false)
-          assert.strictEqual(configAfter.data.remoteConfigEnabled, true)
+          const configAfter = await request('/config')
+          assert.strictEqual(configAfter.codeOriginEnabled, false)
+          assert.strictEqual(configAfter.remoteConfigEnabled, true)
 
           // Step 3: Make another request and verify NO code origin tags
           // The tags are pre-computed and cached, but not applied since _enabled is false
@@ -153,16 +157,16 @@ describe('Code Origin Remote Config', function () {
           await assertCodeOriginAbsent(framework)
 
           // Verify config shows CO disabled
-          const configBefore = await axios.get('/config')
-          assert.strictEqual(configBefore.data.codeOriginEnabled, false)
-          assert.strictEqual(configBefore.data.remoteConfigEnabled, true)
+          const configBefore = await request('/config')
+          assert.strictEqual(configBefore.codeOriginEnabled, false)
+          assert.strictEqual(configBefore.remoteConfigEnabled, true)
 
           // Step 2: Enable code origin at runtime via remote config
           await addRemoteConfigAndWaitForAck({ code_origin_enabled: true })
 
           // Verify config shows CO enabled
-          const configAfter = await axios.get('/config')
-          assert.strictEqual(configAfter.data.codeOriginEnabled, true)
+          const configAfter = await request('/config')
+          assert.strictEqual(configAfter.codeOriginEnabled, true)
 
           // Step 3: Make another request and verify code origin tags ARE now present
           // This works because tags were pre-computed at boot when RC was enabled

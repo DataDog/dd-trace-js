@@ -140,7 +140,7 @@ versions.forEach((version) => {
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
+    const it = createParallelIt(global.it, { concurrency: 4, withReceiver: true })
 
     let cwd, webAppPort, webAppServer
 
@@ -483,7 +483,7 @@ versions.forEach((version) => {
                 assert.match(stdout, /Attempt to fix passed/)
               } else {
                 assert.match(stdout, /Attempt to fix failed/)
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)

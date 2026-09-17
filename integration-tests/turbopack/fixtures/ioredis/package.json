@@ -1,0 +1,5 @@
+{
+  "main": "runner",
+  "name": "ioredis",
+  "version": "5.4.0"
+}

@@ -75,13 +75,13 @@ function convertVercelPromptToMessages (prompt) {
       }
 
       case 'assistant': {
-        const textParts = []
+        let text
         const toolCalls = []
         if (!Array.isArray(msg.content)) break
 
         for (const part of msg.content) {
           if (part.type === 'text') {
-            textParts.push(part.text)
+            text = text === undefined ? part.text : `${text}\n${part.text}`
           } else if (part.type === 'tool-call') {
             toolCalls.push({
               id: part.toolCallId,
@@ -95,8 +95,8 @@ function convertVercelPromptToMessages (prompt) {
 
         if (toolCalls.length > 0) {
           messages.push({ role: 'assistant', tool_calls: toolCalls })
-        } else if (textParts.length > 0) {
-          messages.push({ role: 'assistant', content: textParts.join('\n') })
+        } else if (text !== undefined) {
+          messages.push({ role: 'assistant', content: text })
         }
         break
       }
@@ -180,7 +180,32 @@ function buildOutputMessages (inputMessages, content) {
   return []
 }
 
+/**
+ * Converts Vercel stream chunks into the content shape a doGenerate result carries.
+ *
+ * @param {Array<object>} chunks
+ * @returns {Array<object>}
+ */
+function getStreamedContent (chunks) {
+  const toolCalls = []
+  let text = ''
+
+  for (const chunk of chunks) {
+    if (chunk?.type === 'tool-call') {
+      toolCalls.push(chunk)
+    } else if (chunk?.type === 'text-delta') {
+      // AI SDK 6 renamed `textDelta` to `delta`; both shapes are supported. Coalesced with `??`
+      // because a missing delta must contribute nothing, not "undefined".
+      text += chunk.delta ?? chunk.textDelta ?? ''
+    }
+  }
+
+  if (toolCalls.length) return toolCalls
+  return text ? [{ type: 'text', text }] : []
+}
+
 module.exports = {
+  getStreamedContent,
   convertVercelPromptToMessages,
   convertFilePartToImageUrl,
   buildToolCallOutputMessages,

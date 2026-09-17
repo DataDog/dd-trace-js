@@ -111,7 +111,6 @@ class FakeCiVisIntake extends FakeAgent {
    * Sets library configuration responses to return in order.
    *
    * @param {object[]} responses
-   * @returns {void}
    */
   setSettingsResponses (responses) {
     this.#settingsResponses = responses.slice()
@@ -121,7 +120,6 @@ class FakeCiVisIntake extends FakeAgent {
    * Delays settings responses to exercise initialization ordering.
    *
    * @param {number} delayMs
-   * @returns {void}
    */
   setSettingsResponseDelay (delayMs) {
     this.#settingsResponseDelayMs = delayMs
@@ -146,7 +144,6 @@ class FakeCiVisIntake extends FakeAgent {
 
   /**
    * @param {number} delayMs - Delay before responding to screenshot uploads
-   * @returns {void}
    */
   setMediaResponseDelay (delayMs) {
     this.#mediaResponseDelayMs = delayMs
@@ -155,7 +152,6 @@ class FakeCiVisIntake extends FakeAgent {
   /**
    * Leaves media requests open until the client cancels them.
    *
-   * @returns {void}
    */
   setMediaResponsesPending () {
     this.#mediaResponsesPending = true
@@ -173,7 +169,6 @@ class FakeCiVisIntake extends FakeAgent {
    * Sets Test Management responses to return in order.
    *
    * @param {object[]} responses
-   * @returns {void}
    */
   setTestManagementTestResponses (responses) {
     this.#testManagementResponses = responses.slice()

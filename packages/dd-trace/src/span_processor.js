@@ -1,5 +1,6 @@
 'use strict'
 
+const { AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
@@ -18,7 +19,8 @@ class SpanProcessor {
     this._config = config
     this._killAll = false
 
-    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+        !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
@@ -34,7 +36,19 @@ class SpanProcessor {
   sample (span) {
     const spanContext = span.context()
     this._prioritySampler.sample(spanContext)
-    this._spanSampler.sample(spanContext)
+    if (!this.#isDiscarded(spanContext)) {
+      this._spanSampler.sample(spanContext)
+    }
+  }
+
+  /**
+   * A rule's reject decision can later be overridden (e.g. a product force-keeping the trace via
+   * `PrioritySampler.keepTrace()`), so `discard` only applies while the priority is still a reject.
+   *
+   * @param {import('./opentracing/span_context')} spanContext
+   */
+  #isDiscarded (spanContext) {
+    return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT
   }
 
   process (span) {
@@ -56,11 +70,12 @@ class SpanProcessor {
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
+      const discard = this.#isDiscarded(spanContext)
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
-        } else {
+        } else if (!discard) {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
@@ -76,7 +91,7 @@ class SpanProcessor {
         }
       }
 
-      if (formatted.length !== 0 && trace.isRecording !== false) {
+      if (!discard && formatted.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
       }
 

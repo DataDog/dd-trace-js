@@ -54,12 +54,12 @@ function getConfiguredTransport (framework) {
 }
 
 function getCiLocation (ciWiring) {
-  const parts = []
-  if (ciWiring.configFile) parts.push(`configuration ${formatPath(ciWiring.configFile)}`)
-  if (ciWiring.workflow) parts.push(`workflow ${JSON.stringify(String(ciWiring.workflow))}`)
-  if (ciWiring.job) parts.push(`job ${JSON.stringify(String(ciWiring.job))}`)
-  if (ciWiring.step) parts.push(`step ${JSON.stringify(String(ciWiring.step))}`)
-  return parts.length > 0 ? parts.join(', ') : 'the selected CI test step'
+  let location = ''
+  if (ciWiring.configFile) location += `configuration ${formatPath(ciWiring.configFile)}`
+  if (ciWiring.workflow) location += `${location ? ', ' : ''}workflow ${JSON.stringify(String(ciWiring.workflow))}`
+  if (ciWiring.job) location += `${location ? ', ' : ''}job ${JSON.stringify(String(ciWiring.job))}`
+  if (ciWiring.step) location += `${location ? ', ' : ''}step ${JSON.stringify(String(ciWiring.step))}`
+  return location || 'the selected CI test step'
 }
 
 function formatPath (filename) {

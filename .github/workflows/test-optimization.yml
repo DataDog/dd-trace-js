@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
   # TODO: remove this once we have stable tests
   MOCHA_OPTIONS: --retries 2
 
@@ -232,12 +233,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Keep the regular and Test Optimization suites in separate lanes; together they exceed the CI time budget.
         include:
           - node-version: oldest
             webdriverio-version: oldest
+            spec: webdriverio
           - node-version: latest
             webdriverio-version: latest
-    name: integration-webdriverio (${{ matrix.webdriverio-version }}, node-${{ matrix.node-version }})
+            spec: webdriverio
+          - node-version: oldest
+            webdriverio-version: oldest
+            spec: webdriverio.test-optimization
+          - node-version: latest
+            webdriverio-version: latest
+            spec: webdriverio.test-optimization
+    name: >-
+      integration-webdriverio (${{ matrix.webdriverio-version }},
+      node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -246,11 +258,12 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: npm run test:instrumentations:ci
+        if: matrix.spec == 'webdriverio'
         env:
           PLUGINS: webdriverio
       - uses: ./.github/actions/upload-junit-artifacts
         id: webdriverio_instrumentation_upload
-        if: "!cancelled()"
+        if: "!cancelled() && matrix.spec == 'webdriverio'"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - name: Clear uploaded instrumentation JUnit reports
@@ -259,10 +272,12 @@ jobs:
       - id: webdriverio_integration
         run: npm run test:integration:webdriverio:coverage
         env:
+          SPEC: ${{ matrix.spec }}
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/coverage
         with:
-          flags: test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
+          flags: >-
+            test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled() && steps.webdriverio_integration.outcome != 'skipped'"
         with:
@@ -523,7 +538,27 @@ jobs:
           - vitest.advanced
           - vitest.msw
           - vitest.no-worker-init
-    name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})
+        # TIA is the only Vitest spec whose two supported versions exceed the CI time budget when run together.
+        vitest-version: [all]
+        exclude:
+          - spec: vitest.tia
+            vitest-version: all
+        include:
+          - version: oldest
+            spec: vitest.tia
+            vitest-version: oldest
+          - version: oldest
+            spec: vitest.tia
+            vitest-version: latest
+          - version: latest
+            spec: vitest.tia
+            vitest-version: oldest
+          - version: latest
+            spec: vitest.tia
+            vitest-version: latest
+    name: >-
+      integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }},
+      vitest-${{ matrix.vitest-version }})
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -541,6 +576,7 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}
+          VITEST_VERSION: ${{ matrix.vitest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:

@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const axios = require('axios')
-
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -108,6 +106,12 @@ describe('set_user', () => {
     let port
     let tracer
 
+    async function request () {
+      const response = await fetch(`http://localhost:${port}/`)
+      assert.strictEqual(response.status, 200)
+      await response.arrayBuffer()
+    }
+
     function listener (req, res) {
       if (controller) {
         controller(req, res)
@@ -138,7 +142,7 @@ describe('set_user', () => {
     })
 
     describe('setUser', () => {
-      it('should set a proper user', (done) => {
+      it('should set a proper user', async () => {
         controller = (req, res) => {
           tracer.appsec.setUser({
             id: 'blockedUser',
@@ -148,7 +152,7 @@ describe('set_user', () => {
           })
           res.end()
         }
-        agent.assertSomeTraces(traces => {
+        const agentPromise = agent.assertSomeTraces(traces => {
           assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
           assert.strictEqual(traces[0][0].meta['usr.email'], 'a@b.c')
           assert.strictEqual(traces[0][0].meta['usr.custom'], 'hello')
@@ -157,24 +161,24 @@ describe('set_user', () => {
           assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
           assert.ok(!('appsec.blocked' in traces[0][0].meta))
           assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-        }).then(done).catch(done)
-        axios.get(`http://localhost:${port}/`)
+        })
+        await Promise.all([agentPromise, request()])
       })
 
-      it('should override user on consecutive callings', (done) => {
+      it('should override user on consecutive callings', async () => {
         controller = (req, res) => {
           tracer.appsec.setUser({ id: 'testUser' })
           tracer.appsec.setUser({ id: 'blockedUser' })
           res.end()
         }
-        agent.assertSomeTraces(traces => {
+        const agentPromise = agent.assertSomeTraces(traces => {
           assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
           assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
           assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
           assert.ok(!('appsec.blocked' in traces[0][0].meta))
           assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-        }).then(done).catch(done)
-        axios.get(`http://localhost:${port}/`)
+        })
+        await Promise.all([agentPromise, request()])
       })
     })
   })

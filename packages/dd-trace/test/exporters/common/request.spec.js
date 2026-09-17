@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { EventEmitter, once } = require('node:events')
 const http = require('node:http')
+const https = require('node:https')
 const zlib = require('node:zlib')
 const stream = require('node:stream')
 
@@ -43,6 +44,7 @@ describe('request', function () {
   let request
   let log
   let docker
+  let getHttpsProxyAgent
   let maxAttempts
   let retryStubs
   let runInNoopContext
@@ -57,6 +59,7 @@ describe('request', function () {
         carrier['datadog-container-id'] = 'abcd'
       },
     }
+    getHttpsProxyAgent = sinon.stub().callsFake((url, agent) => agent)
     // The retry policy is exercised in retry.spec.js. Here we keep the integration
     // deterministic: zero backoff, no startup-phase mutation, attempt count
     // overridable per test.
@@ -72,6 +75,7 @@ describe('request', function () {
         storage: () => ({ run: runInNoopContext }),
       },
       './docker': docker,
+      './proxy': { getHttpsProxyAgent },
       '../../log': log,
       './retry': {
         ...require('../../../src/exporters/common/retry'),
@@ -133,6 +137,42 @@ describe('request', function () {
     })
   })
 
+  it('selects an HTTPS proxy agent for authenticated requests', (done) => {
+    const url = new URL('https://test:443/path')
+    const options = {
+      url,
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }
+    nock('https://test:443').post('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (error) => {
+      sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent))
+      done(error)
+    })
+  })
+
+  it('reports proxy selection errors without starting a request', () => {
+    const error = new Error('invalid proxy URL')
+    const requestSpy = sinon.spy(https, 'request')
+    const callback = sinon.spy()
+    getHttpsProxyAgent.throws(error)
+
+    request(Buffer.from(''), {
+      url: new URL('https://test:443/path'),
+      method: 'POST',
+      headers: {
+        'DD-API-KEY': 'test-api-key',
+      },
+    }, callback)
+
+    requestSpy.restore()
+    sinon.assert.calledOnceWithExactly(callback, error)
+    sinon.assert.notCalled(requestSpy)
+  })
+
   it('selects a new default agent when callers reuse options with another protocol', (done) => {
     const options = {
       url: new URL('http://test:123'),
@@ -150,6 +190,7 @@ describe('request', function () {
 
       request(Buffer.from(''), options, (httpsError) => {
         assert.strictEqual(options.agent, undefined)
+        sinon.assert.notCalled(getHttpsProxyAgent)
         done(httpsError)
       })
     })

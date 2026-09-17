@@ -5,7 +5,6 @@ process.env.K_SERVICE = 'test-service'
 
 const assert = require('node:assert/strict')
 const { setTimeout: wait } = require('node:timers/promises')
-const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
@@ -130,12 +129,7 @@ describe('Push Subscription Plugin', () => {
           .assertSomeTraces(traces => {
             const pubsubSpan = findPubSubSpan(traces)
 
-            if (pubsubSpan.meta['_dd.span_links']) {
-              const spanLinks = JSON.parse(pubsubSpan.meta['_dd.span_links'])
-              assert.ok(Array.isArray(spanLinks), `Expected array, got ${inspect(spanLinks)}`)
-              const hasProducerLink = spanLinks.some(link => link.trace_id && link.span_id)
-              assert.strictEqual(hasProducerLink, true)
-            }
+            assert.strictEqual(pubsubSpan.meta['_dd.span_links'], undefined)
           })
           .then(done)
           .catch(done)
@@ -149,8 +143,9 @@ describe('Push Subscription Plugin', () => {
     })
 
     it('should add batch metadata to receive span', (done) => {
-      const batchTraceId = 'abc123def456'
-      const batchSpanId = '789012345678'
+      const batchTraceId = 'abc123def4567890'
+      const batchSpanId = '789012345678abcd'
+      const batchTraceIdUpper = 'abcdef1234567890'
 
       appListener = createServer().listen(0, 'localhost', () => {
         const port = appListener.address().port
@@ -167,6 +162,10 @@ describe('Push Subscription Plugin', () => {
               'pubsub.batch.message_count': 3,
               'pubsub.batch.message_index': 0,
             })
+            assert.deepStrictEqual(JSON.parse(pubsubSpan.meta['_dd.span_links']), [{
+              trace_id: batchTraceIdUpper + batchTraceId,
+              span_id: batchSpanId,
+            }])
           })
           .then(done)
           .catch(done)
@@ -176,6 +175,7 @@ describe('Push Subscription Plugin', () => {
           '_dd.batch.index': '0',
           '_dd.pubsub_request.trace_id': batchTraceId,
           '_dd.pubsub_request.span_id': batchSpanId,
+          '_dd.pubsub_request.p.tid': batchTraceIdUpper,
         }).catch(done)
       })
     })

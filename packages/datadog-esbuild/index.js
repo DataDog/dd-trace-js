@@ -8,8 +8,9 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
-const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
+const { createEsmResolver } = require('./src/resolver')
+const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -166,6 +167,13 @@ ${build.initialOptions.banner.js}`
 
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
+  let resolver
+
+  build.onEnd(async () => {
+    const activeResolver = resolver
+    resolver = undefined
+    await activeResolver?.close()
+  })
 
   build.onResolve({ filter: /.*/ }, args => {
     if (externalModules.has(args.path)) {
@@ -316,10 +324,15 @@ ${build.initialOptions.banner.js}`
 
           interceptedESMModules.add(args.path)
 
+          resolver ??= createEsmResolver()
           const setters = await processModule({
             path: args.path,
             internal: data.internal,
             context: { format: 'module' },
+            excludeDefault: false,
+            moduleSources: new Map(),
+            resolver,
+            transform: build.esbuild.transformSync,
           })
 
           const iitmPath = require.resolve('import-in-the-middle/lib/register.js')

@@ -25,6 +25,7 @@
 
 const { isMainThread, threadId } = require('worker_threads')
 
+const { AUTO_KEEP } = require('../../../ext/priority')
 const { isACFActive } = require('../../datadog-core/src/storage')
 const log = require('./log')
 const {
@@ -94,6 +95,20 @@ const ATTRIBUTE_KEYS = [
 const THREAD_NAME = (isMainThread ? 'Main' : `Worker #${threadId}`) + ' Event Loop'
 const THREAD_ID = String(threadId)
 
+// W3C trace-flags byte for a record, derived the same way DatadogSpanContext
+// #toTraceparent derives the flags it puts on the wire — sampled iff the
+// priority is AUTO_KEEP or above.
+//
+// Unlike toTraceparent, this does NOT materialize a not-yet-taken decision
+// (_ensureSamplingPriority): that would move every trace's sampling decision
+// forward to the first activation of its first span, on the tracer's hot path,
+// as a side effect of profiling being enabled. An undefined priority therefore
+// reads as not sampled, which is also what OTEP-4947 prescribes when the flags
+// are not known yet. See the note on setTraceFlags in getOrBuildContext.
+function traceFlagsOf (spanContext) {
+  return spanContext._sampling?.priority >= AUTO_KEEP ? 1 : 0
+}
+
 // Cache slot on span objects. One ThreadContext is built per span on first
 // activation and re-installed across every async-context frame that
 // re-enters the span — V8's AsyncContextFrame inherits the JS
@@ -140,7 +155,13 @@ function getOrBuildContext (span) {
     cached = {}
     span[CachedSym] = cached
   }
-  cached.context = new ThreadContext(traceId, spanId, attrs)
+  // The flags are the one part of the record that can still change after
+  // publication: a decision taken later, or overridden, is pushed into the live
+  // record with setTraceFlags rather than by rebuilding the context, which would
+  // strand every async-context frame already holding this one. Nothing calls it
+  // yet — the tracer publishes no event for a sampling decision — so a record
+  // built before the decision keeps reading as not sampled.
+  cached.context = new ThreadContext(traceId, spanId, traceFlagsOf(spanContext), attrs)
   cached.webTags = webTags
   if (endpoint === undefined) awaitEndpoint(webTags, cached)
   return cached.context
@@ -279,7 +300,7 @@ function missingApiMember (ns) {
   for (const name of ['ThreadContext', 'getContext', 'clearContext', 'getProcessContextAttributes']) {
     if (typeof ns[name] !== 'function') return name
   }
-  for (const name of ['appendAttributes', 'enter', 'invalidate']) {
+  for (const name of ['appendAttributes', 'enter', 'invalidate', 'setTraceFlags']) {
     if (typeof ns.ThreadContext.prototype[name] !== 'function') return `ThreadContext.prototype.${name}`
   }
 }
@@ -287,15 +308,21 @@ function missingApiMember (ns) {
 // Install and detach one throwaway context, to establish that this process can
 // actually do it before any span depends on it.
 //
-// @datadog/pprof decides whether AsyncContextFrame is available by inspecting
-// `process.execArgv`, and throws from enter() when it concludes it isn't. That
-// disagrees with the feature detection behind `isACFActive` whenever the flag
-// reached Node by another route: `NODE_OPTIONS=--experimental-async-context-frame`
-// is accepted on Node 22 and 23 and leaves `execArgv` empty, and a worker thread
-// created with an explicit `execArgv` loses it too. Since our subscribers run
-// inline with `storage.enterWith`, letting that throw would put the exception in
-// application code on the first span activation, so find out here instead, where
-// declining to start is still an option.
+// @datadog/pprof throws from enter() when it concludes AsyncContextFrame is not
+// active. It reaches that conclusion by its own feature detection, asking the
+// addon what is in the CPED slot during a `run()` — direct evidence about the
+// exact slot the out-of-process reader walks. `isACFActive` above tests the same
+// property through a weaker proxy: whether `run()` delegates to `enterWith()`,
+// which holds today but relies on unspecified dispatch that anything patching
+// `AsyncLocalStorage` can break. So the two can disagree, and pprof's answer is
+// the one that governs whether a record ever gets written. Its enter() can also
+// fail for reasons `isACFActive` says nothing about, such as an addon that
+// loaded but whose TLS block is unusable.
+//
+// Since our subscribers run inline with `storage.enterWith`, letting enter()
+// throw would put the exception in application code on the first span
+// activation, so find out here instead, where declining to start is still an
+// option.
 function canInstallContext (ns) {
   try {
     // Zero-filled ids: the record is only readable while it is installed, which

@@ -143,10 +143,16 @@ function getEnvNameFromSource (name, source) {
   }
 }
 
+/**
+ * @param {string} name
+ */
+function isSupportedConfiguration (name) {
+  return supportedConfigurations[name] !== undefined || aliasToCanonical[name] !== undefined
+}
+
 function validateAccess (name) {
   if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
-    !supportedConfigurations[name] &&
-    !aliasToCanonical[name]) {
+    !isSupportedConfiguration(name)) {
     throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
   }
 }
@@ -284,6 +290,7 @@ function getValueFromEnvSources (name, skipDefault) {
 
 module.exports = {
   getValueFromEnvSources,
+  isSupportedConfiguration,
 
   /**
    * Expose raw stable config maps and warnings for consumers that need

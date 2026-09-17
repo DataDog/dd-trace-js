@@ -4,13 +4,16 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
+const { loadChannel } = require('./register.js')
 const {
   filename,
-  loadChannel,
+  getDisabledInstrumentations,
   matchVersion,
-} = require('./register.js')
+  matchesInstrumentation,
+} = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
 // environments (webpack, esbuild), Node.js built-in modules required by
@@ -69,21 +72,29 @@ function doHook (name) {
 
   try {
     hookFn()
-  } catch {
-    log.error('esbuild-wrapped %s hook failed', name)
+  } catch (error) {
+    log.error('esbuild-wrapped %s hook failed: %s', name, String(error?.message ?? error), error)
   }
 }
+
+/**
+ * @typedef {object} Payload
+ * @property {boolean} [activate]
+ * @property {string} package
+ * @property {unknown} [module]
+ * @property {string} [version]
+ * @property {string} [path]
+ */
 
 /** @type {Set<string>} */
 const instrumentedNodeModules = new Set()
 
-/** @typedef {{ package: string, module: unknown, version: string, path: string }} Payload */
 dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
+  if (disabledInstrumentations.has(name)) return
 
   const isPrefixedWithNode = name.startsWith('node:')
-
   const isNodeModule = isPrefixedWithNode || !hooks[name]
 
   if (isNodeModule) {
@@ -100,20 +111,34 @@ dc.subscribe(CHANNEL, (message) => {
   const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
 
   if (!instrumentation) {
-    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
+    if (!payload.activate) log.error('esbuild-wrapped %s missing in list of instrumentations', name)
     return
   }
 
-  for (const { file, versions, hook } of instrumentation) {
-    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
-      continue
+  if (payload.activate) {
+    for (const { sourceRewrite, versions, hook } of instrumentation) {
+      if (!sourceRewrite || payload.path !== filename(name, sourceRewrite) ||
+        !matchVersion(payload.version, versions)) continue
+
+      try {
+        loadChannel.publish({ name })
+        hook(undefined, payload.version)
+      } catch (error) {
+        log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
+      }
+      return
     }
+    return
+  }
+
+  for (const entry of instrumentation) {
+    if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
 
     try {
-      loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version) ?? payload.module
-    } catch (e) {
-      log.error('Error executing bundler hook', e)
+      loadChannel.publish({ name })
+      payload.module = entry.hook(payload.module, payload.version) ?? payload.module
+    } catch (error) {
+      log.error('Error executing bundler hook: %s', String(error?.message ?? error), error)
     }
   }
 })

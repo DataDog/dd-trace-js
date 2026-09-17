@@ -20,20 +20,76 @@ const identifierPattern = /^[$A-Z_a-z][$\w]*$/
 
 module.exports = {
   awaitContextCallback,
-  awaitContextCallbackAtTryStart,
   configureGraphqlJitCompileObject,
   configureGraphqlJitDeferredField,
   configureGraphqlJitExecute,
   configureGraphqlJitRuntime,
+  configureGraphqlFastPath,
   configureMercuriusRequest,
+  publishDurableOrchestrationFailure,
   waitForAsyncEnd,
 }
 
 /**
- * Awaits an optional context callback before continuing through a matched conditional branch.
+ * Publishes the error captured by Durable Functions immediately before its
+ * executor converts that error into a serialized failed orchestration state.
  *
- * The branch condition is checked again after the callback settles so the
- * original body does not run against state that changed while awaiting.
+ * @param {{
+ *   channelName: string,
+ *   transforms: { tracingChannelDeclaration: Function }
+ * }} state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function publishDurableOrchestrationFailure (state, node, _parent, ancestry) {
+  // Class queries also visit the owning ClassDeclaration so Orchestrion can
+  // synthesize missing methods. This transform targets the concrete method only.
+  if (node.type === 'ClassDeclaration' || node.type === 'ClassExpression') return
+
+  const failureBranches = query(node, 'IfStatement').filter(({ test }) =>
+    test.type === 'BinaryExpression' &&
+    test.operator === '!==' &&
+    test.left?.type === 'MemberExpression' &&
+    test.left.object?.type === 'ThisExpression' &&
+    test.left.property?.name === 'exception' &&
+    test.right?.type === 'Identifier' &&
+    test.right.name === 'undefined'
+  )
+
+  assert.strictEqual(
+    failureBranches.length,
+    1,
+    'publishDurableOrchestrationFailure: executor failure branch not found'
+  )
+  assert.strictEqual(
+    failureBranches[0].consequent.type,
+    'BlockStatement',
+    'publishDurableOrchestrationFailure: expected a block failure branch'
+  )
+
+  const program = ancestry.at(-1)
+  state.transforms.tracingChannelDeclaration(state, program)
+
+  const channelVariable = `tr_ch_apm$${state.channelName.replaceAll(/[^\w]/g, '_')}`
+  const publishStatements = parse(`
+    if (${channelVariable}.end.hasSubscribers) {
+      ${channelVariable}.end.publish({
+        arguments: [context, history],
+        error: this.exception
+      })
+    }
+  `).body
+
+  failureBranches[0].consequent.body.unshift(...publishStatements)
+}
+
+/**
+ * Awaits an optional context callback at the start of a matched function or block, or before continuing through a
+ * matched conditional branch.
+ *
+ * A matched conditional branch is checked again after the callback settles so its original body does not run
+ * against state that changed while awaiting.
  *
  * @param {{
  *   transformOptions?: {
@@ -42,14 +98,61 @@ module.exports = {
  *     callbackThis?: boolean
  *   }
  * }} state
- * @param {import('estree').IfStatement} node
+ * @param {
+ *   import('estree').ArrowFunctionExpression|
+ *   import('estree').BlockStatement|
+ *   import('estree').FunctionDeclaration|
+ *   import('estree').FunctionExpression|
+ *   import('estree').IfStatement
+ * } node
  * @param {import('estree').Node} _parent
  * @param {import('estree').Node[]} ancestry
- * @returns {void}
  */
 function awaitContextCallback (state, node, _parent, ancestry) {
+  let insertionTarget
+  let callbackAncestry = ancestry
+
+  if (node.type === 'BlockStatement') {
+    insertionTarget = node
+  } else if (functionTypes.has(node.type)) {
+    let callbackFunction = node
+    callbackAncestry = [node, ...ancestry]
+
+    if (!node.async) {
+      // Built-in function transforms run before later custom transforms. Keep knowledge of their generated wrapper
+      // here so instrumentation queries can continue to target the original function.
+      const [wrappedFunction] = query(node,
+        'VariableDeclarator[id.name="__apm$traced"] > ArrowFunctionExpression > BlockStatement > ' +
+        'VariableDeclaration > VariableDeclarator[id.name="__apm$wrapped"] > ' +
+        ':matches(ArrowFunctionExpression, FunctionDeclaration, FunctionExpression)[async=true]')
+      if (wrappedFunction) {
+        callbackFunction = wrappedFunction
+        callbackAncestry.unshift(wrappedFunction)
+      }
+    }
+
+    assert(callbackFunction.async && callbackFunction.body?.type === 'BlockStatement',
+      'awaitContextCallback: expected an async function with a block body')
+    insertionTarget = callbackFunction.body
+  }
+
+  if (insertionTarget) {
+    const generatedCallback = createAwaitedContextCallback(
+      state,
+      insertionTarget,
+      callbackAncestry,
+      'awaitContextCallback'
+    )
+    if (!generatedCallback) return
+
+    let insertionIndex = 0
+    while (typeof insertionTarget.body[insertionIndex]?.directive === 'string') insertionIndex++
+    insertionTarget.body.splice(insertionIndex, 0, ...generatedCallback.callbackStatements)
+    return
+  }
+
   assert(node.type === 'IfStatement' && node.consequent?.type === 'BlockStatement',
-    'awaitContextCallback: expected an if statement with a block body')
+    'awaitContextCallback: expected a function, a block, or an if statement with a block body')
 
   const originalStatements = node.consequent.body
   const generatedCallback = createAwaitedContextCallback(
@@ -72,35 +175,6 @@ function awaitContextCallback (state, node, _parent, ancestry) {
     body: originalStatements,
   }
   node.consequent.body = [...callbackStatements, callbackBranch]
-}
-
-/**
- * Awaits an optional context callback before entering the matched node's enclosing try block.
- *
- * @param {Parameters<typeof awaitContextCallback>[0]} state
- * @param {import('estree').Node} node
- * @param {import('estree').Node} _parent
- * @param {import('estree').Node[]} ancestry
- * @returns {void}
- */
-function awaitContextCallbackAtTryStart (state, node, _parent, ancestry) {
-  let tryStatement = node.type === 'TryStatement' ? node : undefined
-  for (const ancestor of ancestry) {
-    if (tryStatement || functionTypes.has(ancestor.type)) break
-    if (ancestor.type === 'TryStatement') tryStatement = ancestor
-  }
-  assert(tryStatement?.block?.type === 'BlockStatement',
-    'awaitContextCallbackAtTryStart: expected an enclosing try statement with a block body')
-
-  const generatedCallback = createAwaitedContextCallback(
-    state,
-    tryStatement.block,
-    ancestry,
-    'awaitContextCallbackAtTryStart'
-  )
-  if (!generatedCallback) return
-
-  tryStatement.block.body.unshift(...generatedCallback.callbackStatements)
 }
 
 /**
@@ -282,7 +356,6 @@ function replaceIdentifier (root, name, replacement) {
  * @param {import('estree').Node} root
  * @param {import('estree').Node} target
  * @param {import('estree').Node[]} statements
- * @returns {boolean}
  */
 function insertBeforeStatement (root, target, statements) {
   for (const key of Object.keys(root)) {
@@ -316,12 +389,43 @@ function queryOne (root, selector) {
 
 /**
  * @param {object} _state
- * @param {import('estree').FunctionExpression} node
- * @param {import('estree').Node} _parent
+ * @param {import('estree').FunctionDeclaration} node
+ * @param {import('estree').Node} parent
  * @param {import('estree').Node[]} ancestry
  */
-function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
-  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+function configureGraphqlFastPath (_state, node, parent, ancestry) {
+  assert.strictEqual(node.type, 'FunctionDeclaration', 'configureGraphqlFastPath: expected a function declaration')
+  assert(identifierPattern.test(node.id?.name), 'configureGraphqlFastPath: expected a named function')
+
+  const insertionRoot = Array.isArray(parent?.body)
+    ? parent
+    : ancestry.find(ancestor => Array.isArray(ancestor?.body) && ancestor.body.includes(parent))
+  assert(insertionRoot, 'configureGraphqlFastPath: expected an enclosing statement list')
+  const insertionTarget = insertionRoot === parent ? node : parent
+
+  const originalName = `__apm$original_${node.id.name}`
+  assert.strictEqual(
+    query(insertionRoot, `VariableDeclarator[id.name="${originalName}"]`).length,
+    0,
+    'configureGraphqlFastPath: original function binding already exists'
+  )
+  configureGraphqlTraceFastPath(
+    node,
+    insertionRoot,
+    insertionTarget,
+    originalName,
+    'configureGraphqlFastPath'
+  )
+}
+
+/**
+ * @param {import('estree').Function} node
+ * @param {import('estree').Node} insertionRoot
+ * @param {import('estree').Node} insertionTarget
+ * @param {string} originalName
+ * @param {string} transformName
+ */
+function configureGraphqlTraceFastPath (node, insertionRoot, insertionTarget, originalName, transformName) {
   const tracedDeclaration = queryOne(
     node,
     'VariableDeclaration:has(VariableDeclarator[id.name="__apm$traced"])'
@@ -340,12 +444,44 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
     'IfStatement[test.operator="!"][consequent.type="ReturnStatement"]' +
       ':has(CallExpression[callee.name="__apm$traced"])'
   )
-  const activeCall = queryOne(
-    node,
-    'AssignmentExpression[left.object.name="__apm$ctx"][left.property.name="result"] > ' +
-      'CallExpression[callee.name="__apm$traced"]'
+  const fastCall = subscriberGuard.consequent.argument
+  const tracedCalls = query(node, 'CallExpression[callee.name="__apm$traced"]')
+  assert.strictEqual(tracedCalls.length, 2, `${transformName}: expected inactive and active traced calls`)
+  const activeCall = tracedCalls.find(call => call !== fastCall)
+  assert(activeCall, `${transformName}: active traced call not found`)
+  assert(functionTypes.has(wrapped.init?.type), `${transformName}: expected a wrapped function`)
+
+  wrapped.id.name = originalName
+  assert(
+    insertBeforeStatement(insertionRoot, insertionTarget, [wrappedDeclaration]),
+    `${transformName}: could not hoist original function`
   )
-  assert(wrapped.init, 'configureGraphqlJitExecute: wrapped query has no implementation')
+
+  fastCall.callee = parse(`${originalName}.apply`).body[0].expression
+  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
+  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
+  activeCall.callee = parse(`${originalName}.apply`).body[0].expression
+  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
+
+  const statements = node.body.body
+  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
+  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
+  assert.notStrictEqual(subscriberGuardIndex, -1, `${transformName}: subscriber guard is not top-level`)
+  assert.notStrictEqual(tracedDeclarationIndex, -1, `${transformName}: traced declaration is not top-level`)
+  statements.splice(subscriberGuardIndex, 1)
+  statements.splice(statements.indexOf(tracedDeclaration), 1)
+  statements.unshift(subscriberGuard)
+}
+
+/**
+ * @param {object} _state
+ * @param {import('estree').FunctionExpression} node
+ * @param {import('estree').Node} _parent
+ * @param {import('estree').Node[]} ancestry
+ */
+function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
+  const context = queryOne(node, 'VariableDeclarator[id.name="__apm$ctx"] > ObjectExpression')
+  const wrapped = queryOne(node, 'VariableDeclarator[id.name="__apm$wrapped"]')
 
   const createBoundQuery = ancestry.find(ancestor =>
     ancestor.type === 'FunctionDeclaration' && ancestor.id?.name === 'createBoundQuery'
@@ -382,25 +518,16 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
   context.properties.push(...properties)
 
   assert(
-    insertBeforeStatement(createBoundQuery.body, retDeclaration, [...bindings, wrappedDeclaration]),
-    'configureGraphqlJitExecute: could not hoist original query'
+    insertBeforeStatement(createBoundQuery.body, retDeclaration, bindings),
+    'configureGraphqlJitExecute: could not insert query bindings'
   )
-
-  const fastCall = subscriberGuard.consequent.argument
-  fastCall.callee = parse('__apm$wrapped.apply').body[0].expression
-  fastCall.arguments = parse('call(this, arguments)').body[0].expression.arguments
-  subscriberGuard.consequent = { type: 'BlockStatement', body: [subscriberGuard.consequent] }
-  activeCall.callee = parse('__apm$wrapped.apply').body[0].expression
-  activeCall.arguments = parse('call(this, __apm$arguments)').body[0].expression.arguments
-
-  const statements = node.body.body
-  const subscriberGuardIndex = statements.indexOf(subscriberGuard)
-  const tracedDeclarationIndex = statements.indexOf(tracedDeclaration)
-  assert.notStrictEqual(subscriberGuardIndex, -1, 'configureGraphqlJitExecute: subscriber guard is not top-level')
-  assert.notStrictEqual(tracedDeclarationIndex, -1, 'configureGraphqlJitExecute: traced declaration is not top-level')
-  statements.splice(subscriberGuardIndex, 1)
-  statements.splice(statements.indexOf(tracedDeclaration), 1)
-  statements.unshift(subscriberGuard)
+  configureGraphqlTraceFastPath(
+    node,
+    createBoundQuery.body,
+    retDeclaration,
+    '__apm$wrapped',
+    'configureGraphqlJitExecute'
+  )
 }
 
 /**
@@ -410,6 +537,12 @@ function configureGraphqlJitExecute (_state, node, _parent, ancestry) {
 function configureGraphqlJitDeferredField (_state, node) {
   const declarations = query(node, 'VariableDeclaration:has(VariableDeclarator[id.name="resolverCall"])')
   const resolverCalls = query(node, 'VariableDeclarator[id.name="resolverCall"]')
+  const executionErrorDeclarations = query(
+    node,
+    'VariableDeclaration:has(VariableDeclarator[id.name="executionError"])'
+  )
+  const executionErrors = query(node, 'VariableDeclarator[id.name="executionError"]')
+  const emptyErrors = query(node, 'VariableDeclarator[id.name="emptyError"]')
   assert.strictEqual(
     declarations.length,
     1,
@@ -420,6 +553,16 @@ function configureGraphqlJitDeferredField (_state, node) {
     1,
     'configureGraphqlJitDeferredField: resolver call not found'
   )
+  assert.strictEqual(
+    executionErrorDeclarations.length,
+    1,
+    'configureGraphqlJitDeferredField: execution error declaration not found'
+  )
+  assert.strictEqual(executionErrors.length, 1, 'configureGraphqlJitDeferredField: execution error not found')
+  assert.strictEqual(emptyErrors.length, 1, 'configureGraphqlJitDeferredField: empty error not found')
+
+  const [resolverCall] = resolverCalls
+  assertGraphqlJitResolverCall(resolverCall.init)
 
   const [descriptor] = parse(`
     const ddTraceDescriptorId = context.ddTraceRuntime?.registerField(context, responsePath, {
@@ -430,18 +573,58 @@ function configureGraphqlJitDeferredField (_state, node) {
     })
   `).body
   assert(
-    insertBeforeStatement(node.body, declarations[0], [descriptor]),
+    insertBeforeStatement(node.body, executionErrorDeclarations[0], [descriptor]),
     'configureGraphqlJitDeferredField: could not insert descriptor'
   )
 
-  const [resolverCall] = resolverCalls
+  executionErrors[0].init.arguments[4] = parse(`
+    ddTraceDescriptorId === undefined
+      ? 'err'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), err)'
+  `).body[0].expression
+  emptyErrors[0].init.arguments[3] = parse(`
+    ddTraceDescriptorId === undefined
+      ? '""'
+      : '(__context.ddTrace?.jitRuntime.recordResolverError(__context.ddTrace, ' +
+        ddTraceDescriptorId + ', err), "")'
+  `).body[0].expression
+
   const replacement = parse(`
-    DD_CALL.slice(0, -1) +
-      (ddTraceDescriptorId === undefined ? '' : ', ' + ddTraceDescriptorId) +
-      ')'
+    context.ddTraceRuntime === undefined
+      ? DD_CALL
+      : context.ddTraceRuntime.compileResolverCall(context, DD_CALL, resolverName, ddTraceDescriptorId)
   `).body[0].expression
   replaceIdentifier(replacement, 'DD_CALL', resolverCall.init)
   resolverCall.init = replacement
+}
+
+/**
+ * @param {import('estree').Expression | null} source
+ */
+function assertGraphqlJitResolverCall (source) {
+  assert.strictEqual(source?.type, 'TemplateLiteral', 'configureGraphqlJitDeferredField: unsupported resolver call')
+
+  const { expressions, quasis } = source
+  assert.ok(expressions.length >= 2, 'configureGraphqlJitDeferredField: resolver call expressions not found')
+  assert.ok(quasis.length >= 3, 'configureGraphqlJitDeferredField: resolver call segments not found')
+  assert.strictEqual(
+    expressions[0].name,
+    'GLOBAL_EXECUTION_CONTEXT',
+    'configureGraphqlJitDeferredField: execution context not found'
+  )
+  assert.strictEqual(
+    quasis[1].value.raw,
+    '.resolvers.',
+    'configureGraphqlJitDeferredField: resolver map access not found'
+  )
+  assert.strictEqual(
+    expressions[1].name,
+    'resolverName',
+    'configureGraphqlJitDeferredField: resolver name not found'
+  )
+  assert.ok(quasis[2].value.raw.startsWith('('), 'configureGraphqlJitDeferredField: resolver call not found')
+  assert.ok(quasis.at(-1).value.raw.endsWith(')'), 'configureGraphqlJitDeferredField: resolver call end not found')
 }
 
 /**
@@ -482,7 +665,6 @@ function configureMercuriusRequest (_state, node) {
  *
  * @param {object} _state
  * @param {import('estree').CallExpression} node
- * @returns {void}
  */
 function waitForAsyncEnd (_state, node) {
   const onFulfilled = node.arguments[0]
@@ -502,7 +684,6 @@ function waitForAsyncEnd (_state, node) {
  * @param {import('estree').BlockStatement} body
  * @param {'ReturnStatement'|'ThrowStatement'} exitType
  * @param {'resolveCallback'|'rejectCallback'} callbackProperty
- * @returns {void}
  */
 function injectAsyncEndCallbackWait (body, exitType, callbackProperty) {
   const callbackVariable = `__apm$${callbackProperty}`

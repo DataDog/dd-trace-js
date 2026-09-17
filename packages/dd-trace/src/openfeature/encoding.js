@@ -29,7 +29,6 @@ function encodeVarint (value) {
  * 4. Base64 encode the result
  *
  * @param {Set<number>} serialIds - Set of serial IDs to encode
- * @returns {string} Base64-encoded delta-varint string
  */
 function encodeDeltaVarint (serialIds) {
   if (!serialIds || serialIds.size === 0) {
@@ -57,7 +56,6 @@ function encodeDeltaVarint (serialIds) {
  * Hash a targeting key using SHA256.
  *
  * @param {string} targetingKey - The targeting key to hash
- * @returns {string} Lowercase hex digest of the SHA256 hash
  */
 function hashTargetingKey (targetingKey) {
   return crypto.createHash('sha256').update(targetingKey).digest('hex')

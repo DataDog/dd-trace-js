@@ -12,6 +12,16 @@ Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog 
 Agentless mode disables features that require an Agent.
 
 Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+Agentless crash tracking requires this key and sends crash data directly to Datadog.
+
+Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
+`DD_METRICS_OTEL_ENABLED` settings still apply.
+
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+`DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+`DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
@@ -125,6 +135,7 @@ tracer.use('openai', {
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -133,6 +144,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -211,6 +223,7 @@ tracer.use('openai', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [playwright](./interfaces/export_.plugins.playwright.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
@@ -219,6 +232,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
@@ -508,7 +522,8 @@ dd-trace-js includes experimental support for OpenTelemetry metrics, designed as
 require('dd-trace').init()
 const { metrics } = require('@opentelemetry/api')
 
-const meter = metrics.getMeter('my-service', '1.0.0')
+const meterProvider = metrics.getMeterProvider()
+const meter = meterProvider.getMeter('my-service', '1.0.0')
 
 // Counter - monotonically increasing values
 const requestCounter = meter.createCounter('http.requests', {
@@ -542,6 +557,11 @@ cpuGauge.addCallback((result) => {
   result.observe(cpuUsage.system / 1000000, { core: '0' })
 })
 ```
+
+Short-lived processes can call `meterProvider.shutdown(callback)` after the final measurement to export once more and
+stop collection. The optional callback receives `null` on success or an error on failure. This method isn't part of the
+OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
+`import('dd-trace').opentelemetry.MeterProvider` to use it.
 
 #### Supported Configuration
 

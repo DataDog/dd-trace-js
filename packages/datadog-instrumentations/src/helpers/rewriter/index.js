@@ -1,8 +1,9 @@
 'use strict'
 
-const { readFileSync } = require('fs')
-const { join } = require('path')
-const { pathToFileURL } = require('url')
+const { readFileSync } = require('node:fs')
+const { join } = require('node:path')
+const { pathToFileURL } = require('node:url')
+
 const log = require('../../../../dd-trace/src/log')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
@@ -13,7 +14,12 @@ const { getRewriteTarget } = require('./targets')
  * @property {(moduleName: string, version: string|undefined, filePath: string) => Transformer|undefined} getTransformer
  *
  * @typedef {object} Transformer
- * @property {(source: string, moduleType: 'cjs'|'esm') => { code: string, map?: string }} transform
+ * @property {(source: string, moduleType: 'cjs'|'esm', sourceMap?: string|object) =>
+ *   { code: string, map?: string|object }} transform
+ *
+ * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
+ *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
+ *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
 /**
@@ -80,48 +86,84 @@ function rewrite (content, filename, format, target) {
 }
 
 /**
- * @param {'cjs'|'esm'} moduleType
- * @returns {InstrumentationMatcher}
+ * @param {string} dcModule
+ * @returns {BundlerRewriter}
  */
-function getMatcher (moduleType) {
-  if (moduleType === 'esm') {
-    matcherEsm ??= createMatcher(moduleType)
+function createBundlerRewriter (dcModule) {
+  const matcher = createMatcher(dcModule)
 
-    return matcherEsm
+  return function rewriteBundled (content, filename, format, target, sourceMap) {
+    if (!content) return { code: content, map: sourceMap }
+
+    target ||= getRewriteTarget(filename)
+    if (!target) return { code: content, map: sourceMap }
+
+    filename = filename.replace('file://', '')
+    const moduleType = format === 'module' ? 'esm' : 'cjs'
+    const { moduleName, filePath } = target
+    const transformer = matcher.getTransformer(moduleName, getVersion(filename, filePath), filePath)
+    if (!transformer) return { code: content, map: sourceMap }
+
+    try {
+      return transformer.transform(getSourceText(content), moduleType, sourceMap)
+    } catch (error) {
+      log.error(error)
+      return { code: content, map: sourceMap }
+    }
   }
-
-  matcherCjs ??= createMatcher(moduleType)
-
-  return matcherCjs
 }
 
 /**
  * @param {'cjs'|'esm'} moduleType
  * @returns {InstrumentationMatcher}
  */
-function createMatcher (moduleType) {
+function getMatcher (moduleType) {
+  if (moduleType === 'esm') {
+    matcherEsm ??= createMatcher(getDcPolyfillSpecifier(moduleType))
+
+    return matcherEsm
+  }
+
+  matcherCjs ??= createMatcher(getDcPolyfillSpecifier(moduleType))
+
+  return matcherCjs
+}
+
+/**
+ * @param {string|undefined} dcModule
+ * @returns {InstrumentationMatcher}
+ */
+function createMatcher (dcModule) {
   const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
   const {
     awaitContextCallback,
-    awaitContextCallbackAtTryStart,
+    configureGraphqlFastPath,
     configureGraphqlJitCompileObject,
     configureGraphqlJitDeferredField,
     configureGraphqlJitExecute,
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
+    publishDurableOrchestrationFailure,
     waitForAsyncEnd,
   } = require('./transforms')
+  const {
+    postgresQueryHandlers,
+    postgresQueryLifecycle,
+  } = require('./transforms/postgres')
 
-  const matcher = create(instrumentations, getDcPolyfillSpecifier(moduleType))
+  const matcher = create(instrumentations, dcModule)
 
   matcher.addTransform('awaitContextCallback', awaitContextCallback)
-  matcher.addTransform('awaitContextCallbackAtTryStart', awaitContextCallbackAtTryStart)
   matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+  matcher.addTransform('configureGraphqlFastPath', configureGraphqlFastPath)
   matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
   matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
   matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
+  matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
+  matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
 
   return matcher
 }
@@ -155,7 +197,6 @@ function getDcPolyfillSpecifier (moduleType) {
  * Convert the source representations accepted by Node.js loader hooks to text.
  *
  * @param {string | ArrayBuffer | BufferView} source
- * @returns {string}
  */
 function getSourceText (source) {
   if (typeof source === 'string') return source
@@ -185,4 +226,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { rewrite, disable }
+module.exports = { createBundlerRewriter, disable, rewrite }

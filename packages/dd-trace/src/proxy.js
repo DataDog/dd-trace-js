@@ -297,7 +297,7 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      if (config.iast.enabled) {
+      if (config.iast.DD_IAST_ENABLED) {
         this._modules.rewriter.enable(config)
       }
 
@@ -311,10 +311,10 @@ class Tracer extends NoopProxy {
         // are lazily configured when the library is imported.
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
-      if (config.isCiVisibility && config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
+      if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
         if (config.DD_API_KEY) {
-          const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
-          const automaticLogPlugin = new LogSubmissionPlugin(this)
+          const LogSubmissionPlugin = require('./log-submission/log-submission-plugin')
+          const automaticLogPlugin = new LogSubmissionPlugin(this, config)
           automaticLogPlugin.configure({ ...config, enabled: true })
         } else {
           log.warn(
@@ -428,7 +428,7 @@ class Tracer extends NoopProxy {
    */
   #updateTracing (config) {
     if (config.DD_TRACE_ENABLED !== false) {
-      if (config.appsec.enabled) {
+      if (config.appsec.DD_APPSEC_ENABLED) {
         this._modules.appsec.enable(config)
       }
       if (config.llmobs.DD_LLMOBS_ENABLED) {
@@ -451,7 +451,7 @@ class Tracer extends NoopProxy {
       if (config.experimental?.aiguard?.enabled) {
         this._modules.aiguard.enable(this._tracer, config)
       }
-      if (config.iast.enabled) {
+      if (config.iast.DD_IAST_ENABLED) {
         this._modules.iast.enable(config, this._tracer)
       }
       // This needs to be after the IAST module is enabled
@@ -552,7 +552,6 @@ class Tracer extends NoopProxy {
 /**
  * Checks the private filesystem-only Test Optimization validation mode.
  *
- * @returns {boolean} whether network-capable tracer side channels must stay disabled
  */
 function isOfflineTestOptimizationValidation () {
   return isTrue(getEnvironmentVariable(VALIDATION_MODE_ENV)) &&
@@ -564,7 +563,6 @@ function isOfflineTestOptimizationValidation () {
  * Checks whether initialization selected a filesystem-only Test Optimization exporter.
  *
  * @param {import('../../../index').TracerOptions} [options] tracer initialization options
- * @returns {boolean} whether the selected exporter is safe for offline validation
  */
 function isOfflineValidationExporter (options) {
   return OFFLINE_VALIDATION_EXPORTERS.has(options?.experimental?.exporter)
