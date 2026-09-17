@@ -77,8 +77,8 @@ describe('profiler', () => {
     log.error.resetHistory()
     log.warn.resetHistory()
 
-    // profiler.js tracks armed heuristics at module scope; reset it so a prior test's state
-    // doesn't leak in. Disarming here calls the fake's disable() against whichever
+    // profiler.js tracks active heuristics at module scope; reset it so a prior test's state
+    // doesn't leak in. Disabling here calls the fake's disable() against whichever
     // `ssiHeuristics` instance is still current, so null the test-local variable only afterwards.
     publishConfig('false')
     ssiHeuristics = undefined
@@ -179,7 +179,7 @@ describe('profiler', () => {
       sinon.assert.calledOnce(log.error)
     })
 
-    it('arms the SSI heuristics when set to auto, and starts on trigger', () => {
+    it('enables the SSI heuristics when set to auto, and starts on trigger', () => {
       publishConfig('auto')
 
       sinon.assert.notCalled(profilingModule.profiler.start)
@@ -191,10 +191,8 @@ describe('profiler', () => {
 
       sinon.assert.calledOnce(profilingModule.profiler.start)
       assert.strictEqual(profiler.isStarted(), true)
-      // deregisters the trigger callback once it has fired
-      sinon.assert.calledTwice(ssiHeuristics.onTriggered)
-      assert.strictEqual(ssiHeuristics.onTriggered.secondCall.args[0], undefined)
-      sinon.assert.notCalled(ssiHeuristics.disable)
+      sinon.assert.calledOnce(ssiHeuristics.disable)
+      assert.strictEqual(ssiHeuristics.triggeredCallback, undefined)
     })
 
     it('warns and does not treat an unexpected value as auto', () => {
@@ -210,21 +208,21 @@ describe('profiler', () => {
       )
     })
 
-    it('preserves an armed auto heuristic when an unexpected value is published', () => {
+    it('preserves an active auto heuristic when an unexpected value is published', () => {
       publishConfig('auto')
-      const armedHeuristics = ssiHeuristics
+      const activeHeuristics = ssiHeuristics
 
       publishConfig('unexpected')
 
-      sinon.assert.notCalled(armedHeuristics.disable)
-      assert.strictEqual(typeof armedHeuristics.triggeredCallback, 'function')
+      sinon.assert.notCalled(activeHeuristics.disable)
+      assert.strictEqual(typeof activeHeuristics.triggeredCallback, 'function')
 
-      armedHeuristics.triggeredCallback()
+      activeHeuristics.triggeredCallback()
 
       sinon.assert.calledOnce(profilingModule.profiler.start)
     })
 
-    it('disarms the SSI heuristics when a later publish disables the profiler', () => {
+    it('disables the SSI heuristics when a later publish disables the profiler', () => {
       publishConfig('auto')
       sinon.assert.calledOnce(FakeSSIHeuristics)
 
@@ -234,7 +232,7 @@ describe('profiler', () => {
       assert.strictEqual(ssiHeuristics.triggeredCallback, undefined)
     })
 
-    it('disarms the SSI heuristics when a later publish unconditionally enables the profiler', () => {
+    it('disables the SSI heuristics when a later publish unconditionally enables the profiler', () => {
       publishConfig('auto')
       sinon.assert.calledOnce(FakeSSIHeuristics)
 
@@ -246,7 +244,7 @@ describe('profiler', () => {
       sinon.assert.calledOnce(profilingModule.profiler.start)
     })
 
-    it('does not re-arm the SSI heuristics on a repeated auto publish before it triggers', () => {
+    it('does not re-enable the SSI heuristics on a repeated auto publish before it triggers', () => {
       publishConfig('auto')
       sinon.assert.calledOnce(FakeSSIHeuristics)
 
@@ -280,7 +278,7 @@ describe('profiler', () => {
       assert.strictEqual(profiler.isStarted(), true)
     })
 
-    it('re-arms the SSI heuristics after a prior arming has already triggered', () => {
+    it('re-enables the SSI heuristics after a prior instance has already triggered', () => {
       publishConfig('auto')
       ssiHeuristics.triggeredCallback()
       sinon.assert.calledOnce(FakeSSIHeuristics)

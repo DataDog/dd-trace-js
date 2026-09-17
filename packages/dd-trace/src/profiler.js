@@ -7,7 +7,7 @@ const log = require('./log')
 const configUpdateChannel = dc.channel('datadog:config:update')
 
 /** @type {import('./profiling/ssi-heuristics').SSIHeuristics | undefined} */
-let armedSSIHeuristics
+let activeSSIHeuristics
 
 /** @type {import('./profiling') | undefined} */
 let profilingModule
@@ -33,10 +33,10 @@ function getSSIHeuristicsModule () {
   return ssiHeuristicsModule
 }
 
-function disarmSSIHeuristics () {
-  if (!armedSSIHeuristics) return
-  armedSSIHeuristics.disable()
-  armedSSIHeuristics = undefined
+function disableSSIHeuristics () {
+  if (!activeSSIHeuristics) return
+  activeSSIHeuristics.disable()
+  activeSSIHeuristics = undefined
 }
 
 /**
@@ -96,34 +96,35 @@ function runWithLabels (labels, fn) {
 configUpdateChannel.subscribe((config) => {
   const enabled = config.profiling.DD_PROFILING_ENABLED
   if (enabled === 'true') {
-    // A non-auto value means the SSI heuristics no longer get a say; disarm so a trigger that
+    // A non-auto value means the SSI heuristics no longer get a say; disable them so a trigger that
     // fires after this publish can't start the profiler behind this decision's back.
-    disarmSSIHeuristics()
+    disableSSIHeuristics()
     // Leave an already-running profiler alone; otherwise an unrelated remote-config publish
     // (e.g. an unrelated sampling-rate change) would restart it on every update.
     if (!isStarted()) start(config)
   } else if (enabled === 'false') {
-    disarmSSIHeuristics()
+    disableSSIHeuristics()
     stop()
   } else if (enabled === 'auto') {
-    if (!isStarted() && !armedSSIHeuristics) {
+    if (!isStarted() && !activeSSIHeuristics) {
       // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
       // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
-      // rather than stopping and re-arming it on every subsequent config publication. Also guard
-      // against re-arming while already armed; each SSIHeuristics instance owns listeners and a
+      // rather than stopping and re-enabling it on every subsequent config publication. Also guard
+      // against creating another active instance; each SSIHeuristics instance owns listeners and a
       // timer until the heuristic makes its decision or is explicitly disabled.
       const { SSIHeuristics } = getSSIHeuristicsModule()
       const heuristics = new SSIHeuristics(config)
-      armedSSIHeuristics = heuristics
+      activeSSIHeuristics = heuristics
       heuristics.start()
       heuristics.onTriggered(() => {
-        // Explicit true/false publishes disarm the heuristics, so reaching this callback guarantees
+        // Explicit true/false publishes disable the heuristics, so reaching this callback guarantees
         // the latest valid published value is still 'auto'.
         if (!isStarted()) start(config)
-        // The heuristic has made its decision, so release the callback and the module-level
-        // reference without treating the successful trigger as a configuration-driven disable.
-        heuristics.onTriggered()
-        if (armedSSIHeuristics === heuristics) armedSSIHeuristics = undefined
+        // The heuristic has made its decision, so release all of its listeners and timer before
+        // dropping the module-level reference. This does not stop the profiler that was just
+        // started; it only tears down the completed heuristic.
+        heuristics.disable()
+        if (activeSSIHeuristics === heuristics) activeSSIHeuristics = undefined
       })
     }
   } else {
