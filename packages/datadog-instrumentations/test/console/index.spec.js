@@ -5,6 +5,7 @@ const { AsyncLocalStorage } = require('node:async_hooks')
 const { Console } = require('node:console')
 const { Writable } = require('node:stream')
 const { format, inspect } = require('node:util')
+const { runInNewContext } = require('node:vm')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire').noPreserveCache()
@@ -214,6 +215,34 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [
       { method: 'warn', message: 'warning' },
       { method: 'error', message: 'error' },
+    ])
+  })
+
+  it('captures every ArrayBuffer view written by a replacement console', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const target = {
+      _stderr: stream,
+      warn (chunk) {
+        stream.write(chunk)
+      },
+    }
+    const dataViewBuffer = Uint8Array.from(Buffer.from('data view\n')).buffer
+    const typedArrayBuffer = Uint8Array.from(Buffer.from('typed array\n')).buffer
+    const chunks = [
+      new DataView(dataViewBuffer),
+      new Uint16Array(typedArrayBuffer),
+      runInNewContext('new Uint8Array([99, 114, 111, 115, 115, 32, 114, 101, 97, 108, 109, 10])'),
+    ]
+    wrapConsole(target)
+
+    for (const chunk of chunks) target.warn(chunk)
+
+    assert.deepStrictEqual(output, chunks)
+    assert.deepStrictEqual(payloads, [
+      { method: 'warn', message: 'data view' },
+      { method: 'warn', message: 'typed array' },
+      { method: 'warn', message: 'cross realm' },
     ])
   })
 
@@ -689,7 +718,7 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'formatted subclass' }])
   })
 
-  it('does not capture native trace or assertion output', () => {
+  it('does not capture current or saved native trace and assertion output', () => {
     const output = []
     const stream = new Writable({
       write (chunk, encoding, callback) {
@@ -698,12 +727,16 @@ describe('console instrumentation', () => {
       },
     })
     const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
+    const savedTrace = target.trace
+    const savedAssert = target.assert
     wrapConsole(target)
 
     target.trace('ignored trace')
     target.assert(false, 'ignored assertion')
+    savedTrace('ignored saved trace')
+    savedAssert(false, 'ignored saved assertion')
 
-    assert.strictEqual(output.length, 2)
+    assert.strictEqual(output.length, 4)
     assert.deepStrictEqual(payloads, [])
   })
 
@@ -1254,7 +1287,7 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'error', message: 'hello' }])
   })
 
-  it('preserves accessor-backed stream writes', () => {
+  it('preserves accessor-backed stream writes without capture', () => {
     const originalWrite = sinon.stub()
     let write = originalWrite
     const setter = sinon.spy((value) => { write = value })
@@ -1278,10 +1311,37 @@ describe('console instrumentation', () => {
     assert.strictEqual(stream.write, originalWrite)
     sinon.assert.notCalled(setter)
     sinon.assert.calledTwice(originalWrite)
-    assert.deepStrictEqual(payloads, [
-      { method: 'warn', message: 'first' },
-      { method: 'warn', message: 'second' },
-    ])
+    assert.deepStrictEqual(payloads, [])
+  })
+
+  it('preserves inherited stream write getter lookup order', () => {
+    const originalWrite = sinon.stub()
+    let chunkCreated = false
+    const streamPrototype = {}
+    Object.defineProperty(streamPrototype, 'write', {
+      configurable: true,
+      get () {
+        assert.strictEqual(chunkCreated, false)
+        return originalWrite
+      },
+    })
+    const stream = Object.create(streamPrototype)
+    const target = {
+      _stderr: stream,
+      warn () {
+        stream.write(createChunk())
+      },
+    }
+    const createChunk = () => {
+      chunkCreated = true
+      return 'hello\n'
+    }
+    wrapConsole(target)
+
+    target.warn()
+
+    sinon.assert.calledOnceWithExactly(originalWrite, 'hello\n')
+    assert.deepStrictEqual(payloads, [])
   })
 
   it('resolves accessor-backed stream writes after formatting', () => {

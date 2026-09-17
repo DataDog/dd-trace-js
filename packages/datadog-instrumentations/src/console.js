@@ -384,7 +384,7 @@ function isCustomInspectWrite (skipFunction, consoleMethod) {
  */
 function decodeChunk (chunk) {
   if (typeof chunk === 'string') return chunk
-  if (!Buffer.isBuffer(chunk) && !(chunk instanceof Uint8Array)) return
+  if (!Buffer.isBuffer(chunk) && !ArrayBuffer.isView(chunk)) return
 
   try {
     const buffer = Buffer.isBuffer(chunk)
@@ -548,8 +548,9 @@ function wrapNodeConsoleWrite (target) {
           const formattedMessage = formatNodeConsoleMessage(this, message)
           if (formattedMessage !== undefined) {
             message = formattedMessage
-            const isCaptureWrite = !isNestedNodeConsoleCall && capture?.nodeConsole && capture.receiver === this &&
-              (!pendingCall || pendingCall.capture === capture)
+            const detectedMethod = getNodeConsoleMethod(nodeConsoleWriteWithTrace, this, pendingCall?.method)
+            const isCaptureWrite = detectedMethod !== false && !isNestedNodeConsoleCall &&
+              capture?.nodeConsole && capture.receiver === this && (!pendingCall || pendingCall.capture === capture)
             if (isCaptureWrite) {
               record = createRecord(capture.method, message, ++nextWriteId, capture.captureLogHolder)
               observedRecordIndex = capture.observedRecords.length
@@ -562,7 +563,6 @@ function wrapNodeConsoleWrite (target) {
               // cannot be wrapped afterward. Newer Node versions publish the
               // method before formatting; older versions retain the stack-based
               // fallback.
-              const detectedMethod = getNodeConsoleMethod(nodeConsoleWriteWithTrace, this, pendingCall?.method)
               const method = detectedMethod === false ? undefined : detectedMethod
               const isActiveCall = !isNestedNodeConsoleCall && capture && !capture.nodeConsole && capture.nativeTarget
               if (!isActiveCall && method && shouldCaptureLogs()) {
@@ -638,7 +638,6 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
       let stream
       let writeDescriptor
       let writeInstallationAttempted = false
-      let getOriginalWrite
       let originalWrite
       let captureActive = false
       let writeActive = false
@@ -671,27 +670,24 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
             stream = nativeStderrDescriptor.get.call(target)
           }
           writeDescriptor = stream && Object.getOwnPropertyDescriptor(stream, 'write')
-          const isUnwrappableAccessor = writeDescriptor &&
-            !Object.hasOwn(writeDescriptor, 'value') &&
-            !writeDescriptor.configurable
+          const isOwnAccessor = writeDescriptor && !Object.hasOwn(writeDescriptor, 'value')
           const canInstallWrite = Boolean(
-            stream && !disabledStreams.has(stream) && (writeDescriptor || Object.isExtensible(stream))
+            stream && !isOwnAccessor && !disabledStreams.has(stream) &&
+            (writeDescriptor || Object.isExtensible(stream))
           )
-          if (!isUnwrappableAccessor && canInstallWrite) {
+          if (canInstallWrite) {
             let originalWriteDescriptor = writeDescriptor
             if (!originalWriteDescriptor && stream) {
               originalWriteDescriptor = getPropertyDescriptor(Object.getPrototypeOf(stream), 'write')
             }
             if (originalWriteDescriptor && Object.hasOwn(originalWriteDescriptor, 'value')) {
               originalWrite = originalWriteDescriptor.value
-            } else {
-              getOriginalWrite = originalWriteDescriptor?.get
             }
           }
-          if (typeof originalWrite === 'function' || typeof getOriginalWrite === 'function') {
+          // Invoking an accessor from inside the wrapper would reverse property lookup and argument evaluation.
+          if (typeof originalWrite === 'function') {
             wrappedWrite = function (chunk) {
-              const write = getOriginalWrite ? getOriginalWrite.call(stream) : originalWrite
-              if (isPublishing || !captureActive || writeActive) return Reflect.apply(write, this, arguments)
+              if (isPublishing || !captureActive || writeActive) return Reflect.apply(originalWrite, this, arguments)
 
               writeActive = true
               const previousWriteId = activeWriteId
@@ -699,7 +695,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
               const isNewWrite = expectedWrite !== wrappedWrite
               const writeId = isNewWrite ? ++nextWriteId : activeWriteId
               activeWriteId = writeId
-              expectedWrite = write
+              expectedWrite = originalWrite
               let ownRecordIndex = -1
               let observedRecordIndex = -1
               let writeCompleted = false
@@ -718,7 +714,7 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
                     capture.ownRecords.push(record)
                   }
                 }
-                const result = Reflect.apply(write, this, arguments)
+                const result = Reflect.apply(originalWrite, this, arguments)
                 writeCompleted = true
                 return result
               } finally {
