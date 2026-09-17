@@ -1630,6 +1630,27 @@ describe('check-require-cache', () => {
     }
   })
 
+  it('preserves a shebang without a trailing newline', () => {
+    const source = '#!/usr/bin/env node'
+    const shebangRewriter = proxyquire('../../../src/helpers/rewriter', {
+      '../../../../../vendor/dist/@apm-js-collab/code-transformer': {
+        create: () => ({
+          addTransform () {},
+          getTransformer: () => ({ transform: () => ({ code: 'module.exports = true' }) }),
+        }),
+      },
+      './instrumentations': [],
+    })
+    const rewritten = shebangRewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'activation.js'),
+      'commonjs',
+      { moduleName: 'bullmq', filePath: 'activation.js' }
+    )
+
+    assert.equal(rewritten, `${source}\nmodule.exports = true`)
+  })
+
   it('maps transformed pure source positions correctly after restoring a shebang', () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'mapped.js')
     const source = "#!/usr/bin/env node\n'use strict'\nfunction work () {\n" +
