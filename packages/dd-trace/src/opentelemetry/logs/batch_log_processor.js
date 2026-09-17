@@ -102,13 +102,15 @@ class BatchLogRecordProcessor {
   }
 
   /**
-   * Discards whatever's queued. Used on a MicroVM clone resume, where log records buffered
-   * before the snapshot would otherwise export under every clone's identity.
+   * Drops queued records and cancels exports already handed to the exporter. A snapshot can occur
+   * after a batch leaves `#logRecords` but before its request completes; leaving that request alive
+   * would let every clone send the same pre-refresh payload.
    * @returns {void}
    */
   resetPendingState () {
     this.#logRecords = []
     this.#clearTimer()
+    this.exporter.resetPendingState?.()
   }
 
   /**

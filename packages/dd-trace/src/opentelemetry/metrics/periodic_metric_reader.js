@@ -245,6 +245,7 @@ class PeriodicMetricReader {
       this.#lastExportedState.delete(key)
     }
     this.#cumulativeState.clear()
+    this.exporter.resetPendingState?.()
   }
 
   /**
