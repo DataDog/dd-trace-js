@@ -1800,6 +1800,20 @@ function getSessionStatus (state) {
 }
 
 /**
+ * Returns whether every started worker reported that it discovered no tests.
+ *
+ * @param {CoordinatorState} state
+ */
+function isExpectedEmptySession (state) {
+  if (state.workers.size === 0) return false
+
+  for (const workerRecord of state.workers) {
+    if (workerRecord.hasTests !== false) return false
+  }
+  return true
+}
+
+/**
  * Finishes the single WebdriverIO-owned test session.
  *
  * @param {CoordinatorState} state
@@ -1840,6 +1854,7 @@ function finishCoordinator (state, error, onDone) {
 
   testSessionFinishCh.publish({
     status: error ? 'fail' : getSessionStatus(state),
+    isExpectedEmptySession: !error && isExpectedEmptySession(state),
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,

@@ -1202,8 +1202,11 @@ function getFinishWrapper (exitOrClose) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
+    const status = runError ? 'fail' : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state))
+    const isExpectedEmptySession = !runError && (areAllSuitesSkipped || this.state.pathsSet.size === 0)
     const flushPromise = getChannelPromise(testSessionFinishCh, {
-      status: runError ? 'fail' : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state)),
+      status,
+      isExpectedEmptySession,
       testCodeCoverageLinesTotal,
       error,
       isEarlyFlakeDetectionEnabled,

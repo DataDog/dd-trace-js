@@ -47,9 +47,7 @@ const {
   TEST_PARAMETERS,
   TEST_RETRY_REASON_TYPES,
   TEST_RETRY_REASON,
-  TEST_SESSION_EMPTY_REASON,
   TEST_SESSION_ID,
-  TEST_SKIP_REASON,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
@@ -58,6 +56,7 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
   TEST_FINAL_STATUS,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -208,10 +207,12 @@ class PlaywrightPlugin extends CiPlugin {
         this.testSessionSpan.setTag(TEST_STATUS, status)
 
         if (isExpectedEmptyShard) {
-          this.testModuleSpan.setTag(TEST_SKIP_REASON, EMPTY_SHARD_SKIP_REASON)
-          this.testModuleSpan.setTag(TEST_SESSION_EMPTY_REASON, EMPTY_SHARD_REASON)
-          this.testSessionSpan.setTag(TEST_SKIP_REASON, EMPTY_SHARD_SKIP_REASON)
-          this.testSessionSpan.setTag(TEST_SESSION_EMPTY_REASON, EMPTY_SHARD_REASON)
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            EMPTY_SHARD_SKIP_REASON,
+            EMPTY_SHARD_REASON
+          )
         }
 
         if (isEarlyFlakeDetectionEnabled) {

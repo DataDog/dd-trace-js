@@ -315,6 +315,7 @@ function getOnEndHandler (isParallel, onDone) {
   return function (frameworkError, onFrameworkErrorDone) {
     let status = 'pass'
     let error = frameworkError
+    const isExpectedEmptySession = arguments.length === 0 && this.stats?.tests === 0
     if (this.stats) {
       status = this.stats.failures === 0 ? 'pass' : 'fail'
       if (this.stats.tests === 0) {
@@ -372,6 +373,7 @@ function getOnEndHandler (isParallel, onDone) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
       isFrameworkError: arguments.length > 0,
+      isExpectedEmptySession,
     }, () => {
       try {
         onDone()
