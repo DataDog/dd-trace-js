@@ -286,7 +286,7 @@ describe('Plugin', () => {
             await lifecyclePool.close()
           })
 
-          if (semver.gte(version, '6.0.0')) {
+          if (semver.intersects(version, '>=6.0.0')) {
             describe('with a heterogeneous pool', () => {
               let heterogeneousPool
 
