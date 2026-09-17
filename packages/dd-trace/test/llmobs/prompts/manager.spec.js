@@ -97,6 +97,7 @@ describe('PromptManager', () => {
       user_version: '0.3.0',
       prompt_version_uuid: undefined,
       ID: 'backend-version-id',
+      template: { messages: [{ role: 'user', content: 'Hello {name}' }] },
     })))
     const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
@@ -115,6 +116,7 @@ describe('PromptManager', () => {
     assert.strictEqual(latest.source, 'registry')
     assert.strictEqual(exact.version, '0.3.0')
     assert.strictEqual(exact.promptVersionUuid, 'backend-version-id')
+    assert.deepStrictEqual(exact.format({ name: 'Ada' }), [{ role: 'user', content: 'Hello Ada' }])
     sinon.assert.notCalled(provider.resolveObjectEvaluation)
   })
 

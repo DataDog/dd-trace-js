@@ -71,11 +71,12 @@ function promptFromData (data, source) {
   if (!isPlainObject(data) || !data.prompt_id) return
   const version = data.user_version || data.version
   if (!version) return
+  const template = Array.isArray(data.template?.messages) ? data.template.messages : data.template
   return new ManagedPrompt({
     id: data.prompt_id,
     version: String(version),
     source,
-    template: data.template || data.chat_template || [],
+    template: template || data.chat_template || [],
     promptUuid: data.prompt_uuid,
     promptVersionUuid: data.prompt_version_uuid || data.id || data.ID,
   })
