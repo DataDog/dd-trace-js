@@ -215,7 +215,6 @@ function compileRoute (route, parse, makeMatcher) {
  * @param {number} g
  * @param {Map<number, number>} groupParent
  * @param {Set<number>} present
- * @returns {boolean}
  */
 function groupActive (g, groupParent, present) {
   while (g !== 0) {
@@ -229,7 +228,6 @@ function groupActive (g, groupParent, present) {
  * URL-encode chars outside the RFC-1103 static alphabet [A-Za-z0-9.-~_]. The 'u' flag iterates whole
  * codepoints so surrogate pairs encode as correct multi-byte UTF-8.
  * @param {string} str
- * @returns {string}
  */
 function encodeStaticSegment (str) {
   return str.replaceAll(/[^A-Za-z0-9.\-~_]/gu, c => {
@@ -246,7 +244,6 @@ function encodeStaticSegment (str) {
 /**
  * URL-encode the 6 characters not allowed in a normalized param name (/?#+{}).
  * @param {string} name
- * @returns {string}
  */
 function encodeParamName (name) {
   return name.replaceAll(/[/?#+{}]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'))
@@ -256,7 +253,6 @@ function encodeParamName (name) {
  * Render the normalized route for a given set of present optional groups.
  * @param {CompiledRoute} compiled
  * @param {Set<number>} present
- * @returns {string}
  */
 function renderRoute (compiled, present) {
   const { segments, groupParent } = compiled
@@ -367,7 +363,6 @@ function resolvePresence (compiled, params) {
  * Stable bitmask key for a present-group set (group ids are small, route-local).
  * @param {number[]} optionalGroups
  * @param {Set<number>} present
- * @returns {number}
  */
 function presenceBitmask (optionalGroups, present) {
   let mask = 0

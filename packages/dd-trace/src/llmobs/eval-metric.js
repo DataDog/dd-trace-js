@@ -61,7 +61,6 @@ const TERMS = {
 
 /**
  * @param {string[]} metricTypes
- * @returns {string} the quoted list, e.g. `"categorical", "score" or "json"`
  */
 function formatMetricTypes (metricTypes) {
   const quoted = metricTypes.map(metricType => `"${metricType}"`)
@@ -99,7 +98,6 @@ function invalidTagsError (kind) {
 /**
  * @param {unknown} timestampMs
  * @param {MetricEventKind} kind
- * @returns {void}
  */
 function validateTimestamp (timestampMs, kind) {
   if (typeof timestampMs !== 'number' || timestampMs < 0) {
@@ -137,7 +135,6 @@ function validateLabel (label, kind) {
 /**
  * @param {string | undefined} metricType - Already lower-cased metric type.
  * @param {MetricEventKind} kind
- * @returns {void}
  */
 function validateMetricType (metricType, kind) {
   if (!metricType || !METRIC_TYPES[kind].includes(metricType)) {
@@ -148,7 +145,6 @@ function validateMetricType (metricType, kind) {
 /**
  * @param {string | undefined} metricType - Metric type already validated for the submitted kind.
  * @param {unknown} value
- * @returns {void}
  */
 function validateMetricValue (metricType, value) {
   if (metricType === 'categorical' && typeof value !== 'string') {
@@ -170,7 +166,6 @@ function validateMetricValue (metricType, value) {
 
 /**
  * @param {unknown} assessment
- * @returns {void}
  */
 function validateAssessment (assessment) {
   if (assessment != null && assessment !== 'pass' && assessment !== 'fail') {
@@ -180,7 +175,6 @@ function validateAssessment (assessment) {
 
 /**
  * @param {unknown} reasoning
- * @returns {void}
  */
 function validateReasoning (reasoning) {
   if (reasoning != null && typeof reasoning !== 'string') {

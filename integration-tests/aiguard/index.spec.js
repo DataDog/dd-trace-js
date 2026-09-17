@@ -592,6 +592,7 @@ describe('AIGuard SDK integration tests', () => {
 
   for (const [endpoint, output, target] of [
     ['/anthropic-stream-after-deny', 'text', 'prompt'],
+    ['/anthropic-raw-stream-after-deny', 'raw SSE text', 'prompt'],
     ['/anthropic-stream-tool-after-deny', 'tool call', 'tool'],
   ]) {
     it(`blocks streamed Anthropic ${output} at After Model before exposing any chunks`, async () => {

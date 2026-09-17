@@ -48,6 +48,11 @@ function jsonResponse (body) {
   })
 }
 
+function sseResponse (events) {
+  const body = events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
+  return { body, response: new Response(body, { headers: { 'content-type': 'text/event-stream' } }) }
+}
+
 function createAnthropicRequest () {
   return {
     model: 'claude-opus-4-1-20250805',
@@ -461,6 +466,121 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
         const response = await apiPromise.asResponse()
         await response.json()
         assert.deepStrictEqual(seen, [body])
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('inspects a streamed raw response before exposing its SSE body', async () => {
+      const apmChannel = tracingChannel('apm:anthropic:request')
+      let asyncEndCount = 0
+      const apmHandlers = { start () {}, asyncEnd () { asyncEndCount++ } }
+      apmChannel.subscribe(apmHandlers)
+      const seen = []
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = async stream => {
+          for await (const event of stream) {
+            seen.push(event)
+          }
+          return stream
+        }
+      })
+      const event = { type: 'message_stop' }
+      const { body, response: rawResponse } = sseResponse([event])
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        const response = await clientReturning(rawResponse).messages.create(options).asResponse()
+
+        assert.deepStrictEqual(seen, [event])
+        assert.strictEqual(await response.text(), body)
+        assert.strictEqual(asyncEndCount, 1)
+      } finally {
+        apmChannel.unsubscribe(apmHandlers)
+        unsubscribe()
+      }
+    })
+
+    it('does not clone the raw response used internally by messages.stream()', async () => {
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = stream => stream
+      })
+      const events = [
+        {
+          type: 'message_start',
+          message: {
+            id: 'msg_1',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-opus-4-1-20250805',
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } },
+        { type: 'content_block_stop', index: 0 },
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn', stop_sequence: null },
+          usage: { output_tokens: 1 },
+        },
+        { type: 'message_stop' },
+      ]
+      const { response } = sseResponse(events)
+      response.clone = () => { throw new Error('response should not be cloned') }
+
+      try {
+        const stream = clientReturning(response).messages.stream(createAnthropicRequest())
+        const seen = []
+        for await (const event of stream) seen.push(event)
+        assert.deepStrictEqual(seen.map(event => event.type), [
+          'message_start',
+          'content_block_start',
+          'content_block_delta',
+          'content_block_stop',
+          'message_delta',
+          'message_stop',
+        ])
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('rejects a direct streamed raw response when its body cannot be cloned', async () => {
+      const cloneError = new Error('locked body')
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = stream => stream
+      })
+      const { response } = sseResponse([{ type: 'message_stop' }])
+      response.clone = () => { throw cloneError }
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        await assert.rejects(
+          () => clientReturning(response).messages.create(options).asResponse(),
+          error => error === cloneError
+        )
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('does not expose a streamed raw response when onResult rejects', async () => {
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = () => Promise.reject(err)
+      })
+      const { response } = sseResponse([{ type: 'message_stop' }])
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        await assert.rejects(
+          () => clientReturning(response).messages.create(options).asResponse(),
+          error => error === err
+        )
       } finally {
         unsubscribe()
       }

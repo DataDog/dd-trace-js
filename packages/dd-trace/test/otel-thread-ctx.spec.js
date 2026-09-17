@@ -8,18 +8,21 @@ const sinon = require('sinon')
 
 require('./setup/core')
 
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../ext/priority')
+
 const TRACE_ID_HEX = '0102030405060708090a0b0c0d0e0f10'
 const SPAN_ID_HEX = '1112131415161718'
 const TRACE_ID_BYTES = Uint8Array.from(Buffer.from(TRACE_ID_HEX, 'hex'))
 const SPAN_ID_BYTES = Uint8Array.from(Buffer.from(SPAN_ID_HEX, 'hex'))
 
-function makeSpan ({ traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {} } = {}) {
+function makeSpan ({ traceId = TRACE_ID_HEX, spanId = SPAN_ID_HEX, parentId, tags = {}, priority } = {}) {
   return {
     context () {
       return {
         _spanId: spanId,
         _parentId: parentId,
         _trace: { started: [] },
+        _sampling: { priority },
         toTraceId: () => traceId.padStart(32, '0'),
         toSpanId: () => spanId.padStart(16, '0'),
         getTags: () => tags,
@@ -51,7 +54,7 @@ describe('otel-thread-ctx', () => {
   let activeSpan
   // Test double for the native ThreadContext class. Captures the constructor
   // arguments and exposes the same surface (appendAttributes, invalidate,
-  // isTruncated, debugBytes).
+  // setTraceFlags, isTruncated, debugBytes).
   let StubThreadContext
   let constructedContexts
   // Tracks every activation of a context (or detach via clearContext).
@@ -96,15 +99,17 @@ describe('otel-thread-ctx', () => {
     setActive = sinon.stub().callsFake(c => { activeContext = c })
 
     StubThreadContext = class StubThreadContext {
-      constructor (traceId, spanId, attributes) {
+      constructor (traceId, spanId, traceFlags, attributes) {
         this.traceId = traceId
         this.spanId = spanId
+        this.traceFlags = traceFlags
         this.attributes = attributes
         // Spied per instance so tests can assert call history on the context,
         // while the methods themselves stay on the prototype where start()'s
         // compatibility check looks for them, as they are on the native class.
         sinon.spy(this, 'appendAttributes')
         sinon.spy(this, 'invalidate')
+        sinon.spy(this, 'setTraceFlags')
         constructedContexts.push(this)
       }
 
@@ -118,6 +123,8 @@ describe('otel-thread-ctx', () => {
       }
 
       invalidate () {}
+
+      setTraceFlags (traceFlags) { this.traceFlags = traceFlags }
 
       isTruncated () { return false }
 
@@ -213,7 +220,7 @@ describe('otel-thread-ctx', () => {
       // failure to a diagnostic-channel subscriber: a missing invalidate() would
       // throw out of the span-finish path and up through DatadogSpan#finish()
       // into application code.
-      for (const method of ['appendAttributes', 'enter', 'invalidate']) {
+      for (const method of ['appendAttributes', 'enter', 'invalidate', 'setTraceFlags']) {
         const Incomplete = class extends StubThreadContext {}
         Incomplete.prototype[method] = undefined
         const m = loadModule({
@@ -322,6 +329,28 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledOnceWithExactly(setActive, context)
     })
 
+    it('sets the W3C sampled flag when the priority is AUTO_KEEP or above', () => {
+      for (const priority of [AUTO_KEEP, USER_KEEP]) {
+        constructedContexts = []
+        activeSpan = makeSpan({ priority })
+        enterCh.publish()
+        assert.equal(constructedContexts[0].traceFlags, 1, `priority ${priority}`)
+      }
+    })
+
+    it('leaves the trace-flags byte at zero when the trace is not sampled', () => {
+      // An undefined priority is a decision the tracer has not taken yet. The
+      // writer deliberately does not force it (that would move every trace's
+      // sampling decision onto the first span activation), so it reads as not
+      // sampled until something pushes the flags in with setTraceFlags.
+      for (const priority of [undefined, AUTO_REJECT, USER_REJECT]) {
+        constructedContexts = []
+        activeSpan = makeSpan({ priority })
+        enterCh.publish()
+        assert.equal(constructedContexts[0].traceFlags, 0, `priority ${priority}`)
+      }
+    })
+
     it('builds a ThreadContext with the endpoint attribute for a web-server span', () => {
       const webTags = { 'span.type': 'web', 'http.method': 'GET', 'http.route': '/x' }
       activeSpan = makeSpan({ tags: webTags })
@@ -342,6 +371,7 @@ describe('otel-thread-ctx', () => {
           _spanId: SPAN_ID_HEX,
           _parentId: rootHex,
           _trace: { started: [rootSpan] },
+          _sampling: {},
           toTraceId: () => TRACE_ID_HEX.padStart(32, '0'),
           toSpanId: () => SPAN_ID_HEX.padStart(16, '0'),
           getTags: () => ({}),

@@ -746,7 +746,6 @@ function hasCucumberBrowserSupport (files, retainedInputs, projectRoot) {
  * @param {string} framework framework name
  * @param {string} projectRoot project root
  * @param {boolean} allowDirectoryConvention whether a literal runner selector owns this root
- * @returns {boolean} whether the file is a candidate
  */
 function isTestFile (filename, source, framework, projectRoot, allowDirectoryConvention) {
   const basename = path.basename(filename)
@@ -775,7 +774,6 @@ function isTestFile (filename, source, framework, projectRoot, allowDirectoryCon
  *
  * @param {string} source candidate source
  * @param {string} framework framework name
- * @returns {boolean} whether ownership is explicit
  */
 function hasExplicitFrameworkImport (source, framework) {
   if (framework === 'vitest') {
@@ -797,7 +795,6 @@ function hasExplicitFrameworkImport (source, framework) {
  * @param {string} source file source
  * @param {string} framework framework name
  * @param {string} packageName project package name
- * @returns {boolean} whether ownership is plausible
  */
 function hasFrameworkOwnership (filename, source, framework, packageName) {
   const normalized = filename.replaceAll('\\', '/').toLowerCase()
@@ -821,7 +818,6 @@ function hasFrameworkOwnership (filename, source, framework, packageName) {
  *
  * @param {string} source candidate source
  * @param {string} framework selected framework
- * @returns {boolean} whether source ownership conflicts
  */
 function hasConflictingFramework (source, framework) {
   const markers = {
@@ -840,7 +836,6 @@ function hasConflictingFramework (source, framework) {
  * @param {string} filename candidate filename
  * @param {string} source candidate source
  * @param {string} projectRoot project root
- * @returns {number} lower-is-better rank
  */
 function getTestRank (filename, source, projectRoot) {
   const relative = path.relative(projectRoot, filename).replaceAll('\\', '/').toLowerCase()
@@ -857,7 +852,6 @@ function getTestRank (filename, source, projectRoot) {
  * Counts static test declarations for preferring small representative files.
  *
  * @param {string} source test source
- * @returns {number} approximate test declaration count
  */
 function getStaticTestCount (source) {
   const direct = [...source.matchAll(/\b(?:it|test)((?:\.[A-Za-z]+)*)\s*\(\s*(['"`])/g)]
@@ -873,7 +867,6 @@ function getStaticTestCount (source) {
  *
  * @param {string} projectRoot detected project root
  * @param {string} repositoryRoot repository root
- * @returns {string} preferred representative root
  */
 function findPreferredRepresentativeRoot (projectRoot, repositoryRoot) {
   if (path.resolve(projectRoot) !== path.resolve(repositoryRoot)) return projectRoot
@@ -895,7 +888,6 @@ function findPreferredRepresentativeRoot (projectRoot, repositoryRoot) {
  * Normalizes repository and package names for exact identity comparison.
  *
  * @param {string} value package identity
- * @returns {string} normalized identity
  */
 function normalizeProjectIdentity (value) {
   const unscoped = String(value || '').toLowerCase().replace(/^@[^/]+\//, '')
@@ -983,7 +975,6 @@ function findPackageRoot (packageName, projectRoot, repositoryRoot) {
  * Returns a runner package name.
  *
  * @param {string} framework framework name
- * @returns {string} package name
  */
 function getRunnerPackageName (framework) {
   return {
@@ -1024,7 +1015,6 @@ function getGeneratedTestConvention (framework, representative, projectRoot) {
  *
  * @param {string} framework framework name
  * @param {string} representative representative test
- * @returns {string} generated test suffix
  */
 function getTestExtension (framework, representative) {
   if (framework === 'cucumber') return '.feature'
@@ -1102,7 +1092,6 @@ function rankCiReviewTargets (files) {
  * Returns a lower-is-better CI review rank.
  *
  * @param {string} filename CI path
- * @returns {number} rank
  */
 function getCiRank (filename) {
   const value = filename.toLowerCase()
@@ -1219,7 +1208,6 @@ function readJson (filename) {
  *
  * @param {string} framework framework id
  * @param {Set<string>} selected selected ids
- * @returns {boolean} selection result
  */
 function isSelected (framework, selected) {
   return selected.size === 0 || selected.has(framework)
@@ -1231,7 +1219,6 @@ function isSelected (framework, selected) {
  * @param {object} packageJson package metadata
  * @param {string} projectRoot project root
  * @param {string} repositoryRoot repository root
- * @returns {string} project id
  */
 function getProjectId (packageJson, projectRoot, repositoryRoot) {
   const value = packageJson.name || path.relative(repositoryRoot, projectRoot) || 'root'
@@ -1242,7 +1229,6 @@ function getProjectId (packageJson, projectRoot, repositoryRoot) {
  * Detects package-manager metadata for reporting only.
  *
  * @param {string} root repository root
- * @returns {string} package manager
  */
 function detectPackageManager (root) {
   if (fs.existsSync(path.join(root, 'pnpm-lock.yaml'))) return 'pnpm'
@@ -1255,7 +1241,6 @@ function detectPackageManager (root) {
  * Detects workspace metadata for reporting only.
  *
  * @param {string} root repository root
- * @returns {string} workspace manager
  */
 function detectWorkspaceManager (root) {
   if (fs.existsSync(path.join(root, 'pnpm-workspace.yaml'))) return 'pnpm'
@@ -1267,7 +1252,6 @@ function detectWorkspaceManager (root) {
  * Returns a manifest operating-system name.
  *
  * @param {string} platform Node.js platform
- * @returns {string} OS name
  */
 function getManifestOs (platform) {
   return platform === 'win32' ? 'windows' : platform
@@ -1278,7 +1262,6 @@ function getManifestOs (platform) {
  *
  * @param {string} root root path
  * @param {string} filename candidate path
- * @returns {boolean} whether the candidate is contained
  */
 function isPathInside (root, filename) {
   const relative = path.relative(path.resolve(root), path.resolve(filename))

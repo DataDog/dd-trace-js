@@ -67,7 +67,6 @@ channel('datadog:identity:update').subscribe(refreshRuntimeId)
  * Lazily generates the process-wide runtime ID on first access instead of at module load,
  * so modules that merely require this file without constructing a Config never pay for it.
  *
- * @returns {string}
  */
 function getRuntimeId () {
   runtimeId ??= uuid()
@@ -439,7 +438,7 @@ class Config extends ConfigBase {
     // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
     if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
-      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -475,8 +474,8 @@ class Config extends ConfigBase {
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
-        trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
-      setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
+        trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
+      setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     }
 
     if (this.cloudPayloadTagging?.request || this.cloudPayloadTagging?.response) {
@@ -530,9 +529,9 @@ class Config extends ConfigBase {
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
-        (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp') ||
-        trackedConfigOrigins.has('llmobs.projectName'))) {
+        (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -648,7 +647,7 @@ class Config extends ConfigBase {
         setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
       }
       setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
-      setAndTrack(this, 'llmobs.agentlessEnabled', true)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
       if (this.DD_API_KEY === undefined) {
         setAndTrack(this, 'dynamicInstrumentation.enabled', false)

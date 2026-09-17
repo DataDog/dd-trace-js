@@ -36,7 +36,6 @@ function isFastSlash (layer, matchers) {
  * @param {{ handle: Function, name?: string, path?: string,
  *   regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
  * @param {Array<{ path?: string, regex?: RegExp }> & { hasStarPath?: boolean, hasSlashPath?: boolean }} matchers
- * @returns {void}
  */
 function annotateLayer (layer, matchers) {
   const handle = layer.handle
@@ -382,7 +381,6 @@ function createLayerDispatchWrappers (name) {
 
 /**
  * @param {{ handle_request?: unknown, handleRequest?: unknown }} layer
- * @returns {boolean}
  */
 function hasLayerDispatch (layer) {
   return typeof layer.handle_request === 'function' || typeof layer.handleRequest === 'function'

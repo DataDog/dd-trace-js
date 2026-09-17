@@ -220,7 +220,6 @@ function partsToContent (parts, hasImages) {
 
 /**
  * @param {Array<object>} parts
- * @returns {boolean}
  */
 function hasImageParts (parts) {
   return parts.some(part => part.type === 'image_url')
@@ -267,7 +266,6 @@ function convertAnthropicToolResultContent (content) {
 
 /**
  * @param {unknown} content
- * @returns {string}
  */
 function convertServerToolResultContent (content) {
   if (typeof content === 'string') return content || '[tool result]'
@@ -434,6 +432,16 @@ function getMessagesOutputMessages (body) {
 }
 
 /**
+ * @param {{index?: unknown}} event
+ * @returns {number|undefined}
+ */
+function getStreamedContentBlockIndex (event) {
+  const index = event.index ?? 0
+  if (!Number.isSafeInteger(index) || index < 0) return
+  return index
+}
+
+/**
  * Combines Anthropic message stream events into regular output messages.
  *
  * @param {Array<object>} events
@@ -441,50 +449,61 @@ function getMessagesOutputMessages (body) {
  */
 function getStreamedMessagesOutputMessages (events) {
   let message
-  const inputJson = []
+  let contentBlocks
+  const inputJson = new Map()
 
   for (const event of events) {
     if (!event || typeof event !== 'object') continue
 
     if (event.type === 'message_start' && event.message && typeof event.message === 'object') {
-      const content = Array.isArray(event.message.content)
-        ? event.message.content.map(block => ({ ...block }))
-        : []
-      message = { role: event.message.role || 'assistant', content }
+      contentBlocks = new Map()
+      if (Array.isArray(event.message.content)) {
+        for (let index = 0; index < event.message.content.length; index++) {
+          contentBlocks.set(index, { ...event.message.content[index] })
+        }
+      }
+      message = { role: event.message.role || 'assistant' }
       continue
     }
 
     if (event.type === 'content_block_start' && event.content_block && typeof event.content_block === 'object') {
-      message ??= { role: 'assistant', content: [] }
-      message.content[event.index ?? 0] = { ...event.content_block }
+      const index = getStreamedContentBlockIndex(event)
+      if (index === undefined) continue
+      message ??= { role: 'assistant' }
+      contentBlocks ??= new Map()
+      contentBlocks.set(index, { ...event.content_block })
       continue
     }
 
     if (event.type !== 'content_block_delta' || !event.delta || typeof event.delta !== 'object') continue
 
-    const index = event.index ?? 0
-    const block = message?.content[index]
+    const index = getStreamedContentBlockIndex(event)
+    if (index === undefined) continue
+    const block = contentBlocks?.get(index)
     if (!block) continue
 
     if (event.delta.type === 'text_delta' && block.type === 'text' && typeof event.delta.text === 'string') {
       block.text = (block.text || '') + event.delta.text
     } else if (event.delta.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
-      inputJson[index] = (inputJson[index] || '') + event.delta.partial_json
+      inputJson.set(index, (inputJson.get(index) || '') + event.delta.partial_json)
     }
   }
 
   if (!message) return []
 
-  for (let index = 0; index < inputJson.length; index++) {
-    if (inputJson[index] === undefined || !message.content[index]) continue
+  for (const [index, json] of inputJson) {
+    const block = contentBlocks.get(index)
+    if (!block) continue
     try {
-      message.content[index].input = JSON.parse(inputJson[index])
+      block.input = JSON.parse(json)
     } catch {
-      message.content[index].input = inputJson[index]
+      block.input = json
     }
   }
 
-  message.content = message.content.filter(Boolean)
+  message.content = [...contentBlocks]
+    .sort(([left], [right]) => left - right)
+    .map(([, block]) => block)
   return getMessagesOutputMessages(message)
 }
 

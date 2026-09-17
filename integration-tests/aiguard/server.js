@@ -672,6 +672,24 @@ app.get('/anthropic-stream-tool-after-deny', async (req, res) => {
   }
 })
 
+app.get('/anthropic-raw-stream-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const response = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+      stream: true,
+    }, { headers: { 'x-mock-response': 'deny' } }).asResponse()
+    for await (const chunk of response.body) {
+      if (chunk !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleStreamError(error, res, chunks)
+  }
+})
+
 const server = app.listen(() => {
   const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })

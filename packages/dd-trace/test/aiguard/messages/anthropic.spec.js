@@ -1315,5 +1315,43 @@ describe('aiguard/messages/anthropic', () => {
         ],
       }])
     })
+
+    it('handles large content block indices without creating sparse arrays', () => {
+      const index = 1e9
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        {
+          type: 'content_block_start',
+          index,
+          content_block: { type: 'tool_use', id: 'call_1', name: 'search', input: {} },
+        },
+        { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: '{"q":"x"}' } },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'search', arguments: '{"q":"x"}' } }],
+      }])
+    })
+
+    it('ignores invalid content block indices without dropping valid output', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: -1, content_block: { type: 'text', text: 'ignored' } },
+        { type: 'content_block_start', index: 0.5, content_block: { type: 'text', text: 'ignored' } },
+        {
+          type: 'content_block_start',
+          index: Number.MAX_SAFE_INTEGER + 1,
+          content_block: { type: 'text', text: 'ignored' },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: -1, delta: { type: 'text_delta', text: 'ignored' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [
+        { role: 'assistant', content: 'Hi' },
+      ])
+    })
   })
 })
