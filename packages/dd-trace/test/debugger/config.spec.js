@@ -18,13 +18,6 @@ const getDebuggerConfig = proxyquire('../../src/debugger/config', {
   '../git_metadata': () => ({ commitSHA: COMMIT_SHA, repositoryUrl: REPOSITORY_URL }),
 })
 
-/**
- * @typedef {{
- *   url: string,
- *   dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: number }
- * }} WorkerConfig
- */
-
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
     const tracerConfig = getConfig({
@@ -78,7 +71,7 @@ describe('getDebuggerConfig', function () {
 
 describe('Debugger worker config', () => {
   it('converts the canonical capture timeout to nanoseconds on initialization and update', () => {
-    /** @type {((config: WorkerConfig) => void) | undefined} */
+    /** @type {((config: NonNullable<ReturnType<import('../../src/debugger/config')>>) => void) | undefined} */
     let onMessage
     const configPort = {
       on: sinon.spy((event, listener) => {

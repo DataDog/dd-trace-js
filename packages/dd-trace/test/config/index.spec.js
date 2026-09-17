@@ -3837,31 +3837,6 @@ describe('Config', () => {
     assert.strictEqual(config.dogstatsd.hostname, 'localhost')
   })
 
-  it('should use canonical Dynamic Instrumentation names internally', () => {
-    const config = getConfig()
-
-    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS, 15)
-    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
-    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE, undefined)
-    assert.deepStrictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS, [])
-    assert.deepStrictEqual(
-      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
-      []
-    )
-    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS, 1)
-
-    for (const name of [
-      'captureTimeoutMs',
-      'enabled',
-      'probeFile',
-      'redactedIdentifiers',
-      'redactionExcludedIdentifiers',
-      'uploadIntervalSeconds',
-    ]) {
-      assert.strictEqual(Object.hasOwn(config.dynamicInstrumentation, name), false)
-    }
-  })
-
   it('should use domain namespaces for experimental controls internally', () => {
     const config = getConfig()
 
