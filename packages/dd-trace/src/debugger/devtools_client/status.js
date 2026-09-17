@@ -88,16 +88,17 @@ function ackError (err, { id: probeId, version }) {
       stacktrace: err.stack,
     }
 
-    send(payload)
+    return send(payload)
   })
 }
 
 function send (payload) {
-  if (jsonBuffer.write(JSON.stringify(payload))) return
+  if (jsonBuffer.write(JSON.stringify(payload))) return true
 
   const { probeId, status } = payload.debugger.diagnostics
   log.debug('[debugger:devtools_client] Dropping %s status for probe %s: diagnostics queue is full', status, probeId)
   guardrailMetrics.eventDropped(DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.DIAGNOSTIC)
+  return false
 }
 
 /**
@@ -139,6 +140,5 @@ function statusPayload (probeId, probeVersion, status) {
 function onlyUniqueUpdates (type, id, version, fn) {
   const key = `${type}-${id}-${version}`
   if (cache.has(key)) return
-  fn()
-  cache.add(key)
+  if (fn()) cache.add(key)
 }

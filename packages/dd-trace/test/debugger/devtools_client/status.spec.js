@@ -158,7 +158,7 @@ describe('diagnostic message http requests', function () {
   }
 
   describe('diagnostics queue', function () {
-    it('should bound the diagnostics queue to 1MB and release completed uploads', function () {
+    it('should bound the queue, release completed uploads, and retry a dropped status', function () {
       const MAX_QUEUE_BYTES = 1024 * 1024
       let accepted = 0
 
@@ -178,7 +178,7 @@ describe('diagnostic message http requests', function () {
 
       const requestsBeforeRelease = request.callCount
       request.firstCall.args[2](new Error('boom'))
-      statusproxy.ackReceived({ id: 'foo', version: accepted })
+      statusproxy.ackReceived({ id: 'foo', version: accepted - 1 })
       clock.tick(1000)
 
       sinon.assert.callCount(request, requestsBeforeRelease + 1)
