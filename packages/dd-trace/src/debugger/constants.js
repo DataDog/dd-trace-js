@@ -1,6 +1,8 @@
 'use strict'
 
 module.exports = {
+  DEFAULT_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
+
   DEBUGGER_INPUT_DIRECT: '/api/v2/debugger',
   DEBUGGER_DIAGNOSTICS_V1: '/debugger/v1/diagnostics',
   DEBUGGER_INPUT_V1: '/debugger/v1/input',

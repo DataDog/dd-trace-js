@@ -7,6 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { DEFAULT_QUEUE_MAX_BYTES } = require('../../../src/debugger/constants')
 const { DROPPED_REASON, EVENT_TYPE, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version: debuggerVersion } = require('../../../../../package.json')
@@ -622,7 +623,7 @@ function createConfigMock (overrides = {}) {
     inputPath: '/debugger/v2/input',
     maxTotalPayloadSize: 5 * 1024 * 1024,
     dynamicInstrumentation: {
-      queueMaxBytes: 10 * 1024 * 1024,
+      queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
       uploadIntervalSeconds: 1,
     },
     ...overrides,

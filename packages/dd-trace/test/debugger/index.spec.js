@@ -266,7 +266,6 @@ describe('debugger/index', () => {
         debug: false,
         dynamicInstrumentation: {
           enabled: true,
-          queueMaxBytes: 10 * 1024 * 1024,
         },
         env: 'test-env',
         hostname: 'test-host',

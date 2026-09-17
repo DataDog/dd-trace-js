@@ -1,13 +1,24 @@
 'use strict'
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
+const { getEnvironmentVariable } = require('../../config/helper')
 const processTags = require('../../process-tags')
+const { DEFAULT_QUEUE_MAX_BYTES } = require('../constants')
 const log = require('./log')
 
 processTags.initialize()
 
+const configuredQueueMaxBytes = Number(getEnvironmentVariable('_DD_DYNAMIC_INSTRUMENTATION_QUEUE_MAX_BYTES'))
+const queueMaxBytes = Number.isSafeInteger(configuredQueueMaxBytes) && configuredQueueMaxBytes > 0
+  ? configuredQueueMaxBytes
+  : DEFAULT_QUEUE_MAX_BYTES
+
 const config = module.exports = {
   ...parentConfig,
+  dynamicInstrumentation: {
+    ...parentConfig.dynamicInstrumentation,
+    queueMaxBytes,
+  },
   parentThreadId,
   maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
 }
