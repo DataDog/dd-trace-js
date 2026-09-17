@@ -276,6 +276,16 @@ describe('Plugin', () => {
         })
 
         describe('pool acquisition lifecycle', () => {
+          let lifecyclePool
+
+          before(async () => {
+            lifecyclePool = await oracledb.createPool(config)
+          })
+
+          after(async () => {
+            await lifecyclePool.close()
+          })
+
           it('traces an idle acquisition that is released without a query', async () => {
             const idlePool = await oracledb.createPool({
               ...config,
@@ -354,18 +364,18 @@ describe('Plugin', () => {
             })
             const parent = tracer.startSpan('oracle-session-callback-parent')
             let acquiredConnection
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+              const acquire = spans.find(span => span.name === expectedSchema.poolAcquire.opName)
+              const query = spans.find(span => span.resource === callbackQuery)
+
+              assert.ok(acquire)
+              assert.ok(query)
+              assert.strictEqual(acquire.parent_id.toString(), parent.context().toSpanId())
+              assert.strictEqual(query.parent_id.toString(), acquire.span_id.toString())
+            })
 
             try {
-              const tracePromise = agent.assertSomeTraces(traces => {
-                const spans = traces.flat()
-                const acquire = spans.find(span => span.name === expectedSchema.poolAcquire.opName)
-                const query = spans.find(span => span.resource === callbackQuery)
-
-                assert.ok(acquire)
-                assert.ok(query)
-                assert.strictEqual(acquire.parent_id.toString(), parent.context().toSpanId())
-                assert.strictEqual(query.parent_id.toString(), acquire.span_id.toString())
-              })
               await tracer.scope().activate(parent, () => {
                 return new Promise((resolve, reject) => {
                   const returnValue = sessionPool.getConnection((connectionError, callbackConnection) => {
@@ -381,7 +391,6 @@ describe('Plugin', () => {
                   assert.strictEqual(returnValue, undefined)
                 })
               })
-              await tracePromise
               await acquiredConnection.close()
               acquiredConnection = undefined
             } finally {
@@ -389,6 +398,7 @@ describe('Plugin', () => {
               parent.finish()
               await sessionPool.close()
             }
+            await tracePromise
           })
 
           it('keeps acquisition and query spans separate and restores Promise context', async () => {
@@ -408,7 +418,7 @@ describe('Plugin', () => {
 
             try {
               await tracer.scope().activate(parent, async () => {
-                acquiredConnection = await pool.getConnection()
+                acquiredConnection = await lifecyclePool.getConnection()
                 assert.strictEqual(tracer.scope().active(), parent)
                 await acquiredConnection.execute(dbQuery)
                 assert.strictEqual(tracer.scope().active(), parent)
@@ -434,7 +444,7 @@ describe('Plugin', () => {
             try {
               await tracer.scope().activate(parent, () => {
                 return new Promise((resolve, reject) => {
-                  returnValue = pool.getConnection((error, callbackConnection) => {
+                  returnValue = lifecyclePool.getConnection((error, callbackConnection) => {
                     try {
                       assert.ifError(error)
                       acquiredConnection = callbackConnection
@@ -470,16 +480,17 @@ describe('Plugin', () => {
 
             try {
               await tracer.scope().activate(parent, async () => {
-                await assert.rejects(pool.getConnection(null), error => {
+                await assert.rejects(lifecyclePool.getConnection(null), error => {
                   errors.push(error)
-                  return error.code === 'NJS-005'
+                  assert.match(error.message, /^NJS-005:/)
+                  return true
                 })
 
                 await new Promise((resolve, reject) => {
-                  const returnValue = pool.getConnection(null, error => {
+                  const returnValue = lifecyclePool.getConnection(null, error => {
                     try {
                       errors.push(error)
-                      assert.strictEqual(error.code, 'NJS-005')
+                      assert.match(error.message, /^NJS-005:/)
                       resolve()
                     } catch (error) {
                       reject(error)
