@@ -208,6 +208,39 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     })
 
+    emptyShardTest('does not classify an empty discovery as an empty shard', async (receiver, run) => {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2 ' +
+        '--grep=does-not-exist --pass-with-no-tests',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-tests-empty-shard',
+          },
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        proc,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.ok(!events.some(({ type }) => type === 'test'))
+          assert.ok(!events.some(({ type }) => type === 'test_suite_end'))
+
+          for (const eventType of ['test_session_end', 'test_module_end']) {
+            const event = events.find(({ type }) => type === eventType)
+            assert.ok(event, `expected ${eventType} event`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    })
+
     emptyShardTest('does not classify failed zero-test shards as expected empty', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2',

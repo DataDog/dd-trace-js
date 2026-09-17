@@ -65,6 +65,7 @@ const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
 const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatcher_createWorker')
+const filterForShardCh = tracingChannel('orchestrion:playwright:filterForShard')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
 const artifactsRecorderScreenshotPathCh =
@@ -122,6 +123,7 @@ let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
 let hasTestsAssignedToShard = false
+let hasTestsBeforeSharding = false
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -1051,6 +1053,25 @@ function dispatcherRunWrapper (run) {
   }
 }
 
+function recordTestsBeforeSharding (testGroups) {
+  hasTestsBeforeSharding = testGroups.some(group => group.tests.length > 0)
+}
+
+function testGroupsHook (testGroupsPackage) {
+  const filterForShard = testGroupsPackage.filterForShard
+  const wrappedFilterForShard = function (...args) {
+    recordTestsBeforeSharding(args.at(-1))
+    return filterForShard.apply(this, args)
+  }
+
+  return new Proxy(testGroupsPackage, {
+    get (target, prop, receiver) {
+      if (prop === 'filterForShard') return wrappedFilterForShard
+      return Reflect.get(target, prop, receiver)
+    },
+  })
+}
+
 function deferEfdRetryGroups (testGroups) {
   const groupsWithOriginalTests = []
   const efdRetryOnlyGroups = []
@@ -1329,6 +1350,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     hasReporterError = false
     playwrightRunSummary = undefined
     hasTestsAssignedToShard = false
+    hasTestsBeforeSharding = false
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1529,6 +1551,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     const isExpectedEmptyShard = finalStatus === 'pass' &&
       Boolean(playwrightConfig.shard) &&
+      hasTestsBeforeSharding &&
       !hasTestsAssignedToShard &&
       testsReportedInGenerateSummary.size === 0
     await getChannelPromise(testSessionFinishCh, {
@@ -1550,6 +1573,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
     hasTestsAssignedToShard = false
+    hasTestsBeforeSharding = false
     efdManagedTestKeys.clear()
     efdRetryCountByTestKey.clear()
     efdRetryCountRequestsByTestKey.clear()
@@ -1703,6 +1727,12 @@ dispatcherRunCh.subscribe({
 dispatcherCreateWorkerCh.subscribe({
   end (ctx) {
     onDispatcherCreateWorker(ctx.self, ctx.result)
+  },
+})
+
+filterForShardCh.subscribe({
+  start (ctx) {
+    recordTestsBeforeSharding(ctx.arguments.at(-1))
   },
 })
 
@@ -1877,6 +1907,12 @@ addHook({
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0 <1.60.0'],
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/testGroups.js',
+  versions: ['>=1.38.0 <1.60.0'],
+}, testGroupsHook)
 
 addHook({
   name: 'playwright',

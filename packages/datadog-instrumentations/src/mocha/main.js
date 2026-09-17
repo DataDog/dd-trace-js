@@ -315,10 +315,9 @@ function getOnEndHandler (isParallel, onDone) {
   return function (frameworkError, onFrameworkErrorDone) {
     let status = 'pass'
     let error = frameworkError
-    const isExpectedEmptySession = arguments.length === 0 && this.stats?.tests === 0
     if (this.stats) {
       status = this.stats.failures === 0 ? 'pass' : 'fail'
-      if (this.stats.tests === 0) {
+      if (this.stats.tests === 0 && this.stats.failures === 0) {
         status = 'skip'
       }
     } else if (this.failures !== 0) {
@@ -330,6 +329,7 @@ function getOnEndHandler (isParallel, onDone) {
     } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
+    const isExpectedEmptySession = arguments.length === 0 && status === 'skip'
 
     testFileToSuiteCtx.clear()
 
