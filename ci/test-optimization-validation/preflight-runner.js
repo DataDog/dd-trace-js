@@ -141,7 +141,6 @@ async function runCandidate ({ framework, index, options, out, testFile }) {
  * @param {object|undefined} commandFailure classified blocker
  * @param {string[]} diagnosticSummary bounded diagnostic lines
  * @param {object} framework framework manifest entry
- * @returns {string} customer-facing diagnosis
  */
 function getFailureDiagnosis (result, observedTestCount, commandFailure, diagnosticSummary, framework) {
   const sharedPrerequisite = !commandFailure && framework.allCandidatesRequireLocalSocket

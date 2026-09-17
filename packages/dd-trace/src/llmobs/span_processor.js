@@ -324,7 +324,6 @@ class LLMObsSpanProcessor {
    * @param {{ apiKey?: string, site?: string }} routing
    * @param {object} event
    * @param {number | undefined} samplingPriority
-   * @returns {boolean}
    */
   #shouldAttachMetaStruct (routing, event, samplingPriority) {
     return !routing.apiKey &&
@@ -336,7 +335,6 @@ class LLMObsSpanProcessor {
    * Checks whether the intake tag list contains keys that cannot be represented losslessly by the meta_struct map.
    *
    * @param {string[]} tags
-   * @returns {boolean}
    */
   #hasRepeatedTagKeys (tags) {
     const keys = new Set()

@@ -7,7 +7,6 @@ const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 
 /**
  * @param {string} hostname
- * @returns {boolean}
  */
 function isLoopbackHost (hostname) {
   // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
@@ -20,7 +19,6 @@ function isLoopbackHost (hostname) {
 /**
  * @param {string|undefined} protocol
  * @param {string|undefined} hostname
- * @returns {boolean}
  */
 function canSendApiKey (protocol, hostname) {
   return protocol === 'https:' || protocol === 'unix:' ||

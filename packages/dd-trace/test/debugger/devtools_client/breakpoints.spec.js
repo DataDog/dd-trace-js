@@ -1422,7 +1422,6 @@ function genProbeConfig ({ id, version, where, when, ...rest } = {}) {
  * Build the runtime sampler cleanup expression.
  *
  * @param {string} id - The probe id.
- * @returns {string}
  */
 function removeProbeExpression (id) {
   return 'globalThis[Symbol.for("dd-trace")]?.[Symbol.for("dd-trace.debugger.probeSampler")]' +

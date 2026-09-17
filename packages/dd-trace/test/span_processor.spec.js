@@ -24,6 +24,7 @@ describe('SpanProcessor', () => {
   let spanFormat
   let config
   let SpanSampler
+  let SpanStatsProcessor
   let sample
 
   before(() => {
@@ -73,12 +74,37 @@ describe('SpanProcessor', () => {
     SpanSampler = sinon.stub().returns({
       sample,
     })
+    SpanStatsProcessor = sinon.stub()
 
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './span_stats': { SpanStatsProcessor },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
+  })
+
+  it('should configure span stats when enabled outside standalone AppSec', () => {
+    const otlpStatsExporter = {}
+    const stats = {}
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = false
+    SpanStatsProcessor.returns(stats)
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config, otlpStatsExporter)
+
+    sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, otlpStatsExporter)
+    assert.strictEqual(processor._stats, stats)
+  })
+
+  it('should not configure span stats in standalone AppSec', () => {
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = true
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    assert.strictEqual(processor._stats, undefined)
   })
 
   it('should generate sampling priority', () => {

@@ -593,7 +593,6 @@ module.exports = class CiPlugin extends Plugin {
    * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
    * @param {Array<{ pattern: string, owners: string[] }>|null|undefined} codeOwnersEntries
    * Parsed CODEOWNERS entries discovered by the coordinator process.
-   * @returns {void}
    */
   _setRepositoryRoot (repositoryRoot, codeOwnersEntries) {
     if (codeOwnersEntries !== undefined) {
