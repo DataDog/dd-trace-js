@@ -18,6 +18,18 @@ const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
+function getMicroVmOtlpHttpMetricExporter () {
+  const loadBase = proxyquire.noPreserveCache()
+  const serverless = { ...require('../../src/serverless'), IS_AWS_LAMBDA_MICROVM: true }
+  const OtlpHttpExporterBase = loadBase('../../src/opentelemetry/otlp/otlp_http_exporter_base', {
+    '../../serverless': serverless,
+  })
+  const loadExporter = proxyquire.noPreserveCache()
+  return loadExporter('../../src/opentelemetry/metrics/otlp_http_metric_exporter', {
+    '../otlp/otlp_http_exporter_base': OtlpHttpExporterBase,
+  })
+}
+
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -38,7 +50,7 @@ describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
   let httpStub
 
-  function setupMetrics (envOverrides, setDefaultEnv = true) {
+  function setupMetrics (envOverrides, setDefaultEnv = true, OtlpHttpMetricExporter) {
     if (setDefaultEnv) {
       process.env.DD_METRICS_OTEL_ENABLED = 'true'
       process.env.DD_SERVICE = 'test-service'
@@ -62,7 +74,9 @@ describe('OpenTelemetry Meter Provider', () => {
     if (config.DD_METRICS_OTEL_ENABLED) {
       const loadMetrics = proxyquire.noPreserveCache()
       const { initializeOpenTelemetryMetrics } =
-        loadMetrics('../../src/opentelemetry/metrics', {})
+        loadMetrics('../../src/opentelemetry/metrics', OtlpHttpMetricExporter
+          ? { './otlp_http_metric_exporter': OtlpHttpMetricExporter }
+          : {})
       initializeOpenTelemetryMetrics(config)
     }
     return { config, meterProvider: metrics.getMeterProvider() }
@@ -1384,6 +1398,38 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Identity refresh', () => {
+    it('cancels an active OTLP export when pending state resets', () => {
+      process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = 'http://localhost:4318/v1/metrics'
+      let request
+      const response = {
+        statusCode: 200,
+        on: sinon.stub().returnsThis(),
+        once: sinon.stub().returnsThis(),
+      }
+
+      httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
+        request = {
+          write: sinon.stub(),
+          end: sinon.stub(),
+          on: sinon.stub().returnsThis(),
+          once: sinon.stub().returnsThis(),
+          setTimeout: sinon.stub().returnsThis(),
+          destroy: sinon.spy(),
+        }
+        callback(response)
+        return request
+      })
+
+      const { config } = setupMetrics(undefined, true, getMicroVmOtlpHttpMetricExporter())
+      const meter = metrics.getMeter('app')
+      meter.createCounter('requests').add(1)
+      metrics.getMeterProvider().reader.forceFlush()
+
+      identityRefreshChannel.publish(config)
+
+      sinon.assert.calledOnce(request.destroy)
+    })
+
     it('exports refreshed resources without resetting the ObservableCounter delta baseline', () => {
       const clock = sinon.useFakeTimers()
       const exportedMetrics = []
