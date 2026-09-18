@@ -438,6 +438,7 @@
 
 /.github/CODEOWNERS @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
+/.github/renovate.json @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
 /.github/pull_request_template.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/dd-trace-js @DataDog/lang-platform-js
 

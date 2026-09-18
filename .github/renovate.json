@@ -13,6 +13,8 @@
     "docs/yarn.lock",
     ".github/actions/datadog-ci/package.json",
     ".github/actions/datadog-ci/yarn.lock",
+    "benchmark/sirun/startup/everything-fixture/package.json",
+    "benchmark/sirun/startup/everything-fixture/package-lock.json",
     "vendor/package.json",
     "vendor/package-lock.json"
   ],
@@ -111,6 +113,20 @@
       ],
       "groupName": "datadog-ci action lockfile maintenance",
       "groupSlug": "datadog-ci-action-lockfile-maintenance"
+    },
+    {
+      "description": "Startup benchmark fixture lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "benchmark/sirun/startup/everything-fixture/package.json"
+      ],
+      "groupName": "startup benchmark fixture lockfile maintenance",
+      "groupSlug": "startup-benchmark-fixture-lockfile-maintenance"
     },
     {
       "description": "Vendor lockfile maintenance",
