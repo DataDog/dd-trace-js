@@ -34,19 +34,29 @@ const EOL = '\n'
 // `[ \t]*` (horizontal whitespace) cannot span line terminators, so under `m` the `^`-anchored
 // match runs once per line instead of rescanning across lines. Stack frames indent with spaces.
 const STACK_FRAME_LINE_REGEX = /^[ \t]*at\s/gm
+const NODE_FRAME_LINE_REGEX = /^[ \t]*at (?:(node:[\w./-]+:\d+:\d+)|[^()\r\n]+ \((node:[\w./-]+:\d+:\d+)\))$/
 
 function sanitize (logEntry) {
   const stack = logEntry.stack_trace
   if (!stack) return logEntry
 
-  let stackLines = stack.split(EOL)
+  const lines = stack.split(EOL)
 
-  const firstIndex = stackLines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
+  const firstIndex = lines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  // Filter to keep only DD frames
-  stackLines = stackLines
-    .filter((line, index) => index >= firstIndex && line.includes(ddBasePath))
-    .map(line => line.replace(ddBasePath, ''))
+  let stackLines = []
+
+  for (let i = Math.max(firstIndex, 0); i < lines.length; i++) {
+    const line = lines[i]
+    if (line.includes(ddBasePath)) {
+      stackLines.push(line.replace(ddBasePath, ''))
+    } else {
+      const match = NODE_FRAME_LINE_REGEX.exec(line)
+      // match[1] is the location in `at node:...`; match[2] is the location in `at fn (node:...)`.
+      // Keep only the runtime location: function names and eval origins can contain customer data.
+      if (match) stackLines.push(`    at ${match[1] ?? match[2]}`)
+    }
+  }
 
   // ALWAYS redact error messages (RFC requirement: exception type only, no message)
   // This handles single-line and multi-line error messages
