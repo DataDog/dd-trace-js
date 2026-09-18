@@ -5,12 +5,14 @@ const { channel } = require('./helpers/instrument')
 
 const configureCh = channel('ci:log-submission:console:configure')
 const logSubmissionCh = channel('ci:log-submission:console')
+const vitestSuiteStartCh = channel('ci:vitest:test-suite:start')
 const methods = ['error', 'warn']
 const methodSet = new Set(methods)
 const wrappedTargets = new WeakSet()
 
 let callDepth = 0
 let configuredGetLogHolder
+let isVitestConsoleSubscribed = false
 
 /**
  * @param {string} method
@@ -81,6 +83,11 @@ function wrapJestConsole (jestConsole, getLogHolder) {
 configureCh.subscribe(({ getLogHolder } = {}) => {
   configuredGetLogHolder = getLogHolder
   wrapConsole(globalThis.console)
+  if (!isVitestConsoleSubscribed) {
+    isVitestConsoleSubscribed = true
+    // Vitest replaces the global console after tracer startup and before the first suite starts.
+    vitestSuiteStartCh.subscribe(() => wrapConsole(globalThis.console))
+  }
 })
 
 module.exports = { wrapConsole, wrapJestConsole }

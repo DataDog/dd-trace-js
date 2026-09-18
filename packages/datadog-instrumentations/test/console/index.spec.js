@@ -7,7 +7,9 @@ const sinon = require('sinon')
 
 const { wrapConsole, wrapJestConsole } = require('../../src/console')
 
+const configureCh = channel('ci:log-submission:console:configure')
 const logSubmissionCh = channel('ci:log-submission:console')
+const vitestSuiteStartCh = channel('ci:vitest:test-suite:start')
 
 describe('console instrumentation', () => {
   let payloads
@@ -80,5 +82,24 @@ describe('console instrumentation', () => {
       { args: ['warning'], logHolder, method: 'warn' },
       { args: ['failure'], logHolder, method: 'error' },
     ])
+  })
+
+  it('wraps the active Vitest console after it replaces the global console', () => {
+    const originalConsole = globalThis.console
+    const initialConsole = { error: sinon.stub(), warn: sinon.stub() }
+    const replacement = { error: sinon.stub(), warn: sinon.stub() }
+    const logHolder = { dd: { span_id: '1', trace_id: '2' } }
+
+    try {
+      globalThis.console = initialConsole
+      configureCh.publish({ getLogHolder: () => logHolder })
+      globalThis.console = replacement
+      vitestSuiteStartCh.publish()
+      replacement.warn('warning')
+    } finally {
+      globalThis.console = originalConsole
+    }
+
+    assert.deepStrictEqual(payloads, [{ args: ['warning'], logHolder, method: 'warn' }])
   })
 })

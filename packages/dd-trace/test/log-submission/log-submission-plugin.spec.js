@@ -150,22 +150,34 @@ describe('LogSubmissionPlugin', () => {
       consoleConfigureCh.unsubscribe(subscriber)
     }
 
-    const applicationSpan = { context: () => ({ getTag: () => 'web' }) }
-    for (const type of ['test', 'test_suite_end', 'test_session_end']) {
-      const span = {
-        id: `${type} span`,
-        traceId: `${type} trace`,
-        context: () => ({ getTag: () => type }),
-      }
-      const key = type === 'test_suite_end' ? 'testSuiteSpan' : type === 'test_session_end' ? 'testSessionSpan' : 'span'
-      legacyStorage.run({ span: applicationSpan, [key]: span }, () => {
+    const createSpan = type => ({
+      id: `${type} span`,
+      traceId: `${type} trace`,
+      context: () => ({ getTag: () => type }),
+    })
+    const testSpan = createSpan('test')
+    const applicationSpan = createSpan('web')
+    applicationSpan.context = () => ({
+      getTag: () => 'web',
+      _trace: { started: [applicationSpan, testSpan] },
+    })
+    const testSuiteSpan = createSpan('test_suite_end')
+    const testSessionSpan = createSpan('test_session_end')
+
+    for (const [store, span] of [
+      [{ span: testSpan }, testSpan],
+      [{ span: applicationSpan }, testSpan],
+      [{ testSuiteSpan }, testSuiteSpan],
+      [{ span: testSessionSpan }, testSessionSpan],
+    ]) {
+      legacyStorage.run(store, () => {
         assert.deepStrictEqual(getLogHolder(), {
           dd: { service: 'my service', span_id: span.id, trace_id: span.traceId },
         })
       })
     }
 
-    legacyStorage.run({ span: applicationSpan }, () => assert.strictEqual(getLogHolder(), undefined))
+    legacyStorage.run({ span: createSpan('web') }, () => assert.strictEqual(getLogHolder(), undefined))
     assert.strictEqual(getLogHolder(), undefined)
   })
 

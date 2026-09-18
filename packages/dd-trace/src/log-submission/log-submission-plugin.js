@@ -77,6 +77,27 @@ function getLogSubmissionPath (config, source) {
   return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service: config.service })}`
 }
 
+/**
+ * @param {object | undefined} store
+ */
+function getTestOptimizationSpan (store) {
+  const activeSpan = store?.span
+  if (activeSpan && TEST_OPTIMIZATION_SPAN_TYPES.has(activeSpan.context().getTag(SPAN_TYPE))) {
+    return activeSpan
+  }
+
+  // Child instrumentation spans replace store.span, so recover the enclosing test from their trace.
+  const traceSpans = activeSpan?.context()._trace?.started
+  if (traceSpans) {
+    for (const span of traceSpans) {
+      if (span.context().getTag(SPAN_TYPE) === 'test') return span
+    }
+  }
+
+  const testSuiteSpan = store?.testSuiteSpan
+  if (testSuiteSpan?.context().getTag(SPAN_TYPE) === 'test_suite_end') return testSuiteSpan
+}
+
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
 
@@ -96,8 +117,7 @@ class LogSubmissionPlugin extends Plugin {
 
     const store = legacyStorage.getStore()
     if (store?.noop) return
-    const span = [store?.span, store?.testSuiteSpan, store?.testSessionSpan]
-      .find(span => span && TEST_OPTIMIZATION_SPAN_TYPES.has(span.context().getTag(SPAN_TYPE)))
+    const span = getTestOptimizationSpan(store)
     if (!span) return
 
     const logHolder = {}
