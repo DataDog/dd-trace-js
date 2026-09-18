@@ -17,7 +17,7 @@
     "vendor/package-lock.json"
   ],
   "timezone": "UTC",
-  "dependencyDashboard": false,
+  "dependencyDashboard": true,
   "automergeType": "pr",
   "automergeStrategy": "squash",
   "platformAutomerge": true,
