@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 require('../setup/mocha')
 
+const { MAX_MESSAGE_LENGTH } = require('../../src/debugger/constants')
 const {
   CONDITION_ERROR_FLAG,
   CONDITION_ERROR_THROTTLE_NS,
@@ -356,6 +357,39 @@ describe('probe sampler', function () {
         })
         assert.strictEqual(sampler.conditionError(7, 'proxy', proxy), true)
         assert.strictEqual(sampler.takeConditionError('proxy'), 'Unknown evaluation error')
+      })
+
+      it('should preserve condition error descriptions at the message length limit', function () {
+        installSampler()
+        const sampler = getSampler()
+        const error = 'x'.repeat(MAX_MESSAGE_LENGTH)
+
+        sampler.conditionError(7, 'probe-1', error)
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), error)
+      })
+
+      it('should truncate condition error descriptions over the message length limit', function () {
+        installSampler()
+        const sampler = getSampler()
+        const error = 'x'.repeat(MAX_MESSAGE_LENGTH + 1)
+
+        sampler.conditionError(7, 'probe-1', error)
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), `${error.slice(0, MAX_MESSAGE_LENGTH)}…`)
+      })
+
+      it('should truncate formatted Error descriptions over the message length limit', function () {
+        installSampler()
+        const sampler = getSampler()
+        const message = 'x'.repeat(MAX_MESSAGE_LENGTH)
+
+        sampler.conditionError(7, 'probe-1', new Error(message))
+
+        assert.strictEqual(
+          sampler.takeConditionError('probe-1'),
+          `${`Error: ${message}`.slice(0, MAX_MESSAGE_LENGTH)}…`
+        )
       })
 
       it('should throttle condition evaluation for the throttle window after an error', function () {

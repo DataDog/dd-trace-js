@@ -3,6 +3,7 @@
 const { types } = require('node:util')
 
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./devtools_client/defaults')
+const { MAX_MESSAGE_LENGTH } = require('./constants')
 const { EVENT_TYPE, SKIPPED_REASON } = require('./guardrail-metrics')
 const {
   CONDITION_ERROR_FLAG,
@@ -181,16 +182,28 @@ function uninstallProbeSampler () {
  * @param {unknown} error - The thrown value.
  */
 function describeError (error) {
-  if (typeof error === 'string') return error
+  if (typeof error === 'string') return truncateErrorDescription(error)
   if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
     return 'Unknown evaluation error'
   }
 
   const name = getErrorStringProperty(error, 'name')
   const message = getErrorStringProperty(error, 'message')
-  if (name === undefined) return message ?? 'Unknown evaluation error'
-  if (message === undefined) return name
-  return `${name}: ${message}`
+  if (name === undefined) return truncateErrorDescription(message ?? 'Unknown evaluation error')
+  if (message === undefined) return truncateErrorDescription(name)
+
+  return truncateErrorDescription(`${name}: ${message}`)
+}
+
+/**
+ * Bound an error description before retaining or transferring it.
+ *
+ * @param {string} description - The description to bound.
+ */
+function truncateErrorDescription (description) {
+  return description.length > MAX_MESSAGE_LENGTH
+    ? `${description.slice(0, MAX_MESSAGE_LENGTH)}…`
+    : description
 }
 
 /**
