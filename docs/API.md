@@ -14,7 +14,7 @@ Agentless mode disables features that require an Agent.
 Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
 Agentless crash tracking requires this key and sends crash data directly to Datadog.
 
-Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Agentless mode uses the Datadog trace intake by default.
 Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
 `DD_METRICS_OTEL_ENABLED` settings still apply.
 

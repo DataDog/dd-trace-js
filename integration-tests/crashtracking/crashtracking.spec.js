@@ -41,7 +41,9 @@ function spawnCrashFixture (fixture, agentPort, environment = {}, onStderr) {
 }
 
 /**
- * Collect the native receiver's agentless requests until both direct intakes receive crash data.
+ * Collect the native receiver's requests to the Errors Tracking intake (the ping and the full
+ * crash report) until both have arrived. Agentless mode does not configure a telemetry endpoint,
+ * so the receiver only ever submits directly to the errors intake.
  *
  * @param {http.Server} server
  * @param {string} expectedApiKey
@@ -50,8 +52,7 @@ function spawnCrashFixture (fixture, agentPort, environment = {}, onStderr) {
  */
 function collectAgentlessCrashRequests (server, expectedApiKey, timeout = 10_000) {
   const requestUrls = []
-  const telemetry = []
-  let receivedErrorTracking = false
+  const errorsIntake = []
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -73,28 +74,18 @@ function collectAgentlessCrashRequests (server, expectedApiKey, timeout = 10_000
 
         requestUrls.push(request.url)
 
-        if (request.url === '/api/v2/apmtelemetry') {
-          const payload = JSON.parse(Buffer.concat(chunks).toString())
-          if (payload.origin === 'Crashtracker') {
-            if (request.headers['dd-api-key'] !== expectedApiKey) {
-              cleanup()
-              reject(new Error('Crash telemetry request has an invalid API key'))
-              return
-            }
-            telemetry.push(payload)
-          }
-        } else if (request.url === '/api/v2/errorsintake') {
+        if (request.url === '/api/v2/errorsintake') {
           if (request.headers['dd-api-key'] !== expectedApiKey) {
             cleanup()
             reject(new Error('Errors Tracking request has an invalid API key'))
             return
           }
-          receivedErrorTracking = true
+          errorsIntake.push(JSON.parse(Buffer.concat(chunks).toString()))
         }
 
-        if (telemetry.length >= 2 && receivedErrorTracking) {
+        if (errorsIntake.length >= 2) {
           cleanup()
-          resolve(telemetry)
+          resolve(errorsIntake)
         }
       })
     }
@@ -201,7 +192,7 @@ describeNotWindows('crashtracking integration', () => {
       )
     })
 
-    it('sends native crash data directly to both agentless intakes', async function () {
+    it('sends native crash data directly to the errors tracking intake', async function () {
       if (os.platform() !== 'linux') this.skip()
 
       const server = http.createServer()
@@ -225,7 +216,7 @@ describeNotWindows('crashtracking integration', () => {
           error.message += `\nFixture stderr: ${stderr}`
           throw error
         }
-        assert.ok(requests.every(payload => payload.request_type === 'logs'))
+        assert.strictEqual(requests.length, 2, 'expected a ping and a full crash report')
       } finally {
         await new Promise(resolve => server.close(resolve))
       }
