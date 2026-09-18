@@ -21,6 +21,8 @@ const {
   TEST_RETRY_REASON_TYPES,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { assertObjectContains, getCiVisAgentlessConfig } = require('../helpers')
 const {
@@ -52,6 +54,22 @@ const DISABLED_MANAGEMENT_TESTS = {
       'disabled-serial-test.js': {
         tests: {
           'disabled serial retry should not run disabled sibling': {
+            properties: {
+              disabled: true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
+const ALL_DISABLED_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      'managed-off-test.js': {
+        tests: {
+          'should be disabled': {
             properties: {
               disabled: true,
             },
@@ -200,6 +218,47 @@ describePlaywrightTestManagement(({ contextNewVersions, it, latest, runtime, ver
         receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
         receiver.setSettings({ test_management: { enabled: true } })
         await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
+      })
+
+      it('does not classify a shard with only disabled tests as empty', async (receiver, run) => {
+        receiver.setTestManagementTests(ALL_DISABLED_MANAGEMENT_TESTS)
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js managed-off-test.js --shard=1/1',
+          {
+            cwd: runtime.cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${runtime.webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-management',
+            },
+          }
+        )
+
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url === '/api/v2/citestcycle',
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(({ type }) => type === 'test').map(({ content }) => content)
+
+            assert.strictEqual(tests.length, 1)
+            assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+            assert.strictEqual(tests[0].meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+            for (const eventType of ['test_session_end', 'test_module_end']) {
+              const event = events.find(({ type }) => type === eventType)
+              assert.ok(event, `expected ${eventType}`)
+              assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
+              assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+            }
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
       })
 
       // Playwright itself only started ignoring unknown worker events in 1.39.0.

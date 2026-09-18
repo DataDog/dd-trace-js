@@ -86,6 +86,7 @@ const {
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
@@ -229,8 +230,13 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
   return specScreenshots.filter(screenshot => isScreenshotForTestAttempt(screenshot, titleParts, attemptIndex))
 }
 
-function getSessionStatus (summary) {
-  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
+function getSessionStatus (summary, testSuiteStatuses) {
+  if (!summary) {
+    if (testSuiteStatuses.has('fail')) return 'fail'
+    if (testSuiteStatuses.has('skip') && !testSuiteStatuses.has('pass')) return 'skip'
+    return 'pass'
+  }
+  if (summary.status === 'failed' || summary.failures > 0 || summary.totalFailed > 0) {
     return 'fail'
   }
   if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
@@ -464,6 +470,8 @@ class CypressPlugin {
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   finishedTestsByFile = {}
+  hasTestsReported = false
+  testSuiteStatuses = new Set()
   testStatuses = {}
   hasLibraryConfiguration = false
   isItrEnabled = false
@@ -554,6 +562,8 @@ class CypressPlugin {
   resetRunState () {
     this._isInit = false
     this.finishedTestsByFile = {}
+    this.hasTestsReported = false
+    this.testSuiteStatuses = new Set()
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
     this.isItrEnabled = false
@@ -1327,12 +1337,22 @@ class CypressPlugin {
    */
   #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats, this.testSuiteStatuses)
+      const hasNoTests = suiteStats?.totalTests === 0 ||
+        (suiteStats?.totalTests === undefined && !this.hasTestsReported)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      if (testStatus !== 'fail' && hasNoTests) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          'No tests were executed',
+          'zero_tests'
+        )
+      }
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
@@ -1446,8 +1466,9 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results, error) {
-    const { tests, stats, screenshots, video } = results || {}
+    const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
+    if (cypressTests.length > 0) this.hasTestsReported = true
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
@@ -1669,7 +1690,12 @@ class CypressPlugin {
     }
 
     const testSuiteFinishTime = this._now()
-    const suiteFailed = error || latestError || getSuiteStatus(stats) === 'fail'
+    const suiteError = error || resultError || latestError
+    const suiteStatus = suiteError ||
+      cypressTests.some(test => CYPRESS_STATUS_TO_TEST_STATUS[test.state] === 'fail')
+      ? 'fail'
+      : getSuiteStatus(stats)
+    this.testSuiteStatuses.add(suiteStatus)
     const testSuiteSpan = this.testSuiteSpan
     const uploadOptions = {
       filePath: video,
@@ -1680,10 +1706,10 @@ class CypressPlugin {
         ? testSuiteSpan.context().toSpanId()
         : undefined,
     }
-    const shouldUploadVideo = suiteFailed && this.#canUploadTestSuiteVideo(uploadOptions)
+    const shouldUploadVideo = suiteStatus === 'fail' && this.#canUploadTestSuiteVideo(uploadOptions)
     if (testSuiteSpan) {
-      testSuiteSpan.setTag(TEST_STATUS, error ? 'fail' : getSuiteStatus(stats))
-      if (error || latestError) testSuiteSpan.setTag('error', error || latestError)
+      testSuiteSpan.setTag(TEST_STATUS, suiteStatus)
+      if (suiteError) testSuiteSpan.setTag('error', suiteError)
       this.testSuiteSpan = null
     }
 
@@ -1943,6 +1969,7 @@ class CypressPlugin {
         return suitePayload
       },
       'dd:beforeEach': (test) => {
+        this.hasTestsReported = true
         const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }
