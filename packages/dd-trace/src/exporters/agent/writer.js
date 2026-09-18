@@ -159,9 +159,9 @@ function makeRequest (version, data, count, url, headers, lookup, flushOptions, 
       'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
     },
     lookup,
-    resetController,
     url,
   }
+  if (resetController) options.resetController = resetController
   if (flushOptions?.deadline !== undefined) {
     options.deadline = flushOptions.deadline
   }

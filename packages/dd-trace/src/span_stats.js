@@ -3,6 +3,7 @@
 const os = require('node:os')
 
 const { channel } = require('dc-polyfill')
+const { IS_AWS_LAMBDA_MICROVM } = require('./serverless')
 
 const pkg = require('../../../package.json')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
@@ -238,14 +239,18 @@ class SpanStatsProcessor {
       this.timer.unref?.()
     }
 
-    // A clone resume shouldn't export buckets accumulated before the snapshot under its own identity.
-    unsubscribeBucketReset?.()
-    const onIdentityRefresh = () => {
-      this.buckets = new TimeBuckets(Boolean(this.otlpExporter))
-      this.exporter?.resetPendingState()
+    if (IS_AWS_LAMBDA_MICROVM) {
+      unsubscribeBucketReset?.()
+      const onIdentityRefresh = () => {
+        // Legacy and OTLP span-stats exporters use different transports, so reset both at the same
+        // identity boundary.
+        this.buckets = new TimeBuckets(Boolean(this.otlpExporter))
+        this.exporter?.resetPendingState()
+        this.otlpExporter?.resetPendingState?.()
+      }
+      identityRefreshChannel.subscribe(onIdentityRefresh)
+      unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
     }
-    identityRefreshChannel.subscribe(onIdentityRefresh)
-    unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
   }
 
   onInterval () {

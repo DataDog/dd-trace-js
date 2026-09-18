@@ -9,6 +9,7 @@ const https = require('https')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
+const { IS_AWS_LAMBDA_MICROVM } = require('../../serverless')
 const log = require('../../log')
 const { canSendApiKey, parseUrl } = require('./url')
 const docker = require('./docker')
@@ -20,7 +21,6 @@ const {
   isRetriableNetworkError,
   markEndpointReached,
 } = require('./retry')
-
 const legacyStorage = storage('legacy')
 
 const maxActiveBufferSize = 1024 * 1024 * 64
@@ -47,18 +47,19 @@ function createResetController () {
     pendingRetryTimers: new Set(),
     activeRequests: new Set(),
     reset () {
-      // Identity-refresh handlers call reset() when a MicroVM clone starts. Active requests must be
-      // aborted in addition to clearing buffers because they may still be connecting and send later.
+      // Snapshot both collections before callbacks run. A cancellation callback can create a new
+      // request; that request belongs to the new generation.
       controller.generation++
 
       const pendingRetryTimers = [...controller.pendingRetryTimers]
+      const activeRequests = [...controller.activeRequests]
       controller.pendingRetryTimers.clear()
+      controller.activeRequests.clear()
+
       for (const retry of pendingRetryTimers) {
         retry.cancel()
       }
 
-      const activeRequests = [...controller.activeRequests]
-      controller.activeRequests.clear()
       for (const cancel of activeRequests) {
         cancel()
       }
@@ -66,6 +67,25 @@ function createResetController () {
   }
 
   return controller
+}
+
+let identityRefreshController
+
+/**
+ * Returns the shared reset controller for direct requests that carry the runtime identity.
+ * @returns {{ generation: number, pendingRetryTimers: Set<object>,
+ *   activeRequests: Set<() => void>, reset: () => void }|undefined}
+ */
+function getIdentityRefreshController () {
+  if (!IS_AWS_LAMBDA_MICROVM) return
+  if (identityRefreshController === undefined) {
+    const { channel } = require('dc-polyfill')
+    // Only MicroVM clones publish this event. Other processes keep their normal request lifecycle.
+    identityRefreshController = createResetController()
+    const identityRefreshChannel = channel('datadog:identity:refresh')
+    identityRefreshChannel.subscribe(() => identityRefreshController.reset())
+  }
+  return identityRefreshController
 }
 
 /**
@@ -255,6 +275,13 @@ function request (data, options, callback) {
        */
       const complete = (error, result, statusCode, headers) => {
         if (settled) return
+        // The response can close before asynchronous decompression finishes; reject data from an old identity.
+        if (resetController && capturedRequestGeneration !== resetController.generation) {
+          error = createIdentityRefreshError()
+          result = undefined
+          statusCode = undefined
+          headers = undefined
+        }
         settled = true
         clearImmediate(timeoutImmediate)
         finalize()
@@ -322,8 +349,8 @@ function request (data, options, callback) {
       }
 
       if (resetController) {
-        // Only reset-aware writers track active requests; non-MicroVM writers do not pass a
-        // controller, so their request path has no additional tracking or cancellation work.
+        // Requests using a reset controller track active requests; ordinary requests do not add
+        // this bookkeeping.
         cancelActiveRequest = () => {
           if (settled) return
           settled = true
@@ -367,5 +394,5 @@ Object.defineProperty(request, 'writable', {
 })
 
 request.createResetController = createResetController
-
+request.getIdentityRefreshController = getIdentityRefreshController
 module.exports = request

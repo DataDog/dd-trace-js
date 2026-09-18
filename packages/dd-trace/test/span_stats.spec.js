@@ -95,6 +95,7 @@ const SpanStatsExporter = sinon.stub().returns(exporter)
 const otlpExporter = {
   export: sinon.stub(),
   flush: sinon.stub(),
+  resetPendingState: sinon.stub(),
 }
 
 const {
@@ -107,6 +108,7 @@ const {
   './exporters/span-stats': {
     SpanStatsExporter,
   },
+  './serverless': { IS_AWS_LAMBDA_MICROVM: true },
 })
 
 describe('SpanAggKey', () => {
@@ -779,7 +781,6 @@ describe('SpanStatsProcessor', () => {
     p.onSpanFinished(topLevelSpan)
     assert.strictEqual(p.buckets.size, 1)
   })
-
   it('should clear pending buckets when the identity-refresh channel fires', () => {
     exporter.resetPendingState.resetHistory()
     const p = new SpanStatsProcessor(config)
@@ -794,6 +795,16 @@ describe('SpanStatsProcessor', () => {
     assert.notStrictEqual(p.buckets, previousBuckets)
     assert.strictEqual(p.buckets.size, 0)
     sinon.assert.calledOnce(exporter.resetPendingState)
+  })
+
+  it('should reset the OTLP exporter when the identity-refresh channel fires', () => {
+    otlpExporter.resetPendingState.resetHistory()
+    const p = new SpanStatsProcessor(config, otlpExporter)
+    clearTimeout(p.timer)
+
+    identityRefreshChannel.publish(config)
+
+    sinon.assert.calledOnce(otlpExporter.resetPendingState)
   })
 
   it('should preserve OTLP trace-root splitting after an identity refresh', () => {
@@ -824,5 +835,20 @@ describe('SpanStatsProcessor', () => {
     // not stacked on top of.
     assert.strictEqual(first.buckets, firstBuckets)
     assert.notStrictEqual(second.buckets, secondBuckets)
+  })
+  it('does not subscribe to identity refresh outside MicroVM', () => {
+    const subscribe = sinon.stub()
+    const unsubscribe = sinon.stub()
+    const channelMock = { subscribe, unsubscribe }
+    const NonMicroVmSpanStatsProcessor = proxyquire('../src/span_stats', {
+      'dc-polyfill': { channel: sinon.stub().returns(channelMock) },
+      './exporters/span-stats': { SpanStatsExporter },
+      './serverless': { IS_AWS_LAMBDA_MICROVM: false },
+    }).SpanStatsProcessor
+
+    const processor = new NonMicroVmSpanStatsProcessor(config)
+    clearTimeout(processor.timer)
+
+    sinon.assert.notCalled(subscribe)
   })
 })

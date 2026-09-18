@@ -294,6 +294,12 @@ class RemoteConfig {
       },
     }
 
+    const resetController = request.getIdentityRefreshController?.()
+    if (resetController) {
+      // The request body contains the current runtime_id; discard it if the clone refreshes first.
+      options.resetController = resetController
+    }
+
     request(this.getPayload(), options, (err, data, statusCode) => {
       // 404 means RC is disabled, ignore it
       if (statusCode === 404) return cb()
