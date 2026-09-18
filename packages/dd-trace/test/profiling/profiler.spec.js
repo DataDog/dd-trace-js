@@ -470,6 +470,28 @@ describe('profiler', function () {
       assert.strictEqual(profiler.enabled, false)
     })
 
+    it('should cancel a deferred restart without stopping again', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+      wallProfiler.start.resetHistory()
+      spaceProfiler.start.resetHistory()
+      profiler.start(makeStartOptions())
+      profiler.cancelQueuedStart()
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+      assert.strictEqual(profiler.enabled, false)
+    })
+
     it('logs and does not crash when a deferred restart fails during setup', async () => {
       await profiler.start(makeStartOptions())
 
