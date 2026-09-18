@@ -17,15 +17,25 @@ class LangChainLLMObsChainHandler extends LangChainLLMObsHandler {
     this._tagger.tagTextIO(span, input, output)
   }
 
-  getName ({ span, instance }) {
-    const firstCallable = instance?.first
+  getName ({ span, instance, options }) {
+    const firstCallable = /** @type {{ name?: string } | undefined} */ (instance?.first)
 
     if (firstCallable?.constructor?.name === 'ChannelWrite') return
+    if (!this.isLangGraphNode(instance)) return super.getName({ span })
 
-    const firstCallableIsLangGraph = firstCallable?.lc_namespace?.includes('langgraph')
-    const firstCallableName = firstCallable?.name
+    // prebuilt nodes (e.g. ToolNode) wrap an anonymous callable, so prefer the node name LangGraph puts in the config
+    return options?.metadata?.langgraph_node ?? firstCallable?.name
+  }
 
-    return firstCallableIsLangGraph ? firstCallableName : super.getName({ span })
+  /**
+   * LangGraph compiles each node into a `RunnableSequence` whose first step is the node's `RunnableCallable`.
+   *
+   * @param {Record<string, unknown> | undefined} instance
+   * @returns {boolean}
+   */
+  isLangGraphNode (instance) {
+    const first = /** @type {{ lc_namespace?: string[] } | undefined} */ (instance?.first)
+    return first?.lc_namespace?.includes('langgraph') ?? false
   }
 }
 
