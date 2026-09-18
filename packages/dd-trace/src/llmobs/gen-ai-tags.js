@@ -77,7 +77,6 @@ function updateGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, 
   if (sessionId) spanContext.setTag(GEN_AI_CONVERSATION_ID, sessionId)
   if (metrics) setGenAiApmUsageMetrics(span, spanKind, metrics)
 
-  // matches the value dd-trace-py writes
   if (spanKind || modelName || modelProvider || mlApp || sessionId) {
     spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'true')
   }
