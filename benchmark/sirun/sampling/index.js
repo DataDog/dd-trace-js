@@ -1,11 +1,13 @@
 'use strict'
 
-const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
+// eslint-disable-next-line import/order -- The startup guard must run before every other require.
+const assert = require('node:assert/strict')
 
-const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
-const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
+const { USER_REJECT } = require('../../../ext/priority')
 const id = require('../../../packages/dd-trace/src/id')
+const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
+const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 
 const { VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -33,9 +35,9 @@ const CONFIGS = {
     ],
     rateLimit: 100,
   },
-  // A keep-everything rule capped at 1/s: after the first token the limiter
-  // rejects, exercising the USER_REJECT + decision-maker-removal branch.
-  'rate-limited': { rules: [{ service: 'web-*', sampleRate: 1, maxPerSecond: 1 }], rateLimit: 1 },
+  // A matching rule with a zero cap deterministically exercises the
+  // rule-limited USER_REJECT branch.
+  'rate-limited': { rules: [{ service: 'web-*', sampleRate: 1, maxPerSecond: 0 }], rateLimit: 100 },
 }
 
 const config = CONFIGS[VARIANT]
@@ -81,7 +83,11 @@ function sampleOnce (span) {
 // Preflight: confirm sample() actually assigns a priority (catches a refactor
 // that turns the bench into a no-op early return).
 const sampled = sampleOnce(spans[0])
-assert.ok(sampled !== undefined, 'sample() did not assign a sampling priority')
+if (VARIANT === 'rate-limited') {
+  assert.equal(sampled, USER_REJECT, 'zero-rate rule did not reject the trace')
+} else {
+  assert.ok(sampled !== undefined, 'sample() did not assign a sampling priority')
+}
 
 guard.loopStart()
 let sink = 0

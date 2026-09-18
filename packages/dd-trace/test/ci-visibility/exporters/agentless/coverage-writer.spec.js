@@ -106,7 +106,7 @@ describe('CI Visibility Coverage Writer', () => {
     })
 
     it('should log request errors', done => {
-      const error = new Error('boom')
+      const error = Object.assign(new Error('boom'), { code: 'ETIMEDOUT' })
 
       request.yields(error)
 
@@ -123,8 +123,13 @@ describe('CI Visibility Coverage Writer', () => {
         sinon.assert.calledWith(log.error, 'Error sending CI coverage payload', error)
         sinon.assert.calledWithExactly(
           incrementCountMetric,
+          'endpoint_payload.requests_errors',
+          { endpoint: 'code_coverage', statusCode: undefined, errorType: 'ETIMEDOUT' }
+        )
+        sinon.assert.calledWithExactly(
+          incrementCountMetric,
           'endpoint_payload.dropped',
-          { endpoint: 'code_coverage' }
+          { endpoint: 'code_coverage', statusCode: undefined, errorType: 'ETIMEDOUT' }
         )
         done()
       })

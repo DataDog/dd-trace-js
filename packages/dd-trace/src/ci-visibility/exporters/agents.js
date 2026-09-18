@@ -5,19 +5,21 @@ const https = require('https')
 
 const { createAgents } = require('../../exporters/common/agents')
 
-// Finalization can flush several Test Optimization payload types together. A dedicated pool keeps
-// that burst from queuing behind the shared exporters' single socket while preserving a hard cap.
+// Finalization can flush several Test Optimization payload types together. Keep media on a separate
+// bounded pool so long uploads cannot consume the sockets needed by trace, coverage, and log writers.
 const maxSockets = 16
 
-const { httpAgent, httpsAgent } = createAgents(maxSockets)
+const payloadAgents = createAgents(maxSockets)
+const mediaAgents = createAgents(maxSockets)
 
 /**
- * Selects the dedicated Test Optimization payload agent for an intake URL.
+ * Selects an agent by intake URL protocol.
  *
  * @param {string|URL|object} url
+ * @param {{httpAgent: http.Agent, httpsAgent: https.Agent}} agents
  * @returns {http.Agent|https.Agent}
  */
-function getAgent (url) {
+function selectAgent (url, { httpAgent, httpsAgent }) {
   const protocol = url?.protocol
   if (protocol === 'https:' || protocol === 'https') return httpsAgent
   if (protocol === 'http:' || protocol === 'http') return httpAgent
@@ -29,4 +31,24 @@ function getAgent (url) {
   }
 }
 
-module.exports = { getAgent }
+/**
+ * Selects the dedicated Test Optimization payload agent for an intake URL.
+ *
+ * @param {string|URL|object} url
+ * @returns {http.Agent|https.Agent}
+ */
+function getAgent (url) {
+  return selectAgent(url, payloadAgents)
+}
+
+/**
+ * Selects the isolated Test Optimization media agent for an intake URL.
+ *
+ * @param {string|URL|object} url
+ * @returns {http.Agent|https.Agent}
+ */
+function getMediaAgent (url) {
+  return selectAgent(url, mediaAgents)
+}
+
+module.exports = { getAgent, getMediaAgent }

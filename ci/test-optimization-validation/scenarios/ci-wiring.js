@@ -442,7 +442,7 @@ function hasUnavailableRemoteCiCommand (ci) {
   })) return true
 
   return evidence.some(item => {
-    const reference = /^\s*uses:\s*["']?([^"'\s]+)["']?\s*$/im.exec(item)?.[1]
+    const reference = /^[ \t]*uses:[ \t]*["']?([^"'\s]+)["']?[ \t]*$/im.exec(item)?.[1]
     return reference && !reference.startsWith('./')
   })
 }
@@ -592,7 +592,6 @@ function readProjectSource (filename, projectFileSources) {
  *
  * @param {string} source file source
  * @param {string} value recorded value
- * @returns {boolean} literal presence
  */
 function containsLiteral (source, value) {
   const normalizedSource = source.replaceAll('\r\n', '\n')

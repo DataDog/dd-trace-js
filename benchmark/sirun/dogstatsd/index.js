@@ -1,8 +1,8 @@
 'use strict'
 
-const assert = require('node:assert/strict')
-
 const guard = require('../startup-guard')
+// eslint-disable-next-line import/order -- The startup guard must run before every other require.
+const assert = require('node:assert/strict')
 
 const { BASELINE_OR_CANDIDATE, VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)

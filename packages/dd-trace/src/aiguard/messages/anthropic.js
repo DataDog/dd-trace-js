@@ -208,12 +208,18 @@ function walkContentBlocks (blocks) {
 function partsToContent (parts, hasImages) {
   if (!parts.length) return
   if (hasImages) return parts
-  return parts.map(p => p.text).join('\n')
+  let content = ''
+  let isFirstPart = true
+  for (const part of parts) {
+    if (!isFirstPart) content += '\n'
+    content += part.text
+    isFirstPart = false
+  }
+  return content
 }
 
 /**
  * @param {Array<object>} parts
- * @returns {boolean}
  */
 function hasImageParts (parts) {
   return parts.some(part => part.type === 'image_url')
@@ -260,7 +266,6 @@ function convertAnthropicToolResultContent (content) {
 
 /**
  * @param {unknown} content
- * @returns {string}
  */
 function convertServerToolResultContent (content) {
   if (typeof content === 'string') return content || '[tool result]'

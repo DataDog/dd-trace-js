@@ -6,20 +6,22 @@
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
 
+const { join } = require('node:path')
+
 const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
 const { LicenseWebpackPlugin } = require('license-webpack-plugin')
-const { join } = require('path')
+
 const { dependencies } = require('./package.json')
 
 const include = new Set([
   ...Object.keys(dependencies),
   'mutexify/promise',
   'protobufjs/minimal', // peer dependency for `@datadog/sketches-js`
-  'source-map/lib/util' // TODO: remove usage of dependency internals
+  'source-map/lib/util', // TODO: remove usage of dependency internals
 ])
 
 const exclude = new Set([
-  'mutexify' // we only ever use `mutexify/promise`
+  'mutexify', // we only ever use `mutexify/promise`
 ])
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
@@ -71,15 +73,15 @@ module.exports = {
       excludedPackageTest: packageName => !include.has(packageName),
       renderLicenses: modules => modules[0].licenseText,
       stats: {
-        warnings: false
-      }
+        warnings: false,
+      },
     }),
     new CopyRspackPlugin({
       patterns: [
         // Binaries need to be copied manually.
         {
           from: 'source-map/lib/mappings.wasm',
-          to: 'source-map'
+          to: 'source-map',
         },
       ],
     }),
@@ -87,9 +89,9 @@ module.exports = {
   output: {
     filename: '[name]/index.js',
     library: {
-      type: 'commonjs2'
+      type: 'commonjs2',
     },
     path: join(__dirname, 'dist'),
-    clean: true
+    clean: true,
   },
 }

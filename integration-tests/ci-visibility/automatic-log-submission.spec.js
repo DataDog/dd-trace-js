@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('assert')
-const { exec } = require('child_process')
 const { once } = require('events')
 const http = require('http')
 
@@ -12,9 +11,10 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
 const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
 const webAppServer = require('./web-app-server')
 
@@ -23,11 +23,12 @@ const playwrightDependency = `@playwright/test@${getLatestPlaywrightSpecifier()}
 const vitestDependency = NODE_MAJOR <= 18 ? 'vitest@3.2.6' : 'vitest'
 
 describe('test optimization automatic log submission', () => {
-  let cwd, receiver, childProcess, webAppPort
-  let testOutput = ''
+  const it = createParallelIt(global.it, { concurrency: 3, withReceiver: true })
+
+  let cwd, webAppPort
 
   useSandbox([
-    'mocha',
+    `mocha@${getLatestMochaSpecifier()}`,
     ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'bunyan',
     'jest',
@@ -55,16 +56,6 @@ describe('test optimization automatic log submission', () => {
 
   after(async () => {
     await new Promise(resolve => webAppServer.close(resolve))
-  })
-
-  beforeEach(async function () {
-    receiver = await new FakeCiVisIntake().start()
-  })
-
-  afterEach(async () => {
-    testOutput = ''
-    childProcess.kill()
-    await receiver.stop()
   })
 
   const testFrameworks = [
@@ -126,9 +117,10 @@ describe('test optimization automatic log submission', () => {
     const { level: expectedLevel, messageKey } = loggers[loggerName]
 
     context(`with ${loggerName} and ${name}`, () => {
-      it('can automatically submit logs', async () => {
+      it('can automatically submit logs', async (receiver, run) => {
         let logIds = {}
         let testIds = {}
+        let testOutput = ''
 
         const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
@@ -175,7 +167,7 @@ describe('test optimization automatic log submission', () => {
             }
           })
 
-        childProcess = exec(command,
+        const childProcess = run(command,
           {
             cwd,
             env: {
@@ -218,8 +210,9 @@ describe('test optimization automatic log submission', () => {
         assert.equal(logTraceId, testTraceId)
       })
 
-      it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is not set', async () => {
-        childProcess = exec(command,
+      it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is not set', async (receiver, run) => {
+        let testOutput = ''
+        const childProcess = run(command,
           {
             cwd,
             env: {
@@ -256,9 +249,11 @@ describe('test optimization automatic log submission', () => {
         assert.strictEqual(hasReceivedEvents, false)
       })
 
-      it('does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set but DD_API_KEY is not', async () => {
-        childProcess = exec(command,
-          {
+      it(
+        'does not submit logs when DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set but DD_API_KEY is not',
+        async (receiver, run) => {
+          let testOutput = ''
+          const childProcess = run(command, {
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
@@ -271,34 +266,36 @@ describe('test optimization automatic log submission', () => {
               TEST_LOGGER: loggerName,
               ...getExtraEnvVars(),
             },
-          }
-        )
+          })
 
-        childProcess.stdout?.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
-        childProcess.stderr?.on('data', (chunk) => {
-          testOutput += chunk.toString()
-        })
+          childProcess.stdout?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          once(childProcess.stdout, 'end'),
-          once(childProcess.stderr, 'end'),
-        ])
+          await Promise.all([
+            once(childProcess, 'exit'),
+            once(childProcess.stdout, 'end'),
+            once(childProcess.stderr, 'end'),
+          ])
 
-        assert.match(testOutput, /Hello simple log!/)
-        assert.match(testOutput, /no automatic log submission will be performed/)
-      })
+          assert.match(testOutput, /Hello simple log!/)
+          assert.match(testOutput, /no automatic log submission will be performed/)
+        }
+      )
     })
   })
 
   context('with bunyan and multiple playwright test groups', () => {
-    it('waits for pending requests only when the worker exits', async () => {
+    it('waits for pending requests only when the worker exits', async (receiver, run) => {
       const logMessages = []
       let firstLogResponse
       let firstLogRequestAborted = false
       let waitingTestResponse
+      let testOutput = ''
+      let childProcess
 
       const respond = (response) => {
         if (response.destroyed || response.writableEnded) return
@@ -349,7 +346,7 @@ describe('test optimization automatic log submission', () => {
 
       try {
         const { port } = logsServer.address()
-        childProcess = exec('./node_modules/.bin/playwright test -c playwright.config.js', {
+        childProcess = run('./node_modules/.bin/playwright test -c playwright.config.js', {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),

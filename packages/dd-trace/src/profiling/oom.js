@@ -54,8 +54,13 @@ function strategiesToCallbackMode (strategies, callbackMode) {
  * @returns {string[]}
  */
 function buildExportCommand (exporters, tags) {
-  const tagString = [...Object.entries(tags),
-    ['snapshot', snapshotKinds.ON_OUT_OF_MEMORY]].map(([key, value]) => `${key}:${value}`).join(',')
+  let tagString = ''
+  for (const [key, value] of Object.entries(tags)) {
+    if (tagString) tagString += ','
+    tagString += `${key}:${value}`
+  }
+  if (tagString) tagString += ','
+  tagString += `snapshot:${snapshotKinds.ON_OUT_OF_MEMORY}`
   let urls = ''
   for (const exporter of exporters) {
     const url = exporter.getExportUrl()

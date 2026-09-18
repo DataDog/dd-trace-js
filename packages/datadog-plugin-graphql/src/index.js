@@ -8,6 +8,7 @@ const GraphQLExecutePlugin = require('./execute')
 const GraphQLJitExecutePlugin = require('./jit')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLRequestPlugin = require('./request')
+const { GraphQLResolveErrorPlugin, GraphQLToolsResolveErrorPlugin } = require('./resolve-error')
 const GraphQLValidatePlugin = require('./validate')
 
 class GraphQLPlugin extends CompositePlugin {
@@ -22,9 +23,9 @@ class GraphQLPlugin extends CompositePlugin {
       // and yoga produce no such channel, so the plugin simply never fires for
       // them.
       request: GraphQLRequestPlugin,
+      resolveError: GraphQLResolveErrorPlugin,
+      toolsResolveError: GraphQLToolsResolveErrorPlugin,
       validate: GraphQLValidatePlugin,
-      // Resolve handling is absorbed into execute. Spans start inline for
-      // correct parenting; collapsed spans finish when execute completes.
     }
   }
 

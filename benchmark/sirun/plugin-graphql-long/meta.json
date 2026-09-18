@@ -1,20 +1,59 @@
 {
   "name": "plugin-graphql-long",
-  "run": "node index.js",
-  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "run": "node --require ../noop-request.js index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../noop-request.js index.js\"",
   "cachegrind": false,
   "iterations": 10,
   "instructions": true,
   "variants": {
     "with-depth-off": {
-      "iterations": 7,
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "OPERATIONS": "1150" }
+      "operations_by_node": {
+        "20": "1280",
+        "24": "2550"
+      },
+      "env": {
+        "DEPTH": "0",
+        "DD_INJECT_FORCE": "true",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "DD_TRACE_ENABLED": "true",
+        "OPERATIONS": "2550",
+        "OTEL_TRACES_EXPORTER": "none",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "6", "OPERATIONS": "800" }
+      "operations_by_node": {
+        "20": "840",
+        "24": "1680"
+      },
+      "env": {
+        "COLLAPSE": "1",
+        "DD_INJECT_FORCE": "true",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "DD_TRACE_ENABLED": "true",
+        "OPERATIONS": "1820",
+        "OTEL_TRACES_EXPORTER": "none",
+        "DEPTH": "6",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-and-collapse-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "OPERATIONS": "210" }
+      "run": "node --predictable-gc-schedule --require ../noop-request.js index.js",
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule --require ../noop-request.js index.js\"",
+      "operations_by_node": {
+        "20": "310",
+        "24": "450"
+      },
+      "env": {
+        "COLLAPSE": "0",
+        "DD_INJECT_FORCE": "true",
+        "DD_REMOTE_CONFIGURATION_ENABLED": "false",
+        "DD_TRACE_ENABLED": "true",
+        "OPERATIONS": "350",
+        "OTEL_TRACES_EXPORTER": "none",
+        "DEPTH": "4",
+        "WITH_TRACER": "1"
+      }
     }
   }
 }

@@ -1,8 +1,6 @@
 'use strict'
 
-const telemetryMetrics = require('../../telemetry/metrics')
-
-const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
+const { appsecMetrics } = require('./common')
 
 const normalizedFrameworkCache = new Map()
 

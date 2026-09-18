@@ -17,4 +17,5 @@ module.exports = {
   createFinalFlushTimeoutError,
   FINAL_FLUSH_FALLBACK_DELAY,
   FINAL_FLUSH_TIMEOUT,
+  FINAL_FLUSH_TIMEOUT_CODE,
 }

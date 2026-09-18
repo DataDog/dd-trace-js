@@ -5,7 +5,14 @@ const createGraphqlJitRuntime = require('../../datadog-instrumentations/src/help
 const GraphQLExecutePlugin = require('./execute')
 const { getBaseTypeName } = require('./utils')
 
-const { readJitDefaultInScope, resolveJitDefaultInvocation, wrapJitResolve } = GraphQLExecutePlugin
+const {
+  readJitDefaultInScope,
+  recordJitResolverError,
+  resolveCompiledJitField,
+  resolveJitDefaultInvocation,
+  unwrapJitResolve,
+  wrapJitResolve,
+} = GraphQLExecutePlugin
 
 /**
  * @typedef {import('graphql').ExecutionArgs} ExecutionArguments
@@ -30,8 +37,11 @@ const patchedResolverMaps = new WeakSet()
 const { configureCompilationContext, runtime: jitRuntime } = createGraphqlJitRuntime({
   createFieldMetadata,
   readDefaultInScope: readJitDefaultInScope,
+  recordResolverError: recordJitResolverError,
   resolveDefaultInvocation: resolveJitDefaultInvocation,
+  resolveField: resolveCompiledJitField,
   startExecution,
+  unwrapResolver: unwrapJitResolve,
   wrapResolver: wrapJitResolve,
 })
 

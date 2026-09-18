@@ -3,7 +3,9 @@
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 
 const log = require('../log')
+const { isEmpty } = require('../util')
 const addresses = require('./addresses')
+const apiSecurity = require('./api_security')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
@@ -22,7 +24,7 @@ const activeInvocations = new WeakMap()
  */
 function onLambdaStartInvocation (data) {
   try {
-    const { span, headers, method, path, query, body, clientIp, pathParams, cookies } = data
+    const { span, headers, method, path, query, body, clientIp, pathParams, cookies, route } = data
 
     if (!span) {
       log.warn('[ASM] No span provided in Lambda start invocation')
@@ -30,7 +32,7 @@ function onLambdaStartInvocation (data) {
     }
 
     const req = { headers: headers ?? {} }
-    activeInvocations.set(span, req)
+    activeInvocations.set(span, { req, method, route })
 
     span.addTags({
       '_dd.appsec.enabled': 1,
@@ -80,8 +82,8 @@ function onLambdaStartInvocation (data) {
 }
 
 /**
- * Maps response data to WAF addresses, runs a final WAF pass,
- * disposes the WAF context, and finishes the request report.
+ * Maps response data to WAF addresses, takes the API Security sampling decision, runs a final
+ * WAF pass, disposes the WAF context, and finishes the request report.
  *
  * @param {{ span: object, statusCode: string | undefined,
  *           responseHeaders: Record<string, string> | undefined }} data
@@ -99,31 +101,47 @@ function onLambdaEndInvocation (data) {
       return
     }
 
-    const req = activeInvocations.get(span)
+    const { req, method, route } = activeInvocations.get(span)
     activeInvocations.delete(span)
 
-    let hasPersistentData = false
-    const persistent = {}
+    try {
+      const persistent = {}
 
-    if (statusCode) {
-      persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
-      hasPersistentData = true
+      if (statusCode) {
+        persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
+      }
+
+      if (responseHeaders) {
+        const filteredHeaders = { ...responseHeaders }
+        delete filteredHeaders['set-cookie']
+        persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
+      }
+
+      const samplingDecision = apiSecurity.sampleRootSpanRequest(span, {
+        method,
+        statusCode,
+        route,
+        // The tracer does not block in Lambda yet, so a response is never a blocked one.
+        blocked: false,
+      }, true)
+
+      if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
+        persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+      }
+
+      let wafResult
+      if (!isEmpty(persistent)) {
+        wafResult = waf.run({ persistent }, req, undefined, span)
+      }
+
+      apiSecurity.reportRootSpanRequest(span, samplingDecision, wafResult)
+    } finally {
+      // The execution environment outlives the invocation, so the native WAF context and the
+      // module-level metrics queue must be released even if the work above threw.
+      waf.disposeContext(req)
+
+      Reporter.finishRequest(req, null, {}, undefined, span)
     }
-
-    if (responseHeaders) {
-      const filteredHeaders = { ...responseHeaders }
-      delete filteredHeaders['set-cookie']
-      persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
-      hasPersistentData = true
-    }
-
-    if (hasPersistentData) {
-      waf.run({ persistent }, req, undefined, span)
-    }
-
-    waf.disposeContext(req)
-
-    Reporter.finishRequest(req, null, {}, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda end-invocation handler', err)
   }

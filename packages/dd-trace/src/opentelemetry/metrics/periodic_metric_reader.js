@@ -9,6 +9,19 @@ const { ObservableInstrument } = require('./instruments')
 const { nowUnixNano } = require('./time')
 
 /**
+ * @param {(error: Error | null) => void} [done]
+ * @param {Error | null} [error]
+ */
+function callDone (done, error) {
+  if (!done) return
+  try {
+    done(error ?? null)
+  } catch (callbackError) {
+    log.error('Error completing OTLP metrics lifecycle callback:', callbackError)
+  }
+}
+
+/**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
  * @typedef {import('@opentelemetry/core').InstrumentationScope} InstrumentationScope
  * @typedef {import('./instruments').Measurement} Measurement
@@ -108,6 +121,10 @@ class PeriodicMetricReader {
   #exportInterval
   #aggregator
   #batchCallbacks = []
+  #exportQueue = []
+  #isExporting = false
+  #shutdownCallbacks = []
+  #shutdownComplete = false
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -164,9 +181,9 @@ class PeriodicMetricReader {
   }
 
   /**
+   * Returns the matching index, or `-1` when no batch callback matches.
    * @param {Function} callback
    * @param {Set} instruments
-   * @returns {number} index in #batchCallbacks, or -1
    */
   #findBatchCallback (callback, instruments) {
     return this.#batchCallbacks.findIndex(record =>
@@ -200,47 +217,34 @@ class PeriodicMetricReader {
 
   /**
    * Forces an immediate collection and export of all metrics.
-   * @param {Function} [done] Called after the metric export completes
+   * @param {(error: Error | null) => void} [done] Called after the metric export completes
    */
   forceFlush (done) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
-      done?.()
+      if (this.#shutdownComplete) callDone(done)
+      else if (done) this.#shutdownCallbacks.push(done)
       return
     }
-    let pending = 2
-    const complete = () => {
-      if (--pending === 0) done?.()
-    }
-
-    // Snapshot requests already active before starting this flush's export.
-    try {
-      if (typeof this.exporter.flush === 'function') this.exporter.flush(complete)
-      else complete()
-    } catch (error) {
-      log.error('Error flushing OTLP metrics:', error)
-      complete()
-    }
-    try {
-      this.#collectAndExport(complete)
-    } catch (error) {
-      log.error('Error exporting OTLP metrics:', error)
-      complete()
-    }
+    this.#enqueueExport(true, done)
   }
 
   /**
    * Shuts down the reader and stops periodic collection.
-   * @returns {void}
+   * @param {(error: Error | null) => void} [done] Called after the final export and exporter shutdown complete
    */
-  shutdown () {
+  shutdown (done) {
     if (this.#isShutdown) {
       log.warn('PeriodicMetricReader is already shutdown')
+      if (this.#shutdownComplete) callDone(done)
+      else if (done) this.#shutdownCallbacks.push(done)
       return
     }
+    if (done) this.#shutdownCallbacks.push(done)
+
     this.#isShutdown = true
     this.#clearTimer()
-    this.forceFlush()
+    this.#enqueueExport(true, error => this.#shutdownExporter(error))
   }
 
   /**
@@ -251,7 +255,7 @@ class PeriodicMetricReader {
     if (this.#timer) return
 
     this.#timer = setInterval(() => {
-      this.#collectAndExport()
+      if (!this.#isExporting && this.#exportQueue.length === 0) this.#enqueueExport(false)
     }, this.#exportInterval)
     this.#timer.unref?.()
   }
@@ -264,6 +268,72 @@ class PeriodicMetricReader {
     if (this.#timer) {
       clearInterval(this.#timer)
       this.#timer = null
+    }
+  }
+
+  /**
+   * @param {boolean} flushExporter Whether to flush the exporter after export
+   * @param {(error: Error | null) => void} [done] Called when the queued export completes
+   */
+  #enqueueExport (flushExporter, done) {
+    this.#exportQueue.push({ flushExporter, done })
+    this.#drainExportQueue()
+  }
+
+  #drainExportQueue () {
+    if (this.#isExporting || this.#exportQueue.length === 0) return
+
+    this.#isExporting = true
+    const { flushExporter, done } = this.#exportQueue.shift()
+    let completed = false
+    const complete = error => {
+      if (completed) return
+      completed = true
+      this.#isExporting = false
+      queueMicrotask(() => this.#drainExportQueue())
+      callDone(done, error)
+    }
+    let exportCompleted = false
+    const afterExport = error => {
+      if (exportCompleted) return
+      exportCompleted = true
+      if (!flushExporter || typeof this.exporter.flush !== 'function') return complete(error)
+
+      try {
+        this.exporter.flush(flushError => complete(error || flushError))
+      } catch (flushError) {
+        log.error('Error flushing OTLP metrics:', flushError)
+        complete(error || flushError)
+      }
+    }
+
+    try {
+      this.#collectAndExport(afterExport)
+    } catch (error) {
+      log.error('Error exporting OTLP metrics:', error)
+      afterExport(error)
+    }
+  }
+
+  /**
+   * @param {Error} [exportError] Error from the final export
+   */
+  #shutdownExporter (exportError) {
+    let completed = false
+    const complete = shutdownError => {
+      if (completed) return
+      completed = true
+      this.#shutdownComplete = true
+      const callbacks = this.#shutdownCallbacks.splice(0)
+      for (const callback of callbacks) callDone(callback, exportError || shutdownError)
+    }
+
+    try {
+      if (typeof this.exporter.shutdown === 'function') this.exporter.shutdown(complete)
+      else complete()
+    } catch (error) {
+      log.error('Error shutting down OTLP metrics exporter:', error)
+      complete(error)
     }
   }
 
@@ -325,7 +395,13 @@ class PeriodicMetricReader {
       this.#lastExportedState
     )
 
-    this.exporter.export(metrics, callback)
+    this.exporter.export(metrics, result => {
+      if (result?.code === 1) {
+        callback?.(result.error || new Error('OTLP metrics export failed'))
+      } else {
+        callback?.()
+      }
+    })
   }
 }
 
@@ -347,7 +423,6 @@ class MetricAggregator {
    * Gets the temporality for a given metric type.
    *
    * @param {string} type - Metric type from METRIC_TYPES
-   * @returns {string} Temporality from TEMPORALITY
    */
   #getTemporality (type) {
     // UpDownCounter and Observable UpDownCounter always use CUMULATIVE
@@ -442,7 +517,6 @@ class MetricAggregator {
    * Gets unique identifier for a given instrumentation scope.
    *
    * @param {InstrumentationScope} instrumentationScope - The instrumentation scope
-   * @returns {string} - The scope identifier
    */
   #getScopeKey (instrumentationScope) {
     return `${instrumentationScope.name}@${instrumentationScope.version}@${instrumentationScope.schemaUrl}`
@@ -455,7 +529,6 @@ class MetricAggregator {
    * @param {string} name - The metric name
    * @param {string} type - The metric type from METRIC_TYPES
    * @param {string} attrKey - The attribute key
-   * @returns {string} - The metric identifier
    */
   #getStateKey (scopeKey, name, type, attrKey) {
     return `${scopeKey}:${name}:${type}:${attrKey}`
@@ -465,7 +538,6 @@ class MetricAggregator {
    * Checks if a given metric type is a delta type.
    *
    * @param {string} type - The metric type from METRIC_TYPES
-   * @returns {boolean} - True if the metric type is a delta type
    */
   #isDeltaType (type) {
     return type === METRIC_TYPES.COUNTER ||
@@ -479,7 +551,6 @@ class MetricAggregator {
    * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
    * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
    * @param {number} collectionTime - The collection timestamp in nanoseconds
-   * @returns {void}
    */
   #applyDeltaTemporality (metrics, lastExportedState, collectionTime) {
     for (const metric of metrics) {
@@ -610,7 +681,6 @@ class MetricAggregator {
    * @param {number} timestamp - The timestamp of the measurement
    * @param {string} stateKey - The state key
    * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
-   * @returns {void}
    */
   #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
@@ -662,7 +732,6 @@ class MetricAggregator {
 
 /**
  * @param {object} x
- * @returns {boolean}
  */
 function isObservableInstrument (x) {
   return x instanceof ObservableInstrument
@@ -671,7 +740,6 @@ function isObservableInstrument (x) {
 /**
  * @param {Set} a
  * @param {Set} b
- * @returns {boolean}
  */
 function setEquals (a, b) {
   if (a.size !== b.size) return false

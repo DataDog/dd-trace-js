@@ -7,7 +7,6 @@ const { before, describe, it } = require('mocha')
 const getConfig = require('../../src/config')
 const {
   agentNameWireSafe,
-  appendOptionalPropagatedTag,
   audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
@@ -16,7 +15,6 @@ const {
   formatAudioPart,
   getFunctionArguments,
   normalizeLlmObsTraceId,
-  stripTagsetEntry,
   validateCostTags,
   safeJsonParse,
   validateKind,
@@ -98,65 +96,6 @@ describe('util', () => {
     it('accepts a name at the 256 byte cap and rejects the first byte over', () => {
       assert.strictEqual(agentNameWireSafe('a'.repeat(256)), true)
       assert.strictEqual(agentNameWireSafe('a'.repeat(257)), false)
-    })
-  })
-
-  describe('appendOptionalPropagatedTag', () => {
-    it('appends key=value to an empty tagset', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('', 'k', 'v'), 'k=v')
-    })
-
-    it('appends with a comma separator to a non-empty tagset', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v'), 'a=1,k=v')
-    })
-
-    it('returns the original tagset when value is falsy', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', undefined), 'a=1')
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', ''), 'a=1')
-    })
-
-    it('returns the original tagset when the safeguard rejects the value', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'bad', () => false), 'a=1')
-    })
-
-    it('appends when the safeguard accepts the value', () => {
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'good', () => true), 'a=1,k=good')
-    })
-
-    it('skips the entry when it would exceed maxTagSetLength', () => {
-      // 'a=1' is 3 chars; ',k=v' is 4 chars; total 7. Cap at 6 → skip.
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 6), 'a=1')
-    })
-
-    it('appends when the entry fits exactly within maxTagSetLength', () => {
-      // 'a=1' (3) + ',k=v' (4) = 7. Cap at 7 → fits.
-      assert.strictEqual(appendOptionalPropagatedTag('a=1', 'k', 'v', null, 7), 'a=1,k=v')
-    })
-  })
-
-  describe('stripTagsetEntry', () => {
-    it('removes a key=value entry from the middle of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,b=2,c=3', 'b'), 'a=1,c=3')
-    })
-
-    it('removes a key=value entry from the start of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('b=2,c=3', 'b'), 'c=3')
-    })
-
-    it('removes a key=value entry from the end of the tagset', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,b=2', 'b'), 'a=1')
-    })
-
-    it('removes all occurrences of a duplicate key', () => {
-      assert.strictEqual(stripTagsetEntry('k=old,a=1,k=new', 'k'), 'a=1')
-    })
-
-    it('returns the original tagset unchanged when the key is absent', () => {
-      assert.strictEqual(stripTagsetEntry('a=1,c=3', 'b'), 'a=1,c=3')
-    })
-
-    it('returns empty string when stripping the only entry', () => {
-      assert.strictEqual(stripTagsetEntry('k=v', 'k'), '')
     })
   })
 

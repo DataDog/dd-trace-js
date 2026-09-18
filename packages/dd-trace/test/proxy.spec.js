@@ -8,6 +8,7 @@ const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const dc = require('dc-polyfill')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -170,9 +171,9 @@ describe('TracerProxy', () => {
       },
       experimental: {
         flaggingProvider: {},
-        aiguard: {
-          enabled: true,
-        },
+      },
+      aiguard: {
+        DD_AI_GUARD_ENABLED: true,
       },
       DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
@@ -211,7 +212,11 @@ describe('TracerProxy', () => {
     flushServerlessTelemetry = sinon.spy()
 
     profiler = {
-      start: sinon.spy(),
+      isStarted: sinon.stub().returns(true),
+      start: sinon.stub().returns(true),
+      stop: sinon.spy(),
+      setCustomLabelKeys: sinon.spy(),
+      runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
     }
 
     appsec = {
@@ -352,9 +357,9 @@ describe('TracerProxy', () => {
       it('only loads Test Optimization startup modules through ci/init', () => {
         const repoRoot = path.resolve(__dirname, '../../..')
         const testOptimizationRoot = path.join(repoRoot, 'packages/dd-trace/src/ci-visibility') + path.sep
+        const logSubmissionModule = require.resolve('../src/log-submission/log-submission-plugin')
         const modules = [
           require.resolve('../src/ci-visibility/test-api-manual/test-api-manual-plugin'),
-          require.resolve('../src/ci-visibility/log-submission/log-submission-plugin'),
           require.resolve('../src/ci-visibility/dynamic-instrumentation'),
         ]
         const script = `
@@ -364,25 +369,36 @@ describe('TracerProxy', () => {
           }
           const modules = ${JSON.stringify(modules)}
           const loaded = modules.map(module => require.cache[module] !== undefined)
+          const logSubmissionLoaded = require.cache[${JSON.stringify(logSubmissionModule)}] !== undefined
           const testOptimizationModuleCount = Object.keys(require.cache)
             .filter(module => module.startsWith(${JSON.stringify(testOptimizationRoot)}))
             .length
-          process.stdout.write(JSON.stringify({ loaded, testOptimizationModuleCount }), () => process.exit())
+          process.stdout.write(
+            JSON.stringify({ loaded, logSubmissionLoaded, testOptimizationModuleCount }),
+            () => process.exit()
+          )
         `
         const cases = [
           {
             entrypoint: repoRoot,
             callInit: 'true',
             environment: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'true' },
-            expected: [false, false, false],
+            expected: [false, false],
+            expectedLogSubmissionLoaded: true,
             expectedTestOptimizationModuleCount: 0,
           },
-          { entrypoint: path.join(repoRoot, 'ci/init'), callInit: 'false', expected: [true, false, true] },
+          {
+            entrypoint: path.join(repoRoot, 'ci/init'),
+            callInit: 'false',
+            expected: [true, true],
+            expectedLogSubmissionLoaded: false,
+          },
           {
             entrypoint: path.join(repoRoot, 'ci/init'),
             callInit: 'false',
             environment: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: 'true' },
-            expected: [true, true, true],
+            expected: [true, true],
+            expectedLogSubmissionLoaded: true,
           },
           {
             entrypoint: path.join(repoRoot, 'ci/init'),
@@ -391,7 +407,8 @@ describe('TracerProxy', () => {
               DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
               DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
             },
-            expected: [false, false, false],
+            expected: [false, false],
+            expectedLogSubmissionLoaded: false,
           },
         ]
 
@@ -417,8 +434,9 @@ describe('TracerProxy', () => {
           })
 
           assert.strictEqual(result.status, 0, result.stderr)
-          const { loaded, testOptimizationModuleCount } = JSON.parse(result.stdout)
+          const { loaded, logSubmissionLoaded, testOptimizationModuleCount } = JSON.parse(result.stdout)
           assert.deepStrictEqual(loaded, testCase.expected)
+          assert.strictEqual(logSubmissionLoaded, testCase.expectedLogSubmissionLoaded)
           if (testCase.expectedTestOptimizationModuleCount !== undefined) {
             assert.strictEqual(testOptimizationModuleCount, testCase.expectedTestOptimizationModuleCount)
           }
@@ -444,7 +462,7 @@ describe('TracerProxy', () => {
       })
 
       it('should enable the IAST rewriter when IAST is enabled', () => {
-        config.iast.enabled = true
+        config.iast.DD_IAST_ENABLED = true
 
         proxy.init()
 
@@ -497,13 +515,13 @@ describe('TracerProxy', () => {
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('debugger-disabled', {
-          dynamic_instrumentation_enabled: false,
+          DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'false',
         }))
 
         sinon.assert.notCalled(dynamicInstrumentation.configure)
@@ -514,13 +532,13 @@ describe('TracerProxy', () => {
 
       it('loads Dynamic Instrumentation when remote config enables it', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf['dynamicInstrumentation.enabled']
+          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('debugger-enabled', {
-          dynamic_instrumentation_enabled: true,
+          DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true',
         }))
 
         sinon.assert.calledOnce(dynamicInstrumentation.isStarted)
@@ -667,7 +685,7 @@ describe('TracerProxy', () => {
         const boundProvider = proxy.openfeature
 
         const handleApmTracing = handlers.get('APM_TRACING')
-        handleApmTracing(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
+        handleApmTracing(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         const flagConfig = { flags: { 'test-flag': {} } }
         const handleFfeFlags = handlers.get('FFE_FLAGS')
@@ -681,17 +699,17 @@ describe('TracerProxy', () => {
       it('keeps OpenFeature active while tracing is disabled and re-enabled', () => {
         config.featureFlags.DD_FEATURE_FLAGS_ENABLED = true
         config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE = 'remote_config'
-        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
-          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
         }
 
         proxy.init()
 
         const provider = proxy.openfeature
         const handleApmTracing = handlers.get('APM_TRACING')
-        handleApmTracing(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: false }))
-        handleApmTracing(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        handleApmTracing(createApmTracingTransaction('ffe-disable', { DD_TRACE_ENABLED: 'false' }))
+        handleApmTracing(createApmTracingTransaction('ffe-enable', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         assert.strictEqual(proxy.openfeature, provider)
         sinon.assert.calledOnce(OpenFeatureProvider)
@@ -700,17 +718,17 @@ describe('TracerProxy', () => {
       })
 
       it('should re-enable AI Guard when remote config re-enables tracing', () => {
-        /** @param {{ DD_TRACE_ENABLED: boolean }} remoteConfig */
+        /** @param {{ DD_TRACE_ENABLED: string }} remoteConfig */
         config.setRemoteConfig = remoteConfig => {
-          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = remoteConfig.DD_TRACE_ENABLED === 'true'
         }
 
         proxy.init()
         const sdk = proxy.aiguard
 
         const handleApmTracing = handlers.get('APM_TRACING')
-        handleApmTracing(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: false }))
-        handleApmTracing(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: true }, 'modify'))
+        handleApmTracing(createApmTracingTransaction('aiguard-disable', { DD_TRACE_ENABLED: 'false' }))
+        handleApmTracing(createApmTracingTransaction('aiguard-enable', { DD_TRACE_ENABLED: 'true' }, 'modify'))
 
         assert.strictEqual(proxy.aiguard, sdk)
         sinon.assert.calledOnce(AIGuardSdk)
@@ -735,13 +753,13 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { DD_TRACE_ENABLED: false }
+        let conf = { DD_TRACE_ENABLED: 'false' }
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { DD_TRACE_ENABLED: true }
+        conf = { DD_TRACE_ENABLED: 'true' }
         handleApmTracing(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -760,10 +778,10 @@ describe('TracerProxy', () => {
         })
 
         config.telemetry = {}
-        config.appsec.enabled = true
-        config.iast.enabled = true
+        config.appsec.DD_APPSEC_ENABLED = true
+        config.iast.DD_IAST_ENABLED = true
         config.setRemoteConfig = conf => {
-          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
+          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED === 'true'
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -772,13 +790,13 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { DD_TRACE_ENABLED: false }
+        let conf = { DD_TRACE_ENABLED: 'false' }
         const handleApmTracing = handlers.get('APM_TRACING')
         handleApmTracing(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { DD_TRACE_ENABLED: true }
+        conf = { DD_TRACE_ENABLED: 'true' }
         handleApmTracing(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
@@ -839,6 +857,20 @@ describe('TracerProxy', () => {
         proxy.dogstatsd.increment('foo')
       })
 
+      it('should expose noop metrics methods in agentless mode', () => {
+        config.DD_AGENTLESS_ENABLED = true
+        config.dogstatsd = {
+          hostname: 'localhost',
+          port: 9876,
+        }
+
+        proxy.init()
+        proxy.dogstatsd.increment('foo')
+
+        assert.strictEqual(dogStatsD._config(), undefined)
+        sinon.assert.calledOnceWithExactly(noopDogStatsDClient.increment, 'foo')
+      })
+
       it('should expose real metrics methods after init when configured', () => {
         config.dogstatsd = {
           hostname: 'localhost',
@@ -863,7 +895,7 @@ describe('TracerProxy', () => {
       })
 
       it('should enable appsec when explicitly configured to true', () => {
-        config.appsec = { enabled: true }
+        config.appsec = { DD_APPSEC_ENABLED: true }
 
         proxy.init()
 
@@ -871,7 +903,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not enable appsec when explicitly configured to false', () => {
-        config.appsec = { enabled: false }
+        config.appsec = { DD_APPSEC_ENABLED: false }
 
         proxy.init()
 
@@ -879,7 +911,7 @@ describe('TracerProxy', () => {
       })
 
       it('should enable iast when configured', () => {
-        config.iast = { enabled: true }
+        config.iast = { DD_IAST_ENABLED: true }
 
         proxy.init()
 
@@ -894,51 +926,33 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(iast.enable)
       })
 
-      it('should not load the profiler when not configured', () => {
-        config.profiling = { DD_PROFILING_ENABLED: false }
+      it('should publish the config on the config-update channel during init', () => {
+        const configUpdateChannel = dc.channel('datadog:config:update')
+        const subscriber = sinon.spy()
+        configUpdateChannel.subscribe(subscriber)
 
-        proxy.init()
+        try {
+          proxy.init()
 
-        sinon.assert.notCalled(profiler.start)
+          sinon.assert.calledOnce(subscriber)
+          assert.strictEqual(subscriber.firstCall.args[0], config)
+        } finally {
+          configUpdateChannel.unsubscribe(subscriber)
+        }
       })
 
-      it('should not load the profiler when profiling config does not exist', () => {
-        config.pro_fil_ing = 'invalidConfig'
-
+      it('should resolve profilerStarted() from the profiler module', async () => {
         proxy.init()
 
-        sinon.assert.notCalled(profiler.start)
+        assert.strictEqual(await proxy.profilerStarted(), true)
+        sinon.assert.calledOnce(profiler.isStarted)
       })
 
-      it('should load profiler when configured', () => {
-        config.profiling = { DD_PROFILING_ENABLED: 'true' }
-
-        proxy.init()
-
-        sinon.assert.called(profiler.start)
-      })
-
-      it('should throw an error since profiler fails to be imported', () => {
-        config.profiling = { DD_PROFILING_ENABLED: 'true' }
-
-        const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
-          './tracer': DatadogTracer,
-          './noop/tracer': NoopTracer,
-          './config': Config,
-          './runtime_metrics': runtimeMetrics,
-          './log': log,
-          './profiler': null, // this will cause the import failure error
-          './appsec': appsec,
-          './telemetry': telemetry,
-          './remote_config': RemoteConfig,
-        })
-
-        const profilerImportFailureProxy = new ProfilerImportFailureProxy()
-        profilerImportFailureProxy.init()
-
-        sinon.assert.calledOnce(log.error)
-        const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
-        sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
+      it('should throw when profilerStarted() is called before init()', () => {
+        assert.throws(
+          () => proxy.profilerStarted(),
+          { message: 'profilerStarted() must be called after init()' }
+        )
       })
 
       it('should start telemetry', () => {
@@ -1357,8 +1371,21 @@ describe('TracerProxy', () => {
         publish: sinon.stub(),
       }
 
+      const microVmChannelNames = new Set([
+        'http.server.request.start',
+        'datadog:identity:update',
+        'datadog:identity:refresh',
+      ])
+      const otherChannelMocks = new Map()
+
       diagnosticsChannelMock = {
-        channel: sinon.stub().returns(channelMock),
+        channel: sinon.stub().callsFake((name) => {
+          if (microVmChannelNames.has(name)) return channelMock
+          if (!otherChannelMocks.has(name)) {
+            otherChannelMocks.set(name, { subscribe: sinon.stub(), unsubscribe: sinon.stub(), publish: sinon.stub() })
+          }
+          return otherChannelMocks.get(name)
+        }),
       }
       storeConfig = sinon.stub().returns({})
 
@@ -1688,11 +1715,12 @@ async function triggerMicroVmRun (server) {
   })
 }
 
-// Helper function to create APM_TRACING batch transaction objects
-function createApmTracingTransaction (configId, libConfig, action = 'apply') {
+// Helper function to create APM_TRACING batch transaction objects. Accepts a flat
+// { KEY: value } map and mirrors the wire shape RC actually delivers: { config: { KEY: value, ... } }
+function createApmTracingTransaction (configId, sdkConfig, action = 'apply') {
   const item = {
     id: configId,
-    file: { lib_config: libConfig },
+    file: { sdk_config: { config: sdkConfig } },
     path: `datadog/1/APM_TRACING/${configId}`,
   }
 

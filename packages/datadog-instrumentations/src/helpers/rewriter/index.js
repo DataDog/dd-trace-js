@@ -1,58 +1,41 @@
 'use strict'
 
-const { readFileSync } = require('fs')
-const { join } = require('path')
-const { pathToFileURL } = require('url')
+const { readFileSync } = require('node:fs')
+const { join } = require('node:path')
+const { pathToFileURL } = require('node:url')
+
 const log = require('../../../../dd-trace/src/log')
-const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-const {
-  awaitContextCallback,
-  configureGraphqlJitCompileObject,
-  configureGraphqlJitDeferredField,
-  configureGraphqlJitExecute,
-  configureGraphqlJitRuntime,
-  configureMercuriusRequest,
-  waitForAsyncEnd,
-} = require('./transforms')
 const instrumentations = require('./instrumentations')
 const { getRewriteTarget } = require('./targets')
 
-// `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
-// (ESM) statements that the transformer splices into the rewritten module.
-// `require()` accepts an absolute filesystem path; the ESM resolver rejects it
-// with `ERR_INVALID_MODULE_SPECIFIER` and needs a `file://` URL instead. We
-// pre-compute both forms here so each matcher hands the transformer a
-// specifier that is valid for the module type it is rewriting.
-let dcPolyfillCjs
-let dcPolyfillEsm
-
-try {
-  const resolved = require.resolve('dc-polyfill')
-  dcPolyfillCjs = resolved.replaceAll('\\', '/')
-  dcPolyfillEsm = pathToFileURL(resolved).href
-} catch {
-  // The `dc-polyfill` module is unavailable for some reason (like bundling).
-  // Let's just keep the default of using `diagnostics-channel` as a fallback
-  // which works for most Node versions.
-}
+/**
+ * @typedef {object} InstrumentationMatcher
+ * @property {(name: string, transform: Function) => void} addTransform
+ * @property {(moduleName: string, version: string|undefined, filePath: string) => Transformer|undefined} getTransformer
+ *
+ * @typedef {object} Transformer
+ * @property {(source: string, moduleType: 'cjs'|'esm', sourceMap?: string|object) =>
+ *   { code: string, map?: string|object }} transform
+ *
+ * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
+ *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
+ *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
+ */
 
 /**
  * @type {Record<string, string>} map of module base name to version
  */
 const moduleVersions = {}
 const disabled = new Set()
-const matcherCjs = create(instrumentations, dcPolyfillCjs)
-const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
-for (const matcher of [matcherCjs, matcherEsm]) {
-  matcher.addTransform('awaitContextCallback', awaitContextCallback)
-  matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
-  matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
-  matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
-  matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
-  matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
-  matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
-}
+// Matchers are built on the first module that actually needs rewriting. The
+// vendored transformer is a quarter megabyte of bundle that an application
+// without a rewrite target never needs to parse, and an application that loads
+// targets of only one module type never needs the other matcher.
+/** @type {InstrumentationMatcher|undefined} */
+let matcherCjs
+/** @type {InstrumentationMatcher|undefined} */
+let matcherEsm
 
 // Keep the marker split: source-map scanners can read a contiguous token in
 // string literals as this file's own inline map.
@@ -80,8 +63,7 @@ function rewrite (content, filename, format, target) {
 
   if (disabled.has(moduleName)) return content
 
-  const matcher = moduleType === 'esm' ? matcherEsm : matcherCjs
-  const transformer = matcher.getTransformer(moduleName, version, filePath)
+  const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
 
   if (!transformer) return content
 
@@ -103,13 +85,120 @@ function rewrite (content, filename, format, target) {
   return content
 }
 
+/**
+ * @param {string} dcModule
+ * @returns {BundlerRewriter}
+ */
+function createBundlerRewriter (dcModule) {
+  const matcher = createMatcher(dcModule)
+
+  return function rewriteBundled (content, filename, format, target, sourceMap) {
+    if (!content) return { code: content, map: sourceMap }
+
+    target ||= getRewriteTarget(filename)
+    if (!target) return { code: content, map: sourceMap }
+
+    filename = filename.replace('file://', '')
+    const moduleType = format === 'module' ? 'esm' : 'cjs'
+    const { moduleName, filePath } = target
+    const transformer = matcher.getTransformer(moduleName, getVersion(filename, filePath), filePath)
+    if (!transformer) return { code: content, map: sourceMap }
+
+    try {
+      return transformer.transform(getSourceText(content), moduleType, sourceMap)
+    } catch (error) {
+      log.error(error)
+      return { code: content, map: sourceMap }
+    }
+  }
+}
+
+/**
+ * @param {'cjs'|'esm'} moduleType
+ * @returns {InstrumentationMatcher}
+ */
+function getMatcher (moduleType) {
+  if (moduleType === 'esm') {
+    matcherEsm ??= createMatcher(getDcPolyfillSpecifier(moduleType))
+
+    return matcherEsm
+  }
+
+  matcherCjs ??= createMatcher(getDcPolyfillSpecifier(moduleType))
+
+  return matcherCjs
+}
+
+/**
+ * @param {string|undefined} dcModule
+ * @returns {InstrumentationMatcher}
+ */
+function createMatcher (dcModule) {
+  const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+  const {
+    awaitContextCallback,
+    configureGraphqlFastPath,
+    configureGraphqlJitCompileObject,
+    configureGraphqlJitDeferredField,
+    configureGraphqlJitExecute,
+    configureGraphqlJitRuntime,
+    configureMercuriusRequest,
+    publishDurableOrchestrationFailure,
+    waitForAsyncEnd,
+  } = require('./transforms')
+  const {
+    postgresQueryHandlers,
+    postgresQueryLifecycle,
+    postgresQueryPreparation,
+  } = require('./transforms/postgres')
+
+  const matcher = create(instrumentations, dcModule)
+
+  matcher.addTransform('awaitContextCallback', awaitContextCallback)
+  matcher.addTransform('waitForAsyncEnd', waitForAsyncEnd)
+  matcher.addTransform('configureGraphqlFastPath', configureGraphqlFastPath)
+  matcher.addTransform('configureGraphqlJitCompileObject', configureGraphqlJitCompileObject)
+  matcher.addTransform('configureGraphqlJitDeferredField', configureGraphqlJitDeferredField)
+  matcher.addTransform('configureGraphqlJitExecute', configureGraphqlJitExecute)
+  matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
+  matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
+  matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
+  matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
+  matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
+  matcher.addTransform('postgresQueryPreparation', postgresQueryPreparation)
+
+  return matcher
+}
+
+/**
+ * `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
+ * (ESM) statements that the transformer splices into the rewritten module.
+ * `require()` accepts an absolute filesystem path; the ESM resolver rejects it
+ * with `ERR_INVALID_MODULE_SPECIFIER` and needs a `file://` URL instead. Each
+ * matcher therefore hands the transformer the form that is valid for the
+ * module type it is rewriting.
+ *
+ * @param {'cjs'|'esm'} moduleType
+ * @returns {string|undefined} `undefined` when `dc-polyfill` cannot be resolved
+ */
+function getDcPolyfillSpecifier (moduleType) {
+  try {
+    const resolved = require.resolve('dc-polyfill')
+
+    return moduleType === 'esm' ? pathToFileURL(resolved).href : resolved.replaceAll('\\', '/')
+  } catch {
+    // The `dc-polyfill` module is unavailable for some reason (like bundling).
+    // Let's just keep the default of using `diagnostics-channel` as a fallback
+    // which works for most Node versions.
+  }
+}
+
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
 
 /**
  * Convert the source representations accepted by Node.js loader hooks to text.
  *
  * @param {string | ArrayBuffer | BufferView} source
- * @returns {string}
  */
 function getSourceText (source) {
   if (typeof source === 'string') return source
@@ -139,4 +228,4 @@ function getVersion (filename, filePath) {
   return moduleVersions[basename]
 }
 
-module.exports = { rewrite, disable }
+module.exports = { createBundlerRewriter, disable, rewrite }

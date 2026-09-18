@@ -577,7 +577,7 @@ describe('SpanStatsProcessor', () => {
     processor.onInterval()
     assert.strictEqual(exporter.export.lastCall.args[0].RuntimeID, originalRuntimeId)
 
-    config.setRemoteConfig({ tags: { team: 'backend' } })
+    config.setRemoteConfig({ DD_TAGS: 'team:backend' })
     assert.notStrictEqual(config.tags, originalTags)
     channel('datadog:identity:update').publish(config)
     processor.onInterval()

@@ -1,20 +1,22 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
+const fs = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 
+const log = require('../../dd-trace/src/log')
 const { wrapCliConfigFileOptions } = require('../src/cypress-config')
 
 describe('Cypress config', () => {
   it('loads and wraps an ESM config', async () => {
-    const project = mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
+    const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
     const configFile = join(project, 'cypress.config.mjs')
-    writeFileSync(configFile, `
+    fs.writeFileSync(configFile, `
       const setupNodeEvents = () => {}
       export default {
         marker: 'esm',
@@ -31,14 +33,14 @@ describe('Cypress config', () => {
       assert.strictEqual(config.e2e.setupNodeEvents.name, 'ddSetupNodeEvents')
     } finally {
       wrapped.cleanup()
-      rmSync(project, { recursive: true, force: true })
+      fs.rmSync(project, { recursive: true, force: true })
     }
   })
 
   it('loads and wraps a CommonJS config', () => {
-    const project = mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
+    const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
     const configFile = join(project, 'cypress.config.cjs')
-    writeFileSync(configFile, `
+    fs.writeFileSync(configFile, `
       const setupNodeEvents = () => {}
       module.exports = {
         marker: 'commonjs',
@@ -55,7 +57,29 @@ describe('Cypress config', () => {
       assert.strictEqual(config.e2e.setupNodeEvents.name, 'ddSetupNodeEvents')
     } finally {
       wrapped.cleanup()
-      rmSync(project, { recursive: true, force: true })
+      fs.rmSync(project, { recursive: true, force: true })
+    }
+  })
+
+  it('reports every failed config-wrapper location', () => {
+    const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
+    const configDirectory = join(project, 'config')
+    const configFile = join(configDirectory, 'cypress.config.cjs')
+    const options = { project, configFile }
+    fs.mkdirSync(configDirectory)
+    fs.writeFileSync(configFile, 'module.exports = {}')
+    const warn = sinon.stub(log, 'warn')
+    const openSync = sinon.stub(fs, 'openSync').throws()
+
+    try {
+      const wrapped = wrapCliConfigFileOptions(options)
+
+      assert.strictEqual(wrapped.options, options)
+      assert.match(warn.firstCall.args[2], /; /)
+    } finally {
+      openSync.restore()
+      warn.restore()
+      fs.rmSync(project, { recursive: true, force: true })
     }
   })
 })

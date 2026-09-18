@@ -481,7 +481,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'across 1 of 1 test\\(s\\)\\.'
                   )
                 )
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
@@ -1873,7 +1873,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
           assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-          assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
+          assert.match(stdout, /test-quarantine-1[^\n\r\u2028\u2029›]*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
         }
@@ -3060,7 +3060,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             eventsPromise,
           ])
 
-          assert.doesNotMatch(output, /\d+ skipped/)
+          assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         })
       }
 
@@ -3327,7 +3327,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         assert.doesNotMatch(output, /I am running concurrent hooks/)
-        assert.doesNotMatch(output, /\d+ skipped/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         assert.strictEqual(exitCode, 0)
       })
 
@@ -3404,7 +3404,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         // Discarded retries must leave the test tree, not surface as skipped tests.
-        assert.doesNotMatch(output, /\d+ skipped/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         // Retries must not run the *Each hooks Jest skips for their concurrent original.
         assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.strictEqual(exitCode, 0)

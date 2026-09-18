@@ -14,11 +14,13 @@ const {
   httpAgent: commonHttpAgent,
   httpsAgent: commonHttpsAgent,
 } = require('../../../src/exporters/common/agents')
-const { getAgent } = require('../../../src/ci-visibility/exporters/agents')
+const { getAgent, getMediaAgent } = require('../../../src/ci-visibility/exporters/agents')
 
 describe('Test Optimization exporter agents', () => {
   const httpAgent = getAgent('http://localhost')
   const httpsAgent = getAgent('https://localhost')
+  const mediaHttpAgent = getMediaAgent('http://localhost')
+  const mediaHttpsAgent = getMediaAgent('https://localhost')
 
   it('keeps the shared exporter agents serialized at one socket', () => {
     assert.notStrictEqual(httpAgent, commonHttpAgent)
@@ -34,6 +36,15 @@ describe('Test Optimization exporter agents', () => {
     assert.strictEqual(httpAgent.maxSockets, 16)
     assert.strictEqual(httpsAgent.keepAlive, true)
     assert.strictEqual(httpsAgent.maxSockets, 16)
+    assert.strictEqual(mediaHttpAgent.keepAlive, true)
+    assert.strictEqual(mediaHttpAgent.maxSockets, 16)
+    assert.strictEqual(mediaHttpsAgent.keepAlive, true)
+    assert.strictEqual(mediaHttpsAgent.maxSockets, 16)
+  })
+
+  it('isolates media sockets from final writer sockets', () => {
+    assert.notStrictEqual(mediaHttpAgent, httpAgent)
+    assert.notStrictEqual(mediaHttpsAgent, httpsAgent)
   })
 
   it('selects the agent by protocol for URL objects and strings', () => {
@@ -41,11 +52,17 @@ describe('Test Optimization exporter agents', () => {
     assert.strictEqual(getAgent('http://localhost'), httpAgent)
     assert.strictEqual(getAgent(new URL('https://localhost')), httpsAgent)
     assert.strictEqual(getAgent('https://localhost'), httpsAgent)
+    assert.strictEqual(getMediaAgent(new URL('http://localhost')), mediaHttpAgent)
+    assert.strictEqual(getMediaAgent('http://localhost'), mediaHttpAgent)
+    assert.strictEqual(getMediaAgent(new URL('https://localhost')), mediaHttpsAgent)
+    assert.strictEqual(getMediaAgent('https://localhost'), mediaHttpsAgent)
   })
 
   it('returns a stable singleton per protocol', () => {
     assert.strictEqual(getAgent('http://a.example'), getAgent('http://b.example'))
     assert.strictEqual(getAgent('https://a.example'), getAgent('https://b.example'))
+    assert.strictEqual(getMediaAgent('http://a.example'), getMediaAgent('http://b.example'))
+    assert.strictEqual(getMediaAgent('https://a.example'), getMediaAgent('https://b.example'))
   })
 
   it('manages the keep-alive socket lifecycle', () => {

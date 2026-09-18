@@ -8,7 +8,6 @@ const { channel } = require('dc-polyfill')
 
 const exporters = require('../../../../ext/exporters')
 const createRfdc = require('../../../../vendor/dist/rfdc')
-const rfdc = createRfdc({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
@@ -25,6 +24,7 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
+const { createSiteUrl } = require('../exporters/common/url')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
@@ -45,6 +45,12 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { programmaticTypeCoercions, transformers } = require('./parsers')
 
+const rfdc = createRfdc({
+  proto: false,
+  circles: false,
+  constructorHandlers: [[RegExp, transformers.toCamelCase]],
+})
+
 const TEST_OPTIMIZATION_WORKER_EXPORTERS = new Set([
   exporters.CUCUMBER_WORKER,
   exporters.JEST_WORKER,
@@ -61,7 +67,6 @@ channel('datadog:identity:update').subscribe(refreshRuntimeId)
  * Lazily generates the process-wide runtime ID on first access instead of at module load,
  * so modules that merely require this file without constructing a Config never pay for it.
  *
- * @returns {string}
  */
 function getRuntimeId () {
   runtimeId ??= uuid()
@@ -96,6 +101,10 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 /** @type {Config | null} */
 let configInstance = null
+
+// Fires whenever remote config applies a new value; profiling and other RC-driven consumers
+// subscribe here instead of proxy.js hardcoding a call into each of them.
+const configUpdateChannel = channel('datadog:config:update')
 
 // An entry that is undefined means it is the default value.
 /** @type {Map<ConfigPath, TelemetrySource>} */
@@ -257,7 +266,7 @@ class Config extends ConfigBase {
 
   /**
    * @param {import('./helper').TracerEnv} envs
-   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config'} source
+   * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config' | 'remote_config'} source
    */
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
@@ -271,7 +280,7 @@ class Config extends ConfigBase {
 
   /**
    * @param {TracerOptions} options
-   * @param {'code' | 'remote_config'} source
+   * @param {'code'} source
    * @param {string} [root]
    */
   #applyOptions (options, source, root = '') {
@@ -279,13 +288,8 @@ class Config extends ConfigBase {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
       if (!entry) {
-        // TODO: Fix this by by changing remote config to use env styles.
-        if (name !== 'DD_TRACE_ENABLED' || source !== 'remote_config') {
-          log.warn('Unknown option %s with value %o', fullName, value)
-          continue
-        }
-        // @ts-expect-error - The entry is defined in the configurationsTable.
-        entry = configurationsTable.DD_TRACE_ENABLED
+        log.warn('Unknown option %s with value %o', fullName, value)
+        continue
       }
 
       if (entry.nestedProperties) {
@@ -331,24 +335,26 @@ class Config extends ConfigBase {
   }
 
   /**
-   * Set the configuration with remote config settings.
-   * Applies remote configuration, recalculates derived values, and merges all configuration sources.
+   * Set the configuration with SDK_CONFIGURATION remote config settings.
+   * Resolves env-var names via `configurationsTable`, since this payload is keyed by env var name.
    *
-   * @param {TracerOptions|null} options - Configurations received via Remote
-   *   Config or null to reset all remote configuration
+   * @param {Partial<Record<import('./helper').SupportedEnvKey, string>>|null} options - Env-var-keyed
+   *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
-    // Clear all RC-managed fields to ensure previous values don't persist.
-    // State is instead managed by the `RCClientLibConfigManager` class
+    // Replace the complete RC layer so omitted fields fall back to their previous source.
+    // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
 
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
-      this.#applyOptions(options, 'remote_config')
+      // Resolve aliases and drop configs this tracer version doesn't recognize
+      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
     }
 
     this.#applyCalculated()
+    configUpdateChannel.publish(this)
   }
 
   /**
@@ -407,11 +413,6 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
-    // Disable log injection when OTEL logs are enabled
-    // OTEL logs and DD log injection are mutually exclusive
-    if (this.DD_LOGS_OTEL_ENABLED) {
-      setAndTrack(this, 'logInjection', false)
-    }
     if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
@@ -438,7 +439,7 @@ class Config extends ConfigBase {
     // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
     if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
-      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -474,8 +475,8 @@ class Config extends ConfigBase {
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
-        trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
-      setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
+        trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
+      setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)
     }
 
     if (this.cloudPayloadTagging?.request || this.cloudPayloadTagging?.response) {
@@ -492,6 +493,9 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('runtimeMetrics.enabled') && this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
+
+    const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
+      isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
     // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
     // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
@@ -526,9 +530,9 @@ class Config extends ConfigBase {
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
     if (!this.llmobs.DD_LLMOBS_ENABLED &&
         !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
-        (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
-        trackedConfigOrigins.has('llmobs.mlApp') ||
-        trackedConfigOrigins.has('llmobs.projectName'))) {
+        (trackedConfigOrigins.has('llmobs.DD_LLMOBS_AGENTLESS_ENABLED') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
+        trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
@@ -639,11 +643,30 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
-    // Experimental agentless APM span intake
-    // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    if (this.DD_AGENTLESS_ENABLED) {
+      if (!trackedConfigOrigins.has('DD_AGENTLESS_LOG_SUBMISSION_ENABLED') && !this.DD_LOGS_OTEL_ENABLED) {
+        setAndTrack(this, 'DD_AGENTLESS_LOG_SUBMISSION_ENABLED', true)
+      }
+      setAndTrack(this, 'testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED', true)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_AGENTLESS_ENABLED', true)
+      setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
+      if (this.DD_API_KEY === undefined) {
+        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+      }
+      setAndTrack(this, 'runtimeMetrics.enabled', false)
+      setAndTrack(this, 'dsmEnabled', false)
+      const profilingExporters = this.DD_PROFILING_EXPORTERS.filter(exporter => exporter !== 'agent')
+      setAndTrack(this, 'DD_PROFILING_EXPORTERS', profilingExporters)
+      if (profilingExporters.length === 0) {
+        setAndTrack(this, 'profiling.DD_PROFILING_ENABLED', 'false')
+      }
+    }
+
+    if (this.DD_AGENTLESS_LOG_SUBMISSION_ENABLED && this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
+    }
+
+    if (agentlessTracingEnabled && !this.isCiVisibility) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -659,6 +682,12 @@ class Config extends ConfigBase {
       }
     }
 
+    // Disable log injection when OTEL logs are enabled
+    // OTEL logs and DD log injection are mutually exclusive
+    if (this.DD_LOGS_OTEL_ENABLED) {
+      setAndTrack(this, 'logInjection', false)
+    }
+
     // Apply all fallbacks to the calculated config.
     for (const [configName, alias] of fallbackConfigurations) {
       if (!trackedConfigOrigins.has(configName) && trackedConfigOrigins.has(alias)) {
@@ -668,16 +697,33 @@ class Config extends ConfigBase {
 
     // TODO: This could likely be moved to the base class and allow easier GRPC handling
     // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
-    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
-    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host. In agentless mode
+    // there is no agent to relay through, so OTLP goes straight to the per-site intake instead.
+    const otlpAgentlessOrigin = agentlessTracingEnabled && !this.OTEL_EXPORTER_OTLP_ENDPOINT
+      ? createSiteUrl(this.site, 'otlp')?.origin
+      : undefined
+    const defaultOtlpBase = otlpAgentlessOrigin ??
+      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+
+    const assignOtlpHeaderApiKey = (configName) => {
+      if (otlpAgentlessOrigin) {
+        this[configName] ??= { ...this.OTEL_EXPORTER_OTLP_HEADERS }
+        this[configName]['dd-api-key'] = this.DD_API_KEY
+        setAndTrack(this, configName, this[configName])
+      }
+    }
+
     if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_LOGS_HEADERS')
     }
     if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_METRICS_HEADERS')
     }
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
+      assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
 
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true

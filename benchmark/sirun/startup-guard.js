@@ -58,8 +58,9 @@ function done (maxShare = 0.07) {
 
   assert.ok(
     share <= maxShare,
-    `startup-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
-    `(max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
+    `startup-guard: load+setup was ${(share * 100).toFixed(2)}% of the run ` +
+    `(setup ${(startup / 1e6).toFixed(1)}ms, loop ${(loop / 1e6).toFixed(1)}ms, ` +
+    `max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
   )
 }
 

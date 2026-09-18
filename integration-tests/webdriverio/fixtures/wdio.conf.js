@@ -32,9 +32,16 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  empty: {
+    maxInstances: 1,
+    specs: ['./empty.e2e.js'],
+  },
   automaticLogSubmission: {
     after () {
-      require('./automatic-log-submission-logger').info('Hello from WebdriverIO after hook!')
+      const loggers = require('./automatic-log-submission-logger')
+      for (const [loggerName, logger] of Object.entries(loggers)) {
+        logger.info(`Hello from WebdriverIO ${loggerName} after hook!`)
+      }
     },
     maxInstances: 1,
     specs: ['./automatic-log-submission.e2e.js'],
@@ -46,6 +53,13 @@ const scenarioConfig = {
   atrAlwaysFails: {
     maxInstances: 1,
     specs: ['./atr-always-fail.e2e.js'],
+  },
+  atrBoth: {
+    maxInstances: 1,
+    specs: [[
+      './atr.e2e.js',
+      './atr-always-fail.e2e.js',
+    ]],
   },
   atrHookFailures: {
     maxInstances: 1,
@@ -66,13 +80,6 @@ const scenarioConfig = {
     reporters: ['webdriverio-missing-reporter'],
     specs: ['./first.e2e.js'],
   },
-  delay: {
-    maxInstances: 1,
-    mochaOpts: {
-      delay: true,
-    },
-    specs: ['./delay.e2e.js'],
-  },
   disabledEfd: {
     maxInstances: 1,
     specs: [[
@@ -84,10 +91,6 @@ const scenarioConfig = {
   efd: {
     maxInstances: 1,
     specs: ['./efd.e2e.js'],
-  },
-  efdFailedTestReplay: {
-    maxInstances: 1,
-    specs: ['./efd-failed-test-replay.e2e.js'],
   },
   efdAfterEachFailure: {
     maxInstances: 1,
@@ -103,9 +106,22 @@ const scenarioConfig = {
       './second.e2e.js',
     ],
   },
-  failedTestReplay: {
+  failedTestReplayAndImpacted: {
     maxInstances: 1,
-    specs: ['./failed-test-replay.e2e.js'],
+    specs: [[
+      './failed-test-replay.e2e.js',
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  failedTestReplayBothAndImpacted: {
+    maxInstances: 1,
+    specs: [[
+      './failed-test-replay.e2e.js',
+      './efd-failed-test-replay.e2e.js',
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
   },
   grep: {
     maxInstances: 1,
@@ -115,20 +131,6 @@ const scenarioConfig = {
     specs: [[
       './first.e2e.js',
       './second.e2e.js',
-    ]],
-  },
-  grouped: {
-    maxInstances: 1,
-    specs: [[
-      './first.e2e.js',
-      './second.e2e.js',
-    ]],
-  },
-  groupedEmpty: {
-    maxInstances: 1,
-    specs: [[
-      './empty.e2e.js',
-      './first.e2e.js',
     ]],
   },
   hookFailure: {
@@ -146,6 +148,7 @@ const scenarioConfig = {
     ]],
   },
   jasmineStatuses: {
+    injectGlobals: false,
     maxInstances: 1,
     specs: ['./jasmine-statuses.e2e.js'],
   },
@@ -161,20 +164,20 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./first.e2e.js'],
   },
-  jasmineEfdSkipped: {
+  jasmineEfdPassing: {
+    jasmineOpts: {
+      grep: 'retries a new test|passes|stays skipped|runs selected test',
+    },
     maxInstances: 1,
-    specs: ['./jasmine-efd-skipped.e2e.js'],
+    specs: [[
+      './efd.e2e.js',
+      './jasmine-efd-skipped.e2e.js',
+      './jasmine-filtered.e2e.js',
+    ]],
   },
   jasmineExpectationHookFailures: {
     maxInstances: 1,
     specs: ['./jasmine-expectation-hook-fail.e2e.js'],
-  },
-  jasmineFiltered: {
-    jasmineOpts: {
-      grep: 'runs selected test',
-    },
-    maxInstances: 1,
-    specs: ['./jasmine-filtered.e2e.js'],
   },
   jasmineGlobalAfterAllFailure: {
     maxInstances: 1,
@@ -183,10 +186,6 @@ const scenarioConfig = {
       './first.e2e.js',
     ]],
   },
-  jasmineHooks: {
-    maxInstances: 1,
-    specs: ['./jasmine-hooks.e2e.js'],
-  },
   jasmineNoExpectations: {
     jasmineOpts: {
       failSpecWithNoExpectations: true,
@@ -194,17 +193,67 @@ const scenarioConfig = {
     maxInstances: 1,
     specs: ['./jasmine-no-expectations.e2e.js'],
   },
-  jasmineRetry: {
+  jasminePassing: {
     maxInstances: 1,
-    specs: ['./jasmine-retry.e2e.js'],
+    runnerEnv: {
+      NODE_OPTIONS: '--require ./runner-env-preload.js',
+    },
+    specs: [[
+      './empty.e2e.js',
+      './first.e2e.js',
+      './second.e2e.js',
+      './jasmine-hooks.e2e.js',
+      './runner-env.e2e.js',
+    ]],
+  },
+  jasmineRumAndRetry: {
+    maxInstances: 1,
+    specs: [[
+      './rum.e2e.js',
+      './rum-no-after-each.e2e.js',
+      './jasmine-retry.e2e.js',
+    ]],
   },
   loadFailure: {
     maxInstances: 1,
     specs: ['./load-fail.e2e.js'],
   },
-  managedHookFailures: {
+  locallyDisabledFailures: {
     maxInstances: 1,
-    specs: ['./managed-hook-fail.e2e.js'],
+    specs: [[
+      './efd.e2e.js',
+      './test-management.e2e.js',
+    ]],
+  },
+  locallyDisabledPassing: {
+    maxInstances: 1,
+    specs: [[
+      './failed-test-replay.e2e.js',
+      './impacted.e2e.js',
+      './first.e2e.js',
+    ]],
+  },
+  managedEfdPassing: {
+    maxInstances: 1,
+    specs: [[
+      './atr-always-fail.e2e.js',
+      './managed-hook-fail.e2e.js',
+    ]],
+  },
+  mochaPassing: {
+    maxInstances: 1,
+    mochaOpts: {
+      delay: true,
+    },
+    runnerEnv: {
+      NODE_OPTIONS: '--require ./runner-env-preload.js',
+    },
+    specs: [[
+      './first.e2e.js',
+      './second.e2e.js',
+      './runner-env.e2e.js',
+      './delay.e2e.js',
+    ]],
   },
   multipleCapabilities: {
     capabilities: [
@@ -221,12 +270,12 @@ const scenarioConfig = {
     },
     specs: ['./retry.e2e.js'],
   },
-  runnerEnvNodeOptions: {
+  rum: {
     maxInstances: 1,
-    runnerEnv: {
-      NODE_OPTIONS: '--require ./runner-env-preload.js',
-    },
-    specs: ['./runner-env.e2e.js'],
+    specs: [[
+      './rum.e2e.js',
+      './rum-no-after-each.e2e.js',
+    ]],
   },
   serial: {
     maxInstances: 1,

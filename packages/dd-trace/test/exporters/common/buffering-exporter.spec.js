@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
@@ -74,5 +75,32 @@ describe('BufferingExporter', () => {
 
     exporter.resetUncodedTraces()
     assert.deepStrictEqual(exporter.getUncodedTraces(), [])
+  })
+
+  it('only reports payloads accepted for serialization as enqueued', () => {
+    const incrementCountMetric = sinon.spy()
+    const TestBufferingExporter = proxyquire('../../../src/exporters/common/buffering-exporter', {
+      '../../ci-visibility/telemetry': {
+        incrementCountMetric,
+        TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION: 'events_enqueued_for_serialization',
+      },
+    })
+    const writer = {
+      append: sinon.stub().onFirstCall().returns(false).onSecondCall().returns(true),
+      flush: sinon.spy(),
+    }
+    const exporter = new TestBufferingExporter({ isCiVisibility: true, flushInterval: 0 })
+    exporter._writer = writer
+    exporter._isInitialized = true
+
+    exporter.export([{}])
+    exporter.export([{}])
+
+    sinon.assert.calledOnceWithExactly(
+      incrementCountMetric,
+      'events_enqueued_for_serialization',
+      {},
+      1
+    )
   })
 })
