@@ -102,7 +102,10 @@ function installProbeSampler (guardrailMetrics) {
      */
     shouldEvaluateCondition (probeId) {
       const state = conditionErrorByProbeId.get(probeId)
-      return state === undefined || process.hrtime.bigint() >= state.throttledUntilNs
+      if (state === undefined) return true
+      if (process.hrtime.bigint() < state.throttledUntilNs) return false
+      conditionErrorByProbeId.delete(probeId)
+      return true
     },
 
     /**
