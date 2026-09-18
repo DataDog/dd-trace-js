@@ -158,6 +158,40 @@ describe('LogSubmissionPlugin', () => {
     legacyStorage.run({ noop: true }, () => assert.strictEqual(canCapture(), false))
   })
 
+  it('does not configure console instrumentation without a valid intake URL', () => {
+    const subscriber = sinon.spy()
+    consoleConfigureCh.subscribe(subscriber)
+    try {
+      plugin.configure(false)
+      plugin.configure({
+        ...pluginConfig,
+        DD_AGENTLESS_LOG_SUBMISSION_URL: 'not a URL',
+      })
+    } finally {
+      consoleConfigureCh.unsubscribe(subscriber)
+    }
+
+    sinon.assert.notCalled(subscriber)
+  })
+
+  it('stops console capture after a synchronous submission failure', () => {
+    let canCapture
+    const subscriber = payload => { canCapture = payload.canCapture }
+    consoleConfigureCh.subscribe(subscriber)
+    try {
+      plugin.configure(false)
+      plugin.configure(pluginConfig)
+    } finally {
+      consoleConfigureCh.unsubscribe(subscriber)
+    }
+    request.throws(new Error('boom'))
+
+    publishLog('{"msg":"hello"}')
+    clock.tick(1000)
+
+    assert.strictEqual(canCapture(), false)
+  })
+
   it('submits console logs without trace correlation when no span is active', () => {
     consoleLogSubmissionCh.publish({ method: 'warn', message: 'outside a test' })
     clock.tick(1000)

@@ -88,7 +88,7 @@ class LogSubmissionPlugin extends Plugin {
   #timer
   #beforeExitHandler = () => this.#flushLogs()
   #createWinstonJsonFormat
-  #canCaptureConsole = () => !legacyStorage.getHandle()?.noop
+  #canCaptureConsole = () => Boolean(this.#logSubmissionUrl) && !legacyStorage.getHandle()?.noop
   #getLogHolder = () => buildLogHolder(this.tracer)
   #winstonStreamClass
   // Winston formats records inside its transports, not at logger.write time, so (unlike Bunyan/Pino)
@@ -181,7 +181,7 @@ class LogSubmissionPlugin extends Plugin {
       ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
-    if (this._enabled) {
+    if (this._enabled && this.#logSubmissionUrl) {
       consoleConfigureCh.publish({ canCapture: this.#canCaptureConsole, getLogHolder: this.#getLogHolder })
     }
 

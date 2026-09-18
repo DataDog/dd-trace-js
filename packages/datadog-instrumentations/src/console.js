@@ -50,7 +50,10 @@ if (nodeConsolePrototype) {
 const nodeConsoleBoundMethods = new Map()
 try {
   for (const method of methods) {
-    nodeConsoleBoundMethods.set(method, Object.getOwnPropertyDescriptor(nodeConsole, method)?.value)
+    const fn = Object.getOwnPropertyDescriptor(nodeConsole, method)?.value
+    if (fn?.name === method && Function.prototype.toString.call(fn) === 'function () { [native code] }') {
+      nodeConsoleBoundMethods.set(method, fn)
+    }
   }
 } catch {}
 const disabledStreams = new WeakSet()
@@ -330,31 +333,52 @@ function prepareCallSites (_, callSites) {
  * @returns {CallSite[] | undefined}
  */
 function getCallSites (skipFunction) {
-  let descriptor
-  let isReplaced = false
+  let prepareStackTraceDescriptor
+  let stackTraceLimitDescriptor
+  let isPrepareStackTraceReplaced = false
+  let isStackTraceLimitReplaced = false
   try {
     // Reading error.stack normally invokes the application's formatter. Replace it only when its descriptor can be
     // restored synchronously; otherwise degrade call-site detection without executing application code.
-    descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')
-    if (descriptor && !descriptor.configurable &&
-      (!Object.hasOwn(descriptor, 'value') || !descriptor.writable)) return
+    prepareStackTraceDescriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace')
+    if (prepareStackTraceDescriptor && !prepareStackTraceDescriptor.configurable &&
+      (!Object.hasOwn(prepareStackTraceDescriptor, 'value') || !prepareStackTraceDescriptor.writable)) return
+    stackTraceLimitDescriptor = Object.getOwnPropertyDescriptor(Error, 'stackTraceLimit')
+    if (stackTraceLimitDescriptor && !stackTraceLimitDescriptor.configurable &&
+      (!Object.hasOwn(stackTraceLimitDescriptor, 'value') || !stackTraceLimitDescriptor.writable)) return
 
     Object.defineProperty(Error, 'prepareStackTrace', {
-      configurable: descriptor?.configurable ?? true,
-      enumerable: descriptor?.enumerable ?? false,
+      configurable: prepareStackTraceDescriptor?.configurable ?? true,
+      enumerable: prepareStackTraceDescriptor?.enumerable ?? false,
       value: prepareCallSites,
       writable: true,
     })
-    isReplaced = true
+    isPrepareStackTraceReplaced = true
+    Object.defineProperty(Error, 'stackTraceLimit', {
+      configurable: stackTraceLimitDescriptor?.configurable ?? true,
+      enumerable: stackTraceLimitDescriptor?.enumerable ?? false,
+      value: 10,
+      writable: true,
+    })
+    isStackTraceLimitReplaced = true
     const error = {}
     Error.captureStackTrace(error, skipFunction)
     const callSites = error.stack
     if (Array.isArray(callSites)) return callSites
   } catch {} finally {
-    if (isReplaced) {
+    if (isStackTraceLimitReplaced) {
       try {
-        if (descriptor) {
-          Object.defineProperty(Error, 'prepareStackTrace', descriptor)
+        if (stackTraceLimitDescriptor) {
+          Object.defineProperty(Error, 'stackTraceLimit', stackTraceLimitDescriptor)
+        } else {
+          delete Error.stackTraceLimit
+        }
+      } catch {}
+    }
+    if (isPrepareStackTraceReplaced) {
+      try {
+        if (prepareStackTraceDescriptor) {
+          Object.defineProperty(Error, 'prepareStackTrace', prepareStackTraceDescriptor)
         } else {
           delete Error.prepareStackTrace
         }
@@ -782,9 +806,9 @@ function wrapConsole (target, captureLogHolder, captureAllowed) {
           // A replacement console may split one record across writes. Node's Console instead
           // uses one final write, after any unrelated writes produced while formatting.
           if (capture.ownRecords.length > 0) {
-            consoleRecord = combineRecords(capture.ownRecords, isNodeConsoleTarget, !capture.nodeConsole)
+            consoleRecord = combineRecords(capture.ownRecords, capture.nodeConsole, !capture.nodeConsole)
           } else if (capture.observedRecords.length > 0) {
-            consoleRecord = combineRecords(capture.observedRecords, isNodeConsoleTarget, !capture.nodeConsole)
+            consoleRecord = combineRecords(capture.observedRecords, capture.nodeConsole, !capture.nodeConsole)
           }
           if (consoleRecord) capture.records.push(consoleRecord)
           if (!parentCapture) publishRecords(capture.records)

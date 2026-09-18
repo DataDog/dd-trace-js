@@ -286,6 +286,36 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
   })
 
+  it('excludes formatting writes when the application disables stack collection', () => {
+    const output = []
+    const stream = { write: chunk => output.push(chunk) }
+    const stackTraceLimitDescriptor = Object.getOwnPropertyDescriptor(Error, 'stackTraceLimit')
+    const target = {
+      _stderr: stream,
+      warn (...args) {
+        stream.write(format(...args))
+        stream.write('\n')
+      },
+    }
+    const value = {
+      [inspect.custom] () {
+        stream.write('unrelated output\n')
+        return 'formatted value'
+      },
+    }
+    wrapConsole(target)
+
+    try {
+      Error.stackTraceLimit = 0
+      target.warn('hello %o', value)
+    } finally {
+      Object.defineProperty(Error, 'stackTraceLimit', stackTraceLimitDescriptor)
+    }
+
+    assert.deepStrictEqual(output, ['unrelated output\n', 'hello formatted value', '\n'])
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: 'hello formatted value' }])
+  })
+
   it('excludes writes delegated through a helper while a replacement console formats arguments', () => {
     const output = []
     const stream = { write: chunk => output.push(chunk) }
@@ -859,7 +889,7 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [])
   })
 
-  it('captures a replaced method on a native Console instance', () => {
+  it('combines writes from a replaced method on a native Console instance', () => {
     const output = []
     const stream = new Writable({
       write (chunk, encoding, callback) {
@@ -869,13 +899,15 @@ describe('console instrumentation', () => {
     })
     const target = new Console({ stdout: stream, stderr: stream, colorMode: false })
     target.warn = function (message) {
-      this._stderr.write(`[custom] ${message}\n`)
+      this._stderr.write('[custom] ')
+      this._stderr.write(message)
+      this._stderr.write('\n')
     }
     wrapConsole(target)
 
     target.warn('hello')
 
-    assert.deepStrictEqual(output, ['[custom] hello\n'])
+    assert.deepStrictEqual(output, ['[custom] ', 'hello', '\n'])
     assert.deepStrictEqual(payloads, [{ method: 'warn', message: '[custom] hello' }])
   })
 
@@ -1160,6 +1192,35 @@ describe('console instrumentation', () => {
     fakeNodeConsole.warn = function warn (message) {
       this.write(`[custom] ${message}\n`)
     }.bind(stream)
+
+    wrapIsolatedConsole(fakeNodeConsole)
+    fakeNodeConsole.warn('hello')
+
+    sinon.assert.calledOnceWithExactly(stream.write, '[custom] hello\n')
+    assert.deepStrictEqual(payloads, [{ method: 'warn', message: '[custom] hello' }])
+  })
+
+  it('captures a user-bound global replacement installed before instrumentation', () => {
+    const stream = { write: sinon.stub() }
+    const writeToConsole = Symbol('kWriteToConsole')
+    class FakeConsole {}
+    FakeConsole.prototype[writeToConsole] = function (streamSymbol, message) {
+      this._stderr.write(message)
+    }
+    const fakeNodeConsole = {
+      Console: FakeConsole,
+      _stderr: stream,
+      error () {},
+      warn: function warn (message) {
+        this.write(`[custom] ${message}\n`)
+      }.bind(stream),
+      '@noCallThru': true,
+    }
+    fakeNodeConsole[writeToConsole] = FakeConsole.prototype[writeToConsole]
+    fakeNodeConsole.error = fakeNodeConsole.error.bind(fakeNodeConsole)
+    const { wrapConsole: wrapIsolatedConsole } = proxyquire('../../src/console', {
+      'node:console': fakeNodeConsole,
+    })
 
     wrapIsolatedConsole(fakeNodeConsole)
     fakeNodeConsole.warn('hello')
