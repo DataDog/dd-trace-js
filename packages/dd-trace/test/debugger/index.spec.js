@@ -121,7 +121,9 @@ describe('debugger/index', () => {
       const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
       onExit(1)
 
-      assert.strictEqual(logCollector.drain()[0].message,
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
         '[debugger] worker thread exited unexpectedly exit_code=1')
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
@@ -132,7 +134,9 @@ describe('debugger/index', () => {
         const error = Object.assign(new TypeError('customer-secret'), { code })
         onError(error)
 
-        const [entry] = logCollector.drain()
+        const entries = logCollector.drain()
+        assert.ok(entries)
+        const [entry] = entries
         assert.strictEqual(entry.message,
           `[debugger] worker thread error name=TypeError${code === undefined ? '' : ` code=${code}`}`)
         assert.ok(!entry.stack_trace.includes('customer-secret'))
@@ -146,7 +150,9 @@ describe('debugger/index', () => {
         reason: 'unexpected_pause_reason',
       }))
 
-      assert.strictEqual(logCollector.drain()[0].message,
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
         '[debugger] worker thread error name=Error reason=unexpected_pause_reason')
     })
 
@@ -163,7 +169,9 @@ describe('debugger/index', () => {
       const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
 
       assert.strictEqual(exitCode, 1)
-      assert.deepStrictEqual(logCollector.drain().map(entry => entry.message), [
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
         '[debugger] worker thread error name=TypeError code=MODULE_NOT_FOUND reason=unexpected_pause_reason',
         '[debugger] worker thread exited unexpectedly exit_code=1',
       ])
@@ -195,7 +203,9 @@ describe('debugger/index', () => {
 
       sinon.assert.calledOnceWithExactly(ack, error)
       assert.strictEqual(DynamicInstrumentation.isStarted(), true)
-      assert.strictEqual(logCollector.drain()[0].message,
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
         '[debugger] worker thread error name=Error reason=unsupported_probe_type')
     })
 
