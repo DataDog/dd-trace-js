@@ -44,13 +44,13 @@ function sanitize (logEntry) {
 
   const firstIndex = lines.findIndex(l => l.match(STACK_FRAME_LINE_REGEX))
 
-  // Filter to keep only DD frames
-  let stackLines = lines
-    .filter((line, index) => index >= firstIndex && line.includes(ddBasePath))
-    .map(line => line.replace(ddBasePath, ''))
+  let stackLines = []
 
-  if (stackLines.length === 0) {
-    for (const line of lines.slice(firstIndex)) {
+  for (let i = Math.max(firstIndex, 0); i < lines.length; i++) {
+    const line = lines[i]
+    if (line.includes(ddBasePath)) {
+      stackLines.push(line.replace(ddBasePath, ''))
+    } else {
       const match = NODE_FRAME_LINE_REGEX.exec(line)
       // Keep only the runtime location: function names and eval origins can contain customer data.
       if (match) stackLines.push(`    at ${match[1] ?? match[2]}`)

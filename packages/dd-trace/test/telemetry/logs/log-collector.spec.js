@@ -84,16 +84,9 @@ describe('telemetry log collector', () => {
       , false)
     })
 
-    it('should redact error message and include only dd frames', () => {
+    it('should redact error messages and keep Datadog frames', () => {
       const ddFrame = `at T (${ddBasePath}path/to/dd/file.js:1:2)`
-      const stack = new TypeError('Error 1')
-        .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${ddFrame}${EOL}`)
-
-      const ddFrames = stack
-        .split(EOL)
-        .filter(line => line.includes(ddBasePath))
-        .map(line => line.replace(ddBasePath, ''))
-        .join(EOL)
+      const stack = `TypeError: Error 1${EOL}${ddFrame}${EOL}    at user (/customer/app.js:1:2)`
 
       assert.strictEqual(logCollector.add({
         message: 'Error 1',
@@ -105,22 +98,15 @@ describe('telemetry log collector', () => {
       assert.strictEqual(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: `TypeError: redacted${EOL}${ddFrames}`,
+        stack_trace: `TypeError: redacted${EOL}at T (path/to/dd/file.js:1:2)`,
       }), true)
     })
 
     it('should redact error message regardless of whether first frame is DD code', () => {
-      const thirdPartyFrame = `at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)
-        at T (${ddBasePath}path/to/dd/file.js:1:2)`
-      const stack = new TypeError('Error 1')
-        .stack.replace(`Error 1${EOL}`, `Error 1${EOL}${thirdPartyFrame}${EOL}`)
-
-      const ddFrames = [
-        'TypeError: redacted',
-        ...stack
-          .split(EOL)
-          .filter(line => line.includes(ddBasePath))
-          .map(line => line.replace(ddBasePath, '')),
+      const stack = [
+        'TypeError: Error 1',
+        '    at callFn (/this/is/not/a/dd/frame/runnable.js:366:21)',
+        `    at T (${ddBasePath}path/to/dd/file.js:1:2)`,
       ].join(EOL)
 
       assert.strictEqual(logCollector.add({
@@ -133,7 +119,7 @@ describe('telemetry log collector', () => {
       assert.strictEqual(logCollector.hasEntry({
         message: 'Error 1',
         level: 'ERROR',
-        stack_trace: ddFrames,
+        stack_trace: `TypeError: redacted${EOL}    at T (path/to/dd/file.js:1:2)`,
       }), true)
     })
 
@@ -190,23 +176,67 @@ describe('telemetry log collector', () => {
       }])
     })
 
-    it('should prefer Datadog frames over runtime frames', () => {
+    it('should retain Datadog and runtime frames in their original order', () => {
       logCollector.add({
         message: 'failure',
         level: 'ERROR',
         errorType: 'TypeError',
         stack_trace: [
           'TypeError: secret',
-          '    at emit (node:events:518:28)',
+          '    at customerName (node:events:518:28)',
           `    at send (${ddBasePath}packages/dd-trace/src/debugger/devtools_client/send.js:10:2)`,
           '    at /customer/app.js:1:2',
+          '    at processTicksAndRejections (node:internal/process/task_queues:105:5)',
+          `    at start (${ddBasePath}packages/dd-trace/src/debugger/index.js:20:3)`,
+          '    at node:internal/main/worker_thread:206:26',
         ].join(EOL),
       })
 
       const entries = logCollector.drain()
       assert.ok(entries)
-      assert.strictEqual(entries[0].stack_trace,
-        'TypeError: redacted\n    at send (packages/dd-trace/src/debugger/devtools_client/send.js:10:2)')
+      assert.strictEqual(entries[0].stack_trace, [
+        'TypeError: redacted',
+        '    at node:events:518:28',
+        '    at send (packages/dd-trace/src/debugger/devtools_client/send.js:10:2)',
+        '    at node:internal/process/task_queues:105:5',
+        '    at start (packages/dd-trace/src/debugger/index.js:20:3)',
+        '    at node:internal/main/worker_thread:206:26',
+      ].join(EOL))
+    })
+
+    it('should deduplicate mixed stacks by sanitized locations', () => {
+      for (const [name, location] of [
+        ['customerOne', 'node:events:518:28'],
+        ['customerTwo', 'node:events:518:28'],
+        ['customerOne', 'node:internal/process/task_queues:105:5'],
+      ]) {
+        logCollector.add({
+          message: 'failure',
+          level: 'ERROR',
+          count: 1,
+          errorType: 'Error',
+          stack_trace: [
+            'Error: secret',
+            `    at send (${ddBasePath}send.js:1:2)`,
+            `    at ${name} (${location})`,
+          ].join(EOL),
+        })
+      }
+
+      assert.deepStrictEqual(logCollector.drain(), [
+        {
+          message: 'failure',
+          level: 'ERROR',
+          count: 2,
+          stack_trace: 'Error: redacted\n    at send (send.js:1:2)\n    at node:events:518:28',
+        },
+        {
+          message: 'failure',
+          level: 'ERROR',
+          count: 1,
+          stack_trace: 'Error: redacted\n    at send (send.js:1:2)\n    at node:internal/process/task_queues:105:5',
+        },
+      ])
     })
 
     it('should retain runtime-only generic errors without requiring an error type', () => {
@@ -242,6 +272,18 @@ describe('telemetry log collector', () => {
           stack_trace: `Error: secret\n${frame}`,
         }), false)
         assert.strictEqual(logCollector.drain(), undefined)
+
+        logCollector.add({
+          message: 'failure',
+          level: 'ERROR',
+          errorType: 'Error',
+          stack_trace: `Error: secret\n    at send (${ddBasePath}send.js:1:2)\n${frame}`,
+        })
+        assert.deepStrictEqual(logCollector.drain(), [{
+          message: 'failure',
+          level: 'ERROR',
+          stack_trace: 'Error: redacted\n    at send (send.js:1:2)',
+        }])
       })
     }
   })
