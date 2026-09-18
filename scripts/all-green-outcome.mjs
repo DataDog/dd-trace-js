@@ -1,8 +1,11 @@
 const failureConclusions = new Set(['failure', 'timed_out'])
 
-/** @param {string} conclusion */
-export function isRetryableConclusion (conclusion) {
-  return failureConclusions.has(conclusion)
+/**
+ * @param {string} conclusion
+ * @param {boolean} [retryCancelled]
+ */
+export function shouldRetryConclusion (conclusion, retryCancelled = false) {
+  return failureConclusions.has(conclusion) || (retryCancelled && conclusion === 'cancelled')
 }
 
 /** @param {number|string} [exitCode] */

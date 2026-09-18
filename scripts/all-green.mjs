@@ -5,7 +5,7 @@ import { context } from '@actions/github'
 import {
   canPropagateCancellation,
   getAllGreenOutcome,
-  isRetryableConclusion,
+  shouldRetryConclusion,
 } from './all-green-outcome.mjs'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads, hasUploadFailed } from './run-upload.mjs'
@@ -147,7 +147,7 @@ async function processRun (run) {
 
 /**
  * Kick off processing for any run that just reached a final state and hasn't been processed yet.
- * A run is final once it's completed and either isn't retryable or already went through a retry
+ * A run is final once it's completed and either isn't retried or already went through a retry
  * attempt.
  *
  * @param {Array<{ id: number, name: string, status: string, conclusion: string }>} runs
@@ -157,7 +157,7 @@ function scheduleProcessing (runs) {
 
   const settled = runs.filter(r =>
     r.status === 'completed' &&
-    (!isRetryableConclusion(r.conclusion) || retriedRunIds.has(r.id)) &&
+    (!shouldRetryConclusion(r.conclusion) || retriedRunIds.has(r.id)) &&
     !dispatchedRunIds.has(r.id)
   )
 
@@ -195,7 +195,7 @@ async function pollUntilDone () {
 
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
-    isRetryableConclusion(r.conclusion) &&
+    shouldRetryConclusion(r.conclusion) &&
     !retriedRunIds.has(r.id)
   )
 
@@ -248,7 +248,7 @@ async function rerunOnStartup () {
   const runs = await getRuns()
   const toRerun = runs.filter(r =>
     r.status === 'completed' &&
-    isRetryableConclusion(r.conclusion)
+    shouldRetryConclusion(r.conclusion, true)
   )
   if (toRerun.length > 0) {
     console.log(`Rerunning ${toRerun.length} failed workflow(s) before polling.`)

@@ -5,7 +5,7 @@ import { describe, it } from 'mocha'
 import {
   canPropagateCancellation,
   getAllGreenOutcome,
-  isRetryableConclusion,
+  shouldRetryConclusion,
 } from './all-green-outcome.mjs'
 
 describe('All Green outcome', () => {
@@ -42,10 +42,14 @@ describe('All Green outcome', () => {
     assert.strictEqual(getAllGreenOutcome(runs, new Set([1])), 'success')
   })
 
-  it('retries failures and timeouts but not cancellations', () => {
-    assert.strictEqual(isRetryableConclusion('failure'), true)
-    assert.strictEqual(isRetryableConclusion('timed_out'), true)
-    assert.strictEqual(isRetryableConclusion('cancelled'), false)
+  it('does not retry cancellations during normal polling', () => {
+    assert.strictEqual(shouldRetryConclusion('failure'), true)
+    assert.strictEqual(shouldRetryConclusion('timed_out'), true)
+    assert.strictEqual(shouldRetryConclusion('cancelled'), false)
+  })
+
+  it('retries cancellations when All Green itself is rerun', () => {
+    assert.strictEqual(shouldRetryConclusion('cancelled', true), true)
   })
 
   it('propagates cancellation only when no other failure set the exit code', () => {
