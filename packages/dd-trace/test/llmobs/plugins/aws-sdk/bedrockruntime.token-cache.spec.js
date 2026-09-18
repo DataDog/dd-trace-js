@@ -191,7 +191,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.usage.total_tokens': 11,
         'gen_ai.usage.cache_read_input_tokens': 2,
         'gen_ai.usage.cache_write_input_tokens': 1,
-        '_dd.llmobs.artificial_gen_ai_tags': 'True',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
       })
       sinon.assert.notCalled(tagMetricsSpy)
     })
@@ -217,7 +217,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.usage.total_tokens': 13,
         'gen_ai.usage.cache_read_input_tokens': 1,
         'gen_ai.usage.cache_write_input_tokens': 3,
-        '_dd.llmobs.artificial_gen_ai_tags': 'True',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
       })
     })
 
@@ -250,7 +250,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
         'gen_ai.application.name': 'test',
-        '_dd.llmobs.artificial_gen_ai_tags': 'True',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
       })
     })
 
@@ -266,7 +266,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
         'gen_ai.application.name': 'test',
-        '_dd.llmobs.artificial_gen_ai_tags': 'True',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
       })
     })
 

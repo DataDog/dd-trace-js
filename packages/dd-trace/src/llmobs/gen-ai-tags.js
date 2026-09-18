@@ -77,9 +77,9 @@ function updateGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, 
   if (sessionId) spanContext.setTag(GEN_AI_CONVERSATION_ID, sessionId)
   if (metrics) setGenAiApmUsageMetrics(span, spanKind, metrics)
 
-  // 'True' is what dd-trace-py writes, and the backend compares against it verbatim
+  // matches the value dd-trace-py writes
   if (spanKind || modelName || modelProvider || mlApp || sessionId) {
-    spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'True')
+    spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'true')
   }
 }
 
@@ -102,7 +102,7 @@ function setGenAiApmUsageMetrics (span, spanKind, metrics) {
     const genAiKey = GEN_AI_USAGE_METRIC_KEYS[METRIC_KEY_ALIASES[key] ?? key]
     if (genAiKey) {
       spanContext.setTag(genAiKey, value)
-      spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'True')
+      spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'true')
     }
   }
 }

@@ -61,7 +61,7 @@ describe('LLMObs plugin with LLM Observability disabled', () => {
       'gen_ai.provider.name': 'openai',
       'gen_ai.application.name': 'test-service',
       'gen_ai.conversation.id': 'sess-1',
-      '_dd.llmobs.artificial_gen_ai_tags': 'True',
+      '_dd.llmobs.artificial_gen_ai_tags': 'true',
     })
   })
 
