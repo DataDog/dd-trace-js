@@ -6,7 +6,7 @@ const log = require('../log')
 const request = require('../exporters/common/request')
 const { encode: encodeMsgpack, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 
-function makeRequest (data, url, cb) {
+function makeRequest (data, url, resetController, cb) {
   const options = {
     path: '/v0.1/pipeline_stats',
     method: 'POST',
@@ -18,6 +18,7 @@ function makeRequest (data, url, cb) {
     },
     url,
   }
+  if (resetController) options.resetController = resetController
 
   log.debug('Request to the intake: %j', options)
 
@@ -29,6 +30,8 @@ function makeRequest (data, url, cb) {
 class DataStreamsWriter {
   constructor (config) {
     this._url = config.url
+    // The common request controller is shared with other direct MicroVM requests.
+    this._resetController = request.getIdentityRefreshController?.()
   }
 
   flush (payload) {
@@ -50,14 +53,18 @@ class DataStreamsWriter {
       return
     }
 
+    // A pending gzip callback may finish after a MicroVM clone starts; discard that payload before
+    // sending it because it belongs to the previous runtime ID. No controller exists otherwise.
+    const identityRefreshGeneration = this._resetController?.generation
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {
         log.error('Error zipping datastream', err)
         return
       }
-      makeRequest(compressedData, this._url, (err, res) => {
+      if (this._resetController && identityRefreshGeneration !== this._resetController.generation) return
+      makeRequest(compressedData, this._url, this._resetController, (err, res) => {
         log.debug('Response from the agent:', res)
-        if (err) {
+        if (err && err.code !== 'ERR_DD_IDENTITY_REFRESH') {
           log.error('Error sending datastream', err)
         }
       })

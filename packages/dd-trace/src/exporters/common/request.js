@@ -170,6 +170,7 @@ function request (data, options, callback) {
     }
   }
   const connectionOptions = { ...options, agent }
+
   delete connectionOptions.resetController
 
   /**
@@ -295,6 +296,7 @@ function request (data, options, callback) {
         if (settled) return
         clearImmediate(timeoutImmediate)
 
+
         if (resetController && capturedRequestGeneration !== resetController.generation) {
           complete(createIdentityRefreshError())
           return
@@ -308,6 +310,7 @@ function request (data, options, callback) {
           // Unref so a pending retry never keeps the host process alive past
           // its natural exit point; long-running apps still retry because the
           // event loop is held open by their own work.
+
           const retry = {
             cancel () {
               clearTimeout(timer)

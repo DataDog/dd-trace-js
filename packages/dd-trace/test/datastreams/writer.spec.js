@@ -12,6 +12,7 @@ const pkg = require('../../../../package.json')
 const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 const stubRequest = sinon.stub()
+stubRequest.getIdentityRefreshController = sinon.stub().returns(undefined)
 
 const stubZlib = {
   gzip: (payload, _opts, fn) => {
@@ -41,10 +42,11 @@ describe('DataStreamWriter unix', () => {
   it("should call 'request' through flush with correct options", () => {
     writer = new DataStreamsWriter(unixConfig)
     writer.flush({})
-    const stubRequestCall = stubRequest.getCalls()[0]
-    const decodedPayload = msgpack.decode(stubRequestCall?.args[0])
-    const requestOptions = stubRequestCall?.args[1]
+    const [payload, options] = stubRequest.firstCall.args
+    const decodedPayload = msgpack.decode(payload)
+    const { resetController, ...requestOptions } = options
     assert.deepStrictEqual(decodedPayload, {})
+    assert.strictEqual(resetController, undefined)
     assert.deepStrictEqual(requestOptions, {
       path: '/v0.1/pipeline_stats',
       method: 'POST',
@@ -56,6 +58,52 @@ describe('DataStreamWriter unix', () => {
       },
       url: unixConfig.url,
     })
+  })
+
+  it('passes the shared reset controller to requests', () => {
+    const localRequest = sinon.stub()
+    localRequest.writable = true
+    const resetController = { reset: sinon.stub() }
+    localRequest.getIdentityRefreshController = sinon.stub().returns(resetController)
+    const { DataStreamsWriter: ResettableWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': localRequest,
+        zlib: stubZlib,
+      })
+    const resettable = new ResettableWriter(unixConfig)
+
+    resettable.flush({})
+    assert.strictEqual(localRequest.firstCall.args[1].resetController, resetController)
+  })
+
+  it('drops compressed payloads created before a controller reset', () => {
+    let gzipCallback
+    const localRequest = sinon.stub()
+    localRequest.writable = true
+    const resetController = {
+      generation: 0,
+      reset () {
+        this.generation++
+      },
+    }
+    const delayedZlib = {
+      gzip: (payload, _opts, callback) => {
+        gzipCallback = callback
+      },
+    }
+    localRequest.getIdentityRefreshController = sinon.stub().returns(resetController)
+    const { DataStreamsWriter: ResettableWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': localRequest,
+        zlib: delayedZlib,
+      })
+    const resettable = new ResettableWriter(unixConfig)
+
+    resettable.flush({ Stats: [] })
+    resetController.reset()
+    gzipCallback(undefined, Buffer.from('compressed'))
+
+    sinon.assert.notCalled(localRequest)
   })
 
   it('drops the payload and logs when msgpack encoding hits the chunk cap', () => {

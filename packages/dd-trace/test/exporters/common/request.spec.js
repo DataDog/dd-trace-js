@@ -254,6 +254,208 @@ describe('request', function () {
     await assert.rejects(completed, { code: 'ABORT_ERR' })
   })
 
+  it('cancels active requests on identity refresh when a controller is provided', () => {
+    const pending = new EventEmitter()
+    pending.abort = sinon.spy()
+    pending.setTimeout = sinon.stub()
+    pending.write = sinon.stub()
+    pending.end = sinon.stub()
+    const resettableRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: { ...http, request: () => pending },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = resettableRequest.createResetController()
+    const callback = sinon.spy()
+
+    resettableRequest(Buffer.from('payload'), {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'POST',
+      resetController,
+    }, callback)
+
+    resetController.reset()
+
+    sinon.assert.calledOnce(pending.abort)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].code, 'ERR_DD_IDENTITY_REFRESH')
+  })
+  it('keeps requests created by an active cancellation callback in the new generation', () => {
+    const requests = []
+    const resettableRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: {
+        ...http,
+        request: () => {
+          const pending = new EventEmitter()
+          pending.abort = sinon.spy()
+          pending.setTimeout = sinon.stub()
+          pending.write = sinon.stub()
+          pending.end = sinon.stub()
+          requests.push(pending)
+          return pending
+        },
+      },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = resettableRequest.createResetController()
+    let callbackStartedNewRequest = false
+    const callback = sinon.spy(() => {
+      if (callbackStartedNewRequest) return
+      callbackStartedNewRequest = true
+      resettableRequest(Buffer.from('new payload'), {
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'POST',
+        resetController,
+      }, sinon.spy())
+    })
+
+    resettableRequest(Buffer.from('payload'), {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'POST',
+      resetController,
+    }, callback)
+
+    resetController.reset()
+
+    assert.strictEqual(requests.length, 2)
+    sinon.assert.calledOnce(requests[0].abort)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(resetController.activeRequests.size, 1)
+  })
+
+  it('keeps requests created by a retry cancellation callback in the new generation', () => {
+    const requests = []
+    const retryError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+    const delay = sinon.stub().returns(1000)
+    const resettableRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: {
+        ...http,
+        request: () => {
+          const shouldFail = requests.length === 0
+          const pending = new EventEmitter()
+          pending.setTimeout = sinon.stub()
+          pending.write = sinon.stub()
+          pending.end = () => {
+            if (shouldFail) pending.emit('error', retryError)
+          }
+          requests.push(pending)
+          return pending
+        },
+      },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+        getRetryDelay: delay,
+      },
+    })
+    const resetController = resettableRequest.createResetController()
+    let callbackStartedNewRequest = false
+    const callback = sinon.spy(() => {
+      if (callbackStartedNewRequest) return
+      callbackStartedNewRequest = true
+      resettableRequest(Buffer.from('new payload'), {
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'POST',
+        resetController,
+      }, sinon.spy())
+    })
+
+    resettableRequest(Buffer.from('payload'), {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'POST',
+      resetController,
+    }, callback)
+
+    resetController.reset()
+
+    assert.strictEqual(requests.length, 2)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(resetController.pendingRetryTimers.size, 0)
+    assert.strictEqual(resetController.activeRequests.size, 1)
+  })
+
+
+  it('cancels scheduled retries on identity refresh when a controller is provided', () => {
+    const requests = []
+    const retryError = Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })
+    const delay = sinon.stub().returns(1000)
+    const resettableRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: {
+        ...http,
+        request: () => {
+          const pending = new EventEmitter()
+          pending.setTimeout = sinon.stub()
+          pending.write = sinon.stub()
+          pending.end = () => pending.emit('error', retryError)
+          requests.push(pending)
+          return pending
+        },
+      },
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+        getRetryDelay: delay,
+      },
+    })
+    const resetController = resettableRequest.createResetController()
+    const callback = sinon.spy()
+
+    resettableRequest(Buffer.from('payload'), {
+      protocol: 'http:',
+      hostname: 'test',
+      port: 123,
+      path: '/path',
+      method: 'POST',
+      resetController,
+    }, callback)
+
+    resetController.reset()
+
+    assert.strictEqual(requests.length, 1)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].code, 'ERR_DD_IDENTITY_REFRESH')
+  })
+
   it('settles once when a response is truncated', async () => {
     /**
      * @param {import('node:http').IncomingMessage} incoming
