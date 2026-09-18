@@ -4,6 +4,8 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
+const { BaseEvaluator, EvaluatorResult, LengthEvaluator, StringCheckEvaluator } =
+  require('../../../src/llmobs/evaluators')
 const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
@@ -793,6 +795,70 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(summaryEvaluatorResults.exactMatch, [true, null, null])
     assert.equal(result.summaryEvaluations.passRate.value, 1 / 3)
     assert.equal(result.runs[0].hasError, true)
+  })
+
+  it('runs object evaluators alongside callbacks and copies EvaluatorResult annotations onto metrics', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('hello', 'hello', { topic: 't' })
+
+    class Annotated extends BaseEvaluator {
+      constructor () {
+        super('annotated')
+      }
+
+      evaluate (context) {
+        return new EvaluatorResult(0.5, {
+          reasoning: `saw ${context.inputData}/${context.outputData}/${context.expectedOutput}`,
+          assessment: 'pass',
+          metadata: { topic: context.metadata.topic },
+          tags: { source: 'object' },
+        })
+      }
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+      evaluators: [
+        new LengthEvaluator({ minLength: 1 }),
+        new StringCheckEvaluator(),
+        new Annotated(),
+        function plain (input, output) { return output === input },
+      ],
+    }).run()
+
+    const row = result.rows[0]
+    assert.deepEqual(row.evaluations, {
+      LengthEvaluator: true, StringCheckEvaluator: true, annotated: 0.5, plain: true,
+    })
+    assert.deepEqual(row.evaluationErrors, {})
+
+    const metrics = requests
+      .filter(request => request.method === 'postExperimentEvents')
+      .flatMap(request => request.attributes.metrics)
+    const byLabel = Object.fromEntries(metrics.map(metric => [metric.label, metric]))
+    assert.equal(byLabel.LengthEvaluator.metric_type, 'boolean')
+    assert.equal(byLabel.LengthEvaluator.boolean_value, true)
+    assert.equal(byLabel.LengthEvaluator.assessment, 'pass')
+    assert.equal(byLabel.annotated.metric_type, 'score')
+    assert.equal(byLabel.annotated.score_value, 0.5)
+    assert.equal(byLabel.annotated.reasoning, 'saw hello/hello/hello')
+    assert.equal(byLabel.annotated.assessment, 'pass')
+    assert.deepEqual(byLabel.annotated.metadata, { topic: 't' })
+    assert.ok(byLabel.annotated.tags.includes('source:object'))
+    assert.equal(byLabel.plain.reasoning, undefined)
+    assert.equal(byLabel.plain.boolean_value, true)
+  })
+
+  it('rejects evaluators that are neither functions nor evaluate() objects', () => {
+    const { client: c } = clientWithMockBackend()
+    assert.throws(() => new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo'),
+      task: input => input,
+      evaluators: { bad: 42 },
+    }), { name: 'TypeError', message: "row evaluator 'bad' must be a function or an object with an evaluate method" })
   })
 
   it('marks an empty summary evaluator error as a run error', async () => {

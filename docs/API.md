@@ -37,6 +37,81 @@ const tracer = require('dd-trace').init({
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
 
+<h3 id="llmobs-evaluators">Built-in evaluators</h3>
+
+`tracer.llmobs.evaluators` exposes evaluator classes mirroring dd-trace-py's `ddtrace.llmobs.evaluators`. Evaluator objects expose `evaluate(context)` and can be mixed with callback evaluators in `experiments.experiment({ evaluators })`. Their metric label defaults to the class name (override with `name`). Each returns an `EvaluatorResult` whose `value`, `reasoning`, `assessment`, `metadata` and `tags` are forwarded to the experiment metric; callback evaluators may also return an `EvaluatorResult`.
+
+| Evaluator | Value | Notes |
+| --- | --- | --- |
+| `LengthEvaluator({ minLength, maxLength, countType })` | boolean | Inclusive bounds over `characters` (default), `words` or `lines`. |
+| `JSONEvaluator({ requiredKeys })` | boolean | Output must parse as a JSON object containing every required key. |
+| `StringCheckEvaluator({ operation, caseSensitive, stripWhitespace })` | boolean | `eq`, `ne`, `contains`, `icontains` against the expected output. |
+| `RegexMatchEvaluator({ pattern, matchMode, flags })` | boolean | `search` (default), `match` (anchored start) or `fullmatch`. |
+| `SemanticSimilarityEvaluator({ embeddingFn, threshold })` | score in `[0, 1]` | Cosine similarity normalized to `[0, 1]`; `embeddingFn(text)` may return a promise. |
+| `LLMJudge({ userPrompt, modelCall, model, provider, structuredOutput })` | boolean / score / categorical / raw | Provider agnostic: `modelCall({ provider, model, messages, jsonSchema, modelParams })` performs the request. |
+
+`LLMJudge` structured outputs are `BooleanStructuredOutput`, `ScoreStructuredOutput` and `CategoricalStructuredOutput` (or a raw JSON schema). `{{input_data}}`, `{{output_data}}`, `{{expected_output}}` and `{{metadata.key}}` placeholders in the prompts are rendered from the evaluator context.
+
+```javascript
+const { LLMJudge, BooleanStructuredOutput, LengthEvaluator } = tracer.llmobs.evaluators
+
+const judge = new LLMJudge({
+  name: 'correctness',
+  provider: 'openai',
+  model: 'gpt-4o',
+  userPrompt: 'Question: {{input_data}}\nAnswer: {{output_data}}\nExpected: {{expected_output}}',
+  structuredOutput: new BooleanStructuredOutput({ description: 'The answer is correct', reasoning: true }),
+  modelCall: async ({ messages, jsonSchema, model }) => {
+    const completion = await openai.chat.completions.create({
+      model,
+      messages,
+      response_format: { type: 'json_schema', json_schema: { name: 'eval', schema: jsonSchema } }
+    })
+    return completion.choices[0].message.content
+  }
+})
+
+await tracer.llmobs.experiments.experiment({
+  name: 'qa',
+  dataset,
+  task: ({ input }) => answer(input),
+  evaluators: [judge, new LengthEvaluator({ maxLength: 200, countType: 'words' })]
+}).run()
+```
+
+<h3 id="llmobs-experiments-control-plane">Publishing evaluators, pulling and listing experiments, CSV datasets</h3>
+
+- `experiments.publishEvaluator(llmJudge, { agentService, evalName, variableMapping })` registers an `LLMJudge` (with a `provider`) as a custom evaluator that runs on production traces for the given application (defaults to the configured `mlApp`). Returns `{ uiUrl }`.
+- `experiments.pullExperiment(experimentId)` fetches an experiment's metadata and its rows/evaluations (`result.rows[i].evaluations`, `evaluationErrors`, `evaluationDetails`).
+- `experiments.listExperiments({ experimentName, metadataFilter, parentExperimentIds, projectName, pageLimit, maxResults })` lists experiments in a project, following pagination until `maxResults`.
+- `experiments.createDatasetFromCsv({ csvPath, datasetName, inputDataColumns, expectedOutputColumns, metadataColumns, csvDelimiter, description, projectName, deduplicate, idColumn })` parses a CSV file and bulk-uploads it as a new dataset.
+
+<h3 id="llmobs-experiments-parity">Python (dd-trace-py) parity</h3>
+
+| Python | Node | Status |
+| --- | --- | --- |
+| `LLMObs.create_dataset(name, description, records, project_name)` | `experiments.createDataset(name, { description, records, projectName })` | matched |
+| `LLMObs.pull_dataset(name, version, project_name)` | `experiments.pullDataset(name, { version, projectName })` | matched |
+| `LLMObs.create_dataset_from_csv(...)` | `experiments.createDatasetFromCsv({ ... })` | matched (object options, camelCase) |
+| `LLMObs.experiment(name, task, dataset, evaluators, ...)` | `experiments.experiment({ name, task, dataset, evaluators, ... })` | matched |
+| `LLMObs.async_experiment(...)` | `experiments.experiment(...)` (tasks/evaluators may be async) | matched (single API) |
+| `LLMObs.pull_experiment(experiment_id)` | `experiments.pullExperiment(experimentId)` | divergent: returns a plain summary + `result`; Python returns a `SyncExperiment` supporting `rerun_evaluators()` |
+| `LLMObs.list_experiments(...)` | `experiments.listExperiments({ ... })` | matched |
+| `LLMObs.publish_evaluator(evaluator, agent_service, eval_name, variable_mapping)` | `experiments.publishEvaluator(evaluator, { agentService, evalName, variableMapping })` | matched |
+| `LLMObs._delete_dataset(dataset_id)` | — | not implemented (private in Python) |
+| `Dataset.push()` / `append` / `extend` / `update` / `delete` / `url` / `version` / `latest_version` | `Dataset.push()` / `addRecord` / `addRecords` / `update` / `delete` / `url()` / `version()` / `latestVersion()` | matched |
+| `Dataset.add_tags` / `remove_tags` / `replace_tags` | `Dataset.addTags` / `removeTags` / `replaceTags` | matched |
+| `Dataset.as_dataframe()` | — | not implemented (pandas-specific) |
+| `Experiment.run(jobs, raise_errors, max_retries, retry_delay, ...)` / `url` / `name` | `Experiment.run({ concurrency, throwOnErrors, maxRetries, retryDelay })` / `url()` / `name()` | matched (`sample_size` not implemented) |
+| `SyncExperiment.rerun_evaluators(...)` | — | not implemented (requires task-less experiment re-evaluation; open question) |
+| `ExperimentResult.as_dataframe()` | — | not implemented (pandas-specific) |
+| `EvaluatorContext` / `SummaryEvaluatorContext` / `EvaluatorResult` | same names, camelCase fields | matched |
+| `MultiEvaluatorResult` | — | not implemented (multi-valued evaluators; open question) |
+| `RemoteEvaluator` | — | not implemented (Datadog-hosted evaluators; open question) |
+| `LengthEvaluator`, `JSONEvaluator`, `StringCheckEvaluator`, `RegexMatchEvaluator`, `SemanticSimilarityEvaluator` | same | matched (camelCase options) |
+| `LLMJudge` + `Boolean/Score/CategoricalStructuredOutput` | same | divergent: `modelCall(request)` single-object callback instead of Python's `LLMClient` protocol / provider SDK clients |
+| `EvaluatorRunner`, `EvaluatorRunnerSampler` | — | not implemented (internal periodic service for `_DD_LLMOBS_EVALUATORS`, not part of the public experiments flow) |
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
