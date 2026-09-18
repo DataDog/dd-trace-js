@@ -52,6 +52,7 @@ function sanitize (logEntry) {
       stackLines.push(line.replace(ddBasePath, ''))
     } else {
       const match = NODE_FRAME_LINE_REGEX.exec(line)
+      // match[1] is the location in `at node:...`; match[2] is the location in `at fn (node:...)`.
       // Keep only the runtime location: function names and eval origins can contain customer data.
       if (match) stackLines.push(`    at ${match[1] ?? match[2]}`)
     }
