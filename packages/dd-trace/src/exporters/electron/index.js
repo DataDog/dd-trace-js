@@ -6,8 +6,6 @@ const { truncateSpan, normalizeSpan } = require('../../encode/tags-processors')
 const traceChannel = channel('datadog:apm:electron:export')
 
 class ElectronExporter {
-  static supportsMetaStruct = true
-
   #timer
   #traces = []
 

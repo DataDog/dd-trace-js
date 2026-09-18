@@ -26,8 +26,6 @@ const OtlpTraceTransformer = require('./otlp_transformer')
  * @augments OtlpHttpExporterBase
  */
 class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
-  static supportsMetaStruct = true
-
   #transformer
 
   /**

@@ -8,7 +8,7 @@ const TRACE_FORMAT_OVERHEAD = TRACE_PREFIX.length + TRACE_SUFFIX.length
 const MAX_SIZE = 64 * 1024 // 64kb
 
 class LogExporter {
-  static supportsMetaStruct = false
+  supportsMetaStruct = false
 
   export (spans) {
     log.debug('Adding trace to queue: %j', spans)
