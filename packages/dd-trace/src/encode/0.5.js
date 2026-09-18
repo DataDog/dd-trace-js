@@ -173,7 +173,6 @@ class AgentEncoder extends BaseEncoder {
    * @param {Uint8Array} target
    * @param {number} offset
    * @param {number} index
-   * @returns {number}
    */
   #writeIndexAt (target, offset, index) {
     target[offset] = 0xCE
@@ -192,7 +191,6 @@ class AgentEncoder extends BaseEncoder {
    * @param {Uint8Array} target
    * @param {number} offset
    * @param {{ toBuffer: () => Uint8Array | number[] }} identifier
-   * @returns {number}
    */
   #writeIdAt (target, offset, identifier) {
     target[offset] = 0xCF

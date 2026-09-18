@@ -32,6 +32,8 @@ module.exports = class FakeAgent extends EventEmitter {
   port = 0
   advertiseDebuggerV2IntakeSupport = true
   debuggerV2IntakeStatusCode = 202
+  // When set, debugger input requests are received but never answered, simulating a stalled intake
+  stallDebuggerIntake = false
   evpProxyVersions = [2]
   /** @type {Set<import('net').Socket>} */
   #sockets = new Set()
@@ -51,6 +53,9 @@ module.exports = class FakeAgent extends EventEmitter {
     }
     if (options.debuggerV2IntakeStatusCode !== undefined) {
       this.debuggerV2IntakeStatusCode = options.debuggerV2IntakeStatusCode
+    }
+    if (options.stallDebuggerIntake !== undefined) {
+      this.stallDebuggerIntake = options.stallDebuggerIntake
     }
     if (options.evpProxyVersions !== undefined) {
       this.evpProxyVersions = [...options.evpProxyVersions]
@@ -495,6 +500,10 @@ function buildExpressServer (agent) {
   })
 
   app.post('/debugger/v2/input', (req, res) => {
+    if (agent.stallDebuggerIntake) {
+      agent.emit('debugger-input-stalled', { headers: req.headers, query: req.query, payload: req.body })
+      return
+    }
     res.status(agent.debuggerV2IntakeStatusCode).send()
     if (agent.debuggerV2IntakeStatusCode === 404) {
       agent.emit('debugger-input-v2-404')

@@ -30,7 +30,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   configure (config) {
     super.configure(config)
 
-    let rowsToTaint = this.iastConfig?.dbRowsToTaint
+    let rowsToTaint = this.iastConfig?.DD_IAST_DB_ROWS_TO_TAINT
     if (typeof rowsToTaint !== 'number') {
       rowsToTaint = 1
     }

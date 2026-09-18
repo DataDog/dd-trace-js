@@ -26,7 +26,6 @@ const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
 /**
  * @param {number} durationMs
  * @param {EfdRetryPolicy} retryPolicy
- * @returns {number}
  */
 function getEfdRetryCountForDuration (durationMs, retryPolicy) {
   for (const { durationLimitMs, retryCount } of retryPolicy.durationRetryCounts) {
@@ -62,7 +61,6 @@ function createEfdRetryPolicy (retriesByDuration = {}) {
 
 /**
  * @param {EfdRetryPolicy | undefined} retryPolicy
- * @returns {boolean}
  */
 function hasEfdRetries (retryPolicy) {
   return (retryPolicy?.schedulingRetryCount ?? 0) > 0
@@ -71,7 +69,6 @@ function hasEfdRetries (retryPolicy) {
 /**
  * @param {number} retryIndex
  * @param {number | undefined} retryCount
- * @returns {boolean}
  */
 function shouldSkipEfdRetry (retryIndex, retryCount) {
   return retryCount !== undefined && retryIndex > retryCount
