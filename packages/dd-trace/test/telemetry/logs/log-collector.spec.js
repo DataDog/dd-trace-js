@@ -161,6 +161,85 @@ describe('telemetry log collector', () => {
         stack_trace: `Error: redacted${EOL}${ddFrames}`,
       }), true)
     })
+
+    it('should retain runtime locations when no Datadog frames survive', () => {
+      logCollector.add({
+        message: '[debugger] worker thread error',
+        level: 'ERROR',
+        errorType: 'Error',
+        stack_trace: [
+          'Error: Cannot find module /customer/secret.js',
+          'Require stack:',
+          '- /customer/app.js',
+          '    at Function._resolveFilename (node:internal/modules/cjs/loader:1365:15)',
+          '    at customerFunction (/customer/app.js:10:2)',
+          '    at customerName (node:events:518:28)',
+          '    at node:internal/main/worker_thread:206:26',
+        ].join(EOL),
+      })
+
+      assert.deepStrictEqual(logCollector.drain(), [{
+        message: '[debugger] worker thread error',
+        level: 'ERROR',
+        stack_trace: [
+          'Error: redacted',
+          '    at node:internal/modules/cjs/loader:1365:15',
+          '    at node:events:518:28',
+          '    at node:internal/main/worker_thread:206:26',
+        ].join(EOL),
+      }])
+    })
+
+    it('should prefer Datadog frames over runtime frames', () => {
+      logCollector.add({
+        message: 'failure',
+        level: 'ERROR',
+        errorType: 'TypeError',
+        stack_trace: [
+          'TypeError: secret',
+          '    at emit (node:events:518:28)',
+          `    at send (${ddBasePath}packages/dd-trace/src/debugger/devtools_client/send.js:10:2)`,
+          '    at /customer/app.js:1:2',
+        ].join(EOL),
+      })
+
+      assert.strictEqual(logCollector.drain()[0].stack_trace,
+        'TypeError: redacted\n    at send (packages/dd-trace/src/debugger/devtools_client/send.js:10:2)')
+    })
+
+    it('should retain runtime-only generic errors without requiring an error type', () => {
+      assert.strictEqual(logCollector.add({
+        message: 'Generic Error',
+        level: 'ERROR',
+        stack_trace: 'Error: secret\n    at node:internal/main/worker_thread:206:26',
+      }), true)
+
+      assert.strictEqual(logCollector.drain()[0].stack_trace, '    at node:internal/main/worker_thread:206:26')
+    })
+
+    for (const frame of [
+      '    at /customer/node:events:518:28',
+      '    at node:events (/customer/app.js:518:28)',
+      '    at file:///customer/node:internal/main/worker_thread:206:26',
+      '    at eval (eval at run (/customer/app.js:1:2), node:events:518:28)',
+      '    at node:internal/main/worker_thread:206:26 /customer/secret',
+      '    at node:internal/main/worker_thread:206',
+      '    at run (node:internal/main/worker_thread:206:26',
+      '    at node:internal/main/worker_thread:206:26)',
+      'node:internal/main/worker_thread:206:26',
+      'Error: node:internal/main/worker_thread:206:26',
+      '',
+    ]) {
+      it(`should reject non-runtime locations and malformed frames: ${JSON.stringify(frame)}`, () => {
+        assert.strictEqual(logCollector.add({
+          message: 'Generic Error',
+          level: 'ERROR',
+          errorType: 'Error',
+          stack_trace: `Error: secret\n${frame}`,
+        }), false)
+        assert.strictEqual(logCollector.drain(), undefined)
+      })
+    }
   })
 
   describe('drain', () => {
