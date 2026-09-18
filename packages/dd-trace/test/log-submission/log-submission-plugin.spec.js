@@ -33,6 +33,8 @@ const tracer = {
 }
 const pluginConfig = {
   enabled: true,
+  isCiVisibility: true,
+  DD_AGENTLESS_LOG_SUBMISSION_ENABLED: true,
   DD_AGENTLESS_LOG_SUBMISSION_URL: 'http://127.0.0.1:8126',
   DD_API_KEY: 'secret',
   service: 'my service',
@@ -179,7 +181,36 @@ describe('LogSubmissionPlugin', () => {
 
     legacyStorage.run({ span: createSpan('web') }, () => assert.strictEqual(getLogHolder(), undefined))
     assert.strictEqual(getLogHolder(), undefined)
+
+    for (const config of [
+      { isCiVisibility: false },
+      { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: false },
+    ]) {
+      plugin.configure({ ...pluginConfig, ...config })
+      legacyStorage.run({ span: testSpan }, () => assert.strictEqual(getLogHolder(), undefined))
+    }
   })
+
+  for (const { description, config } of [
+    { description: 'outside Test Optimization', config: { isCiVisibility: false } },
+    {
+      description: 'without agentless log submission',
+      config: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: false },
+    },
+  ]) {
+    it(`does not activate console instrumentation ${description}`, () => {
+      const subscriber = sinon.stub()
+      consoleConfigureCh.subscribe(subscriber)
+      try {
+        plugin.configure(false)
+        plugin.configure({ ...pluginConfig, ...config })
+      } finally {
+        consoleConfigureCh.unsubscribe(subscriber)
+      }
+
+      sinon.assert.notCalled(subscriber)
+    })
+  }
 
   it('flushes pending Bunyan logs before exit', () => {
     publishLog('{"msg":"hello"}')

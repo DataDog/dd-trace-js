@@ -58,6 +58,8 @@ function wrapConsole (target, getLogHolder) {
  * @param {(() => { dd: object } | undefined) | undefined} [getLogHolder]
  */
 function wrapJestConsole (jestConsole, getLogHolder) {
+  if (!getLogHolder && !configuredGetLogHolder) return
+
   const { BufferedConsole, CustomConsole } = jestConsole
 
   if (BufferedConsole && !wrappedTargets.has(BufferedConsole)) {

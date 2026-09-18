@@ -84,6 +84,21 @@ describe('console instrumentation', () => {
     ])
   })
 
+  it('does not wrap Jest console adapters before console submission is configured', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+      }
+    }
+    const originalWrite = BufferedConsole.write
+
+    wrapJestConsole({ BufferedConsole })
+    BufferedConsole.write([], 'warn', 'warning')
+
+    assert.strictEqual(BufferedConsole.write, originalWrite)
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('wraps the active Vitest console after it replaces the global console', () => {
     const originalConsole = globalThis.console
     const initialConsole = { error: sinon.stub(), warn: sinon.stub() }

@@ -113,7 +113,10 @@ class LogSubmissionPlugin extends Plugin {
   #beforeExitHandler = () => this.#flushLogs()
   #createWinstonJsonFormat
   #getConsoleLogHolder = () => {
-    if (!this._enabled || !this.#logSubmissionUrl) return
+    if (!this._enabled ||
+        !this.#logSubmissionUrl ||
+        !this.#config?.isCiVisibility ||
+        !this.#config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) return
 
     const store = legacyStorage.getStore()
     if (store?.noop) return
@@ -219,7 +222,10 @@ class LogSubmissionPlugin extends Plugin {
       ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
-    if (this._enabled && this.#logSubmissionUrl) {
+    if (this._enabled &&
+        this.#logSubmissionUrl &&
+        this.#config?.isCiVisibility &&
+        this.#config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
       consoleConfigureCh.publish({ getLogHolder: this.#getConsoleLogHolder })
     }
 
