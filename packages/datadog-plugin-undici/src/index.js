@@ -17,6 +17,7 @@ const {
 } = tags
 
 const UPGRADE_CHANNEL = 'apm:undici:request:upgrade'
+const UNDICI_NATIVE_QUERY_SOURCE = 'undici:request:create'
 
 // WeakMap to store span context for native undici request objects
 const requestContexts = new WeakMap()
@@ -68,9 +69,15 @@ class UndiciPlugin extends HttpClientPlugin {
     const base = `${protocol}//${host}`
     const pathname = stripQueryAndFragment(path)
     const uri = `${base}${pathname}`
+    const hasQuery = path.length > pathname.length && path.charCodeAt(pathname.length) === 63
 
     const allowed = this.config.filter(uri)
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const httpUrl = hasQuery && allowed && this.config.queryStringTaggingEnabled !== false
+      ? otelSemantics
+        ? buildClientHttpUrl(this.config, base, path, uri)
+        : this.config.queryStringSchema.getUrl(this.config, path, uri, UNDICI_NATIVE_QUERY_SOURCE)
+      : uri
     const childOf = store && allowed ? store.span : null
 
     const span = this.startSpan(this.operationName(), {
@@ -78,7 +85,7 @@ class UndiciPlugin extends HttpClientPlugin {
       meta: {
         'span.kind': 'client',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
+        'http.url': httpUrl,
         'out.host': hostname,
       },
       metrics: {
