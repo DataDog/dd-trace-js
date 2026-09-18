@@ -67,6 +67,9 @@ async function main () {
     reporterOptions: config.reporterOptions,
   })
 
+  const globalSetups = []
+  const globalTeardowns = []
+
   if ((config.require) != null) {
     for (const req of config.require) {
       // Resolve relative to repo root (cwd), matching Mocha CLI behavior.
@@ -74,8 +77,21 @@ async function main () {
       if (mod?.mochaHooks) {
         mocha.rootHooks(mod.mochaHooks)
       }
+      if (Array.isArray(mod?.mochaGlobalSetup)) {
+        globalSetups.push(...mod.mochaGlobalSetup)
+      } else if (mod?.mochaGlobalSetup) {
+        globalSetups.push(mod.mochaGlobalSetup)
+      }
+      if (Array.isArray(mod?.mochaGlobalTeardown)) {
+        globalTeardowns.push(...mod.mochaGlobalTeardown)
+      } else if (mod?.mochaGlobalTeardown) {
+        globalTeardowns.push(mod.mochaGlobalTeardown)
+      }
     }
   }
+
+  mocha.globalSetup(globalSetups)
+  mocha.globalTeardown(globalTeardowns)
 
   mocha.addFile(resolvedFile)
 
