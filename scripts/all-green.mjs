@@ -2,6 +2,7 @@ import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
+import { getAllGreenOutcome } from './all-green-outcome.mjs'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads, hasUploadFailed } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
@@ -268,6 +269,16 @@ async function cancelRunningWorkflows (runs) {
   )
 }
 
+async function cancelAllGreen (cancelledRuns) {
+  for (const run of cancelledRuns) {
+    console.log(`Workflow run ${run.id} (${run.name}) was cancelled.`)
+  }
+  console.log('Cancelling All Green instead of reporting a failure.')
+  // Exit codes can only report success or failure, so cancel this workflow run through GitHub.
+  process.exitCode = 0
+  await octokit.rest.actions.cancelWorkflowRun({ owner, repo, run_id: context.runId })
+}
+
 async function checkAllGreen () {
   await rerunOnStartup()
 
@@ -280,6 +291,13 @@ async function checkAllGreen () {
 
   const [junitResults, coverageResults] = await Promise.all([uploadAllJunit(), uploadAllCoverageToDatadog()])
   logUploads('junit + coverage (every run)', [...junitResults, ...coverageResults])
+
+  const outcome = getAllGreenOutcome(runs, staleFailureRunIds)
+  if (outcome === 'cancelled') {
+    const cancelledRuns = runs.filter(r => r.conclusion === 'cancelled')
+    await cancelAllGreen(cancelledRuns)
+    return
+  }
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
@@ -311,7 +329,7 @@ async function checkAllGreen () {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 
-  if (failedRuns.length === 0) {
+  if (outcome === 'success') {
     console.log('All jobs were successful.')
   } else {
     console.log('One or more jobs failed.')
