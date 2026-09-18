@@ -5,7 +5,7 @@ const { sendData } = require('../send-data')
 const logCollector = require('./log-collector')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
-const errorLog = dc.channel('datadog:log:error')
+const errorLog = dc.channel('datadog:log:error:record')
 
 let enabled = false
 
