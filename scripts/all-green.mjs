@@ -2,7 +2,11 @@ import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
-import { getAllGreenOutcome } from './all-green-outcome.mjs'
+import {
+  canPropagateCancellation,
+  getAllGreenOutcome,
+  isRetryableConclusion,
+} from './all-green-outcome.mjs'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads, hasUploadFailed } from './run-upload.mjs'
 import { uploadAllJunit } from './upload-junit.mjs'
@@ -55,7 +59,6 @@ const conclusionEmojis = {
 }
 
 const failureConclusions = new Set(['failure', 'timed_out', 'cancelled'])
-const pollingRetryConclusions = new Set(['failure', 'timed_out'])
 
 let retries = 0
 const retriedRunIds = new Set()
@@ -144,8 +147,8 @@ async function processRun (run) {
 
 /**
  * Kick off processing for any run that just reached a final state and hasn't been processed yet.
- * A run is final once it's completed and either isn't retried (its conclusion isn't in
- * `pollingRetryConclusions`) or already went through a retry attempt.
+ * A run is final once it's completed and either isn't retryable or already went through a retry
+ * attempt.
  *
  * @param {Array<{ id: number, name: string, status: string, conclusion: string }>} runs
  */
@@ -154,7 +157,7 @@ function scheduleProcessing (runs) {
 
   const settled = runs.filter(r =>
     r.status === 'completed' &&
-    (!pollingRetryConclusions.has(r.conclusion) || retriedRunIds.has(r.id)) &&
+    (!isRetryableConclusion(r.conclusion) || retriedRunIds.has(r.id)) &&
     !dispatchedRunIds.has(r.id)
   )
 
@@ -192,7 +195,7 @@ async function pollUntilDone () {
 
   const toRetry = runs.filter(r =>
     r.status === 'completed' &&
-    pollingRetryConclusions.has(r.conclusion) &&
+    isRetryableConclusion(r.conclusion) &&
     !retriedRunIds.has(r.id)
   )
 
@@ -245,7 +248,7 @@ async function rerunOnStartup () {
   const runs = await getRuns()
   const toRerun = runs.filter(r =>
     r.status === 'completed' &&
-    failureConclusions.has(r.conclusion)
+    isRetryableConclusion(r.conclusion)
   )
   if (toRerun.length > 0) {
     console.log(`Rerunning ${toRerun.length} failed workflow(s) before polling.`)
@@ -275,7 +278,6 @@ async function cancelAllGreen (cancelledRuns) {
   }
   console.log('Cancelling All Green instead of reporting a failure.')
   // Exit codes can only report success or failure, so cancel this workflow run through GitHub.
-  process.exitCode = 0
   await octokit.rest.actions.cancelWorkflowRun({ owner, repo, run_id: context.runId })
 }
 
@@ -293,15 +295,22 @@ async function checkAllGreen () {
   logUploads('junit + coverage (every run)', [...junitResults, ...coverageResults])
 
   const outcome = getAllGreenOutcome(runs, staleFailureRunIds)
+  if (!done) {
+    console.log(`State is still pending after ${RETRIES} retries.`)
+    await cancelRunningWorkflows(runs)
+  }
+
   if (outcome === 'cancelled') {
+    if (!canPropagateCancellation(process.exitCode)) {
+      console.error('Report processing or upload failed, preserving the failure instead of propagating cancellation.')
+      return
+    }
     const cancelledRuns = runs.filter(r => r.conclusion === 'cancelled')
     await cancelAllGreen(cancelledRuns)
     return
   }
 
   if (!done) {
-    console.log(`State is still pending after ${RETRIES} retries.`)
-    await cancelRunningWorkflows(runs)
     process.exitCode = 1
     return
   }
