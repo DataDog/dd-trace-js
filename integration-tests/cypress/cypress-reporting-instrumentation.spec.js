@@ -2237,6 +2237,18 @@ moduleTypes.forEach(({
       }
     })
 
+    it('preserves a Cypress failed-run result that reports no tests', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun({ status: 'failed', failures: 1, message: 'Cypress failed to run' })
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
     it('marks an interactive Cypress run with no statistics or tests as empty', async () => {
       const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
 

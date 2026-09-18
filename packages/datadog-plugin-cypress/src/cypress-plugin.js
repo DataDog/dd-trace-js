@@ -234,7 +234,7 @@ function getSessionStatus (summary, hasFailedTestSuites) {
   if (!summary) {
     return hasFailedTestSuites ? 'fail' : 'pass'
   }
-  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
+  if (summary.status === 'failed' || summary.failures > 0 || summary.totalFailed > 0) {
     return 'fail'
   }
   if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
