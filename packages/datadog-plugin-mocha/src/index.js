@@ -65,6 +65,7 @@ const {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -881,6 +882,7 @@ class MochaPlugin extends CiPlugin {
       isTestManagementEnabled,
       isParallel,
       isFrameworkError,
+      isExpectedEmptySession,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -892,6 +894,15 @@ class MochaPlugin extends CiPlugin {
         } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
+
+        if (isExpectedEmptySession) {
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            'No tests were executed',
+            'zero_tests'
+          )
+        }
 
         if (error) {
           this.testSessionSpan.setTag('error', error)
