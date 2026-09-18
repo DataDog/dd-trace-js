@@ -63,7 +63,9 @@ describe('logger telemetry delivery', () => {
     log.error(message, cause)
 
     sinon.assert.calledOnce(message)
-    assert.strictEqual(collector.drain()[0].stack_trace,
+    const entries = collector.drain()
+    assert.ok(entries)
+    assert.strictEqual(entries[0].stack_trace,
       'TypeError: redacted\n    at request (request.js:1:2)')
   })
 
@@ -72,7 +74,9 @@ describe('logger telemetry delivery', () => {
     cause.stack = `Error: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
     log.error(cause)
 
-    assert.strictEqual(collector.drain()[0].message, 'Generic Error')
+    const entries = collector.drain()
+    assert.ok(entries)
+    assert.strictEqual(entries[0].message, 'Generic Error')
   })
 
   it('should respect transmission opt-outs, including lazy messages', () => {
