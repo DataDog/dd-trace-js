@@ -173,6 +173,7 @@ describe('onPause', function () {
 
     assert(thrown instanceof Error)
     assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
+    assert.strictEqual(thrown.reason, 'unexpected_pause_reason')
     sinon.assert.notCalled(session.post)
     sinon.assert.notCalled(ackEmitting)
     sinon.assert.notCalled(send)
