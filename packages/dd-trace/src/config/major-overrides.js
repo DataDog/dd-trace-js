@@ -65,6 +65,11 @@ function applyMajorOverrides (supportedConfigurations, majorVersion) {
     const electronEntry = supportedConfigurations.DD_TRACE_ELECTRON_ENABLED?.[0]
     if (electronEntry) electronEntry.default = 'false'
   }
+
+  if (majorVersion >= 8) {
+    const optionsRequestsEntry = supportedConfigurations.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED?.[0]
+    if (optionsRequestsEntry) optionsRequestsEntry.default = 'false'
+  }
 }
 
 /**
