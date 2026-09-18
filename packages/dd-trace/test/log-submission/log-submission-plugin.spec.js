@@ -8,8 +8,12 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
+const { storage } = require('../../../datadog-core')
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
 
+const legacyStorage = storage('legacy')
+const consoleConfigureCh = channel('ci:log-submission:console:configure')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const winstonAddTransportCh = channel('ci:log-submission:winston:add-transport')
@@ -17,6 +21,15 @@ const winstonConfigureCh = channel('ci:log-submission:winston:configure')
 const request = sinon.stub()
 const log = {
   error: sinon.stub(),
+}
+const tracer = {
+  inject (span, format, carrier) {
+    carrier.dd = {
+      service: 'my service',
+      span_id: span.id,
+      trace_id: span.traceId,
+    }
+  },
 }
 const pluginConfig = {
   enabled: true,
@@ -50,7 +63,7 @@ describe('LogSubmissionPlugin', () => {
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     const previousBeforeExitHandlers = new Set(beforeExitHandlers)
-    plugin = new LogSubmissionPlugin({}, {})
+    plugin = new LogSubmissionPlugin(tracer, {})
     plugin.configure(pluginConfig)
     beforeExitHandler = [...beforeExitHandlers].find(handler => !previousBeforeExitHandlers.has(handler))
   })
@@ -107,6 +120,53 @@ describe('LogSubmissionPlugin', () => {
     const [data, options] = request.firstCall.args
     assert.deepStrictEqual(JSON.parse(data), [{ level: 'info', message: 'hello' }])
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service')
+  })
+
+  it('submits best-effort formatted console warnings and errors', () => {
+    const logHolder = { dd: { service: 'my service', span_id: '1', trace_id: '2' } }
+    consoleLogSubmissionCh.publish({ args: ['warning: %s', 'details'], logHolder, method: 'warn' })
+    consoleLogSubmissionCh.publish({ args: [new Error('boom')], logHolder, method: 'error' })
+    clock.tick(1000)
+
+    const [data, options] = request.firstCall.args
+    const messages = JSON.parse(data)
+    assert.deepStrictEqual(messages[0], { dd: logHolder.dd, message: 'warning: details', status: 'warn' })
+    assert.deepStrictEqual({ dd: messages[1].dd, status: messages[1].status }, {
+      dd: logHolder.dd,
+      status: 'error',
+    })
+    assert.match(messages[1].message, /^Error: boom/)
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=nodejs&service=my+service')
+  })
+
+  it('provides correlation only for active Test Optimization spans', () => {
+    let getLogHolder
+    const subscriber = payload => { getLogHolder = payload.getLogHolder }
+    consoleConfigureCh.subscribe(subscriber)
+    try {
+      plugin.configure(false)
+      plugin.configure(pluginConfig)
+    } finally {
+      consoleConfigureCh.unsubscribe(subscriber)
+    }
+
+    const applicationSpan = { context: () => ({ getTag: () => 'web' }) }
+    for (const type of ['test', 'test_suite_end', 'test_session_end']) {
+      const span = {
+        id: `${type} span`,
+        traceId: `${type} trace`,
+        context: () => ({ getTag: () => type }),
+      }
+      const key = type === 'test_suite_end' ? 'testSuiteSpan' : type === 'test_session_end' ? 'testSessionSpan' : 'span'
+      legacyStorage.run({ span: applicationSpan, [key]: span }, () => {
+        assert.deepStrictEqual(getLogHolder(), {
+          dd: { service: 'my service', span_id: span.id, trace_id: span.traceId },
+        })
+      })
+    }
+
+    legacyStorage.run({ span: applicationSpan }, () => assert.strictEqual(getLogHolder(), undefined))
+    assert.strictEqual(getLogHolder(), undefined)
   })
 
   it('flushes pending Bunyan logs before exit', () => {

@@ -288,6 +288,84 @@ describe('test optimization automatic log submission', () => {
     })
   })
 
+  const consoleFrameworks = [
+    {
+      name: 'playwright global console',
+      command: './node_modules/.bin/playwright test -c playwright.config.js',
+      expectedMessage: 'Playwright console error: 42',
+      expectedStatus: 'error',
+      getExtraEnvVars: () => ({
+        TEST_DIR: 'ci-visibility/automatic-log-submission-console-playwright',
+      }),
+    },
+    {
+      name: 'Jest console adapter',
+      command: 'node ./node_modules/jest/bin/jest --config ' +
+        './ci-visibility/automatic-log-submission-console-jest/config.js',
+      expectedMessage: 'Jest console warning: details',
+      expectedStatus: 'warn',
+    },
+  ]
+
+  for (const {
+    name,
+    command,
+    expectedMessage,
+    expectedStatus,
+    getExtraEnvVars = () => ({}),
+  } of consoleFrameworks) {
+    it(`submits correlated logs from the ${name}`, async (receiver, run) => {
+      let logIds
+      let testIds
+      let testOutput = ''
+
+      const logsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.includes('/api/v2/logs?ddsource=nodejs'),
+        payloads => {
+          const messages = payloads.flatMap(({ logMessage }) => logMessage)
+          const message = messages.find(({ message }) => message === expectedMessage)
+
+          assert.ok(message, `received console logs: ${JSON.stringify(messages)}\n${testOutput}`)
+          assert.equal(message.status, expectedStatus)
+          assert.equal(message.dd.service, 'my-service')
+          assert.deepStrictEqual(['service', 'span_id', 'trace_id'], Object.keys(message.dd).sort())
+          logIds = { spanId: message.dd.span_id, traceId: message.dd.trace_id }
+        }
+      )
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const test = events.find(({ type }) => type === 'test').content
+          testIds = { spanId: test.span_id.toString(), traceId: test.trace_id.toString() }
+        }
+      )
+      const childProcess = run(command, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+          DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
+          DD_API_KEY: '1',
+          DD_SERVICE: 'my-service',
+          ...getExtraEnvVars(),
+        },
+      })
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        logsPromise,
+        eventsPromise,
+      ])
+
+      assert.deepStrictEqual(logIds, testIds)
+    })
+  }
+
   context('with bunyan and multiple playwright test groups', () => {
     it('waits for pending requests only when the worker exits', async (receiver, run) => {
       const logMessages = []

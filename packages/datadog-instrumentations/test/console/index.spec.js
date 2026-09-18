@@ -1,0 +1,84 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const { channel } = require('dc-polyfill')
+const sinon = require('sinon')
+
+const { wrapConsole, wrapJestConsole } = require('../../src/console')
+
+const logSubmissionCh = channel('ci:log-submission:console')
+
+describe('console instrumentation', () => {
+  let payloads
+  let subscriber
+
+  beforeEach(() => {
+    payloads = []
+    subscriber = payload => payloads.push(payload)
+    logSubmissionCh.subscribe(subscriber)
+  })
+
+  afterEach(() => {
+    logSubmissionCh.unsubscribe(subscriber)
+  })
+
+  it('captures direct warnings and errors without changing console behavior', () => {
+    const logHolder = { dd: { span_id: '1', trace_id: '2' } }
+    const target = {
+      error: sinon.stub().returns('error result'),
+      log: sinon.stub().returns('log result'),
+      warn: sinon.stub().returns('warn result'),
+    }
+    const originalLog = target.log
+    wrapConsole(target, () => logHolder)
+
+    assert.strictEqual(target.warn('warning', 42), 'warn result')
+    assert.strictEqual(target.error('error'), 'error result')
+    assert.strictEqual(target.log('ignored'), 'log result')
+
+    assert.strictEqual(target.log, originalLog)
+    assert.deepStrictEqual(payloads, [
+      { args: ['warning', 42], logHolder, method: 'warn' },
+      { args: ['error'], logHolder, method: 'error' },
+    ])
+  })
+
+  it('does not capture without an active Test Optimization context', () => {
+    const target = { warn: sinon.stub() }
+    const getLogHolder = sinon.stub()
+    wrapConsole(target, getLogHolder)
+
+    target.warn('outside a test')
+
+    sinon.assert.calledOnce(getLogHolder)
+    assert.deepStrictEqual(payloads, [])
+  })
+
+  it('captures Jest buffered and custom console adapters', () => {
+    class BufferedConsole {
+      static write (buffer, method, message) {
+        buffer.push(message)
+        return buffer
+      }
+    }
+    class CustomConsole {
+      _logError (method, message) {
+        return `${method}: ${message}`
+      }
+    }
+    const logHolder = { dd: { span_id: '1', trace_id: '2' } }
+    wrapJestConsole({ BufferedConsole, CustomConsole }, () => logHolder)
+    const buffer = []
+
+    assert.strictEqual(BufferedConsole.write(buffer, 'log', 'ignored'), buffer)
+    assert.strictEqual(BufferedConsole.write(buffer, 'warn', 'warning'), buffer)
+    assert.strictEqual(new CustomConsole()._logError('error', 'failure'), 'error: failure')
+
+    assert.deepStrictEqual(buffer, ['ignored', 'warning'])
+    assert.deepStrictEqual(payloads, [
+      { args: ['warning'], logHolder, method: 'warn' },
+      { args: ['failure'], logHolder, method: 'error' },
+    ])
+  })
+})
