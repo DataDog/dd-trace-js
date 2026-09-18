@@ -11,7 +11,7 @@ const {
   spawnProcAndExpectExit,
   stopProc,
 } = require('../../../../../../integration-tests/helpers')
-const { assertLlmObsSpanEvent } = require('../../util')
+const { assertLlmObsSpanEvent, getLlmObsSpansFromApmSpans } = require('../../util')
 
 function check (expected, actual) {
   for (const expectedLLMObsSpanIdx in expected) {
@@ -39,15 +39,12 @@ const testCases = [
     name: 'instruments an application with decorators',
     file: 'index',
     setup: (agent, results) => {
-      const llmobsRes = agent.assertLlmObsPayloadReceived(({ payload }) => {
-        results.llmobsSpans = payload.flatMap(item => item.spans)
-      })
-
       const apmRes = agent.assertMessageReceived(({ payload }) => {
         results.apmSpans = payload
+        results.llmobsSpans = getLlmObsSpansFromApmSpans(payload.flatMap(trace => trace))
       })
 
-      return [llmobsRes, apmRes]
+      return [apmRes]
     },
     runTest: ({ llmobsSpans, apmSpans }) => {
       const actual = llmobsSpans

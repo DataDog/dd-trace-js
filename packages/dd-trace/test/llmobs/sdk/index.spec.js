@@ -36,6 +36,7 @@ describe('sdk', () => {
     sinon.spy(LLMObsSpanProcessor.prototype, 'process')
     sinon.spy(LLMObsSpanProcessor.prototype, 'format')
     sinon.spy(tracer._tracer._processor, 'process')
+    sinon.stub(LLMObsTagger.tagMap, 'delete')
 
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')

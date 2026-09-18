@@ -494,6 +494,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
+    const llmobsExplicitlyDisabled = !this.llmobs.DD_LLMOBS_ENABLED &&
+      trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED')
+    if (this.llmobs.DD_LLMOBS_AGENTLESS_ENABLED && !llmobsExplicitlyDisabled) {
+      setAndTrack(this, 'DD_AGENTLESS_ENABLED', true)
+    }
+
     const agentlessTracingEnabled = this.DD_AGENTLESS_ENABLED ||
       isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
 
@@ -534,6 +540,12 @@ class Config extends ConfigBase {
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_ML_APP') ||
         trackedConfigOrigins.has('llmobs.DD_LLMOBS_PROJECT_NAME'))) {
       setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
+    }
+
+    if (this.llmobs.DD_LLMOBS_ENABLED) {
+      // llmobs attempts to attach to meta_struct, ensure 0.4 is the protocol being used
+      // mirrors other tracer SDKs (python) for llm observability
+      setAndTrack(this, 'protocolVersion', '0.4')
     }
 
     if (this.OTEL_RESOURCE_ATTRIBUTES) {

@@ -4,8 +4,8 @@ const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 require('./setup/core')
 

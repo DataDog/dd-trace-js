@@ -9,6 +9,7 @@ const {
   ERROR_TYPE,
   ERROR_STACK,
 } = require('../constants')
+const { AUTO_KEEP } = require('../../../../ext/priority')
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -38,10 +39,13 @@ const {
   SAMPLE_RATE,
   SAMPLING_DECISION,
   TRACE_ID,
+  LLMOBS_META_STRUCT_KEY,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+
+const cachedEvents = new Map()
 
 class LLMObservabilitySpan {
   /**
@@ -63,6 +67,8 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
+  #destroyer
+
   /** @type {import('../config/config-base')} */
   #config
 
@@ -74,6 +80,9 @@ class LLMObsSpanProcessor {
 
   constructor (config) {
     this.#config = config
+
+    this.#destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   setUserSpanProcessor (userSpanProcessor) {
@@ -100,20 +109,19 @@ class LLMObsSpanProcessor {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
       }
-
-      const enqueued = this.#writer.append(formattedEvent, routing)
-
-      // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
-      // gen_ai.* spans, the parent-chain walk stops at any span carrying this
-      // tag, preserving this span as the immediate LLMObs parent. Set only
-      // when the writer actually buffered the event — format may have dropped
-      // it (user processor returned null), thrown, or the writer may have
-      // dropped it silently when its buffer is full. Leaving this tag off in
-      // those cases avoids dd-go reparenting OTel children under a span that
-      // has no corresponding LLMObs event.
-      if (enqueued) {
-        span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+      const metaStructTags = {
+        mlApp: mlObsTags[ML_APP],
+        sampleRate: mlObsTags[SAMPLE_RATE],
+        samplingDecision: mlObsTags[SAMPLING_DECISION],
       }
+
+      if (this.#config.DD_TRACE_ENABLED === false) {
+        this.#appendToWriter(span, formattedEvent, routing)
+      } else {
+        cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
+      }
+
+      LLMObsTagger.tagMap.delete(span)
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
@@ -123,6 +131,63 @@ class LLMObsSpanProcessor {
         Span won't be sent to LLM Observability: ${e.message}
       `)
     }
+  }
+
+  /**
+   * Routes cached LLMObs events after the APM sampling decision has been finalized for the trace chunk.
+   *
+   * @param {{
+   *   spans: import('../opentracing/span')[],
+   *   samplingPriority?: number,
+   *   isRecording?: boolean,
+   *   supportsMetaStruct?: boolean,
+   * }} trace
+   */
+  processTrace ({ spans, samplingPriority, isRecording, supportsMetaStruct }) {
+    for (const span of spans) {
+      const cached = cachedEvents.get(span)
+      if (!cached) continue
+      cachedEvents.delete(span)
+
+      try {
+        const { event, metaStructTags, routing } = cached
+        if (this.#shouldAttachMetaStruct(
+          routing,
+          event,
+          samplingPriority,
+          isRecording,
+          supportsMetaStruct
+        )) {
+          this.#attachMetaStruct(span, event, metaStructTags)
+          continue
+        }
+
+        this.#appendToWriter(span, event, routing)
+      } catch (e) {
+        this.#logAppendError(e)
+      }
+    }
+  }
+
+  /** Routes events still awaiting an APM sampling decision through the LLMObs writer. */
+  processPending () {
+    for (const [span, cached] of cachedEvents) {
+      cachedEvents.delete(span)
+
+      try {
+        this.#appendToWriter(span, cached.event, cached.routing)
+      } catch (e) {
+        this.#logAppendError(e)
+      }
+    }
+  }
+
+  destroy () {
+    if (!this.#destroyer) return
+
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+    this.processPending()
+    this.#destroyer = undefined
   }
 
   format (span) {
@@ -283,6 +348,153 @@ class LLMObsSpanProcessor {
     return llmObsSpanEvent
   }
 
+  /**
+   * The meta_struct path replaces the EVP proxy path only when the finalized APM sampling decision keeps the trace.
+   *
+   * @param {{ apiKey?: string, site?: string }} routing
+   * @param {object} event
+   * @param {number | undefined} samplingPriority
+   * @param {boolean | undefined} isRecording
+   * @param {boolean | undefined} supportsMetaStruct
+   */
+  #shouldAttachMetaStruct (routing, event, samplingPriority, isRecording, supportsMetaStruct) {
+    return supportsMetaStruct !== false &&
+      isRecording !== false &&
+      !routing.apiKey &&
+      !this.#hasRepeatedTagKeys(event.tags) &&
+      (samplingPriority === undefined || samplingPriority >= AUTO_KEEP)
+  }
+
+  /**
+   * Routes an event through the LLMObs writer and marks the source span when it is buffered.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ apiKey?: string, site?: string }} routing
+   */
+  #appendToWriter (span, event, routing) {
+    const enqueued = this.#writer.append(event, routing)
+
+    // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
+    // gen_ai.* spans, the parent-chain walk stops at any span carrying this
+    // tag, preserving this span as the immediate LLMObs parent. Set only
+    // when the writer actually buffered the event — format may have dropped
+    // it (user processor returned null), thrown, or the writer may have
+    // dropped it silently when its buffer is full. Leaving this tag off in
+    // those cases avoids dd-go reparenting OTel children under a span that
+    // has no corresponding LLMObs event.
+    if (enqueued) {
+      span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+    }
+  }
+
+  /** @param {Error} error */
+  #logAppendError (error) {
+    logger.warn(`
+      Failed to append span to LLM Observability writer, likely due to an unserializable property.
+      Span won't be sent to LLM Observability: ${error.message}
+    `)
+  }
+
+  /**
+   * Checks whether the intake tag list contains keys that cannot be represented losslessly by the meta_struct map.
+   * TODO: have intake support duplicate tags and remove this function from check
+   *
+   * @param {string[]} tags
+   */
+  #hasRepeatedTagKeys (tags) {
+    const keys = new Set()
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      const key = tag.slice(0, separatorIndex)
+      if (keys.has(key)) return true
+      keys.add(key)
+    }
+    return false
+  }
+
+  /**
+   * Adds the LLMObs payload to the span structured metadata for APM trace submission.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
+   */
+  #attachMetaStruct (span, event, metaStructTags) {
+    span.meta_struct ??= {}
+    span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(event, metaStructTags)
+  }
+
+  /**
+   * Converts the LLMObs span event payload into the meta_struct shape consumed by the trace intake.
+   *
+   * @param {object} event
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
+   * @returns {object}
+   */
+  #formatMetaStruct (event, metaStructTags) {
+    const tags = this.#stringArrayTagsToObjectTags(event.tags)
+    const dd = {}
+
+    if (metaStructTags.sampleRate !== undefined) dd.sample_rate = metaStructTags.sampleRate
+    if (metaStructTags.samplingDecision !== undefined) dd.sampling_decision = metaStructTags.samplingDecision
+    if (event._dd?.scope !== undefined) dd.scope = event._dd.scope
+
+    const metaStruct = {
+      trace_id: event.trace_id,
+      tags,
+      meta: this.#formatMetaStructMeta(event.meta),
+      metrics: event.metrics,
+      _dd: dd,
+    }
+
+    if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
+    if (event.name !== undefined) metaStruct.name = event.name
+    if (metaStructTags.mlApp) metaStruct.ml_app = metaStructTags.mlApp
+    if (event.session_id) metaStruct.session_id = event.session_id
+
+    return metaStruct
+  }
+
+  /**
+   * Converts the writer event meta shape to the LLMObs meta_struct shape.
+   *
+   * @param {object} eventMeta
+   * @returns {object}
+   */
+  #formatMetaStructMeta (eventMeta) {
+    const meta = {}
+
+    for (const [key, value] of Object.entries(eventMeta)) {
+      if (key === 'span.kind') {
+        meta.span = { kind: value }
+      } else if (key === ERROR_MESSAGE) {
+        this.#getMetaStructError(meta).message = value
+      } else if (key === ERROR_TYPE) {
+        this.#getMetaStructError(meta).type = value
+      } else if (key === ERROR_STACK) {
+        this.#getMetaStructError(meta).stack = value
+      } else {
+        meta[key] = value
+      }
+    }
+
+    return meta
+  }
+
+  /**
+   * Returns `meta.error`, initializing it once.
+   *
+   * @param {object} meta
+   * @returns {object}
+   */
+  #getMetaStructError (meta) {
+    if (!meta.error) meta.error = {}
+    return meta.error
+  }
+
   // For now, this only applies to metadata, as we let users annotate this field with any object
   // However, we want to protect against circular references or BigInts (unserializable)
   // This function can be reused for other fields if needed
@@ -375,6 +587,23 @@ class LLMObsSpanProcessor {
       } else {
         out.push(`${key}:${value ?? ''}`)
       }
+    }
+    return out
+  }
+
+  /**
+   * Converts LLMObs intake tags to the tag object used in span meta_struct.
+   *
+   * @param {string[]} tags
+   * @returns {Record<string, string>}
+   */
+  #stringArrayTagsToObjectTags (tags) {
+    const out = {}
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      out[tag.slice(0, separatorIndex)] = tag.slice(separatorIndex + 1)
     }
     return out
   }

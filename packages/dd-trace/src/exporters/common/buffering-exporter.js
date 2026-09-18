@@ -7,6 +7,8 @@ const { incrementCountMetric, TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION } = re
  * Provides common export logic with flush intervals.
  */
 class BufferingExporter {
+  supportsMetaStruct = false
+
   _traceBuffer = []
   _isInitialized = false
   _writer

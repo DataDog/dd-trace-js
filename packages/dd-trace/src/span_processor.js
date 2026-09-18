@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const { AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
@@ -8,6 +10,8 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 const { APM_TRACING_ENABLED_KEY } = require('./constants')
+
+const traceSampledCh = channel('dd-trace:trace:sampled')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -67,6 +71,15 @@ class SpanProcessor {
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
+
+      if (traceSampledCh.hasSubscribers) {
+        traceSampledCh.publish({
+          spans: finished,
+          samplingPriority: spanContext._sampling.priority,
+          isRecording: trace.isRecording,
+          supportsMetaStruct: this._exporter.supportsMetaStruct !== false,
+        })
+      }
 
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
