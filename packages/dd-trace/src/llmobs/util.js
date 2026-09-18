@@ -306,7 +306,6 @@ function getFunctionArguments (fn, args = []) {
 // keys), so a name containing `=` is safe and must not be dropped.
 /**
  * @param {string} name
- * @returns {boolean}
  */
 function agentNameWireSafe (name) {
   // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
@@ -413,7 +412,6 @@ function findGenAIAncestorSpanId (span) {
 /**
  * Generate a 128-bit LLMObs trace ID with the span start time encoded in its high bits.
  * @param {number} startTime
- * @returns {string}
  */
 function generateLlmObsTraceId (startTime) {
   const identifier = id()
@@ -462,7 +460,6 @@ function normalizeLlmObsTraceId (traceId) {
 /**
  * @param {string} fmt
  * @param {Record<string, string>} [mimeTypeLookup]
- * @returns {string}
  */
 function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
   fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''

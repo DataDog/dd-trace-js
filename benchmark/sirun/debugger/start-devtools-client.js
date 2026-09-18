@@ -99,7 +99,6 @@ const config = {
  *
  * @param {URL} url
  * @param {(error: Error | null, info: { endpoints: string[] }) => void} callback
- * @returns {void}
  */
 function fetchAgentInfo (url, callback) {
   process.nextTick(callback, null, { endpoints: [DEBUGGER_INPUT_V2] })

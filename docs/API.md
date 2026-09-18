@@ -135,6 +135,7 @@ tracer.use('openai', {
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -143,6 +144,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -221,6 +223,7 @@ tracer.use('openai', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [playwright](./interfaces/export_.plugins.playwright.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
@@ -229,6 +232,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)

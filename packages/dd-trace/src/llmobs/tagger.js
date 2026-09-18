@@ -87,7 +87,7 @@ class LLMObsTagger {
   }
 
   /**
-   * The sampler reads its rate from `config.llmobs.sampleRate`, which can change
+   * The sampler reads its rate from `config.llmobs.DD_LLMOBS_SAMPLE_RATE`, which can change
    * at runtime (e.g. via remote config). Rebuild the sampler whenever the rate
    * changes so decisions reflect the current config, while reusing the existing
    * sampler when it hasn't.
@@ -95,7 +95,7 @@ class LLMObsTagger {
    * @returns {import('../sampler')}
    */
   #getSampler () {
-    const rate = this.#config.llmobs?.sampleRate ?? 1
+    const rate = this.#config.llmobs?.DD_LLMOBS_SAMPLE_RATE ?? 1
     if (this.#sampler === null || rate !== this.#sampler.rate()) {
       this.#sampler = new Sampler(rate)
     }
@@ -128,7 +128,7 @@ class LLMObsTagger {
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this.#config.llmobs.mlApp ||
+      this.#config.llmobs.DD_LLMOBS_ML_APP ||
       this.#config.service // this should always have a default
 
     if (!spanMlApp) {

@@ -14,7 +14,6 @@ const { getRootSpan } = require('./utils')
  * @param {import('../../tracer')} tracer
  * @param {import('../../../../../index').User} user
  * @param {Record<string, string>} [metadata]
- * @returns {void}
  */
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
@@ -48,7 +47,6 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
  * @param {string} userId
  * @param {boolean} exists
  * @param {Record<string, string>} [metadata]
- * @returns {void}
  */
 function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
   if (!userId || typeof userId !== 'string') {

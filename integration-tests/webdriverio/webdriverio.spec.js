@@ -143,7 +143,6 @@ function stopServer (server) {
  * @param {object} module
  * @param {object[]} suites
  * @param {object[]} tests
- * @returns {void}
  */
 function assertEventHierarchy (session, module, suites, tests) {
   const sessionId = session.test_session_id.toString(10)
@@ -167,7 +166,6 @@ function assertEventHierarchy (session, module, suites, tests) {
  *
  * @param {object[]} suites
  * @param {object[]} tests
- * @returns {void}
  */
 function assertOneTestPerSuiteExecution (suites, tests) {
   assert.deepStrictEqual(
@@ -181,7 +179,6 @@ function assertOneTestPerSuiteExecution (suites, tests) {
  *
  * @param {object} failedTest
  * @param {object[]} media
- * @returns {void}
  */
 function assertFailureScreenshotUploaded (failedTest, media) {
   assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')

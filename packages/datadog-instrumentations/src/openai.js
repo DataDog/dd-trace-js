@@ -297,9 +297,10 @@ for (const extension of extensions) {
           // chat.completions and completions
           const stream = streamedResponse && getOption(args, 'stream', false)
 
-          const intercepted = !stream && interceptChannel?.hasSubscribers
+          const tracing = ch.start.hasSubscribers
+          const intercepted = interceptChannel?.hasSubscribers
 
-          if (!ch.start.hasSubscribers && !intercepted) {
+          if (!tracing && !intercepted) {
             return methodFn.apply(this, args)
           }
 
@@ -325,7 +326,7 @@ for (const extension of extensions) {
             // pagination page types reach the prototype wrappers above. A method that resolves to
             // a plain value has none, and a WeakMap rejects a non-object key.
             if (apiProm?.responsePromise) {
-              responsePromiseContexts.set(apiProm.responsePromise, { ctx, stream, interceptCtx })
+              responsePromiseContexts.set(apiProm.responsePromise, { ctx, stream, interceptCtx, tracing })
             }
 
             ch.end.publish(ctx)
@@ -340,19 +341,22 @@ for (const extension of extensions) {
 }
 
 function handleUnwrappedAPIPromise (apiProm, state) {
-  const { ctx, stream, interceptCtx } = state
+  const { ctx, stream, interceptCtx, tracing } = state
 
   return heldUntil(apiProm, interceptCtx?.beforeResult?.())
     .then(([{ response, options }, body]) => {
       if (stream) {
-        const wrapIterator = wrapStreamIterator(response, options, ctx)
+        return Promise.resolve(interceptCtx?.onResult ? interceptCtx.onResult(body) : body).then(streamBody => {
+          if (!tracing) return streamBody
 
-        if (body.iterator) {
-          shimmer.wrap(body, 'iterator', wrapIterator)
-        } else {
-          shimmer.wrap(body.response.body, Symbol.asyncIterator, wrapIterator)
-        }
-        return body
+          const wrapIterator = wrapStreamIterator(response, options, ctx)
+          if (streamBody.iterator) {
+            shimmer.wrap(streamBody, 'iterator', wrapIterator)
+          } else {
+            shimmer.wrap(streamBody.response.body, Symbol.asyncIterator, wrapIterator)
+          }
+          return streamBody
+        })
       }
 
       const responseData = {

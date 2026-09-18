@@ -65,7 +65,6 @@ const loggedAttemptToFixTests = new Set()
  * Checks whether a Mocha test failed, including serialized tests from parallel workers.
  *
  * @param {object} test
- * @returns {boolean}
  */
 function isTestFailed (test) {
   if (test.isFailed) {
@@ -82,7 +81,6 @@ function isTestFailed (test) {
  *
  * @param {object} runner
  * @param {object} config
- * @returns {void}
  */
 function adjustRunnerFailuresForTestOptimization (runner, config) {
   if (config.isEarlyFlakeDetectionEnabled) {
@@ -212,7 +210,6 @@ function wrapOriginalEfdTest (test, retryPolicy) {
 /**
  * Disables Mocha's native retry mechanism for Datadog-managed clone retries.
  * @param {{ retries?: (count: number) => void }} test
- * @returns {void}
  */
 function disableMochaRetries (test) {
   if (typeof test.retries === 'function') {
@@ -232,7 +229,6 @@ function disableMochaRetries (test) {
  *   isEarlyFlakeDetectionEnabled?: boolean,
  *   earlyFlakeDetectionRetryPolicy?: import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy
  * }} config
- * @returns {boolean}
  */
 function isDatadogManagedRetryTest (test, config) {
   return test._ddIsAttemptToFix || isEarlyFlakeDetectionTest(test, config)
@@ -251,7 +247,6 @@ function isDatadogManagedRetryTest (test, config) {
  *   isEarlyFlakeDetectionEnabled?: boolean,
  *   earlyFlakeDetectionRetryPolicy?: import('../../../dd-trace/src/ci-visibility/efd-retry-policy').EfdRetryPolicy
  * }} config
- * @returns {boolean}
  */
 function isEarlyFlakeDetectionTest (test, config) {
   return !test._ddIsAttemptToFix &&
@@ -309,7 +304,6 @@ function retryTest (test, numRetries, tags, retryPolicy) {
  * Restores a runnable function wrapped with its Test Optimization context.
  *
  * @param {import('mocha').Runnable} runnable
- * @returns {void}
  */
 function restoreRunnableFunction (runnable) {
   const wrappedFunction = runnable.fn
@@ -322,7 +316,6 @@ function restoreRunnableFunction (runnable) {
  * Restores a test function wrapped to measure its EFD duration.
  *
  * @param {import('mocha').Test} test
- * @returns {void}
  */
 function restoreEfdTestFunction (test) {
   if (!originalEfdFns.has(test)) return
@@ -336,7 +329,6 @@ function restoreEfdTestFunction (test) {
  * Clears state that belongs to one Mocha runner execution and removes retry clones from prior executions.
  *
  * @param {import('mocha').Suite} rootSuite
- * @returns {void}
  */
 function resetRunState (rootSuite) {
   for (const key of Object.keys(newTests)) delete newTests[key]
@@ -430,7 +422,6 @@ function getTestFullName (test) {
  * Records every attempt for a test grouped by its full test name.
  * @param {Record<string, Array<{ file: string, fullTitle: () => string }>>} testsByFullName
  * @param {{ file: string, fullTitle: () => string }} test
- * @returns {void}
  */
 function recordTestAttempt (testsByFullName, test) {
   const testFullName = getTestFullName(test)
@@ -470,7 +461,6 @@ function getTestContext (test) {
  * Claims publication of a test finish event across Mocha's terminal event paths.
  *
  * @param {object} test
- * @returns {boolean}
  */
 function startTestFinish (test) {
   if (test._ddTestFinishStarted || test._ddTestFinishPublished) return false

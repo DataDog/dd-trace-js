@@ -21,7 +21,6 @@ let activeRequests = 0
  * @param {object} options - HTTP request options
  * @param {(error: Error|null, result?: string|null, statusCode?: number,
  *   headers?: import('node:http').IncomingHttpHeaders) => void} callback
- * @returns {void}
  */
 function requestVideo (body, options, callback) {
   if (activeRequests >= MAX_ACTIVE_REQUESTS) {

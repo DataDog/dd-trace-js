@@ -97,7 +97,7 @@ function getPrepareStackTraceAccessor () {
 
 function getCompileMethodFn (compileMethod) {
   let delegate = function (content, filename) {
-    if (isDdTrace(filename) || !isPrivateModule(filename) || !config.iast?.enabled) {
+    if (isDdTrace(filename) || !isPrivateModule(filename) || !config.iast?.DD_IAST_ENABLED) {
       return compileMethod.apply(this, [content, filename])
     }
 
@@ -163,7 +163,7 @@ function shimPrepareStackTrace () {
 
 function enableRewriter (telemetryVerbosity) {
   try {
-    if (config.iast?.enabled) {
+    if (config.iast?.DD_IAST_ENABLED) {
       const rewriter = getRewriter(telemetryVerbosity)
       if (rewriter) {
         shimPrepareStackTrace()
@@ -218,7 +218,7 @@ let enableEsmRewriter = function (telemetryVerbosity) {
           telemetryVerbosity,
           chainSourceMap: isFlagPresent('--enable-source-maps'),
           orchestrionConfig,
-          iastEnabled: config?.iast?.enabled,
+          iastEnabled: config?.iast?.DD_IAST_ENABLED,
         },
       })
     } catch (e) {

@@ -49,7 +49,6 @@ function callViaPromise (client, method, params) {
 /**
  * @param {string|AwsSdkVersionCallback} range
  * @param {AwsSdkVersionCallback} [cb]
- * @returns {void}
  */
 function withAwsSdkV2Versions (range, cb) {
   if (typeof range === 'function') {
@@ -63,7 +62,6 @@ function withAwsSdkV2Versions (range, cb) {
 /**
  * @param {string|AwsSdkVersionCallback} range
  * @param {AwsSdkVersionCallback} [cb]
- * @returns {void}
  */
 function withAwsSdkV3Versions (range, cb) {
   if (typeof range === 'function') {
@@ -77,7 +75,6 @@ function withAwsSdkV3Versions (range, cb) {
 /**
  * @param {string|AwsSdkVersionCallback} range
  * @param {AwsSdkVersionCallback} [cb]
- * @returns {void}
  */
 function withAwsSdkVersions (range, cb) {
   if (typeof range === 'function') {
@@ -91,7 +88,6 @@ function withAwsSdkVersions (range, cb) {
 
 /**
  * @param {string} range
- * @returns {string}
  */
 function getAwsSdkV3Range (range) {
   return range === '*' ? AWS_SDK_V3_RANGE : `${range} ${AWS_SDK_V3_RANGE}`

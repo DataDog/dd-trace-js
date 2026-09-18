@@ -24,8 +24,8 @@ const MAX_EVIDENCE_LENGTH = 32_768
 
 class SensitiveHandler {
   constructor () {
-    this._namePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionNamePattern']), 'gmi')
-    this._valuePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
+    this._namePattern = new RegExp(/** @type {string} */ (defaults['iast.DD_IAST_REDACTION_NAME_PATTERN']), 'gmi')
+    this._valuePattern = new RegExp(/** @type {string} */ (defaults['iast.DD_IAST_REDACTION_VALUE_PATTERN']), 'gmi')
 
     this._sensitiveAnalyzers = new Map()
     this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
