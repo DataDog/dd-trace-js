@@ -28,7 +28,9 @@ describe('remote config failure reasons', () => {
       },
       './log': { debug: sinon.spy(), error: sinon.spy(), '@noCallThru': true },
     })
-    onMessage = probePort.on.getCalls().find(call => call.args[0] === 'message').args[1]
+    const messageSubscription = probePort.on.getCalls().find(call => call.args[0] === 'message')
+    assert.ok(messageSubscription)
+    onMessage = messageSubscription.args[1]
   })
 
   for (const { overrides, action = 'apply', reason, message } of [
