@@ -203,7 +203,9 @@ describe('telemetry log collector', () => {
         ].join(EOL),
       })
 
-      assert.strictEqual(logCollector.drain()[0].stack_trace,
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].stack_trace,
         'TypeError: redacted\n    at send (packages/dd-trace/src/debugger/devtools_client/send.js:10:2)')
     })
 
@@ -214,7 +216,9 @@ describe('telemetry log collector', () => {
         stack_trace: 'Error: secret\n    at node:internal/main/worker_thread:206:26',
       }), true)
 
-      assert.strictEqual(logCollector.drain()[0].stack_trace, '    at node:internal/main/worker_thread:206:26')
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].stack_trace, '    at node:internal/main/worker_thread:206:26')
     })
 
     for (const frame of [
