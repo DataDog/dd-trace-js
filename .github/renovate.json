@@ -19,6 +19,7 @@
   "timezone": "UTC",
   "dependencyDashboard": false,
   "automergeType": "pr",
+  "automergeStrategy": "squash",
   "platformAutomerge": true,
   "rebaseWhen": "behind-base-branch",
   "postUpdateOptions": [

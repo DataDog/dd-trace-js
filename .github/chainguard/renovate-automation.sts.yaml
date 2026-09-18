@@ -9,5 +9,4 @@ claim_pattern:
   job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/renovate-automation.yml@refs/pull/[0-9]+/merge
 
 permissions:
-  contents: write
   pull_requests: write
