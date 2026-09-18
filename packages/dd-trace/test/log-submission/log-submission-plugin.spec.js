@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -141,6 +142,20 @@ describe('LogSubmissionPlugin', () => {
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=nodejs&service=my+service')
   })
 
+  it('preserves custom inspection when formatting console logs', () => {
+    const redacted = {
+      password: 'secret',
+      [inspect.custom]: () => '[REDACTED]',
+    }
+    const logHolder = { dd: { service: 'my service', span_id: '1', trace_id: '2' } }
+
+    consoleLogSubmissionCh.publish({ args: [redacted], logHolder, method: 'warn' })
+    clock.tick(1000)
+
+    const [message] = JSON.parse(request.firstCall.args[0])
+    assert.strictEqual(message.message, '[REDACTED]')
+  })
+
   it('provides correlation only for active Test Optimization spans', () => {
     let getLogHolder
     const subscriber = payload => { getLogHolder = payload.getLogHolder }
@@ -158,18 +173,24 @@ describe('LogSubmissionPlugin', () => {
       context: () => ({ getTag: () => type }),
     })
     const testSpan = createSpan('test')
+    const testSuiteSpan = createSpan('test_suite_end')
     const applicationSpan = createSpan('web')
     applicationSpan.context = () => ({
       getTag: () => 'web',
-      _trace: { started: [applicationSpan, testSpan] },
+      _trace: { started: [testSuiteSpan, applicationSpan, testSpan] },
     })
-    const testSuiteSpan = createSpan('test_suite_end')
     const testSessionSpan = createSpan('test_session_end')
+    const applicationSuiteSpan = createSpan('web')
+    applicationSuiteSpan.context = () => ({
+      getTag: () => 'web',
+      _trace: { started: [testSuiteSpan, applicationSuiteSpan] },
+    })
 
     for (const [store, span] of [
       [{ span: testSpan }, testSpan],
       [{ span: applicationSpan }, testSpan],
       [{ testSuiteSpan }, testSuiteSpan],
+      [{ span: applicationSuiteSpan }, testSuiteSpan],
       [{ span: testSessionSpan }, testSessionSpan],
     ]) {
       legacyStorage.run(store, () => {

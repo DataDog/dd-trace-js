@@ -86,6 +86,7 @@ const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
 const consoleLogSubmissionCh = channel('ci:log-submission:console')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -2702,7 +2703,10 @@ async function waitForTestSessionFinish (payload) {
 
   publishWithCompletion(testSessionFinishCh, payload, onDone)
 
-  const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+  const waitingResult = await Promise.race([
+    Promise.all([flushPromise, getChannelPromise(logSubmissionFlushCh)]),
+    timeoutPromise,
+  ])
 
   if (waitingResult === 'timeout') {
     log.error('Timeout waiting for the tracer to flush')

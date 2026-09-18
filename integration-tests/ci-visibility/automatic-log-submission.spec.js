@@ -301,7 +301,7 @@ describe('test optimization automatic log submission', () => {
     {
       name: 'Jest console adapter',
       command: 'node ./node_modules/jest/bin/jest --config ' +
-        './ci-visibility/automatic-log-submission-console-jest/config.js',
+        './ci-visibility/automatic-log-submission-console-jest/config.js --forceExit --runInBand',
       expectedMessage: 'Jest console warning: details',
       expectedStatus: 'warn',
     },

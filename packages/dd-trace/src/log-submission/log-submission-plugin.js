@@ -89,9 +89,13 @@ function getTestOptimizationSpan (store) {
   // Child instrumentation spans replace store.span, so recover the enclosing test from their trace.
   const traceSpans = activeSpan?.context()._trace?.started
   if (traceSpans) {
+    let nestedTestSuiteSpan
     for (const span of traceSpans) {
-      if (span.context().getTag(SPAN_TYPE) === 'test') return span
+      const spanType = span.context().getTag(SPAN_TYPE)
+      if (spanType === 'test') return span
+      if (spanType === 'test_suite_end') nestedTestSuiteSpan = span
     }
+    if (nestedTestSuiteSpan) return nestedTestSuiteSpan
   }
 
   const testSuiteSpan = store?.testSuiteSpan
@@ -187,7 +191,7 @@ class LogSubmissionPlugin extends Plugin {
     this.addSub('ci:log-submission:console', ({ args, logHolder, method }) => {
       let message
       try {
-        message = formatWithOptions({ customInspect: false }, ...args)
+        message = formatWithOptions({}, ...args)
       } catch (error) {
         log.error('Could not format console log for automatic submission', error)
         return

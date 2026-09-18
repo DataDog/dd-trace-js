@@ -40,16 +40,18 @@ function wrapConsole (target, getLogHolder) {
     if (typeof target[method] !== 'function') continue
 
     // Global console methods are bound at runtime, so source rewriting cannot intercept them.
-    shimmer.wrap(target, method, original => function () {
-      const shouldPublish = callDepth++ === 0
-      try {
-        const result = original.apply(this, arguments)
-        if (shouldPublish) publishLog(method, [...arguments], getLogHolder)
-        return result
-      } finally {
-        callDepth--
-      }
-    })
+    try {
+      shimmer.wrap(target, method, original => function () {
+        const shouldPublish = callDepth++ === 0
+        try {
+          const result = original.apply(this, arguments)
+          if (shouldPublish) publishLog(method, [...arguments], getLogHolder)
+          return result
+        } finally {
+          callDepth--
+        }
+      })
+    } catch {}
   }
 }
 

@@ -57,6 +57,17 @@ describe('console instrumentation', () => {
     assert.deepStrictEqual(payloads, [])
   })
 
+  it('does not throw when the console cannot be extended', () => {
+    const prototype = { error: sinon.stub(), warn: sinon.stub() }
+    const target = Object.freeze(Object.create(prototype))
+
+    wrapConsole(target, sinon.stub())
+    target.warn('warning')
+
+    sinon.assert.calledOnceWithExactly(prototype.warn, 'warning')
+    assert.deepStrictEqual(payloads, [])
+  })
+
   it('captures Jest buffered and custom console adapters', () => {
     class BufferedConsole {
       static write (buffer, method, message) {
