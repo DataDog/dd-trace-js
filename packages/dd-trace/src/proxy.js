@@ -49,6 +49,10 @@ const OPENFEATURE_STATE_NOOP = 0
 const OPENFEATURE_STATE_LAZY = 1
 const OPENFEATURE_STATE_ACTIVE = 2
 
+const configUpdateChannel = channel('datadog:config:update')
+
+const profiler = require('./profiler')
+
 let dynamicInstrumentation
 
 function getDynamicInstrumentation () {
@@ -113,6 +117,9 @@ function defineLazily (obj, property, getClass, ...args) {
 
 class Tracer extends NoopProxy {
   #openfeatureState = OPENFEATURE_STATE_NOOP
+
+  /** @type {boolean} */
+  #configPublished = false
 
   constructor () {
     super()
@@ -249,20 +256,8 @@ class Tracer extends NoopProxy {
         openfeatureRemoteConfig.enable(rc, () => this.openfeature, subscribeOpenfeatureToRemoteConfig)
       }
 
-      if (config.profiling.DD_PROFILING_ENABLED === 'true') {
-        this._profilerStarted = this._startProfiler(config)
-      } else {
-        this._profilerStarted = false
-        if (config.profiling.DD_PROFILING_ENABLED === 'auto') {
-          const { SSIHeuristics } = require('./profiling/ssi-heuristics')
-          const ssiHeuristics = new SSIHeuristics(config)
-          ssiHeuristics.start()
-          ssiHeuristics.onTriggered(() => {
-            this._startProfiler(config)
-            ssiHeuristics.onTriggered() // deregister this callback
-          })
-        }
-      }
+      configUpdateChannel.publish(config)
+      this.#configPublished = true
 
       // Experimental: mirror the active trace ID, span ID and endpoint into
       // an OTEP-4947 thread-local context record an out-of-process eBPF
@@ -297,7 +292,7 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      if (config.iast.enabled) {
+      if (config.iast.DD_IAST_ENABLED) {
         this._modules.rewriter.enable(config)
       }
 
@@ -374,22 +369,6 @@ class Tracer extends NoopProxy {
   }
 
   /**
-   * @param {import('./config/config-base')} config - Tracer configuration
-   */
-  _startProfiler (config) {
-    // do not stop tracer initialization if the profiler fails to be imported
-    try {
-      return require('./profiler').start(config)
-    } catch (error) {
-      log.error(
-        'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-        error
-      )
-      return false
-    }
-  }
-
-  /**
    * `tracer.openfeature` is only reachable through this proxy. SSI itself (auto-injecting
    * the tracer, resolving the vendored provider regardless of the customer's own
    * `node_modules` layout) is unaffected -- that is what this PR fixes. The remaining gap is
@@ -428,7 +407,7 @@ class Tracer extends NoopProxy {
    */
   #updateTracing (config) {
     if (config.DD_TRACE_ENABLED !== false) {
-      if (config.appsec.enabled) {
+      if (config.appsec.DD_APPSEC_ENABLED) {
         this._modules.appsec.enable(config)
       }
       if (config.llmobs.DD_LLMOBS_ENABLED) {
@@ -443,15 +422,15 @@ class Tracer extends NoopProxy {
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
 
-        if (config.experimental?.aiguard?.enabled) {
+        if (config.aiguard.DD_AI_GUARD_ENABLED) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
       }
-      if (config.experimental?.aiguard?.enabled) {
+      if (config.aiguard.DD_AI_GUARD_ENABLED) {
         this._modules.aiguard.enable(this._tracer, config)
       }
-      if (config.iast.enabled) {
+      if (config.iast.DD_IAST_ENABLED) {
         this._modules.iast.enable(config, this._tracer)
       }
       // This needs to be after the IAST module is enabled
@@ -507,15 +486,13 @@ class Tracer extends NoopProxy {
    * @override
    */
   get profiling () {
-    // Lazily require the profiler module and cache the result. If profiling
-    // is not enabled, runWithLabels still works as a passthrough (just calls fn()).
-    const profilerModule = require('./profiler')
+    // If profiling is not enabled, runWithLabels still works as a passthrough (just calls fn()).
     const profiling = {
       setCustomLabelKeys (keys) {
-        profilerModule.setCustomLabelKeys(keys)
+        profiler.setCustomLabelKeys(keys)
       },
       runWithLabels (labels, fn) {
-        return profilerModule.runWithLabels(labels, fn)
+        return profiler.runWithLabels(labels, fn)
       },
     }
     Reflect.defineProperty(this, 'profiling', { value: profiling, configurable: true, enumerable: true })
@@ -526,11 +503,11 @@ class Tracer extends NoopProxy {
    * @override
    */
   profilerStarted () {
-    if (this._profilerStarted === undefined) {
+    if (!this.#configPublished) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return Promise.resolve(this._profilerStarted)
+    return Promise.resolve(profiler.isStarted())
   }
 
   /**

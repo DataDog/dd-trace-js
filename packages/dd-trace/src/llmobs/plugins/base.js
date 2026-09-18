@@ -182,7 +182,7 @@ class LLMObsPlugin extends TracingPlugin {
       ...tags,
       mlApp: tags.mlApp ||
         traceTags[PROPAGATED_ML_APP_KEY] ||
-        this._tracerConfig.llmobs.mlApp ||
+        this._tracerConfig.llmobs.DD_LLMOBS_ML_APP ||
         this._tracerConfig.service,
       sessionId: tags.sessionId ||
         traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||

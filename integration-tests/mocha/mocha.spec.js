@@ -83,6 +83,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FINAL_STATUS,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
@@ -3158,6 +3160,35 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  it('keeps a root hook failure failed when no tests execute', async () => {
+    const suiteFile = 'ci-visibility/mocha-plugin-tests/empty-session-failing-before.js'
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        for (const eventType of ['test_session_end', 'test_module_end']) {
+          const event = events.find(({ type }) => type === eventType)
+          assert.ok(event, `expected ${eventType} event`)
+          assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
+          assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+        }
+      })
+
+    childProcess = exec(
+      `node node_modules/mocha/bin/mocha ./${suiteFile}`,
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+    const [, [exitCode]] = await Promise.all([
+      eventsPromise,
+      once(childProcess, 'close'),
+    ])
+    assert.notStrictEqual(exitCode, 0)
+  })
+
   context('intelligent test runner', () => {
     context('if the agent is not event platform proxy compatible', () => {
       it('does not do any intelligent test runner request', (done) => {
@@ -3499,6 +3530,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(tests.length, 0)
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'No tests were executed')
+          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
         })
 
       childProcess = exec(

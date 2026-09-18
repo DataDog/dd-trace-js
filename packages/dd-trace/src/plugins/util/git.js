@@ -95,10 +95,8 @@ function isDirectory (path) {
 }
 
 function isGitAvailable () {
-  const isWindows = os.platform() === 'win32'
-  const command = isWindows ? 'where' : 'which'
   try {
-    cachedExec(command, ['git'])
+    cachedExec('git', ['--version'])
     return true
   } catch {
     incrementCountMetric(TELEMETRY_GIT_COMMAND_ERRORS, { command: 'check_git', exitCode: 'missing' })
