@@ -1,0 +1,74 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "enabledManagers": [
+    "npm"
+  ],
+  "includePaths": [
+    "package.json",
+    "yarn.lock",
+    "docs/package.json",
+    "docs/yarn.lock",
+    ".github/actions/datadog-ci/package.json",
+    ".github/actions/datadog-ci/yarn.lock",
+    "vendor/package.json",
+    "vendor/package-lock.json"
+  ],
+  "timezone": "UTC",
+  "dependencyDashboard": false,
+  "automergeType": "pr",
+  "platformAutomerge": true,
+  "rebaseWhen": "behind-base-branch",
+  "postUpdateOptions": [
+    "yarnDedupeHighest"
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": false
+  },
+  "osvVulnerabilityAlerts": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "* 0-4 * * 0"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Disable regular dependency updates",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest",
+        "digest",
+        "rollback",
+        "bump",
+        "replacement"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Automerge Sunday lockfile maintenance",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "groupName": "all lock files",
+      "groupSingleUpdates": true,
+      "automerge": true,
+      "labels": [
+        "dependencies",
+        "javascript",
+        "semver-patch"
+      ]
+    }
+  ]
+}

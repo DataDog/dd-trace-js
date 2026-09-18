@@ -1,0 +1,33 @@
+name: "Renovate Automation"
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  renovate-automation:
+    if: >-
+      github.event.pull_request.user.login == 'renovate[bot]' &&
+      github.actor == 'renovate[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: renovate-automation
+      - name: Approve the PR
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - name: Enable auto-merge for the Renovate PR
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
