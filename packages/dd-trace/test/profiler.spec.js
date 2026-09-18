@@ -28,6 +28,7 @@ describe('profiler', () => {
         enabled: false,
         start: sinon.stub(),
         stop: sinon.stub(),
+        cancelQueuedStart: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
         runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
       },
@@ -72,6 +73,7 @@ describe('profiler', () => {
     profilingModule.profiler.stop.callsFake(() => {
       profilingModule.profiler.enabled = false
     })
+    profilingModule.profiler.cancelQueuedStart.reset()
     FakeSSIHeuristics.resetHistory()
     log.debug.resetHistory()
     log.error.resetHistory()
@@ -163,6 +165,45 @@ describe('profiler', () => {
       sinon.assert.calledTwice(profilingModule.profiler.start)
       sinon.assert.calledTwice(profilingModule.profiler.stop)
       assert.strictEqual(profilingModule.profiler.enabled, false)
+    })
+
+    it('cancels a queued forced start before entering auto mode', () => {
+      let stopping = false
+      let pendingStart = false
+      profilingModule.profiler.start.callsFake(() => {
+        if (stopping) {
+          pendingStart = true
+          return true
+        }
+        profilingModule.profiler.enabled = true
+        return true
+      })
+      profilingModule.profiler.stop.callsFake(() => {
+        pendingStart = false
+        if (!profilingModule.profiler.enabled) return
+        stopping = true
+        profilingModule.profiler.enabled = false
+      })
+      profilingModule.profiler.cancelQueuedStart.callsFake(() => {
+        pendingStart = false
+      })
+
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('true')
+      publishConfig('auto')
+
+      stopping = false
+      if (pendingStart) profilingModule.profiler.start({})
+
+      sinon.assert.calledOnce(profilingModule.profiler.cancelQueuedStart)
+      sinon.assert.calledOnce(FakeSSIHeuristics)
+      sinon.assert.calledTwice(profilingModule.profiler.start)
+      assert.strictEqual(profilingModule.profiler.enabled, false)
+
+      ssiHeuristics.triggeredCallback()
+      sinon.assert.calledThrice(profilingModule.profiler.start)
+      assert.strictEqual(profilingModule.profiler.enabled, true)
     })
 
     it('logs and does not propagate when stopping the profiler throws', () => {

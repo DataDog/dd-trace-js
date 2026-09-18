@@ -294,10 +294,17 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = this.#flushInterval
   }
 
+  /**
+   * Retracts a start requested while a shutdown collection was still in flight.
+   */
+  cancelQueuedStart () {
+    this.#pendingStart = undefined
+  }
+
   stop () {
     // A stop() always reflects the latest desired state, so it cancels any restart queued by a
     // start() that arrived while a prior shutdown collection was still in flight.
-    this.#pendingStart = undefined
+    this.cancelQueuedStart()
 
     if (!this.enabled) return
 
