@@ -35,6 +35,7 @@ describe('common Writer', () => {
     Writer = proxyquire('../../../src/exporters/common/writer', {
       './request': request,
       '../../log': log,
+      '../../serverless': { IS_AWS_LAMBDA_MICROVM: true },
     })
 
     writer = new Writer({ url: 'http://localhost:8126' })
@@ -188,5 +189,21 @@ describe('common Writer', () => {
 
     sinon.assert.calledOnce(encoder.reset)
     sinon.assert.calledOnce(resetController.reset)
+  })
+
+  it('does not create a reset controller outside MicroVM', () => {
+    const nonMicroVmRequest = sinon.stub()
+    nonMicroVmRequest.writable = true
+    nonMicroVmRequest.createResetController = sinon.stub()
+
+    const NonMicroVmWriter = proxyquire('../../../src/exporters/common/writer', {
+      './request': nonMicroVmRequest,
+      '../../log': log,
+      '../../serverless': { IS_AWS_LAMBDA_MICROVM: false },
+    })
+
+    new NonMicroVmWriter({ url: 'http://localhost:8126' })
+
+    sinon.assert.notCalled(nonMicroVmRequest.createResetController)
   })
 })

@@ -189,6 +189,7 @@ function describeWriter (protocolVersion) {
         const { resetController, ...requestOptions } = options
         assert.deepStrictEqual(request.getCall(0).args[0], [expectedData])
         assert.strictEqual(resetController, writer._identityRefreshController)
+        assert.strictEqual(Object.hasOwn(options, 'resetController'), false)
         assert.deepStrictEqual(requestOptions, {
           url,
           path: `/v${protocolVersion}/traces`,

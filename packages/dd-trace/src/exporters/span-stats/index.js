@@ -34,7 +34,6 @@ class SpanStatsExporter {
 
   /**
    * Discards encoded payloads and cancels retries that were started before an identity refresh.
-   * @returns {void}
    */
   resetPendingState () {
     this._writer.resetPendingBatch()

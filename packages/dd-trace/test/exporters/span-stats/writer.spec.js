@@ -16,6 +16,11 @@ let request
 let encoder
 let url
 let log
+const getBaseWriter = isMicroVm => proxyquire('../../../src/exporters/common/writer', {
+  './request': request,
+  '../../log': log,
+  '../../serverless': { IS_AWS_LAMBDA_MICROVM: isMicroVm },
+})
 
 describe('span-stats writer', () => {
   beforeEach(() => {
@@ -42,7 +47,9 @@ describe('span-stats writer', () => {
       return encoder
     }
 
+    const BaseWriter = getBaseWriter(false)
     Writer = proxyquire('../../../src/exporters/span-stats/writer', {
+      '../common/writer': BaseWriter,
       '../common/request': request,
       '../../encode/span-stats': { SpanStatsEncoder },
       '../../log': log,
@@ -115,7 +122,9 @@ describe('span-stats writer', () => {
       const SpanStatsEncoder = function () {
         return encoder
       }
+      const MicroVmBaseWriter = getBaseWriter(true)
       const MicroVmWriter = proxyquire('../../../src/exporters/span-stats/writer', {
+        '../common/writer': MicroVmBaseWriter,
         '../common/request': request,
         '../../encode/span-stats': { SpanStatsEncoder },
         '../../log': log,
