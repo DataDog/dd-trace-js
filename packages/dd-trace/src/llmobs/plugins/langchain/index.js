@@ -3,8 +3,6 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
-const pluginManager = require('../../../../../..')._pluginManager
-
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
 const OPENAI_PROVIDER_NAME = 'openai'
@@ -180,6 +178,9 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   isLLMIntegrationEnabled (integration) {
+    // read off the owning manager rather than a module-scope capture: the tracer, and with it the
+    // plugin manager, can be rebuilt after this module is first loaded
+    const pluginManager = this._tracer?._pluginManager
     return SUPPORTED_INTEGRATIONS.has(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
   }
 }
