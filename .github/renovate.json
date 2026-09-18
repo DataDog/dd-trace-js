@@ -71,7 +71,7 @@
       ]
     },
     {
-      "description": "Maintain the root lockfile separately",
+      "description": "Root lockfile maintenance",
       "matchManagers": [
         "npm"
       ],
@@ -85,7 +85,7 @@
       "groupSlug": "root-lockfile-maintenance"
     },
     {
-      "description": "Maintain the docs lockfile separately",
+      "description": "Docs lockfile maintenance",
       "matchManagers": [
         "npm"
       ],
@@ -99,7 +99,7 @@
       "groupSlug": "docs-lockfile-maintenance"
     },
     {
-      "description": "Maintain the datadog-ci action lockfile separately",
+      "description": "datadog-ci action lockfile maintenance",
       "matchManagers": [
         "npm"
       ],
@@ -113,7 +113,7 @@
       "groupSlug": "datadog-ci-action-lockfile-maintenance"
     },
     {
-      "description": "Maintain the vendor lockfile separately",
+      "description": "Vendor lockfile maintenance",
       "matchManagers": [
         "npm"
       ],
