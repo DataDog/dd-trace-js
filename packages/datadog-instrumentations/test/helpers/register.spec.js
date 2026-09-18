@@ -7,6 +7,8 @@ const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
 
 const satisfies = require('../../../../vendor/dist/semifies')
+const hooks = require('../../src/helpers/hooks')
+const instrumentations = require('../../src/helpers/instrumentations')
 
 describe('register', () => {
   let hooksMock
@@ -134,6 +136,30 @@ describe('register', () => {
       result_class: 'incompatible_library',
       result_reason: `Incompatible integration version: ${integrationName}@${moduleVersion}`,
     })
+  })
+
+  it('should not report rewrite-only WebdriverIO integrations as incompatible', () => {
+    const integrations = [
+      ['@wdio/runner', '@wdio/runner/build/index.js', '9.31.7', true],
+      ['jasmine-core', 'jasmine-core/lib/jasmine-core/jasmine.js', '5.13.0', false],
+      ['webdriver', 'webdriver/build/index.cjs', '9.31.7', false],
+    ]
+    hooksMock = Object.fromEntries(integrations.map(([name]) => [name, hooks[name]]))
+    instrumentationsMock = instrumentations
+    loadRegisterWithEnv()
+
+    for (const [name, moduleName, moduleVersion, isIitm] of integrations) {
+      const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === name)
+      const moduleExports = {}
+
+      assert.strictEqual(
+        hookCall.args[2](moduleExports, moduleName, `/path/to/${name}`, moduleVersion, isIitm),
+        moduleExports
+      )
+    }
+    channel('dd-trace:exporter:first-flush').publish()
+
+    sinon.assert.notCalled(telemetryMock)
   })
 
   it('should only unwrap an IITM default export after its instrumentation matches', () => {

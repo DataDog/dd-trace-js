@@ -22,7 +22,7 @@ const {
   TEST_SUITE_EXECUTION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { publishWithCompletion } = require('./helpers/channel')
-const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { addHook, channel, getHooks, tracingChannel } = require('./helpers/instrument')
 const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
@@ -104,6 +104,20 @@ let isRumCleanupPending = false
 function getCurrentRumContext () {
   return globalThis.window
 }
+
+/**
+ * @param {unknown} moduleExports
+ */
+function preserveModuleExports (moduleExports) {
+  return moduleExports
+}
+
+const rewriteHooks = getHooks(['@wdio/runner', 'jasmine-core', 'webdriver'])
+for (const hook of rewriteHooks.values()) {
+  addHook(hook, preserveModuleExports)
+}
+const [webdriverHook] = getHooks('webdriver').values()
+addHook({ name: 'webdriver', versions: webdriverHook.versions, file: 'build/index.cjs' }, preserveModuleExports)
 
 addHook({
   name: '@wdio/local-runner',
