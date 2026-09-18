@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const semver = require('semver')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -42,30 +44,45 @@ describe('esm', () => {
       await agent.stop()
     })
 
+    const modes = semver.intersects(version, '>=6.0.0') ? ['default', 'thick'] : ['default']
+
     for (const variant of Object.keys(variants)) {
-      it(`is instrumented ${variant}`, async () => {
-        const messageReceived = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-          assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
-        }, messageTimeoutMs)
+      for (const mode of modes) {
+        const suffix = mode === 'thick' ? ' in Thick mode' : ''
 
-        const completed = spawnPluginIntegrationTestProcAndExpectExit(
-          sandboxCwd(),
-          variants[variant],
-          agent.port,
-          undefined,
-          undefined,
-          undefined,
-          processTimeoutMs
-        )
-        proc = completed.proc
+        it(`is instrumented ${variant}${suffix}`, async () => {
+          const messageReceived = agent.assertMessageReceived(({ headers, payload }) => {
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+            assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+            assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
+            assert.strictEqual(checkSpansForServiceName(payload, 'oracle.pool.acquire'), true)
 
-        await Promise.all([
-          completed,
-          messageReceived,
-        ])
-      }).timeout(messageTimeoutMs + 5_000)
+            if (mode === 'thick') {
+              const acquireSpans = payload.flat().filter(span => span.name === 'oracle.pool.acquire')
+              assert.strictEqual(acquireSpans.length, 2)
+              for (const span of acquireSpans) {
+                assert.strictEqual(span.meta['db.user'], 'test')
+              }
+            }
+          }, messageTimeoutMs)
+
+          const completed = spawnPluginIntegrationTestProcAndExpectExit(
+            sandboxCwd(),
+            variants[variant],
+            agent.port,
+            mode === 'thick' ? { ORACLEDB_THICK: 'true' } : undefined,
+            undefined,
+            undefined,
+            processTimeoutMs
+          )
+          proc = completed.proc
+
+          await Promise.all([
+            completed,
+            messageReceived,
+          ])
+        }).timeout(messageTimeoutMs + 5_000)
+      }
     }
   })
 })
