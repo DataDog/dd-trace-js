@@ -1,0 +1,18 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {},
+    "body": "{\"model\":\"gpt-4o-mini\",\"input\":\"Run MCP lookup\",\"tools\":[{\"type\":\"mcp\",\"server_label\":\"dd\",\"server_url\":\"https://example.com/mcp\"}],\"stream\":false}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"id\":\"resp_parity\",\"object\":\"response\",\"created_at\":1700000000,\"model\":\"gpt-4o-mini\",\"output\":[{\"type\":\"mcp_list_tools\",\"tools\":[{\"name\":\"lookup\",\"description\":\"Lookup\",\"input_schema\":{\"type\":\"object\"}}]},{\"type\":\"mcp_call\",\"id\":\"mcp_1\",\"name\":\"lookup\",\"arguments\":\"{\\\"q\\\":\\\"x\\\"}\",\"output\":\"result text\"},{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"done\"}]}],\"usage\":{\"input_tokens\":10,\"output_tokens\":8,\"total_tokens\":18,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens_details\":{\"reasoning_tokens\":0}}}"
+  }
+}

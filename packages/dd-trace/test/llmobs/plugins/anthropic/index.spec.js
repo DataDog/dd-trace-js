@@ -99,6 +99,25 @@ describe('Plugin', () => {
         assert.equal(llmobsSpans[0].meta.model_provider, 'unknown', 'Model provider does not match')
       })
 
+      it('sets model_provider to amazon for Bedrock base URLs', async () => {
+        const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()
+        const customClient = new Anthropic({ baseURL: 'http://localhost:8000/bedrock', maxRetries: 0 })
+
+        try {
+          await customClient.messages.create({
+            model: 'claude-3-7-sonnet-20250219',
+            messages: [{ role: 'user', content: 'Hello, world!' }],
+            max_tokens: 100,
+            temperature: 0.5,
+          })
+        } catch {
+        }
+
+        const { llmobsSpans } = await getEvents()
+
+        assert.equal(llmobsSpans[0].meta.model_provider, 'amazon', 'Model provider does not match')
+      })
+
       describe('stream', () => {
         it('creates a span', async () => {
           const stream = await client.messages.create({
@@ -324,6 +343,14 @@ describe('Plugin', () => {
               }],
             },
           ],
+          toolDefinitions: [{
+            name: 'get_weather',
+            description: 'Get the weather for a specific location',
+            schema: {
+              type: 'object',
+              properties: { location: { type: 'string' } },
+            },
+          }],
           metadata: {
             max_tokens: 16000,
             temperature: 1,
@@ -412,6 +439,14 @@ describe('Plugin', () => {
             },
           ],
           outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          toolDefinitions: [{
+            name: 'get_weather',
+            description: 'Get the weather for a specific location',
+            schema: {
+              type: 'object',
+              properties: { location: { type: 'string' } },
+            },
+          }],
           metadata: {
             max_tokens: 16000,
             temperature: 1,

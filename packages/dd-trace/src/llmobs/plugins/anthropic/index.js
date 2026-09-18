@@ -3,7 +3,7 @@
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
 const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
-const { appendMessage } = require('./util')
+const { appendMessage, getAnthropicToolDefinitions } = require('./util')
 
 const ALLOWED_METADATA_KEYS = new Set([
   'max_tokens',
@@ -50,7 +50,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
               response.content.push({ type, text: contentBlock.text })
             } else if (type === 'thinking') {
               response.content.push({ type, thinking: contentBlock.thinking ?? '' })
-            } else if (type === 'tool_use') {
+            } else if (typeof type === 'string' && type.includes('tool_use')) {
               response.content.push({ type, name: contentBlock.name, input: '', id: contentBlock.id })
             }
             break
@@ -79,7 +79,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
           case 'content_block_stop': {
             const lastBlock = response.content.at(-1)
             if (!lastBlock) break
-            if (lastBlock.type === 'tool_use') {
+            if (typeof lastBlock.type === 'string' && lastBlock.type.includes('tool_use')) {
               const input = lastBlock.input ?? '{}'
               lastBlock.input = safeJsonParse(input, {})
             }
@@ -134,9 +134,11 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   }
 
   _getModelProvider (baseUrl = '') {
-    if (baseUrl.includes('anthropic')) {
-      return 'anthropic'
-    }
+    const url = typeof baseUrl === 'string' ? baseUrl.toLowerCase() : ''
+    if (!url) return UNKNOWN_MODEL_PROVIDER
+    if (url.includes('bedrock')) return 'amazon'
+    if (url.includes('google')) return 'google'
+    if (url.includes('anthropic')) return 'anthropic'
     return UNKNOWN_MODEL_PROVIDER
   }
 
@@ -144,16 +146,18 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { options, result } = ctx
+    const { options = {}, result } = ctx
 
     this.#tagAnthropicInputMessages(span, options)
+    const toolDefinitions = getAnthropicToolDefinitions(options?.tools)
+    if (toolDefinitions.length) this._tagger.tagToolDefinitions(span, toolDefinitions)
     this.#tagAnthropicOutputMessages(span, result)
     this.#tagAnthropicMetadata(span, options)
     this.#tagAnthropicUsage(span, result)
   }
 
   #tagAnthropicInputMessages (span, options) {
-    const { system, messages } = options
+    const { system, messages = [] } = options
     const inputMessages = []
 
     if (system) {
@@ -178,7 +182,13 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     }
 
     const outputMessages = []
+    if (!Array.isArray(content)) {
+      this._tagger.tagLLMIO(span, null, [{ content: content == null ? '' : String(content), role }])
+      return
+    }
+
     for (const block of content) {
+      if (!block || typeof block !== 'object') continue
       if (block.type === 'thinking') {
         outputMessages.push({ content: block.thinking ?? '', role: 'reasoning' })
         continue
@@ -186,10 +196,10 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       const { text } = block
       if (typeof text === 'string') {
         outputMessages.push({ content: text, role })
-      } else if (block.type === 'tool_use') {
+      } else if (typeof block.type === 'string' && block.type.includes('tool_use')) {
         const toolCall = {
           name: block.name,
-          arguments: safeJsonParse(block.input, {}),
+          arguments: typeof block.input === 'string' ? safeJsonParse(block.input, {}) : (block.input ?? {}),
           toolId: block.id,
           type: block.type,
         }
