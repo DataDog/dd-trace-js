@@ -14,6 +14,8 @@ const { computeIntakeUrl } = require('./intake')
  * Batches multiple traces per request using timer-based flushing.
  */
 class AgentlessExporter {
+  static supportsMetaStruct = true
+
   #timer
   #config
 

@@ -109,8 +109,19 @@ class LLMObsSpanProcessor {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
       }
+      const metaStructTags = {
+        mlApp: mlObsTags[ML_APP],
+        sampleRate: mlObsTags[SAMPLE_RATE],
+        samplingDecision: mlObsTags[SAMPLING_DECISION],
+      }
 
-      cachedEvents.set(span, { event: formattedEvent, mlObsTags, routing })
+      if (this.#config.DD_TRACE_ENABLED === false) {
+        this.#appendToWriter(span, formattedEvent, routing)
+      } else {
+        cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
+      }
+
+      LLMObsTagger.tagMap.delete(span)
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
@@ -129,18 +140,25 @@ class LLMObsSpanProcessor {
    *   spans: import('../opentracing/span')[],
    *   samplingPriority?: number,
    *   isRecording?: boolean,
+   *   supportsMetaStruct?: boolean,
    * }} trace
    */
-  processTrace ({ spans, samplingPriority, isRecording }) {
+  processTrace ({ spans, samplingPriority, isRecording, supportsMetaStruct }) {
     for (const span of spans) {
       const cached = cachedEvents.get(span)
       if (!cached) continue
       cachedEvents.delete(span)
 
       try {
-        const { event, mlObsTags, routing } = cached
-        if (this.#shouldAttachMetaStruct(routing, event, samplingPriority, isRecording)) {
-          this.#attachMetaStruct(span, event, mlObsTags)
+        const { event, metaStructTags, routing } = cached
+        if (this.#shouldAttachMetaStruct(
+          routing,
+          event,
+          samplingPriority,
+          isRecording,
+          supportsMetaStruct
+        )) {
+          this.#attachMetaStruct(span, event, metaStructTags)
           continue
         }
 
@@ -337,9 +355,10 @@ class LLMObsSpanProcessor {
    * @param {object} event
    * @param {number | undefined} samplingPriority
    * @param {boolean | undefined} isRecording
+   * @param {boolean | undefined} supportsMetaStruct
    */
-  #shouldAttachMetaStruct (routing, event, samplingPriority, isRecording) {
-    return !this.#config.isCiVisibility &&
+  #shouldAttachMetaStruct (routing, event, samplingPriority, isRecording, supportsMetaStruct) {
+    return supportsMetaStruct !== false &&
       isRecording !== false &&
       !routing.apiKey &&
       !this.#hasRepeatedTagKeys(event.tags) &&
@@ -379,6 +398,7 @@ class LLMObsSpanProcessor {
 
   /**
    * Checks whether the intake tag list contains keys that cannot be represented losslessly by the meta_struct map.
+   * TODO: have intake support duplicate tags and remove this function from check
    *
    * @param {string[]} tags
    */
@@ -400,26 +420,26 @@ class LLMObsSpanProcessor {
    *
    * @param {import('../opentracing/span')} span
    * @param {object} event
-   * @param {Record<string, unknown>} mlObsTags
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
    */
-  #attachMetaStruct (span, event, mlObsTags) {
+  #attachMetaStruct (span, event, metaStructTags) {
     span.meta_struct ??= {}
-    span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(event, mlObsTags)
+    span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(event, metaStructTags)
   }
 
   /**
    * Converts the LLMObs span event payload into the meta_struct shape consumed by the trace intake.
    *
    * @param {object} event
-   * @param {Record<string, unknown>} mlObsTags
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
    * @returns {object}
    */
-  #formatMetaStruct (event, mlObsTags) {
+  #formatMetaStruct (event, metaStructTags) {
     const tags = this.#stringArrayTagsToObjectTags(event.tags)
     const dd = {}
 
-    if (mlObsTags[SAMPLE_RATE] !== undefined) dd.sample_rate = mlObsTags[SAMPLE_RATE]
-    if (mlObsTags[SAMPLING_DECISION] !== undefined) dd.sampling_decision = mlObsTags[SAMPLING_DECISION]
+    if (metaStructTags.sampleRate !== undefined) dd.sample_rate = metaStructTags.sampleRate
+    if (metaStructTags.samplingDecision !== undefined) dd.sampling_decision = metaStructTags.samplingDecision
     if (event._dd?.scope !== undefined) dd.scope = event._dd.scope
 
     const metaStruct = {
@@ -432,7 +452,7 @@ class LLMObsSpanProcessor {
 
     if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
     if (event.name !== undefined) metaStruct.name = event.name
-    if (mlObsTags[ML_APP]) metaStruct.ml_app = mlObsTags[ML_APP]
+    if (metaStructTags.mlApp) metaStruct.ml_app = metaStructTags.mlApp
     if (event.session_id) metaStruct.session_id = event.session_id
 
     return metaStruct

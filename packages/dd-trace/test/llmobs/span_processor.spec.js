@@ -84,6 +84,7 @@ describe('span processor', () => {
       processor.process(span)
 
       assert.strictEqual(span.meta_struct, undefined)
+      assert.strictEqual(LLMObsTagger.tagMap.has(span), false)
       sinon.assert.notCalled(writer.append)
 
       processor.processTrace({ spans: [span], samplingPriority: 1 })
@@ -262,6 +263,36 @@ describe('span processor', () => {
       assert.strictEqual(span.meta_struct, undefined)
     })
 
+    it('uses the writer immediately when apm tracing is disabled', () => {
+      processor.destroy()
+      processor = new LLMObsSpanProcessor({
+        DD_TRACE_ENABLED: false,
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      })
+      processor.setWriter(writer)
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], samplingPriority: 1, supportsMetaStruct: true })
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
     it('uses the writer when the apm trace is not recording', () => {
       span = {
         context () {
@@ -286,13 +317,7 @@ describe('span processor', () => {
       assert.strictEqual(span.meta_struct, undefined)
     })
 
-    it('uses the writer when the Test Optimization exporter is active', () => {
-      processor.destroy()
-      processor = new LLMObsSpanProcessor({
-        isCiVisibility: true,
-        llmobs: { DD_LLMOBS_ENABLED: true },
-      })
-      processor.setWriter(writer)
+    it('uses the writer when the apm exporter does not support meta_struct', () => {
       span = {
         context () {
           return {
@@ -309,7 +334,8 @@ describe('span processor', () => {
         '_ml_obs.meta.span.kind': 'workflow',
       })
 
-      processSpan(1)
+      processor.process(span)
+      processor.processTrace({ spans: [span], samplingPriority: 1, supportsMetaStruct: false })
 
       sinon.assert.calledOnce(writer.append)
       assert.strictEqual(span.meta_struct, undefined)

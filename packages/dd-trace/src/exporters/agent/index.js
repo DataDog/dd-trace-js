@@ -6,6 +6,8 @@ const { createServerlessDeliveryTracker } = require('../../serverless')
 const Writer = require('./writer')
 
 class AgentExporter {
+  static supportsMetaStruct = true
+
   #timer
   #serverlessDeliveryTracker
 

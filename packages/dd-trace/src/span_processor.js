@@ -77,6 +77,7 @@ class SpanProcessor {
           spans: finished,
           samplingPriority: spanContext._sampling.priority,
           isRecording: trace.isRecording,
+          supportsMetaStruct: this._exporter.constructor.supportsMetaStruct,
         })
       }
 
