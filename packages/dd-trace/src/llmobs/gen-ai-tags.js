@@ -1,6 +1,7 @@
 'use strict'
 
 const {
+  ARTIFICIAL_GEN_AI_TAGS,
   CACHE_READ_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   DEFAULT_MODEL,
@@ -21,6 +22,9 @@ const {
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
 } = require('./constants/tags')
+
+// dd-trace-py writes the same string, and the backend compares against it verbatim.
+const ARTIFICIAL_GEN_AI_TAGS_VALUE = 'True'
 
 /** @type {Set<string | undefined>} */
 const MODEL_BACKED_SPAN_KINDS = new Set(['llm', 'embedding'])
@@ -75,6 +79,10 @@ function updateGenAiApmTags (span, { spanKind, modelName, modelProvider, mlApp, 
   if (mlApp) spanContext.setTag(GEN_AI_APPLICATION_NAME, mlApp)
   if (sessionId) spanContext.setTag(GEN_AI_CONVERSATION_ID, sessionId)
   if (metrics) setGenAiApmUsageMetrics(span, spanKind, metrics)
+
+  if (spanKind || modelName || modelProvider || mlApp || sessionId) {
+    spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, ARTIFICIAL_GEN_AI_TAGS_VALUE)
+  }
 }
 
 /**
@@ -94,11 +102,15 @@ function setGenAiApmUsageMetrics (span, spanKind, metrics) {
     if (typeof value !== 'number') continue
 
     const genAiKey = GEN_AI_USAGE_METRIC_KEYS[METRIC_KEY_ALIASES[key] ?? key]
-    if (genAiKey) spanContext.setTag(genAiKey, value)
+    if (genAiKey) {
+      spanContext.setTag(genAiKey, value)
+      spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, ARTIFICIAL_GEN_AI_TAGS_VALUE)
+    }
   }
 }
 
 module.exports = {
+  ARTIFICIAL_GEN_AI_TAGS_VALUE,
   MODEL_BACKED_SPAN_KINDS,
   setGenAiApmTags,
   setGenAiApmUsageMetrics,

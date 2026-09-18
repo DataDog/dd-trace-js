@@ -65,6 +65,7 @@ describe('claude-agent-sdk gen_ai APM attributes with LLM Observability disabled
       'gen_ai.usage.total_tokens': 17,
       'gen_ai.usage.cache_read_input_tokens': 2,
       'gen_ai.usage.cache_write_input_tokens': 1,
+      '_dd.llmobs.artificial_gen_ai_tags': 'True',
     })
   })
 })

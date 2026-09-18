@@ -106,6 +106,10 @@ module.exports = {
   GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_write_input_tokens',
   GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.reasoning_output_tokens',
 
+  // Marks the `gen_ai.*` tags on an APM span as tracer-emitted. Without it the backend reads them
+  // as user-set and builds a duplicate LLMObs span out of the APM span.
+  ARTIFICIAL_GEN_AI_TAGS: '_dd.llmobs.artificial_gen_ai_tags',
+
   ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
   ROUTING_SITE: '_dd.llmobs.routing.site',
 }

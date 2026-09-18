@@ -2440,6 +2440,7 @@ describe('sdk', () => {
         'gen_ai.usage.cache_read_input_tokens': 4,
         'gen_ai.usage.cache_write_input_tokens': 5,
         'gen_ai.usage.reasoning_output_tokens': 6,
+        '_dd.llmobs.artificial_gen_ai_tags': 'True',
       })
     })
 
@@ -2507,6 +2508,7 @@ describe('sdk', () => {
       span.finish()
 
       assert.strictEqual(apmTags(span)['gen_ai.operation.name'], undefined)
+      assert.strictEqual(apmTags(span)['_dd.llmobs.artificial_gen_ai_tags'], undefined)
     })
   })
 

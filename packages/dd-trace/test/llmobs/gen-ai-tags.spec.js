@@ -5,7 +5,12 @@ require('../setup/core')
 const assert = require('node:assert')
 const { describe, it, beforeEach } = require('mocha')
 
-const { setGenAiApmTags, setGenAiApmUsageMetrics, updateGenAiApmTags } = require('../../src/llmobs/gen-ai-tags')
+const {
+  ARTIFICIAL_GEN_AI_TAGS_VALUE,
+  setGenAiApmTags,
+  setGenAiApmUsageMetrics,
+  updateGenAiApmTags,
+} = require('../../src/llmobs/gen-ai-tags')
 
 describe('gen_ai APM tags', () => {
   let span
@@ -40,6 +45,7 @@ describe('gen_ai APM tags', () => {
       'gen_ai.usage.input_tokens': 10,
       'gen_ai.usage.output_tokens': 20,
       'gen_ai.usage.total_tokens': 30,
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
     })
   })
 
@@ -50,6 +56,7 @@ describe('gen_ai APM tags', () => {
       'gen_ai.operation.name': 'embedding',
       'gen_ai.request.model': 'custom',
       'gen_ai.provider.name': 'custom',
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
     })
   })
 
@@ -60,18 +67,25 @@ describe('gen_ai APM tags', () => {
       'gen_ai.operation.name': 'agent',
       'gen_ai.request.model': 'gpt-4o',
       'gen_ai.provider.name': 'openai',
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
     })
 
     tags = {}
     setGenAiApmTags(span, { spanKind: 'workflow' })
 
-    assert.deepStrictEqual(tags, { 'gen_ai.operation.name': 'workflow' })
+    assert.deepStrictEqual(tags, {
+      'gen_ai.operation.name': 'workflow',
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
+    })
   })
 
   it('omits token usage for a kind that is not model-backed', () => {
     setGenAiApmTags(span, { spanKind: 'workflow', metrics: { input_tokens: 10 } })
 
-    assert.deepStrictEqual(tags, { 'gen_ai.operation.name': 'workflow' })
+    assert.deepStrictEqual(tags, {
+      'gen_ai.operation.name': 'workflow',
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
+    })
   })
 
   it('writes only the fields an update carries, without defaulting the model', () => {
@@ -80,6 +94,7 @@ describe('gen_ai APM tags', () => {
     assert.deepStrictEqual(tags, {
       'gen_ai.operation.name': 'llm',
       'gen_ai.conversation.id': 'sess-1',
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
     })
   })
 
@@ -100,6 +115,7 @@ describe('gen_ai APM tags', () => {
       'gen_ai.usage.cache_read_input_tokens': 4,
       'gen_ai.usage.cache_write_input_tokens': 5,
       'gen_ai.usage.reasoning_output_tokens': 6,
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
     })
   })
 
@@ -111,6 +127,16 @@ describe('gen_ai APM tags', () => {
       output_tokens: 20,
     })
 
-    assert.deepStrictEqual(tags, { 'gen_ai.usage.output_tokens': 20 })
+    assert.deepStrictEqual(tags, {
+      'gen_ai.usage.output_tokens': 20,
+      '_dd.llmobs.artificial_gen_ai_tags': ARTIFICIAL_GEN_AI_TAGS_VALUE,
+    })
+  })
+
+  it('does not mark a span it wrote no gen_ai tag onto', () => {
+    updateGenAiApmTags(span, {})
+    setGenAiApmUsageMetrics(span, 'workflow', { input_tokens: 10 })
+
+    assert.deepStrictEqual(tags, {})
   })
 })
