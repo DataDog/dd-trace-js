@@ -1,5 +1,7 @@
 'use strict'
 
+const { types } = require('node:util')
+
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./devtools_client/defaults')
 const { EVENT_TYPE, SKIPPED_REASON } = require('./guardrail-metrics')
 const {
@@ -103,21 +105,23 @@ function installProbeSampler (guardrailMetrics) {
     },
 
     /**
-     * Record that a probe's condition threw, throttle the probe, and request a pause so the error can be reported.
+     * Record that a probe's condition threw, throttle the probe, and request a pause if the error can be reported.
      *
      * Error results bypass the per-probe and global rate limits: they are rate limited by the throttle instead, which
-     * allows one error result per probe per window.
+     * allows one error result per probe per window. If the shared buffer is full, the error is dropped but the throttle
+     * is retained.
      *
      * @param {number} probeIndex - The worker-side probe sampling index.
      * @param {string} probeId - The probe id.
      * @param {unknown} error - The value thrown by the condition.
      */
     conditionError (probeIndex, probeId, error) {
+      const stored = storeSampledProbeIndex(probeIndex | CONDITION_ERROR_FLAG)
       conditionErrorByProbeId.set(probeId, {
         throttledUntilNs: process.hrtime.bigint() + CONDITION_ERROR_THROTTLE_NS,
-        error: describeError(error),
+        error: stored ? describeError(error) : undefined,
       })
-      return storeSampledProbeIndex(probeIndex | CONDITION_ERROR_FLAG)
+      return stored
     },
 
     /**
@@ -171,14 +175,37 @@ function uninstallProbeSampler () {
 }
 
 /**
- * Describe a value thrown by a probe condition the way the template evaluation does, without touching the value if it's
- * not an error, since conditions can throw anything.
+ * Describe a value thrown by a probe condition without invoking user code. Conditions can throw anything, including
+ * errors with accessors and proxies whose traps have side effects.
  *
  * @param {unknown} error - The thrown value.
  */
 function describeError (error) {
-  if (error instanceof Error) return `${error.name}: ${error.message}`
-  return typeof error === 'string' ? error : 'Unknown evaluation error'
+  if (typeof error === 'string') return error
+  if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
+    return 'Unknown evaluation error'
+  }
+
+  const name = getErrorStringProperty(error, 'name')
+  const message = getErrorStringProperty(error, 'message')
+  if (name === undefined) return message ?? 'Unknown evaluation error'
+  if (message === undefined) return name
+  return `${name}: ${message}`
+}
+
+/**
+ * Read a string-valued error property without invoking accessors or proxy traps.
+ *
+ * @param {object} error - The thrown object to inspect.
+ * @param {'name' | 'message'} property - The property to find.
+ */
+function getErrorStringProperty (error, property) {
+  while (error !== null) {
+    if (types.isProxy(error)) return
+    const descriptor = Object.getOwnPropertyDescriptor(error, property)
+    if (descriptor !== undefined) return typeof descriptor.value === 'string' ? descriptor.value : undefined
+    error = Object.getPrototypeOf(error)
+  }
 }
 
 /**

@@ -331,6 +331,31 @@ describe('probe sampler', function () {
 
         sampler.conditionError(7, 'probe-1', { not: 'an error' })
         assert.strictEqual(sampler.takeConditionError('probe-1'), 'Unknown evaluation error')
+
+        sampler.conditionError(7, 'probe-1', { name: 'CustomError', message: 'boom' })
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'CustomError: boom')
+      })
+
+      it('should not invoke error accessors or proxy traps when describing a condition error', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        for (const property of ['name', 'message']) {
+          const error = new Error('boom')
+          Object.defineProperty(error, property, {
+            get () { throw new Error(`${property} getter invoked`) },
+          })
+
+          assert.strictEqual(sampler.conditionError(7, `accessor-${property}`, error), true)
+          assert.strictEqual(sampler.takeConditionError(`accessor-${property}`), property === 'name' ? 'boom' : 'Error')
+        }
+
+        const proxy = new Proxy(new Error('boom'), {
+          get () { throw new Error('get trap invoked') },
+          getPrototypeOf () { throw new Error('getPrototypeOf trap invoked') },
+        })
+        assert.strictEqual(sampler.conditionError(7, 'proxy', proxy), true)
+        assert.strictEqual(sampler.takeConditionError('proxy'), 'Unknown evaluation error')
       })
 
       it('should throttle condition evaluation for the throttle window after an error', function () {
@@ -363,12 +388,19 @@ describe('probe sampler', function () {
         )
       })
 
-      it('should skip the condition error when the shared buffer is full', function () {
+      it('should drop the condition error but retain the throttle when the shared buffer is full', function () {
         const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
         Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, MAX_SAMPLED_PROBES_PER_PAUSE)
 
-        assert.strictEqual(getSampler().conditionError(7, 'probe-1', new Error('boom')), false)
+        assert.strictEqual(sampler.conditionError(7, 'probe-1', new Error('boom')), false)
         assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 1)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
+        now += CONDITION_ERROR_THROTTLE_NS - 1n
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
+        now += 1n
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), true)
       })
 
       it('should forget the recorded error and throttle when a probe is removed', function () {
