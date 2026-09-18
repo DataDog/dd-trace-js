@@ -435,6 +435,30 @@ for (const version of versions) {
               assertLoggerOutput()
             })
 
+            if (framework === 'mocha') {
+              it('submits correlated logs from the global console', async () => {
+                await runScenario('automaticConsoleLogSubmission', 1, payloads => {
+                  const logRequests = getLogRequests(payloads).filter(({ url }) =>
+                    url === '/api/v2/logs?ddsource=nodejs&service=my-service')
+                  const messages = logRequests.flatMap(({ logMessage }) => logMessage)
+                  const message = messages.find(({ message }) =>
+                    message === 'WebdriverIO console warning: details')
+                  const test = getEvents(payloads).find(event => event.type === 'test').content
+
+                  assert.ok(message)
+                  assert.strictEqual(message.status, 'warn')
+                  assert.deepStrictEqual(Object.keys(message.dd).sort(), ['service', 'span_id', 'trace_id'])
+                  assert.strictEqual(message.dd.service, 'my-service')
+                  assert.strictEqual(message.dd.span_id, test.span_id.toString())
+                  assert.strictEqual(message.dd.trace_id, test.trace_id.toString())
+                }, {
+                  DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                  DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                  DD_SERVICE: 'my-service',
+                })
+              })
+            }
+
             it('does not submit logs when automatic submission is disabled', async () => {
               await runScenario('automaticLogSubmission', 1, payloads => {
                 assert.strictEqual(getLogRequests(payloads).length, 0)
