@@ -2130,7 +2130,7 @@ moduleTypes.forEach(({
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
       hasTestsReported: cypressPlugin.hasTestsReported,
-      hasFailedTestSuites: cypressPlugin.hasFailedTestSuites,
+      testSuiteStatuses: cypressPlugin.testSuiteStatuses,
       testsToSkip: cypressPlugin.testsToSkip,
       testSessionSpan: cypressPlugin.testSessionSpan,
       testModuleSpan: cypressPlugin.testModuleSpan,
@@ -2150,7 +2150,7 @@ moduleTypes.forEach(({
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
       cypressPlugin.hasTestsReported = originalState.hasTestsReported
-      cypressPlugin.hasFailedTestSuites = originalState.hasFailedTestSuites
+      cypressPlugin.testSuiteStatuses = originalState.testSuiteStatuses
       cypressPlugin.testsToSkip = originalState.testsToSkip
       cypressPlugin.testSessionSpan = originalState.testSessionSpan
       cypressPlugin.testModuleSpan = originalState.testModuleSpan
@@ -2167,7 +2167,7 @@ moduleTypes.forEach(({
         const tags = {}
         return {
           tags,
-          context: () => ({ _trace: { started: [] } }),
+          context: () => ({ _trace: { started: [] }, toTraceId: () => '123' }),
           finish: sinon.stub(),
           setTag: sinon.stub().callsFake((name, value) => { tags[name] = value }),
         }
@@ -2282,8 +2282,44 @@ moduleTypes.forEach(({
     it('preserves a failed interactive Cypress run without summary statistics', async () => {
       const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
       cypressPlugin.hasTestsReported = true
-      cypressPlugin.hasFailedTestSuites = true
+      cypressPlugin.testSuiteStatuses.add('fail')
 
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves an all-skipped interactive Cypress run without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.hasTestsReported = true
+      cypressPlugin.testSuiteSpan = { finish: sinon.stub(), setTag: sinon.stub() }
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/skipped-test.js' },
+        { stats: { tests: 1, pending: 1 } }
+      )
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'skip')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves a Cypress result error without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      const resultError = new Error('Cypress failed to load the spec')
+      cypressPlugin.testSuiteSpan = { finish: sinon.stub(), setTag: sinon.stub() }
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/load-error.js' },
+        { error: resultError }
+      )
       await cypressPlugin.afterRun()
 
       for (const span of [testSessionSpan, testModuleSpan]) {
