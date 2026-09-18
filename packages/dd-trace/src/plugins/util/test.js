@@ -102,6 +102,7 @@ const TEST_STATUS = 'test.status'
 const TEST_FINAL_STATUS = 'test.final_status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
+const TEST_SESSION_EMPTY_REASON = 'test.session.empty_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
@@ -470,9 +471,11 @@ module.exports = {
   TEST_FINAL_STATUS,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
+  TEST_SESSION_EMPTY_REASON,
   TEST_IS_RUM_ACTIVE,
   setRumTestCorrelation,
   setRumTestTags,
+  setExpectedEmptyTestSessionTags,
   TEST_SOURCE_FILE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
@@ -874,6 +877,24 @@ function setRumTestTags (testSpan, isRumActive, browserVersion) {
   }
   if (browserVersion) {
     testSpan.setTag(TEST_BROWSER_VERSION, browserVersion)
+  }
+}
+
+/**
+ * Marks a successful test session that intentionally executed no tests.
+ *
+ * @param {import('../../opentracing/span')} testSessionSpan
+ * @param {import('../../opentracing/span')|undefined} testModuleSpan
+ * @param {string} skipReason
+ * @param {string} emptyReason
+ */
+function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, skipReason, emptyReason) {
+  for (const span of [testSessionSpan, testModuleSpan]) {
+    if (!span) continue
+
+    span.setTag(TEST_STATUS, 'skip')
+    span.setTag(TEST_SKIP_REASON, skipReason)
+    span.setTag(TEST_SESSION_EMPTY_REASON, emptyReason)
   }
 }
 

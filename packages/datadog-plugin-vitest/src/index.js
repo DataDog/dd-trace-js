@@ -44,6 +44,7 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   ITR_CORRELATION_ID,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -579,6 +580,7 @@ class VitestPlugin extends CiPlugin {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
+      isExpectedEmptySession,
       onDone,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags)) {
@@ -587,6 +589,14 @@ class VitestPlugin extends CiPlugin {
       }
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (isExpectedEmptySession) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          'No tests were executed',
+          'zero_tests'
+        )
+      }
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
