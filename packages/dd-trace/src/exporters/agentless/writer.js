@@ -72,6 +72,17 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
+   * Discards pending traces and closes the pipeline exporter on identity refresh.
+   * @returns {void}
+   */
+  resetPendingBatch () {
+    // The pipeline exporter owns its transport lifecycle and is not tracked by the common request
+    // controller, so close it before resetting the encoder and shared request state.
+    this.#closeExporter()
+    super.resetPendingBatch()
+  }
+
+  /**
    * @param {Buffer} data - v0.4 MessagePack payload.
    * @param {number} count - Number of traces in the payload.
    * @param {() => void} done - Callback invoked after delivery completes or fails.
