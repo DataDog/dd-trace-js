@@ -29,6 +29,7 @@ describe('profiler', () => {
         start: sinon.stub(),
         stop: sinon.stub(),
         cancelQueuedStart: sinon.stub(),
+        hasQueuedStart: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
         runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
       },
@@ -74,6 +75,8 @@ describe('profiler', () => {
       profilingModule.profiler.enabled = false
     })
     profilingModule.profiler.cancelQueuedStart.reset()
+    profilingModule.profiler.hasQueuedStart.reset()
+    profilingModule.profiler.hasQueuedStart.returns(false)
     FakeSSIHeuristics.resetHistory()
     log.debug.resetHistory()
     log.error.resetHistory()
@@ -204,6 +207,47 @@ describe('profiler', () => {
       ssiHeuristics.triggeredCallback()
       sinon.assert.calledThrice(profilingModule.profiler.start)
       assert.strictEqual(profilingModule.profiler.enabled, true)
+    })
+
+    it('preserves an SSI-approved queued start across repeated auto publishes', () => {
+      let stopping = false
+      let pendingStart
+      profilingModule.profiler.start.callsFake((config) => {
+        if (stopping) {
+          pendingStart = config
+          return true
+        }
+        profilingModule.profiler.enabled = true
+        return true
+      })
+      profilingModule.profiler.stop.callsFake(() => {
+        pendingStart = undefined
+        if (!profilingModule.profiler.enabled) return
+        stopping = true
+        profilingModule.profiler.enabled = false
+      })
+      profilingModule.profiler.cancelQueuedStart.callsFake(() => {
+        pendingStart = undefined
+      })
+      profilingModule.profiler.hasQueuedStart.callsFake((enabled) => {
+        return pendingStart?.profiling.DD_PROFILING_ENABLED === enabled
+      })
+
+      publishConfig('true')
+      publishConfig('false')
+      publishConfig('auto')
+      ssiHeuristics.triggeredCallback()
+      publishConfig('auto')
+
+      sinon.assert.calledOnce(FakeSSIHeuristics)
+      sinon.assert.calledOnce(profilingModule.profiler.cancelQueuedStart)
+      sinon.assert.calledWithExactly(profilingModule.profiler.hasQueuedStart, 'auto')
+
+      stopping = false
+      profilingModule.profiler.start(pendingStart)
+
+      assert.strictEqual(profilingModule.profiler.enabled, true)
+      sinon.assert.calledThrice(profilingModule.profiler.start)
     })
 
     it('logs and does not propagate when stopping the profiler throws', () => {
