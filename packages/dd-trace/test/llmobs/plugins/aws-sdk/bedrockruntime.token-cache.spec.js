@@ -15,6 +15,7 @@ require('../../../setup/core')
 describe('BedrockRuntime LLMObs plugin pending token headers', () => {
   const deserializeCh = dc.channel('apm:aws:response:deserialize:bedrockruntime')
   const completeCh = dc.channel('apm:aws:request:complete:bedrockruntime')
+  const streamedChunkCh = dc.channel('apm:aws:response:streamed-chunk:bedrockruntime')
 
   let BedrockRuntimePlugin
   let plugin
@@ -104,6 +105,47 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     })
   })
 
+  it('releases the pending headers when the request fails', () => {
+    publishDeserialize('req-failed', { input: 5, output: 3 })
+
+    // the rejection path builds a response with the error and no top-level $metadata
+    completeCh.publish({
+      response: {
+        request: { operation: 'converse', params: { modelId: 'amazon.titan' } },
+        error: Object.assign(new Error('ThrottlingException'), { $metadata: { requestId: 'req-failed' } }),
+      },
+    })
+
+    // reusing the id surfaces a leak: zero header tokens means the failed :complete: consumed it
+    completeCh.publish(buildLlmComplete('req-failed', 'amazon.titan'))
+
+    sinon.assert.calledOnce(tagMetricsSpy)
+    assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
+  it('caches nothing when the response reports no token counts', () => {
+    deserializeCh.publish({ headers: { 'x-amzn-requestid': 'req-no-counts' } })
+
+    completeCh.publish(buildLlmComplete('req-no-counts', 'amazon.titan'))
+
+    sinon.assert.calledOnce(tagMetricsSpy)
+    assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
+  it('evicts the oldest pending headers instead of growing without bound', () => {
+    publishDeserialize('req-oldest', { input: 9, output: 9 })
+
+    // retried attempts publish headers no :complete: will claim, so the cache is capped
+    for (let i = 0; i < 1000; i++) {
+      publishDeserialize(`req-unclaimed-${i}`, { input: 1, output: 1 })
+    }
+
+    completeCh.publish(buildLlmComplete('req-oldest', 'amazon.titan'))
+
+    sinon.assert.calledOnce(tagMetricsSpy)
+    assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
   it('ignores deserialize without an x-amzn-requestid header', () => {
     deserializeCh.publish({
       headers: { 'x-amzn-bedrock-input-token-count': '5' },
@@ -113,6 +155,160 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
 
     sinon.assert.calledOnce(tagMetricsSpy)
     assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
+  describe('with LLM Observability disabled', () => {
+    let apmTags
+
+    beforeEach(() => {
+      // the enabled plugin from the outer scope would consume the cached headers first
+      plugin.configure({ enabled: false })
+
+      plugin = new BedrockRuntimePlugin({}, {
+        llmobs: { DD_LLMOBS_ENABLED: false },
+        service: 'test',
+      })
+      plugin._tagger = { tagMetrics: tagMetricsSpy }
+      plugin.configure({ enabled: true })
+
+      apmTags = {}
+    })
+
+    it('tags the APM span with gen_ai attributes from the header token counts', () => {
+      publishDeserialize('req-disabled', { input: 5, output: 3, cacheRead: 2, cacheWrite: 1 })
+      completeCh.publish({
+        ...buildLlmComplete('req-disabled', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+        'gen_ai.usage.input_tokens': 8,
+        'gen_ai.usage.output_tokens': 3,
+        'gen_ai.usage.total_tokens': 11,
+        'gen_ai.usage.cache_read_input_tokens': 2,
+        'gen_ai.usage.cache_write_input_tokens': 1,
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+      sinon.assert.notCalled(tagMetricsSpy)
+    })
+
+    it('reads Converse usage off the response, which carries no token headers', () => {
+      completeCh.publish({
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'converse', params: { modelId: 'amazon.titan' } },
+          $metadata: { requestId: 'req-converse' },
+          usage: { inputTokens: 7, outputTokens: 2, cacheReadInputTokens: 1, cacheWriteInputTokens: 3 },
+        },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+        // input tokens are normalized to also count cached tokens
+        'gen_ai.usage.input_tokens': 11,
+        'gen_ai.usage.output_tokens': 2,
+        'gen_ai.usage.total_tokens': 13,
+        'gen_ai.usage.cache_read_input_tokens': 1,
+        'gen_ai.usage.cache_write_input_tokens': 3,
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+    })
+
+    it('reads Converse stream usage off the metadata event', () => {
+      const ctx = {
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'converseStream', params: { modelId: 'amazon.titan' } },
+          $metadata: { requestId: 'req-converse-stream' },
+        },
+      }
+
+      streamedChunkCh.publish({ ctx, chunk: { contentBlockDelta: { delta: { text: 'ignored' } } } })
+      streamedChunkCh.publish({ ctx, chunk: { metadata: { usage: { inputTokens: 4, outputTokens: 6 } } } })
+      completeCh.publish(ctx)
+
+      assert.deepStrictEqual(apmTags['gen_ai.usage.input_tokens'], 4)
+      assert.deepStrictEqual(apmTags['gen_ai.usage.output_tokens'], 6)
+      assert.deepStrictEqual(apmTags['gen_ai.usage.total_tokens'], 10)
+    })
+
+    it('omits token usage entirely when neither headers nor the response report any', () => {
+      completeCh.publish({
+        ...buildLlmComplete('req-no-usage', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+    })
+
+    it('omits token usage when the response carries no token-count headers', () => {
+      deserializeCh.publish({ headers: { 'x-amzn-requestid': 'req-headerless' } })
+      completeCh.publish({
+        ...buildLlmComplete('req-headerless', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.application.name': 'test',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+    })
+
+    it('skips a request whose model id the SDK never accepted', () => {
+      completeCh.publish({
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'invokeModel', params: {} },
+          error: new Error('ValidationException: modelId is required'),
+        },
+      })
+
+      assert.deepStrictEqual(apmTags, {})
+
+      // a throw here would have disabled the plugin, so the next request must still be tagged
+      completeCh.publish({
+        ...buildLlmComplete('req-after-invalid', 'amazon.titan'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.equal(apmTags['gen_ai.operation.name'], 'llm')
+    })
+
+    it('emits nothing for an embedding model', () => {
+      publishDeserialize('req-embed', { input: 5 })
+      completeCh.publish({
+        ...buildLlmComplete('req-embed', 'amazon.embed-text'),
+        currentStore: { span: buildSpan() },
+      })
+
+      assert.deepStrictEqual(apmTags, {})
+    })
+
+    function buildSpan () {
+      const spanContext = {
+        _trace: { tags: {} },
+        setTag (key, value) {
+          apmTags[key] = value
+        },
+      }
+      return { context: () => spanContext }
+    }
   })
 
   function publishDeserialize (requestId, { input, output, cacheRead, cacheWrite } = {}) {

@@ -3,6 +3,7 @@
 const { storage } = require('../../../../datadog-core')
 const telemetry = require('../telemetry')
 const {
+  buildUsage,
   extractRequestParams,
   extractTextAndResponseReason,
   parseModelId,
@@ -36,6 +37,10 @@ const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 /** @type {Map<string, HeaderTokens>} */
 const pendingTokenHeaders = new Map()
 
+// Headers are published per attempt, so a retried or aborted request leaves entries no `:complete:`
+// will ever claim. Bound the cache and evict oldest-first rather than grow with every one of them.
+const MAX_PENDING_TOKEN_HEADERS = 1000
+
 class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   constructor () {
     super(...arguments)
@@ -47,17 +52,42 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
       // Release the cached headers even for operations the plugin does not tag,
       // so non-LLM Bedrock calls do not leak entries into pendingTokenHeaders.
-      const tokensFromHeaders = consumeTokenHeaders(response.$metadata?.requestId)
+      const tokensFromHeaders = consumeTokenHeaders(getRequestId(response))
 
       // avoids instrumenting other non supported runtime operations
       if (!ENABLED_OPERATIONS.has(operation)) return
 
-      const { modelProvider, modelName } = parseModelId(request.params.modelId)
+      // the SDK rejects a request with no model id, and the parser assumes a string
+      const modelId = request.params?.modelId
+      if (typeof modelId !== 'string') return
+
+      const { modelProvider, modelName } = parseModelId(modelId)
 
       // avoids instrumenting non llm type
       if (modelName.includes('embed')) return
 
       const span = ctx.currentStore?.span
+      if (!span) return
+
+      if (!this._llmobsEnabled) {
+        // no LLMObs payload to build, so the usage comes from the response headers and, for
+        // Converse (which sends no token headers), the usage the response reports directly
+        const converseUsage = CONVERSE_OPERATIONS.has(operation)
+          ? response.usage ?? ctx.streamedUsage
+          : undefined
+
+        this._setGenAiApmTags(span, {
+          spanKind: 'llm',
+          modelName: modelId.toLowerCase(),
+          modelProvider: 'amazon_bedrock',
+          // reporting zeros for every metric would be worse than reporting none
+          metrics: tokensFromHeaders || converseUsage
+            ? extractTokens({ tokensFromHeaders, usage: buildUsage(converseUsage) })
+            : undefined,
+        })
+        return
+      }
+
       this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     })
 
@@ -71,7 +101,11 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
-      pendingTokenHeaders.set(requestId, {
+      // Responses that report no counts at all, error responses included, would otherwise cache a
+      // record of undefined fields that reads as a measurement of zero.
+      if (!inputTokenCount && !outputTokenCount && !cacheReadTokenCount && !cacheWriteTokenCount) return
+
+      cacheTokenHeaders(requestId, {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount, 10),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount, 10),
         cacheReadTokensFromHeaders: cacheReadTokenCount && Number.parseInt(cacheReadTokenCount, 10),
@@ -80,6 +114,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
+      if (!this._llmobsEnabled) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies are
+        // left to the LLMObs path
+        const usage = chunk?.metadata?.usage
+        if (usage) ctx.streamedUsage = usage
+        return
+      }
+
       if (!ctx.chunks) ctx.chunks = []
 
       if (chunk) ctx.chunks.push(chunk)
@@ -146,6 +188,29 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       usage: textAndResponseReason.usage,
     }))
   }
+}
+
+/**
+ * The request id sits on the response metadata, or on the error's for a failed request: the
+ * rejection path builds a response with no top-level `$metadata`.
+ *
+ * @param {{ $metadata?: { requestId?: string }, error?: { $metadata?: { requestId?: string } } }} response
+ * @returns {string | undefined}
+ */
+function getRequestId (response) {
+  return response.$metadata?.requestId ?? response.error?.$metadata?.requestId
+}
+
+/**
+ * @param {string} requestId
+ * @param {HeaderTokens} tokens
+ */
+function cacheTokenHeaders (requestId, tokens) {
+  if (pendingTokenHeaders.size >= MAX_PENDING_TOKEN_HEADERS) {
+    pendingTokenHeaders.delete(/** @type {string} */ (pendingTokenHeaders.keys().next().value))
+  }
+
+  pendingTokenHeaders.set(requestId, tokens)
 }
 
 /**

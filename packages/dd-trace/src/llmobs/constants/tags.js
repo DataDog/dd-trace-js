@@ -1,5 +1,14 @@
 'use strict'
 
+const INPUT_TOKENS_METRIC_KEY = 'input_tokens'
+const OUTPUT_TOKENS_METRIC_KEY = 'output_tokens'
+const TOTAL_TOKENS_METRIC_KEY = 'total_tokens'
+const CACHE_READ_INPUT_TOKENS_METRIC_KEY = 'cache_read_input_tokens'
+const CACHE_WRITE_INPUT_TOKENS_METRIC_KEY = 'cache_write_input_tokens'
+const CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY = 'ephemeral_5m_input_tokens'
+const CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY = 'ephemeral_1h_input_tokens'
+const REASONING_OUTPUT_TOKENS_METRIC_KEY = 'reasoning_output_tokens'
+
 module.exports = {
   SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval', 'experiment'],
   SPAN_KIND: '_ml_obs.meta.span.kind',
@@ -42,6 +51,7 @@ module.exports = {
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
   UNKNOWN_MODEL_PROVIDER: 'unknown',
+  DEFAULT_MODEL: 'custom',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
@@ -52,14 +62,28 @@ module.exports = {
   OUTPUT_MESSAGES: '_ml_obs.meta.output.messages',
   OUTPUT_VALUE: '_ml_obs.meta.output.value',
 
-  INPUT_TOKENS_METRIC_KEY: 'input_tokens',
-  OUTPUT_TOKENS_METRIC_KEY: 'output_tokens',
-  TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'cache_read_input_tokens',
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'cache_write_input_tokens',
-  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY: 'ephemeral_5m_input_tokens',
-  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY: 'ephemeral_1h_input_tokens',
-  REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
+  INPUT_TOKENS_METRIC_KEY,
+  OUTPUT_TOKENS_METRIC_KEY,
+  TOTAL_TOKENS_METRIC_KEY,
+  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+  REASONING_OUTPUT_TOKENS_METRIC_KEY,
+
+  // integrations build metric objects with these camelCase spellings. Null prototype: metric names
+  // come from `LLMObs.annotate()` too, so a custom metric named after an `Object.prototype` member
+  // must not resolve to an inherited property.
+  METRIC_KEY_ALIASES: Object.assign(Object.create(null), {
+    inputTokens: INPUT_TOKENS_METRIC_KEY,
+    outputTokens: OUTPUT_TOKENS_METRIC_KEY,
+    totalTokens: TOTAL_TOKENS_METRIC_KEY,
+    cacheReadTokens: CACHE_READ_INPUT_TOKENS_METRIC_KEY,
+    cacheWriteTokens: CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite5mTokens: CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+    cacheWrite1hTokens: CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
+    reasoningOutputTokens: REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  }),
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
 
@@ -68,6 +92,23 @@ module.exports = {
   INSTRUMENTATION_METHOD_AUTO: 'auto',
   INSTRUMENTATION_METHOD_ANNOTATED: 'annotated',
   INSTRUMENTATION_METHOD_UNKNOWN: 'unknown',
+
+  GEN_AI_OPERATION_NAME: 'gen_ai.operation.name',
+  GEN_AI_REQUEST_MODEL: 'gen_ai.request.model',
+  GEN_AI_PROVIDER_NAME: 'gen_ai.provider.name',
+  GEN_AI_APPLICATION_NAME: 'gen_ai.application.name',
+  GEN_AI_CONVERSATION_ID: 'gen_ai.conversation.id',
+
+  GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.input_tokens',
+  GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.output_tokens',
+  GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY: 'gen_ai.usage.total_tokens',
+  GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_read_input_tokens',
+  GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.cache_write_input_tokens',
+  GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY: 'gen_ai.usage.reasoning_output_tokens',
+
+  // Marks the `gen_ai.*` tags on an APM span as tracer-emitted. Without it the backend reads them
+  // as user-set and builds a duplicate LLMObs span out of the APM span.
+  ARTIFICIAL_GEN_AI_TAGS: '_dd.llmobs.artificial_gen_ai_tags',
 
   ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
   ROUTING_SITE: '_dd.llmobs.routing.site',

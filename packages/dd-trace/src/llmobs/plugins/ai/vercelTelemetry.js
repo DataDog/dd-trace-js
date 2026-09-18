@@ -140,6 +140,20 @@ function formatLanguageModelOutputMessages (content) {
   return outputMessages
 }
 
+/**
+ * @param {object} [usage] AI SDK usage, from the result or the stream's `finish` chunk
+ * @returns {Record<string, number | undefined>}
+ */
+function extractUsageMetrics (usage) {
+  return {
+    inputTokens: usage?.inputTokens?.total,
+    cacheWriteTokens: usage?.inputTokens?.cacheWrite ?? 0,
+    cacheReadTokens: usage?.inputTokens?.cacheRead ?? 0,
+    outputTokens: usage?.outputTokens?.total,
+    reasoningOutputTokens: usage?.outputTokens?.reasoning ?? 0,
+  }
+}
+
 class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   static id = 'ai_llmobs_vercel_telemetry'
   static integration = 'ai'
@@ -152,6 +166,13 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     super(...arguments)
 
     this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
+      if (!this._llmobsEnabled) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies and
+        // `ctx.result` are left to the LLMObs path
+        if (chunk?.type === 'finish') ctx.streamedUsage = chunk.usage
+        return
+      }
+
       ctx.chunks ??= []
       const chunks = ctx.chunks
       if (chunk) chunks.push(chunk)
@@ -200,6 +221,17 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
 
     super.asyncEnd(ctx)
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx, spanKind) {
+    const usage = ctx.result?.usage ?? ctx.streamedUsage
+    if (!usage) return {}
+
+    // `embed` reports a single token count, the generation operations a structured breakdown
+    return { metrics: spanKind === 'embedding' ? { inputTokens: usage.tokens } : extractUsageMetrics(usage) }
   }
 
   /**
@@ -367,14 +399,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     if (!result) return
 
     // metrics
-    const { usage } = result
-    this._tagger.tagMetrics(span, {
-      inputTokens: usage?.inputTokens?.total,
-      cacheWriteTokens: usage?.inputTokens?.cacheWrite ?? 0,
-      cacheReadTokens: usage?.inputTokens?.cacheRead ?? 0,
-      outputTokens: usage?.outputTokens?.total,
-      reasoningOutputTokens: usage?.outputTokens?.reasoning ?? 0,
-    })
+    this._tagger.tagMetrics(span, extractUsageMetrics(result.usage))
   }
 
   setToolTags (span, ctx) {

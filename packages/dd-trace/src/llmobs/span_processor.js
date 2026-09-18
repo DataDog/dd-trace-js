@@ -38,8 +38,10 @@ const {
   SAMPLE_RATE,
   SAMPLING_DECISION,
   TRACE_ID,
+  DEFAULT_MODEL,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
+const { setGenAiApmTags } = require('./gen-ai-tags')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
@@ -91,6 +93,12 @@ class LLMObsSpanProcessor {
     if (!LLMObsTagger.tagMap.has(span)) return
 
     try {
+      this.#setGenAiApmTags(span)
+    } catch (e) {
+      logger.debug('Failed to set gen_ai APM tags:', e.message)
+    }
+
+    try {
       const formattedEvent = this.format(span)
       telemetry.incrementLLMObsSpanFinishedCount(span)
       if (formattedEvent == null) return
@@ -138,8 +146,8 @@ class LLMObsSpanProcessor {
     const output = {}
 
     if (['llm', 'embedding'].includes(spanKind)) {
-      meta.model_name = mlObsTags[MODEL_NAME] || 'custom'
-      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || 'custom').toLowerCase()
+      meta.model_name = mlObsTags[MODEL_NAME] || DEFAULT_MODEL
+      meta.model_provider = (mlObsTags[MODEL_PROVIDER] || DEFAULT_MODEL).toLowerCase()
     }
 
     if (mlObsTags[METADATA] || mlObsTags[COST_TAGS]) {
@@ -281,6 +289,22 @@ class LLMObsSpanProcessor {
     if (sessionId) llmObsSpanEvent.session_id = sessionId
 
     return llmObsSpanEvent
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   */
+  #setGenAiApmTags (span) {
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+
+    setGenAiApmTags(span, {
+      spanKind: mlObsTags[SPAN_KIND],
+      modelName: mlObsTags[MODEL_NAME],
+      modelProvider: mlObsTags[MODEL_PROVIDER],
+      mlApp: mlObsTags[ML_APP],
+      sessionId: mlObsTags[SESSION_ID],
+      metrics: mlObsTags[METRICS],
+    })
   }
 
   // For now, this only applies to metadata, as we let users annotate this field with any object
