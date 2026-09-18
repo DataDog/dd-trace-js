@@ -180,18 +180,21 @@ describe('debugger/index', () => {
 
     it('should replace unknown metadata instead of sending it', () => {
       const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
-      const error = Object.assign(new Error('customer-secret'), {
-        name: 'customer-name', code: 'customer-code', reason: 'customer-reason',
-      })
-      error.stack = 'customer-name: customer-secret\n    at /customer/app.js:1:2'
-      onError(error)
+      for (const metadata of [
+        { name: 'customer-name', code: 'customer-code', reason: 'customer-reason' },
+        { name: 'customer-name', code: { secret: 'customer-code' }, reason: { secret: 'customer-reason' } },
+      ]) {
+        const error = Object.assign(new Error('customer-secret'), metadata)
+        error.stack = 'customer-name: customer-secret\n    at /customer/app.js:1:2'
+        onError(error)
 
-      assert.deepStrictEqual(logCollector.drain(), [{
-        level: 'ERROR',
-        count: 1,
-        stack_trace: '',
-        message: '[debugger] worker thread error name=unknown code=unknown reason=unknown',
-      }])
+        assert.deepStrictEqual(logCollector.drain(), [{
+          level: 'ERROR',
+          count: 1,
+          stack_trace: '',
+          message: '[debugger] worker thread error name=unknown code=unknown reason=unknown',
+        }])
+      }
     })
 
     it('should report a rejected probe without terminating the worker', () => {
