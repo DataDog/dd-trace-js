@@ -62,7 +62,6 @@
       "matchUpdateTypes": [
         "lockFileMaintenance"
       ],
-      "groupName": "all lock files",
       "groupSingleUpdates": true,
       "automerge": true,
       "labels": [
@@ -70,6 +69,62 @@
         "javascript",
         "semver-patch"
       ]
+    },
+    {
+      "description": "Maintain the root lockfile separately",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "package.json"
+      ],
+      "groupName": "root lockfile maintenance",
+      "groupSlug": "root-lockfile-maintenance"
+    },
+    {
+      "description": "Maintain the docs lockfile separately",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "docs/package.json"
+      ],
+      "groupName": "docs lockfile maintenance",
+      "groupSlug": "docs-lockfile-maintenance"
+    },
+    {
+      "description": "Maintain the datadog-ci action lockfile separately",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        ".github/actions/datadog-ci/package.json"
+      ],
+      "groupName": "datadog-ci action lockfile maintenance",
+      "groupSlug": "datadog-ci-action-lockfile-maintenance"
+    },
+    {
+      "description": "Maintain the vendor lockfile separately",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "matchFileNames": [
+        "vendor/package.json"
+      ],
+      "groupName": "vendor lockfile maintenance",
+      "groupSlug": "vendor-lockfile-maintenance"
     }
   ]
 }
