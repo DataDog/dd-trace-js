@@ -173,7 +173,7 @@ session.on('Debugger.paused', async ({ params }) => {
   if (probesWithCaptureExpressions === true) {
     captureExpressionResults = new Map()
     for (const probe of probes) {
-      if (probe.compiledCaptureExpressions === undefined) continue
+      if (conditionErrorProbes?.has(probe) || probe.compiledCaptureExpressions === undefined) continue
       // eslint-disable-next-line no-await-in-loop
       captureExpressionResults.set(probe.id, await evaluateCaptureExpressions(
         params.callFrames[0],

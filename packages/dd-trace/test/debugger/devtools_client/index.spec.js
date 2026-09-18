@@ -595,6 +595,48 @@ describe('onPause', function () {
         { expr: 'foo.bar == 42', message: 'TypeError: boom' },
       ])
     })
+
+    it('should not evaluate capture expressions for probes with condition errors', async function () {
+      const limits = { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+      const erroring = genProcessedProbe('probe-1')
+      erroring.when = { dsl: 'foo.bar == 42', json: {} }
+      erroring.condition = 'foo.bar === 42'
+      erroring.compiledCaptureExpressions = [{ name: 'unsafe', expression: 'unsafe()', limits }]
+      const captured = genProcessedProbe('probe-2')
+      captured.compiledCaptureExpressions = [{ name: 'foo', expression: 'foo', limits }]
+
+      state.breakpointToProbes.set(breakpointId, new Map([[erroring.id, erroring], [captured.id, captured]]))
+      state.samplingIndexToProbe.set(1, erroring)
+      state.samplingIndexToProbe.set(2, captured)
+      Atomics.store(sampledProbeIndexes, 0, 2)
+      Atomics.store(sampledProbeIndexes, 2, 1 | CONDITION_ERROR_FLAG)
+      Atomics.store(sampledProbeIndexes, 3, 2)
+
+      const evaluatedCaptureExpressions = []
+      session.post = sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          if (params.expression === 'unsafe()' || params.expression === 'foo') {
+            evaluatedCaptureExpressions.push(params.expression)
+            return Promise.resolve({ result: { type: 'number', value: 42, description: '42' } })
+          }
+          assert.strictEqual(params.expression.slice(-takeConditionErrorExpression.length - 2),
+            `,${takeConditionErrorExpression}]`)
+          return Promise.resolve({ result: { value: [{}, 'TypeError: boom'] } })
+        }
+        return Promise.resolve({})
+      })
+
+      await onPaused(event)
+
+      assert.deepStrictEqual(evaluatedCaptureExpressions, ['foo'])
+      sinon.assert.calledTwice(send)
+      assert.deepStrictEqual(send.firstCall.args[3].evaluationErrors, [
+        { expr: 'foo.bar == 42', message: 'TypeError: boom' },
+      ])
+      assert.deepStrictEqual(send.secondCall.args[3].captures.lines[1].captureExpressions.foo, {
+        type: 'number', value: '42',
+      })
+    })
   })
 
   it('should log sampler overflow', async function () {
