@@ -12,10 +12,11 @@ const WHITESPACE = /[ \t]/
  * @param {string} fieldSeparator Between entries.
  * @param {string} pairSeparator Between key and value within an entry.
  * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
+ * @param {number} [maxEntries] Maximum number of entries to parse.
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
-function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
-  const segments = value.split(fieldSeparator, MAX_LIST_MEMBERS)
+function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries) {
+  const segments = maxEntries === undefined ? value.split(fieldSeparator) : value.split(fieldSeparator, maxEntries)
 
   // TODO: We should extract dd no matter at what position and move it to the front of the list.
   // Extract up 31 additional entries.
@@ -38,11 +39,11 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
   return entries
 }
 
-function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs) {
+function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs))
+  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -54,6 +55,86 @@ function toString (map, pairSeparator, fieldSeparator) {
     result = `${key}${pairSeparator}${value}${result}`
   }
   return result
+}
+
+/**
+ * Keeps complete leftmost fields within a byte limit, skipping fields that do not fit.
+ *
+ * @param {string} value
+ * @param {string} separator
+ * @param {number} maxBytes
+ */
+function limitValue (value, separator, maxBytes) {
+  if (value.length <= maxBytes / 4 || Buffer.byteLength(value) <= maxBytes) return value
+
+  let result = ''
+  let byteLength = 0
+  let start = 0
+
+  while (start < value.length) {
+    let end = value.indexOf(separator, start)
+    if (end === -1) end = value.length
+    const field = value.slice(start, end)
+    const fieldLength = Buffer.byteLength(field) + (result ? 1 : 0)
+    if (byteLength + fieldLength <= maxBytes) {
+      if (result) result += separator
+      result += field
+      byteLength += fieldLength
+    }
+    start = end + 1
+  }
+
+  return result
+}
+
+/**
+ * Returns the complete leftmost fields within a byte limit without scanning the unbounded suffix.
+ *
+ * @param {string} value
+ * @param {string} separator
+ * @param {number} maxBytes
+ */
+function limitInputValue (value, separator, maxBytes) {
+  if (value.length <= maxBytes / 4) return value
+
+  let end = Math.min(value.length, maxBytes)
+  if (end === value.length && Buffer.byteLength(value) <= maxBytes) return value
+
+  let low = 0
+  let high = end
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    if (Buffer.byteLength(value.slice(0, middle)) <= maxBytes) low = middle
+    else high = middle - 1
+  }
+  end = low
+
+  if (end === value.length) return value
+  if (value[end] === separator) return value.slice(0, end)
+
+  const separatorIndex = value.lastIndexOf(separator, end - 1)
+  return separatorIndex === -1 ? '' : value.slice(0, separatorIndex)
+}
+
+/**
+ * Keeps the 32 leftmost members allowed by W3C Trace Context.
+ *
+ * @param {string} value
+ */
+function limitTraceState (value) {
+  let end = 0
+  let members = 0
+  let start = 0
+
+  while (start < value.length && members < MAX_LIST_MEMBERS) {
+    const next = value.indexOf(',', start)
+    if (next === -1) return value
+    end = next
+    members++
+    start = next + 1
+  }
+
+  return value.slice(0, end)
 }
 
 class TraceStateData {
@@ -76,8 +157,9 @@ class TraceStateData {
   }
 
   delete (key) {
+    if (!this.#map.delete(key)) return false
     this.changed = true
-    return this.#map.delete(key)
+    return true
   }
 
   clear () {
@@ -97,12 +179,24 @@ class TraceStateData {
     return this.#map.size
   }
 
-  static fromString (value) {
+  /**
+   * @param {string | undefined} value
+   * @param {number} [maxBytes]
+   * @returns {TraceStateData}
+   */
+  static fromString (value, maxBytes) {
+    if (typeof value === 'string' && maxBytes !== undefined) {
+      value = limitInputValue(value, ';', maxBytes)
+    }
     return fromString(TraceStateData, value, ';', ':', false)
   }
 
-  toString () {
-    return toString(this, ':', ';')
+  /**
+   * @param {number} [maxBytes]
+   */
+  toString (maxBytes) {
+    const value = toString(this, ':', ';')
+    return maxBytes === undefined ? value : limitValue(value, ';', maxBytes)
   }
 }
 
@@ -140,29 +234,40 @@ class TraceState {
     return this.#map.size
   }
 
-  forVendor (vendor, handle) {
+  /** @returns {TraceState} A shallow copy with independent member storage. */
+  clone () {
+    return new TraceState(this.#map)
+  }
+
+  /**
+   * @param {string} vendor
+   * @param {(state: TraceStateData) => unknown} handle
+   * @param {number} [maxBytes]
+   * @returns {unknown}
+   */
+  forVendor (vendor, handle, maxBytes) {
     const data = this.#map.get(vendor)
-    const state = TraceStateData.fromString(data)
+    const state = TraceStateData.fromString(data, maxBytes)
     const result = handle(state)
 
-    if (state.changed) {
-      const value = state.toString()
-      if (value) {
-        this.set(vendor, value)
-      } else {
-        this.delete(vendor)
-      }
-    }
+    if (!state.changed && maxBytes === undefined) return result
+
+    const value = state.toString(maxBytes)
+    if (value === data) return result
+    if (value) this.set(vendor, value)
+    else this.delete(vendor)
 
     return result
   }
 
   static fromString (value) {
-    return fromString(TraceState, value, ',', '=', true)
+    return fromString(TraceState, value, ',', '=', true, MAX_LIST_MEMBERS)
   }
 
   toString () {
-    return toString(this, '=', ',')
+    const value = toString(this, '=', ',')
+    if (this.size <= MAX_LIST_MEMBERS) return value
+    return limitTraceState(value)
   }
 }
 
