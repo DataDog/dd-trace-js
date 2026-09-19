@@ -3,6 +3,8 @@
 const { URL } = require('url')
 const log = require('../../dd-trace/src/log')
 
+const easyConnectProtocol = /^tcps?:\/\//i
+
 function parseOracleDescriptor (descriptor) {
   const hostnameMatch = descriptor.match(/HOST\s*=\s*([^)]+)/i)
   const hostname = hostnameMatch?.[1] || 'localhost' // Default Oracle hostname
@@ -24,7 +26,7 @@ module.exports = function getDBInformation (connAttrs) {
     return parseOracleDescriptor(connectString)
   }
   try {
-    const url = new URL(`oracle://${connectString}`)
+    const url = new URL(easyConnectProtocol.test(connectString) ? connectString : `oracle://${connectString}`)
     return {
       hostname: url.hostname || 'localhost', // Default Oracle hostname
       port: url.port || '1521', // Default Oracle port
