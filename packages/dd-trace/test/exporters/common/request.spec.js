@@ -7,6 +7,7 @@ const https = require('node:https')
 const zlib = require('node:zlib')
 const stream = require('node:stream')
 
+const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const nock = require('nock')
@@ -14,6 +15,8 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 const FormData = require('../../../src/exporters/common/form-data')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 const initHTTPServer = () => {
   return new Promise(resolve => {
@@ -610,6 +613,223 @@ describe('request', function () {
     })
   })
 
+  it('does not cancel active requests created by retry cancellation callbacks', () => {
+    const controller = request.createResetController()
+    const oldRequest = sinon.spy()
+    const newRequest = sinon.spy()
+
+    controller.pendingRetryTimers.add({
+      cancel: () => controller.activeRequests.add(newRequest),
+    })
+    controller.activeRequests.add(oldRequest)
+
+    controller.reset()
+
+    sinon.assert.calledOnce(oldRequest)
+    sinon.assert.notCalled(newRequest)
+    assert.ok(controller.activeRequests.has(newRequest))
+  })
+
+  it('does not create an identity refresh controller outside MicroVM', () => {
+    assert.strictEqual(request.getIdentityRefreshController(), undefined)
+  })
+
+  it('resets the shared identity refresh controller in MicroVM', () => {
+    const microVmRequest = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      './docker': docker,
+      './proxy': { getHttpsProxyAgent },
+      '../../serverless': { IS_AWS_LAMBDA_MICROVM: true },
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const controller = microVmRequest.getIdentityRefreshController()
+
+    identityRefreshChannel.publish()
+
+    assert.strictEqual(controller.generation, 1)
+  })
+
+  it('cancels scheduled retries when pending retries are reset', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    const requestMessage = new EventEmitter()
+    requestMessage.write = sinon.stub()
+    requestMessage.end = () => requestMessage.emit('error', error)
+    requestMessage.setTimeout = sinon.stub()
+    const httpStub = {
+      ...http,
+      request: sinon.stub().returns(requestMessage),
+    }
+    retryStubs.getRetryDelay = sinon.fake.returns(1000)
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = request.createResetController()
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      resetController,
+    }, (err) => {
+      try {
+        assert.strictEqual(err.code, 'ERR_DD_IDENTITY_REFRESH')
+        assert.strictEqual(httpStub.request.callCount, 1)
+        done()
+      } catch (assertionError) {
+        done(assertionError)
+      }
+    })
+
+    resetController.reset()
+  })
+
+  it('does not cancel retries scheduled by cancellation callbacks', () => {
+    const clock = sinon.useFakeTimers()
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    const httpStub = {
+      ...http,
+      request: sinon.stub().callsFake(() => {
+        const requestMessage = new EventEmitter()
+        requestMessage.write = sinon.stub()
+        requestMessage.end = () => requestMessage.emit('error', error)
+        requestMessage.setTimeout = sinon.stub()
+        return requestMessage
+      }),
+    }
+    retryStubs.getRetryDelay = sinon.fake.returns(1000)
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = request.createResetController()
+    const retriedCallback = sinon.spy()
+    const initialCallback = sinon.spy(() => {
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'PUT',
+        resetController,
+      }, retriedCallback)
+    })
+
+    try {
+      request(Buffer.from(''), {
+        path: '/path',
+        method: 'PUT',
+        resetController,
+      }, initialCallback)
+
+      resetController.reset()
+
+      sinon.assert.calledOnce(initialCallback)
+      sinon.assert.notCalled(retriedCallback)
+      assert.strictEqual(httpStub.request.callCount, 2)
+
+      clock.tick(1000)
+
+      sinon.assert.calledOnce(retriedCallback)
+      assert.strictEqual(httpStub.request.callCount, 3)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('does not schedule a retry for in-flight requests after pending retries are reset', (done) => {
+    const error = Object.assign(new Error('ECONNREFUSED'), { code: 'ECONNREFUSED' })
+    const requestMessage = new EventEmitter()
+    requestMessage.write = sinon.stub()
+    requestMessage.end = sinon.stub()
+    requestMessage.setTimeout = sinon.stub()
+    const httpStub = {
+      ...http,
+      request: sinon.stub().returns(requestMessage),
+    }
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+      './retry': {
+        ...require('../../../src/exporters/common/retry'),
+        ...retryStubs,
+      },
+    })
+    const resetController = request.createResetController()
+
+    request(Buffer.from(''), {
+      path: '/path',
+      method: 'PUT',
+      resetController,
+    }, (err) => {
+      try {
+        assert.strictEqual(err.code, 'ERR_DD_IDENTITY_REFRESH')
+        assert.strictEqual(httpStub.request.callCount, 1)
+        sinon.assert.notCalled(retryStubs.getRetryDelay)
+        done()
+      } catch (assertionError) {
+        done(assertionError)
+      }
+    })
+
+    resetController.reset()
+    requestMessage.emit('error', error)
+  })
+
+  it('aborts active requests when pending requests are reset', () => {
+    const requestMessage = new EventEmitter()
+    requestMessage.write = sinon.stub()
+    requestMessage.end = sinon.stub()
+    requestMessage.setTimeout = sinon.stub()
+    requestMessage.abort = sinon.spy()
+    const httpStub = {
+      ...http,
+      request: sinon.stub().returns(requestMessage),
+    }
+    request = proxyquire('../../../src/exporters/common/request', {
+      '../../../../datadog-core': {
+        storage: () => ({ run: runInNoopContext }),
+      },
+      http: httpStub,
+      './docker': docker,
+      '../../log': log,
+    })
+    const resetController = request.createResetController()
+    const callback = sinon.spy()
+
+    request(Buffer.from(''), { path: '/path', method: 'PUT', resetController }, callback)
+    resetController.reset()
+
+    sinon.assert.calledOnce(requestMessage.abort)
+    sinon.assert.calledOnce(callback)
+    assert.strictEqual(callback.firstCall.args[0].code, 'ERR_DD_IDENTITY_REFRESH')
+
+    requestMessage.emit('error', Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }))
+    sinon.assert.calledOnce(callback)
+  })
+
   it('should retry on UDS ENOENT (socket file not yet present)', (done) => {
     const error = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
 
@@ -863,6 +1083,52 @@ describe('request', function () {
         assert.strictEqual(res, JSON.stringify({ foo: 'bar' }))
         done(err)
       })
+    })
+
+    it('rejects a compressed response after identity refresh', async () => {
+      const compressedData = zlib.gzipSync(Buffer.from('stale response'))
+      const controller = request.createResetController()
+      const callback = sinon.spy()
+      let gunzipCallback
+      let resolveGunzip
+      const gunzipStarted = new Promise(resolve => {
+        resolveGunzip = resolve
+      })
+      const gunzipStub = sinon.stub(zlib, 'gunzip').callsFake((_buffer, callback) => {
+        gunzipCallback = callback
+        resolveGunzip()
+      })
+
+      try {
+        nock('http://test:123')
+          .post('/path')
+          .reply(200, compressedData, { 'content-encoding': 'gzip' })
+
+        request(Buffer.from(''), {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'accept-encoding': 'gzip',
+          },
+          resetController: controller,
+        }, callback)
+
+        await gunzipStarted
+        sinon.assert.notCalled(callback)
+
+        controller.reset()
+        sinon.assert.notCalled(callback)
+
+        gunzipCallback(null, Buffer.from('stale response'))
+        sinon.assert.calledOnce(callback)
+        assert.strictEqual(callback.firstCall.args[0].code, 'ERR_DD_IDENTITY_REFRESH')
+      } finally {
+        gunzipStub.restore()
+      }
     })
 
     it('should ignore badly compressed data and log an error', (done) => {

@@ -164,6 +164,12 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     path: isAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType, isAgentlessMode ? config.DD_API_KEY : undefined),
   }
+
+  const resetController = request.getIdentityRefreshController?.()
+  if (resetController) {
+    // A MicroVM refresh changes runtime_id; discard requests built before that change.
+    options.resetController = resetController
+  }
   if (isCiVisibility) options.agent = getTestOptimizationAgent(url)
 
   const data = JSON.stringify({
@@ -179,6 +185,11 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
+    if (error?.code === 'ERR_DD_IDENTITY_REFRESH') {
+      // The payload has the old runtime_id; discard it instead of retrying it with the new generation.
+      // A nil error clears the retry entry maintained by telemetry.
+      return cb(null, { payload, reqType })
+    }
     if (!isAgentlessMode && error && config.DD_API_KEY && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')

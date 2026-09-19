@@ -794,6 +794,65 @@ describe('Telemetry retry', () => {
     )
   })
 
+  it('should discard identity-cancelled data instead of retrying it', () => {
+    const sent = []
+    const identityError = Object.assign(new Error('identity refreshed'), {
+      code: 'ERR_DD_IDENTITY_REFRESH',
+    })
+    let cancelNext = false
+    const sendDataError = {
+      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+        sent.push({ reqType, payload })
+        if (cancelNext) {
+          cancelNext = false
+          cb(null, { payload, reqType })
+          return
+        }
+        cb()
+      },
+    }
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        },
+      },
+      './send-data': sendDataError,
+    })
+
+    telemetry.start({
+      telemetry: {
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
+      dynamicInstrumentation: { enabled: false },
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c',
+      },
+    }, {
+      _pluginsByName: pluginsByName,
+    })
+
+    cancelNext = true
+    pluginsByName.boo3 = { _enabled: true }
+    telemetry.updateIntegrations()
+    pluginsByName.boo5 = { _enabled: true }
+    telemetry.updateIntegrations()
+
+    assert.deepStrictEqual(sent.slice(-2).map(({ reqType }) => reqType), [
+      'app-integrations-change',
+      'app-integrations-change',
+    ])
+  })
+
   it('should send regular request after completed batch request ', () => {
     const sendDataError = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
