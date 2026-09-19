@@ -77,7 +77,6 @@ const CUCUMBER_RETRY_NAME_SUFFIX = / ?\(attempt \d+(?:, retried)?\) ?$/
  *
  * @param {string} testName
  * @param {boolean} isRetry
- * @returns {string}
  */
 function getCucumberTestName (testName, isRetry) {
   return isRetry ? testName.replace(CUCUMBER_RETRY_NAME_SUFFIX, '') : testName
@@ -140,11 +139,9 @@ let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
 let areAllSuitesSkipped = false
+let hasTestsToRun = false
 let repositoryRoot
 
-/**
- * @returns {boolean}
- */
 function shouldRunEarlyFlakeDetection () {
   return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
@@ -1165,6 +1162,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
     }
 
+    hasTestsToRun = isCoordinator ? this.sourcedPickles.length > 0 : this.pickleIds.length > 0
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
     if (isKnownTestsEnabled) {
@@ -1272,8 +1270,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
+    const isExpectedEmptySession = success && !hasTestsToRun
     const flushPromise = getChannelPromise(sessionFinishCh, {
-      status: success ? 'pass' : 'fail',
+      status: isExpectedEmptySession ? 'skip' : (success ? 'pass' : 'fail'),
+      isExpectedEmptySession,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
       testSessionCoverageFiles,

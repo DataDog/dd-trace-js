@@ -22,7 +22,6 @@ let missingRouteWarningLogged = false
 /**
  * Logs the unavailable exposure-delivery warning once.
  *
- * @returns {void}
  */
 function warnExposureDeliveryUnavailable () {
   if (missingRouteWarningLogged) return
@@ -38,7 +37,6 @@ function warnExposureDeliveryUnavailable () {
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {Function} Stop callback
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
   setWriterEnabledValue(true, {
@@ -59,7 +57,6 @@ function setAgentStrategy (config, setWriterEnabledValue) {
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {Function} Stop callback
  */
 function setAgentlessStrategy (config, setWriterEnabledValue) {
   const directRoute = createDirectEVPRoute(config, EVP_EVENT_PLATFORM_SUBDOMAIN)
@@ -68,14 +65,12 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
   let state = 'unknown'
   let stopped = false
 
-  /** @returns {void} */
   const stop = () => {
     stopped = true
     clearTimeout(recoveryTimer)
     recoveryTimer = undefined
   }
 
-  /** @returns {void} */
   const scheduleRecovery = () => {
     if (stopped || state !== 'unavailable' || recoveryTimer !== undefined) return
 
@@ -83,7 +78,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
     recoveryTimer.unref?.()
   }
 
-  /** @returns {void} */
   const markUnavailable = () => {
     if (stopped || state === 'direct') return
     if (state !== 'unavailable') {
@@ -93,7 +87,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
     scheduleRecovery()
   }
 
-  /** @returns {void} */
   const activateDirect = () => {
     if (stopped || state === 'direct' || directRoute === undefined) return
     state = 'direct'
@@ -104,7 +97,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
 
   /**
    * @param {{url: URL, basePath: string}} localRoute - Discovered local route
-   * @returns {void}
    */
   const activateLocal = localRoute => {
     state = 'local'
@@ -124,7 +116,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
     setWriterEnabledValue(true, route)
   }
 
-  /** @returns {void} */
   function discover () {
     recoveryTimer = undefined
     if (stopped || state === 'direct' || discovering) return
@@ -169,7 +160,6 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
- * @returns {Function} Stop callback
  */
 function setEventDeliveryStrategy (config, setWriterEnabledValue) {
   if (config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless') {

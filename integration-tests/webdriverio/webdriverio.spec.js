@@ -33,6 +33,8 @@ const {
   TEST_MANAGEMENT_ENABLED,
   TEST_MODULE,
   TEST_STATUS,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   TEST_SUITE,
   TEST_TYPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -143,7 +145,6 @@ function stopServer (server) {
  * @param {object} module
  * @param {object[]} suites
  * @param {object[]} tests
- * @returns {void}
  */
 function assertEventHierarchy (session, module, suites, tests) {
   const sessionId = session.test_session_id.toString(10)
@@ -167,7 +168,6 @@ function assertEventHierarchy (session, module, suites, tests) {
  *
  * @param {object[]} suites
  * @param {object[]} tests
- * @returns {void}
  */
 function assertOneTestPerSuiteExecution (suites, tests) {
   assert.deepStrictEqual(
@@ -181,7 +181,6 @@ function assertOneTestPerSuiteExecution (suites, tests) {
  *
  * @param {object} failedTest
  * @param {object[]} media
- * @returns {void}
  */
 function assertFailureScreenshotUploaded (failedTest, media) {
   assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
@@ -389,6 +388,22 @@ for (const version of versions) {
         assert.strictEqual(new Set(tests.map(test => test.metrics.process_id)).size, 2)
       })
     })
+
+    for (const framework of ['mocha', 'jasmine']) {
+      it(`reports successful zero-test ${framework} workers as skipped with an explanation`, async () => {
+        await runScenario('empty', 0, ({ session, module, suites, tests }) => {
+          assert.strictEqual(tests.length, 0)
+          assert.strictEqual(suites.length, 1)
+          assert.strictEqual(suites[0].meta[TEST_STATUS], 'skip')
+
+          for (const event of [session, module]) {
+            assert.strictEqual(event.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No tests were executed')
+            assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+          }
+        }, 0, { framework })
+      })
+    }
 
     it('reports parallel Jasmine workers as one session', async () => {
       await runScenario('parallel', 2, ({ session, suites, tests }) => {

@@ -108,7 +108,6 @@ class DatadogSpanContext {
   /**
    * Check if a tag exists.
    * @param {string} key - Tag key
-   * @returns {boolean}
    */
   hasTag (key) { return Object.hasOwn(this._tags, key) }
 

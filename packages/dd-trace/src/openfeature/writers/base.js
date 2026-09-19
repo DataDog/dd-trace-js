@@ -46,7 +46,6 @@ const EVP_ORIGIN_HEADERS = {
  *
  * @param {Error | null} error - Request error
  * @param {number | undefined} statusCode - HTTP response status
- * @returns {boolean} Whether direct retry is safe
  */
 function isSafeToReplay (error, statusCode) {
   return error?.code === 'EAI_AGAIN' || error?.code === 'ECONNREFUSED' ||
@@ -59,7 +58,6 @@ function isSafeToReplay (error, statusCode) {
  *
  * @param {Error | null} error - Request error
  * @param {number | undefined} statusCode - HTTP response status
- * @returns {boolean} Whether the delivery result is ambiguous
  */
 function isTransportFailure (error, statusCode) {
   return error !== null && error !== undefined && statusCode === undefined
@@ -69,7 +67,6 @@ function isTransportFailure (error, statusCode) {
  * Tests whether an HTTP response should move only future Agentless batches.
  *
  * @param {number | undefined} statusCode - HTTP response status
- * @returns {boolean} Whether the local route should be replaced without replay
  */
 function shouldSwitchFutureRoute (statusCode) {
   return statusCode === 403 || statusCode === 429 || statusCode >= 500 && statusCode < 600
@@ -209,7 +206,6 @@ class BaseFFEWriter {
   /**
    * @private
    * @param {Array<object>} payload - Payload to encode
-   * @returns {string} JSON-stringified payload
    */
   _encode (payload) {
     return JSON.stringify(payload)
@@ -221,7 +217,6 @@ class BaseFFEWriter {
    * @protected
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
-   * @returns {void}
    */
   _sendPayload (payload, eventCount) {
     const route = this.#createActiveRoute()
@@ -233,7 +228,6 @@ class BaseFFEWriter {
    *
    * @param {WriterRoute} route - Active route
    * @param {WriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   _setRoutes (route, fallbackRoute) {
     this.#activateRoute(this.#createRoute(route))
@@ -289,7 +283,6 @@ class BaseFFEWriter {
    * Makes a route active for future event batches.
    *
    * @param {ActiveWriterRoute} route - Route state
-   * @returns {void}
    */
   #activateRoute (route) {
     this._baseUrl = route.url
@@ -306,7 +299,6 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
-   * @returns {void}
    */
   #sendRequest (payload, eventCount, route, fallbackRoute) {
     request(payload, route.requestOptions, (error, response, statusCode) => {

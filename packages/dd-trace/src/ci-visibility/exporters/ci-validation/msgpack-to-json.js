@@ -257,7 +257,6 @@ class MsgpackJsonConverter {
     }
   }
 
-  /** @returns {number} unsigned 8-bit integer */
   #readUInt8 () {
     this.#assertAvailable(1)
     return this.#input[this.#offset++]

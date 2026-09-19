@@ -10,7 +10,6 @@ const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 
 /**
  * @param {string} hostname
- * @returns {boolean}
  */
 function isLoopbackHost (hostname) {
   // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
@@ -23,7 +22,6 @@ function isLoopbackHost (hostname) {
 /**
  * @param {string|undefined} protocol
  * @param {string|undefined} hostname
- * @returns {boolean}
  */
 function canSendApiKey (protocol, hostname) {
   return protocol === 'https:' || protocol === 'unix:' ||

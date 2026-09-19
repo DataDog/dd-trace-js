@@ -659,6 +659,12 @@ module.exports = {
       versions: ['8.0.0'],
     },
   ],
+  postgres: [
+    {
+      name: 'pg',
+      versions: ['>=8.0.3'],
+    },
+  ],
   '@prisma/client': [
     {
       name: 'prisma',

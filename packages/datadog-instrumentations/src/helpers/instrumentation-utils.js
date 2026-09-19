@@ -9,7 +9,6 @@ const { isRelativeRequire } = require('./shared-utils')
 /**
  * @param {string|undefined} version
  * @param {string[]|undefined} ranges
- * @returns {boolean}
  */
 function matchVersion (version, ranges) {
   return !version || !ranges || ranges.some(range => satisfies(version, range))
@@ -18,7 +17,6 @@ function matchVersion (version, ranges) {
 /**
  * @param {string} name
  * @param {string} [file]
- * @returns {string}
  */
 function filename (name, file) {
   return file ? `${name}/${file}` : name
@@ -29,7 +27,6 @@ function filename (name, file) {
  * @param {string|undefined} version
  * @param {string} moduleName
  * @param {{ file?: string, filePattern?: string, versions?: string[] }} instrumentation
- * @returns {boolean}
  */
 function matchesInstrumentation (name, version, moduleName, instrumentation) {
   const { file, filePattern, versions } = instrumentation

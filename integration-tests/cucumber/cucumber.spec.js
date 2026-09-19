@@ -74,6 +74,7 @@ const {
   TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
   TEST_SKIP_REASON,
+  TEST_SESSION_EMPTY_REASON,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
@@ -1150,7 +1151,13 @@ describe(`cucumber@${version} commonJS`, () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
+              const testModule = events.find(event => event.type === 'test_module_end').content
               assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              for (const event of [testSession, testModule]) {
+                assert.strictEqual(event.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No scenarios were executed')
+                assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+              }
             })
 
           childProcess = exec(

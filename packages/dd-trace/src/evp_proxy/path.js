@@ -4,7 +4,6 @@ const LEADING_SLASHES = /^\/+/
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function stripTrailingSlashes (value) {
   let end = value.length
@@ -18,7 +17,6 @@ function stripTrailingSlashes (value) {
  * This utility does not perform EVP proxy discovery.
  *
  * @param {...string} paths - URL path components
- * @returns {string} Joined request path
  */
 function joinEVPProxyPath (...paths) {
   let joined = ''
@@ -36,7 +34,6 @@ function joinEVPProxyPath (...paths) {
  *
  * @param {URL} url - Configured Agent URL
  * @param {...string} paths - EVP path components
- * @returns {string} Joined request path
  */
 function joinAgentURLPath (url, ...paths) {
   const prefix = url.protocol === 'http:' || url.protocol === 'https:' ? url.pathname : ''

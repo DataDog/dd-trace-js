@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
+const { INCOMPLETE_REASON } = require('../../../../src/debugger/guardrail-metrics')
 const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
 const target = getTargetCodePath(__filename)
@@ -17,7 +18,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     afterEach(teardown)
 
     it('should return expected object for nested objects with maxReferenceDepth: 1', function (done) {
-      assertOnBreakpoint(done, { maxReferenceDepth: 1 }, (state) => {
+      assertOnBreakpoint(done, { maxReferenceDepth: 1 }, (state, incomplete) => {
+        assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.DEPTH)
         assert.strictEqual(Object.keys(state).length, 1)
 
         assert.ok(Object.hasOwn(state, 'myNestedObj'), `Available keys: ${inspect(Object.keys(state))}`)
@@ -43,7 +45,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('should return expected object for nested objects with maxReferenceDepth: 5', function (done) {
-      assertOnBreakpoint(done, { maxReferenceDepth: 5 }, (state) => {
+      assertOnBreakpoint(done, { maxReferenceDepth: 5 }, (state, incomplete) => {
+        assert.strictEqual(incomplete.reasons, INCOMPLETE_REASON.DEPTH)
         assert.strictEqual(Object.entries(state).length, 1)
 
         assert.ok(Object.hasOwn(state, 'myNestedObj'), `Available keys: ${inspect(Object.keys(state))}`)

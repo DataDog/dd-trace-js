@@ -116,7 +116,6 @@ class ExposuresWriter extends BaseFFEWriter {
   /**
    * @param {boolean} enabled - Whether to enable the writer
    * @param {ExposureRoute} [route] - Selected EVP route
-   * @returns {void}
    */
   setEnabled (enabled, route) {
     if (route) {
@@ -136,7 +135,6 @@ class ExposuresWriter extends BaseFFEWriter {
    * Applies caller-supplied route data without performing discovery.
    *
    * @param {ExposureRoute} route - Selected EVP route
-   * @returns {void}
    */
   #setRoute (route) {
     const fallbackRoute = route.fallback && {
@@ -184,9 +182,6 @@ class ExposuresWriter extends BaseFFEWriter {
     }
   }
 
-  /**
-   * @returns {number} Cumulative number of exposure events dropped due to buffer overflow.
-   */
   get droppedEventCount () {
     return this._droppedEvents
   }

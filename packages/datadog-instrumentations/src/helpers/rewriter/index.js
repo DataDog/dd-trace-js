@@ -146,6 +146,11 @@ function createMatcher (dcModule) {
     publishDurableOrchestrationFailure,
     waitForAsyncEnd,
   } = require('./transforms')
+  const {
+    postgresQueryHandlers,
+    postgresQueryLifecycle,
+    postgresQueryPreparation,
+  } = require('./transforms/postgres')
 
   const matcher = create(instrumentations, dcModule)
 
@@ -158,6 +163,9 @@ function createMatcher (dcModule) {
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
   matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
+  matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
+  matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
+  matcher.addTransform('postgresQueryPreparation', postgresQueryPreparation)
 
   return matcher
 }
@@ -191,7 +199,6 @@ function getDcPolyfillSpecifier (moduleType) {
  * Convert the source representations accepted by Node.js loader hooks to text.
  *
  * @param {string | ArrayBuffer | BufferView} source
- * @returns {string}
  */
 function getSourceText (source) {
   if (typeof source === 'string') return source

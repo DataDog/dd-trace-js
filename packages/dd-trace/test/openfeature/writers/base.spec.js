@@ -42,7 +42,6 @@ describe('OpenFeature Base FFE Writer transport', () => {
 
       /**
        * @param {object} route - Selected event route
-       * @returns {void}
        */
       setRoute (route) {
         const mapRoute = selectedRoute => ({
@@ -59,7 +58,6 @@ describe('OpenFeature Base FFE Writer transport', () => {
       /**
        * @param {string} payload - Encoded aggregate payload
        * @param {number} eventCount - Aggregate event count
-       * @returns {void}
        */
       send (payload, eventCount) {
         this._sendPayload(payload, eventCount)

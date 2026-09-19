@@ -259,7 +259,6 @@ function parseChange (entry, options = {}) {
 /**
  * @param {string[]} paths
  * @param {ChangedFile[]} changedFiles
- * @returns {void}
  */
 function appendChangedPaths (paths, changedFiles) {
   for (const file of changedFiles) {
@@ -290,7 +289,6 @@ function isInternalOnly (files) {
 /**
  * @param {Map<string, Contributor>} contributors
  * @param {Contributor[]} additions
- * @returns {void}
  */
 function addContributors (contributors, additions) {
   for (const contributor of additions) {

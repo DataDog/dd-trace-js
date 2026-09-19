@@ -65,6 +65,7 @@ const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
 const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatcher_createWorker')
+const filterForShardCh = tracingChannel('orchestrion:playwright:filterForShard')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
 const artifactsRecorderScreenshotPathCh =
@@ -121,6 +122,8 @@ let modifiedFiles = {}
 let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
+let hasTestsAssignedToShard = false
+let hasTestsBeforeSharding = false
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -159,7 +162,6 @@ const automaticFailureVideoPaths = new Set()
  * Returns whether Playwright's internal screenshot recorder created an attachment.
  *
  * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
  */
 function isAutomaticFailureScreenshotAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
@@ -169,7 +171,6 @@ function isAutomaticFailureScreenshotAttachment (attachment) {
  * Returns whether Playwright's internal video recorder created an attachment.
  *
  * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
  */
 function isAutomaticFailureVideoAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureVideoPaths.delete(attachment.path)
@@ -230,7 +231,6 @@ function getTestRepeatEachKey (test) {
 
 /**
  * @param {object} test
- * @returns {string}
  */
 function getTestEfdKey (test) {
   const projectKey = getTestProjectKey(test)
@@ -263,9 +263,6 @@ function registerEfdRetryTest (test) {
   })
 }
 
-/**
- * @returns {boolean}
- */
 function shouldRunEarlyFlakeDetection () {
   return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
@@ -389,7 +386,6 @@ function sendDdPropertiesToWorkerWhenAvailable (workerProcess, testId) {
 
 /**
  * @param {object} test
- * @returns {boolean}
  */
 function shouldRequestEfdRetryCount (test) {
   // The main process remains the source of truth. repeatEachIndex is only used as
@@ -558,7 +554,6 @@ function getProjectsFromRunner (runner, configArg) {
  * Returns whether at least one Playwright project captures automatic screenshots for failed tests.
  *
  * @param {Array<object>} projects - Playwright projects with resolved use options
- * @returns {boolean} Whether failure screenshot capture is enabled
  */
 function isFailureScreenshotCaptureEnabled (projects) {
   for (const project of projects) {
@@ -575,7 +570,6 @@ function isFailureScreenshotCaptureEnabled (projects) {
  * Returns whether at least one Playwright project records videos that can be retained for failures.
  *
  * @param {Array<object>} projects - Playwright projects with resolved use options
- * @returns {boolean} Whether video capture is enabled
  */
 function isFailureVideoCaptureEnabled (projects) {
   for (const project of projects) {
@@ -789,7 +783,6 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
  *
  * @param {object} test
  * @param {string} testSuiteAbsolutePath
- * @returns {void}
  */
 function recordSkippedTestOptimizationExecution (test, testSuiteAbsolutePath) {
   if (recordedTestOptimizationExecutions.has(test) ||
@@ -1050,8 +1043,33 @@ function testEndHandler ({
 function dispatcherRunWrapper (run) {
   return function (...args) {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
+    for (const tests of Object.values(remainingTestsByFile)) {
+      if (tests.length > 0) {
+        hasTestsAssignedToShard = true
+        break
+      }
+    }
     return run.apply(this, args)
   }
+}
+
+function recordTestsBeforeSharding (testGroups) {
+  hasTestsBeforeSharding = testGroups.some(group => group.tests.length > 0)
+}
+
+function testGroupsHook (testGroupsPackage) {
+  const filterForShard = testGroupsPackage.filterForShard
+  const wrappedFilterForShard = function (...args) {
+    recordTestsBeforeSharding(args.at(-1))
+    return filterForShard.apply(this, args)
+  }
+
+  return new Proxy(testGroupsPackage, {
+    get (target, prop, receiver) {
+      if (prop === 'filterForShard') return wrappedFilterForShard
+      return Reflect.get(target, prop, receiver)
+    },
+  })
 }
 
 function deferEfdRetryGroups (testGroups) {
@@ -1089,6 +1107,13 @@ function deferEfdRetryGroups (testGroups) {
 
 function prepareDispatcherRun (dispatcher, args) {
   let testGroups = args[0]
+
+  for (const group of testGroups) {
+    if (group.tests.length > 0) {
+      hasTestsAssignedToShard = true
+      break
+    }
+  }
 
   // Filter out disabled tests from testGroups before they get scheduled,
   // unless they have attemptToFix (in which case they should still run and be retried)
@@ -1324,6 +1349,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined
+    hasTestsAssignedToShard = false
+    hasTestsBeforeSharding = false
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1333,6 +1360,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         config.config.reporter.unshift([require.resolve('./playwright-reporter')])
       }
     }
+    const runnerConfig = getPlaywrightConfig(this)
+    const playwrightConfig = config?.config || runnerConfig.config || runnerConfig
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
@@ -1520,8 +1549,14 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
+    const isExpectedEmptyShard = finalStatus === 'pass' &&
+      Boolean(playwrightConfig.shard) &&
+      hasTestsBeforeSharding &&
+      !hasTestsAssignedToShard &&
+      testsReportedInGenerateSummary.size === 0
     await getChannelPromise(testSessionFinishCh, {
-      status: finalStatus,
+      status: isExpectedEmptyShard ? 'skip' : finalStatus,
+      isExpectedEmptyShard,
       error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
@@ -1537,6 +1572,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     playwrightRunSummary = undefined
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
+    hasTestsAssignedToShard = false
+    hasTestsBeforeSharding = false
     efdManagedTestKeys.clear()
     efdRetryCountByTestKey.clear()
     efdRetryCountRequestsByTestKey.clear()
@@ -1693,6 +1730,12 @@ dispatcherCreateWorkerCh.subscribe({
   },
 })
 
+filterForShardCh.subscribe({
+  start (ctx) {
+    recordTestsBeforeSharding(ctx.arguments.at(-1))
+  },
+})
+
 processHostStartRunnerCh.subscribe({
   start (ctx) {
     prepareProcessHostStartRunner(ctx.self)
@@ -1734,7 +1777,6 @@ reporterRunSummaryCh.subscribe((runSummary) => {
  * Records a reporter failure even when the reporter throws a falsy value.
  *
  * @param {unknown} error
- * @returns {void}
  */
 function recordReporterError (error) {
   if (hasReporterError) return
@@ -1756,7 +1798,6 @@ function recordReporterError (error) {
  * Records a path created by Playwright's automatic screenshot recorder.
  *
  * @param {object} ctx - Orchestrion context
- * @returns {void}
  */
 function recordAutomaticFailureScreenshotPath (ctx) {
   if (isFailureScreenshotUploadEnabled &&
@@ -1770,7 +1811,6 @@ function recordAutomaticFailureScreenshotPath (ctx) {
  * Records only the destination used by Playwright's automatic video recorder.
  *
  * @param {object} ctx - Orchestrion context
- * @returns {void}
  */
 function recordAutomaticFailureVideoPath (ctx) {
   const video = ctx.arguments?.[0]
@@ -1867,6 +1907,12 @@ addHook({
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0 <1.60.0'],
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/testGroups.js',
+  versions: ['>=1.38.0 <1.60.0'],
+}, testGroupsHook)
 
 addHook({
   name: 'playwright',
