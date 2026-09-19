@@ -8,7 +8,7 @@ const { getValueFromEnvSources } = require('../config/helper')
 // `config/defaults` defers its own `dns` require until after it exports, so this no longer hits
 // the `config/defaults` <-> log parse cycle that motivated the lazy require below.
 const { defaults } = require('../config/defaults')
-const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
+const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel, errorRecordChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
 
@@ -95,10 +95,14 @@ const log = {
 }
 
 function publishFormatted (ch, formatter, ...args) {
-  if (ch.hasSubscribers) {
-    const log = Log.parse(...args)
-    const { formatted, cause } = getErrorLog(log)
+  const publishRecord = ch === errorChannel && errorRecordChannel.hasSubscribers
+  if (!ch.hasSubscribers && !publishRecord) return
 
+  const record = getErrorLog(Log.parse(...args))
+  if (publishRecord) errorRecordChannel.publish(record)
+
+  if (ch.hasSubscribers) {
+    const { formatted, cause } = record
     // calling twice ch.publish() because Error cause is only available in Node.js v16.9.0
     // TODO: replace it with Error(message, { cause }) when cause has broad support
     if (formatted) ch.publish(formatter?.(formatted) || formatted)
@@ -109,7 +113,10 @@ function publishFormatted (ch, formatter, ...args) {
 function getErrorLog (err) {
   if (typeof err?.delegate === 'function') {
     const result = err.delegate(...err.args)
-    return Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+    const resolved = Array.isArray(result) ? Log.parse(...result) : Log.parse(result)
+    resolved.cause ??= err.cause
+    resolved.sendViaTelemetry &&= err.sendViaTelemetry
+    return resolved
   }
   return err
 }
