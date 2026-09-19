@@ -54,7 +54,8 @@ probePort.on('message', async ({ action, probe, ackId }) => {
     await processMsg(action, probe)
     probePort.postMessage({ ackId })
   } catch (err) {
-    probePort.postMessage({ ackId, error: err })
+    // Structured cloning an Error drops its custom properties, so send the reason separately.
+    probePort.postMessage({ ackId, error: err, reason: err.reason })
     ackError(err, probe)
   }
 })
@@ -72,18 +73,20 @@ async function processMsg (action, probe) {
   if (action !== 'unapply') ackReceived(probe)
 
   if (probe.type !== 'LOG_PROBE') {
-    throw new Error(`Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`)
+    throw Object.assign(new Error(
+      `Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`
+    ), { reason: 'unsupported_probe_type' })
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
-    throw new Error(
+    throw Object.assign(new Error(
       // eslint-disable-next-line @stylistic/max-len
       `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
-    )
+    ), { reason: 'unsupported_insertion_point' })
   }
   if (probe.captureSnapshot && probe.captureExpressions?.length > 0) {
-    throw new Error(
+    throw Object.assign(new Error(
       `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`
-    )
+    ), { reason: 'conflicting_capture_options' })
   }
 
   switch (action) {
@@ -99,8 +102,8 @@ async function processMsg (action, probe) {
       ackInstalled(probe)
       break
     default:
-      throw new Error(
+      throw Object.assign(new Error(
         `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
-      )
+      ), { reason: 'unknown_remote_config_action' })
   }
 }

@@ -49,7 +49,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
   if (params.reason !== 'other') {
     // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
-    throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
+    throw Object.assign(new Error(`Unexpected Debugger.paused reason: ${params.reason}`), {
+      reason: 'unexpected_pause_reason',
+    })
   }
 
   let maxReferenceDepth = 0

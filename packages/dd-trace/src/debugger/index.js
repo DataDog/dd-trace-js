@@ -32,6 +32,19 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
 // be lost when the application exits on its own.
 const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
 
+const WORKER_ERROR_NAMES = new Set([
+  'Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'EvalError', 'URIError', 'AggregateError',
+])
+const WORKER_ERROR_CODES = new Set([
+  'MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND', 'ERR_WORKER_OUT_OF_MEMORY', 'ERR_WORKER_INIT_FAILED',
+  'ERR_WORKER_UNSERIALIZABLE_ERROR', 'ERR_INSPECTOR_COMMAND', 'ERR_INSPECTOR_NOT_ACTIVE', 'ERR_INSPECTOR_CLOSED',
+  'ERR_INSPECTOR_ALREADY_CONNECTED', 'ERR_INSPECTOR_NOT_CONNECTED', 'ERR_DLOPEN_FAILED', 'ERR_REQUIRE_ESM',
+])
+const WORKER_ERROR_REASONS = new Set([
+  'unexpected_pause_reason', 'unsupported_probe_type', 'unsupported_insertion_point',
+  'conflicting_capture_options', 'unknown_remote_config_action',
+])
+
 let worker = null
 let configChannel = null
 let ackId = 0
@@ -108,7 +121,8 @@ function start (config, rcInstance) {
     probeChannel.port2.postMessage({ action, probe, ackId })
   })
 
-  probeChannel.port2.on('message', ({ ackId, error }) => {
+  probeChannel.port2.on('message', ({ ackId, error, reason }) => {
+    if (error && reason !== undefined) logWorkerError(error, reason)
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
@@ -155,12 +169,14 @@ function start (config, rcInstance) {
       )
     })
 
-    worker.on('error', (err) => log.error('[debugger] worker thread error', err))
+    worker.on('error', (err) => logWorkerError(err))
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
     worker.once('exit', (code) => {
       const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
-      log.error('[debugger] worker thread exited unexpectedly', error)
+      // Telemetry omits printf arguments, so the numeric exit code must be part of the message.
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.error(() => `[debugger] worker thread exited unexpectedly exit_code=${code}`, error)
       cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     })
 
@@ -172,6 +188,29 @@ function start (config, rcInstance) {
     configChannel.port1.unref?.()
     configChannel.port2.unref?.()
   })
+}
+
+/**
+ * Only allowlisted tokens belong in the telemetry message; exception messages remain in the redacted cause.
+ *
+ * @param {Error & { code?: unknown, reason?: unknown }} error - The worker failure
+ * @param {unknown} [reason] - Explicit reason preserved across a probe acknowledgement's structured clone
+ */
+function logWorkerError (error, reason = error.reason) {
+  // Telemetry omits printf arguments. Only these allowlisted values may be interpolated into its message.
+  // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+  log.error(() => {
+    const name = WORKER_ERROR_NAMES.has(error.name) ? error.name : 'unknown'
+    let message = `[debugger] worker thread error name=${name}`
+    if (error.code !== undefined) {
+      const code = typeof error.code === 'string' && WORKER_ERROR_CODES.has(error.code) ? error.code : 'unknown'
+      message += ` code=${code}`
+    }
+    if (reason !== undefined) {
+      message += ` reason=${typeof reason === 'string' && WORKER_ERROR_REASONS.has(reason) ? reason : 'unknown'}`
+    }
+    return message
+  }, error)
 }
 
 /**
