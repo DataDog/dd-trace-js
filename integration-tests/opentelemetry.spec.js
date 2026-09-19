@@ -5,7 +5,11 @@ const assert = require('node:assert/strict')
 const { fork } = require('child_process')
 const { join } = require('path')
 const axios = require('axios')
+
+const latestVersions = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
+
+const OTEL_API_VERSIONS = ['1.4.1', '1.8.0', latestVersions['@opentelemetry/api']]
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
@@ -66,6 +70,54 @@ async function getWithRetry (url, timeoutMs) {
   }
   throw lastErr
 }
+
+describe('OpenTelemetry API version compatibility', function () {
+  this.timeout(20_000)
+
+  for (const apiVersion of OTEL_API_VERSIONS) {
+    describe(apiVersion, () => {
+      let agent
+      let proc
+      let cwd
+      const timeout = 5000
+
+      useSandbox(
+        [`@opentelemetry/api@${apiVersion}`],
+        false,
+        ['./integration-tests/opentelemetry/basic.js']
+      )
+
+      before(async () => {
+        cwd = sandboxCwd()
+        agent = await new FakeAgent().start()
+      })
+
+      after(async () => {
+        await stopProc(proc)
+        await agent?.stop()
+      })
+
+      it('preserves user API span and propagation behavior', async () => {
+        const installedApiVersion = require(join(cwd, 'node_modules/@opentelemetry/api/package.json')).version
+        assert.strictEqual(installedApiVersion, apiVersion)
+
+        proc = fork(join(cwd, 'basic.js'), {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+          },
+        })
+
+        await check(agent, proc, timeout, ({ payload }) => {
+          const trace = payload.find(trace => trace.length === 1 && trace[0].name === 'otel-sub')
+          assert.ok(trace)
+          assert.strictEqual(trace[0].meta['test.attribute'], 'value')
+          assert.strictEqual(trace[0].duration, 50_000_000)
+        })
+      })
+    })
+  }
+})
 
 describe('opentelemetry', function () {
   this.timeout(20_000)
