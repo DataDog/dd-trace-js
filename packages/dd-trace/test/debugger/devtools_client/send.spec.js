@@ -7,7 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const { DEFAULT_QUEUE_MAX_BYTES } = require('../../../src/debugger/constants')
+const { DEFAULT_QUEUE_MAX_BYTES, MAX_MESSAGE_LENGTH } = require('../../../src/debugger/constants')
 const { DROPPED_REASON, EVENT_TYPE, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version: debuggerVersion } = require('../../../../../package.json')
@@ -27,8 +27,6 @@ const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
 const snapshot = { snapshot: true, probe: { id: 'my-probe-id' } }
-const MAX_MESSAGE_LENGTH = 8 * 1024 // Mirrors the limit in send.js
-
 describe('input message http requests', function () {
   /** @type {sinon.SinonFakeTimers} */
   let clock

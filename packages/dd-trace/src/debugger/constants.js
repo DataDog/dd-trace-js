@@ -3,6 +3,7 @@
 module.exports = {
   DEFAULT_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
   DIAGNOSTICS_QUEUE_MAX_BYTES: 1024 * 1024,
+  MAX_MESSAGE_LENGTH: 8 * 1024,
 
   DEBUGGER_INPUT_DIRECT: '/api/v2/debugger',
   DEBUGGER_DIAGNOSTICS_V1: '/debugger/v1/diagnostics',

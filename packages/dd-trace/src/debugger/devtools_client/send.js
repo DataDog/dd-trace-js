@@ -5,7 +5,7 @@ const { stringify } = require('querystring')
 
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
-const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
+const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2, MAX_MESSAGE_LENGTH } = require('../constants')
 const { DROPPED_REASON, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
@@ -17,7 +17,6 @@ const buildTags = require('./tags')
 
 module.exports = send
 
-const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
 const MAX_LOG_PAYLOAD_SIZE_MB = 1
 const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
 
