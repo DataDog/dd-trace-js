@@ -460,7 +460,7 @@ describe('debugger/index', () => {
         { id: 'probe2', type: 'metric' },
       ]
       const probeFileContent = JSON.stringify(probes)
-      config.dynamicInstrumentation.probeFile = '/path/to/probes.json'
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = '/path/to/probes.json'
 
       readFileStub.callsFake((path, encoding, callback) => {
         callback(null, probeFileContent)
@@ -489,7 +489,7 @@ describe('debugger/index', () => {
     })
 
     it('should handle file read error gracefully', () => {
-      config.dynamicInstrumentation.probeFile = '/path/to/missing.json'
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = '/path/to/missing.json'
       const readError = new Error('ENOENT: no such file or directory')
 
       readFileStub.callsFake((path, encoding, callback) => {
@@ -503,7 +503,7 @@ describe('debugger/index', () => {
     })
 
     it('should handle invalid JSON gracefully', () => {
-      config.dynamicInstrumentation.probeFile = '/path/to/invalid.json'
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = '/path/to/invalid.json'
       const invalidJSON = '{ invalid json content'
 
       readFileStub.callsFake((path, encoding, callback) => {
