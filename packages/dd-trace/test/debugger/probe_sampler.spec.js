@@ -5,7 +5,10 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 require('../setup/mocha')
 
+const { MAX_MESSAGE_LENGTH } = require('../../src/debugger/constants')
 const {
+  CONDITION_ERROR_FLAG,
+  CONDITION_ERROR_THROTTLE_NS,
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
@@ -16,11 +19,21 @@ const { installProbeSampler, uninstallProbeSampler } = require('../../src/debugg
 const {
   compileBreakpointCondition,
   getRemoveProbeExpression,
+  getTakeConditionErrorExpression,
 } = require('../../src/debugger/devtools_client/probe_sampler')
 const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('../../src/debugger/devtools_client/defaults')
 
 const ddTraceSymbol = Symbol.for('dd-trace')
 const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
+
+/**
+ * @typedef {object} RuntimeSampler
+ * @property {Function} makeSampleDecision
+ * @property {Function} shouldEvaluateCondition
+ * @property {Function} conditionError
+ * @property {Function} takeConditionError
+ * @property {Function} remove
+ */
 
 /** @type {GuardrailMetrics} */
 let guardrailMetrics
@@ -97,11 +110,16 @@ describe('probe sampler', function () {
     const $dd_sampler = globalThis[Symbol.for("dd-trace")]?.[Symbol.for("dd-trace.debugger.probeSampler")]
     if ($dd_sampler === undefined) return false
     let $dd_sampled = false
-    try {
-      if (((foo) === (42)) === true) {
-        $dd_sampled = $dd_sampler.makeSampleDecision(0, "probe-1", 200000n, true) || $dd_sampled
+    if ($dd_sampler.shouldEvaluateCondition("probe-1")) {
+      try {
+        if (((foo) === (42)) === true) {
+          $dd_sampled = $dd_sampler.makeSampleDecision(0, "probe-1", 200000n, true) || $dd_sampled
+        }
+      } catch ($dd_error) {
+        $dd_sampled = $dd_sampler.conditionError(0, "probe-1", $dd_error) ||
+          $dd_sampled
       }
-    } catch {}
+    }
     return $dd_sampled
   })()`)
     })
@@ -109,6 +127,33 @@ describe('probe sampler', function () {
     it('should compile an expression that removes probe sampler state', function () {
       assert.strictEqual(getRemoveProbeExpression('probe-1'),
         'globalThis[Symbol.for("dd-trace")]?.[Symbol.for("dd-trace.debugger.probeSampler")]?.remove("probe-1")')
+    })
+
+    it('should compile an expression that takes the recorded condition error of a probe', function () {
+      assert.strictEqual(getTakeConditionErrorExpression('probe-1'),
+        'globalThis[Symbol.for("dd-trace")]?.[Symbol.for("dd-trace.debugger.probeSampler")]' +
+        '?.takeConditionError("probe-1")')
+    })
+
+    it('should pause for a condition error and skip the condition until the throttle window has passed', function () {
+      installSampler()
+      const sampler = getSampler()
+      const probes = [{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 0n, condition: 'foo.bar' }]
+      const breakpointCondition = compileBreakpointCondition(probes)
+      const evaluate = () => {
+        // eslint-disable-next-line no-new-func
+        return new Function('foo', `return ${breakpointCondition}`)(undefined)
+      }
+
+      assert.strictEqual(evaluate(), true, 'should pause to report the error')
+      assert.strictEqual(
+        sampler.takeConditionError('probe-1'),
+        "TypeError: Cannot read properties of undefined (reading 'bar')"
+      )
+      assert.strictEqual(evaluate(), false, 'should skip the condition while throttled')
+
+      now += CONDITION_ERROR_THROTTLE_NS
+      assert.strictEqual(evaluate(), true, 'should evaluate the condition again once the throttle window has passed')
     })
   })
 
@@ -251,6 +296,159 @@ describe('probe sampler', function () {
       assert.deepStrictEqual(drainGuardrailMetrics(), [])
     })
 
+    describe('condition errors', function () {
+      it('should evaluate conditions of probes without a recorded error', function () {
+        installSampler()
+
+        assert.strictEqual(getSampler().shouldEvaluateCondition('probe-1'), true)
+      })
+
+      it('should request a pause flagged as a condition error', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        assert.strictEqual(sampler.conditionError(7, 'probe-1', new TypeError('boom')), true)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7 | CONDITION_ERROR_FLAG)
+      })
+
+      it('should hand over the recorded error once', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        sampler.conditionError(7, 'probe-1', new TypeError('boom'))
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'TypeError: boom')
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+        assert.strictEqual(sampler.takeConditionError('unknown-probe'), undefined)
+      })
+
+      it('should describe non-error values thrown by a condition', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        sampler.conditionError(7, 'probe-1', 'a string')
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'a string')
+
+        sampler.conditionError(7, 'probe-1', { not: 'an error' })
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'Unknown evaluation error')
+
+        sampler.conditionError(7, 'probe-1', { name: 'CustomError', message: 'boom' })
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'CustomError: boom')
+      })
+
+      it('should not invoke error accessors or proxy traps when describing a condition error', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        for (const property of ['name', 'message']) {
+          const error = new Error('boom')
+          Object.defineProperty(error, property, {
+            get () { throw new Error(`${property} getter invoked`) },
+          })
+
+          assert.strictEqual(sampler.conditionError(7, `accessor-${property}`, error), true)
+          assert.strictEqual(sampler.takeConditionError(`accessor-${property}`), property === 'name' ? 'boom' : 'Error')
+        }
+
+        const proxy = new Proxy(new Error('boom'), {
+          get () { throw new Error('get trap invoked') },
+          getPrototypeOf () { throw new Error('getPrototypeOf trap invoked') },
+        })
+        assert.strictEqual(sampler.conditionError(7, 'proxy', proxy), true)
+        assert.strictEqual(sampler.takeConditionError('proxy'), 'Unknown evaluation error')
+      })
+
+      it('should preserve condition error descriptions at the message length limit', function () {
+        installSampler()
+        const sampler = getSampler()
+        const error = 'x'.repeat(MAX_MESSAGE_LENGTH)
+
+        sampler.conditionError(7, 'probe-1', error)
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), error)
+      })
+
+      it('should truncate condition error descriptions over the message length limit', function () {
+        installSampler()
+        const sampler = getSampler()
+        const error = 'x'.repeat(MAX_MESSAGE_LENGTH + 1)
+
+        sampler.conditionError(7, 'probe-1', error)
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), `${error.slice(0, MAX_MESSAGE_LENGTH)}…`)
+      })
+
+      it('should truncate formatted Error descriptions over the message length limit', function () {
+        installSampler()
+        const sampler = getSampler()
+        const message = 'x'.repeat(MAX_MESSAGE_LENGTH)
+
+        sampler.conditionError(7, 'probe-1', new Error(message))
+
+        assert.strictEqual(
+          sampler.takeConditionError('probe-1'),
+          `${`Error: ${message}`.slice(0, MAX_MESSAGE_LENGTH)}…`
+        )
+      })
+
+      it('should throttle condition evaluation for the throttle window after an error', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        sampler.conditionError(7, 'probe-1', new TypeError('boom'))
+
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-2'), true, 'should not affect other probes')
+        now += CONDITION_ERROR_THROTTLE_NS - 1n
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
+        now += 1n
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), true)
+      })
+
+      it('should not apply the per-probe or global rate limits to condition errors', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+
+        for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY; i++) {
+          assert.strictEqual(sampler.makeSampleDecision(i, `snapshot-${i}`, 0n, true), true)
+        }
+        assert.strictEqual(sampler.makeSampleDecision(99, 'probe-1', 1_000_000_000n, true), false)
+
+        assert.strictEqual(sampler.conditionError(99, 'probe-1', new Error('boom')), true)
+        assert.strictEqual(
+          Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
+          MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1
+        )
+      })
+
+      it('should drop the condition error but retain the throttle when the shared buffer is full', function () {
+        const sampledProbeIndexes = installSampler()
+        const sampler = getSampler()
+        Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, MAX_SAMPLED_PROBES_PER_PAUSE)
+
+        assert.strictEqual(sampler.conditionError(7, 'probe-1', new Error('boom')), false)
+        assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 1)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
+        now += CONDITION_ERROR_THROTTLE_NS - 1n
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), false)
+        now += 1n
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), true)
+      })
+
+      it('should forget the recorded error and throttle when a probe is removed', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        sampler.conditionError(7, 'probe-1', new Error('boom'))
+        sampler.remove('probe-1')
+
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1'), true)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+      })
+    })
+
     it('should set overflow and skip probes when the shared buffer is full', function () {
       const sampledProbeIndexes = installSampler()
       assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 0)
@@ -300,5 +498,5 @@ function getDatadogGlobal () {
  * Get the installed runtime sampler.
  */
 function getSampler () {
-  return /** @type {{ makeSampleDecision: Function, remove: Function }} */ (getDatadogGlobal()[samplerSymbol])
+  return /** @type {RuntimeSampler} */ (getDatadogGlobal()[samplerSymbol])
 }
