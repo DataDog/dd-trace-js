@@ -56,6 +56,19 @@ function createAnthropicRequest () {
   }
 }
 
+function createStream (chunks) {
+  return {
+    [Symbol.asyncIterator] () {
+      let index = 0
+      return {
+        next: () => Promise.resolve(index < chunks.length
+          ? { done: false, value: chunks[index++] }
+          : { done: true, value: undefined }),
+      }
+    },
+  }
+}
+
 describe('anthropic interception', () => {
   let Messages
 
@@ -293,28 +306,79 @@ describe('anthropic interception', () => {
     })
   }
 
-  it('leaves a stream to the native call and hands the async iterable back untouched', () => {
+  it('publishes streamed calls to an interceptor without changing the stream', () => {
     const { calls, unsubscribe } = subscribeIntercept()
     const chunks = [{ type: 'content_block_delta' }]
-    const streamBody = {
-      [Symbol.asyncIterator] () {
-        let index = 0
-        return {
-          next: () => Promise.resolve(index < chunks.length
-            ? { done: false, value: chunks[index++] }
-            : { done: true, value: undefined }),
-        }
-      },
-    }
+    const streamBody = createStream(chunks)
     const messages = new Messages()
     messages._nextApiPromise = new FakeAPIPromise(streamBody)
 
     return messages.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse()
       .then(body => {
-        assert.deepStrictEqual(calls, [])
+        assert.strictEqual(calls.length, 1)
+        assert.strictEqual(calls[0].arguments[0].stream, true)
         assert.strictEqual(body, streamBody)
       })
       .finally(unsubscribe)
+  })
+
+  it('snapshots streamed input before later caller mutation', () => {
+    const prepare = subscribeSnapshottingCall()
+    const { calls, unsubscribe } = subscribeIntercept()
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(createStream([]))
+    const options = { messages: [{ role: 'user', content: 'original' }], stream: true }
+
+    const apiPromise = messages.create(options)
+    options.messages[0].content = 'mutated'
+
+    return apiPromise.parse()
+      .then(() => {
+        assert.strictEqual(messages.sentArgs[0].messages[0].content, 'original')
+        assert.strictEqual(calls[0].arguments[0].messages[0].content, 'original')
+      })
+      .finally(() => {
+        prepare.unsubscribe()
+        unsubscribe()
+      })
+  })
+
+  it('delivers the stream returned by the interceptor', () => {
+    const original = createStream([{ type: 'content_block_delta', value: 'original' }])
+    const replacement = createStream([{ type: 'content_block_delta', value: 'replacement' }])
+    const { unsubscribe } = subscribeIntercept(ctx => {
+      ctx.onResult = () => replacement
+    })
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(original)
+
+    return messages.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse()
+      .then(body => assert.strictEqual(body, replacement))
+      .finally(unsubscribe)
+  })
+
+  it('rejects the streamed call and marks the span errored when onResult rejects', () => {
+    const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+    const { unsubscribe } = subscribeIntercept(ctx => {
+      ctx.onResult = () => Promise.reject(error)
+    })
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    let erroredCtx
+    const apmHandlers = { start () {}, error (ctx) { erroredCtx = ctx } }
+    apmChannel.subscribe(apmHandlers)
+
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(createStream([{ type: 'content_block_delta' }]))
+
+    return assert.rejects(
+      () => messages.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse(),
+      candidate => candidate === error
+    )
+      .then(() => assert.strictEqual(erroredCtx?.error, error))
+      .finally(() => {
+        apmChannel.unsubscribe(apmHandlers)
+        unsubscribe()
+      })
   })
 })
 
