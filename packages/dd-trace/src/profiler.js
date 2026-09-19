@@ -71,6 +71,17 @@ function stop () {
   }
 }
 
+function cancelQueuedStart () {
+  profilingModule?.profiler.cancelQueuedStart()
+}
+
+/**
+ * @param {'true' | 'auto'} enabled - Profiling activation mode
+ */
+function hasQueuedStart (enabled) {
+  return profilingModule?.profiler.hasQueuedStart(enabled) ?? false
+}
+
 /**
  * Declares the set of custom label keys that will be used with
  * `runWithLabels`.
@@ -106,7 +117,16 @@ configUpdateChannel.subscribe((config) => {
     disableSSIHeuristics()
     stop()
   } else if (enabled === 'auto') {
-    if (!isStarted() && !activeSSIHeuristics) {
+    if (!isStarted()) {
+      // A completed SSI heuristic may have approved an auto start while shutdown is still in
+      // flight. Preserve that decision across subsequent config publications.
+      if (hasQueuedStart('auto')) return
+
+      // Entering auto retracts any unconditional start queued by an earlier true update. Profiling
+      // may start only if the active SSI heuristic makes that decision.
+      cancelQueuedStart()
+      if (activeSSIHeuristics) return
+
       // 'auto' defers the start decision to SSI heuristics. A running profiler already reflects a
       // decision that was made (by SSI or a prior unconditional enablement), so leave it alone
       // rather than stopping and re-enabling it on every subsequent config publication. Also guard
