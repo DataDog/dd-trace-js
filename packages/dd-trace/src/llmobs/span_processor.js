@@ -14,6 +14,8 @@ const {
   MODEL_NAME,
   MODEL_PROVIDER,
   METADATA,
+  AGENT_VERSION,
+  AGENT_VERSION_TAG_KEY,
   COST_TAGS,
   TOOL_DEFINITIONS,
   INPUT_MESSAGES,
@@ -212,7 +214,7 @@ class LLMObsSpanProcessor {
 
     const name = mlObsTags[NAME] || span._name
 
-    const tags = this.#getTags(span, mlApp, sessionId, error)
+    const tags = this.#getTags(span, mlApp, sessionId, error, spanKind)
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
@@ -332,7 +334,7 @@ class LLMObsSpanProcessor {
     return metadata._dd
   }
 
-  #getTags (span, mlApp, sessionId, error) {
+  #getTags (span, mlApp, sessionId, error, spanKind) {
     let tags = {
       ...this.#config.parsedDdTags,
       version: this.#config.version,
@@ -355,6 +357,14 @@ class LLMObsSpanProcessor {
 
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
+
+    // An agent version can be supplied before the kind is settled (annotation context spans a whole
+    // block, and integrations may still call `changeKind`), so it is only promoted to a tag here,
+    // once the final kind is known. Only agent spans carry it, never their children.
+    if (spanKind === 'agent') {
+      const agentVersion = LLMObsTagger.tagMap.get(span)?.[AGENT_VERSION]
+      if (agentVersion) tags[AGENT_VERSION_TAG_KEY] = agentVersion
+    }
 
     return tags
   }
