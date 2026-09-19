@@ -16,8 +16,10 @@ describe('AgentlessExporter', () => {
   let Exporter
   let exporter
   let writer
+  let Writer
   let initialHandlersSize
   let clock
+  let writerOptions
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
@@ -25,14 +27,17 @@ describe('AgentlessExporter', () => {
     writer = {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
+      flushAndDrainStats: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
     }
 
-    const Writer = function () {
+    Writer = function (options) {
+      writerOptions = options
       return writer
     }
 
     Exporter = proxyquire('../../../src/exporters/agentless', {
+      '@datadog/libdatadog': { supportsAgentlessStats: true },
       './writer': Writer,
     })
 
@@ -72,6 +77,71 @@ describe('AgentlessExporter', () => {
       assert.strictEqual(exporter._url.hostname, 'trace.browser-intake-us3-datadoghq.com')
     })
 
+    it('should configure native client stats when local stats are enabled', () => {
+      exporter = new Exporter({
+        site: 'us3.datadoghq.com',
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true, interval: 15 },
+        tags: {},
+      })
+
+      assert.deepStrictEqual(writerOptions.stats, {
+        endpoint: 'https://trace.agent.us3.datadoghq.com/api/v0.2/stats',
+        intervalMs: 15_000,
+      })
+      assert.strictEqual(exporter.clientStatsMode, 'native')
+    })
+
+    it('should use the default native stats interval', () => {
+      exporter = new Exporter({
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        tags: {},
+      })
+
+      assert.strictEqual(writerOptions.stats.intervalMs, 10_000)
+    })
+
+    it('should disable client stats when native stats are unsupported', () => {
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        '@datadog/libdatadog': { supportsAgentlessStats: false },
+        './writer': Writer,
+      })
+
+      exporter = new Exporter({
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        tags: {},
+      })
+
+      assert.strictEqual(writerOptions.stats, undefined)
+      assert.strictEqual(exporter.clientStatsMode, 'disabled')
+    })
+
+    for (const [name, config] of [
+      ['client stats are disabled', { stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false } }],
+      ['AppSec standalone mode is enabled', {
+        appsec: { DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: true },
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+      }],
+    ]) {
+      it(`should leave native client stats disabled when ${name}`, () => {
+        exporter = new Exporter({ site: 'datadoghq.com', tags: {}, ...config })
+
+        assert.strictEqual(writerOptions.stats, undefined)
+        assert.strictEqual(exporter.clientStatsMode, 'disabled')
+      })
+    }
+
+    it('should retain JavaScript client stats when OTLP span metrics are enabled', () => {
+      exporter = new Exporter({
+        site: 'datadoghq.com',
+        tags: {},
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: true },
+        OTEL_TRACES_SPAN_METRICS_ENABLED: true,
+      })
+
+      assert.strictEqual(writerOptions.stats, undefined)
+      assert.strictEqual(exporter.clientStatsMode, 'javascript')
+    })
+
     it('should register beforeExit handler', () => {
       exporter = new Exporter({})
 
@@ -104,7 +174,7 @@ describe('AgentlessExporter', () => {
       }
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
-        '../common/docker': { containerId: 'container-id' },
+        '../common/docker': { containerId: 'container-id', entityId: 'cid-container-id' },
         './writer': Writer,
       })
 
@@ -117,12 +187,13 @@ describe('AgentlessExporter', () => {
       assert.ok(writerOptions.metadata)
       assertObjectContains(writerOptions.metadata, {
         containerId: 'container-id',
+        entityId: 'cid-container-id',
         env: 'production',
         runtimeID: 'test-uuid',
       })
     })
 
-    it('should omit container metadata when only an entity ID is available', () => {
+    it('should pass an entity ID without container metadata', () => {
       const writerOptions = {}
       /** @param {object} options */
       const Writer = function (options) {
@@ -143,7 +214,8 @@ describe('AgentlessExporter', () => {
         tags: { 'runtime-id': 'test-uuid' },
       })
 
-      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerID'), false)
+      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerId'), false)
+      assert.strictEqual(writerOptions.metadata.entityId, 'in-1234')
     })
 
     it('should reflect a runtime id updated on config after construction', () => {
@@ -208,6 +280,7 @@ describe('AgentlessExporter', () => {
       clock.tick(1000)
 
       sinon.assert.calledOnce(writer.flush)
+      sinon.assert.notCalled(writer.flushAndDrainStats)
     })
 
     it('should batch multiple exports into one flush', () => {
@@ -251,6 +324,7 @@ describe('AgentlessExporter', () => {
 
       sinon.assert.calledWith(writer.append, spans)
       sinon.assert.calledOnce(writer.flush)
+      sinon.assert.notCalled(writer.flushAndDrainStats)
     })
   })
 
@@ -262,19 +336,22 @@ describe('AgentlessExporter', () => {
     it('should flush writer immediately', () => {
       exporter.flush()
 
-      sinon.assert.called(writer.flush)
+      sinon.assert.calledOnce(writer.flushAndDrainStats)
+      sinon.assert.notCalled(writer.flush)
     })
 
     it('should clear pending timer on explicit flush', () => {
       exporter.export([{ name: 'test' }])
       exporter.flush()
 
-      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnce(writer.flushAndDrainStats)
+      sinon.assert.notCalled(writer.flush)
 
       // Timer should be cleared, so ticking should not trigger another flush
       clock.tick(1000)
 
-      sinon.assert.calledOnce(writer.flush)
+      sinon.assert.calledOnce(writer.flushAndDrainStats)
+      sinon.assert.notCalled(writer.flush)
     })
 
     it('should call callback when done', (done) => {

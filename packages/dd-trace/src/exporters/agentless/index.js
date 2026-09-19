@@ -3,10 +3,12 @@
 const { URL } = require('node:url')
 const os = require('node:os')
 
+const { supportsAgentlessStats } = require('@datadog/libdatadog')
+
 const log = require('../../log')
-const { containerId } = require('../common/docker')
+const { containerId, entityId } = require('../common/docker')
 const Writer = require('./writer')
-const { computeIntakeUrl } = require('./intake')
+const { computeIntakeUrl, computeStatsIntakeUrl } = require('./intake')
 
 /**
  * Agentless exporter for APM trace intake.
@@ -16,6 +18,9 @@ const { computeIntakeUrl } = require('./intake')
 class AgentlessExporter {
   #timer
   #config
+
+  /** @type {'disabled'|'javascript'|'native'} */
+  clientStatsMode = 'disabled'
 
   /**
    * @param {object} config - Configuration object
@@ -27,11 +32,28 @@ class AgentlessExporter {
   constructor (config) {
     this.#config = config
     const site = config.site ?? 'datadoghq.com'
+    let stats
+
+    if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      this.clientStatsMode = 'javascript'
+    }
 
     try {
       // Agentless traffic carries the Datadog API key, so the intake is always an https endpoint
       // derived from the site; never config.url (the agent's cleartext http) or the key leaks.
       this._url = new URL(computeIntakeUrl(site))
+      if (
+        supportsAgentlessStats &&
+        config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+        !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED &&
+        !config.OTEL_TRACES_SPAN_METRICS_ENABLED
+      ) {
+        stats = {
+          endpoint: computeStatsIntakeUrl(site),
+          intervalMs: (config.stats.interval ?? 10) * 1000,
+        }
+        this.clientStatsMode = 'native'
+      }
     } catch (err) {
       log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, err.message)
       this._url = null
@@ -45,10 +67,12 @@ class AgentlessExporter {
       get runtimeID () { return config.tags['runtime-id'] },
     }
     if (containerId) metadata.containerId = containerId
+    if (entityId) metadata.entityId = entityId
 
     this._writer = new Writer({
       url: this._url,
       site,
+      stats,
       metadata,
     })
 
@@ -117,7 +141,7 @@ class AgentlessExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
     try {
-      this._writer.flush(done)
+      this._writer.flushAndDrainStats(done)
     } catch (err) {
       log.error('Failed to flush traces: %s', err.message)
       done()
