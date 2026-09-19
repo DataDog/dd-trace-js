@@ -634,6 +634,35 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(bucketSizeNs, p.bucketSizeNs)
   })
 
+  it('uses continuous OTLP windows and restarts the interval after force flush', () => {
+    const clock = sinon.useFakeTimers({ now: 12_345_000 })
+    try {
+      const localExporter = {
+        export: sinon.stub().callsFake((_drained, _bucketSizeNs, done) => done?.()),
+        flush: sinon.stub().callsFake(done => done?.()),
+      }
+      const p = new SpanStatsProcessor(config, localExporter)
+
+      p.onSpanFinished(topLevelSpan)
+      clock.tick(3_000)
+      p.forceFlush(() => {})
+      p.onSpanFinished(topLevelSpan)
+
+      clock.tick(7_000)
+      assert.ok(localExporter.export.calledOnce)
+
+      clock.tick(3_000)
+      assert.ok(localExporter.export.calledTwice)
+      const [first] = localExporter.export.firstCall.args[0]
+      const [second] = localExporter.export.secondCall.args[0]
+
+      assert.strictEqual(second.timeNs, first.timeNs + first.durationNs)
+      assert.strictEqual(second.durationNs, 10_000 * 1e6)
+    } finally {
+      clock.restore()
+    }
+  })
+
   it('should split OTLP trace roots when their attribute is exported', () => {
     const childSpan = { ...topLevelSpan, parent_id: { equals: () => false } }
     const processor = new SpanStatsProcessor(config, otlpExporter)

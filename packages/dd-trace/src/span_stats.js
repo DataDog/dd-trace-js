@@ -16,6 +16,7 @@ const {
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const id = require('./id')
 const log = require('./log')
+const { nowUnixNano } = require('./opentelemetry/metrics/time')
 
 const GRPC_STATUS_CODE_MAP = Object.fromEntries(GRPC_STATUS_NAMES.map((name, i) => [name, String(i)]))
 const ZERO_ID = id('0')
@@ -191,6 +192,7 @@ class TimeBuckets extends Map {
 
 class SpanStatsProcessor {
   #config
+  #otlpStartTimeNs
 
   /**
    * @param {import('./config/config-base')} config
@@ -220,6 +222,7 @@ class SpanStatsProcessor {
     this.hostname = os.hostname()
     this.enabled = enabled
     this.otlpExporter = otlpExporter || null
+    this.#otlpStartTimeNs = otlpExporter ? nowUnixNano() : undefined
     this.env = env
     this.#config = config
     this.sequence = 0
@@ -241,10 +244,11 @@ class SpanStatsProcessor {
    */
   forceFlush (done) {
     this.#flush(done)
+    if (this.otlpExporter) this.timer.refresh()
   }
 
   #flush (done) {
-    const drained = this.#drainBuckets()
+    const drained = this.otlpExporter ? this.#drainOtlpBucket() : this.#drainBuckets()
 
     if (this.enabled && !this.otlpExporter) {
       this.exporter.export({
@@ -282,7 +286,7 @@ class SpanStatsProcessor {
         this.otlpExporter.export(drained, this.bucketSizeNs, done)
       }
     } else if (this.otlpExporter) {
-      if (typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
+      if (done && typeof this.otlpExporter.flush === 'function') this.otlpExporter.flush(done)
       else done?.()
     } else done?.()
   }
@@ -291,8 +295,11 @@ class SpanStatsProcessor {
     if (!this.enabled && !this.otlpExporter) return
     if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
-    const spanEndNs = span.start + span.duration
-    const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
+    let bucketTime = this.#otlpStartTimeNs
+    if (!this.otlpExporter) {
+      const spanEndNs = span.start + span.duration
+      bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
+    }
 
     this.buckets.forTime(bucketTime)
       .forSpan(span)
@@ -306,6 +313,15 @@ class SpanStatsProcessor {
     }
     this.buckets.clear()
     return drained
+  }
+
+  #drainOtlpBucket () {
+    const startTimeNs = this.#otlpStartTimeNs
+    const endTimeNs = Math.max(nowUnixNano(), startTimeNs + 1e3)
+    const bucket = this.buckets.get(startTimeNs)
+    this.buckets = new TimeBuckets(true)
+    this.#otlpStartTimeNs = endTimeNs
+    return bucket ? [{ timeNs: startTimeNs, durationNs: endTimeNs - startTimeNs, bucket }] : []
   }
 
   #toV06Payload (drained) {
