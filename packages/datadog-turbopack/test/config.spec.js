@@ -8,8 +8,12 @@ const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const { withDatadogTurbopack } = require('../../../next')
+const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
+const { getUnusedPackageName } = require('../../datadog-instrumentations/test/helpers/get-unused-package-name')
 
 const directories = []
+const unusedPackageName = getUnusedPackageName(Object.keys(hooks))
+const unusedPackagePath = `/app/node_modules/${unusedPackageName}/index.js`
 
 describe('withDatadogTurbopack', () => {
   afterEach(() => {
@@ -65,8 +69,7 @@ describe('withDatadogTurbopack', () => {
     assert.deepStrictEqual(sourceRule.condition.all.slice(0, 2), ['node', 'foreign'])
     assert.equal(packagePath.test('/app/node_modules/express/index.js'), true)
     assert.equal(packagePath.test('/app/node_modules/.pnpm/ai@6.0.0/node_modules/ai/dist/index.mjs'), true)
-    assert.equal(packagePath.test('/app/node_modules/webdriver/build/index.js'), false)
-    assert.equal(packagePath.test('/app/node_modules/unrelated/index.js'), false)
+    assert.equal(packagePath.test(unusedPackagePath), false)
     assert.equal(extensionlessPath.test('/app/node_modules/ioredis/runner'), true)
     assert.equal(extensionlessPath.test('/app/node_modules/ioredis/runner.js'), false)
     assert.equal(extensionlessPath.test('/app/node_modules/ioredis/package.json'), false)
@@ -93,7 +96,7 @@ describe('withDatadogTurbopack', () => {
     assert.ok(config.turbopack.conditions.existing)
     assert.ok(config.turbopack.rules.existing)
     assert.equal(packagePath.test('/app/node_modules/express/index.js'), true)
-    assert.equal(packagePath.test('/app/node_modules/unrelated/index.js'), false)
+    assert.equal(packagePath.test(unusedPackagePath), false)
     assert.equal(source.path.test('/app/node_modules/express/index.js'), true)
     assert.equal(extensionless.path.test('/app/node_modules/ioredis/runner'), true)
     assert.equal(source.path.test('/app/node_modules/express/package.json'), false)
