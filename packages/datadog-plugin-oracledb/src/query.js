@@ -6,6 +6,8 @@ const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
 let parser
 
+/** @typedef {{ name: string, source: string | undefined }} Service */
+
 /**
  * @param {{ poolAttrs: object }} ctx
  */
@@ -29,6 +31,19 @@ class OracledbQueryPlugin extends DatabasePlugin {
   static system = 'oracle'
   static peerServicePrecursors = ['db.instance', 'db.hostname']
 
+  /** @type {boolean} */
+  #dynamicService = false
+  /** @type {object | undefined} */
+  #nomenclatureConfig
+  /** @type {string | undefined} */
+  #operationName
+  /** @type {object | string | undefined} */
+  #params
+  /** @type {Service | undefined} */
+  #service
+  /** @type {WeakMap<object, Service>} */
+  #services = new WeakMap()
+
   constructor (...args) {
     super(...args)
     this.addBind('apm:oracledb:pool:session:start', bindPoolAttributes)
@@ -42,7 +57,10 @@ class OracledbQueryPlugin extends DatabasePlugin {
       connAttrs = storage('legacy').getStore()?.oracledbPoolAttrs
     }
 
-    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
+    if (this.#nomenclatureConfig !== this._tracer._nomenclature.config) {
+      this.#refreshNaming()
+    }
+    const service = this.#getService(connAttrs)
 
     if (hostname === undefined) {
       // Lazy load for performance. This is not needed in v6 and up
@@ -59,7 +77,7 @@ class OracledbQueryPlugin extends DatabasePlugin {
     // the caller's binds.
     const sql = query?.statement ?? query
 
-    const span = this.startSpan(this.operationName(), {
+    const span = this.startSpan(this.#operationName, {
       service,
       resource: sql,
       type: 'sql',
@@ -78,6 +96,51 @@ class OracledbQueryPlugin extends DatabasePlugin {
     ctx.injected = query?.statement ? { ...query, statement: injected } : injected
 
     return ctx.currentStore
+  }
+
+  #refreshNaming () {
+    this.#nomenclatureConfig = this._tracer._nomenclature.config
+    this.#operationName = this.operationName()
+    this.#params = undefined
+    this.#service = undefined
+    this.#services = new WeakMap()
+  }
+
+  /**
+   * @param {object | string | undefined} params
+   * @returns {Service}
+   */
+  #getService (params) {
+    if (!this.#dynamicService) {
+      this.#service ??= this.serviceName({ pluginConfig: this.config, params })
+      return this.#service
+    }
+
+    if (typeof params === 'object' && params !== null) {
+      let service = this.#services.get(params)
+      if (service === undefined) {
+        service = this.serviceName({ pluginConfig: this.config, params })
+        this.#services.set(params, service)
+      }
+      return service
+    }
+
+    if (this.#service === undefined || this.#params !== params) {
+      this.#params = params
+      this.#service = this.serviceName({ pluginConfig: this.config, params })
+    }
+    return this.#service
+  }
+
+  /**
+   * @override
+   * @param {boolean | Record<string, unknown>} config
+   */
+  configure (config) {
+    const result = super.configure(config)
+    this.#dynamicService = typeof this.config.service === 'function'
+    this.#nomenclatureConfig = undefined
+    return result
   }
 }
 
