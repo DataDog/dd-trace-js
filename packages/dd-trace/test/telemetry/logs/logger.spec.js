@@ -94,6 +94,27 @@ describe('logger telemetry delivery', () => {
     }])
   })
 
+  it('should collect error-like causes with a throwing constructor getter', () => {
+    const cause = Object.create(null)
+    Object.defineProperties(cause, {
+      stack: { value: `customer-secret\n    at request (${ddBasePath}request.js:1:2)` },
+      constructor: {
+        get () {
+          throw new Error('customer getter')
+        },
+      },
+    })
+
+    log.error('Request failed', cause)
+
+    assert.deepStrictEqual(collector.drain(), [{
+      message: 'Request failed',
+      level: 'ERROR',
+      count: 1,
+      stack_trace: 'Error: redacted\n    at request (request.js:1:2)',
+    }])
+  })
+
   it('should respect transmission opt-outs, including lazy messages', () => {
     const configuredLazyMessage = sinon.stub().returns('hidden')
     const noTransmitErrorLazyMessage = sinon.stub().returns('hidden')

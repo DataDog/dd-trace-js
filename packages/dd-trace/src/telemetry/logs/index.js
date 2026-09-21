@@ -50,10 +50,18 @@ function onErrorLog (msg) {
 
   if (cause) {
     telLog.stack_trace = cause.stack
-    telLog.errorType = cause.constructor?.name || 'Error'
+    telLog.errorType = getErrorType(cause)
   }
 
   onLog(telLog)
+}
+
+function getErrorType (cause) {
+  try {
+    return cause.constructor?.name || 'Error'
+  } catch {
+    return 'Error'
+  }
 }
 
 function start (config) {
