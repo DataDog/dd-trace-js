@@ -1,7 +1,7 @@
 'use strict'
 
 const { spawnSync } = require('node:child_process')
-const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
@@ -12,7 +12,10 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
+const { SourceMapConsumer } = require('../../../../../vendor/node_modules/@datadog/source-map')
 const { parse, query } = require('../../../src/helpers/rewriter/compiler')
+
+const SOURCE_MAP_MARKER = '//# sourceMappingURL=data:application/json;base64,'
 
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
@@ -652,6 +655,30 @@ describe('check-require-cache', () => {
           },
           transform: 'configureGraphqlFastPath',
           channelName: 'execute',
+        },
+        {
+          module: {
+            name: 'bullmq',
+            versionRange: '>=0.1',
+            filePath: 'activation.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: 'bullmq',
+            versionRange: '>=0.1',
+            filePath: 'mapped.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
         },
       ],
     })
@@ -1477,6 +1504,79 @@ describe('check-require-cache', () => {
     assert.strictEqual(queries[0].next().value.constructor.name, 'Query')
     assert.strictEqual(queries[1].next().value.constructor.name, 'Query')
     assert.strictEqual(subs.start.callCount, 0)
+  })
+
+  it('resolves module versions from file URLs with encoded characters', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter url-'))
+    const packageDirectory = join(dir, 'node_modules', 'bullmq')
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ version: '5.66.0' }))
+
+    try {
+      const filename = join(packageDirectory, 'activation.js')
+      const source = "'use strict'\nfunction work () { return true }\nmodule.exports = work\n"
+      const rewritten = rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+      })
+
+      assert.notStrictEqual(rewritten, source)
+    } finally {
+      rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
+  it('preserves a shebang without a trailing newline', () => {
+    const source = '#!/usr/bin/env node'
+    const shebangRewriter = proxyquire('../../../src/helpers/rewriter', {
+      '../../../../../vendor/dist/@apm-js-collab/code-transformer': {
+        create: () => ({
+          addTransform () {},
+          getTransformer: () => ({ transform: () => ({ code: 'module.exports = true' }) }),
+        }),
+      },
+      './instrumentations': [],
+    })
+    const rewritten = shebangRewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'activation.js'),
+      'commonjs',
+      { moduleName: 'bullmq', filePath: 'activation.js' }
+    )
+
+    assert.equal(rewritten, `${source}\nmodule.exports = true`)
+  })
+
+  it('maps transformed pure source positions correctly after restoring a shebang', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'mapped.js')
+    const source = "#!/usr/bin/env node\n'use strict'\nfunction work () {\n" +
+      "  throw new Error('mapped')\n}\nmodule.exports = work\n"
+    const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'mapped.js',
+    })
+    const markerIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+
+    assert.notStrictEqual(markerIndex, -1)
+    const parsedMap = JSON.parse(Buffer.from(
+      rewritten.slice(markerIndex + SOURCE_MAP_MARKER.length).trim(),
+      'base64'
+    ).toString())
+    assert.equal(parsedMap.version, 3)
+
+    const generatedIndex = rewritten.indexOf('function work')
+    const generatedPrefix = rewritten.slice(0, generatedIndex)
+    const generatedLine = generatedPrefix.split('\n').length
+    const generatedColumn = generatedPrefix.length - generatedPrefix.lastIndexOf('\n') - 1
+    const consumer = new SourceMapConsumer(parsedMap)
+    const mapped = consumer.generatedPositionFor({
+      source: 'bullmq/mapped.js',
+      line: 3,
+      column: 9,
+    })
+
+    assert.equal(mapped.line, generatedLine)
+    assert.equal(mapped.column, generatedColumn)
   })
 })
 
