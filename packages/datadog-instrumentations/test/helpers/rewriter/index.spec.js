@@ -17,6 +17,16 @@ const { parse, query } = require('../../../src/helpers/rewriter/compiler')
 
 const SOURCE_MAP_MARKER = '//# sourceMappingURL=data:application/json;base64,'
 
+// V8 treats CR, LS and PS as line terminators just like LF, so shebang
+// restoration must locate the first of any of them.
+const LINE_TERMINATORS = {
+  LF: '\n',
+  CRLF: '\r\n',
+  CR: '\r',
+  'U+2028': '\u2028',
+  'U+2029': '\u2029',
+}
+
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
   let rewriter
@@ -1547,37 +1557,72 @@ describe('check-require-cache', () => {
     assert.equal(rewritten, `${source}\nmodule.exports = true`)
   })
 
-  it('maps transformed pure source positions correctly after restoring a shebang', () => {
-    const filename = resolve(__dirname, 'node_modules', 'test', 'mapped.js')
-    const source = "#!/usr/bin/env node\n'use strict'\nfunction work () {\n" +
-      "  throw new Error('mapped')\n}\nmodule.exports = work\n"
-    const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
-      moduleName: 'bullmq',
-      filePath: 'mapped.js',
+  for (const [name, separator] of Object.entries(LINE_TERMINATORS)) {
+    it(`maps transformed pure source positions correctly after restoring a shebang followed by ${name}`, () => {
+      const filename = resolve(__dirname, 'node_modules', 'test', 'mapped.js')
+      const source = `#!/usr/bin/env node${separator}'use strict'${separator}function work () {${separator}` +
+        `  throw new Error('mapped')${separator}}${separator}module.exports = work${separator}`
+      const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'mapped.js',
+      })
+      const markerIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+
+      assert.notStrictEqual(markerIndex, -1)
+      const parsedMap = JSON.parse(Buffer.from(
+        rewritten.slice(markerIndex + SOURCE_MAP_MARKER.length).trim(),
+        'base64'
+      ).toString())
+      assert.equal(parsedMap.version, 3)
+
+      const generatedIndex = rewritten.indexOf('function work')
+      const generatedPrefix = rewritten.slice(0, generatedIndex)
+      const generatedLine = generatedPrefix.split('\n').length
+      const generatedColumn = generatedPrefix.length - generatedPrefix.lastIndexOf('\n') - 1
+      const consumer = new SourceMapConsumer(parsedMap)
+      const mapped = consumer.generatedPositionFor({
+        source: 'bullmq/mapped.js',
+        line: 3,
+        column: 9,
+      })
+
+      assert.equal(mapped.line, generatedLine)
+      assert.equal(mapped.column, generatedColumn)
     })
-    const markerIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+  }
 
-    assert.notStrictEqual(markerIndex, -1)
-    const parsedMap = JSON.parse(Buffer.from(
-      rewritten.slice(markerIndex + SOURCE_MAP_MARKER.length).trim(),
-      'base64'
-    ).toString())
-    assert.equal(parsedMap.version, 3)
+  for (const [name, separator] of Object.entries(LINE_TERMINATORS)) {
+    it(`restores a shebang followed by a ${name} line terminator without re-running the program`, () => {
+      const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+      // The top-level counter lives on globalThis because re-executed top-level
+      // code could reset a module scoped `var` back to its initial value.
+      const runsKey = `__dd_rewriter_shebang_runs_${name.replaceAll('+', '')}`
+      const source = `#!/usr/bin/env node${separator}'use strict'${separator}` +
+        `globalThis.${runsKey} = (globalThis.${runsKey} | 0) + 1${separator}` +
+        `function work () { return globalThis.${runsKey} }${separator}module.exports = work${separator}`
+      const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+      })
 
-    const generatedIndex = rewritten.indexOf('function work')
-    const generatedPrefix = rewritten.slice(0, generatedIndex)
-    const generatedLine = generatedPrefix.split('\n').length
-    const generatedColumn = generatedPrefix.length - generatedPrefix.lastIndexOf('\n') - 1
-    const consumer = new SourceMapConsumer(parsedMap)
-    const mapped = consumer.generatedPositionFor({
-      source: 'bullmq/mapped.js',
-      line: 3,
-      column: 9,
+      delete globalThis[runsKey]
+
+      try {
+        assert.notStrictEqual(rewritten, source)
+        assert.match(rewritten, /orchestrion:bullmq:work/)
+
+        const mod = new Module(filename, module.parent)
+        mod.filename = filename
+        mod.paths = Module._nodeModulePaths(dirname(filename))
+        mod._compile(rewritten, filename)
+
+        assert.strictEqual(typeof mod.exports, 'function')
+        assert.strictEqual(mod.exports(), 1)
+      } finally {
+        delete globalThis[runsKey]
+      }
     })
-
-    assert.equal(mapped.line, generatedLine)
-    assert.equal(mapped.column, generatedColumn)
-  })
+  }
 })
 
 describe('rewriter source-map trailer', () => {

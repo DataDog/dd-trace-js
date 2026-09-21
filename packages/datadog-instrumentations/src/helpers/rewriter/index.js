@@ -90,7 +90,7 @@ function rewrite (content, filename, format, target) {
     let { code, map } = transformer.transform(source, moduleType)
 
     if (source.startsWith('#!') && !code.startsWith('#!')) {
-      const shebangEnd = source.indexOf('\n')
+      const shebangEnd = source.search(/[\r\n\u2028\u2029]/)
       code = (shebangEnd === -1 ? source : source.slice(0, shebangEnd)) + '\n' + code
       map = shiftSourceMapLine(map)
     }
