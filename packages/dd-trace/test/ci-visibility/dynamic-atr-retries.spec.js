@@ -32,30 +32,30 @@ describe('dynamic-atr-retries', () => {
     })
 
     it('returns null when empty', () => {
-      assert.equal(getDynamicAtrBuckets([]), null)
+      assert.equal(getDynamicAtrBuckets(''), null)
     })
 
     it('parses valid buckets', () => {
-      assert.deepEqual(getDynamicAtrBuckets(['10', '4', '1', '1', '1']), [10, 4, 1, 1, 1])
+      assert.deepEqual(getDynamicAtrBuckets('10,4,1,1,1'), [10, 4, 1, 1, 1])
     })
 
     it('returns null for wrong count', () => {
-      assert.equal(getDynamicAtrBuckets(['10', '4', '1']), null)
+      assert.equal(getDynamicAtrBuckets('10,4,1'), null)
     })
 
     it('returns null for value below 1', () => {
-      assert.equal(getDynamicAtrBuckets(['10', '4', '0', '1', '1']), null)
+      assert.equal(getDynamicAtrBuckets('10,4,0,1,1'), null)
     })
 
     it('returns null for value above 20', () => {
-      assert.equal(getDynamicAtrBuckets(['21', '4', '1', '1', '1']), null)
+      assert.equal(getDynamicAtrBuckets('21,4,1,1,1'), null)
     })
 
     for (const value of [
-      ['1x', '2', '3', '4', '5'],
-      ['1.5', '2', '3', '4', '5'],
-      ['1', '', '3', '4', '5'],
-      ['invalid'],
+      '1x,2,3,4,5',
+      '1.5,2,3,4,5',
+      '1,,3,4,5',
+      'invalid',
     ]) {
       it(`returns null for malformed bucket value ${JSON.stringify(value)}`, () => {
         assert.equal(getDynamicAtrBuckets(value), null)
