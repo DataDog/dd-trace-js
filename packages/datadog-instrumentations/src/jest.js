@@ -533,6 +533,17 @@ function setOriginalConcurrentTest (wrappedConcurrentTest, originalConcurrentTes
 }
 
 /**
+ * Stops further retries only after Jest's test-result handlers have observed the failure.
+ *
+ * @param {{ name: string, test?: { errors: unknown[] } }} event
+ */
+function suppressDynamicAtrErrors (event) {
+  if (event.name === 'test_done' && dynamicAtrFinalErrorsByTest.has(event.test)) {
+    event.test.errors = []
+  }
+}
+
+/**
  * Restores terminal failures before custom environments inspect the completed describe block.
  *
  * @param {{ name: string }} event
@@ -1890,7 +1901,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         await super.handleTestEvent(event, state)
       }
 
-      if (event.name === 'setup') {
+      if (event.name === 'run_start') {
+        this.registerDynamicAtrResultHandler?.()
+      } else if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
         this.bindTestEach(this.global.test)
       }
@@ -2248,7 +2261,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // Quarantine must consume terminal failures before we save errors for Jest's final result.
         if (dynamicAtrCount !== undefined && failedAllTests && event.test.errors?.length) {
           dynamicAtrFinalErrorsByTest.set(event.test, event.test.errors)
-          event.test.errors = []
         }
 
         const ctx = testContexts.get(event.test)
@@ -3475,7 +3487,7 @@ addHook({
   versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
 }, coverageReporterWrapper)
 
-function jestAdapterWrapper (jestAdapter, jestVersion) {
+function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
   const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function (...args) {
     const environment = args[2]
@@ -3484,6 +3496,18 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
     }
 
     wrapEnvironmentCustomHandleTestEvent(environment)
+
+    if (environment.isDynamicAtrEnabled && environment.isFlakyTestRetriesEnabled) {
+      // Register at run_start, after Circus installs its per-test reporter and snapshot handlers.
+      environment.registerDynamicAtrResultHandler = () => {
+        if (satisfies(jestVersion, '>=30.0.0')) {
+          environment.global[Symbol.for('EVENT_HANDLERS')].push(suppressDynamicAtrErrors)
+        } else {
+          const circusState = args[3].requireInternalModule(path.join(hookMeta.moduleBaseDir, 'build/state.js'))
+          circusState.addEventHandler(suppressDynamicAtrErrors)
+        }
+      }
+    }
 
     testSuiteStartCh.publish({
       testSuite: environment.testSuite,

@@ -72,6 +72,10 @@ if (process.env.USE_WORKER_THREADS) {
   options.workerThreads = true
 }
 
+if (process.env.CUSTOM_REPORTER) {
+  options.reporters = [process.env.CUSTOM_REPORTER]
+}
+
 if (process.env.OLD_RUNNER) {
   options.testRunner = 'jest-jasmine2'
 }

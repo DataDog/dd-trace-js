@@ -4401,6 +4401,40 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       Promise.all([once(childProcess, 'exit'), eventsPromise]).then(() => done(), done)
     })
 
+    for (const parallel of [false, true]) {
+      it(`preserves dynamic ATR failures in per-test reporter results (parallel=${parallel})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
+        let output = ''
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-',
+            CUSTOM_REPORTER: './ci-visibility/jest-dynamic-atr-reporter.js',
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,4,4,4,4',
+            SHOULD_CHECK_RESULTS: '1',
+            ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
+          },
+        })
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        const [exitCode] = await once(childProcess, 'exit')
+        const results = [...output.matchAll(/DYNAMIC_ATR_CASE:(.+)/g)].map(match => JSON.parse(match[1]))
+        const failing = results.filter(result => result.name === 'can retry failed tests')
+        assert.deepStrictEqual(failing.map(({ status, errors, invocations }) => ({ status, errors, invocations })), [
+          { status: 'failed', errors: 1, invocations: 1 },
+          { status: 'failed', errors: 1, invocations: 2 },
+          { status: 'failed', errors: 1, invocations: 3 },
+        ])
+        const recovered = results.filter(result => result.name === 'can retry flaky tests')
+        assert.deepStrictEqual(recovered.map(result => result.status), ['failed', 'failed', 'passed'])
+        assert.strictEqual(recovered.at(-1).errors, 0)
+        const passing = results.filter(result => result.name === 'will not retry passed tests')
+        assert.deepStrictEqual(passing.map(result => result.status), ['passed'])
+        assert.strictEqual(exitCode, 1)
+      })
+    }
+
     for (const callsSuper of [true, false]) {
       it(`restores dynamic ATR failures before custom describe finish (callsSuper=${callsSuper})`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
