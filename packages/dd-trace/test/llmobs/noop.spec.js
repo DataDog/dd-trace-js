@@ -94,21 +94,21 @@ describe('noop', () => {
 
   it('fails clearly for Prompt Management network operations before initialization', async () => {
     const operations = [
-      () => llmobs.getPrompt('p'),
-      () => llmobs.refreshPrompt('p'),
-      () => llmobs.createPrompt('p', []),
-      () => llmobs.createPromptVersion('p', []),
-      () => llmobs.updatePrompt('p', {}),
-      () => llmobs.updatePromptVersion('p', 1, {}),
-      () => llmobs.deletePrompt('p'),
-      () => llmobs.listPrompts(),
-      () => llmobs.listPromptVersions('p'),
+      () => llmobs.prompts.getPrompt('p'),
+      () => llmobs.prompts.refreshPrompt('p'),
+      () => llmobs.prompts.createPrompt('p', []),
+      () => llmobs.prompts.createPromptVersion('p', []),
+      () => llmobs.prompts.updatePrompt('p', {}),
+      () => llmobs.prompts.updatePromptVersion('p', 1, {}),
+      () => llmobs.prompts.deletePrompt('p'),
+      () => llmobs.prompts.listPrompts(),
+      () => llmobs.prompts.listPromptVersions('p'),
     ]
 
     for (const operation of operations) {
       await assert.rejects(operation(), /Prompt Management requires tracer\.init\(\)/)
     }
-    llmobs.clearPromptCache()
+    llmobs.prompts.clearPromptCache()
   })
 
   describe('trace', () => {

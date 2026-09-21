@@ -12,8 +12,22 @@ const sinon = require('sinon')
 const log = require('../../../src/log')
 const telemetry = require('../../../src/llmobs/telemetry')
 const { cacheKey } = require('../../../src/llmobs/prompts/cache')
-const PromptManager = require('../../../src/llmobs/prompts/manager')
 const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
+
+let fetchStub
+const PromptManager = proxyquire('../../../src/llmobs/prompts/manager', {
+  '../../exporters/common/request': (body, options, callback) => {
+    Promise.resolve(fetchStub(options.url, { ...options, body: body || undefined }))
+      .then(async response => {
+        const responseBody = await response.text()
+        if (response.ok) return callback(null, responseBody, response.status, {})
+        const error = new Error()
+        if (options.includeErrorResponseBody) error.responseBody = responseBody
+        callback(error, null, response.status, {})
+      })
+      .catch(callback)
+  },
+})
 
 function response (status, body) {
   const text = typeof body === 'string' ? body : (body === undefined ? '' : JSON.stringify(body))
@@ -51,12 +65,11 @@ function makeConfig (overrides = {}) {
 }
 
 describe('PromptManager', () => {
-  let fetchStub
   let provider
   let cacheDir
 
   beforeEach(() => {
-    fetchStub = sinon.stub(global, 'fetch')
+    fetchStub = sinon.stub()
     provider = { resolveObjectEvaluation: sinon.stub().resolves({ value: {} }) }
   })
 
@@ -86,6 +99,7 @@ describe('PromptManager', () => {
       prompt_version_uuid: undefined,
       ID: 'backend-version-id',
       config: undefined,
+      template: { messages: [{ role: 'user', content: 'Hello {name}' }] },
     })))
     const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
@@ -100,18 +114,20 @@ describe('PromptManager', () => {
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/greeting')
     assert.strictEqual(fetchStub.secondCall.args[0],
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/a%2Fb/versions/3')
-    assert.strictEqual(fetchStub.firstCall.args[1].redirect, 'error')
+    assert.strictEqual(fetchStub.firstCall.args[1].retry, false)
     assert.strictEqual(latest.source, 'registry')
     assert.deepStrictEqual(latest.config, { model: { temperature: 0.2 }, unknown: [1, true] })
     assert.strictEqual(exact.version, '0.3.0')
     assert.deepStrictEqual(exact.config, {})
     assert.strictEqual(exact.promptVersionUuid, 'backend-version-id')
+    assert.deepStrictEqual(exact.format({ name: 'Ada' }), [{ role: 'user', content: 'Hello Ada' }])
     sinon.assert.notCalled(provider.resolveObjectEvaluation)
   })
 
-  it('rejects cleartext non-loopback origins and allows loopback development endpoints', () => {
+  it('rejects cleartext non-loopback origins and allows loopback development endpoints', async () => {
     process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'http://api.example.test'
-    assert.throws(() => new PromptManager(makeConfig(), () => provider), {
+    const insecure = new PromptManager(makeConfig(), () => provider)
+    await assert.rejects(insecure.getPrompt('greeting'), {
       name: 'PromptAuthError',
       status: 0,
       detail: 'Prompt origin must use HTTPS unless it targets a loopback host',
@@ -123,8 +139,9 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.origin, 'http://127.0.0.1:8126')
   })
 
-  it('rejects DD_SITE values containing URL authority delimiters', () => {
-    assert.throws(() => new PromptManager(makeConfig({ site: 'datadoghq.com@collector.example' }), () => provider), {
+  it('rejects DD_SITE values containing URL authority delimiters', async () => {
+    const manager = new PromptManager(makeConfig({ site: 'datadoghq.com@collector.example' }), () => provider)
+    await assert.rejects(manager.getPrompt('greeting'), {
       name: 'PromptAuthError',
       status: 0,
       detail: 'DD_SITE is invalid for prompt operations',
@@ -159,6 +176,17 @@ describe('PromptManager', () => {
     )
     sinon.assert.notCalled(fetchStub)
     sinon.assert.notCalled(fallback)
+  })
+
+  it('treats a null version as absent', async () => {
+    provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1' }) })
+    const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
+
+    const prompt = await manager.getPrompt('greeting', { version: null })
+
+    assert.strictEqual(prompt.source, 'ff')
+    sinon.assert.calledOnce(provider.resolveObjectEvaluation)
+    sinon.assert.notCalled(fetchStub)
   })
 
   it('snapshots targeting attributes before provider evaluation', async () => {
@@ -451,7 +479,7 @@ describe('PromptManager', () => {
     await manager.getPrompt('greeting')
     now.returns(60_101)
     await manager.getPrompt('greeting')
-    manager.clearCache()
+    manager.clearPromptCache()
     assert.strictEqual(backgroundSignal.aborted, true)
     await new Promise(setImmediate)
 
@@ -505,17 +533,17 @@ describe('PromptManager', () => {
 
     manager.hotCache.set(key, cached)
     manager.warmCache.set(key, cached)
-    manager.clearCache({ hot: false })
+    manager.clearPromptCache({ hot: false })
     assert.strictEqual(manager.hotCache.get(key).prompt.id, 'greeting')
     assert.strictEqual(manager.warmCache.get(key), undefined)
 
     manager.warmCache.set(key, cached)
-    manager.clearCache({ warm: false })
+    manager.clearPromptCache({ warm: false })
     assert.strictEqual(manager.hotCache.get(key), undefined)
     assert.strictEqual(manager.warmCache.get(key).prompt.id, 'greeting')
 
     manager.hotCache.set(key, cached)
-    manager.clearCache()
+    manager.clearPromptCache()
     assert.strictEqual(manager.hotCache.get(key), undefined)
     assert.strictEqual(manager.warmCache.get(key), undefined)
   })
@@ -523,7 +551,7 @@ describe('PromptManager', () => {
   it('implements every CRUD route, body, and credential boundary', async () => {
     fetchStub.resolves(response(200, {}))
     const manager = new PromptManager(makeConfig(), () => provider)
-    const template = [{ role: 'user', content: 'Hi' }]
+    const template = 'Hi {name}'
 
     await manager.createPrompt('a/b', template, { title: '', description: '', userVersion: '', envIds: [] })
     await manager.createPromptVersion('a/b', template, {
@@ -557,7 +585,7 @@ describe('PromptManager', () => {
     assert.deepStrictEqual(JSON.parse(calls[3].options.body), { description: '', env_ids: [] })
     for (const call of calls.slice(0, 5)) assert.strictEqual(call.options.headers['DD-APPLICATION-KEY'], 'app-key')
     for (const call of calls.slice(5)) assert.strictEqual(call.options.headers['DD-APPLICATION-KEY'], undefined)
-    for (const call of calls) assert.strictEqual(call.options.redirect, 'error')
+    for (const call of calls) assert.strictEqual(call.options.retry, false)
   })
 
   it('evicts exact prompt-wide hot and warm selectors after successful mutations', async () => {

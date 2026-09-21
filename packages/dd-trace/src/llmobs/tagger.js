@@ -553,8 +553,8 @@ class LLMObsTagger {
 
     if (currentPrompt) {
       if (replacesPrompt) {
-        if (promptUuid == null) delete currentPrompt.prompt_uuid
-        if (promptVersionUuid == null) delete currentPrompt.prompt_version_uuid
+        if (promptUuid == null) currentPrompt.prompt_uuid = undefined
+        if (promptVersionUuid == null) currentPrompt.prompt_version_uuid = undefined
       }
       Object.assign(currentPrompt, validatedPrompt)
     } else {

@@ -306,6 +306,7 @@ interface Plugins {
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
+  "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -3243,6 +3244,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Supabase JavaScript client](https://github.com/supabase/supabase-js).
+     */
+    interface supabase extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
@@ -3686,38 +3693,8 @@ declare namespace tracer {
        */
       experiments: Experiments,
 
-      /** Resolve an exact, environment-targeted, or latest managed prompt. */
-      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
-      /** Refresh the prompt selected by the current environment. */
-      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
-      /** Clear the in-memory and/or persistent prompt caches. */
-      clearPromptCache (options?: ClearPromptCacheOptions): void
-      /** Create a prompt and its first version. */
-      createPrompt (
-        promptId: string,
-        template: PromptTemplateMessage[],
-        options?: CreatePromptOptions
-      ): Promise<PromptResponse>
-      /** Add a version to an existing prompt. */
-      createPromptVersion (
-        promptId: string,
-        template: PromptTemplateMessage[],
-        options?: CreatePromptVersionOptions
-      ): Promise<PromptVersionResponse>
-      /** Update prompt metadata. */
-      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
-      /** Update prompt-version metadata or environment assignments. */
-      updatePromptVersion (
-        promptId: string,
-        version: number,
-        options: UpdatePromptVersionOptions
-      ): Promise<PromptVersionResponse>
-      /** Delete a prompt. */
-      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
-      /** List prompts. */
-      listPrompts (): Promise<PromptResponse[]>
-      /** List versions for a prompt. */
-      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
+      /** Prompt Management API. */
+      prompts: Prompts,
 
       /**
        * Enable LLM Observability tracing.
@@ -3877,6 +3854,41 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    interface Prompts {
+      /** Resolve an exact, environment-targeted, or latest managed prompt. */
+      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
+      /** Refresh the prompt selected by the current environment. */
+      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
+      /** Clear the in-memory and/or persistent prompt caches. */
+      clearPromptCache (options?: ClearPromptCacheOptions): void
+      /** Create a text or chat prompt and its first version. */
+      createPrompt (
+        promptId: string,
+        template: string | PromptTemplateMessage[],
+        options?: CreatePromptOptions
+      ): Promise<PromptResponse>
+      /** Add a text or chat version to an existing prompt. */
+      createPromptVersion (
+        promptId: string,
+        template: string | PromptTemplateMessage[],
+        options?: CreatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Update prompt metadata. */
+      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
+      /** Update prompt-version metadata or environment assignments. */
+      updatePromptVersion (
+        promptId: string,
+        version: number,
+        options: UpdatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Delete a prompt. */
+      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
+      /** List prompts. */
+      listPrompts (): Promise<PromptResponse[]>
+      /** List versions for a prompt. */
+      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
     }
 
     interface PromptTemplateMessage {

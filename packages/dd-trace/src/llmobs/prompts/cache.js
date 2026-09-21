@@ -10,13 +10,19 @@ const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
 const log = require('../../log')
 const ManagedPrompt = require('./prompt')
 
+const CACHE_SUBPATH = path.join('datadog', 'llmobs', 'prompts')
 const MAX_HOT_ENTRIES = 1024
 const PROMPT_SOURCES = new Set(['registry', 'cache', 'fallback', 'ff', 'resolve'])
 
+/** @param {string} key */
 function promptIdFromKey (key) {
   return key.slice(0, key.lastIndexOf(':'))
 }
 
+/**
+ * @param {string} promptId
+ * @param {Array<unknown>} selector
+ */
 function cacheKey (promptId, selector) {
   const hash = createHash('sha1').update(JSON.stringify(selector)).digest('hex').slice(0, 16)
   return `${promptId}:${hash}`
@@ -25,9 +31,9 @@ function cacheKey (promptId, selector) {
 function defaultCacheDir () {
   try {
     const home = os.homedir()
-    if (home) return path.join(home, '.cache', 'datadog', 'llmobs', 'prompts')
+    if (home) return path.join(home, '.cache', CACHE_SUBPATH)
   } catch {}
-  return path.join(os.tmpdir(), 'datadog', 'llmobs', 'prompts')
+  return path.join(os.tmpdir(), CACHE_SUBPATH)
 }
 
 class HotCache {
@@ -210,6 +216,7 @@ class WarmCache {
     try {
       this.#ensureDir(path.dirname(file))
       if (!this.enabled) return
+      // Write separately, then rename so other processes see either the old file or the complete new one.
       fs.writeFileSync(temporary, JSON.stringify({ prompt, timestamp: Date.now() }), {
         encoding: 'utf8',
         mode: 0o600,
@@ -226,6 +233,7 @@ class WarmCache {
    * @param {string} key
    */
   delete (key) {
+    if (!this.enabled) return
     try {
       fs.rmSync(this.#path(key), { force: true })
     } catch (error) {
@@ -238,6 +246,7 @@ class WarmCache {
    * @param {string} promptId
    */
   evictPrompt (promptId) {
+    if (!this.enabled) return
     try {
       fs.rmSync(this.#promptDir(promptId), { recursive: true, force: true })
     } catch (error) {
@@ -249,6 +258,7 @@ class WarmCache {
    * Clear all warm prompt entries.
    */
   clear () {
+    if (!this.enabled) return
     try {
       for (const entry of fs.readdirSync(this.cacheDir)) {
         fs.rmSync(path.join(this.cacheDir, entry), { recursive: true, force: true })

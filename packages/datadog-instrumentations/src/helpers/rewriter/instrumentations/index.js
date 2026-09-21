@@ -3,6 +3,7 @@
 module.exports = [
   ...require('./ai'),
   ...require('./azure-cosmos'),
+  ...require('./azure-durable-functions'),
   ...require('./bullmq'),
   ...require('./claude-agent-sdk'),
   ...require('./graphql'),
@@ -15,4 +16,5 @@ module.exports = [
   ...require('./playwright'),
   ...require('./webdriverio'),
   ...require('./aws-durable-execution-sdk-js'),
+  ...require('./supabase'),
 ]

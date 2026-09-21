@@ -2,13 +2,12 @@
 
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
+const request = require('../../exporters/common/request')
 const { createSiteUrl, isLoopbackHost } = require('../../exporters/common/url')
+const { ERROR_NAMES, PROMPTS_PATH, SOURCE_CACHE } = require('../constants/prompts')
 const telemetry = require('../telemetry')
 const { HotCache, WarmCache, cacheKey, promptIdFromKey } = require('./cache')
 const ManagedPrompt = require('./prompt')
-
-const PROMPTS_PATH = '/api/unstable/llm-obs/v1/prompts'
-const SOURCE_CACHE = 'cache'
 
 /**
  * @typedef {object} PromptRequest
@@ -48,11 +47,14 @@ function isPlainObject (value) {
 function promptRequest (promptId, { version, env, targetingKey, attributes = {} } = {}) {
   const requestAttributes = { ...attributes }
   let selector
-  if (version !== undefined) selector = ['version', version]
-  else if (env) {
+  if (version !== undefined) {
+    selector = ['version', version]
+  } else if (env) {
     const attributesSelector = Object.keys(requestAttributes).sort().map(key => [key, requestAttributes[key]])
     selector = ['resolve', env, targetingKey ?? null, attributesSelector]
-  } else selector = ['latest']
+  } else {
+    selector = ['latest']
+  }
 
   return {
     promptId,
@@ -69,11 +71,12 @@ function promptFromData (data, source) {
   if (!isPlainObject(data) || !data.prompt_id) return
   const version = data.user_version || data.version
   if (!version) return
+  const template = Array.isArray(data.template?.messages) ? data.template.messages : data.template
   return new ManagedPrompt({
     id: data.prompt_id,
     version: String(version),
     source,
-    template: data.template || data.chat_template || [],
+    template: template || data.chat_template || [],
     config: data.config,
     promptUuid: data.prompt_uuid,
     promptVersionUuid: data.prompt_version_uuid || data.id || data.ID,
@@ -99,12 +102,12 @@ function detailFromBody (body) {
 }
 
 function errorName (status) {
-  if (status === 400) return 'PromptValidationError'
-  if (status === 401 || status === 403) return 'PromptAuthError'
-  if (status === 404) return 'PromptNotFoundError'
-  if (status === 409) return 'PromptConflictError'
-  if (status >= 500) return 'PromptServerError'
-  return 'PromptAPIError'
+  if (status === 400) return ERROR_NAMES.VALIDATION
+  if (status === 401 || status === 403) return ERROR_NAMES.AUTH
+  if (status === 404) return ERROR_NAMES.NOT_FOUND
+  if (status === 409) return ERROR_NAMES.CONFLICT
+  if (status >= 500) return ERROR_NAMES.SERVER
+  return ERROR_NAMES.API
 }
 
 class PromptAPIError extends Error {
@@ -129,10 +132,6 @@ function normalizeItem (item) {
   return normalized
 }
 
-function normalizeResponse (data) {
-  return Array.isArray(data) ? data.map(normalizeItem) : normalizeItem(data)
-}
-
 function requestSignal (timeoutMs, cacheSignal) {
   const timeoutSignal = AbortSignal.timeout(timeoutMs)
   if (!cacheSignal) return timeoutSignal
@@ -140,6 +139,15 @@ function requestSignal (timeoutMs, cacheSignal) {
   cacheSignal.addEventListener('abort', () => controller.abort(cacheSignal.reason), { once: true })
   timeoutSignal.addEventListener('abort', () => controller.abort(timeoutSignal.reason), { once: true })
   return controller.signal
+}
+
+function httpRequest (body, options) {
+  return new Promise((resolve, reject) => {
+    request(body || '', { ...options, retry: false, includeErrorResponseBody: true }, (error, responseBody, status) => {
+      if (error && status === undefined) return reject(error)
+      resolve({ ok: !error, status, body: error?.responseBody || responseBody || '' })
+    })
+  })
 }
 
 class PromptManager {
@@ -153,12 +161,7 @@ class PromptManager {
     this.ttlMs = Math.round(config.DD_LLMOBS_PROMPTS_CACHE_TTL * 1000)
     this.timeoutMs = Math.round(config.DD_LLMOBS_PROMPTS_TIMEOUT * 1000)
     const origin = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN') || createSiteUrl(config.site, 'api')?.origin
-    if (!origin) throw new PromptAPIError(0, 'DD_SITE is invalid for prompt operations', 'PromptAuthError')
-    const { hostname, protocol } = new URL(origin)
-    if (protocol !== 'https:' && !(protocol === 'http:' && isLoopbackHost(hostname))) {
-      throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', 'PromptAuthError')
-    }
-    this.origin = origin.replace(/\/$/, '')
+    this.origin = origin?.replace(/\/$/, '')
     this.cacheGeneration = 0
     this.fetchTokens = new Map()
     this.pendingFetches = new Map()
@@ -173,12 +176,23 @@ class PromptManager {
     })
   }
 
+  #requireOrigin () {
+    if (!this.origin) {
+      throw new PromptAPIError(0, 'DD_SITE is invalid for prompt operations', ERROR_NAMES.AUTH)
+    }
+    const { hostname, protocol } = new URL(this.origin)
+    if (protocol !== 'https:' && !(protocol === 'http:' && isLoopbackHost(hostname))) {
+      throw new PromptAPIError(0, 'Prompt origin must use HTTPS unless it targets a loopback host', ERROR_NAMES.AUTH)
+    }
+    return this.origin
+  }
+
   /**
    * Require API authentication before using an HTTP prompt path.
    */
   #requireApiKey () {
     if (!this.config.DD_API_KEY) {
-      throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', 'PromptAuthError')
+      throw new PromptAPIError(0, 'DD_API_KEY is required for prompt operations', ERROR_NAMES.AUTH)
     }
     return this.config.DD_API_KEY
   }
@@ -211,8 +225,10 @@ class PromptManager {
    * @returns {Promise<PromptFetchResult>}
    */
   async #fetchHttp (request, cacheSignal) {
+    let origin
     let apiKey
     try {
+      origin = this.#requireOrigin()
       apiKey = this.#requireApiKey()
     } catch (error) {
       return { reason: error.detail, error }
@@ -244,14 +260,14 @@ class PromptManager {
     }
 
     try {
-      const response = await fetch(`${this.origin}${path}`, {
+      const response = await httpRequest(body, {
+        url: `${origin}${path}`,
         method,
         headers,
-        body,
-        redirect: 'error',
+        timeout: this.timeoutMs,
         signal: requestSignal(this.timeoutMs, cacheSignal),
       })
-      const responseBody = await response.text()
+      const responseBody = response.body
       if (response.ok) {
         let data
         try {
@@ -285,13 +301,13 @@ class PromptManager {
    * @returns {Promise<PromptFetchResult>}
    */
   async #fetchAndCache (request, { hot = true, signal } = {}) {
-    const generation = this.cacheGeneration
+    const generationAtStart = this.cacheGeneration
     const token = Symbol(request.key)
     this.fetchTokens.set(request.key, token)
     const result = await this.#fetchHttp(request, signal)
     const latest = this.fetchTokens.get(request.key) === token
     if (latest) this.fetchTokens.delete(request.key)
-    const cacheable = generation === this.cacheGeneration && latest
+    const cacheable = generationAtStart === this.cacheGeneration && latest
     if (result.prompt) {
       if (cacheable) {
         const cached = withSource(result.prompt, SOURCE_CACHE)
@@ -387,7 +403,8 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt>}
    */
   async getPrompt (promptId, options = {}) {
-    const { version, fallback, targetingKey, attributes = {} } = options
+    const { fallback, targetingKey, attributes = {} } = options
+    const version = options.version ?? undefined
     if (version !== undefined) {
       return this.#getHttpPrompt(promptRequest(promptId, { version }), fallback)
     }
@@ -413,6 +430,7 @@ class PromptManager {
    * @returns {Promise<ManagedPrompt | undefined>}
    */
   async refreshPrompt (promptId) {
+    this.#requireOrigin()
     this.#requireApiKey()
     const request = promptRequest(promptId, { env: this.config.env })
     this.pendingFetches.delete(request.key)
@@ -424,7 +442,7 @@ class PromptManager {
    * Clear hot and/or warm prompt caches.
    * @param {{hot?: boolean, warm?: boolean}} [options]
    */
-  clearCache ({ hot = true, warm = true } = {}) {
+  clearPromptCache ({ hot = true, warm = true } = {}) {
     this.cacheGeneration++
     this.pendingFetches.clear()
     if (hot) this.hotCache.clear()
@@ -466,12 +484,13 @@ class PromptManager {
    */
   async #request (method, path, body, requireAppKey) {
     try {
+      const origin = this.#requireOrigin()
       const apiKey = this.#requireApiKey()
       if (requireAppKey && !this.config.DD_APP_KEY) {
-        throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', 'PromptAuthError')
+        throw new PromptAPIError(0, 'DD_APP_KEY is required for prompt write operations', ERROR_NAMES.AUTH)
       }
       if (body?.config !== undefined && !isPlainObject(body.config)) {
-        throw new PromptAPIError(0, 'config must be a JSON object', 'PromptValidationError')
+        throw new PromptAPIError(0, 'config must be a JSON object', ERROR_NAMES.VALIDATION)
       }
 
       const headers = {
@@ -481,21 +500,22 @@ class PromptManager {
       }
       if (requireAppKey) headers['DD-APPLICATION-KEY'] = this.config.DD_APP_KEY
 
-      const response = await fetch(`${this.origin}${path}`, {
+      const response = await httpRequest(body === undefined ? undefined : JSON.stringify(body), {
+        url: `${origin}${path}`,
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
-        redirect: 'error',
+        timeout: this.timeoutMs,
         signal: AbortSignal.timeout(this.timeoutMs),
       })
 
-      const responseBody = await response.text()
+      const responseBody = response.body
       if (!response.ok) throw new PromptAPIError(response.status, detailFromBody(responseBody))
       if (!responseBody) return {}
       try {
-        return normalizeResponse(JSON.parse(responseBody))
+        const data = JSON.parse(responseBody)
+        return Array.isArray(data) ? data.map(normalizeItem) : normalizeItem(data)
       } catch {
-        throw new PromptAPIError(response.status, 'invalid JSON in response body', 'PromptServerError')
+        throw new PromptAPIError(response.status, 'invalid JSON in response body', ERROR_NAMES.SERVER)
       }
     } catch (error) {
       const promptError = error instanceof PromptAPIError ? error : new PromptAPIError(0, error.message)
@@ -504,9 +524,9 @@ class PromptManager {
   }
 
   /**
-   * Create a prompt and its first version.
+   * Create a text or chat prompt and its first version.
    * @param {string} promptId
-   * @param {Array<{role: string, content: string}>} template
+   * @param {string | Array<{role: string, content: string}>} template
    * @param {{title?: string, description?: string, userVersion?: string, envIds?: string[],
    *   config?: Record<string, unknown>}} [options]
    * @returns {Promise<object | object[]>}
@@ -524,9 +544,9 @@ class PromptManager {
   }
 
   /**
-   * Add a version to an existing prompt.
+   * Add a text or chat version to an existing prompt.
    * @param {string} promptId
-   * @param {Array<{role: string, content: string}>} template
+   * @param {string | Array<{role: string, content: string}>} template
    * @param {{description?: string, userVersion?: string, envIds?: string[],
    *   config?: Record<string, unknown>}} [options]
    * @returns {Promise<object | object[]>}
@@ -557,7 +577,7 @@ class PromptManager {
     }
     if (options.title === undefined && options.description === undefined) {
       const error = new PromptAPIError(0, 'At least one of title or description must be provided',
-        'PromptValidationError')
+        ERROR_NAMES.VALIDATION)
       throw this.#recordCrudError('PATCH', error)
     }
     const body = {}
@@ -583,7 +603,7 @@ class PromptManager {
     }
     if (options.description === undefined && options.envIds === undefined) {
       const error = new PromptAPIError(0, 'At least one of description or envIds must be provided',
-        'PromptValidationError')
+        ERROR_NAMES.VALIDATION)
       throw this.#recordCrudError('PATCH', error)
     }
     const body = {}

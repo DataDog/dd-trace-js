@@ -16,7 +16,6 @@ const patched = new WeakSet()
  *
  * @param {string[]} versions
  * @param {(Mocha: Function, frameworkVersion: string) => Function} wrapMochaRun
- * @returns {void}
  */
 function addMochaRunHooks (versions, wrapMochaRun) {
   const patchedMochaConstructors = new WeakSet()

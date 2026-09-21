@@ -570,7 +570,7 @@ describe('Config', () => {
   it('should use generic OTLP exporter config for logs and metrics when specific config is not set', () => {
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
     process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-test=value'
-    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'HTTP/PROTOBUF'
     process.env.OTEL_EXPORTER_OTLP_TIMEOUT = '1234'
 
     const config = getConfig()
@@ -584,13 +584,59 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
-      OTEL_EXPORTER_OTLP_PROTOCOL: 'grpc',
-      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'grpc',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc',
+      OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: 'http/protobuf',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/protobuf',
       OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
     })
+  })
+
+  it('should reject malformed and unsupported OTLP HTTP endpoints', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'ftp://collector:4318'
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'not a URL'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'file:///tmp/logs'
+    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = 'grpc://collector:4317'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_ENDPOINT, undefined)
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, 'http://127.0.0.1:4318/v1/logs')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, 'http://127.0.0.1:4318/v1/metrics')
+  })
+
+  it('should use a valid generic OTLP endpoint when a signal endpoint is invalid', () => {
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'https://collector:4318/base/'
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'ftp://collector:4318/v1/traces'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'https://collector:4318/base/v1/traces')
+  })
+
+  it('should normalize site from environment and programmatic configuration', () => {
+    process.env.DD_SITE = 'US3.DATADOGHQ.COM'
+
+    assert.strictEqual(getConfig().site, 'us3.datadoghq.com')
+    assert.strictEqual(getConfig({ site: 'DATADOGHQ.EU' }).site, 'datadoghq.eu')
+  })
+
+  it('should keep standard gRPC protocols inert when OTLP exporters are inactive', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.OTEL_LOGS_EXPORTER = 'none'
+    process.env.OTEL_METRICS_EXPORTER = 'none'
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
+    process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
+    process.env.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL = 'grpc'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL, 'grpc')
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'grpc')
+    sinon.assert.notCalled(log.warn)
   })
 
   describe('sensitive configurations excluded from telemetry', () => {
@@ -978,12 +1024,13 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
   })
 
-  it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {
-    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/json'
-    getConfig()
+  it('should normalize supported OTEL_EXPORTER_OTLP_TRACES_PROTOCOL casing without warning', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'HTTP/JSON'
+    const config = getConfig()
     const warnCall = log.warn.getCalls().find(
       (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
     )
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
     assert.strictEqual(warnCall, undefined)
   })
 
@@ -1278,6 +1325,7 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 1, origin: 'default' },
       { name: 'DD_ENV', value: null, origin: 'default' },
+      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
@@ -1333,7 +1381,7 @@ describe('Config', () => {
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
       { name: 'DD_PROFILING_ENABLED', value: 'false', origin: 'default' },
-      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_PROFILING_ALLOCATION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_PROFILING_EXPORTERS', value: 'agent', origin: 'default' },
       { name: 'DD_PROFILING_SOURCE_MAP', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PROTOCOL_VERSION', value: '0.4', origin: 'default' },
@@ -1439,6 +1487,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED = 'true'
     process.env.DD_AI_GUARD_BLOCK = 'true'
     process.env.DD_AI_GUARD_ENABLED = 'true'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
@@ -1768,6 +1817,7 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'env_var' },
       { name: 'DD_ENV', value: 'test', origin: 'env_var' },
+      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: false, origin: 'default' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
@@ -1775,6 +1825,7 @@ describe('Config', () => {
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
       { name: 'DD_AI_GUARD_REDACTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_TIMEOUT', value: 10_000, origin: 'default' },
+      { name: 'DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENABLED', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'env_var' },
@@ -1916,6 +1967,33 @@ describe('Config', () => {
     })
   })
 
+  it('should accept numeric and automatic OOM heap limit extension sizes', () => {
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = '1000000'
+
+    let config = getConfig()
+
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 1000000)
+
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = 'auto'
+    config = getConfig()
+
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
+  })
+
+  it('should reject invalid OOM heap limit extension sizes', () => {
+    process.env.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE = 'automatic'
+
+    const config = getConfig()
+
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Heap limit extension size must be an integer or "auto": \'automatic\' for ' +
+        'DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE (source: env_var), picked default'
+    )
+    assert.strictEqual(config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE, 'auto')
+    assert.strictEqual(config.getOrigin('DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE'), 'default')
+  })
+
   it('should transform safe programmatic option types', () => {
     const config = getConfig({
       startupLogs: 'False',
@@ -1999,6 +2077,7 @@ describe('Config', () => {
       value: 'yes',
       origin: 'code',
       error: {
+        code: null,
         message: "Invalid BOOLEAN input: 'yes' for startupLogs (source: code), picked default",
       },
     }])
@@ -2667,6 +2746,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED = 'false'
     process.env.DD_AI_GUARD_BLOCK = 'false'
     process.env.DD_AI_GUARD_ENABLED = 'false'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
@@ -4498,6 +4578,19 @@ apm_configuration_default:
       assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
 
+    it('should normalize stable site and OTLP protocol configuration', () => {
+      fs.writeFileSync(
+        localConfigPath,
+        `
+apm_configuration_default:
+  DD_SITE: US3.DATADOGHQ.COM
+  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: HTTP/JSON
+`)
+      const config = getConfig()
+      assert.strictEqual(config.site, 'us3.datadoghq.com')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, 'http/json')
+    })
+
     it('should apply service specific config', () => {
       fs.writeFileSync(
         localConfigPath,
@@ -5765,7 +5858,7 @@ rules:
           name: 'DD_FEATURE_FLAGS_CONFIGURATION_SOURCE',
           value: 'offline',
           origin: 'env_var',
-          error: { message: warning },
+          error: { code: null, message: warning },
         },
         { name: 'DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED', value: true, origin: 'env_var' },
       ])
