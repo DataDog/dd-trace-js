@@ -4436,7 +4436,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         env: {
           ...getCiVisEvpProxyConfig(receiver.port),
           TESTS_TO_RUN: 'jest-flaky/flaky-fails',
-          CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jestEnvironmentDynamicAtrDuration.js',
+          CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-dynamic-atr-duration.js',
           DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
           DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '',
         },
@@ -4444,6 +4444,69 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
+
+    it('keeps independent dynamic ATR budgets for duplicate declarations and parameterized rows', async () => {
+      receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const tests = payloads.flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test').map(event => event.content)
+          for (const message of ['first declaration', 'second declaration', 'first row', 'second row']) {
+            const attempts = tests.filter(test => test.meta[ERROR_MESSAGE]?.includes(message))
+            const expected = message.startsWith('first') ? 2 : 4
+            assert.strictEqual(attempts.length, expected, message)
+            assert.strictEqual(attempts.filter(test => test.meta[TEST_FINAL_STATUS] === 'fail').length, 1, message)
+            assert.strictEqual(attempts.filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true').length, 1)
+          }
+        }
+      )
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-flaky/dynamic-atr-duplicate-fails',
+          CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-dynamic-atr-duration.js',
+          DYNAMIC_ATR_TEST_DURATIONS: '100,6000,100,6000',
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+          SHOULD_CHECK_RESULTS: '1',
+        },
+      })
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1)
+    })
+
+    for (const nativeRetries of [0, 1, 2, 3]) {
+      it(`caps the dynamic ATR budget at jest.retryTimes(${nativeRetries})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, Math.min(nativeRetries, 2) + 1)
+            const last = tests.at(-1)
+            assert.strictEqual(last.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(last.meta[TEST_FINAL_STATUS], 'fail')
+            assert.strictEqual(tests.filter(test => test.meta[TEST_FINAL_STATUS]).length, 1)
+          }
+        )
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/dynamic-atr-native-fails',
+            JEST_NATIVE_RETRIES: String(nativeRetries),
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+    }
 
     it('clears dynamic ATR budgets between Jest runs with colliding test keys', async () => {
       receiver.setSettings({
