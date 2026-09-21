@@ -22,6 +22,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
 const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
@@ -4096,15 +4097,25 @@ describe('Config', () => {
         })
       }
       for (const [value, expected] of [
-        ['1, 2,3,4,20', ['1', '2', '3', '4', '20']],
-        ['', []],
-        ['1,invalid,3', ['1', 'invalid', '3']],
+        ['1, 2,3,4,20', [1, 2, 3, 4, 20]],
+        ['', null],
+        ['1,invalid,3', null],
       ]) {
         it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS=${JSON.stringify(value)}`, () => {
           process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
           const config = getConfig(options)
-          // Config parses the list; the exporter validates its length and numeric budgets.
-          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, expected)
+          // Preserve positions until ATR validates the complete list.
+          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, value)
+          assert.deepStrictEqual(
+            getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), expected
+          )
+        })
+      }
+      for (const value of ['1,2,,3,4,5', ',1,2,3,4,5', '1,2,3,4,5,', '1,2, ,3,4,5', ',,,,,']) {
+        it(`should reject empty dynamic ATR bucket entries in ${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          assert.strictEqual(getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), null)
         })
       }
       it('should enable flaky test retries by default', () => {
