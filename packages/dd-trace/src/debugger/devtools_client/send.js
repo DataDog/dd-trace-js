@@ -5,8 +5,8 @@ const { stringify } = require('querystring')
 
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
-const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
-const { INCOMPLETE_REASON } = require('../guardrail-metrics')
+const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2, MAX_MESSAGE_LENGTH } = require('../constants')
+const { DROPPED_REASON, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
 const config = require('./config')
@@ -17,7 +17,6 @@ const buildTags = require('./tags')
 
 module.exports = send
 
-const MAX_MESSAGE_LENGTH = 8 * 1024 // 8KB
 const MAX_LOG_PAYLOAD_SIZE_MB = 1
 const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
 
@@ -32,6 +31,7 @@ setInputPath(config.inputPath)
 
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
+  maxQueueBytes: config.queueMaxBytes,
   timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
   onFlush,
 })
@@ -87,29 +87,36 @@ function send (message, logger, dd, snapshot, processTags, eventType, incomplete
     size = Buffer.byteLength(json)
   }
 
-  jsonBuffer.write(json, size)
-
-  if (incompleteReasons !== 0) guardrailMetrics.captureIncomplete(incompleteReasons, eventType)
+  if (jsonBuffer.write(json, size)) {
+    if (incompleteReasons !== 0) guardrailMetrics.captureIncomplete(incompleteReasons, eventType)
+  } else {
+    // The upload queue is full, typically because the intake is slow or unreachable. Dropping is the only option that
+    // keeps memory bounded without blocking.
+    log.debug('[debugger:devtools_client] Dropping probe result for probe %s: upload queue is full', snapshot.probe.id)
+    guardrailMetrics.eventDropped(DROPPED_REASON.QUEUE_FULL, eventType)
+  }
 }
 
 /**
  * @param {string} payload - The payload to send
+ * @param {() => void} done - Releases the payload from the upload queue
  */
-function onFlush (payload) {
+function onFlush (payload, done) {
   log.debug('[debugger:devtools_client] Flushing probe payload buffer')
 
   request(payload, buildRequestOptions(), (err, res, statusCode) => {
-    if (!handleV2FallbackIfNeeded(statusCode, payload) && err) {
-      log.error('[debugger:devtools_client] Error sending probe payload', err)
-    }
+    if (handleV2FallbackIfNeeded(statusCode, payload, done)) return
+    done()
+    if (err) log.error('[debugger:devtools_client] Error sending probe payload', err)
   })
 }
 
 /**
  * @param {number} statusCode - The status code of the response
  * @param {string} payload - The payload to send
+ * @param {() => void} done - Releases the payload from the upload queue
  */
-function handleV2FallbackIfNeeded (statusCode, payload) {
+function handleV2FallbackIfNeeded (statusCode, payload, done) {
   if (statusCode !== 404 || config.inputPath !== DEBUGGER_INPUT_V2) {
     return false
   }
@@ -121,6 +128,7 @@ function handleV2FallbackIfNeeded (statusCode, payload) {
   setInputPath(DEBUGGER_DIAGNOSTICS_V1)
 
   request(payload, buildRequestOptions(), (err) => {
+    done()
     if (err) {
       log.error('[debugger:devtools_client] Error sending probe payload after fallback to %s',
         DEBUGGER_DIAGNOSTICS_V1,
