@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
+const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const reporterErrorCh = channel('ci:playwright:reporter:error')
 const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
 const reporterSuiteHookErrorCh = channel('ci:playwright:reporter:suite-hook-error')
@@ -170,7 +171,8 @@ class DatadogPlaywrightReporter {
     reporterRunSummaryCh.publish({ failureCount, quarantinedFailureCount, hasIncompleteTests })
     suitesWithHookErrors.clear()
 
-    if (!this.captureReporterErrors) return
+    // A reused config can retain this reporter after the plugin is disabled.
+    if (!this.captureReporterErrors || !libraryConfigurationCh.hasSubscribers) return
 
     this.isFinalizing = true
     // Playwright 1.60 and 1.61 only expose reporter errors through this exact console call.
