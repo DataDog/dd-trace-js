@@ -14,7 +14,20 @@ class DynamicAtrDurationEnvironment extends NodeEnvironment {
         ? (event.test.invocations === 1 ? this.durations.shift() : 300_001)
         : 300_001
     }
-    return super.handleTestEvent?.(event, state)
+    if (process.env.DYNAMIC_ATR_REPORT_ERRORS && event.name === 'run_describe_finish') {
+      for (const test of event.describeBlock.children) {
+        if (test.type === 'test') {
+          process.stdout.write(`DYNAMIC_ATR_RESULT:${JSON.stringify({
+            name: test.name,
+            errors: test.errors.length,
+            invocations: test.invocations,
+          })}\n`)
+        }
+      }
+    }
+    if (!process.env.DYNAMIC_ATR_SKIP_SUPER) {
+      return super.handleTestEvent?.(event, state)
+    }
   }
 }
 

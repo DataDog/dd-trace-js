@@ -4401,6 +4401,32 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       Promise.all([once(childProcess, 'exit'), eventsPromise]).then(() => done(), done)
     })
 
+    for (const callsSuper of [true, false]) {
+      it(`restores dynamic ATR failures before custom describe finish (callsSuper=${callsSuper})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
+        let output = ''
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-flaky/flaky-fails',
+            CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-dynamic-atr-duration.js',
+            DYNAMIC_ATR_TEST_DURATIONS: '100',
+            DYNAMIC_ATR_REPORT_ERRORS: '1',
+            ...(callsSuper ? {} : { DYNAMIC_ATR_SKIP_SUPER: '1' }),
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            SHOULD_CHECK_RESULTS: '1',
+          },
+        })
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        const [exitCode] = await once(childProcess, 'exit')
+        const results = [...output.matchAll(/DYNAMIC_ATR_RESULT:(.+)/g)].map(match => JSON.parse(match[1]))
+        assert.deepStrictEqual(results, [{ name: 'can retry failed tests', errors: 1, invocations: 2 }])
+        assert.strictEqual(exitCode, 1)
+      })
+    }
+
     it('retries a >5m dynamic ATR test once when all EFD fallback buckets are zero', async () => {
       receiver.setSettings({
         itr_enabled: false,

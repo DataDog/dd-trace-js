@@ -533,6 +533,20 @@ function setOriginalConcurrentTest (wrappedConcurrentTest, originalConcurrentTes
 }
 
 /**
+ * Restores terminal failures before custom environments inspect the completed describe block.
+ *
+ * @param {{ name: string }} event
+ */
+function restoreDynamicAtrErrors (event) {
+  if (event.name !== 'run_describe_finish' || dynamicAtrFinalErrorsByTest.size === 0) return
+
+  for (const [test, errors] of dynamicAtrFinalErrorsByTest) {
+    test.errors = errors
+  }
+  dynamicAtrFinalErrorsByTest.clear()
+}
+
+/**
  * Wraps a custom Jest environment handler so Datadog still observes events even
  * when the custom environment does not call `super.handleTestEvent`.
  *
@@ -550,6 +564,7 @@ function getWrappedCustomHandleTestEvent (handleTestEvent, datadogHandleTestEven
   }
 
   const wrappedHandleTestEvent = function (event, state) {
+    restoreDynamicAtrErrors(event)
     const result = handleTestEvent.call(this, event, state)
     const runDatadogHandler = value => {
       if (isDatadogJestEventHandled(event)) return value
@@ -1869,15 +1884,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.handleAddTestEvent(event, state)
       }
 
+      restoreDynamicAtrErrors(event)
+
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
-      }
-
-      if (event.name === 'run_describe_finish' && dynamicAtrFinalErrorsByTest.size > 0) {
-        for (const [test, errors] of dynamicAtrFinalErrorsByTest) {
-          test.errors = errors
-        }
-        dynamicAtrFinalErrorsByTest.clear()
       }
 
       if (event.name === 'setup') {
