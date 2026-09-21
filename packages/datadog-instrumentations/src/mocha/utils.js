@@ -541,7 +541,8 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           // Dynamic ATR guarantees one retry, including the >5m EFD fallback bucket.
           this.retries(Math.max(1, maxRetries))
         } else {
-          this.retries(dynamicCount)
+          // A beforeEach hook runs before the retry body; update the clone, not the hook.
+          test.retries(dynamicCount)
         }
       } else {
         this.retries(libraryConfig.flakyTestRetriesCount)

@@ -1022,6 +1022,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
+    config.dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
     config.isDiEnabled = libraryConfig.isDiEnabled
     config.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
 

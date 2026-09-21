@@ -5392,6 +5392,60 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('auto test retries', () => {
+    const dynamicCases = [
+      { name: 'custom buckets', buckets: '1,3,3,3,3', attempts: 2 },
+      { name: 'backend buckets', buckets: '', attempts: 3 },
+      { name: 'malformed buckets', buckets: '1,,3,3,3', attempts: 3 },
+      { name: 'disabled flag', buckets: '1,3,3,3,3', attempts: 5, enabled: false },
+      { name: 'recovery', buckets: '1,3,3,3,3', attempts: 2, recover: true },
+      { name: 'retry hook failure', buckets: '1,3,3,3,3', attempts: 2, hookFailure: true },
+    ]
+    for (const parallel of [false, true]) {
+      for (const scenario of dynamicCases) {
+        const runTest = parallel ? parallelIt : it
+        runTest(`uses dynamic ATR ${scenario.name} (parallel=${parallel})`, async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            early_flake_detection: {
+              enabled: false,
+              slow_test_retries: { '5s': 2, '10s': 3, '30s': 3, '5m': 3 },
+            },
+          })
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, scenario.attempts)
+              const last = tests.at(-1)
+              assert.strictEqual(last.meta[TEST_STATUS], scenario.recover ? 'pass' : 'fail')
+              assert.strictEqual(last.meta[TEST_FINAL_STATUS], scenario.recover ? 'pass' : 'fail')
+              assert.strictEqual(last.meta[TEST_HAS_FAILED_ALL_RETRIES], scenario.recover ? undefined : 'true')
+              assert.strictEqual(last.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+              if (scenario.hookFailure) assert.match(last.meta[ERROR_MESSAGE], /retry beforeEach failed/)
+            }
+          )
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify(['./test-flaky-test-retries/dynamic-atr.js']),
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(scenario.enabled !== false),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: scenario.buckets,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4',
+              SHOULD_CHECK_RESULTS: '1',
+              ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
+              ...(scenario.recover ? { DYNAMIC_ATR_RECOVER: '1' } : {}),
+              ...(scenario.hookFailure ? { DYNAMIC_ATR_HOOK_FAILURE: '1' } : {}),
+            },
+          })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, scenario.recover ? 0 : 1)
+        })
+      }
+    }
+
     // retry listener was released in mocha@6.0.0
     onlyLatestIt('retries failed tests automatically', (done) => {
       receiver.setSettings({
