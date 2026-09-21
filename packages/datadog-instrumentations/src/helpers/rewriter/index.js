@@ -19,7 +19,7 @@ const { getRewriteTarget } = require('./targets')
  *   { code: string, map?: string|object }} transform
  *
  * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
- *   target?: { moduleName: string, filePath: string }, sourceMap?: string|object) =>
+ *   target?: { moduleName: string, filePath: string, activationName?: string }, sourceMap?: string|object) =>
  *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
@@ -62,7 +62,7 @@ function normalizeFilename (filename) {
  * @param {string|Buffer|ArrayBuffer|Uint8Array} content
  * @param {string} filename
  * @param {string} [format]
- * @param {{ moduleName: string, filePath: string }} [target]
+ * @param {{ moduleName: string, filePath: string, activationName?: string }} [target]
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
@@ -74,7 +74,7 @@ function rewrite (content, filename, format, target) {
     if (!target) return content
 
     const moduleType = format === 'module' ? 'esm' : 'cjs'
-    const { moduleName, filePath } = target
+    const { moduleName, filePath, activationName } = target
     if (disabled.has(moduleName)) return content
 
     const version = getVersion(filename, filePath)
@@ -82,12 +82,21 @@ function rewrite (content, filename, format, target) {
 
     const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
 
-    if (!transformer) return content
+    if (!transformer && !activationName) return content
 
     const source = getSourceText(content)
 
+    if (!transformer) {
+      return appendOrchestrionLoad(
+        source,
+        { moduleName, activationName, version, result: 'unsupported' },
+        moduleType
+      )
+    }
+
     // TODO: pass existing sourcemap as input for remapping
-    let { code, map } = transformer.transform(source, moduleType)
+    const transformed = transformer.transform(source, moduleType)
+    let { code, map } = transformed
 
     if (source.startsWith('#!') && !code.startsWith('#!')) {
       // A shebang must be the entire first line, and JavaScript recognizes
@@ -96,6 +105,11 @@ function rewrite (content, filename, format, target) {
       const shebangEnd = source.search(/[\r\n\u2028\u2029]/)
       code = (shebangEnd === -1 ? source : source.slice(0, shebangEnd)) + '\n' + code
       map = shiftSourceMapLine(map)
+    }
+
+    if (activationName) {
+      const result = code === source ? 'matched' : 'rewritten'
+      code = appendOrchestrionLoad(code, { moduleName, activationName, version, result }, moduleType)
     }
 
     if (!map) return code
@@ -234,6 +248,30 @@ function getSourceText (source) {
     return Buffer.from(source.buffer, source.byteOffset, source.byteLength).toString('utf8')
   }
   return Buffer.from(source).toString('utf8')
+}
+
+/**
+ * Publish target-level compatibility on the application thread when a pure target is evaluated.
+ *
+ * @param {string} source
+ * @param {{ moduleName: string, activationName: string, version: string,
+ *   result: 'unsupported'|'matched'|'rewritten' }} payload
+ * @param {'cjs'|'esm'} moduleType
+ */
+function appendOrchestrionLoad (source, payload, moduleType) {
+  const dcModule = JSON.stringify(getDcPolyfillSpecifier(moduleType) ?? 'diagnostics_channel')
+  const message = JSON.stringify(payload)
+
+  if (moduleType === 'esm') {
+    let binding = 'ddTraceOrchestrionDc'
+    let suffix = 0
+    while (source.includes(binding)) binding = `ddTraceOrchestrionDc${++suffix}`
+
+    return `${source}\nimport ${binding} from ${dcModule}\n` +
+      `${binding}.channel('dd-trace:instrumentation:load:orchestrion').publish(${message})\n`
+  }
+
+  return `${source}\nrequire(${dcModule}).channel('dd-trace:instrumentation:load:orchestrion').publish(${message})\n`
 }
 
 /**
