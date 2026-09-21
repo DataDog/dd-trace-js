@@ -8,6 +8,7 @@ const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+const Plugin = require('../src/plugins/plugin')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 const nomenclature = require('../../dd-trace/src/service-naming')
@@ -25,6 +26,7 @@ describe('Plugin Manager', () => {
   let Graphql
   let pm
   let registeredDefaults
+  let subscriptionCalls
 
   function makeTracerConfig (overrides = {}) {
     return {
@@ -43,19 +45,24 @@ describe('Plugin Manager', () => {
       _nomenclature: nomenclature,
     }
     instantiated = []
-    class FakePlugin {
-      constructor (aTracer) {
+    subscriptionCalls = 0
+    class FakePlugin extends Plugin {
+      constructor (aTracer, tracerConfig) {
+        super(aTracer, tracerConfig)
         assert.strictEqual(aTracer, tracer)
         instantiated.push(/** @type {{ id: string }} */ (/** @type {unknown} */ (this.constructor)).id)
       }
-
-      configure () {}
     }
 
     const plugins = {
       one: {},
       two: class Two extends FakePlugin {
         static id = 'two'
+
+        constructor (...args) {
+          super(...args)
+          this.addSub('test:plugin-manager:two', () => subscriptionCalls++)
+        }
       },
       three: {},
       four: class Four extends FakePlugin {
@@ -81,7 +88,7 @@ describe('Plugin Manager', () => {
     }
 
     Two = plugins.two
-    Two.prototype.configure = sinon.spy()
+    Two.prototype.configure = sinon.spy(Plugin.prototype.configure)
     Four = plugins.four
     Four.prototype.configure = sinon.spy()
     Graphql = plugins.graphql
@@ -357,6 +364,16 @@ describe('Plugin Manager', () => {
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
       assert.deepStrictEqual(instantiated, ['two', 'four'])
+    })
+
+    it('instantiates a plugin only once for repeated source-file activations', () => {
+      pm.configure(makeTracerConfig())
+      loadChannel.publish({ name: 'two' })
+      loadChannel.publish({ name: 'two' })
+      channel('test:plugin-manager:two').publish()
+
+      assert.deepStrictEqual(instantiated, ['two'])
+      assert.equal(subscriptionCalls, 1)
     })
 
     it('enables plugins without a registered per-plugin flag by default', () => {
