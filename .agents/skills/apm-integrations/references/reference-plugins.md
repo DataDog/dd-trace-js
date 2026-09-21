@@ -78,8 +78,8 @@ For instrumentation:
 
 | File | Purpose |
 |------|---------|
-| `datadog-instrumentations/src/<lib>.js` | Hook logic (shimmer) or hooks file (orchestrion) |
-| `datadog-instrumentations/src/helpers/hooks.js` | Registration (both shimmer and orchestrion) |
+| `datadog-instrumentations/src/<lib>.js` | Hook logic (shimmer or hybrid Orchestrion only) |
+| `datadog-instrumentations/src/helpers/hooks.js` | Registration (shimmer or hybrid Orchestrion only) |
 | `rewriter/instrumentations/<lib>.js` | JavaScript config (orchestrion) |
 
 ## How to Use References
