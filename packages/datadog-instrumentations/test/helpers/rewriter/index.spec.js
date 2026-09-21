@@ -1536,6 +1536,40 @@ describe('check-require-cache', () => {
     }
   })
 
+  it('discovers rewrite targets in Windows paths through both entrypoints', () => {
+    const { rewrite, createBundlerRewriter } = require('../../../src/helpers/rewriter')
+    const directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-windows-'))
+    const packageDirectory = join(directory, 'node_modules', 'ai')
+    const source = 'function getTracer () { return {} }\n'
+
+    try {
+      mkdirSync(packageDirectory, { recursive: true })
+      writeFileSync(join(packageDirectory, 'package.json'), '{"version":"5.0.0"}')
+      const filename = join(packageDirectory, 'dist', 'index.js').replaceAll('/', '\\')
+      const rewriteBundled = createBundlerRewriter(require.resolve('dc-polyfill'))
+
+      assert.match(rewrite(source, filename, 'commonjs'), /orchestrion:ai:getTracer/)
+      assert.match(rewriteBundled(source, filename, 'commonjs').code, /orchestrion:ai:getTracer/)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves input when file URL conversion fails through either entrypoint', () => {
+    const source = Buffer.from('function work () {}')
+    const sourceMap = { version: 3, mappings: '' }
+    const target = { moduleName: 'bullmq', filePath: 'activation.js' }
+    const rewriteBundled = rewriter.createBundlerRewriter(require.resolve('dc-polyfill'))
+
+    for (const invalidSegment of ['%ZZ', '%2F']) {
+      const url = `file:///C:/project/${invalidSegment}/node_modules/bullmq/activation.js`
+      assert.strictEqual(rewriter.rewrite(source, url, 'commonjs', target), source)
+      const result = rewriteBundled(source, url, 'commonjs', target, sourceMap)
+      assert.strictEqual(result.code, source)
+      assert.strictEqual(result.map, sourceMap)
+    }
+  })
+
   it('preserves a shebang without a trailing newline', () => {
     const source = '#!/usr/bin/env node'
     const shebangRewriter = proxyquire('../../../src/helpers/rewriter', {
