@@ -3,8 +3,6 @@
 const assert = require('node:assert')
 const { spawnSync } = require('node:child_process')
 const { once } = require('node:events')
-const { writeFileSync } = require('node:fs')
-const path = require('node:path')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
@@ -1712,20 +1710,7 @@ versions.forEach((version) => {
   describe(`playwright@${version} with Test Optimization disabled`, function () {
     this.timeout(30000)
 
-    useSandbox([`@playwright/test@${version}`], false, [])
-
-    before(() => {
-      writeFileSync(path.join(sandboxCwd(), 'playwright.config.js'), `
-        module.exports = { testMatch: 'disabled-test.js', reporter: 'list', workers: 1 }
-      `)
-      writeFileSync(path.join(sandboxCwd(), 'disabled-test.js'), `
-        const { test, expect } = require('@playwright/test')
-        test('executes the test body', () => {
-          console.log('PLAYWRIGHT_TEST_EXECUTED')
-          expect(process.env.TEST_SHOULD_FAIL).toBe('false')
-        })
-      `)
-    })
+    useSandbox([`@playwright/test@${version}`], false, ['./integration-tests/ci-visibility'])
 
     for (const [reason, configuration] of [
       ['missing API key', { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' }],
@@ -1735,7 +1720,12 @@ versions.forEach((version) => {
     ]) {
       for (const shouldFail of [false, true]) {
         it(`runs a ${shouldFail ? 'failing' : 'passing'} test with ${reason}`, () => {
-          const result = spawnSync(process.execPath, ['node_modules/@playwright/test/cli.js', 'test'], {
+          const result = spawnSync(process.execPath, [
+            'node_modules/@playwright/test/cli.js',
+            'test',
+            '--config',
+            'ci-visibility/playwright-tests-disabled/playwright.config.js',
+          ], {
             cwd: sandboxCwd(),
             encoding: 'utf8',
             timeout: 20000,
