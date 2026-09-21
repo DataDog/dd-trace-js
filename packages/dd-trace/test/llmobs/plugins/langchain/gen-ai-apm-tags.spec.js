@@ -40,6 +40,23 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
     plugin.configure({ enabled: false })
   })
 
+  // regression: the plugin manager used to be captured when this module first loaded, so a tracer
+  // rebuilt afterwards left the lookup pointing at a manager with no plugins, and the LangChain
+  // model span kept the `llm` kind the provider span was already emitting
+  it('resolves a provider integration through the tracer that owns the plugin', () => {
+    const anthropic = { llmobs: { _enabled: true } }
+    const owned = new TestChatModelPlugin(
+      { _pluginManager: { _pluginsByName: { anthropic } } },
+      { llmobs: { DD_LLMOBS_ENABLED: false }, service: 'test-service' }
+    )
+
+    assert.equal(owned.isLLMIntegrationEnabled('anthropic'), true)
+
+    anthropic.llmobs._enabled = false
+    assert.equal(owned.isLLMIntegrationEnabled('anthropic'), false)
+    assert.equal(owned.isLLMIntegrationEnabled('cohere'), false)
+  })
+
   it('defers to the provider integration for a traced chat model call', () => {
     publish()
 
