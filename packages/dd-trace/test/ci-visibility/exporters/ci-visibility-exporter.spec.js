@@ -16,6 +16,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
+const { getDynamicAtrRetryCount } = require('../../../src/ci-visibility/dynamic-atr-retries')
 const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-policy')
 const {
   FINAL_FLUSH_FALLBACK_DELAY,
@@ -212,47 +213,125 @@ describe('CI Visibility Exporter', () => {
     })
   })
 
+  describe('dynamic ATR backend budgets', () => {
+    for (const localRetryCount of [undefined, 0, 17]) {
+      for (const buckets of [undefined, ['invalid'], ['1', '2', '3', '4', '5']]) {
+        it(`keeps backend budgets separate from EFD override ${localRetryCount}, buckets ${buckets}`, () => {
+          const exporter = new CiVisibilityExporter({
+            testOptimization: {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: buckets,
+              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+              DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: localRetryCount,
+            },
+          })
+          const remotePolicy = createEfdRetryPolicy({ '5s': 10, '10s': 5, '30s': 3, '5m': 0 })
+          const config = exporter.filterConfiguration({
+            isFlakyTestRetriesEnabled: true,
+            earlyFlakeDetectionRetryPolicy: remotePolicy,
+          })
+          const expected = buckets?.length === 5 ? [1, 2, 3, 4, 5] : [10, 5, 3, 1, 1]
+          assert.deepStrictEqual(config.dynamicAtrBuckets, expected)
+          assert.strictEqual(Object.isFrozen(config.dynamicAtrBuckets), true)
+          for (const [index, duration] of [5000, 10000, 30000, 300000, 300001].entries()) {
+            assert.strictEqual(
+              getDynamicAtrRetryCount(duration, config.earlyFlakeDetectionRetryPolicy, config.dynamicAtrBuckets),
+              expected[index]
+            )
+          }
+          assert.strictEqual(config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, localRetryCount ?? 10)
+        })
+      }
+    }
+  })
+
   describe('dynamic ATR telemetry', () => {
-    it('records one metric only when dynamic ATR is effective', () => {
-      const ciVisibilityExporter = new CiVisibilityExporter({
-        testOptimization: {
-          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
-          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
-          DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
-        },
+    for (const [localEnabled, remoteEnabled] of [[true, true], [false, true], [true, false]]) {
+      it(`handles single-phase settings with local=${localEnabled}, backend=${remoteEnabled}`, async () => {
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: localEnabled,
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+          },
+        })
+        recordDynamicAtrRetries = sinon.spy()
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, { data: { attributes: { require_git: false, flaky_test_retries_enabled: remoteEnabled } } })
+        exporter._resolveCanUseCiVisProtocol(true)
+        await new Promise((resolve, reject) => {
+          exporter.getLibraryConfiguration({}, err => err ? reject(err) : resolve())
+        })
+        assert.strictEqual(scope.isDone(), true)
+        if (localEnabled && remoteEnabled) {
+          sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, false)
+        } else {
+          sinon.assert.notCalled(recordDynamicAtrRetries)
+        }
       })
-      recordDynamicAtrRetries = sinon.spy()
+    }
 
-      ciVisibilityExporter._libraryConfig = ciVisibilityExporter.filterConfiguration({
-        isFlakyTestRetriesEnabled: false,
-      })
-      ciVisibilityExporter._recordDynamicAtrTelemetry()
-      ciVisibilityExporter._libraryConfig = ciVisibilityExporter.filterConfiguration({
-        isFlakyTestRetriesEnabled: true,
-      })
-      ciVisibilityExporter._recordDynamicAtrTelemetry()
-      ciVisibilityExporter._recordDynamicAtrTelemetry()
-
-      sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, true)
-    })
-
-    it('does not tag EFD fallback settings as custom buckets', () => {
-      const ciVisibilityExporter = new CiVisibilityExporter({
-        testOptimization: {
-          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
-          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['invalid'],
-          DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
-        },
-      })
-      recordDynamicAtrRetries = sinon.spy()
-
-      ciVisibilityExporter._libraryConfig = ciVisibilityExporter.filterConfiguration({
-        isFlakyTestRetriesEnabled: true,
-      })
-      ciVisibilityExporter._recordDynamicAtrTelemetry()
-
-      sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, false)
-    })
+    for (const customBuckets of [undefined, ['invalid'], ['1', '2', '3', '4', '5']]) {
+      for (const outcome of ['enabled', 'disabled', 'settings error', 'git error']) {
+        it(`records only final enabled settings: ${outcome}, buckets ${customBuckets}`, async () => {
+          const exporter = new CiVisibilityExporter({
+            url,
+            testOptimization: {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: customBuckets,
+              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+            },
+          })
+          recordDynamicAtrRetries = sinon.spy()
+          const uploadError = new Error('git upload failed')
+          sinon.stub(exporter, 'sendGitMetadata')
+          const scope = nock(url)
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, () => {
+              exporter._resolveGit(outcome === 'git error' ? uploadError : undefined)
+              return { data: { attributes: { require_git: true, flaky_test_retries_enabled: true } } }
+            })
+          if (outcome !== 'git error') {
+            scope.post('/api/v2/libraries/tests/services/setting')
+              .reply(outcome === 'settings error' ? 400 : 200, () => {
+                sinon.assert.notCalled(recordDynamicAtrRetries)
+                return {
+                  data: {
+                    attributes: {
+                      require_git: false,
+                      flaky_test_retries_enabled: outcome === 'enabled',
+                    },
+                  },
+                }
+              })
+          }
+          exporter._resolveCanUseCiVisProtocol(true)
+          const { err, config } = await new Promise(resolve => {
+            exporter.getLibraryConfiguration({}, (err, config) => resolve({ err, config }))
+          })
+          assert.strictEqual(scope.isDone(), true)
+          if (outcome.endsWith('error')) {
+            assert.ok(err)
+          } else {
+            assert.strictEqual(err, null)
+            assert.strictEqual(config.isDynamicAtrEnabled, outcome === 'enabled')
+          }
+          if (outcome === 'enabled') {
+            sinon.stub(exporter._testOptimizationHttpCache, 'readSettings').returns({
+              isFlakyTestRetriesEnabled: true,
+            })
+            const cachedConfig = await new Promise((resolve, reject) => {
+              exporter.getLibraryConfiguration({}, (err, config) => err ? reject(err) : resolve(config))
+            })
+            assert.strictEqual(cachedConfig.isDynamicAtrEnabled, true)
+            sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, customBuckets?.length === 5)
+          } else {
+            sinon.assert.notCalled(recordDynamicAtrRetries)
+          }
+        })
+      }
+    }
   })
 
   describe('sendGitMetadata', () => {
