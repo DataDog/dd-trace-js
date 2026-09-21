@@ -18,7 +18,8 @@ Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
 Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
 `DD_METRICS_OTEL_ENABLED` settings still apply.
 
-Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. During Test Optimization, it also submits
+best-effort formatted `console.warn` and `console.error` calls made with an active test, suite, or session span. Set
 `DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
