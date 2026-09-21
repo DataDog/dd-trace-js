@@ -156,7 +156,7 @@ function start (config, rcInstance) {
     })
 
     const threadPausedMetric = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
-      .distribution('execution.pause.duration_ms')
+      .distribution('execution.pause.duration')
     worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
       if (type === 'thread-paused') threadPausedMetric.track(durationMs)
     })

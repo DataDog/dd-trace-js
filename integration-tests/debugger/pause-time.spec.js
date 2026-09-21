@@ -24,7 +24,7 @@ describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', funct
         namespace: 'live_debugger',
         fn: ({ payload }) => {
           const [series] = payload.payload.series
-          assert.strictEqual(series.metric, 'execution.pause.duration_ms')
+          assert.strictEqual(series.metric, 'execution.pause.duration')
           assert.strictEqual(series.common, true)
           assert.deepStrictEqual(series.tags, [])
           const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))

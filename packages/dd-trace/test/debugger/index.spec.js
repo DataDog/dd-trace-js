@@ -200,7 +200,7 @@ describe('debugger/index', () => {
       assert.strictEqual(sketches.namespace, 'live_debugger')
       assert.strictEqual(sketches.series.length, 1)
       const [series] = sketches.series
-      assert.strictEqual(series.metric, 'execution.pause.duration_ms')
+      assert.strictEqual(series.metric, 'execution.pause.duration')
       assert.strictEqual(series.common, true)
       assert.deepStrictEqual(series.tags, [])
       const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))
