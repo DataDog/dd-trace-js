@@ -90,6 +90,9 @@ function rewrite (content, filename, format, target) {
     let { code, map } = transformer.transform(source, moduleType)
 
     if (source.startsWith('#!') && !code.startsWith('#!')) {
+      // A shebang must be the entire first line, and JavaScript recognizes
+      // exactly four line terminators: \n, \r, \u2028 (line separator), and
+      // \u2029 (paragraph separator). Any of the four can end the shebang line.
       const shebangEnd = source.search(/[\r\n\u2028\u2029]/)
       code = (shebangEnd === -1 ? source : source.slice(0, shebangEnd)) + '\n' + code
       map = shiftSourceMapLine(map)
