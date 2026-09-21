@@ -587,6 +587,40 @@ versions.forEach((version) => {
       const programmaticRerunsContext = satisfies(version, '>=1.60.0') || version === 'latest' ? context : context.skip
 
       programmaticRerunsContext('programmatic reruns', () => {
+        context('automatic test retries', () => {
+          for (const retries of [0, 1]) {
+            it(`preserves ${retries} configured retries after disabling the plugin`, async (receiver, run) => {
+              receiver.setSettings({ flaky_test_retries_enabled: true })
+
+              let output = ''
+              const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  NODE_OPTIONS: '',
+                  TEST_DIR: './ci-visibility/playwright-tests-disabled',
+                  TEST_SHOULD_FAIL: 'true',
+                  PLAYWRIGHT_RETRIES: String(retries),
+                  DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+                  PLAYWRIGHT_DISABLE_PLUGIN_BETWEEN_RUNS: '1',
+                },
+              })
+              proc.stdout?.on('data', chunk => { output += chunk.toString() })
+              proc.stderr?.on('data', chunk => { output += chunk.toString() })
+
+              const [exitCode] = await once(proc, 'close')
+              const [firstRun, secondRun] = output.split('PLAYWRIGHT_PLUGIN_DISABLED\n')
+
+              assert.ok(secondRun, output)
+              const firstRunCount = firstRun.split('PLAYWRIGHT_TEST_EXECUTED\n').length - 1
+              const secondRunCount = secondRun.split('PLAYWRIGHT_TEST_EXECUTED\n').length - 1
+              assert.strictEqual(firstRunCount, (retries || 2) + 1, output)
+              assert.strictEqual(secondRunCount, retries + 1, output)
+              assert.strictEqual(exitCode, 0, output)
+            })
+          }
+        })
+
         for (const [feature, settings, firstRunCount] of [
           ['reporter', {}, 1],
           ['test management', { test_management: { enabled: true } }, 0],

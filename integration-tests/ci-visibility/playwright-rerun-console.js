@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const tracer = require('dd-trace/ci/init')
@@ -14,10 +15,11 @@ async function main () {
   const config = await configLoader.loadConfig({
     configDir: process.cwd(),
     resolvedConfigFile: path.join(process.cwd(), 'playwright.config.js'),
-  })
+  }, { retries: Number(process.env.PLAYWRIGHT_RETRIES || 0) })
   const options = { passWithNoTests: true }
+  const expectedStatus = process.env.TEST_SHOULD_FAIL === 'true' ? 'failed' : 'passed'
 
-  await testRunner.runAllTestsWithConfig(config, options)
+  assert.strictEqual(await testRunner.runAllTestsWithConfig(config, options), expectedStatus)
   // eslint-disable-next-line no-console
   if (console.error !== originalConsoleError) throw new Error('console.error was not restored after the first run')
 
@@ -26,7 +28,7 @@ async function main () {
     process.stdout.write('PLAYWRIGHT_PLUGIN_DISABLED\n')
   }
 
-  await testRunner.runAllTestsWithConfig(config, options)
+  assert.strictEqual(await testRunner.runAllTestsWithConfig(config, options), expectedStatus)
   // eslint-disable-next-line no-console
   if (console.error !== originalConsoleError) throw new Error('console.error was not restored after the second run')
 }
