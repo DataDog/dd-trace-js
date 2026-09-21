@@ -24,7 +24,7 @@ const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
  */
 
 /**
- * Returns the zero-based retry-bucket index for a test duration.
+ * Returns the zero-based dynamic ATR retry-bucket index for a test duration.
  *
  * Bucket boundaries (ms): 5 000, 10 000, 30 000, 300 000.
  * Durations at a boundary remain in that bucket.
@@ -41,7 +41,7 @@ function retryBucketIndexForDuration (durationMs) {
 }
 
 /**
- * Returns the configured retry budget for a test duration.
+ * Returns the backend retry budget using dynamic ATR's inclusive duration cutoffs.
  *
  * @param {number} durationMs
  * @param {EfdRetryPolicy} retryPolicy
@@ -59,7 +59,13 @@ function retriesForDuration (durationMs, retryPolicy) {
  * @param {EfdRetryPolicy} retryPolicy
  */
 function getEfdRetryCountForDuration (durationMs, retryPolicy) {
-  return retriesForDuration(durationMs, retryPolicy)
+  // EFD retains exclusive cutoffs, including no retries at exactly five minutes.
+  for (const { durationLimitMs, retryCount } of retryPolicy.durationRetryCounts) {
+    if (durationMs < durationLimitMs) {
+      return retryCount
+    }
+  }
+  return 0
 }
 
 /**
