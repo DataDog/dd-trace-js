@@ -1348,6 +1348,19 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    if (!libraryConfigurationCh.hasSubscribers) {
+      // Instrumentation hooks still run when the plugin is disabled between runs.
+      isKnownTestsEnabled = false
+      isEarlyFlakeDetectionEnabled = false
+      isFlakyTestRetriesEnabled = false
+      isTestManagementTestsEnabled = false
+      isImpactedTestsEnabled = false
+      knownTests = {}
+      testManagementTests = {}
+      modifiedFiles = {}
+      return runAllTests.apply(this, arguments)
+    }
+
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined
@@ -1479,9 +1492,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // Test Management tests have their retries set to 0 at the test level,
     // preventing them from being retried by ATR or `--retries`.
     const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    const projectsWithAutomaticRetries = []
     if (shouldSetATRRetries) {
       for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
+          projectsWithAutomaticRetries.push(project)
           project.retries = flakyTestRetriesCount
         }
       }
@@ -1506,6 +1521,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       hasReporterError = false
       throw error
     } finally {
+      for (const project of projectsWithAutomaticRetries) {
+        project.retries = 0
+      }
       restoreReporterConsoleError?.()
     }
 
