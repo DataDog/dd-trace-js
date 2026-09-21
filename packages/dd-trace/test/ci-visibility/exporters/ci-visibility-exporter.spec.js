@@ -175,7 +175,7 @@ describe('CI Visibility Exporter', () => {
         testOptimization: {
           ...testOptimization,
           DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
-          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
         },
       })
 
@@ -254,7 +254,7 @@ describe('CI Visibility Exporter', () => {
     }
 
     for (const localRetryCount of [undefined, 0, 17]) {
-      for (const buckets of [undefined, 'invalid', '1,2,3,4,5']) {
+      for (const buckets of [undefined, ['invalid'], ['1', '2', '3', '4', '5']]) {
         it(`keeps backend budgets separate from EFD override ${localRetryCount}, buckets ${buckets}`, () => {
           const exporter = new CiVisibilityExporter({
             testOptimization: {
@@ -269,7 +269,7 @@ describe('CI Visibility Exporter', () => {
             isFlakyTestRetriesEnabled: true,
             earlyFlakeDetectionRetryPolicy: remotePolicy,
           })
-          const expected = buckets === '1,2,3,4,5' ? [1, 2, 3, 4, 5] : [10, 5, 3, 1, 1]
+          const expected = buckets?.length === 5 ? [1, 2, 3, 4, 5] : [10, 5, 3, 1, 1]
           assert.deepStrictEqual(config.dynamicAtrBuckets, expected)
           assert.strictEqual(Object.isFrozen(config.dynamicAtrBuckets), true)
           for (const [index, duration] of [5000, 10000, 30000, 300000, 300001].entries()) {
@@ -311,7 +311,7 @@ describe('CI Visibility Exporter', () => {
       })
     }
 
-    for (const customBuckets of [undefined, 'invalid', '1,2,3,4,5']) {
+    for (const customBuckets of [undefined, ['invalid'], ['1', '2', '3', '4', '5']]) {
       for (const outcome of ['enabled', 'disabled', 'settings error', 'git error']) {
         it(`records only final enabled settings: ${outcome}, buckets ${customBuckets}`, async () => {
           const exporter = new CiVisibilityExporter({
@@ -364,7 +364,7 @@ describe('CI Visibility Exporter', () => {
               exporter.getLibraryConfiguration({}, (err, config) => err ? reject(err) : resolve(config))
             })
             assert.strictEqual(cachedConfig.isDynamicAtrEnabled, true)
-            sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, customBuckets === '1,2,3,4,5')
+            sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, customBuckets?.length === 5)
           } else {
             sinon.assert.notCalled(recordDynamicAtrRetries)
           }
