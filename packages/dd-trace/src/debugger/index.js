@@ -155,6 +155,11 @@ function start (config, rcInstance) {
       )
     })
 
+    const threadPausedMetric = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+      .distribution('execution.pause.duration_ms')
+    worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
+      if (type === 'thread-paused') threadPausedMetric.track(durationMs)
+    })
     worker.on('error', (err) => log.error('[debugger] worker thread error', err))
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 

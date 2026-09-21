@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { workerData: { probeSamplerBuffer } } = require('worker_threads')
+const { parentPort, workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
@@ -134,7 +134,7 @@ session.on('Debugger.paused', async ({ params }) => {
 
   // This can happen if sampled probe indexes are inconsistent with the worker state. Those cases are logged above.
   if (probes.length === 0) {
-    return session.post('Debugger.resume')
+    return resume(start)
   }
 
   const timestamp = Date.now()
@@ -183,15 +183,7 @@ session.on('Debugger.paused', async ({ params }) => {
     }
   }
 
-  await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
-
-  // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
-  // On my machine I'm seeing around 1.7ms of overhead.
-  // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ~${
-    Number(diff) / 1_000_000
-  } ms`)
+  await resume(start)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
@@ -354,6 +346,20 @@ session.on('Debugger.paused', async ({ params }) => {
     })
   }
 })
+
+/**
+ * Resume before reporting the elapsed time so telemetry does not extend the pause. This measures from receipt of the
+ * pause notification through the resume response, not the full time V8 suspends the instrumented thread.
+ *
+ * @param {bigint} start - Monotonic time when the pause notification was received, in nanoseconds.
+ */
+async function resume (start) {
+  await session.post('Debugger.resume')
+  const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000
+  parentPort.postMessage({ type: 'thread-paused', durationMs })
+  log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: ~%d ms',
+    durationMs)
+}
 
 function processDD (result) {
   return result?.trace_id === undefined ? undefined : result
