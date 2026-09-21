@@ -11,7 +11,10 @@ const hooks = require('../../datadog-instrumentations/src/helpers/hooks')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 const { filename, matchesInstrumentation } = require('../../datadog-instrumentations/src/helpers/instrumentation-utils')
 const { createBundlerRewriter } = require('../../datadog-instrumentations/src/helpers/rewriter')
-const { getRewriteTarget } = require('../../datadog-instrumentations/src/helpers/rewriter/targets')
+const {
+  getRewriteTarget,
+  getRewriteTargetNames,
+} = require('../../datadog-instrumentations/src/helpers/rewriter/targets')
 const { isESMFile } = require('../../datadog-esbuild/src/utils')
 const { SYNTHETIC_EXTENSION } = require('./constants')
 
@@ -20,7 +23,7 @@ const ARGUMENTS_BINDING = 1
 const MODULE_BINDING = 2
 const REQUIRE_BINDING = 4
 const COMMONJS_BINDINGS = MODULE_BINDING | REQUIRE_BINDING
-const targetPackages = new Set(Object.keys(hooks))
+const targetPackages = new Set([...Object.keys(hooks), ...getRewriteTargetNames()])
 const entrypoints = new Map()
 const loadedHooks = new Set()
 const packageCache = new Map()
@@ -98,7 +101,7 @@ module.exports = function loader (source, inputSourceMap) {
     }
 
     if (publications.length > 0) code = appendCommonJsPublications(code, publications, dcModule)
-    if (rewritten && publications.length === 0) {
+    if (rewritten && publications.length === 0 && (rewriteTarget.activationName || hooks[rewriteTarget.moduleName])) {
       if (!esm && hasUnsafeCommonJsBindings(code)) {
         this.emitWarning?.(new Error(`Skipped CommonJS activation for unsafe wrapper bindings in ${resourcePath}`))
         this.callback(undefined, source, inputSourceMap)

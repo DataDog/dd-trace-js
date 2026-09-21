@@ -359,25 +359,54 @@ describe('Turbopack loader', () => {
     sinon.assert.calledOnceWithExactly(emitWarning, sinon.match.has('code', 'ENOENT'))
   })
 
-  it('ignores rewrite targets without an activation hook', () => {
+  it('discovers and activates standalone rewrite targets without a hook registration', () => {
     const projectDir = createProject()
     const packageDir = createPackage(projectDir, 'rewrite-only-package', { version: '1.0.0' })
     const source = 'module.exports = true\n'
     const resourcePath = write(packageDir, 'index.js', source)
     const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: undefined })
-    const rewriteTarget = { filePath: 'index.js', moduleName: 'rewrite-only-package' }
+    const rewriteTarget = {
+      activationName: 'rewrite-only-package',
+      filePath: 'index.js',
+      moduleName: 'rewrite-only-package',
+    }
     const { loader, rewriteFactory } = loadLoader({
       hooks: {},
       instrumentations: {},
       rewrite,
       rewriteTarget: () => rewriteTarget,
+      rewriteTargetNames: new Set(['rewrite-only-package']),
     })
 
     const result = runLoader(loader, resourcePath, source)
 
-    assert.equal(result.code, source)
-    sinon.assert.notCalled(rewrite)
-    sinon.assert.notCalled(rewriteFactory)
+    assert.match(result.code, /\/\/ rewritten/)
+    assert.match(result.code, /"activate":true,"package":"rewrite-only-package"/)
+    sinon.assert.calledOnce(rewrite)
+    sinon.assert.calledOnce(rewriteFactory)
+  })
+
+  it('rewrites child targets without appending standalone activation', () => {
+    const projectDir = createProject()
+    const packageDir = createPackage(projectDir, '@wdio/runner', { version: '9.0.0' })
+    const source = 'module.exports = true\n'
+    const resourcePath = write(packageDir, 'build/index.js', source)
+    const rewrittenSource = `${source}// rewritten\n`
+    const rewrite = sinon.stub().returns({ code: rewrittenSource, map: undefined })
+    const rewriteTarget = { filePath: 'build/index.js', moduleName: '@wdio/runner' }
+    const { loader } = loadLoader({
+      hooks: {},
+      instrumentations: {},
+      rewrite,
+      rewriteTarget: () => rewriteTarget,
+      rewriteTargetNames: new Set(['@wdio/runner']),
+    })
+
+    const result = runLoader(loader, resourcePath, source)
+
+    assert.equal(result.code, rewrittenSource)
+    assert.doesNotMatch(result.code, /"activate":true/)
+    sinon.assert.calledOnce(rewrite)
   })
 
   it('fails open when a supported rewrite target has no package metadata', () => {
@@ -436,6 +465,7 @@ describe('Turbopack loader', () => {
     assert.match(result.code, new RegExp(`import ddTraceTurbopackDc from ${escapeRegExp(JSON.stringify(dcModule))}`))
     assert.match(result.code, /channel\.hasSubscribers/)
     assert.match(result.code, /"activate":true,"package":"rewrite-package"/)
+    assert.equal(result.code.match(/"activate":true/g)?.length, 1)
     assert.match(result.code, /"path":"rewrite-package\/dist\/index\.mjs","version":"4\.0\.0"/)
     assert.strictEqual(result.sourceMap, outputMap)
     const outputPath = write(packageDir, 'output.mjs', result.code)
@@ -469,6 +499,7 @@ describe('Turbopack loader', () => {
 
     assert.match(result.code, /const dc = require\("\.\.\//)
     assert.match(result.code, /"activate":true,"package":"rewrite-package"/)
+    assert.equal(result.code.match(/"activate":true/g)?.length, 1)
 
     const publishedPackageDir = createPackage(projectDir, 'published-rewrite-package', { version: '2.0.0' })
     const publishedPath = write(
@@ -618,7 +649,8 @@ describe('Turbopack loader', () => {
  *   instrumentations: Record<string, object[]>,
  *   relativePath?: string,
  *   rewrite?: Function,
- *   rewriteTarget?: (path: string) => object|undefined
+ *   rewriteTarget?: (path: string) => object|undefined,
+ *   rewriteTargetNames?: Set<string>
  * }} options
  * @returns {{ loader: Function, rewriteFactory: import('sinon').SinonStub }}
  */
@@ -628,6 +660,7 @@ function loadLoader ({
   relativePath,
   rewrite = sinon.stub().callsFake((source, _path, _format, _target, map) => ({ code: source, map })),
   rewriteTarget = () => undefined,
+  rewriteTargetNames = new Set(Object.keys(hooks)),
 }) {
   const originalRequire = Module.prototype.require
   const rewriteFactory = sinon.stub().returns(rewrite)
@@ -637,7 +670,10 @@ function loadLoader ({
         '../../datadog-instrumentations/src/helpers/hooks': hooks,
         '../../datadog-instrumentations/src/helpers/instrumentations': instrumentations,
         '../../datadog-instrumentations/src/helpers/rewriter': { createBundlerRewriter: rewriteFactory },
-        '../../datadog-instrumentations/src/helpers/rewriter/targets': { getRewriteTarget: rewriteTarget },
+        '../../datadog-instrumentations/src/helpers/rewriter/targets': {
+          getRewriteTarget: rewriteTarget,
+          getRewriteTargetNames: () => rewriteTargetNames.values(),
+        },
         'node:path': relativePath ? { ...path, relative: () => relativePath } : path,
       }
       if (stubs[request]) return stubs[request]
