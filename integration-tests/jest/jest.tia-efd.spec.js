@@ -4435,10 +4435,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     }
 
-    for (const callsSuper of [true, false]) {
-      it(`restores dynamic ATR failures before custom describe finish (callsSuper=${callsSuper})`, async () => {
+    for (const [callsSuper, preventExtensions] of [[true, false], [false, false], [true, true], [false, true]]) {
+      const label = `callsSuper=${callsSuper}, preventExtensions=${preventExtensions}`
+      it(`restores dynamic ATR failures before custom describe finish (${label})`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
         let output = ''
+        let stderr = ''
         childProcess = exec(runTestsCommand, {
           cwd,
           env: {
@@ -4447,6 +4449,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jest-environment-dynamic-atr-duration.js',
             DYNAMIC_ATR_TEST_DURATIONS: '100',
             DYNAMIC_ATR_REPORT_ERRORS: '1',
+            ...(preventExtensions ? { DYNAMIC_ATR_PREVENT_EXTENSIONS: '1' } : {}),
             ...(callsSuper ? {} : { DYNAMIC_ATR_SKIP_SUPER: '1' }),
             DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
             DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
@@ -4454,9 +4457,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         })
         childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { stderr += chunk })
         const [exitCode] = await once(childProcess, 'exit')
         const results = [...output.matchAll(/DYNAMIC_ATR_RESULT:(.+)/g)].map(match => JSON.parse(match[1]))
-        assert.deepStrictEqual(results, [{ name: 'can retry failed tests', errors: 1, invocations: 2 }])
+        assert.deepStrictEqual(results, [{ name: 'can retry failed tests', errors: 1, invocations: 2 }], stderr)
         assert.strictEqual(exitCode, 1)
       })
     }

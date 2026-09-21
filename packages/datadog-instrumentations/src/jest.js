@@ -182,6 +182,8 @@ const dynamicAtrRetryCountByTest = new Map()
 // temporarily cleared to keep that ceiling from scheduling another retry, then
 // restored before Jest reports the suite result.
 const dynamicAtrFinalErrorsByTest = new Map()
+// Custom environments may prevent extensions after their base constructor runs.
+const dynamicAtrResultHandlerRegistrations = new WeakMap()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
@@ -682,6 +684,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
       this.hasConcurrentTests = false
+      this.concurrentTestState = undefined
       this.concurrentTestContexts = new Map()
       this.concurrentTestStates = new WeakMap()
       this.concurrentTestSourceFns = new WeakMap()
@@ -1902,7 +1905,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'run_start') {
-        this.registerDynamicAtrResultHandler?.()
+        const registerResultHandler = dynamicAtrResultHandlerRegistrations.get(this)
+        dynamicAtrResultHandlerRegistrations.delete(this)
+        registerResultHandler?.()
       } else if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
         this.bindTestEach(this.global.test)
@@ -3499,14 +3504,14 @@ function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
 
     if (environment.isDynamicAtrEnabled && environment.isFlakyTestRetriesEnabled) {
       // Register at run_start, after Circus installs its per-test reporter and snapshot handlers.
-      environment.registerDynamicAtrResultHandler = () => {
+      dynamicAtrResultHandlerRegistrations.set(environment, () => {
         if (satisfies(jestVersion, '>=30.0.0')) {
           environment.global[Symbol.for('EVENT_HANDLERS')].push(suppressDynamicAtrErrors)
         } else {
           const circusState = args[3].requireInternalModule(path.join(hookMeta.moduleBaseDir, 'build/state.js'))
           circusState.addEventHandler(suppressDynamicAtrErrors)
         }
-      }
+      })
     }
 
     testSuiteStartCh.publish({

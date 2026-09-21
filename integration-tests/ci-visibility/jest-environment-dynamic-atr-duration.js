@@ -7,6 +7,14 @@ const NodeEnvironment =
 class DynamicAtrDurationEnvironment extends NodeEnvironment {
   durations = process.env.DYNAMIC_ATR_TEST_DURATIONS?.split(',').map(Number)
 
+  /** @param {...unknown} args */
+  constructor (...args) {
+    super(...args)
+    if (process.env.DYNAMIC_ATR_PREVENT_EXTENSIONS) {
+      Object.preventExtensions(this)
+    }
+  }
+
   handleTestEvent (event, state) {
     if (event.name === 'test_done') {
       // Exercise the >5m dynamic ATR bucket without making the integration test wait five minutes.
