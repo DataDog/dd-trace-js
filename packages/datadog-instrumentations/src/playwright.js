@@ -515,6 +515,8 @@ function getTestsBySuiteFromTestsById (testsById) {
 }
 
 function getPlaywrightConfig (playwrightRunner) {
+  if (!playwrightRunner) return {}
+
   try {
     return playwrightRunner._configLoader.fullConfig()
   } catch {
