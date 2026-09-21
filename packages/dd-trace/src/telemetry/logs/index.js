@@ -50,7 +50,7 @@ function onErrorLog (msg) {
 
   if (cause) {
     telLog.stack_trace = cause.stack
-    telLog.errorType = cause.constructor.name
+    telLog.errorType = cause.constructor?.name || 'Error'
   }
 
   onLog(telLog)

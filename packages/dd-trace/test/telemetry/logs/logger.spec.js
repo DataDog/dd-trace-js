@@ -79,6 +79,21 @@ describe('logger telemetry delivery', () => {
     assert.strictEqual(entries[0].message, 'Generic Error')
   })
 
+  it('should collect error-like causes without a constructor', () => {
+    const cause = Object.assign(Object.create(null), {
+      stack: `customer-secret\n    at request (${ddBasePath}request.js:1:2)`,
+    })
+
+    log.error('Request failed', cause)
+
+    assert.deepStrictEqual(collector.drain(), [{
+      message: 'Request failed',
+      level: 'ERROR',
+      count: 1,
+      stack_trace: 'Error: redacted\n    at request (request.js:1:2)',
+    }])
+  })
+
   it('should respect transmission opt-outs, including lazy messages', () => {
     const configuredLazyMessage = sinon.stub().returns('hidden')
     const noTransmitErrorLazyMessage = sinon.stub().returns('hidden')
