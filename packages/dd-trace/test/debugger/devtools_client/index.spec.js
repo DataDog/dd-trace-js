@@ -696,11 +696,12 @@ describe('onPause', function () {
       await onPaused(event)
 
       sinon.assert.calledOnce(send)
-      const [message, , , snapshot] = send.firstCall.args
+      const [message, , , snapshot, , , incompleteReasons] = send.firstCall.args
       assert.strictEqual(message, 'hello world', 'should still report the result')
       assert.deepStrictEqual(snapshot.evaluationErrors, [
         { expr: '', message: 'Template evaluation exceeded its time budget of 10ms' },
       ])
+      assert.strictEqual(incompleteReasons, 0)
       sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
       assert.ok(
         session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(
@@ -761,7 +762,7 @@ describe('onPause', function () {
       assert.deepStrictEqual(snapshot.evaluationErrors, [
         { expr: 'foo', message: 'Expression evaluation exceeded its time budget of 10ms' },
       ])
-      assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.TIMEOUT)
+      assert.strictEqual(incompleteReasons, 0)
       sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
       assert.ok(
         session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(

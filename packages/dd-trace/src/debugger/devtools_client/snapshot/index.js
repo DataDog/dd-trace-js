@@ -170,7 +170,6 @@ async function evaluateCaptureExpressions (
         })
       )
       if (process.hrtime.bigint() - evaluationStart > evaluationTimeoutNs) {
-        incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
         timedOut = true
         evaluationErrors.push({
           expr: name,
