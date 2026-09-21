@@ -121,19 +121,17 @@ describe('Prompt caches', () => {
     assert.strictEqual(cache.cacheDir, path.join(cacheDir, 'datadog', 'llmobs', 'prompts'))
   })
 
-  it('clears and evicts owned files even when warm reads and writes are disabled', () => {
+  it('does not delete warm cache files when disabled', () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-disabled-'))
     const enabled = new WarmCache({ cacheDir, ...WARM_OPTIONS })
     const disabled = new WarmCache({ cacheDir, ...WARM_OPTIONS, enabled: false })
     const key = cacheKey('prompt', ['latest'])
     enabled.set(key, prompt('prompt'))
 
+    disabled.delete(key)
     disabled.evictPrompt('prompt')
-    assert.strictEqual(enabled.get(key), undefined)
-
-    enabled.set(key, prompt('prompt'))
     disabled.clear()
-    assert.strictEqual(enabled.get(key), undefined)
+    assert.strictEqual(enabled.get(key).prompt.id, 'prompt')
   })
 
   it('preserves warm entry age when promoting it to the hot cache', () => {

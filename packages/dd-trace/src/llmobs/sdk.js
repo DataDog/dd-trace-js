@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -47,15 +48,15 @@ class LLMObs extends NoopLLMObs {
 
   #promptManager
 
-  #getProvider
+  #getOpenFeatureProvider
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
-   * @param {() => object} getProvider - Lazy getter for the tracer's existing OpenFeature provider
+   * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config, getProvider = () => {}) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -63,7 +64,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
-    this.#getProvider = getProvider
+    this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
 
   get enabled () {
@@ -80,110 +81,12 @@ class LLMObs extends NoopLLMObs {
   }
 
   /**
-   * Get the lazily-created Prompt Management owner.
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
    */
-  #getPromptManager () {
-    if (!this.#promptManager) {
-      const PromptManager = require('./prompts/manager')
-      this.#promptManager = new PromptManager(this._config, this.#getProvider)
-    }
+  get prompts () {
+    this.#promptManager ??= new PromptManager(this._config, this.#getOpenFeatureProvider)
     return this.#promptManager
-  }
-
-  /**
-   * Retrieve and resolve a managed prompt.
-   * @param {string} promptId
-   * @param {import('../../../../index').llmobs.GetPromptOptions} [options]
-   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt>}
-   */
-  getPrompt (promptId, options) {
-    return this.#getPromptManager().getPrompt(promptId, options)
-  }
-
-  /**
-   * Refresh the selector implied by the current environment.
-   * @param {string} promptId
-   * @returns {Promise<import('../../../../index').llmobs.ManagedPrompt | undefined>}
-   */
-  refreshPrompt (promptId) {
-    return this.#getPromptManager().refreshPrompt(promptId)
-  }
-
-  /**
-   * Clear managed prompt caches.
-   * @param {import('../../../../index').llmobs.ClearPromptCacheOptions} [options]
-   */
-  clearPromptCache (options = {}) {
-    this.#getPromptManager().clearCache(options)
-  }
-
-  /**
-   * Create a prompt.
-   * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateItem[]} template
-   * @param {import('../../../../index').llmobs.CreatePromptOptions} [options]
-   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
-   */
-  createPrompt (promptId, template, options) {
-    return this.#getPromptManager().createPrompt(promptId, template, options)
-  }
-
-  /**
-   * Create a prompt version.
-   * @param {string} promptId
-   * @param {import('../../../../index').llmobs.PromptTemplateItem[]} template
-   * @param {import('../../../../index').llmobs.CreatePromptVersionOptions} [options]
-   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
-   */
-  createPromptVersion (promptId, template, options) {
-    return this.#getPromptManager().createPromptVersion(promptId, template, options)
-  }
-
-  /**
-   * Update prompt metadata.
-   * @param {string} promptId
-   * @param {import('../../../../index').llmobs.UpdatePromptOptions} options
-   * @returns {Promise<import('../../../../index').llmobs.PromptResponse>}
-   */
-  updatePrompt (promptId, options) {
-    return this.#getPromptManager().updatePrompt(promptId, options)
-  }
-
-  /**
-   * Update prompt-version metadata.
-   * @param {string} promptId
-   * @param {number} version
-   * @param {import('../../../../index').llmobs.UpdatePromptVersionOptions} options
-   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse>}
-   */
-  updatePromptVersion (promptId, version, options) {
-    return this.#getPromptManager().updatePromptVersion(promptId, version, options)
-  }
-
-  /**
-   * Delete a prompt.
-   * @param {string} promptId
-   * @returns {Promise<import('../../../../index').llmobs.DeletedPromptResponse>}
-   */
-  deletePrompt (promptId) {
-    return this.#getPromptManager().deletePrompt(promptId)
-  }
-
-  /**
-   * List prompts.
-   * @returns {Promise<import('../../../../index').llmobs.PromptResponse[]>}
-   */
-  listPrompts () {
-    return this.#getPromptManager().listPrompts()
-  }
-
-  /**
-   * List prompt versions.
-   * @param {string} promptId
-   * @returns {Promise<import('../../../../index').llmobs.PromptVersionResponse[]>}
-   */
-  listPromptVersions (promptId) {
-    return this.#getPromptManager().listPromptVersions(promptId)
   }
 
   enable (options = {}) {
