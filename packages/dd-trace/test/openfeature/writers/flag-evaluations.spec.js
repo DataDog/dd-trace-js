@@ -159,15 +159,21 @@ describe('OpenFeature flag evaluations writer', () => {
       observeFullEvaluationData: false,
       timestamp: 1_759_276_800_100,
     }))
+    aggregator.add(event({
+      flagKey: 'bypass',
+      attrs: Object.freeze({ canary: 'still-must-not-survive' }),
+      observeFullEvaluationData: true,
+      timestamp: 1_759_276_800_400,
+    }))
     const { full, degraded } = aggregator.take()
     const [entry] = degraded.values()
     assert.strictEqual(full.size, 0)
     assert.strictEqual(degraded.size, 1)
     assert.strictEqual(entry.consent, false)
     assert.strictEqual(entry.attrs, undefined)
-    assert.strictEqual(entry.count, 2)
+    assert.strictEqual(entry.count, 3)
     assert.strictEqual(entry.first, 1_759_276_800_100)
-    assert.strictEqual(entry.last, 1_759_276_800_300)
+    assert.strictEqual(entry.last, 1_759_276_800_400)
   })
 
   it('re-enforces privacy and error policy independently during serialization', () => {
