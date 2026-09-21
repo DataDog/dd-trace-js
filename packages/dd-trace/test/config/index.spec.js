@@ -4096,25 +4096,32 @@ describe('Config', () => {
           assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, expected)
         })
       }
-      for (const [value, expected] of [
-        ['1, 2,3,4,20', [1, 2, 3, 4, 20]],
-        ['', null],
-        ['1,invalid,3', null],
+      for (const [value, parsed, expected] of [
+        ['1, 2,3,4,20', ['1', '2', '3', '4', '20'], [1, 2, 3, 4, 20]],
+        ['', [], null],
+        ['1,invalid,3', ['1', 'invalid', '3'], null],
       ]) {
         it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS=${JSON.stringify(value)}`, () => {
           process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
           const config = getConfig(options)
           // Preserve positions until ATR validates the complete list.
-          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, value)
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
           assert.deepStrictEqual(
             getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), expected
           )
         })
       }
-      for (const value of ['1,2,,3,4,5', ',1,2,3,4,5', '1,2,3,4,5,', '1,2, ,3,4,5', ',,,,,']) {
+      for (const [value, parsed] of [
+        ['1,2,,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',1,2,3,4,5', ['', '1', '2', '3', '4', '5']],
+        ['1,2,3,4,5,', ['1', '2', '3', '4', '5', '']],
+        ['1,2, ,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',,,,,', ['', '', '', '', '', '']],
+      ]) {
         it(`should reject empty dynamic ATR bucket entries in ${JSON.stringify(value)}`, () => {
           process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
           const config = getConfig(options)
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
           assert.strictEqual(getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), null)
         })
       }
