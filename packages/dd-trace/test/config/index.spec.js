@@ -2026,6 +2026,27 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
   })
 
+  it('should reject non-finite dynamic instrumentation evaluation timeouts', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = 'Infinity'
+
+    const config = getConfig({
+      dynamicInstrumentation: {
+        evaluationTimeoutMs: -Infinity,
+      },
+    })
+
+    assert.strictEqual(config.dynamicInstrumentation.evaluationTimeoutMs, 50)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Number must be finite: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS ' +
+        '(source: env_var), picked default'
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Number must be finite: -Infinity for dynamicInstrumentation.evaluationTimeoutMs (source: code), picked default'
+    )
+  })
+
   it('should ignore undefined programmatic option values', () => {
     const config = getConfig({ startupLogs: undefined })
 

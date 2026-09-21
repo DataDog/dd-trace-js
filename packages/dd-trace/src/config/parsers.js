@@ -227,6 +227,10 @@ const transformers = {
     if (url?.protocol === 'http:' || url?.protocol === 'https:') return value
     warnInvalidValue(value, optionName, source, 'Invalid HTTP URL')
   },
+  validateFiniteNumber (value, optionName, source) {
+    if (Number.isFinite(value)) return value
+    warnInvalidValue(value, optionName, source, 'Number must be finite')
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
     for (let index = 0; index < value.length; index++) {

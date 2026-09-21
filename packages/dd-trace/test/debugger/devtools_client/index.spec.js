@@ -703,8 +703,14 @@ describe('onPause', function () {
       ])
       sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
       assert.ok(
-        session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(send.firstCall),
-        'should throttle after reporting the result'
+        session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(
+          session.post.withArgs('Debugger.resume').firstCall
+        ),
+        'should throttle after resuming the application'
+      )
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledBefore(send.firstCall),
+        'should throttle before processing the result'
       )
     })
 
@@ -757,6 +763,16 @@ describe('onPause', function () {
       ])
       assert.strictEqual(incompleteReasons, INCOMPLETE_REASON.TIMEOUT)
       sinon.assert.calledWith(session.post, 'Runtime.evaluate', { expression: evaluationTimedOutExpression })
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledAfter(
+          session.post.withArgs('Debugger.resume').firstCall
+        ),
+        'should throttle after resuming the application'
+      )
+      assert.ok(
+        session.post.withArgs('Runtime.evaluate').firstCall.calledBefore(send.firstCall),
+        'should throttle before processing the result'
+      )
     })
 
     it('should log if throttling the probe fails', async function () {

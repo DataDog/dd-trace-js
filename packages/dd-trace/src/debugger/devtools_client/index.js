@@ -194,6 +194,21 @@ session.on('Debugger.paused', async ({ params }) => {
   await session.post('Debugger.resume')
   const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
 
+  // Ideally these throttles would be installed before resuming so a tight loop could not sample the probe again before
+  // the request is handled. That would keep the application paused for another inspector request even when the probe
+  // does not immediately run again, so we deliberately resume first. If the race occurs, the probe can perform one
+  // additional over-budget evaluation before the throttle takes effect, which is preferable to lengthening every
+  // timeout pause.
+  for (const probe of probes) {
+    // Condition errors are already throttled synchronously by the sampler; preserve that state and its classification.
+    if (conditionErrorProbes?.has(probe)) continue
+    if ((probe.templateRequiresEvaluation && templatesTimedOut) ||
+        captureExpressionResults?.get(probe.id)?.timedOut === true) {
+      // TODO: Batch all timed-out probes into a single Runtime.evaluate request.
+      throttleProbe(probe)
+    }
+  }
+
   // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
   // On my machine I'm seeing around 1.7ms of overhead.
   // eslint-disable-next-line eslint-rules/eslint-log-printf-style
@@ -316,8 +331,6 @@ session.on('Debugger.paused', async ({ params }) => {
       snapshot.evaluationErrors = [...probe.permanentEvaluationErrors]
     }
 
-    let evaluationTimedOut = captureExpressionResults?.get(probe.id)?.timedOut === true
-
     let message = ''
     if (probe.templateRequiresEvaluation) {
       const results = evalResults[messageIndex++]
@@ -339,7 +352,6 @@ session.on('Debugger.paused', async ({ params }) => {
         }
       }
       if (templatesTimedOut) {
-        evaluationTimedOut = true
         const error = {
           expr: '',
           message: 'Template evaluation exceeded its time budget of ' +
@@ -360,8 +372,6 @@ session.on('Debugger.paused', async ({ params }) => {
     send(message, logger, dd, snapshot,
       config.propagateProcessTags.enabled ? processTags.serialized : undefined,
       eventType, incompleteReasons)
-
-    if (evaluationTimedOut) throttleProbe(probe)
   }
 
   if (captureDisabledProbes !== undefined) {
