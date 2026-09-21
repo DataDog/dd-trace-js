@@ -87,19 +87,23 @@ describeRetries(`cucumber@${version} dynamic ATR`, function () {
         return { events, exitCode: childProcess.exitCode, output }
       }
 
-      for (const custom of [true, false]) {
-        it(`uses initial duration buckets with ${custom ? 'custom' : 'EFD fallback'} budgets`, async () => {
+      for (const bucketConfig of ['custom', 'backend', 'empty entry']) {
+        it(`uses initial duration buckets with ${bucketConfig} budgets and EFD disabled`, async () => {
+          const custom = bucketConfig === 'custom'
           const budgets = custom ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 1]
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             known_tests_enabled: false,
             early_flake_detection: {
-              enabled: !custom,
+              enabled: false,
               slow_test_retries: { '5s': 2, '10s': 3, '30s': 4, '5m': 5 },
             },
           })
           const { events, exitCode, output } = await run('budgets', {
-            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: custom ? budgets.join(',') : '',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: custom
+              ? budgets.join(',')
+              : bucketConfig === 'empty entry' ? '1,2,,3,4,5' : '',
+            DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: '17',
           })
           assert.strictEqual(exitCode, 1, output)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
