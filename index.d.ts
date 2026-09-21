@@ -298,6 +298,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -306,6 +307,7 @@ interface Plugins {
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
+  "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -3128,6 +3130,25 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Postgres.js](https://github.com/porsager/postgres) module.
+     */
+    interface postgres extends DatabaseInstrumentation {
+      /**
+       * The service name to be used for this plugin.
+       */
+      service?: string;
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: TracerOptions['dbmPropagationMode'];
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
      */
     interface prisma extends PrismaClient, PrismaEngine {
@@ -3240,6 +3261,12 @@ declare namespace tracer {
         reply?: (span?: Span, request?: any, response?: any) => any;
       };
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [Supabase JavaScript client](https://github.com/supabase/supabase-js).
+     */
+    interface supabase extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

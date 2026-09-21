@@ -2,6 +2,7 @@
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const processTags = require('../../process-tags')
+const { DEFAULT_QUEUE_MAX_BYTES } = require('../constants')
 const log = require('./log')
 
 processTags.initialize()
@@ -10,6 +11,7 @@ const config = module.exports = {
   ...parentConfig,
   parentThreadId,
   maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+  queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
 }
 
 updateConfig(parentConfig)

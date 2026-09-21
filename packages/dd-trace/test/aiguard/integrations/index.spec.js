@@ -10,7 +10,12 @@ const sinon = require('sinon')
 const chatCompletionsInterceptChannel = channel('dd-trace:openai:chat.completions:intercept')
 
 describe('AIGuard integration wiring', () => {
-  const config = { experimental: { aiguard: { block: true } } }
+  const config = {
+    aiguard: {
+      DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: true,
+      DD_AI_GUARD_BLOCK: true,
+    },
+  }
   let AIGuard
   let evaluate
   let aiguard
@@ -77,12 +82,12 @@ describe('AIGuard integration wiring', () => {
     })
     const aiguard = { evaluate }
 
-    integrations.enable(aiguard, true)
+    integrations.enable(aiguard, true, true)
     integrations.disable()
 
     sinon.assert.calledOnceWithExactly(anthropicIntegration.enable, aiguard, true)
-    sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true)
-    sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true, true)
+    sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true, true)
     sinon.assert.calledOnce(anthropicIntegration.disable)
     sinon.assert.calledOnce(openaiIntegration.disable)
     sinon.assert.calledOnce(vercelAiIntegration.disable)

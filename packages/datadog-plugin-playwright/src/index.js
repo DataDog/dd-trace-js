@@ -56,6 +56,7 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
   TEST_FINAL_STATUS,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -69,13 +70,14 @@ const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
+const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
+const EMPTY_SHARD_REASON = 'zero_test_shard'
 const noop = () => {}
 
 /**
  * Returns whether an attachment is an automatic Playwright failure screenshot.
  *
  * @param {object} attachment - Playwright test attachment
- * @returns {boolean}
  */
 function isPlaywrightFailureScreenshot (attachment) {
   return attachment?.name === 'screenshot' &&
@@ -88,7 +90,6 @@ function isPlaywrightFailureScreenshot (attachment) {
  * Returns whether an attachment is a Playwright test video.
  *
  * @param {object} attachment - Playwright test attachment
- * @returns {boolean}
  */
 function isPlaywrightFailureVideo (attachment) {
   return attachment?.name === 'video' &&
@@ -182,6 +183,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isExpectedEmptyShard,
       error,
       onDone,
     }) => {
@@ -203,6 +205,15 @@ class PlaywrightPlugin extends CiPlugin {
       const finishSession = (flushDone) => {
         this.testModuleSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_STATUS, status)
+
+        if (isExpectedEmptyShard) {
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            EMPTY_SHARD_SKIP_REASON,
+            EMPTY_SHARD_REASON
+          )
+        }
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
@@ -682,7 +693,6 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
    * @param {(result: string|undefined) => void} onDone - Completion callback
-   * @returns {boolean} Whether at least one upload was started
    */
   uploadTestScreenshots ({ screenshots, traceId, signal }, onDone) {
     const exporter = this.tracer?._exporter
@@ -735,7 +745,6 @@ class PlaywrightPlugin extends CiPlugin {
    * @param {string} options.traceId - Test trace id used as the video key
    * @param {AbortSignal} options.signal - Signal used to cancel uploads during error finalization
    * @param {(result: string|undefined) => void} onDone - Completion callback
-   * @returns {boolean} Whether at least one upload was started
    */
   uploadTestVideos ({ videos, traceId, signal }, onDone) {
     const exporter = this.tracer?._exporter

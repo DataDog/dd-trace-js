@@ -14,12 +14,46 @@ const responsesInterceptChannel = channel('dd-trace:openai:responses:intercept')
 
 const EVAL_OPTS = { block: true, source: SOURCE_AUTO, integration: 'openai' }
 
+class FakeStream {
+  constructor (chunks) {
+    this.chunks = chunks
+  }
+
+  tee () {
+    return [new FakeStream(this.chunks), new FakeStream(this.chunks)]
+  }
+
+  [Symbol.asyncIterator] () {
+    let index = 0
+    return {
+      next: () => Promise.resolve(index < this.chunks.length
+        ? { done: false, value: this.chunks[index++] }
+        : { done: true, value: undefined }),
+    }
+  }
+}
+
+function readStream (stream) {
+  const chunks = []
+  const iterator = stream[Symbol.asyncIterator]()
+
+  function readAll () {
+    return iterator.next().then(({ done, value }) => {
+      if (done) return chunks
+      chunks.push(value)
+      return readAll()
+    })
+  }
+
+  return readAll()
+}
+
 describe('AIGuard OpenAI integration', () => {
   let evaluate
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves()
-    openai.enable({ evaluate }, true)
+    openai.enable({ evaluate }, true, true)
   })
 
   afterEach(() => {
@@ -240,6 +274,168 @@ describe('AIGuard OpenAI integration', () => {
       assert.strictEqual(await ctx.onResult(body), body)
 
       sinon.assert.calledOnce(evaluate)
+    })
+  })
+
+  describe('streamed output', () => {
+    it('can disable After Model evaluation', () => {
+      openai.disable()
+      openai.enable({ evaluate }, true, false)
+      const ctx = intercept(chatCompletionsInterceptChannel, {
+        arguments: [{ messages: [{ role: 'user', content: 'Hello' }], stream: true }],
+      })
+
+      assert.strictEqual(typeof ctx.beforeResult, 'function')
+      assert.strictEqual(ctx.onResult, undefined)
+    })
+
+    it('evaluates chat completion text and returns the other stream branch', async () => {
+      const chunks = [
+        { choices: [{ index: 0, delta: { content: 'Hello' } }] },
+        { choices: [{ index: 0, delta: { content: ' world' } }] },
+      ]
+      const ctx = intercept(chatCompletionsInterceptChannel, {
+        arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }],
+      })
+
+      const result = await ctx.onResult(new FakeStream(chunks))
+
+      assert.deepStrictEqual(await readStream(result), chunks)
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello world' },
+      ], EVAL_OPTS)
+    })
+
+    it('evaluates tool-call-only chat completion streams', async () => {
+      const chunks = [
+        {
+          choices: [{
+            index: 0,
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'search', arguments: '' },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{
+            index: 0,
+            delta: { tool_calls: [{ index: 0, function: { arguments: '{"query":"unsafe"}' } }] },
+          }],
+        },
+      ]
+      const ctx = intercept(chatCompletionsInterceptChannel, {
+        arguments: [{ messages: [{ role: 'user', content: 'Search' }], stream: true }],
+      })
+
+      await ctx.onResult(new FakeStream(chunks))
+
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Search' },
+        {
+          role: 'assistant',
+          tool_calls: [{
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'search', arguments: '{"query":"unsafe"}' },
+          }],
+        },
+      ], EVAL_OPTS)
+    })
+
+    it('rejects before returning a streamed tool call when After Model denies it', async () => {
+      const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      evaluate.rejects(error)
+      const chunks = [
+        {
+          choices: [{
+            index: 0,
+            delta: {
+              tool_calls: [{
+                index: 0,
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'shell', arguments: '' },
+              }],
+            },
+          }],
+        },
+        {
+          choices: [{
+            index: 0,
+            delta: { tool_calls: [{ index: 0, function: { arguments: '{"cmd":"unsafe"}' } }] },
+          }],
+        },
+      ]
+      const ctx = intercept(chatCompletionsInterceptChannel, {
+        arguments: [{ messages: [{ role: 'user', content: 'Run the check' }], stream: true }],
+      })
+
+      await assert.rejects(() => ctx.onResult(new FakeStream(chunks)), candidate => candidate === error)
+
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Run the check' },
+        {
+          role: 'assistant',
+          tool_calls: [{
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'shell', arguments: '{"cmd":"unsafe"}' },
+          }],
+        },
+      ], EVAL_OPTS)
+    })
+
+    it('evaluates the final Responses API snapshot', async () => {
+      const chunks = [{
+        type: 'response.completed',
+        response: { output: [{ type: 'message', role: 'assistant', content: 'Hi' }] },
+      }]
+      const ctx = intercept(responsesInterceptChannel, {
+        arguments: [{ input: 'Hello', stream: true }],
+      })
+
+      const result = await ctx.onResult(new FakeStream(chunks))
+
+      assert.deepStrictEqual(await readStream(result), chunks)
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi' },
+      ], EVAL_OPTS)
+    })
+
+    it('rejects before returning a Responses API stream when After Model denies it', async () => {
+      const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      evaluate.rejects(error)
+      const chunks = [{
+        type: 'response.completed',
+        response: { output: [{ type: 'message', role: 'assistant', content: 'Unsafe output' }] },
+      }]
+      const ctx = intercept(responsesInterceptChannel, {
+        arguments: [{ input: 'Hello', stream: true }],
+      })
+
+      await assert.rejects(() => ctx.onResult(new FakeStream(chunks)), candidate => candidate === error)
+
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Unsafe output' },
+      ], EVAL_OPTS)
+    })
+
+    it('passes through streams from SDK versions without tee()', () => {
+      const stream = { [Symbol.asyncIterator]: () => {} }
+      const ctx = intercept(chatCompletionsInterceptChannel, {
+        arguments: [{ messages: [{ role: 'user', content: 'Hello' }], stream: true }],
+      })
+
+      assert.strictEqual(ctx.onResult(stream), stream)
+      sinon.assert.notCalled(evaluate)
     })
   })
 })

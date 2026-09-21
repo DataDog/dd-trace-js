@@ -224,7 +224,6 @@ function getCoverageRootDir () {
  * from the suite path.
  *
  * @param {string} testSuiteAbsolutePath
- * @returns {boolean}
  */
 function isModifiedTestSuite (testSuiteAbsolutePath) {
   const testPath = getTestSuitePath(testSuiteAbsolutePath, getCoverageRootDir())
@@ -318,7 +317,7 @@ function getOnEndHandler (isParallel, onDone) {
     let error = frameworkError
     if (this.stats) {
       status = this.stats.failures === 0 ? 'pass' : 'fail'
-      if (this.stats.tests === 0) {
+      if (this.stats.tests === 0 && this.stats.failures === 0) {
         status = 'skip'
       }
     } else if (this.failures !== 0) {
@@ -330,6 +329,7 @@ function getOnEndHandler (isParallel, onDone) {
     } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
+    const isExpectedEmptySession = arguments.length === 0 && status === 'skip'
 
     testFileToSuiteCtx.clear()
 
@@ -373,6 +373,7 @@ function getOnEndHandler (isParallel, onDone) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
       isFrameworkError: arguments.length > 0,
+      isExpectedEmptySession,
     }, () => {
       try {
         onDone()
@@ -394,7 +395,6 @@ function getOnEndHandler (isParallel, onDone) {
  * Applies Test Optimization failure suppression once per runner execution.
  *
  * @param {object} runner
- * @returns {void}
  */
 function adjustRunnerFailuresOnce (runner) {
   if (runnerFailuresAdjusted.has(runner)) return
@@ -427,7 +427,6 @@ function getRunnerRecoveryState (runner) {
  *
  * @param {object} runner
  * @param {object} test
- * @returns {void}
  */
 function markTestPending (runner, test) {
   const state = getRunnerRecoveryState(runner)
@@ -447,7 +446,6 @@ function markTestPending (runner, test) {
  *
  * @param {object} runner
  * @param {object} test
- * @returns {void}
  */
 function markTestTerminal (runner, test) {
   getRunnerRecoveryState(runner).tests.add(test)
@@ -458,7 +456,6 @@ function markTestTerminal (runner, test) {
  * Restores test and hook state changed only to abort the current run.
  *
  * @param {object} runner
- * @returns {void}
  */
 function restoreReporterMutations (runner) {
   const state = runnerRecoveryStates.get(runner)
@@ -490,7 +487,6 @@ function restoreReporterMutations (runner) {
  *
  * @param {object} runner
  * @param {object} test
- * @returns {void}
  */
 function stopCurrentTest (runner, test) {
   const hookDown = runner.hookDown
@@ -512,7 +508,6 @@ function stopCurrentTest (runner, test) {
  *
  * @param {object} runner
  * @param {object} hook
- * @returns {void}
  */
 function stopCurrentHook (runner, hook) {
   const hookMethod = runner.hook
@@ -556,7 +551,6 @@ function stopCurrentHook (runner, hook) {
  *
  * @param {object} runner
  * @param {object} test
- * @returns {void}
  */
 function stopAfterEachHooks (runner, test) {
   const hookUp = runner.hookUp
@@ -572,7 +566,6 @@ function stopAfterEachHooks (runner, test) {
  * Prevents Mocha from entering any subsequent user hooks after a reporter error.
  *
  * @param {object} runner
- * @returns {void}
  */
 function stopFutureHooks (runner) {
   if (runnerHookMethods.has(runner)) return
@@ -587,7 +580,6 @@ function stopFutureHooks (runner) {
  * Restores the runner hook method after reporter-error finalization.
  *
  * @param {object} runner
- * @returns {void}
  */
 function restoreFutureHooks (runner) {
   const hook = runnerHookMethods.get(runner)
@@ -602,7 +594,6 @@ function restoreFutureHooks (runner) {
  *
  * @param {object} runner
  * @param {object} hook
- * @returns {boolean} whether the completed hook was a before-each hook
  */
 function stopRemainingCurrentHooks (runner, hook) {
   const hookLists = [hook.parent?._beforeAll, hook.parent?._beforeEach, hook.parent?._afterEach, hook.parent?._afterAll]
@@ -631,7 +622,6 @@ function stopRemainingCurrentHooks (runner, hook) {
  *
  * @param {object} runner
  * @param {object} hook
- * @returns {void}
  */
 function stopAfterHookEnd (runner, hook) {
   if (!stopRemainingCurrentHooks(runner, hook) || !runner.test) return
@@ -643,7 +633,6 @@ function stopAfterHookEnd (runner, hook) {
  * Prevents Mocha from entering the root suite after a run-start reporter error.
  *
  * @param {object} runner
- * @returns {void}
  */
 function stopRootSuite (runner) {
   const runSuite = runner.runSuite
@@ -664,7 +653,6 @@ function createSkippedParallelFileRunner () {
  * Prevents a parallel run-start reporter error from scheduling test workers.
  *
  * @param {object} runner
- * @returns {void}
  */
 function stopParallelWorkers (runner) {
   const state = getRunnerRecoveryState(runner)
@@ -680,7 +668,6 @@ function stopParallelWorkers (runner) {
  * Resets suite coverage after every reporter has observed the completed suite.
  *
  * @param {object} runner
- * @returns {void}
  */
 function resetPendingSuiteCoverage (runner) {
   if (!runnersWithPendingCoverageReset.delete(runner) || !global.__coverage__) return
@@ -734,7 +721,6 @@ function getFrameworkFinalizationError (frameworkError) {
  * runs Datadog's end handler and propagates the original error after finalization.
  *
  * @param {Function} Runner
- * @returns {void}
  */
 function wrapRunnerEmit (Runner) {
   if (wrappedRunnerEmitPrototypes.has(Runner.prototype)) return
@@ -875,7 +861,6 @@ function isFailedTestReplayEnabled () {
  * Mirrors Mocha 5's private exclusivity check.
  *
  * @param {MochaSuite} suite
- * @returns {boolean}
  */
 function hasOnly (suite) {
   if (suite._onlyTests.length || suite._onlySuites.length) return true
@@ -890,7 +875,6 @@ function hasOnly (suite) {
  * Mirrors Mocha 5's private exclusivity filter.
  *
  * @param {MochaSuite} suite
- * @returns {boolean}
  */
 function filterOnly (suite) {
   if (suite._onlyTests.length) {
@@ -1072,7 +1056,6 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
 /**
  * @param {import('mocha').Runner} runner
- * @returns {void}
  */
 function startMochaRunner (runner) {
   if (readyRunners.has(runner)) {
@@ -1204,8 +1187,10 @@ addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
-}, function (Runner, frameworkVersion) {
-  if (patched.has(Runner)) return Runner
+}, function (runnerPackage, frameworkVersion) {
+  const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
+  if (typeof Runner !== 'function') return
+  if (patched.has(Runner)) return
 
   patched.add(Runner)
   wrapRunnerEmit(Runner)
@@ -1550,7 +1535,7 @@ addHook({
     return runMochaRunner(run, this, args)
   })
 
-  return Runner
+  return runnerPackage
 })
 
 // Used both in serial and parallel mode, and by both the main process and the workers

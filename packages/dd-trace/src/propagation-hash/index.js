@@ -30,7 +30,6 @@ class PropagationHashManager {
 
   /**
    * Check if process tags propagation is enabled
-   * @returns {boolean}
    */
   isEnabled () {
     return this._config?.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED === true

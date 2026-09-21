@@ -86,6 +86,7 @@ const {
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
   getTestOptimizationRequestResults,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
@@ -229,8 +230,13 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
   return specScreenshots.filter(screenshot => isScreenshotForTestAttempt(screenshot, titleParts, attemptIndex))
 }
 
-function getSessionStatus (summary) {
-  if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
+function getSessionStatus (summary, testSuiteStatuses) {
+  if (!summary) {
+    if (testSuiteStatuses.has('fail')) return 'fail'
+    if (testSuiteStatuses.has('skip') && !testSuiteStatuses.has('pass')) return 'skip'
+    return 'pass'
+  }
+  if (summary.status === 'failed' || summary.failures > 0 || summary.totalFailed > 0) {
     return 'fail'
   }
   if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
@@ -464,6 +470,8 @@ class CypressPlugin {
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   finishedTestsByFile = {}
+  hasTestsReported = false
+  testSuiteStatuses = new Set()
   testStatuses = {}
   hasLibraryConfiguration = false
   isItrEnabled = false
@@ -550,11 +558,12 @@ class CypressPlugin {
    * Resets state that is scoped to a single Cypress run so the singleton plugin
    * can be reused safely across multiple programmatic cypress.run() calls.
    *
-   * @returns {void}
    */
   resetRunState () {
     this._isInit = false
     this.finishedTestsByFile = {}
+    this.hasTestsReported = false
+    this.testSuiteStatuses = new Set()
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
     this.isItrEnabled = false
@@ -630,7 +639,6 @@ class CypressPlugin {
    *
    * @param {string} traceId - Test trace id used for the upload
    * @param {Promise<string|undefined>} uploadPromise - Promise resolving to the upload outcome
-   * @returns {void}
    */
   addScreenshotUploadPromise (traceId, uploadPromise) {
     const uploadPromises = this.screenshotUploadPromisesByTraceId.get(traceId)
@@ -659,7 +667,6 @@ class CypressPlugin {
    * Cancels screenshot work that must not outlive an errored after:spec finalization boundary.
    *
    * @param {Error} error - Error that triggered finalization
-   * @returns {void}
    */
   abortPendingScreenshotUploads (error) {
     for (const controller of this.screenshotUploadAbortControllers) controller.abort(error)
@@ -673,7 +680,6 @@ class CypressPlugin {
    * start/finish. Captured at session span creation so it shares the same
    * epoch as the trace without reaching into span internals.
    *
-   * @returns {number}
    */
   _now () {
     return this._timeOrigin + performance.now() - this._perfOrigin
@@ -682,7 +688,6 @@ class CypressPlugin {
   /**
    * Returns the directory used to normalize coverage file names.
    *
-   * @returns {string}
    */
   getCoverageRootDir () {
     return this.repositoryRoot || this.rootDir || process.cwd()
@@ -691,7 +696,6 @@ class CypressPlugin {
   /**
    * Returns whether skipped test coverage should be backfilled into the session coverage map.
    *
-   * @returns {boolean}
    */
   shouldBackfillSkippedCoverage () {
     return this.isItrEnabled &&
@@ -704,7 +708,6 @@ class CypressPlugin {
    * Adds a test's Istanbul coverage to the aggregated session coverage map.
    *
    * @param {object} coverage
-   * @returns {void}
    */
   addTestSessionCoverage (coverage) {
     mergeCoverage(coverage, this.testSessionCoverageMap)
@@ -713,7 +716,6 @@ class CypressPlugin {
   /**
    * Applies backend skipped-test coverage to the aggregated session coverage map.
    *
-   * @returns {boolean}
    */
   applySkippedCoverageToTestSessionCoverage () {
     if (!this.shouldBackfillSkippedCoverage()) {
@@ -756,7 +758,6 @@ class CypressPlugin {
   /**
    * Uploads executable-line coverage for the test session when backend configuration enables it.
    *
-   * @returns {void}
    */
   reportTestSessionCoverage () {
     const exporter = this.tracer._tracer._exporter
@@ -785,7 +786,6 @@ class CypressPlugin {
    * @param {object} cypressConfig - Cypress resolved config
    * @param {object} tracer - dd-trace proxy tracer
    * @param {object} testOptimizationConfig - Test Optimization config
-   * @returns {void}
    */
   warnIfMisconfiguredTestFailureScreenshots (cypressConfig, tracer, testOptimizationConfig) {
     if (!testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) {
@@ -816,7 +816,6 @@ class CypressPlugin {
    * @param {object} cypressConfig - Cypress resolved config
    * @param {object} tracer - dd-trace proxy tracer
    * @param {object} testOptimizationConfig - Test Optimization config
-   * @returns {void}
    */
   warnIfMisconfiguredTestFailureVideos (cypressConfig, tracer, testOptimizationConfig) {
     if (!testOptimizationConfig.DD_TEST_FAILURE_VIDEOS_ENABLED) return
@@ -962,7 +961,6 @@ class CypressPlugin {
    * @param {string} testSuite
    * @param {string} testName
    * @param {number | undefined} duration
-   * @returns {number}
    */
   setEfdRetryCountForTest (testSuite, testName, duration) {
     if (!this.efdRetryCountByTest[testSuite]) {
@@ -985,7 +983,6 @@ class CypressPlugin {
    * @param {string} testSuite
    * @param {string} testName
    * @param {number} efdRetryIndex
-   * @returns {boolean}
    */
   shouldSkipEfdRetry (testSuite, testName, efdRetryIndex) {
     const testSuiteRetries = this.efdRetryCountByTest[testSuite]
@@ -1340,12 +1337,22 @@ class CypressPlugin {
    */
   #finalizeRun (suiteStats, error, hasPendingVideoSpans = false) {
     if (this.testSessionSpan && this.testModuleSpan) {
-      const testStatus = error ? 'fail' : getSessionStatus(suiteStats)
+      const testStatus = error ? 'fail' : getSessionStatus(suiteStats, this.testSuiteStatuses)
+      const hasNoTests = suiteStats?.totalTests === 0 ||
+        (suiteStats?.totalTests === undefined && !this.hasTestsReported)
       const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
       const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
+      if (testStatus !== 'fail' && hasNoTests) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          'No tests were executed',
+          'zero_tests'
+        )
+      }
       if (error) {
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
@@ -1434,7 +1441,6 @@ class CypressPlugin {
    * Uploads failure screenshots as soon as Cypress creates them.
    *
    * @param {object} details - Cypress screenshot details
-   * @returns {void}
    */
   afterScreenshot (details) {
     const lastFailedTestSpan = this.lastFinishedTest?.testStatus === 'fail'
@@ -1460,8 +1466,9 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results, error) {
-    const { tests, stats, screenshots, video } = results || {}
+    const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
+    if (cypressTests.length > 0) this.hasTestsReported = true
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
@@ -1683,7 +1690,12 @@ class CypressPlugin {
     }
 
     const testSuiteFinishTime = this._now()
-    const suiteFailed = error || latestError || getSuiteStatus(stats) === 'fail'
+    const suiteError = error || resultError || latestError
+    const suiteStatus = suiteError ||
+      cypressTests.some(test => CYPRESS_STATUS_TO_TEST_STATUS[test.state] === 'fail')
+      ? 'fail'
+      : getSuiteStatus(stats)
+    this.testSuiteStatuses.add(suiteStatus)
     const testSuiteSpan = this.testSuiteSpan
     const uploadOptions = {
       filePath: video,
@@ -1694,10 +1706,10 @@ class CypressPlugin {
         ? testSuiteSpan.context().toSpanId()
         : undefined,
     }
-    const shouldUploadVideo = suiteFailed && this.#canUploadTestSuiteVideo(uploadOptions)
+    const shouldUploadVideo = suiteStatus === 'fail' && this.#canUploadTestSuiteVideo(uploadOptions)
     if (testSuiteSpan) {
-      testSuiteSpan.setTag(TEST_STATUS, error ? 'fail' : getSuiteStatus(stats))
-      if (error || latestError) testSuiteSpan.setTag('error', error || latestError)
+      testSuiteSpan.setTag(TEST_STATUS, suiteStatus)
+      if (suiteError) testSuiteSpan.setTag('error', suiteError)
       this.testSuiteSpan = null
     }
 
@@ -1838,7 +1850,6 @@ class CypressPlugin {
    * @param {string|undefined} options.filePath - Cypress video path
    * @param {string|undefined} options.testSessionId - Test session id
    * @param {string|undefined} options.testSuiteId - Test suite id
-   * @returns {boolean}
    */
   #canUploadTestSuiteVideo ({ filePath, testSessionId, testSuiteId }) {
     const exporter = this.tracer?._tracer?._exporter
@@ -1958,6 +1969,7 @@ class CypressPlugin {
         return suitePayload
       },
       'dd:beforeEach': (test) => {
+        this.hasTestsReported = true
         const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }

@@ -28,6 +28,8 @@ const {
   ITR_CORRELATION_ID,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const {
   TELEMETRY_CODE_COVERAGE_STARTED,
@@ -41,7 +43,11 @@ const { NODE_MAJOR } = require('../../version')
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const supportedVersions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const requestedVersion = process.env.VITEST_VERSION
+const versions = requestedVersion && requestedVersion !== 'all'
+  ? [requestedVersion === 'oldest' ? supportedVersions[0] : supportedVersions.at(-1)]
+  : supportedVersions
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
@@ -413,9 +419,13 @@ versions.forEach((version) => {
           assert.strictEqual(events.some(event => event.type === 'test'), false)
           assert.strictEqual(coverageBySuite.size, 0)
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'No tests were executed')
+          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
           assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
           assert.strictEqual(testModule.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testModule.meta[TEST_SKIP_REASON], 'No tests were executed')
+          assert.strictEqual(testModule.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 2)
         })
 

@@ -412,9 +412,9 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
+          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement > BlockStatement',
           channelName: 'trace_await_context_callback_at_try_start',
-          transform: 'awaitContextCallbackAtTryStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -439,7 +439,21 @@ describe('check-require-cache', () => {
           },
           astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
           channelName: 'trace_await_context_callback_at_function_start',
-          transform: 'awaitContextCallbackAtFunctionStart',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        // Matching the same function twice verifies that the transform checks its resolved insertion target.
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
+          channelName: 'trace_await_context_callback_at_function_start',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -462,9 +476,10 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback-outer-try.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="tracedNested"] CallExpression[callee.name="task"]',
+          astQuery: 'FunctionDeclaration[id.name="runNestedWithoutTry"] > BlockStatement > ' +
+            'TryStatement > BlockStatement',
           channelName: 'trace_await_context_callback_outer_try',
-          transform: 'awaitContextCallbackAtTryStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -546,6 +561,59 @@ describe('check-require-cache', () => {
           transformOptions: {
             callbackName: 'beforeContinue',
           },
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'durable-orchestration-executor.js',
+          },
+          functionQuery: {
+            className: 'TaskOrchestrationExecutor',
+            methodName: 'execute',
+          },
+          channelName: 'TaskOrchestrationExecutor_failure',
+          transform: 'publishDurableOrchestrationFailure',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-alias.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-async-handler.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-generator-handler.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-alias.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
         },
         {
           module: {
@@ -1028,9 +1096,12 @@ describe('check-require-cache', () => {
     const { runFromStart } = compileFile('trace-await-context-callback')
     const steps = []
 
-    const [rewrittenFunction] = query(parse(content), 'FunctionDeclaration[id.name="runFromStart"] ' +
-      'VariableDeclarator[id.name="__apm$wrapped"] > FunctionExpression[async=true]')
+    const rewrittenFunction = query(parse(content),
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true]')
+      .find(node => node.body.body[0]?.directive === 'use strict')
+    assert(rewrittenFunction)
     assert.equal(rewrittenFunction.body.body[0].directive, 'use strict')
+    assert.equal(query(rewrittenFunction, 'VariableDeclarator[id.name="__apm$beforeStart"]').length, 1)
 
     subs = {
       start (ctx) {
@@ -1071,7 +1142,7 @@ describe('check-require-cache', () => {
     assert.equal(await runAfterSetup(() => 'passed'), 'passed')
   })
 
-  it('should not use a try block outside the traced function', async () => {
+  it('should leave a matched block outside the traced function untouched', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-outer-try.js')
     const source = readFileSync(filename, 'utf8')
     const { runNestedWithoutTry } = compileFile('trace-await-context-callback-outer-try')
@@ -1233,6 +1304,32 @@ describe('check-require-cache', () => {
     assert.equal(subs.start.callCount, 0)
   })
 
+  it('should publish durable orchestration failures without wrapping the result', () => {
+    ch = tracingChannel('orchestrion:test:TaskOrchestrationExecutor_failure')
+    subs = { end: sinon.spy() }
+    ch.subscribe(subs)
+
+    const TaskOrchestrationExecutor = compileFile('durable-orchestration-executor')
+    const executor = new TaskOrchestrationExecutor()
+    const context = {}
+    const history = []
+
+    const result = executor.execute(context, history)
+    assert.deepStrictEqual(result, { context, history })
+    sinon.assert.notCalled(subs.end)
+
+    const error = new Error('orchestration failed')
+    executor.exception = error
+
+    assert.throws(() => executor.execute(context, history), candidate => candidate === error)
+    sinon.assert.calledOnce(subs.end)
+
+    const failure = subs.end.firstCall.args[0]
+    assert.strictEqual(failure.arguments[0], context)
+    assert.strictEqual(failure.arguments[1], history)
+    assert.strictEqual(failure.error, error)
+  })
+
   it('should leave dependencies without a rewrite target untouched', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
     const source = readFileSync(filename, 'utf8')
@@ -1309,6 +1406,77 @@ describe('check-require-cache', () => {
     await iter.next()
 
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
+  })
+
+  it('should ignore unrelated destructured requires and use an aliased Postgres Query binding', () => {
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-alias')
+    const queries = Postgres()
+
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 2)
+  })
+
+  it('should use an aliased Postgres Query import binding', async () => {
+    const fixtureDirectory = resolve(__dirname, 'node_modules', 'test-esm')
+    const filename = join(fixtureDirectory, 'postgres-query-alias.js')
+    const source = readFileSync(filename, 'utf8')
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'postgres-query-alias.js',
+    })
+    const directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-postgres-esm-'))
+    const outputFile = join(directory, 'postgres-query-alias.js')
+
+    writeFileSync(join(directory, 'package.json'), '{"type":"module"}')
+    writeFileSync(join(directory, 'query.js'), readFileSync(join(fixtureDirectory, 'query.js')))
+    writeFileSync(outputFile, rewritten)
+
+    ch = tracingChannel('orchestrion:test-esm:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const { default: Postgres } = await import(pathToFileURL(outputFile).href)
+    const queries = Postgres()
+
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 2)
+  })
+
+  it('should leave async Postgres handlers untouched', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'postgres-query-async-handler.js')
+    const source = readFileSync(filename, 'utf8')
+
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-async-handler')
+    const queries = await Promise.all(Postgres())
+
+    assert.strictEqual(content, source)
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 0)
+  })
+
+  it('should leave generator Postgres handlers untouched', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'postgres-query-generator-handler.js')
+    const source = readFileSync(filename, 'utf8')
+
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-generator-handler')
+    const queries = Postgres()
+
+    assert.strictEqual(content, source)
+    assert.strictEqual(queries[0].next().value.constructor.name, 'Query')
+    assert.strictEqual(queries[1].next().value.constructor.name, 'Query')
+    assert.strictEqual(subs.start.callCount, 0)
   })
 })
 

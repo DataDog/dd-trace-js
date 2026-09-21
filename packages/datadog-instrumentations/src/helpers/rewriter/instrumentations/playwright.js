@@ -95,6 +95,18 @@ module.exports = [
   },
   {
     module: {
+      name: 'playwright',
+      versionRange: '>=1.60.0',
+      filePath: 'lib/runner/index.js',
+    },
+    functionQuery: {
+      functionName: 'filterForShard',
+      kind: 'Sync',
+    },
+    channelName: 'filterForShard',
+  },
+  {
+    module: {
       name: 'playwright-core',
       versionRange: '>=1.60.0',
       filePath: 'lib/coreBundle.js',

@@ -98,9 +98,9 @@ Group imports with blank lines and sort within each group:
 2. Third-party modules
 3. Internal modules, furthest path first
 
-For new methods, add TypeScript-compatible JSDoc with specific parameter and return types. Reuse existing typedefs,
-never use `any`, and do not add runtime work solely to satisfy static typing. Do not rewrite unrelated code only to
-improve its types.
+For new methods, add TypeScript-compatible JSDoc with specific parameter types. Omit return types that TypeScript can
+infer. Reuse existing typedefs, never use `any`, and do not add runtime work solely to satisfy static typing. Do not
+rewrite unrelated code only to improve its types.
 
 ## Production Safety and Performance
 
@@ -153,9 +153,7 @@ never weaken or delete assertions to make them pass.
 ## Pull Requests and CI
 
 - Commit format: `type(scope): description`.
-- Types: `feat`, `fix`, `perf`, `refactor`, `test`, `bench`, `docs`, `chore`, `ci`.
-- Reserve `feat`, `fix`, and `perf` for shipped production code; use the area type for tests, benchmarks, CI, or tools.
-- Use `.github/pull_request_template.md` and the appropriate `semver-patch`, `semver-minor`, or `semver-major` label.
+- Before opening or updating a PR, read and follow `.github/pull_request_template.md`.
 - All required tests must pass; the repository follows an all-green policy.
 
 ## Specialized Workflows
@@ -173,6 +171,8 @@ Load the relevant repository skill when the task matches:
 New instrumentations belong in `packages/datadog-instrumentations/` and communicate with plugins through diagnostic
 channels. Validate new plugin structure with
 `./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
+
+Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
 
 For vendored rspack dependencies, run yarn from `vendor/`; generated bundles are written under
 `packages/node_modules/`.

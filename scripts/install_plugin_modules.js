@@ -288,7 +288,6 @@ async function patchPeerDependencies ({ folder, externalName }) {
  *
  * @param {string} entry
  * @param {string} [parent]
- * @returns {boolean}
  */
 function isGeneratedWorkspace (entry, parent = '') {
   const workspaceName = parent ? join(parent, entry) : entry
@@ -400,7 +399,6 @@ function addFolderToWorkspaces (name, version) {
 /**
  * @param {string|null} [name]
  * @param {string|null} [version]
- * @returns {string}
  */
 function folder (name, version) {
   return join(__dirname, '..', 'versions', basename(name, version))
@@ -409,7 +407,6 @@ function folder (name, version) {
 /**
  * @param {string|null} [name]
  * @param {string|null} [version]
- * @returns {string}
  */
 function basename (name, version) {
   return name ? (version ? `${name}@${version}` : name) : ''
@@ -419,7 +416,6 @@ function basename (name, version) {
  * @param {string|null} name
  * @param {string|null} version
  * @param {string} file
- * @returns {string}
  */
 function filename (name, version, file) {
   return join(folder(name, version), file)
