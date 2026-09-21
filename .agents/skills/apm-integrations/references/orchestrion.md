@@ -12,7 +12,7 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks
-> the vendored version (currently 0.16.0); confirm anything below against the
+> the vendored version (currently 0.18.1); confirm anything below against the
 > package source: `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
 > `#visit`) and `lib/transforms.js`.
 
@@ -23,7 +23,7 @@ declaration, class/object method, named expression, or assignment to a named
 receiver. Do **not** use shimmer just because users reach it through a decorated
 runtime handle; match the source function behind the handle instead.
 
-Inactive-path cost is **not zero** in the vendored 0.16.0 templates. The wrapper
+Inactive-path cost is **not zero** in the vendored 0.18.1 templates. The wrapper
 builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
 operator checks `hasSubscribers`. The check skips channel work and the wrapped
 call's tracing body, not the wrapper's array/object/closure setup. For very hot
@@ -95,6 +95,7 @@ runs on the matched files. Without this file the rewriter is never triggered.
 
   astQuery?: string,         // raw ESQuery selector; replaces functionQuery targeting only
   transform?: string,        // name of a custom transform (overrides kind)
+  transformOptions?: object, // configuration consumed by the selected custom transform
   channelName: string,       // segment of the channel name (see below)
 }
 ```
@@ -141,7 +142,7 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 
 ## Result Mutation
 
-Code-transformer 0.16 lets a subscriber replace the value returned to the
+Code-transformer 0.18.1 lets a subscriber replace the value returned to the
 caller:
 
 - For `kind: 'Sync'`, reassign `ctx.result` in `end`.
@@ -231,8 +232,10 @@ for (const matcher of [matcherCjs, matcherEsm]) {
 
 The package exports `create()`, not `InstrumentationMatcher`; registration goes
 through the matcher instances returned by `create()`. Select the registered
-name from a config with `transform: '<name>'` (it overrides `kind`). Signature:
-`(state, node, parent, ancestry) => void`, mutating the AST in place.
+name from a config with `transform: '<name>'` (it overrides `kind`). Pass
+configuration from the integration entry through `transformOptions` and read it
+from `state.transformOptions`. Signature: `(state, node, parent, ancestry) =>
+void`, mutating the AST in place.
 
 Configs run in order and share the AST. Established pattern (see
 `waitForAsyncEnd`): built-in wraps first; a later custom transform matches inside

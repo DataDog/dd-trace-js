@@ -150,11 +150,11 @@ mkdir -p packages/datadog-plugin-<name>/{src,test}
 | Caches data (Redis, Memcached) | `CachePlugin` | `../../dd-trace/src/plugins/cache` | Cache-specific tags |
 | Makes HTTP/RPC requests | `ClientPlugin` | `../../dd-trace/src/plugins/client` | Peer service, distributed tracing headers |
 | Handles HTTP requests | `ServerPlugin` | `../../dd-trace/src/plugins/server` | Request/response lifecycle |
-| Routes requests (middleware) | `RouterPlugin` | `../../dd-trace/src/plugins/router` | Middleware span tracking, route extraction |
+| Routes requests (middleware) | `RouterPlugin` | `../../datadog-plugin-router/src` | Middleware span tracking, route extraction |
 | Produces messages | `ProducerPlugin` | `../../dd-trace/src/plugins/producer` | DSM integration, messaging tags |
 | Consumes messages | `ConsumerPlugin` | `../../dd-trace/src/plugins/consumer` | DSM integration, messaging tags |
 | Has multiple operations | `CompositePlugin` | `../../dd-trace/src/plugins/composite` | Combines sub-plugins |
-| Injects trace context into logs | `LogPlugin` | `../../dd-trace/src/plugins/log` | No spans, log correlation |
+| Injects trace context into logs | `LogPlugin` | `../../dd-trace/src/plugins/log_plugin` | No spans, log correlation |
 | None of the above | `TracingPlugin` | `../../dd-trace/src/plugins/tracing` | Generic span creation |
 
 **Wrong base class = complex workarounds.** If fighting the base class, the choice is probably wrong.
@@ -265,23 +265,19 @@ Add to `.github/workflows/apm-integrations.yml`:
 ```yaml
 <name>:
   runs-on: ubuntu-latest
+  permissions:
+    id-token: write
   env:
     PLUGINS: <name>
-    # SERVICES: <docker-service>  # if external services needed, plus the service configuration. should match docker-compose
+    # SERVICES: <service> # when the job declares the matching GitHub service
   steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/testagent/start
-    - uses: ./.github/actions/node
-      with:
-        version: ${{ matrix.node-version }}
-    - uses: ./.github/actions/install
-    - run: npm run test:plugins:ci
-  strategy:
-    matrix:
-      node-version: [18, 22]
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: ./.github/actions/plugins/test
 ```
 
-Check the existing workflow for the current step format.
+The shared `plugins/test` action installs dependencies and runs the plugin suite on the supported Node versions. For a
+service-backed integration, add the corresponding `services` block by copying an adjacent job in the workflow; its
+`SERVICES` value must match the service name the test runner starts.
 
 ## Step 8: Write Tests
 
