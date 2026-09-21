@@ -66,6 +66,7 @@ const VIDEO_CAPTURE_DISABLED_WARNING =
 const VIDEO_UPLOAD_UNSUPPORTED_VERSION_WARNING =
   'DD_TEST_FAILURE_VIDEOS_ENABLED is true, but Playwright video upload requires Playwright 1.38.0 or later.'
 const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
+const UNBOUND_RUNNER_EXPORT_VERSION = '1.59.0'
 
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -75,6 +76,42 @@ function assertRequestErrorTag (events, tag) {
     assert.strictEqual(event.content.meta[tag], 'true', `${eventType} should have ${tag} tag`)
   }
 }
+
+const unboundRunnerExportContext = !PLAYWRIGHT_VERSION || PLAYWRIGHT_VERSION === 'latest'
+  ? context
+  : context.skip
+
+unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound runner export`, function () {
+  const it = createParallelIt(global.it, { withReceiver: true })
+  let cwd
+
+  this.timeout(80000)
+
+  useSandbox([`@playwright/test@${UNBOUND_RUNNER_EXPORT_VERSION}`], true)
+
+  before(() => {
+    cwd = sandboxCwd()
+  })
+
+  it('uses the explicit config when runAllTestsWithConfig is called unbound', async (receiver, run) => {
+    let testOutput = ''
+    const proc = run(
+      'node ./ci-visibility/playwright-unbound-runner.js',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '',
+          TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+        },
+      }
+    )
+    proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+    const [exitCode] = await once(proc, 'exit')
+    assert.strictEqual(exitCode, 0, testOutput)
+  })
+})
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
