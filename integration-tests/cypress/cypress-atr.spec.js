@@ -289,6 +289,154 @@ moduleTypes.forEach(({
         ])
       })
 
+      it('uses the cached dynamic budget instead of a conflicting flat count', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: { enabled: false },
+        })
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            const neverPassingTest = tests.filter(test =>
+              test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+            )
+            assert.strictEqual(neverPassingTest.length, 2, 'one initial execution plus the first dynamic bucket')
+            assert.ok(neverPassingTest.every(test => test.meta[TEST_STATUS] === 'fail'))
+            assert.strictEqual(neverPassingTest[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          }, { hardTimeout: 30000 }
+        )
+      })
+
+      it('enforces unequal dynamic ATR budgets after each test duration is known', async function () {
+        // Cypress restarts the browser between retries. Four attempts of the slow
+        // fixture can exceed this suite's default timeout on CI runners.
+        this.timeout(240_000)
+
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: { enabled: false },
+        })
+
+        const specToRun = 'cypress/e2e/dynamic-atr-retries.js'
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            const constructorTest = tests.filter(test =>
+              test.resource === 'cypress/e2e/dynamic-atr-retries.js.constructor'
+            )
+            const longTest = tests.filter(test =>
+              test.resource === 'cypress/e2e/dynamic-atr-retries.js.uses the next retry budget'
+            )
+
+            assert.strictEqual(
+              constructorTest.length,
+              2,
+              'the constructor title uses the first bucket instead of the scheduler maximum'
+            )
+            assert.strictEqual(longTest.length, 4, 'the second bucket retains its larger retry budget')
+            assert.strictEqual(constructorTest[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(longTest[3].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          },
+          { hardTimeout: 180_000 }
+        )
+      })
+
+      it('retries a >5m dynamic ATR test once when the EFD fallback bucket is zero', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: {
+            enabled: false,
+            slow_test_retries: {
+              '5s': 3,
+              '10s': 0,
+              '30s': 0,
+              '5m': 0,
+            },
+          },
+        })
+
+        const specToRun = 'cypress/e2e/dynamic-atr-fallback.js'
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_DYNAMIC_ATR_DURATION_MS: '300001',
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '',
+            },
+          }
+        )
+
+        await receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+              .filter(test => test.resource === 'cypress/e2e/dynamic-atr-fallback.js.' +
+                'uses the dynamic ATR fallback retry floor')
+
+            assert.strictEqual(tests.length, 2, 'one initial execution plus the dynamic ATR floor')
+            assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          },
+          { hardTimeout: 30_000 }
+        )
+      })
+
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async () => {
         receiver.setSettings({
           itr_enabled: false,
