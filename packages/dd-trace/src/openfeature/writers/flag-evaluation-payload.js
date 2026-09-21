@@ -99,27 +99,28 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
   for (const entry of degraded.values()) entries.push([entry, true])
 
   for (const [entry, aggregateDegraded] of entries) {
-    let row = makeRow(entry, timestamp, aggregateDegraded)
+    const row = makeRow(entry, timestamp, aggregateDegraded)
     if (row === undefined) {
       recordDropped('serialization_error', entry.count)
       continue
     }
+    let serializedRow = row
     let encoded
     try {
-      encoded = JSON.stringify(row)
+      encoded = JSON.stringify(serializedRow)
     } catch {
-      recordDropped('serialization_error', row.evaluation_count)
+      recordDropped('serialization_error', serializedRow.evaluation_count)
       continue
     }
 
-    let canDegrade = row.targeting_key !== undefined || row.context !== undefined
+    let canDegrade = serializedRow.targeting_key !== undefined || serializedRow.context !== undefined
     const degrade = () => {
       if (!canDegrade) return false
-      row = { ...row }
-      delete row.targeting_key
-      delete row.context
-      encoded = JSON.stringify(row)
-      recordDegraded('payload_limit', row.evaluation_count)
+      serializedRow = { ...serializedRow }
+      delete serializedRow.targeting_key
+      delete serializedRow.context
+      encoded = JSON.stringify(serializedRow)
+      recordDegraded('payload_limit', serializedRow.evaluation_count)
       canDegrade = false
       return true
     }
@@ -127,11 +128,11 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
     try {
       if (Buffer.byteLength(encoded) > EVP_EVENT_SIZE_LIMIT) degrade()
     } catch {
-      recordDropped('serialization_error', row.evaluation_count)
+      recordDropped('serialization_error', serializedRow.evaluation_count)
       continue
     }
     if (Buffer.byteLength(encoded) > EVP_EVENT_SIZE_LIMIT) {
-      recordDropped('payload_limit', row.evaluation_count)
+      recordDropped('payload_limit', serializedRow.evaluation_count)
       continue
     }
 
@@ -144,12 +145,12 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
       try {
         if (degrade()) addition = Buffer.byteLength(encoded)
       } catch {
-        recordDropped('serialization_error', row.evaluation_count)
+        recordDropped('serialization_error', serializedRow.evaluation_count)
         continue
       }
     }
     if (size + addition > EVP_PAYLOAD_SIZE_LIMIT) {
-      recordDropped('payload_limit', row.evaluation_count)
+      recordDropped('payload_limit', serializedRow.evaluation_count)
       continue
     }
     encodedRows.push(encoded)

@@ -29,6 +29,7 @@ const MAX_VISITED_NODES = MAX_CONTEXT_FIELDS * (MAX_SNAPSHOT_DEPTH + 1)
  * Check proxies before any reflection, including revoked proxies.
  *
  * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
  */
 function isRecord (value) {
   if (value === null || typeof value !== 'object' || isProxy(value)) return false
