@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert')
-const { spawnSync } = require('node:child_process')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
@@ -121,6 +120,40 @@ versions.forEach((version) => {
 
     after(async () => {
       await new Promise(resolve => webAppServer.close(resolve))
+    })
+
+    context('with Test Optimization disabled', () => {
+      for (const [reason, configuration] of [
+        ['missing API key', { DD_API_KEY: undefined }],
+        ['Test Optimization disabled', { DD_CIVISIBILITY_ENABLED: 'false' }],
+        ['tracing disabled', { DD_TRACE_ENABLED: 'false' }],
+      ]) {
+        for (const shouldFail of [false, true]) {
+          it(`runs a ${shouldFail ? 'failing' : 'passing'} test with ${reason}`, async (receiver, run) => {
+            let output = ''
+            const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-disabled',
+                TEST_SHOULD_FAIL: String(shouldFail),
+                // Keep configuration errors visible when initialization is skipped.
+                DD_TRACE_DEBUG: 'true',
+                ...configuration,
+              },
+            })
+            proc.stdout?.on('data', chunk => { output += chunk.toString() })
+            proc.stderr?.on('data', chunk => { output += chunk.toString() })
+
+            const [exitCode] = await once(proc, 'close')
+
+            assert.strictEqual(exitCode, shouldFail ? 1 : 0, output)
+            assert.match(output, /PLAYWRIGHT_TEST_EXECUTED/)
+            assert.match(output, shouldFail ? /1 failed/ : /1 passed/)
+            assert.doesNotMatch(output, /Playwright session start error/)
+          })
+        }
+      }
     })
 
     async function runRequestErrorTagTest (receiver, run, envVars, tag) {
@@ -1705,56 +1738,5 @@ versions.forEach((version) => {
         })
       })
     })
-  })
-
-  describe(`playwright@${version} with Test Optimization disabled`, function () {
-    this.timeout(30000)
-
-    useSandbox([`@playwright/test@${version}`], false, ['./integration-tests/ci-visibility'])
-
-    for (const [reason, configuration] of [
-      ['missing API key', { DD_CIVISIBILITY_AGENTLESS_ENABLED: 'true' }],
-      ['Test Optimization disabled', { DD_CIVISIBILITY_ENABLED: 'false' }],
-      ['tracing disabled', { DD_TRACE_ENABLED: 'false' }],
-      ['tracer only required', { NODE_OPTIONS: '-r dd-trace' }],
-    ]) {
-      for (const shouldFail of [false, true]) {
-        it(`runs a ${shouldFail ? 'failing' : 'passing'} test with ${reason}`, () => {
-          const result = spawnSync(process.execPath, [
-            'node_modules/@playwright/test/cli.js',
-            'test',
-            '--config',
-            'ci-visibility/playwright-tests-disabled/playwright.config.js',
-          ], {
-            cwd: sandboxCwd(),
-            encoding: 'utf8',
-            timeout: 20000,
-            env: {
-              ...process.env,
-              DD_API_KEY: '',
-              DATADOG_API_KEY: '',
-              DD_AGENTLESS_ENABLED: 'false',
-              DD_CIVISIBILITY_AGENTLESS_ENABLED: 'false',
-              DD_CIVISIBILITY_ENABLED: 'true',
-              DD_TRACE_ENABLED: 'true',
-              DD_TRACE_DEBUG: 'true',
-              DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-              DD_REMOTE_CONFIGURATION_ENABLED: 'false',
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
-              NODE_OPTIONS: '-r dd-trace/ci/init',
-              TEST_SHOULD_FAIL: String(shouldFail),
-              ...configuration,
-            },
-          })
-          const output = result.stdout + result.stderr
-
-          assert.ifError(result.error)
-          assert.strictEqual(result.status, shouldFail ? 1 : 0, output)
-          assert.match(output, /PLAYWRIGHT_TEST_EXECUTED/)
-          assert.match(output, shouldFail ? /1 failed/ : /1 passed/)
-          assert.doesNotMatch(output, /Playwright session start error/)
-        })
-      }
-    }
   })
 })
