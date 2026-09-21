@@ -49,11 +49,13 @@ const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base6
  * callers pass plain paths. `fileURLToPath` is the only correct conversion: a
  * plain scheme strip leaves Windows paths rooted at `/C:/` and keeps
  * percent-encoded characters undecoded, which breaks version resolution.
+ * Rewrite-target paths use forward slashes, including on Windows.
  *
  * @param {string} filename
  */
-function toAbsolutePath (filename) {
-  return filename.startsWith('file://') ? fileURLToPath(filename) : filename
+function normalizeFilename (filename) {
+  const path = filename.startsWith('file://') ? fileURLToPath(filename) : filename
+  return path.replaceAll('\\', '/')
 }
 
 /**
@@ -66,23 +68,22 @@ function toAbsolutePath (filename) {
 function rewrite (content, filename, format, target) {
   if (!content) return content
 
-  target ||= getRewriteTarget(filename)
-  if (!target) return content
-
-  filename = toAbsolutePath(filename)
-
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
-  const { moduleName, filePath } = target
-  if (disabled.has(moduleName)) return content
-
-  const version = getVersion(filename, filePath)
-  if (!version) return content
-
-  const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
-
-  if (!transformer) return content
-
   try {
+    filename = normalizeFilename(filename)
+    target ||= getRewriteTarget(filename)
+    if (!target) return content
+
+    const moduleType = format === 'module' ? 'esm' : 'cjs'
+    const { moduleName, filePath } = target
+    if (disabled.has(moduleName)) return content
+
+    const version = getVersion(filename, filePath)
+    if (!version) return content
+
+    const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
+
+    if (!transformer) return content
+
     const source = getSourceText(content)
 
     // TODO: pass existing sourcemap as input for remapping
@@ -116,16 +117,19 @@ function createBundlerRewriter (dcModule) {
   return function rewriteBundled (content, filename, format, target, sourceMap) {
     if (!content) return { code: content, map: sourceMap }
 
-    target ||= getRewriteTarget(filename)
-    if (!target) return { code: content, map: sourceMap }
-
-    filename = toAbsolutePath(filename)
-    const moduleType = format === 'module' ? 'esm' : 'cjs'
-    const { moduleName, filePath } = target
-    const transformer = matcher.getTransformer(moduleName, getVersion(filename, filePath), filePath)
-    if (!transformer) return { code: content, map: sourceMap }
-
     try {
+      filename = normalizeFilename(filename)
+      target ||= getRewriteTarget(filename)
+      if (!target) return { code: content, map: sourceMap }
+
+      const moduleType = format === 'module' ? 'esm' : 'cjs'
+      const { moduleName, filePath } = target
+      const version = getVersion(filename, filePath)
+      if (!version) return { code: content, map: sourceMap }
+
+      const transformer = matcher.getTransformer(moduleName, version, filePath)
+      if (!transformer) return { code: content, map: sourceMap }
+
       return transformer.transform(getSourceText(content), moduleType, sourceMap)
     } catch (error) {
       log.error(error)
@@ -247,8 +251,7 @@ function disable (instrumentation) {
 }
 
 function getVersion (filename, filePath) {
-  // Rewrite-target file paths use forward slashes; Windows loader paths use backslashes.
-  const [basename] = filename.replaceAll('\\', '/').split(filePath)
+  const [basename] = filename.split(filePath)
 
   if (!moduleVersions[basename]) {
     try {
