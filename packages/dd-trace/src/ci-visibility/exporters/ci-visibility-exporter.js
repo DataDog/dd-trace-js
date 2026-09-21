@@ -487,7 +487,6 @@ class CiVisibilityExporter extends BufferingExporter {
       // before the git upload resolves, so `shouldRequestSkippableSuites()` and the
       // skippable path's `_gitUploadPromise` await behave identically to the uncached flow.
       this._libraryConfig = this.filterConfiguration(libraryConfig)
-      this._recordDynamicAtrTelemetry()
       if (err) {
         return done(err, libraryConfig)
       }
@@ -503,7 +502,6 @@ class CiVisibilityExporter extends BufferingExporter {
               // (failed) response so stale phase-1 feature flags don't stay installed.
               // On error `finalLibraryConfig` is undefined, so this resolves to empty settings.
               this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
-              this._recordDynamicAtrTelemetry()
               return done(finalErr, finalLibraryConfig)
             }
             writeToCache(cacheKey, finalLibraryConfig)
@@ -557,6 +555,15 @@ class CiVisibilityExporter extends BufferingExporter {
       remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true
     // Dynamic ATR only replaces the flat ATR policy when backend ATR is enabled.
     const isDynamicAtrEnabled = isFlakyTestRetriesEnabled && this._dynamicAtrEnabled
+    let dynamicAtrBuckets
+    if (isDynamicAtrEnabled) {
+      // Resolve the backend fallback before local EFD overrides can reach any runner.
+      const backendPolicy = remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+      dynamicAtrBuckets = this._dynamicAtrBuckets ?? Object.freeze([
+        ...backendPolicy.durationRetryCounts.map(({ retryCount }) => Math.max(1, retryCount)),
+        1,
+      ])
+    }
 
     return Object.freeze({
       isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
@@ -570,7 +577,7 @@ class CiVisibilityExporter extends BufferingExporter {
       isFlakyTestRetriesEnabled,
       flakyTestRetriesCount,
       isDynamicAtrEnabled,
-      dynamicAtrBuckets: isDynamicAtrEnabled ? this._dynamicAtrBuckets : undefined,
+      dynamicAtrBuckets,
       isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
       isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
       isTestManagementEnabled:
@@ -585,7 +592,7 @@ class CiVisibilityExporter extends BufferingExporter {
   _recordDynamicAtrTelemetry () {
     if (!this._hasRecordedDynamicAtrTelemetry && this._libraryConfig?.isDynamicAtrEnabled) {
       this._hasRecordedDynamicAtrTelemetry = true
-      recordDynamicAtrRetries(this._libraryConfig.dynamicAtrBuckets !== undefined)
+      recordDynamicAtrRetries(this._dynamicAtrBuckets !== undefined)
     }
   }
 
