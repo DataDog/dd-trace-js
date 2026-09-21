@@ -587,6 +587,55 @@ versions.forEach((version) => {
       const programmaticRerunsContext = satisfies(version, '>=1.60.0') || version === 'latest' ? context : context.skip
 
       programmaticRerunsContext('programmatic reruns', () => {
+        for (const [feature, settings, firstRunCount] of [
+          ['reporter', {}, 1],
+          ['test management', { test_management: { enabled: true } }, 0],
+          ['early flake detection', {
+            known_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              faulty_session_threshold: 100,
+              slow_test_retries: { '5s': 2 },
+            },
+          }, 3],
+        ]) {
+          it(`disables ${feature} effects on the next run with the same config`, async (receiver, run) => {
+            receiver.setSettings(settings)
+            receiver.setKnownTests({ playwright: { 'disabled-test.js': [] } })
+            receiver.setTestManagementTests({
+              playwright: {
+                suites: {
+                  'disabled-test.js': {
+                    tests: { 'executes the test body': { properties: { disabled: true } } },
+                  },
+                },
+              },
+            })
+
+            let output = ''
+            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '',
+                TEST_DIR: './ci-visibility/playwright-tests-disabled',
+                TEST_SHOULD_FAIL: 'false',
+                PLAYWRIGHT_DISABLE_PLUGIN_BETWEEN_RUNS: '1',
+              },
+            })
+            proc.stdout?.on('data', chunk => { output += chunk.toString() })
+            proc.stderr?.on('data', chunk => { output += chunk.toString() })
+
+            const [exitCode] = await once(proc, 'close')
+            const [firstRun, secondRun] = output.split('PLAYWRIGHT_PLUGIN_DISABLED\n')
+
+            assert.ok(secondRun, output)
+            assert.strictEqual(firstRun.split('PLAYWRIGHT_TEST_EXECUTED').length - 1, firstRunCount, output)
+            assert.strictEqual(secondRun.split('PLAYWRIGHT_TEST_EXECUTED').length - 1, 1, output)
+            assert.strictEqual(exitCode, 0, output)
+          })
+        }
+
         it('restores console.error after every run with the same config', async (receiver, run) => {
           let testOutput = ''
           const proc = run(

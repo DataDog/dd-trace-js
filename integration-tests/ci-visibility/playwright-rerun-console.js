@@ -1,8 +1,8 @@
 'use strict'
 
-require('dd-trace/ci/init')
-
 const path = require('node:path')
+
+const tracer = require('dd-trace/ci/init')
 
 const playwrightDirectory = path.dirname(require.resolve('playwright/package.json'))
 const { configLoader } = require(path.join(playwrightDirectory, 'lib/common/index'))
@@ -20,6 +20,11 @@ async function main () {
   await testRunner.runAllTestsWithConfig(config, options)
   // eslint-disable-next-line no-console
   if (console.error !== originalConsoleError) throw new Error('console.error was not restored after the first run')
+
+  if (process.env.PLAYWRIGHT_DISABLE_PLUGIN_BETWEEN_RUNS === '1') {
+    tracer.use('playwright', false)
+    process.stdout.write('PLAYWRIGHT_PLUGIN_DISABLED\n')
+  }
 
   await testRunner.runAllTestsWithConfig(config, options)
   // eslint-disable-next-line no-console

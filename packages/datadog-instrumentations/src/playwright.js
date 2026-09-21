@@ -1347,6 +1347,15 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
     if (!libraryConfigurationCh.hasSubscribers) {
+      // Instrumentation hooks still run when the plugin is disabled between runs.
+      isKnownTestsEnabled = false
+      isEarlyFlakeDetectionEnabled = false
+      isFlakyTestRetriesEnabled = false
+      isTestManagementTestsEnabled = false
+      isImpactedTestsEnabled = false
+      knownTests = {}
+      testManagementTests = {}
+      modifiedFiles = {}
       return runAllTests.apply(this, arguments)
     }
 
