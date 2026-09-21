@@ -1,37 +1,46 @@
 'use strict'
 
-const { types: { isProxy } } = require('node:util')
-
 const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT } = require('../constants/constants')
+const { validateContextSnapshot } = require('./flag-evaluation-context')
 const { hashTargetingKey, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped, recordPayloadSplit } = require('./flag-evaluation-telemetry')
 
-/** @param {unknown} attrs */
-function safeAttrs (attrs) {
-  if (attrs === null || typeof attrs !== 'object' || isProxy(attrs)) return
-  const prototype = Object.getPrototypeOf(attrs)
-  if (prototype !== null && prototype !== Object.prototype) return
-  const output = Object.create(null)
-  let hasAttrs = false
-  for (const key of Object.keys(attrs)) {
-    const descriptor = Object.getOwnPropertyDescriptor(attrs, key)
-    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) continue
-    const value = descriptor.value
-    if (normalizeTargetingKey(key) === undefined) continue
-    if (value === null || typeof value === 'boolean' ||
-      (typeof value === 'number' && Number.isFinite(value)) ||
-      (typeof value === 'string' && normalizeTargetingKey(value) !== undefined)) {
-      output[key] = value
-      hasAttrs = true
-    }
-  }
-  return hasAttrs ? output : undefined
-}
+/** @typedef {import('./flag-evaluation-aggregation').AggregationEntry} AggregationEntry */
+/** @typedef {import('./flag-evaluation-context').ContextSnapshot} ContextSnapshot */
+/**
+ * @typedef {object} FlagEvaluationBatchContext
+ * @property {string} service
+ * @property {string} [env]
+ * @property {string} [version]
+ */
+/**
+ * @typedef {object} FlagEvaluationRow
+ * @property {number} timestamp
+ * @property {{ key: string }} flag
+ * @property {number} first_evaluation
+ * @property {number} last_evaluation
+ * @property {number} evaluation_count
+ * @property {boolean} [runtime_default_used]
+ * @property {string} [targeting_key]
+ * @property {{ evaluation: ContextSnapshot }} [context]
+ * @property {{ key: string }} [variant]
+ * @property {{ key: string }} [allocation]
+ * @property {{ key: string }} [targeting_rule]
+ * @property {{ message: string }} [error]
+ */
+/** @typedef {{ encoded: string, rows: number }} EncodedFlagEvaluationPayload */
 
+/**
+ * @param {AggregationEntry} entry
+ * @param {number} timestamp
+ * @param {boolean} degraded
+ * @returns {FlagEvaluationRow | undefined}
+ */
 function makeRow (entry, timestamp, degraded) {
   const flagKey = normalizeTargetingKey(entry.flagKey)
   if (flagKey === undefined || !Number.isSafeInteger(entry.first) || !Number.isSafeInteger(entry.last) ||
     !Number.isSafeInteger(entry.count) || entry.count < 1) return
+  /** @type {FlagEvaluationRow} */
   const row = {
     timestamp,
     flag: { key: flagKey },
@@ -53,7 +62,7 @@ function makeRow (entry, timestamp, degraded) {
       ? normalizeTargetingKey(entry.rawTargetingKey)
       : hashTargetingKey(entry.rawTargetingKey)
     if (targetingKey !== undefined) row.targeting_key = targetingKey
-    const attrs = entry.consent === true ? safeAttrs(entry.attrs) : undefined
+    const attrs = entry.consent === true ? validateContextSnapshot(entry.attrs) : undefined
     if (attrs !== undefined) row.context = { evaluation: attrs }
   }
   return row
@@ -62,16 +71,18 @@ function makeRow (entry, timestamp, degraded) {
 /**
  * Serialize aggregate maps into exact EVP envelopes.
  *
- * @param {Map<string, object>} full
- * @param {Map<string, object>} degraded
- * @param {object} context
+ * @param {Map<string, AggregationEntry>} full
+ * @param {Map<string, AggregationEntry>} degraded
+ * @param {FlagEvaluationBatchContext} context
  * @param {number} timestamp
- * @returns {Array<{ encoded: string, rows: number }>}
+ * @returns {EncodedFlagEvaluationPayload[]}
  */
 function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
   const prefix = '{"context":' + JSON.stringify(context) + ',"flagEvaluations":['
   const suffix = ']}'
+  /** @type {EncodedFlagEvaluationPayload[]} */
   const payloads = []
+  /** @type {string[]} */
   let encodedRows = []
   let size = Buffer.byteLength(prefix) + Buffer.byteLength(suffix)
 
@@ -82,6 +93,7 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
     size = Buffer.byteLength(prefix) + Buffer.byteLength(suffix)
   }
 
+  /** @type {Array<[AggregationEntry, boolean]>} */
   const entries = []
   for (const entry of full.values()) entries.push([entry, false])
   for (const entry of degraded.values()) entries.push([entry, true])

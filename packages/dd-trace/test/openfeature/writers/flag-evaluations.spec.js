@@ -9,9 +9,8 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 const constants = require('../../../src/openfeature/constants/constants')
-const { FlagEvaluationAggregator, observeEntry } = require(
-  '../../../src/openfeature/writers/flag-evaluation-aggregation'
-)
+const aggregationModule = require('../../../src/openfeature/writers/flag-evaluation-aggregation')
+const { FlagEvaluationAggregator } = aggregationModule
 const { buildFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
 const flagEvaluationTelemetry = require('../../../src/openfeature/writers/flag-evaluation-telemetry')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
@@ -137,21 +136,38 @@ describe('OpenFeature flag evaluations writer', () => {
   })
 
   it('re-enforces strict consent in aggregation and AND-folds every merge', () => {
-    const aggregator = new FlagEvaluationAggregator()
+    assert.deepStrictEqual(Object.keys(aggregationModule), ['FlagEvaluationAggregator'])
+    const { FlagEvaluationAggregator: ReducedAggregator } = proxyquire(
+      '../../../src/openfeature/writers/flag-evaluation-aggregation',
+      {
+        '../constants/constants': {
+          ...constants,
+          FLAG_EVALUATION_PER_FLAG_CAP: 0,
+        },
+      }
+    )
+    const aggregator = new ReducedAggregator()
     aggregator.add(event({
       flagKey: 'bypass',
       attrs: Object.freeze({ canary: 'must-not-survive' }),
-      observeFullEvaluationData: 1,
+      observeFullEvaluationData: true,
+      timestamp: 1_759_276_800_300,
     }))
-    const { full } = aggregator.take()
-    const [entry] = full.values()
+    aggregator.add(event({
+      flagKey: 'bypass',
+      attrs: Object.freeze({ canary: 'must-not-survive-either' }),
+      observeFullEvaluationData: false,
+      timestamp: 1_759_276_800_100,
+    }))
+    const { full, degraded } = aggregator.take()
+    const [entry] = degraded.values()
+    assert.strictEqual(full.size, 0)
+    assert.strictEqual(degraded.size, 1)
     assert.strictEqual(entry.consent, false)
     assert.strictEqual(entry.attrs, undefined)
-
-    const fold = { count: 1, first: 20, last: 20, consent: true }
-    observeEntry(fold, 10, false)
-    observeEntry(fold, 30, true)
-    assert.deepStrictEqual(fold, { count: 3, first: 10, last: 30, consent: false })
+    assert.strictEqual(entry.count, 2)
+    assert.strictEqual(entry.first, 1_759_276_800_100)
+    assert.strictEqual(entry.last, 1_759_276_800_300)
   })
 
   it('re-enforces privacy and error policy independently during serialization', () => {

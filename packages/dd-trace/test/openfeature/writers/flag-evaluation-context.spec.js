@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const {
   snapshotEvaluationContext,
   canonicalContextKey,
+  validateContextSnapshot,
 } = require('../../../src/openfeature/writers/flag-evaluation-context')
 
 /** @param {object} context */
@@ -16,6 +17,25 @@ function attrs (context) {
 }
 
 describe('flag evaluation context snapshot', () => {
+  it('revalidates a scalar snapshot without retaining behavior or malformed text', () => {
+    const snapshot = { kept: 'value', number: 1, bool: false, nothing: null, malformed: '\uD800' }
+    Object.defineProperty(snapshot, 'getter', {
+      enumerable: true,
+      get () {
+        assert.fail('snapshot getter must not run')
+        return undefined
+      },
+    })
+    const result = validateContextSnapshot(snapshot)
+
+    assert.deepStrictEqual({ ...result }, { kept: 'value', number: 1, bool: false, nothing: null })
+    assert.strictEqual(Object.getPrototypeOf(result), null)
+    assert.strictEqual(Object.isFrozen(result), true)
+    assert.strictEqual(validateContextSnapshot(new Proxy({}, {
+      ownKeys () { assert.fail('proxy must not be enumerated') },
+    })), undefined)
+  })
+
   it('flattens supported scalars, nested records, and lists without retaining caller objects', () => {
     const context = {
       targetingKey: 'private-subject',

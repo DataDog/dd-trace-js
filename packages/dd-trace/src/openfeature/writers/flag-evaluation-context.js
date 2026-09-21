@@ -37,6 +37,33 @@ function isRecord (value) {
 }
 
 /**
+ * Revalidate a hook-owned scalar snapshot without invoking caller behavior.
+ * Aggregation and serialization call this independently at their privacy boundaries.
+ *
+ * @param {unknown} value
+ * @returns {ContextSnapshot | undefined}
+ */
+function validateContextSnapshot (value) {
+  if (!isRecord(value)) return
+  /** @type {Record<string, ContextScalar>} */
+  const attrs = Object.create(null)
+  let hasAttrs = false
+  for (const key of Object.keys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) continue
+    const item = descriptor.value
+    if (normalizeTargetingKey(key) === undefined) continue
+    if (item === null || typeof item === 'boolean' ||
+      (typeof item === 'number' && Number.isFinite(item)) ||
+      (typeof item === 'string' && normalizeTargetingKey(item) !== undefined)) {
+      attrs[key] = item
+      hasAttrs = true
+    }
+  }
+  return hasAttrs ? Object.freeze(attrs) : undefined
+}
+
+/**
  * Retain only a capped set of property names, in JavaScript's natural key order.
  *
  * Object.keys must enumerate the complete object: JS has no bounded own-key API.
@@ -192,4 +219,4 @@ function canonicalContextKey (attrs) {
   return JSON.stringify(Object.keys(attrs).sort().map(key => [key, attrs[key]]))
 }
 
-module.exports = { snapshotEvaluationContext, canonicalContextKey }
+module.exports = { snapshotEvaluationContext, canonicalContextKey, validateContextSnapshot }

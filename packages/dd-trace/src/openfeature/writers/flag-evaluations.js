@@ -17,7 +17,7 @@ const { normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation
 const { recordDropped, recordTargetingKeyOmitted } = require('./flag-evaluation-telemetry')
 const BaseFFEWriter = require('./base')
 
-/** @typedef {Readonly<Record<string, string | number | boolean | null>>} ContextSnapshot */
+/** @typedef {import('./flag-evaluation-aggregation').FlagEvaluationEvent} FlagEvaluationEvent */
 
 /**
  * @typedef {object} FlagEvaluationRoute
@@ -28,20 +28,7 @@ const BaseFFEWriter = require('./base')
  * @property {FlagEvaluationRoute} [fallback]
  */
 
-/**
- * @typedef {object} FlagEvaluationEvent
- * @property {string} flagKey
- * @property {string} [variant]
- * @property {string} [allocationKey]
- * @property {string} [targetingRuleKey]
- * @property {boolean} runtimeDefault
- * @property {unknown} [errorCode]
- * @property {unknown} [targetingKey]
- * @property {ContextSnapshot} [attrs]
- * @property {unknown} [observeFullEvaluationData]
- * @property {number} timestamp
- */
-
+/** @param {unknown} value */
 function optionalKey (value) {
   const key = normalizeTargetingKey(value)
   return key === undefined || key.length === 0 ? undefined : key
