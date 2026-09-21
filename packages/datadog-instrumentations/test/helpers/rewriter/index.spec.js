@@ -1,7 +1,7 @@
 'use strict'
 
 const { spawnSync } = require('node:child_process')
-const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
@@ -1477,6 +1477,134 @@ describe('check-require-cache', () => {
     assert.strictEqual(queries[0].next().value.constructor.name, 'Query')
     assert.strictEqual(queries[1].next().value.constructor.name, 'Query')
     assert.strictEqual(subs.start.callCount, 0)
+  })
+})
+
+describe('rewriter loader correctness', () => {
+  const target = { moduleName: 'test', filePath: 'index.js' }
+
+  function createFixture () {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter fixture-'))
+    const packageDirectory = join(root, 'node_modules', 'test')
+    const filename = join(packageDirectory, target.filePath)
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ version: '1.2.3' }))
+    return { filename, root }
+  }
+
+  function loadRewriter ({ disabled = new Set(), transform = source => ({ code: source }) } = {}) {
+    const matcher = {
+      addTransform: sinon.stub(),
+      getTransformer: sinon.stub().returns({ transform }),
+    }
+    const create = sinon.stub().returns(matcher)
+    const rewriter = proxyquire('../../../src/helpers/rewriter', {
+      '../../../../dd-trace/src/log': { '@noCallThru': true, error: sinon.stub() },
+      '../../../../../vendor/dist/@apm-js-collab/code-transformer': { '@noCallThru': true, create },
+      '../instrumentation-utils': { '@noCallThru': true, getDisabledInstrumentations: () => disabled },
+      './instrumentations': { '@noCallThru': true },
+      './transforms': { '@noCallThru': true },
+      './transforms/postgres': { '@noCallThru': true },
+    })
+    return { create, matcher, rewriter }
+  }
+
+  it('resolves versions from encoded file URLs for loader and bundler rewrites', () => {
+    const { filename, root } = createFixture()
+    const { matcher, rewriter } = loadRewriter()
+    const rewriteBundled = rewriter.createBundlerRewriter('/dc')
+    const source = 'module.exports = true\n'
+
+    try {
+      assert.strictEqual(rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', target), source)
+      assert.deepStrictEqual(
+        rewriteBundled(source, pathToFileURL(filename).href, 'commonjs', target),
+        { code: source }
+      )
+      sinon.assert.calledTwice(matcher.getTransformer)
+      sinon.assert.alwaysCalledWithExactly(matcher.getTransformer, 'test', '1.2.3', 'index.js')
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('resolves versions from Windows-style loader paths', () => {
+    const { filename, root } = createFixture()
+    const { matcher, rewriter } = loadRewriter()
+    const source = 'module.exports = true\n'
+
+    try {
+      assert.strictEqual(rewriter.rewrite(source, filename.replaceAll('/', '\\'), 'commonjs', target), source)
+      sinon.assert.calledOnceWithExactly(matcher.getTransformer, 'test', '1.2.3', 'index.js')
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('honors disabled instrumentations in an isolated loader module graph', () => {
+    const { filename, root } = createFixture()
+    const { create, rewriter } = loadRewriter({ disabled: new Set(['test']) })
+    const source = 'module.exports = true\n'
+
+    try {
+      assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', target), source)
+      sinon.assert.notCalled(create)
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('returns the original source when the package version cannot be resolved', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-missing-version-'))
+    const filename = join(root, 'node_modules', 'test', target.filePath)
+    const { create, rewriter } = loadRewriter()
+    const source = 'module.exports = true\n'
+
+    try {
+      assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', target), source)
+      sinon.assert.notCalled(create)
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('restores stripped shebangs and shifts object source maps', () => {
+    const { filename, root } = createFixture()
+    const sourceMap = { mappings: 'AAAA', names: [], sources: ['index.js'], version: 3 }
+    const { rewriter } = loadRewriter({
+      transform: () => ({ code: 'module.exports = true', map: sourceMap }),
+    })
+    const source = '#!/usr/bin/env node\nmodule.exports = true\n'
+
+    try {
+      const rewritten = rewriter.rewrite(source, filename, 'commonjs', target)
+      const marker = '//# sourceMappingURL=data:application/json;base64,'
+      const markerIndex = rewritten.indexOf(marker)
+
+      assert.notStrictEqual(markerIndex, -1)
+      const parsedMap = JSON.parse(Buffer.from(rewritten.slice(markerIndex + marker.length), 'base64').toString())
+
+      assert.match(rewritten, /^#!\/usr\/bin\/env node\nmodule\.exports = true/)
+      assert.strictEqual(parsedMap.mappings, ';AAAA')
+      assert.strictEqual(sourceMap.mappings, 'AAAA')
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('restores a stripped shebang without a trailing newline', () => {
+    const { filename, root } = createFixture()
+    const { rewriter } = loadRewriter({ transform: () => ({ code: 'module.exports = true' }) })
+    const source = '#!/usr/bin/env node'
+
+    try {
+      assert.strictEqual(
+        rewriter.rewrite(source, filename, 'commonjs', target),
+        `${source}\nmodule.exports = true`
+      )
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
   })
 })
 
