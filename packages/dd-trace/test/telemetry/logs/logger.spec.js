@@ -80,14 +80,23 @@ describe('logger telemetry delivery', () => {
   })
 
   it('should respect transmission opt-outs, including lazy messages', () => {
-    log.error('hidden', log.NO_TRANSMIT)
-    log.error(() => 'hidden', log.NO_TRANSMIT)
-    log.error('hidden', new log.NoTransmitError('secret'))
-    log.error(() => 'hidden', new log.NoTransmitError('secret'))
-    log.error(() => ['hidden', log.NO_TRANSMIT])
-    log.errorWithoutTelemetry('hidden')
-    log.errorWithoutTelemetry(() => 'hidden')
+    const configuredLazyMessage = sinon.stub().returns('hidden')
+    const noTransmitErrorLazyMessage = sinon.stub().returns('hidden')
+    const resolvedOptOutLazyMessage = sinon.stub().returns(['hidden', log.NO_TRANSMIT])
+    const errorWithoutTelemetryLazyMessage = sinon.stub().returns('hidden')
 
+    log.error('hidden', log.NO_TRANSMIT)
+    log.error(configuredLazyMessage, log.NO_TRANSMIT)
+    log.error('hidden', new log.NoTransmitError('secret'))
+    log.error(noTransmitErrorLazyMessage, new log.NoTransmitError('secret'))
+    log.error(resolvedOptOutLazyMessage)
+    log.errorWithoutTelemetry('hidden')
+    log.errorWithoutTelemetry(errorWithoutTelemetryLazyMessage)
+
+    sinon.assert.notCalled(configuredLazyMessage)
+    sinon.assert.notCalled(noTransmitErrorLazyMessage)
+    sinon.assert.calledOnce(resolvedOptOutLazyMessage)
+    sinon.assert.notCalled(errorWithoutTelemetryLazyMessage)
     assert.strictEqual(collector.drain(), undefined)
   })
 

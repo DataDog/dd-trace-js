@@ -98,7 +98,10 @@ function publishFormatted (ch, formatter, ...args) {
   const publishRecord = ch === errorChannel && errorRecordChannel.hasSubscribers
   if (!ch.hasSubscribers && !publishRecord) return
 
-  const record = getErrorLog(Log.parse(...args))
+  const parsed = Log.parse(...args)
+  if (!ch.hasSubscribers && !parsed.sendViaTelemetry) return
+
+  const record = getErrorLog(parsed)
   if (publishRecord) errorRecordChannel.publish(record)
 
   if (ch.hasSubscribers) {
