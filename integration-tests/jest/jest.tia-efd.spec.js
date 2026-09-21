@@ -49,6 +49,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_IMPACT_ANALYSIS_ALL_TESTS_SKIPPED_MESSAGE,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   getLineCoverageBitmap,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -439,8 +441,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEvent, testOutput)
+          const testSession = testSessionEvent.content
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'No tests were found')
+          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
         })
       childProcess = exec(
         runTestsCommand,

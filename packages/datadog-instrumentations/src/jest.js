@@ -85,6 +85,8 @@ const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -2701,7 +2703,10 @@ async function waitForTestSessionFinish (payload) {
 
   publishWithCompletion(testSessionFinishCh, payload, onDone)
 
-  const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+  const waitingResult = await Promise.race([
+    Promise.all([flushPromise, getChannelPromise(logSubmissionFlushCh)]),
+    timeoutPromise,
+  ])
 
   if (waitingResult === 'timeout') {
     log.error('Timeout waiting for the tracer to flush')
@@ -3224,14 +3229,16 @@ function getCliWrapper (isNewJestVersion) {
 
       // Determine session status after EFD and quarantine checks have potentially modified success
       let status, error
+      const isExpectedEmptySession = numTotalTests === 0 && numTotalTestSuites === 0
       if (result.results.success) {
-        status = numTotalTests === 0 && numTotalTestSuites === 0 ? 'skip' : 'pass'
+        status = isExpectedEmptySession ? 'skip' : 'pass'
       } else {
         status = 'fail'
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
+        isExpectedEmptySession: result.results.success && isExpectedEmptySession,
         ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
       }))
 
@@ -3709,6 +3716,19 @@ const JEST_LOGGING_LIBRARIES = new Set([
 const disabledJestInstrumentations = new Set(
   getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
 )
+
+addHook({
+  name: '@jest/console',
+  versions: [MINIMUM_JEST_VERSION],
+}, jestConsole => {
+  const isConsoleDisabled = disabledJestInstrumentations.has('console') ||
+    disabledJestInstrumentations.has('node:console')
+  if (!isConsoleDisabled && consoleLogSubmissionCh.hasSubscribers) {
+    require('./console').wrapJestConsole(jestConsole)
+  }
+  return jestConsole
+})
+
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
   'selenium-webdriver/chrome',

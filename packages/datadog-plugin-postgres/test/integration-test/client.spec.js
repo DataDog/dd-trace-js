@@ -47,7 +47,12 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'postgres.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          sandboxCwd(),
+          variants[variant],
+          agent.port,
+          { DD_DBM_PROPAGATION_MODE: 'service' }
+        )
 
         await traceReceived
       }).timeout(20000)
@@ -63,7 +68,10 @@ describe('esm', () => {
           sandboxCwd(),
           'partial-rewrite.cjs',
           agent.port,
-          { NODE_OPTIONS: '--require=./preload-query.cjs' }
+          {
+            DD_DBM_PROPAGATION_MODE: 'service',
+            NODE_OPTIONS: '--require=./preload-query.cjs',
+          }
         )
       } finally {
         agent.removeListener('message', onMessage)
