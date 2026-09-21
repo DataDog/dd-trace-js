@@ -96,15 +96,23 @@ const log = {
 
 function publishFormatted (ch, formatter, ...args) {
   const publishRecord = ch === errorChannel && errorRecordChannel.hasSubscribers
-  if (!ch.hasSubscribers && !publishRecord) return
+  const publishLog = ch.hasSubscribers
+  if (!publishLog && !publishRecord) return
 
-  const parsed = Log.parse(...args)
-  if (!ch.hasSubscribers && !parsed.sendViaTelemetry) return
+  let record
+  try {
+    const parsed = Log.parse(...args)
+    if (!publishLog && !parsed.sendViaTelemetry) return
+    record = getErrorLog(parsed)
+  } catch (err) {
+    // Telemetry must not expose parsing failures while the configured logger is disabled.
+    if (!publishLog) return
+    throw err
+  }
 
-  const record = getErrorLog(parsed)
   if (publishRecord) errorRecordChannel.publish(record)
 
-  if (ch.hasSubscribers) {
+  if (publishLog) {
     const { formatted, cause } = record
     // calling twice ch.publish() because Error cause is only available in Node.js v16.9.0
     // TODO: replace it with Error(message, { cause }) when cause has broad support

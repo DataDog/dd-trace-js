@@ -131,6 +131,33 @@ describe('logger telemetry delivery', () => {
     }])
   })
 
+  it('should ignore causes with a throwing stack getter', () => {
+    const cause = Object.create(null)
+    Object.defineProperty(cause, 'stack', {
+      get () {
+        throw new Error('customer getter')
+      },
+    })
+
+    log.error('Request failed', cause)
+    assert.strictEqual(collector.drain(), undefined)
+  })
+
+  it('should ignore causes whose stack getter throws during telemetry delivery', () => {
+    const cause = Object.create(null)
+    let reads = 0
+    Object.defineProperty(cause, 'stack', {
+      get () {
+        if (++reads === 1) return `customer-secret\n    at request (${ddBasePath}request.js:1:2)`
+        throw new Error('customer getter')
+      },
+    })
+
+    log.error('Request failed', cause)
+    assert.strictEqual(reads, 2)
+    assert.strictEqual(collector.drain(), undefined)
+  })
+
   it('should respect transmission opt-outs, including lazy messages', () => {
     const configuredLazyMessage = sinon.stub().returns('hidden')
     const noTransmitErrorLazyMessage = sinon.stub().returns('hidden')

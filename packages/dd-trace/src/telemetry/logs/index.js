@@ -49,7 +49,11 @@ function onErrorLog (msg) {
   }
 
   if (cause) {
-    telLog.stack_trace = cause.stack
+    try {
+      telLog.stack_trace = cause.stack
+    } catch {
+      return
+    }
     telLog.errorType = getErrorType(cause)
   }
 
