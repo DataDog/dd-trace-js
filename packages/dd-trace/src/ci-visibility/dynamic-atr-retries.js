@@ -34,13 +34,12 @@ function isDynamicAtrEnabled (value) {
  * @returns {number[] | null}
  */
 function getDynamicAtrBuckets (value) {
-  if (typeof value !== 'string' || value.trim().length === 0) {
+  if (!Array.isArray(value) || value.length === 0) {
     return null
   }
 
-  // Positional buckets must retain empty entries so validation can reject them.
-  const parts = value.split(',')
-  const raw = value
+  const parts = value
+  const raw = parts.join(',')
   if (parts.length !== RETRY_BUCKET_COUNT) {
     log.warn(
       'Invalid %s value %o; expected five comma-separated integers in [1, %d]',
@@ -51,7 +50,7 @@ function getDynamicAtrBuckets (value) {
 
   const buckets = []
   for (const part of parts) {
-    const trimmedPart = part.trim()
+    const trimmedPart = typeof part === 'string' ? part.trim() : ''
     if (!/^\d+$/.test(trimmedPart)) {
       log.warn(
         'Invalid %s value %o; expected five comma-separated integers in [1, %d]',
