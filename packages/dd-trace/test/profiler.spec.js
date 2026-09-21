@@ -29,7 +29,7 @@ describe('profiler', () => {
         start: sinon.stub(),
         stop: sinon.stub(),
         cancelQueuedStart: sinon.stub(),
-        hasQueuedStart: sinon.stub(),
+        getQueuedStart: sinon.stub(),
         setCustomLabelKeys: sinon.spy(),
         runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
       },
@@ -75,8 +75,7 @@ describe('profiler', () => {
       profilingModule.profiler.enabled = false
     })
     profilingModule.profiler.cancelQueuedStart.reset()
-    profilingModule.profiler.hasQueuedStart.reset()
-    profilingModule.profiler.hasQueuedStart.returns(false)
+    profilingModule.profiler.getQueuedStart.reset()
     FakeSSIHeuristics.resetHistory()
     log.debug.resetHistory()
     log.error.resetHistory()
@@ -229,8 +228,8 @@ describe('profiler', () => {
       profilingModule.profiler.cancelQueuedStart.callsFake(() => {
         pendingStart = undefined
       })
-      profilingModule.profiler.hasQueuedStart.callsFake((enabled) => {
-        return pendingStart?.profiling.DD_PROFILING_ENABLED === enabled
+      profilingModule.profiler.getQueuedStart.callsFake(() => {
+        return pendingStart?.profiling.DD_PROFILING_ENABLED
       })
 
       publishConfig('true')
@@ -241,7 +240,7 @@ describe('profiler', () => {
 
       sinon.assert.calledOnce(FakeSSIHeuristics)
       sinon.assert.calledOnce(profilingModule.profiler.cancelQueuedStart)
-      sinon.assert.calledWithExactly(profilingModule.profiler.hasQueuedStart, 'auto')
+      sinon.assert.calledTwice(profilingModule.profiler.getQueuedStart)
 
       stopping = false
       profilingModule.profiler.start(pendingStart)

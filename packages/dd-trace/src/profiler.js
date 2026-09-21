@@ -75,11 +75,8 @@ function cancelQueuedStart () {
   profilingModule?.profiler.cancelQueuedStart()
 }
 
-/**
- * @param {'true' | 'auto'} enabled - Profiling activation mode
- */
-function hasQueuedStart (enabled) {
-  return profilingModule?.profiler.hasQueuedStart(enabled) ?? false
+function getQueuedStart () {
+  return profilingModule?.profiler.getQueuedStart()
 }
 
 /**
@@ -120,7 +117,8 @@ configUpdateChannel.subscribe((config) => {
     if (!isStarted()) {
       // A completed SSI heuristic may have approved an auto start while shutdown is still in
       // flight. Preserve that decision across subsequent config publications.
-      if (hasQueuedStart('auto')) return
+      // The queued start retains the config that SSI approved; later auto publishes do not replace it.
+      if (getQueuedStart() === 'auto') return
 
       // Entering auto retracts any unconditional start queued by an earlier true update. Profiling
       // may start only if the active SSI heuristic makes that decision.

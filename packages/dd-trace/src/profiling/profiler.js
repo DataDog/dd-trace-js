@@ -302,12 +302,10 @@ class Profiler extends EventEmitter {
   }
 
   /**
-   * Reports whether a start for the given activation mode is waiting for shutdown to finish.
-   *
-   * @param {'true' | 'auto'} enabled - Profiling activation mode
+   * Returns the activation mode of the start waiting for shutdown to finish.
    */
-  hasQueuedStart (enabled) {
-    return this.#pendingStart?.profiling?.DD_PROFILING_ENABLED === enabled
+  getQueuedStart () {
+    return this.#pendingStart?.profiling?.DD_PROFILING_ENABLED
   }
 
   stop () {

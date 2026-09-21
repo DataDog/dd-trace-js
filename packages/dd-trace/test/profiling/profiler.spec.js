@@ -482,12 +482,11 @@ describe('profiler', function () {
       spaceProfiler.start.resetHistory()
       profiler.start(makeStartOptions({ profiling: { DD_PROFILING_ENABLED: 'auto' } }))
 
-      assert.strictEqual(profiler.hasQueuedStart('auto'), true)
-      assert.strictEqual(profiler.hasQueuedStart('true'), false)
+      assert.strictEqual(profiler.getQueuedStart(), 'auto')
 
       profiler.cancelQueuedStart()
 
-      assert.strictEqual(profiler.hasQueuedStart('auto'), false)
+      assert.strictEqual(profiler.getQueuedStart(), undefined)
 
       resolveEncode(wallProfile)
       await waitForExport()
