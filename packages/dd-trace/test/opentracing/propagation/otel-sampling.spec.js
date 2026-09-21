@@ -215,6 +215,28 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
   })
 
   describe('limits and extraction behavior', () => {
+    for (const unknownFields of [30, 31, 32]) {
+      for (const sampled of [false, true]) {
+        it(`forwards an inherited ${sampled ? 'keep' : 'drop'} with ${unknownFields + 2} OTel sub-fields`, () => {
+          const fields = Array.from({ length: unknownFields }, (_, index) => `k${index}:v`)
+          const rv = sampled ? 'ef284ace7a91e1' : '65cd67504a538e'
+          const th = 'e6666666666668'
+          // The 32-member limit applies to vendors, not sub-fields inside a 256-byte ot value.
+          const value = [...fields, `rv:${rv}`, `th:${th}`].join(';')
+          assert.ok(Buffer.byteLength(value) <= 256)
+
+          const parent = extractParent({ sampled, tracestate: `ot=${value}` })
+          assert.strictEqual(parent._tracestate.get('ot'), value)
+
+          const { span, prioritySampler } = startSpan({ parent, sampleRate: sampled ? 0 : 1 })
+          const carrier = inject(span, prioritySampler)
+
+          assert.strictEqual(parseTracestate(carrier.tracestate).ot, value)
+          assert.strictEqual(carrier.traceparent.endsWith(sampled ? '-01' : '-00'), true)
+        })
+      }
+    }
+
     it('retains dd and ot as the first two of 32 members', () => {
       const tracestate = Array.from({ length: 32 }, (_, index) => `v${index}=x`).join(',')
       const { span, prioritySampler } = startSpan({ traceId: '1', sampleRate: 0.1 })
