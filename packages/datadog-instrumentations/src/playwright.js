@@ -1346,6 +1346,10 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    if (!libraryConfigurationCh.hasSubscribers) {
+      return runAllTests.apply(this, arguments)
+    }
+
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined

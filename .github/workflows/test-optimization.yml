@@ -156,6 +156,7 @@ jobs:
         playwright-version: [oldest, latest]
         spec:
           - playwright-reporting
+          - playwright-disabled
           - playwright-efd
           - playwright-atr
           - playwright-test-management-attempt-to-fix
