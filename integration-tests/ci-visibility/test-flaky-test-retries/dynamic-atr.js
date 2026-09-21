@@ -10,13 +10,20 @@ describe('dynamic ATR', () => {
       get: () => 100,
       set: () => {},
     })
-    if (process.env.DYNAMIC_ATR_HOOK_FAILURE && this.currentTest.currentRetry() === 1) {
+    if (process.env.DYNAMIC_ATR_HOOK_FAILURE === 'beforeEach' && this.currentTest.currentRetry() === 1) {
       assert.fail('retry beforeEach failed')
     }
   })
 
+  afterEach(function () {
+    if (process.env.DYNAMIC_ATR_HOOK_FAILURE === 'afterEach' && this.currentTest.currentRetry() === 1) {
+      assert.fail('retry afterEach failed')
+    }
+  })
+
   it('uses the duration budget', function () {
-    if (process.env.DYNAMIC_ATR_RECOVER && this.test.currentRetry() === 1) return
+    if (this.test.currentRetry() === 1 &&
+      (process.env.DYNAMIC_ATR_RECOVER || process.env.DYNAMIC_ATR_HOOK_FAILURE === 'afterEach')) return
     assert.fail('test body failed')
   })
 })

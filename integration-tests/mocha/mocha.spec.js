@@ -5398,8 +5398,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       { name: 'malformed buckets', buckets: '1,,3,3,3', attempts: 3 },
       { name: 'disabled flag', buckets: '1,3,3,3,3', attempts: 5, enabled: false },
       { name: 'recovery', buckets: '1,3,3,3,3', attempts: 2, recover: true },
-      { name: 'retry hook failure', buckets: '1,3,3,3,3', attempts: 2, hookFailure: true },
+      { name: 'retry hook failure', buckets: '1,3,3,3,3', attempts: 2, hookFailure: 'beforeEach' },
+      { name: 'early retry beforeEach failure', buckets: '3,3,3,3,3', attempts: 2, hookFailure: 'beforeEach' },
+      { name: 'early retry afterEach failure', buckets: '3,3,3,3,3', attempts: 2, hookFailure: 'afterEach' },
     ]
+    for (const hookFailure of ['beforeEach', 'afterEach']) {
+      dynamicCases.push({
+        name: `disabled flag with early retry ${hookFailure} failure`,
+        buckets: '3,3,3,3,3',
+        attempts: 2,
+        enabled: false,
+        hookFailure,
+      })
+    }
     for (const parallel of [false, true]) {
       for (const scenario of dynamicCases) {
         const runTest = parallel ? parallelIt : it
@@ -5423,7 +5434,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(last.meta[TEST_HAS_FAILED_ALL_RETRIES], scenario.recover ? undefined : 'true')
               assert.strictEqual(last.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
               assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
-              if (scenario.hookFailure) assert.match(last.meta[ERROR_MESSAGE], /retry beforeEach failed/)
+              if (scenario.hookFailure) {
+                assert.match(last.meta[ERROR_MESSAGE], new RegExp(`retry ${scenario.hookFailure} failed`))
+              }
             }
           )
           childProcess = exec(runTestsCommand, {
@@ -5437,7 +5450,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               SHOULD_CHECK_RESULTS: '1',
               ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
               ...(scenario.recover ? { DYNAMIC_ATR_RECOVER: '1' } : {}),
-              ...(scenario.hookFailure ? { DYNAMIC_ATR_HOOK_FAILURE: '1' } : {}),
+              ...(scenario.hookFailure ? { DYNAMIC_ATR_HOOK_FAILURE: scenario.hookFailure } : {}),
             },
           })
           const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])

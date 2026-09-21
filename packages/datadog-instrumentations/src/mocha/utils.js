@@ -745,7 +745,10 @@ function getTestFinishInfo (test, status, config, error) {
   const efdRetryCount = efdRetryCountByTestFullName.get(testName) ??
     config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
   const isLastEfdRetry = testStatuses.length === efdRetryCount + 1
-  const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
+  // Mocha aborts native retries on hook failure, even when the retry budget is not exhausted.
+  const isTerminalHookFailure = test._ddHookFailed && !isDatadogManagedRetryTest(test, config)
+  const isLastAtrAttempt = isTerminalHookFailure || getIsLastRetry(test) ||
+    (config.isFlakyTestRetriesEnabled && status === 'pass')
 
   // Needed for the getFinalStatus call. This is because EFD does NOT tag as
   // EFD retry the first run of the test. It only tags as retries the clones
@@ -767,9 +770,9 @@ function getTestFinishInfo (test, status, config, error) {
     hasFailedAllRetries = true
   }
 
-  // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  // ATR: mark terminal attempts when every executed attempt failed.
   if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
-    getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
+    isLastAtrAttempt && testStatuses.every(status => status === 'fail')) {
     hasFailedAllRetries = true
   }
 
@@ -777,7 +780,7 @@ function getTestFinishInfo (test, status, config, error) {
   const isAtrRetry = config.isFlakyTestRetriesEnabled &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
-  const isFinalAttempt = status !== 'fail' || test._currentRetry >= test._retries
+  const isFinalAttempt = isTerminalHookFailure || status !== 'fail' || test._currentRetry >= test._retries
 
   const { isFlakyTestRetriesEnabled } = config
   const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
@@ -1036,21 +1039,12 @@ function getOnFailHandler (isMain, config) {
         hookError.stack = err.stack
         testContext.err = hookError
         errorCh.runStores(testContext, () => {})
+        // Mocha marks the hook failed, so record the test failure before computing final metadata.
+        test._ddHookFailed = true
         const testFinishInfo = getTestFinishInfo(test, 'fail', config, hookError)
-        // ATR never retries hook failures: this.retries(N) is set in runnableWrapper
-        // which only runs when the test function executes — hooks bypass that path,
-        // so _retries stays at -1 and getIsLastRetry returns false, leaving finalStatus
-        // undefined. We must also mark the attempt final when no clone-based retry
-        // mechanism (EFD original, EFD clone, ATF) has queued further attempts.
-        const noCloneRetries = !test._ddIsEfdRetry &&
-          !((test._ddIsNew || test._ddIsModified) && config.isEarlyFlakeDetectionEnabled) &&
-          !test._ddIsAttemptToFix
-        if (testFinishInfo.finalStatus !== undefined || noCloneRetries) {
+        if (testFinishInfo.finalStatus !== undefined) {
           test._ddIsFinalAttempt = true
         }
-        // test.state is never set to 'failed' for hook failures (Mocha marks the hook,
-        // not the test). Flag it so finishRootSuiteForFile can compute the correct status.
-        test._ddHookFailed = true
         test._ddTestFinishPublished = true
         testFinishCh.publish({
           status: 'fail',
