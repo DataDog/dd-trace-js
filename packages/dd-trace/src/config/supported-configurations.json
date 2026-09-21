@@ -560,7 +560,7 @@
     "DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS": [
       {
         "implementation": "A",
-        "type": "array",
+        "type": "string",
         "default": null,
         "namespace": "testOptimization"
       }
