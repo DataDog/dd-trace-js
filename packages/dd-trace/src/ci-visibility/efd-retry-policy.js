@@ -24,16 +24,42 @@ const EARLY_FLAKE_DETECTION_RETRY_BUCKETS =
  */
 
 /**
+ * Returns the zero-based retry-bucket index for a test duration.
+ *
+ * Bucket boundaries (ms): 5 000, 10 000, 30 000, 300 000.
+ * Durations at a boundary remain in that bucket.
+ *
+ * @param {number} durationMs
+ */
+function retryBucketIndexForDuration (durationMs) {
+  for (let index = 0; index < EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS.length; index++) {
+    if (durationMs <= EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS[index].limitMs) {
+      return index
+    }
+  }
+  return EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS.length // > 5 m bucket
+}
+
+/**
+ * Returns the configured retry budget for a test duration.
+ *
+ * @param {number} durationMs
+ * @param {EfdRetryPolicy} retryPolicy
+ */
+function retriesForDuration (durationMs, retryPolicy) {
+  const index = retryBucketIndexForDuration(durationMs)
+  if (index < retryPolicy.durationRetryCounts.length) {
+    return retryPolicy.durationRetryCounts[index].retryCount
+  }
+  return 0
+}
+
+/**
  * @param {number} durationMs
  * @param {EfdRetryPolicy} retryPolicy
  */
 function getEfdRetryCountForDuration (durationMs, retryPolicy) {
-  for (const { durationLimitMs, retryCount } of retryPolicy.durationRetryCounts) {
-    if (durationMs < durationLimitMs) {
-      return retryCount
-    }
-  }
-  return 0
+  return retriesForDuration(durationMs, retryPolicy)
 }
 
 /**
@@ -82,5 +108,7 @@ module.exports = {
   createEfdRetryPolicy,
   getEfdRetryCountForDuration,
   hasEfdRetries,
+  retriesForDuration,
+  retryBucketIndexForDuration,
   shouldSkipEfdRetry,
 }
