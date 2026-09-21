@@ -4081,6 +4081,32 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
+      it('should default dynamic ATR configuration in the testOptimization namespace', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, false)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, undefined)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED'), false)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS'), false)
+      })
+      for (const [value, expected] of [['true', true], ['false', false], ['invalid', false]]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=${value}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = value
+          const config = getConfig(options)
+          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, expected)
+        })
+      }
+      for (const [value, expected] of [
+        ['1, 2,3,4,20', ['1', '2', '3', '4', '20']],
+        ['', []],
+        ['1,invalid,3', ['1', 'invalid', '3']],
+      ]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS=${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          // Config parses the list; the exporter validates its length and numeric budgets.
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, expected)
+        })
+      }
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true)
