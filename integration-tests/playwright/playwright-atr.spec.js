@@ -15,6 +15,7 @@ const {
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_NAME,
   TEST_IS_NEW,
   TEST_HAS_DYNAMIC_NAME,
@@ -145,7 +146,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              TEST_DIR: './ci-visibility/playwright-dynamic-atr',
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
               DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
@@ -155,6 +156,64 @@ versions.forEach((version) => {
 
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
+
+      const dynamicCases = [
+        {
+          name: 'elapsed duration',
+          buckets: '3,1,1,1,1',
+          attempts: 2,
+          env: { PLAYWRIGHT_SLOW_INITIAL_ATTEMPT: '1' },
+        },
+        {
+          name: 'serial retry offset',
+          buckets: '1,1,1,1,1',
+          attempts: 2,
+          env: { PLAYWRIGHT_SERIAL_RETRY: '1' },
+        },
+      ]
+      for (const scope of ['CLI', 'suite']) {
+        for (const retries of [0, 1, 3]) {
+          if (scope === 'CLI' && retries === 0) continue // Zero project retries enables ATR.
+          dynamicCases.push({
+            name: `${scope} retries=${retries}`,
+            buckets: retries === 1 ? '3,3,3,3,3' : '1,1,1,1,1',
+            attempts: retries + 1,
+            args: scope === 'CLI' ? `--retries=${retries}` : '',
+            env: scope === 'suite' ? { PLAYWRIGHT_SUITE_RETRIES: String(retries) } : {},
+          })
+        }
+      }
+      for (const scenario of dynamicCases) {
+        it(`respects dynamic ATR ${scenario.name}`, async (receiver, run) => {
+          receiver.setSettings({ flaky_test_retries_enabled: true })
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url === '/api/v2/citestcycle',
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === 'always fails' && test.meta[TEST_STATUS] !== 'skip')
+              assert.strictEqual(tests.length, scenario.attempts)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+              if (scenario.attempts > 1) {
+                assert.strictEqual(tests.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              }
+              assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+            }, 30000)
+          const proc = run(`./node_modules/.bin/playwright test -c playwright.config.js ${scenario.args || ''}`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-dynamic-atr',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: scenario.buckets,
+              ...scenario.env,
+            },
+          })
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1)
+        })
+      }
 
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async (receiver, run) => {
         receiver.setSettings({

@@ -138,6 +138,7 @@ const efdScheduledOriginalTestKeys = new Set()
 const efdStartedOriginalTestKeys = new Set()
 const efdSlowAbortedTests = new Set()
 const dynamicAtrRetryCountByTestKey = new Map()
+const automaticRetryProjectNames = new Set()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
 const disabledTestIds = new Set()
@@ -682,7 +683,6 @@ function getFinalStatus ({
   isAtrRetry,
   isEfdManagedTest,
   isAttemptToFix,
-  hasFailedAllRetries,
   hasFailedAttemptToFixRetries,
   hasPassedAnyEfdAttempt,
   testStatus,
@@ -694,7 +694,7 @@ function getFinalStatus ({
     return 'skip'
   }
   if (isAtrRetry) {
-    return hasFailedAllRetries ? 'fail' : 'pass'
+    return testStatus
   }
   if (isEfdManagedTest) {
     return hasPassedAnyEfdAttempt ? 'pass' : 'fail'
@@ -851,6 +851,19 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
   }
 }
 
+/**
+ * Checks whether a test inherits the retry limit assigned by Test Optimization.
+ * @param {object} test
+ * @param {object[]} projects
+ */
+function hasAutomaticRetries (test, projects) {
+  if (!automaticRetryProjectNames.has(getBrowserNameFromProjects(projects, test))) return false
+  for (let suite = test.parent; suite; suite = suite.parent) {
+    if (suite._retries !== undefined) return false
+  }
+  return true
+}
+
 function testEndHandler ({
   test,
   annotations,
@@ -859,6 +872,7 @@ function testEndHandler ({
   isTimeout,
   shouldCreateTestSpan,
   projects,
+  testDuration,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -896,13 +910,12 @@ function testEndHandler ({
   const testStatuses = testsToTestStatuses.get(testStatusKey) || []
 
   if (testStatuses.length === 0) {
-    testsToTestStatuses.set(testStatusKey, [testStatus])
+    testsToTestStatuses.set(testStatusKey, testStatuses)
     if (test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test))) {
       newTestsWithDynamicNames.add(`${getTestSuitePath(test._requireFile, rootDir)} › ${getTestFullname(test)}`)
     }
-  } else {
-    testStatuses.push(testStatus)
   }
+  testStatuses.push(testStatus)
 
   const testEfdKey = getTestEfdKey(test)
   const dynamicAtrTestKey = testEfdKey
@@ -923,12 +936,16 @@ function testEndHandler ({
     !testProperties.attemptToFix &&
     !test._ddIsEfdRetry &&
     !isEfdManagedTest &&
+    hasAutomaticRetries(test, projects) &&
     !dynamicAtrRetryCountByTestKey.has(dynamicAtrTestKey)
   ) {
-    const duration = results.at(-1)?.duration ?? 0
+    const testResult = results.at(-1)
+    const duration = testDuration ??
+      (testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime)
     const retryCount = getDynamicAtrRetryCount(duration, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets)
     dynamicAtrRetryCountByTestKey.set(dynamicAtrTestKey, retryCount)
-    test.retries = retryCount
+    // Serial groups may skip this test before its first actual execution.
+    test.retries = (testResult?.retry ?? 0) + retryCount
   }
   const hasRecordedTestOptimizationExecution = recordedTestOptimizationExecutions.has(test)
 
@@ -982,19 +999,19 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
-  // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  const willRetry = testWillRetry(test, testStatus)
+
+  // ATR: use the effective native limit for tests with explicit Playwright retries.
   const atrRetryCount = isDynamicAtrEnabled
-    ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey)
+    ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey) ?? test.retries
     : flakyTestRetriesCount
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
-    testStatuses.length === atrRetryCount + 1 &&
+    !willRetry &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }
-
-  const willRetry = testWillRetry(test, testStatus)
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {
@@ -1012,7 +1029,6 @@ function testEndHandler ({
       isAtrRetry,
       isEfdManagedTest,
       isAttemptToFix: test._ddIsAttemptToFix,
-      hasFailedAllRetries: test._ddHasFailedAllRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       hasPassedAnyEfdAttempt: testStatuses.includes('pass'),
       testStatus,
@@ -1130,7 +1146,6 @@ function deferEfdRetryGroups (testGroups) {
 }
 
 function prepareDispatcherRun (dispatcher, args) {
-  dynamicAtrRetryCountByTestKey.clear()
   let testGroups = args[0]
 
   for (const group of testGroups) {
@@ -1227,7 +1242,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       videos.push(attachment)
     }
   })
-  worker.on('testEnd', ({ testId, status, errors, annotations }) => {
+  worker.on('testEnd', ({ testId, status, errors, annotations, duration }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
@@ -1246,6 +1261,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
         isTimeout,
         shouldCreateTestSpan,
         projects,
+        testDuration: duration,
       }
     )
     const testResult = test.results.at(-1)
@@ -1384,6 +1400,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       return runAllTests.apply(this, arguments)
     }
 
+    testsToTestStatuses.clear()
+    dynamicAtrRetryCountByTestKey.clear()
+    automaticRetryProjectNames.clear()
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined
@@ -1531,6 +1550,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           projectsWithAutomaticRetries.push(project)
+          automaticRetryProjectNames.add(project.name)
           project.retries = atrRetries
         }
       }
@@ -2567,7 +2587,6 @@ function instrumentWorkerMainMethods (workerMain) {
       isAtrRetry: test._ddIsAtrRetry,
       isEfdManagedTest: test._ddIsEfdManagedTest,
       isAttemptToFix: test._ddIsAttemptToFix,
-      hasFailedAllRetries: test._ddHasFailedAllRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       hasPassedAnyEfdAttempt: test._ddHasPassedAnyEfdAttempt,
       testStatus: STATUS_TO_TEST_STATUS[status],
