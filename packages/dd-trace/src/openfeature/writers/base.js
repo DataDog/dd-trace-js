@@ -153,8 +153,7 @@ class BaseFFEWriter {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
 
-    const route = this.#createActiveRoute()
-    this.#sendRequest(payload, events.length, route, this._fallbackRoute)
+    this._sendPayload(payload, events.length)
   }
 
   /**
@@ -201,6 +200,17 @@ class BaseFFEWriter {
   _setRoutes (route, fallbackRoute) {
     this.#activateRoute(this.#createRoute(route))
     this._fallbackRoute = fallbackRoute ? this.#createRoute(fallbackRoute) : undefined
+  }
+
+  /**
+   * Sends an already encoded payload through the active route and fallback.
+   *
+   * @param {string} payload - Encoded event batch
+   * @param {number} eventCount - Number of rows represented by the batch
+   */
+  _sendPayload (payload, eventCount) {
+    const route = this.#createActiveRoute()
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute)
   }
 
   /**
