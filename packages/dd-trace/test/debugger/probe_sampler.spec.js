@@ -116,9 +116,8 @@ describe('probe sampler', function () {
     if ($dd_sampler === undefined) return false
     let $dd_sampled = false
     if ($dd_sampler.shouldEvaluateCondition("probe-1", true)) {
-      const $dd_start = $dd_sampler.now()
       try {
-        $dd_sampled = $dd_sampler.conditionEvaluated(0, "probe-1", $dd_start,
+        $dd_sampled = $dd_sampler.conditionEvaluated(0, "probe-1", $dd_sampler.now(),
           ((foo) === (42)) === true, 200000n, true) || $dd_sampled
       } catch ($dd_error) {
         $dd_sampled = $dd_sampler.conditionError(0, "probe-1", $dd_error) || $dd_sampled
