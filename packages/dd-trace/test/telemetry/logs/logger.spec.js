@@ -69,6 +69,22 @@ describe('logger telemetry delivery', () => {
       'TypeError: redacted\n    at request (request.js:1:2)')
   })
 
+  it('should collect the cause of an empty lazy message', () => {
+    const cause = new TypeError('customer-secret')
+    cause.stack = `TypeError: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
+    const message = sinon.stub().returns('')
+
+    log.error(message, cause)
+
+    sinon.assert.calledOnce(message)
+    assert.deepStrictEqual(collector.drain(), [{
+      message: 'Generic Error',
+      level: 'ERROR',
+      count: 1,
+      stack_trace: 'TypeError: redacted\n    at request (request.js:1:2)',
+    }])
+  })
+
   it('should redact bare errors', () => {
     const cause = new Error('customer-secret')
     cause.stack = `Error: customer-secret\n    at request (${ddBasePath}request.js:1:2)`
