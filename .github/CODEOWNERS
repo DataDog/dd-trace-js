@@ -383,7 +383,7 @@
 /.github/workflows/all-green.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
 /.github/workflows/audit.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/custom-node-version-dispatch.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
-/.github/workflows/dependabot-automation.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
+/.github/workflows/dependabot-automation.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/flakiness.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/platform.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 /.github/workflows/project.yml @DataDog/dd-trace-js @Datadog/lang-platform-js @dd-octo-sts
@@ -437,7 +437,7 @@
 /openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
 /.github/CODEOWNERS @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/apm-sdk-capabilities-js
+/.github/dependabot.yml @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/pull_request_template.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/vendored-dependencies.csv @DataDog/dd-trace-js @DataDog/lang-platform-js
 
