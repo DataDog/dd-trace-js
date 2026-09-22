@@ -20,15 +20,15 @@ let appliedActions = new Map()
  */
 
 /**
- * @typedef {import('./waf').WAFConfig & { rules?: string }} AppSecConfig
+ * @typedef {import('./waf').WAFConfig & { DD_APPSEC_RULES?: string }} AppSecConfig
  */
 
 /**
  * @param {AppSecConfig} config
  */
 function loadRules (config) {
-  const defaultRules = config.rules
-    ? JSON.parse(readFileSync(config.rules, 'utf8'))
+  const defaultRules = config.DD_APPSEC_RULES
+    ? JSON.parse(readFileSync(config.DD_APPSEC_RULES, 'utf8'))
     : require('./recommended.json')
 
   waf.init(defaultRules, config)

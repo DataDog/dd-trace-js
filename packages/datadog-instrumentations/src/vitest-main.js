@@ -1202,8 +1202,19 @@ function getFinishWrapper (exitOrClose) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
+    const hasNoTestFiles = this.state.pathsSet.size === 0
+    const hasUnexpectedEmptySession = hasNoTestFiles && !areAllSuitesSkipped && !this.config.passWithNoTests
+    if (!error && hasUnexpectedEmptySession) {
+      error = new Error('No test files were found.')
+    }
+    const status = runError || hasUnexpectedEmptySession
+      ? 'fail'
+      : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state))
+    const isExpectedEmptySession = !runError && !hasUnexpectedEmptySession &&
+      (areAllSuitesSkipped || hasNoTestFiles)
     const flushPromise = getChannelPromise(testSessionFinishCh, {
-      status: runError ? 'fail' : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state)),
+      status,
+      isExpectedEmptySession,
       testCodeCoverageLinesTotal,
       error,
       isEarlyFlakeDetectionEnabled,
