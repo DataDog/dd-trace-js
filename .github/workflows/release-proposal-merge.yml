@@ -43,17 +43,28 @@ jobs:
 
           {
             echo "base_ref=$(jq -r .baseRefName <<< "$proposal")"
+            echo "head_ref=$(jq -r .headRefName <<< "$proposal")"
             echo "head_sha=$(jq -r .headRefOid <<< "$proposal")"
           } >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out trusted repository state
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
-          ref: ${{ steps.proposal.outputs.head_sha }}
+          fetch-depth: 1
+          ref: master
           token: ${{ steps.octo-sts.outputs.token }}
+      - name: Fetch release proposal
+        env:
+          HEAD_REF: ${{ steps.proposal.outputs.head_ref }}
+          HEAD_SHA: ${{ steps.proposal.outputs.head_sha }}
+        run: |
+          git fetch --no-tags origin "refs/heads/$HEAD_REF"
+          test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+          git update-ref refs/heads/release-proposal "$HEAD_SHA"
       - name: Fast-forward release branch
         env:
           BASE_REF: ${{ steps.proposal.outputs.base_ref }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          HEAD_REF: ${{ steps.proposal.outputs.head_ref }}
           HEAD_SHA: ${{ steps.proposal.outputs.head_sha }}
           PR_URL: https://github.com/${{ github.repository }}/pull/${{ inputs.pull-request-number }}
         run: |
@@ -64,14 +75,15 @@ jobs:
 
           jq -e \
             --arg base_ref "$BASE_REF" \
+            --arg head_ref "$HEAD_REF" \
             --arg head_sha "$HEAD_SHA" '
             .state == "OPEN" and
             .isDraft == false and
             .isCrossRepository == false and
             .reviewDecision == "APPROVED" and
             .baseRefName == $base_ref and
-            (.headRefName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-proposal$")) and
+            .headRefName == $head_ref and
             .headRefOid == $head_sha
           ' <<< "$proposal" > /dev/null
 
-          git push origin "HEAD:refs/heads/$BASE_REF"
+          git push origin "refs/heads/release-proposal:refs/heads/$BASE_REF"
