@@ -84,7 +84,6 @@ describe('span processor', () => {
       processor.process(span)
 
       assert.strictEqual(span.meta_struct, undefined)
-      assert.strictEqual(LLMObsTagger.tagMap.has(span), false)
       sinon.assert.notCalled(writer.append)
 
       processor.processTrace({ spans: [span], samplingPriority: 1 })

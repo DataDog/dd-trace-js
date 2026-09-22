@@ -36,7 +36,6 @@ describe('sdk', () => {
     sinon.spy(LLMObsSpanProcessor.prototype, 'process')
     sinon.spy(LLMObsSpanProcessor.prototype, 'format')
     sinon.spy(tracer._tracer._processor, 'process')
-    sinon.stub(LLMObsTagger.tagMap, 'delete')
 
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
@@ -1490,6 +1489,19 @@ describe('sdk', () => {
 
         assert.deepStrictEqual(spanCtx, { traceId, spanId })
       })
+    })
+
+    it('uses a provided finished span', () => {
+      let span
+      llmobs.trace({ kind: 'workflow', name: 'test' }, currentSpan => {
+        span = currentSpan
+      })
+
+      const spanCtx = llmobs.exportSpan(span)
+      const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
+      const spanId = span.context().toSpanId()
+
+      assert.deepStrictEqual(spanCtx, { traceId, spanId })
     })
 
     it('uses the active span in an llmobs scope', () => {

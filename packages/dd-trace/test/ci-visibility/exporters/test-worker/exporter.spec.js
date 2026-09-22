@@ -34,6 +34,12 @@ const {
 describe('CI Visibility Test Worker Exporter', () => {
   let send, originalSend
 
+  it('does not support meta_struct', () => {
+    const exporter = new TestWorkerCiVisibilityExporter()
+
+    assert.strictEqual(exporter.supportsMetaStruct, false)
+  })
+
   beforeEach(() => {
     send = sinon.spy()
     originalSend = process.send

@@ -120,8 +120,6 @@ class LLMObsSpanProcessor {
       } else {
         cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
       }
-
-      LLMObsTagger.tagMap.delete(span)
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
