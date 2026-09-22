@@ -58,6 +58,10 @@ webpackVersions.forEach((version) => {
       execSync('node ./build-and-test-skip-external.js', { timeout })
     })
 
+    it('inlines compressed libdatadog WASM assets', () => {
+      execSync('node ./build-and-test-libdatadog-wasm.js', { timeout })
+    })
+
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', { timeout })
     })

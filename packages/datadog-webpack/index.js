@@ -7,6 +7,7 @@ const instrumentations = require('../datadog-instrumentations/src/helpers/instru
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
+const { LIBDATADOG_WASM_PACKAGE } = require('../datadog-esbuild/src/libdatadog-wasm')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
@@ -142,6 +143,12 @@ class DatadogWebpackPlugin {
 
         const { pkg, path: modulePath, pkgJson } = extractPackageAndModulePath(normalizedResource)
         if (!pkg) {
+          return
+        }
+
+        if (pkg === LIBDATADOG_WASM_PACKAGE && normalizedResource.endsWith('.js')) {
+          createData.loaders ||= []
+          createData.loaders.push({ loader: require.resolve('./src/wasm-loader') })
           return
         }
 

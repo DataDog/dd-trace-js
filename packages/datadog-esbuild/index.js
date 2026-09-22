@@ -8,12 +8,15 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const { inlineLibdatadogWasmAssets } = require('./src/libdatadog-wasm')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
 const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+const LIBDATADOG_WASM_PATH_PATTERN =
+  /[\\/]node_modules[\\/]@datadog[\\/]libdatadog-wasm[\\/].*\.[cm]?js$/
 
 let rewriter
 
@@ -62,6 +65,23 @@ for (const builtin of builtinModules) {
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
 module.exports.name = 'datadog-esbuild'
+
+/**
+ * @param {object} args
+ * @param {string} args.path
+ */
+function loadLibdatadogWasm (args) {
+  const source = fs.readFileSync(args.path, 'utf8')
+  const result = inlineLibdatadogWasmAssets(source, args.path)
+  if (!result) return
+
+  return {
+    contents: result.contents,
+    loader: 'js',
+    resolveDir: path.dirname(args.path),
+    watchFiles: result.assets,
+  }
+}
 
 function isESMBuild (build) {
   // check toLowerCase? to be safe if unexpected object is there instead of a string
@@ -300,6 +320,8 @@ ${build.initialOptions.banner.js}`
       }
     }
   })
+
+  build.onLoad({ filter: LIBDATADOG_WASM_PATH_PATTERN }, loadLibdatadogWasm)
 
   build.onLoad({ filter: /.*/ }, async args => {
     if (args.pluginData?.pkgOfInterest) {

@@ -71,6 +71,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('inlines compressed libdatadog WASM assets', () => {
+      execSync('node ./build-and-test-libdatadog-wasm.js', {
+        timeout,
+      })
+    })
+
     it('handles typescript apps that import without file extensions', () => {
       execSync('node ./build-and-test-typescript.mjs', {
         timeout,

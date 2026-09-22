@@ -1,55 +1,104 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
+const wasmLoader = require('../src/wasm-loader')
 
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
     it('throws when minimize is enabled', () => {
       const plugin = new DatadogWebpackPlugin()
-      let environmentHook
-      const compiler = {
-        options: {
-          optimization: { minimize: true },
-        },
-        hooks: {
-          environment: { tap: (name, fn) => { environmentHook = fn } },
-          thisCompilation: { tap: () => {} },
-          normalModuleFactory: { tap: () => {} },
-        },
-      }
+      const { callbacks, compiler } = createCompiler(true)
 
       plugin.apply(compiler)
       assert.throws(
-        () => environmentHook(),
+        () => callbacks.environment(),
         /optimization\.minimize is not compatible/
       )
     })
 
     it('does not throw when minimize is not enabled', () => {
       const plugin = new DatadogWebpackPlugin()
-      const tapped = []
-      const compiler = {
-        options: {
-          optimization: { minimize: false },
-        },
-        hooks: {
-          environment: { tap: () => {} },
-          thisCompilation: { tap: () => {} },
-          normalModuleFactory: {
-            tap: (name, fn) => { tapped.push(name) },
-          },
-        },
-      }
+      const { callbacks, compiler } = createCompiler(false)
 
       plugin.apply(compiler)
-      assert.equal(tapped[0], 'DatadogWebpackPlugin')
+      assert.equal(callbacks.normalModuleFactoryName, 'DatadogWebpackPlugin')
+    })
+
+    it('adds the WASM loader only to JavaScript modules', () => {
+      const plugin = new DatadogWebpackPlugin()
+      const { callbacks, compiler } = createCompiler(false)
+      const packageRoot = '/app/node_modules/@datadog/libdatadog-wasm'
+
+      plugin.apply(compiler)
+
+      const configuredLoader = { loader: '/configured-loader.js' }
+      const js = { loaders: [configuredLoader], resource: `${packageRoot}/index.js` }
+      callbacks.afterResolve({ createData: js })
+      assert.deepStrictEqual(js.loaders, [
+        configuredLoader,
+        { loader: require.resolve('../src/wasm-loader') },
+      ])
+
+      const json = { resource: `${packageRoot}/package.json` }
+      callbacks.afterResolve({ createData: json })
+      assert.strictEqual(json.loaders, undefined)
     })
   })
 })
+
+/**
+ * @param {boolean} minimize
+ */
+function createCompiler (minimize) {
+  const callbacks = {}
+  const compiler = {
+    options: {
+      optimization: { minimize },
+    },
+    hooks: {
+      environment: {
+        /**
+         * @param {string} name
+         * @param {Function} handler
+         */
+        tap (name, handler) {
+          callbacks.environment = handler
+        },
+      },
+      thisCompilation: { tap: () => {} },
+      normalModuleFactory: {
+        /**
+         * @param {string} name
+         * @param {Function} handler
+         */
+        tap (name, handler) {
+          callbacks.normalModuleFactoryName = name
+          handler({
+            hooks: {
+              afterResolve: {
+                /**
+                 * @param {string} name
+                 * @param {Function} handler
+                 */
+                tap (name, handler) {
+                  callbacks.afterResolve = handler
+                },
+              },
+            },
+          })
+        },
+      },
+    },
+  }
+  return { callbacks, compiler }
+}
 
 describe('loader', () => {
   it('appends dc-polyfill channel publish to module source', () => {
@@ -92,3 +141,77 @@ describe('loader', () => {
     assert.ok(result.includes('__dd_payload'), 'should use __dd_payload variable')
   })
 })
+
+describe('WASM loader', () => {
+  it('leaves releases without external WASM assets unchanged', () => {
+    const source = 'module.exports = Buffer.from("inline WASM")'
+    const result = wasmLoader.call({
+      cacheable: () => {},
+      resourcePath: '/fixture.js',
+    }, source)
+
+    assert.strictEqual(result, source)
+  })
+
+  it('inlines marked assets and watches the compressed file', () => {
+    const fixture = createWasmFixture()
+    const dependencies = []
+    let cacheable = false
+    try {
+      const result = wasmLoader.call({
+        addDependency: dependency => dependencies.push(dependency),
+        cacheable: () => { cacheable = true },
+        resourcePath: fixture.modulePath,
+      }, fixture.source)
+
+      assert.strictEqual(cacheable, true)
+      assert.deepStrictEqual(dependencies, [fixture.assetPath])
+      assert.doesNotMatch(result, /@datadog\/wasm-asset|\.wasm\.br/)
+      assert.match(result, /Buffer\.from\("Zml4dHVyZSBXQVNN", 'base64'\)/)
+    } finally {
+      fs.rmSync(fixture.directory, { force: true, recursive: true })
+    }
+  })
+
+  it('fails when a marked asset is missing', () => {
+    const fixture = createWasmFixture()
+    try {
+      fs.rmSync(fixture.assetPath)
+      assert.throws(() => wasmLoader.call({
+        addDependency: () => {},
+        cacheable: () => {},
+        resourcePath: fixture.modulePath,
+      }, fixture.source), /fixture_bg\.wasm\.br/)
+    } finally {
+      fs.rmSync(fixture.directory, { force: true, recursive: true })
+    }
+  })
+
+  it('fails when the marked loader shape changes', () => {
+    const fixture = createWasmFixture('const bytes = /* @datadog/wasm-asset */ loadWasm()')
+    try {
+      assert.throws(() => wasmLoader.call({
+        addDependency: () => {},
+        cacheable: () => {},
+        resourcePath: fixture.modulePath,
+      }, fixture.source), /Unsupported .* asset loader/)
+    } finally {
+      fs.rmSync(fixture.directory, { force: true, recursive: true })
+    }
+  })
+})
+
+/**
+ * @param {string} [source]
+ */
+function createWasmFixture (source) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webpack-wasm-'))
+  const modulePath = path.join(directory, 'fixture.js')
+  const assetPath = path.join(directory, 'fixture_bg.wasm.br')
+  const dirnameExpression = '${' + '__dirname}'
+  const loaderSource = source ?? 'const bytes = /* @datadog/wasm-asset */ ' +
+    `require('node:fs').readFileSync(\`${dirnameExpression}/fixture_bg.wasm.br\`)`
+  fs.writeFileSync(assetPath, 'fixture WASM')
+  fs.writeFileSync(modulePath, loaderSource)
+  return { assetPath, directory, modulePath, source: loaderSource }
+}
