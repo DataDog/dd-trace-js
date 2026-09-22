@@ -289,6 +289,30 @@ describe('span processor', () => {
       assert.strictEqual(span.meta_struct, undefined)
     })
 
+    it('uses the writer immediately when the apm trace is not recorded', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            _trace: { record: false },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+
+      processor.process(span)
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
     it('uses the writer when the apm trace is not recording', () => {
       span = {
         context () {

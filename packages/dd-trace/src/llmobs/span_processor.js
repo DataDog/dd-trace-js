@@ -121,7 +121,7 @@ class LLMObsSpanProcessor {
         samplingDecision: mlObsTags[SAMPLING_DECISION],
       }
 
-      if (this.#config.DD_TRACE_ENABLED === false) {
+      if (this.#config.DD_TRACE_ENABLED === false || span.context()._trace?.record === false) {
         this.#appendToWriter(span, formattedEvent, routing)
       } else {
         cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
