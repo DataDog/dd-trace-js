@@ -1002,12 +1002,14 @@ function waitForRumTestStart (context) {
  */
 function createWorkerConfiguration () {
   return {
+    dynamicAtrBuckets: undefined,
     earlyFlakeDetectionFaultyThreshold: 30,
     earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
     flakyTestRetriesCount: 0,
     isCodeCoverageEnabled: false,
     isCoverageReportUploadEnabled: false,
     isDiEnabled: false,
+    isDynamicAtrEnabled: false,
     isEarlyFlakeDetectionEnabled: false,
     isFlakyTestRetriesEnabled: false,
     isImpactedTestsEnabled: false,
@@ -1329,10 +1331,14 @@ function configureCoordinator (state, response) {
     return
   }
 
+  configuration.dynamicAtrBuckets = libraryConfig.isDynamicAtrEnabled === true
+    ? libraryConfig.dynamicAtrBuckets
+    : undefined
   configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
   configuration.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   configuration.isDiEnabled = libraryConfig.isDiEnabled
+  configuration.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled === true
   configuration.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
   configuration.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   configuration.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled

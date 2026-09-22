@@ -30,6 +30,7 @@
       }
     },
     "finish-immediately-with-many-tags": {
+      "iterations": 10,
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
