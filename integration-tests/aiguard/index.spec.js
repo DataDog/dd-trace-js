@@ -590,6 +590,21 @@ describe('AIGuard SDK integration tests', () => {
     })
   })
 
+  it('keeps the raw Anthropic response readable through .withResponse()', async () => {
+    const response = await executeRequest(`${url}/anthropic-stream-with-response`)
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body))
+    assert.strictEqual(response.body.blocked, false)
+    assert.match(response.body.text, /event: message_start/)
+    assert.match(response.body.text, /"text":"Hello"/)
+    assert.match(response.body.text, /event: message_stop/)
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+      assert.strictEqual(guardSpans.length, 2)
+      assertGuardSpansChildOf(payload, 'anthropic.request')
+    })
+  })
+
   for (const [endpoint, output, target] of [
     ['/anthropic-stream-after-deny', 'text', 'prompt'],
     ['/anthropic-raw-stream-after-deny', 'raw SSE text', 'prompt'],

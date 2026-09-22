@@ -627,6 +627,20 @@ app.get('/anthropic-stream', async (req, res) => {
   }
 })
 
+app.get('/anthropic-stream-with-response', async (req, res) => {
+  try {
+    const { response } = await anthropicClient.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 32,
+      messages: [{ role: 'user', content: 'Hello there' }],
+      stream: true,
+    }).withResponse()
+    res.status(200).json({ blocked: false, text: await response.text() })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
 app.get('/anthropic-stream-after-deny', async (req, res) => {
   let chunks = 0
   try {

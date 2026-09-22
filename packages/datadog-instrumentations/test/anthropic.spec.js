@@ -501,6 +501,34 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       }
     })
 
+    it('keeps a streamed raw response readable through withResponse()', async () => {
+      const apmChannel = tracingChannel('apm:anthropic:request')
+      let asyncEndCount = 0
+      const apmHandlers = { start () {}, asyncEnd () { asyncEndCount++ } }
+      apmChannel.subscribe(apmHandlers)
+      const seen = []
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = async stream => {
+          for await (const event of stream) seen.push(event)
+          return stream
+        }
+      })
+      const event = { type: 'message_stop' }
+      const { body, response: rawResponse } = sseResponse([event])
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        const { response } = await clientReturning(rawResponse).messages.create(options).withResponse()
+
+        assert.deepStrictEqual(seen, [event])
+        assert.strictEqual(await response.text(), body)
+        assert.strictEqual(asyncEndCount, 1)
+      } finally {
+        apmChannel.unsubscribe(apmHandlers)
+        unsubscribe()
+      }
+    })
+
     it('does not clone the raw response used internally by messages.stream()', async () => {
       const { unsubscribe } = subscribeIntercept(ctx => {
         ctx.onResult = stream => stream
