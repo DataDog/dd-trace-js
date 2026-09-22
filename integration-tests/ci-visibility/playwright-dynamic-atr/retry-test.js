@@ -14,6 +14,10 @@ if (process.env.PLAYWRIGHT_SERIAL_RETRY) {
 }
 
 test('always fails', async () => {
+  const retrySource = test.info().project.metadata?.retrySource
+  if (retrySource) {
+    test.info().annotations.push({ type: 'DD_TAGS[test.retry_source]', description: retrySource })
+  }
   if (process.env.PLAYWRIGHT_EXPECTED_FAILURE) {
     test.fail()
     if (process.env.PLAYWRIGHT_EXPECTED_FAILURE === 'passes') return

@@ -138,7 +138,7 @@ const efdScheduledOriginalTestKeys = new Set()
 const efdStartedOriginalTestKeys = new Set()
 const efdSlowAbortedTests = new Set()
 const dynamicAtrRetryCountByTestKey = new Map()
-const automaticRetryProjectNames = new Set()
+const automaticRetryProjects = new Set()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
 const disabledTestIds = new Set()
@@ -600,14 +600,19 @@ function getProjectsFromDispatcher (dispatcher) {
   return dispatcher._loader?.fullConfig()?.projects
 }
 
-function getBrowserNameFromProjects (projects, test) {
+/**
+ * Resolves the configured project by Playwright's unique ID or legacy index.
+ * @param {object[]} projects
+ * @param {object} test
+ */
+function getTestProject (projects, test) {
   if (!projects || !test) {
     return null
   }
   const { _projectIndex, _projectId: testProjectId } = test
 
   if (_projectIndex !== undefined) {
-    return projects[_projectIndex]?.name
+    return projects[_projectIndex]
   }
 
   return projects.find(({ __projectId, _id, name }) => {
@@ -618,7 +623,12 @@ function getBrowserNameFromProjects (projects, test) {
       return _id === testProjectId
     }
     return name === testProjectId
-  })?.name
+  })
+}
+
+function getBrowserNameFromProjects (projects, test) {
+  const project = getTestProject(projects, test)
+  return project && project.name
 }
 
 function formatTestHookError (error, hookType, isTimeout) {
@@ -868,7 +878,7 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
  * @param {object[]} projects
  */
 function hasAutomaticRetries (test, projects) {
-  if (!automaticRetryProjectNames.has(getBrowserNameFromProjects(projects, test))) return false
+  if (!automaticRetryProjects.has(getTestProject(projects, test))) return false
   for (let suite = test.parent; suite; suite = suite.parent) {
     if (suite._retries !== undefined) return false
   }
@@ -1425,7 +1435,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     testsToTestStatuses.clear()
     dynamicAtrRetryCountByTestKey.clear()
-    automaticRetryProjectNames.clear()
+    automaticRetryProjects.clear()
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined
@@ -1573,7 +1583,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           projectsWithAutomaticRetries.push(project)
-          automaticRetryProjectNames.add(project.name)
+          automaticRetryProjects.add(project)
           project.retries = atrRetries
         }
       }

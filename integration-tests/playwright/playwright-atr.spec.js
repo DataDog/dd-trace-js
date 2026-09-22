@@ -253,6 +253,42 @@ versions.forEach((version) => {
         })
       }
 
+      for (const name of ['', 'same-name']) {
+        for (const nativeFirst of [false, true]) {
+          const label = `${name || 'unnamed'}, nativeFirst=${nativeFirst}`
+          it(`isolates dynamic ATR for colliding project names (${label})`, async (receiver, run) => {
+            receiver.setSettings({ flaky_test_retries_enabled: true })
+            const proc = run(
+              './node_modules/.bin/playwright test -c ci-visibility/playwright-dynamic-atr-projects.config.js', {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+                  DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+                  PLAYWRIGHT_PROJECT_NAME: name,
+                  PLAYWRIGHT_NATIVE_PROJECT_FIRST: nativeFirst ? '1' : '',
+                },
+              })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const tests = payloads.flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test').map(event => event.content)
+                assert.strictEqual(tests.length, 6)
+                for (const [source, count] of [['automatic', 2], ['native', 4]]) {
+                  const attempts = tests.filter(test => test.meta['test.retry_source'] === source)
+                  assert.strictEqual(attempts.length, count, source)
+                  assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'))
+                  assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+                  assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                  assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                }
+              })
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 1)
+          })
+        }
+      }
+
       const dynamicCases = [
         {
           name: 'elapsed duration',
