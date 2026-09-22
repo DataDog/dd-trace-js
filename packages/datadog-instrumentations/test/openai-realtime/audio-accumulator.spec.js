@@ -153,11 +153,11 @@ describe('openai realtime AudioAccumulator', () => {
       assert.strictEqual(accumulator.startTime, undefined)
     })
 
-    // Once the cap has dropped frames, a partial trim cannot put them back: the bytes after the trim
-    // point are gone too. Reopening here would let later frames build a clip that starts partway
-    // through the segment while the duration still spans all of it, so the segment stays closed and
-    // the turn falls back to an `[audio]` marker.
-    it('stays closed when a partial trim leaves a gap in a dropped segment', () => {
+    // The scenario the trim exists for: a continuously streaming client whose lead-in — the mic
+    // stays open across the whole previous agent response — spends the cap before the user speaks.
+    // Shedding that lead-in has to reopen the segment, or the speech that follows is dropped too and
+    // the turn keeps nothing but an `[audio]` marker.
+    it('reopens a segment whose lead-in spent the cap, so the speech that follows is kept', () => {
       const accumulator = new AudioAccumulator()
       accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES).toString('base64'), 1000)
       accumulator.append(b64([1, 2, 3, 4]), 2000)
@@ -166,23 +166,25 @@ describe('openai realtime AudioAccumulator', () => {
       // Shed the lead-in that spent the cap, but not the whole segment.
       accumulator.trimLeading(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
 
-      assert.strictEqual(accumulator.oversize, true)
+      assert.strictEqual(accumulator.oversize, false, 'retention reopens for the speech')
       assert.strictEqual(accumulator.totalDecodedBytes, 4)
-      // The timing survives; the bytes do not, and nothing claims otherwise.
-      assert.strictEqual(accumulator.toBuffer().length, 0)
       assert.strictEqual(accumulator.present, true)
     })
 
-    it('keeps dropping frames after a partial trim, rather than starting a clip mid-segment', () => {
+    it('retains the frames that arrive after the lead-in was shed', () => {
       const accumulator = new AudioAccumulator()
       accumulator.append(Buffer.alloc(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES).toString('base64'), 1000)
       accumulator.append(b64([1, 2, 3, 4]), 2000)
       accumulator.trimLeading(LLMOBS_AUDIO_ACCUMULATE_MAX_BYTES)
 
+      // The user speaks. These frames are the whole point of trimming.
       accumulator.append(b64([7, 8]), 3000)
+      accumulator.append(b64([9, 10]), 3010)
 
-      assert.strictEqual(accumulator.toBuffer().length, 0)
-      assert.strictEqual(accumulator.totalDecodedBytes, 6)
+      assert.deepStrictEqual(accumulator.toBuffer(), Buffer.from([7, 8, 9, 10]))
+      // `totalDecodedBytes` still counts the 4 bytes that were dropped before the reopen, so the
+      // window runs slightly longer than the clip — the pre-onset padding, not speech.
+      assert.strictEqual(accumulator.totalDecodedBytes, 8)
     })
 
     it('reopens a segment the lead-in had already pushed oversize', () => {
