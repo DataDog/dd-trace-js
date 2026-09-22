@@ -472,6 +472,10 @@ before(function () {
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
       isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
       isTextTerminal = suiteConfig.isTextTerminal
+      if (isDynamicAtrEnabled && isTextTerminal) {
+        // The first test event can precede this task, and an earlier user hook can skip our beforeEach.
+        Cypress.mocha.getRootSuite().eachTest(configureTestRetries)
+      }
       rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis

@@ -387,33 +387,10 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
-function getMatchingCypressTest (cypressTests, testName, attemptIndex, testStatus, preferIndexedMatch = false) {
-  let matchingTestByIndex
-  let matchingTestByStatus
-  let matchingTestIndex = 0
-
-  for (const cypressTest of cypressTests) {
-    if (cypressTest.title.join(' ') !== testName) {
-      continue
-    }
-
-    if (matchingTestIndex === attemptIndex) {
-      matchingTestByIndex = cypressTest
-    }
-    matchingTestIndex++
-
-    if (!matchingTestByStatus && CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === testStatus) {
-      matchingTestByStatus = cypressTest
-    }
-  }
-
-  return preferIndexedMatch
-    ? matchingTestByIndex || matchingTestByStatus
-    : matchingTestByStatus || matchingTestByIndex
-}
-
 function isCypressHookFailure (cypressTest) {
-  return CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state] === 'fail' &&
+  // Duplicate titles can leave the aggregate state passed even when the final attempt has a hook failure.
+  const lastAttempt = cypressTest.attempts?.at(-1)
+  return (cypressTest.state === 'failed' || lastAttempt?.state === 'failed') &&
     /\bhook\b/.test(String(cypressTest.displayError || ''))
 }
 
@@ -1624,29 +1601,26 @@ class CypressPlugin {
     const matchedCypressTests = new Set()
     for (const finishedTestAttempts of finishedTestsByTest.values()) {
       const { testName } = finishedTestAttempts[0]
-      // Public Cypress results omit runnable IDs but retain declaration order.
-      const matchingCypressTest = cypressTests.find(test =>
+      // Cypress reports one result per original runnable, including Datadog-managed clones.
+      // Public results omit runnable IDs but retain declaration order.
+      const cypressTest = cypressTests.find(test =>
         test.title.join(' ') === testName && !matchedCypressTests.has(test)
       )
-      matchedCypressTests.add(matchingCypressTest)
+      matchedCypressTests.add(cypressTest)
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         const isDatadogManagedAttempt = finishedTest.isEfdManagedTest || finishedTest.isAttemptToFix
-        const cypressTest = isDatadogManagedAttempt
-          ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus, isLastAttempt) ||
-            cypressTests.find(test => test.title.join(' ') === testName)
-          : matchingCypressTest
         if (!cypressTest) {
           continue
         }
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
-        const shouldUseCapturedStatus = isDatadogManagedAttempt && !(isLastAttempt && isCypressHookFailure(cypressTest))
-        let cypressTestStatus = shouldUseCapturedStatus
-          ? finishedTest.testStatus
-          : CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
+        if (isDatadogManagedAttempt) {
+          cypressTestStatus = isLastAttempt && isCypressHookFailure(cypressTest) ? 'fail' : finishedTest.testStatus
+        }
         if (!finishedTest.isEfdManagedTest && !finishedTest.isAttemptToFix &&
           cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]

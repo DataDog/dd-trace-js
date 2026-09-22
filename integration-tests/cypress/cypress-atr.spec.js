@@ -293,6 +293,7 @@ moduleTypes.forEach(({
       for (const [scenario, description] of [
         ['duplicates', 'keeps dynamic ATR budgets and final statuses separate for duplicate titles'],
         ['local-retries', 'applies dynamic ATR budgets over local test and suite retry overrides'],
+        ['early-hook', 'sets the dynamic ATR retry floor before earlier user hooks'],
         ['late-hook', 'corrects dynamic ATR final status after late hook failures'],
         ['late-hook-flat', 'corrects fixed ATR final status after late hook failures'],
         ['stop', 'does not mark dynamic ATR retries exhausted when Cypress stops early'],
@@ -321,6 +322,7 @@ moduleTypes.forEach(({
                 DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
                 DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: scenario === 'duplicates' ? '1,3,3,3,3' : '2,2,2,2,2',
                 ...(scenario === 'duplicates' ? { CYPRESS_DYNAMIC_ATR_DURATION_MS: '1' } : {}),
+                ...(scenario === 'early-hook' ? { CYPRESS_EARLY_BEFORE_EACH_FAILURE: 'true' } : {}),
               },
             }
           )
@@ -357,6 +359,12 @@ moduleTypes.forEach(({
                     assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
                   }
                 }
+              } else if (scenario === 'early-hook') {
+                assert.deepStrictEqual(testOutput.match(/early beforeEach attempt \d+/g), [
+                  'early beforeEach attempt 0',
+                  'early beforeEach attempt 1',
+                ], testOutput)
+                assert.ok(!testOutput.includes('the test body should not run'))
               } else if (scenario === 'local-retries') {
                 assert.strictEqual(tests.length, 15, testOutput)
                 const names = new Set(tests.map(test => test.meta[TEST_NAME]))

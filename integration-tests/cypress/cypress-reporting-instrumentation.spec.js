@@ -2617,7 +2617,10 @@ moduleTypes.forEach(({
                 return isTextTerminal
               },
               on: (name, callback) => { events[name] = callback },
-              mocha: { getRunner: () => runner, getRootSuite: () => ({ file: 'test.cy.js' }) },
+              mocha: {
+                getRunner: () => runner,
+                getRootSuite: () => ({ file: 'test.cy.js', eachTest: callback => callback(currentTest) }),
+              },
             },
             cy: { task, on () {} },
             before: callback => { hooks.before = callback },
@@ -2627,6 +2630,7 @@ moduleTypes.forEach(({
           })
 
           await hooks.before()
+          assert.strictEqual(currentTest._retries, isTextTerminal ? Math.max(1, retries) : retries)
           const entryPoints = [
             () => events['test:before:run']({}, currentTest),
             () => events['test:before:run:async']({}, currentTest),
