@@ -1002,7 +1002,8 @@ function wrapRun (pl, isLatestVersion, version) {
 
         // Notice that ATR is handled using cucumber native retries features.
         // Therefore, if we reach this point, we are certain that it's the last ATR execution
-        const isLastAtrRetry = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && this.maxAttempts > 1
+        const isLastAtrRetry = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+          numTestRetries > 0 && this.maxAttempts > 1
 
         const statuses = lastStatusByPickleId.get(this.pickle.id)
         const isLastEfdRetry = isEfdRetry && statuses?.length === efdRetryCount + 1
@@ -1143,7 +1144,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isSuitesSkippingEnabled = isItrEnabled && configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isCoverageReportUploadEnabled = configurationResponse.libraryConfig?.isCoverageReportUploadEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
-    isDynamicAtrEnabled = configurationResponse.libraryConfig?.isDynamicAtrEnabled === true
+    isDynamicAtrEnabled = configurationResponse.libraryConfig?.isDynamicAtrEnabled === true &&
+      satisfies(frameworkVersion, '>=8.0.0')
     dynamicAtrBuckets = configurationResponse.libraryConfig?.dynamicAtrBuckets
     const configRetryCount = configurationResponse.libraryConfig?.flakyTestRetriesCount
     numTestRetries = (typeof configRetryCount === 'number' && configRetryCount > 0) ? configRetryCount : 0

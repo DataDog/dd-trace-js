@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { spawn } = require('node:child_process')
+const { readFileSync } = require('node:fs')
 
 const satisfies = require('semifies')
 
@@ -23,7 +24,7 @@ const version = process.env.CUCUMBER_VERSION || 'latest'
 const supportsTracer = satisfies(process.versions.node, `${engines.node} <${nodeMaxMajor}`) ||
   isTrue(process.env.DD_INJECT_FORCE)
 const supportsRetries = version === 'latest' || satisfies(version, '>=8.0.0')
-const describeRetries = supportsTracer && supportsRetries ? describe : describe.skip
+const describeRetries = supportsTracer ? describe : describe.skip
 const fixture = 'ci-visibility/cucumber-dynamic-atr'
 const durationBuckets = [
   [0, 0], [4999, 0], [5000, 0], [5001, 1], [10000, 1],
@@ -95,6 +96,49 @@ describeRetries(`cucumber@${version} dynamic ATR`, function () {
         )
         assert.ok(events?.some(event => event.type === 'test'), output)
         return { events, exitCode: childProcess.exitCode, output }
+      }
+
+      if (!supportsRetries) {
+        for (const bucketConfig of ['custom', 'fallback']) {
+          it(`preserves static retries before Cucumber 8 with ${bucketConfig} buckets`, async () => {
+            receiver.setSettings({
+              flaky_test_retries_enabled: true,
+              early_flake_detection: { enabled: false, slow_test_retries: { '5s': 3 } },
+            })
+            const messagesPath = `${cwd}/attempts.ndjson`
+            const { exitCode, output } = await run('budgets', {
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: bucketConfig === 'custom' ? '1,2,3,4,5' : '',
+            }, ['--name', '^duration 0$', '--format', `message:${messagesPath}`])
+            assert.strictEqual(exitCode, 1, output)
+            // Cucumber 7 does not expose individual retry attempts as test spans.
+            const messages = readFileSync(messagesPath, 'utf8').trim().split('\n').map(line => JSON.parse(line))
+            assert.strictEqual(messages.filter(message => message.testCaseStarted).length, 2)
+          })
+        }
+        return
+      }
+
+      for (const [feature, name, count, status, expectedExitCode] of [
+        ['budgets', 'duration 0', 3, 'fail', 1],
+        ['recovery', 'recovers', 3, 'pass', 0],
+        ['recovery', 'passes', 1, 'pass', 0],
+        ['recovery', 'skips', 1, 'skip', 0],
+      ]) {
+        it(`preserves native retry final status with a zero ATR budget for ${name}`, async () => {
+          const { events, exitCode, output } = await run(feature, {
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'false',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '0',
+          }, ['--name', `^${name}$`, '--retry', '2'])
+          assert.strictEqual(exitCode, expectedExitCode, output)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, count)
+          const terminal = tests.filter(test => test.meta[TEST_FINAL_STATUS] !== undefined)
+          assert.strictEqual(terminal.length, 1)
+          assert.strictEqual(terminal[0].meta[TEST_STATUS], status)
+          assert.strictEqual(terminal[0].meta[TEST_FINAL_STATUS], status)
+          assert.strictEqual(terminal[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+        })
       }
 
       for (const bucketConfig of ['custom', 'backend', 'empty entry']) {
