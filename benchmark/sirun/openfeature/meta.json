@@ -1,0 +1,40 @@
+{
+  "name": "openfeature",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "typical": {
+      "env": {
+        "VARIANT": "typical",
+        "CONSENT": "false",
+        "OPERATIONS": "1000000"
+      }
+    },
+    "scale": {
+      "env": {
+        "VARIANT": "scale",
+        "CONSENT": "false",
+        "OPERATIONS": "20000",
+        "WARMUP": "500"
+      }
+    },
+    "stress": {
+      "env": {
+        "VARIANT": "stress",
+        "CONSENT": "false",
+        "OPERATIONS": "2000",
+        "WARMUP": "50"
+      }
+    },
+    "hostile": {
+      "env": {
+        "VARIANT": "hostile",
+        "CONSENT": "false",
+        "OPERATIONS": "1000000"
+      }
+    }
+  }
+}
