@@ -226,8 +226,9 @@ versions.forEach((version) => {
       }
 
       for (const dynamic of [false, true]) {
-        for (const maxFailures of [1, 2]) {
-          modernRetryTest(`finalizes non-serial canceled retries (dynamic=${dynamic}, maxFailures=${maxFailures})`,
+        for (const maxFailures of [0, 1, 2]) {
+          const outcome = maxFailures ? 'canceled' : 'completed'
+          it(`finalizes non-serial ${outcome} retries (dynamic=${dynamic}, maxFailures=${maxFailures})`,
             async (receiver, run) => {
               receiver.setSettings({ flaky_test_retries_enabled: dynamic })
               const args = dynamic ? '' : '--retries=3'
@@ -245,8 +246,10 @@ versions.forEach((version) => {
                 proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
                   const tests = payloads.flatMap(({ payload }) => payload.events)
                     .filter(event => event.type === 'test').map(event => event.content)
-                  assert.strictEqual(tests.length, version === oldest ? maxFailures : 4)
+                  assert.strictEqual(tests.length, version === oldest && maxFailures ? maxFailures : 4)
                   assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+                  assert.ok(tests.every(test => test.meta['_dd.playwright.retry_test_id'] === undefined))
+                  assert.ok(tests.every(test => test.meta['_dd.playwright.defer_final_status'] === undefined))
                   assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
                   assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
                 })

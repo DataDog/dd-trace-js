@@ -1054,17 +1054,21 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
-  // this handles tests that do not go through the worker process (because they're skipped)
+  // Legacy Playwright also creates executed test spans in the main process.
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
+    const retryTestId = testStatus !== 'skip' && !isEfdManagedTest &&
+      !test._ddIsAttemptToFix && test.retries > 0
+      ? test.id ?? test._id
+      : undefined
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
     const finalStatus = getFinalStatus({
-      isFinalExecution: !willRetry,
+      isFinalExecution: retryTestId !== undefined || !willRetry,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry,
@@ -1095,6 +1099,8 @@ function testEndHandler ({
         isAtrRetry,
         isModified: test._ddIsModified,
         finalStatus,
+        retryTestId,
+        deferFinalStatus: willRetry,
         earlyFlakeAbortReason: efdSlowAbortedTests.has(testEfdKey) ? 'slow' : undefined,
         ...testCtx.currentStore,
       })

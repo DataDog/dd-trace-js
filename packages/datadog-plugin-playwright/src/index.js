@@ -554,6 +554,8 @@ class PlaywrightPlugin extends CiPlugin {
       }
 
       const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
+      const isDeferredMainTest = !this._tracerConfig.DD_PLAYWRIGHT_WORKER &&
+        retryTestId !== undefined && deferFinalStatus
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -609,10 +611,10 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
-      if (finalStatus) {
+      if (finalStatus && !isDeferredMainTest) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
       }
-      if (retryTestId !== undefined) {
+      if (retryTestId !== undefined && this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
         // This identifier is removed by the main process before exporting the trace.
         span.setTag(RETRY_TEST_ID, retryTestId)
         if (deferFinalStatus) span.setTag(DEFER_FINAL_STATUS, 'true')
@@ -640,10 +642,6 @@ class PlaywrightPlugin extends CiPlugin {
         }
         stepSpan.finish(stepStartTime + stepDuration)
       }
-      if (finalStatus === 'fail') {
-        this.numFailedTests++
-      }
-
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
@@ -657,6 +655,28 @@ class PlaywrightPlugin extends CiPlugin {
           isModified,
         }
       )
+      if (retryTestId !== undefined && !this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
+        const finishPrevious = this.#pendingRetryTestFinishes.get(retryTestId)
+        finishPrevious?.(false)
+        this.#pendingRetryTestFinishes.delete(retryTestId)
+        if (isDeferredMainTest) {
+          // Legacy spans have no worker report. Retain the last execution until a
+          // successor arrives or session end confirms that its retry was canceled.
+          const finishTime = span._getTime()
+          finishAllTraceSpans(span)
+          this.#pendingRetryTestFinishes.set(retryTestId, (isFinal) => {
+            if (isFinal) {
+              span.setTag(TEST_FINAL_STATUS, finalStatus)
+              if (finalStatus === 'fail') this.numFailedTests++
+            }
+            span.finish(finishTime)
+          })
+          return
+        }
+      }
+      if (finalStatus === 'fail') {
+        this.numFailedTests++
+      }
       span.finish()
 
       finishAllTraceSpans(span)
