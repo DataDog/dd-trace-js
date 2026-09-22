@@ -317,7 +317,7 @@ function getOnEndHandler (isParallel, onDone) {
     let error = frameworkError
     if (this.stats) {
       status = this.stats.failures === 0 ? 'pass' : 'fail'
-      if (this.stats.tests === 0) {
+      if (this.stats.tests === 0 && this.stats.failures === 0) {
         status = 'skip'
       }
     } else if (this.failures !== 0) {
@@ -329,6 +329,7 @@ function getOnEndHandler (isParallel, onDone) {
     } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
+    const isExpectedEmptySession = arguments.length === 0 && status === 'skip'
 
     testFileToSuiteCtx.clear()
 
@@ -372,6 +373,7 @@ function getOnEndHandler (isParallel, onDone) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
       isFrameworkError: arguments.length > 0,
+      isExpectedEmptySession,
     }, () => {
       try {
         onDone()
@@ -1020,6 +1022,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
+    config.dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
     config.isDiEnabled = libraryConfig.isDiEnabled
     config.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
 
@@ -1103,9 +1107,16 @@ function wrapMochaRun (Mocha, frameworkVersion) {
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
+    const originalDelay = this.options.delay
     this.options.delay = true
 
-    const runner = run.apply(this, args)
+    let runner
+    try {
+      runner = run.apply(this, args)
+    } finally {
+      // Only this runner needs the configuration delay, including when the next run disables the plugin.
+      this.options.delay = originalDelay
+    }
 
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
@@ -1115,7 +1126,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
     })
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
-      if (isFailedTestReplayEnabled()) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       if (config.isKnownTestsEnabled) {
@@ -1197,6 +1208,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
+      resetRunState(this.suite)
       return runMochaRunner(run, this, args)
     }
 
@@ -1779,6 +1791,8 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+      newWorkerArgs._ddIsDynamicAtrEnabled = config.isDynamicAtrEnabled
+      newWorkerArgs._ddDynamicAtrBuckets = config.dynamicAtrBuckets
     }
 
     if (isFailedTestReplayEnabled()) {

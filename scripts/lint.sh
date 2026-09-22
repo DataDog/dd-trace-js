@@ -16,13 +16,7 @@ run node scripts/check-no-coverage-artifacts.js
 run node scripts/check-no-mcr-images.js
 run node scripts/check-docker-image-shas.js
 run node scripts/verify-carrier-fields.mjs
-run codeowners-audit \
-  --glob='**/*.spec.js' \
-  --glob='benchmark/sirun/**' \
-  --glob='.agents/**' \
-  --glob='.claude/**' \
-  --glob='integration-tests/**' \
-  --glob='packages/dd-trace/src/guardrails/**'
+run codeowners-audit --no-report --fail-on-unowned
 run node scripts/verify-exercised-tests.js
 
 status=0

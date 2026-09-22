@@ -30,6 +30,7 @@ describe('EFD retry policy', () => {
   it('treats missing duration buckets as zero retries', () => {
     assert.strictEqual(getEfdRetryCountForDuration(0, createEfdRetryPolicy()), 0)
     assert.strictEqual(getEfdRetryCountForDuration(0, createEfdRetryPolicy({ '10s': 3 })), 0)
+    assert.strictEqual(getEfdRetryCountForDuration(4_999, createEfdRetryPolicy({ '10s': 3 })), 0)
     assert.strictEqual(getEfdRetryCountForDuration(5_000, createEfdRetryPolicy({ '10s': 3 })), 3)
   })
 
