@@ -881,6 +881,44 @@ for (const version of versions) {
           }, 1)
         })
 
+        if (framework === 'mocha') {
+          for (const enabled of [true, false]) {
+            it(`uses the worker retry budget with dynamic ATR enabled=${enabled}`, async () => {
+              receiver.setSettings({
+                early_flake_detection: {
+                  enabled: false,
+                  slow_test_retries: { '5s': 3, '10s': 3, '30s': 3, '5m': 3 },
+                },
+                flaky_test_retries_enabled: true,
+              })
+
+              await runScenario('atrAlwaysFails', 1, payloads => {
+                const events = getEvents(payloads)
+                const session = events.find(event => event.type === 'test_session_end').content
+                const suite = events.find(event => event.type === 'test_suite_end').content
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                const retryCount = enabled ? 1 : 5
+
+                assert.strictEqual(countRequests(payloads, SETTINGS_PATH), 1)
+                assert.strictEqual(tests.length, retryCount + 1)
+                assert.strictEqual(retries.length, retryCount)
+                assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+                assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+                assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                assert.strictEqual(tests.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+              }, {
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(enabled),
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+              }, 1)
+            })
+          }
+        }
+
         {
           const jasmineTest = framework === 'jasmine' ? it : it.skip
           jasmineTest('falls back to ATR when the EFD retry policy has no retries', async () => {

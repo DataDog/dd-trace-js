@@ -3976,12 +3976,14 @@ describe('webdriverio instrumentation', () => {
       request.onDone({
         isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
+          dynamicAtrBuckets: [1, 2, 3, 4, 5],
           earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
           isCodeCoverageEnabled: true,
           isCoverageReportUploadEnabled: true,
           isDiEnabled: true,
+          isDynamicAtrEnabled: true,
           isEarlyFlakeDetectionEnabled: true,
           isFlakyTestRetriesEnabled: true,
           isImpactedTestsEnabled: true,
@@ -4121,15 +4123,17 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
       assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
+      assert.strictEqual(secondWorker.sentMessages[0].content.configuration.isDynamicAtrEnabled, true)
+      assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.dynamicAtrBuckets, [1, 2, 3, 4, 5])
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
-        dynamicAtrBuckets: undefined,
+        dynamicAtrBuckets: [1, 2, 3, 4, 5],
         earlyFlakeDetectionFaultyThreshold: 30,
         earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
         isDiEnabled: true,
-        isDynamicAtrEnabled: false,
+        isDynamicAtrEnabled: true,
         isEarlyFlakeDetectionEnabled: true,
         isFlakyTestRetriesEnabled: true,
         isImpactedTestsEnabled: true,
