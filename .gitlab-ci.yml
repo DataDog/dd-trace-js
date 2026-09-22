@@ -29,9 +29,10 @@ update_central_configurations_version_range_v2:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks/gitlab-ci.yml"
-  - project: "ddoghq/llm-validation-platform"
-    ref: &llmval_platform_sha "c331696647a78672101002ba48ccebbd41b0fae8" # v0.1.3
-    file: "/ci/llm-validation.gitlab-ci.yml"
+  # TODO(lang-platform-js): Temporarily disabled — re-enable once LLM validation is fixed.
+  # - project: "ddoghq/llm-validation-platform"
+  #   ref: &llmval_platform_sha "c331696647a78672101002ba48ccebbd41b0fae8" # v0.1.3
+  #   file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
     ref: "main"
@@ -60,21 +61,22 @@ variables:
   OCI_PACKAGE_MAX_SIZE_BYTES: 30_000_000
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
 
-"llm validation":
-  variables:
-    LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
-    LLMVAL_PLATFORM_REF: *llmval_platform_sha
-
-llm validation definitions:
-  extends: llm validation
-  variables:
-    LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
-    LLMVAL_LEVEL: "minimum"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - .llm-validation/config.yaml
-        - .llm-validation/suites/**/*
+# TODO(lang-platform-js): Temporarily disabled — re-enable once LLM validation is fixed.
+# "llm validation":
+#   variables:
+#     LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
+#     LLMVAL_PLATFORM_REF: *llmval_platform_sha
+#
+# llm validation definitions:
+#   extends: llm validation
+#   variables:
+#     LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
+#     LLMVAL_LEVEL: "minimum"
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+#       changes:
+#         - .llm-validation/config.yaml
+#         - .llm-validation/suites/**/*
 
 configure_system_tests:
   variables:
