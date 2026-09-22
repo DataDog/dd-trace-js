@@ -648,7 +648,6 @@ function getPayload (_message = message, _snapshot = snapshot) {
  * Build a payload-shaped JSON document of an exact size, by padding a single stack frame.
  *
  * @param {number} bytes - The size of the returned document in bytes
- * @returns {string} - The JSON document
  */
 function payloadJsonOfSize (bytes) {
   const json = JSON.stringify(getPayload(message, { id: '123', stack: [''], captures: { pruned: true } }))
