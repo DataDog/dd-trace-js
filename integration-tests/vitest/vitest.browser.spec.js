@@ -46,30 +46,20 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { describeDynamicAtr } = require('./dynamic-atr')
+
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
 const latestVitestVersion = browserProvider === 'webdriverio'
   ? latestVersions['@vitest/browser-webdriverio']
   : latestVersions.vitest
-const vitestVersion = isLegacyBrowserProvider ? '3.2.6' : latestVitestVersion
+const vitestVersions = isLegacyBrowserProvider
+  ? ['3.2.6']
+  : browserProvider === 'playwright' ? ['4.1.0', latestVitestVersion] : [latestVitestVersion]
 const browserName = browserProvider === 'webdriverio' ? 'chrome' : 'chromium'
 const browserProjectName = `browser-${browserName}`
 const browserProviderDescription = browserProvider === 'playwright' ? '' : ` with ${browserProvider}`
 const playwrightVersion = getLatestPlaywrightSpecifier()
-const browserProviderDependency = isLegacyBrowserProvider
-  ? `@vitest/browser@${vitestVersion}`
-  : `@vitest/browser-${browserProvider}@${vitestVersion}`
-const browserRuntimeDependency = browserProvider === 'webdriverio'
-  ? `webdriverio@${latestVersions.webdriverio}`
-  : `playwright@${playwrightVersion}`
-const sandboxDependencies = [
-  `vitest@${vitestVersion}`,
-  browserProviderDependency,
-  browserRuntimeDependency,
-]
-if (isLegacyBrowserProvider) {
-  sandboxDependencies.push('vite@6.1.0')
-}
 const NODE_OPTIONS = '--import dd-trace/register.js -r dd-trace/ci/init'
 
 function getEvents (payloads) {
@@ -86,7 +76,7 @@ function getTestByName (tests, name) {
   return test
 }
 
-describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, function () {
+vitestVersions.forEach(version => describe(`vitest@${version} Browser Mode${browserProviderDescription}`, function () {
   this.timeout(180_000)
 
   const runtimeEfdSuiteAdmissionIt = isLegacyBrowserProvider ? it.skip : it
@@ -95,6 +85,20 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
   let receiver
   let testOutput
 
+  const browserProviderDependency = isLegacyBrowserProvider
+    ? `@vitest/browser@${version}`
+    : `@vitest/browser-${browserProvider}@${version}`
+  const browserRuntimeDependency = browserProvider === 'webdriverio'
+    ? `webdriverio@${latestVersions.webdriverio}`
+    : `playwright@${playwrightVersion}`
+  const sandboxDependencies = [
+    `vitest@${version}`,
+    browserProviderDependency,
+    browserRuntimeDependency,
+  ]
+  if (isLegacyBrowserProvider) {
+    sandboxDependencies.push('vite@6.1.0')
+  }
   useSandbox(sandboxDependencies, true)
 
   before(function () {
@@ -145,6 +149,26 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       60_000
     )
   }
+
+  if (!isLegacyBrowserProvider) {
+    describeDynamicAtr({
+      mode: 'browser',
+      supportsDynamicAtr: true,
+      getContext: () => ({
+        cwd,
+        receiver,
+        env: {
+          VITEST_BROWSER_MODE: '1',
+          VITEST_BROWSER_PROVIDER: browserProvider,
+          VITEST_BROWSER_PROVIDER_FACTORY: '1',
+        },
+        onChildProcess: child => { childProcess = child },
+      }),
+    })
+  }
+
+  // Keep the minimum retry-condition version focused on the retry regressions.
+  if (version === '4.1.0') return
 
   it('reports each browser test once with browser identity', async () => {
     receiver.setSettings({
@@ -933,7 +957,7 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 0, testOutput)
     assert.match(testOutput, /Disabled: 1 test skipped\./)
   })
-})
+}))
 
 function getRumTestExecutionId (testOutput, testName) {
   const match = testOutput.match(new RegExp(`DD_VITEST_RUM_EXECUTION_ID:${testName}:(\\d+)`))

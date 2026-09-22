@@ -64,6 +64,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
+const { describeDynamicAtr } = require('./dynamic-atr')
 
 const NUM_RETRIES_EFD = 3
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
@@ -113,7 +114,7 @@ function assertCompleteTestSessionTrace (events, testOutput) {
 }
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
+const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', '3.2.6', '4.1.0', 'latest']
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
@@ -148,6 +149,23 @@ versions.forEach((version) => {
     })
 
     const poolConfig = ['forks', 'threads']
+
+    const supportsDynamicAtr = version === '4.1.0' || version === 'latest'
+    for (const pool of supportsDynamicAtr ? poolConfig : ['forks']) {
+      describeDynamicAtr({
+        mode: pool,
+        supportsDynamicAtr,
+        getContext: () => ({
+          cwd,
+          receiver,
+          env: { POOL_CONFIG: pool },
+          onChildProcess: child => { childProcess = child },
+        }),
+      })
+    }
+
+    // Only retry boundary regressions need these extra versions on modern Node.js.
+    if (NODE_MAJOR > 18 && (version === '3.2.6' || version === '4.1.0')) return
 
     newerVitestIt('reports a failed session when a custom reporter rejects onTestRunEnd', async function () {
       this.timeout(20_000)
