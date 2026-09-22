@@ -125,6 +125,10 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaDependencyVersion = MOCHA_VERSION === 'latest' ? getLatestMochaSpecifier() : MOCHA_VERSION
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
+// ATR needs the retry event introduced in Mocha 6.
+const retryEventsIt = supportsMochaRetryEvents ? it : it.skip
+// Reusing a runner requires cleanReferencesAfterRun, introduced in Mocha 7.2.
+const rerunIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=7.2.0') ? it : it.skip
 // Global setup/teardown fixtures were introduced in Mocha 8.2.0.
 const globalFixturesIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.2.0') ? it : it.skip
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
@@ -5426,7 +5430,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     }
     for (const parallel of [false, true]) {
       for (const scenario of dynamicCases) {
-        const runTest = parallel ? parallelIt : it
+        const runTest = parallel ? parallelIt : retryEventsIt
         runTest(`uses dynamic ATR ${scenario.name} (parallel=${parallel})`, async () => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
@@ -5477,7 +5481,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     }
 
     for (const nativeRetries of [0, 1]) {
-      it(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
+      rerunIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true })
         let output = ''
         childProcess = exec('node ./ci-visibility/run-mocha-atr-rerun.js', {
