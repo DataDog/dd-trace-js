@@ -524,6 +524,56 @@ describe('Plugin', () => {
           }))
         })
 
+        it('should follow ws when an explicit binary option overrides the inferred one', () => {
+          const payload = Buffer.from('explicitly text')
+
+          // `ws` spreads the caller's options over its own default, so an explicit nullish
+          // `binary` wins and the frame goes out with the text opcode.
+          /** @type {Promise<boolean>} */
+          const frameReceived = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.on('error', reject)
+              ws.send(payload, { binary: undefined })
+            })
+            connectClient()
+            client.on('message', (data, isBinary) => resolve(isBinary))
+            client.on('error', reject)
+          })
+
+          return frameReceived.then(isBinary => {
+            assert.strictEqual(isBinary, false, 'ws should have sent a text frame')
+
+            return agent.assertSomeTraces(traces => {
+              const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+              assert.ok(sendSpan, 'Should have a websocket.send span')
+              assert.strictEqual(sendSpan.meta['websocket.message.type'], 'text')
+              assert.strictEqual(sendSpan.metrics['websocket.message.length'], payload.length)
+            })
+          })
+        })
+
+        it('should trace the length of a sent array of octets', () => {
+          // `ws` runs plain arrays through `Buffer.from()`, which yields one byte per element.
+          const payload = [1, 2, 3]
+
+          /** @type {Promise<void>} */
+          const sendComplete = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.on('error', reject)
+              ws.send(payload, err => err ? reject(err) : resolve())
+            })
+            connectClient()
+            client.on('error', reject)
+          })
+
+          return sendComplete.then(() => agent.assertSomeTraces(traces => {
+            const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(sendSpan, 'Should have a websocket.send span')
+            assert.strictEqual(sendSpan.meta['websocket.message.type'], 'binary')
+            assert.strictEqual(sendSpan.metrics['websocket.message.length'], Buffer.from(payload).length)
+          }))
+        })
+
         it('should not trace received messages without listeners', () => {
           /** @type {Promise<void>} */
           const sendComplete = new Promise((resolve, reject) => {

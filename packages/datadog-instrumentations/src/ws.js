@@ -102,10 +102,13 @@ function wrapSend (send) {
 
     const [data, options, cb] = arguments
 
-    // `ws` stringifies numbers and otherwise infers binariness from the payload type.
+    // `ws` stringifies numbers, then spreads `options` over its own inferred default, so an
+    // explicitly passed `binary` wins even when it is nullish and the frame goes out as text.
     const payload = typeof data === 'number' ? data.toString() : data
-    const binary = options?.binary ?? typeof payload !== 'string'
-    const byteLength = dataLength(/** @type {WebSocketMessageData} */ (payload))
+    const binary = options != null && Object.hasOwn(options, 'binary')
+      ? Boolean(options.binary)
+      : typeof payload !== 'string'
+    const byteLength = sentDataLength(payload)
     const ctx = { data, binary, socket, byteLength }
 
     return typeof cb === 'function'
@@ -250,6 +253,27 @@ addHook({
   shimmer.wrap(Receiver.prototype, 'addListener', wrapReceiverOn)
   return Receiver
 })
+
+/**
+ * Byte length of an outgoing payload, following the coercion `ws` applies in `Sender.send`:
+ * strings and blobs are measured directly and everything else goes through `toBuffer()`, which
+ * yields one byte per element for plain arrays rather than concatenating them.
+ *
+ * @param {WebSocketMessageData | number | undefined} data
+ */
+function sentDataLength (data) {
+  if (typeof data === 'string') {
+    return Buffer.byteLength(data)
+  }
+  if (data instanceof Blob) {
+    return data.size
+  }
+  // Covers views as well as `ArrayBuffer` and `SharedArrayBuffer`.
+  if (typeof (/** @type {{ byteLength?: unknown }} */ (data)?.byteLength) === 'number') {
+    return /** @type {{ byteLength: number }} */ (data).byteLength
+  }
+  return Array.isArray(data) ? data.length : 0
+}
 
 /**
  * @param {WebSocketMessageData} data
