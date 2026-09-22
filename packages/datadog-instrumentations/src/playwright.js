@@ -716,14 +716,14 @@ function getFinalStatus ({
 }
 
 /**
- * Identifies serial tests whose native retries can be triggered by another test in the group.
+ * Reports whether another test in the serial group can trigger this test to run again.
  * @param {object} test
  */
-function getSerialTestId (test) {
-  if (isTestEfdManaged(test) || test._ddIsAttemptToFix) return
+function isSerialTest (test) {
   for (let suite = test.parent; suite; suite = suite.parent) {
-    if (suite._parallelMode === 'serial') return test.id
+    if (suite._parallelMode === 'serial') return true
   }
+  return false
 }
 
 function getTestFullname (test) {
@@ -1338,7 +1338,13 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       isFinalExecution = !testWillRetry(test, status, expectedStatus)
     }
 
+    const retryTestId = !isEfdManagedTest && !test._ddIsAttemptToFix && test.retries > 0 ? test.id : undefined
+    const deferFinalStatus = retryTestId !== undefined &&
+      (!isFinalExecution || (isSerialTest(test) && test.results.length <= test.retries))
+
     const ddProperties = {
+      _ddRetryTestId: retryTestId,
+      _ddDeferFinalStatus: deferFinalStatus,
       _ddIsDisabled: test._ddIsDisabled,
       _ddIsQuarantined: test._ddIsQuarantined,
       _ddIsAttemptToFix: test._ddIsAttemptToFix,
@@ -1622,7 +1628,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
-        const lastExecution = getSerialTestId(test) && test.results.findLast(result =>
+        const lastExecution = test.results.findLast(result =>
           result.status === 'passed' || result.status === 'failed' || result.status === 'timedOut')
         if (lastExecution) {
           // Fail-fast can cancel the expected retry. Its retained worker trace is
@@ -2623,11 +2629,11 @@ function instrumentWorkerMainMethods (workerMain) {
     })
     await Promise.race([ddPropertiesPromise, ddPropertiesTimeoutPromise])
 
-    const serialTestId = getSerialTestId(test)
+    const retryTestId = test._ddRetryTestId
     const finalStatus = getFinalStatus({
-      // A passing serial test can run again after a later test fails. The main
-      // process retains its last execution and decides finality once the run ends.
-      isFinalExecution: serialTestId !== undefined || test._ddIsFinalExecution,
+      // Retain a candidate final status while a native retry is possible. The main
+      // process removes it when another execution arrives, or keeps it if retries stop.
+      isFinalExecution: retryTestId !== undefined || test._ddIsFinalExecution,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry: test._ddIsAtrRetry,
@@ -2640,7 +2646,8 @@ function instrumentWorkerMainMethods (workerMain) {
 
     await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
-      serialTestId,
+      retryTestId,
+      deferFinalStatus: test._ddDeferFinalStatus,
       steps: steps.filter(step => step.testId === testId),
       error,
       extraTags: annotationTags,

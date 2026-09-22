@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const { createServer } = require('node:http')
 const satisfies = require('semifies')
 
 const {
@@ -191,6 +192,86 @@ versions.forEach((version) => {
         })
       }
 
+      for (const retryMode of ['disabled', 'suite-zero', 'flat-zero']) {
+        it(`exports serial tests before session end with ${retryMode} retries`, async (receiver, run) => {
+          receiver.setSettings({ flaky_test_retries_enabled: retryMode !== 'disabled' })
+          let traceReceived = false
+          let waitingResponse
+          const server = createServer((req, res) => {
+            if (traceReceived) res.end()
+            else waitingResponse = res
+          })
+          const onPayload = ({ url, payload }) => {
+            if (url !== '/api/v2/citestcycle') return
+            if (payload.events.some(event => event.type === 'test' &&
+              event.content.meta[TEST_NAME] === 'exports completed test')) {
+              traceReceived = true
+              waitingResponse?.end()
+            }
+          }
+          receiver.on('message', onPayload)
+          await new Promise(resolve => server.listen(0, resolve))
+          try {
+            const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-serial-no-retries',
+                TRACE_RECEIVED_URL: `http://localhost:${server.address().port}`,
+                PLAYWRIGHT_SUITE_RETRIES: retryMode === 'suite-zero' ? '0' : '',
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: retryMode === 'flat-zero' ? '0' : '1',
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(retryMode !== 'flat-zero'),
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+              },
+            })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const tests = payloads.flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test').map(event => event.content)
+                assert.strictEqual(tests.length, 2)
+                assert.ok(tests.every(test => test.meta[TEST_FINAL_STATUS] === 'pass'))
+              })
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          } finally {
+            receiver.off('message', onPayload)
+            server.closeAllConnections()
+            await new Promise(resolve => server.close(resolve))
+          }
+        })
+      }
+
+      for (const dynamic of [false, true]) {
+        for (const maxFailures of [1, 2]) {
+          it(`finalizes non-serial canceled retries (dynamic=${dynamic}, maxFailures=${maxFailures})`,
+            async (receiver, run) => {
+              receiver.setSettings({ flaky_test_retries_enabled: dynamic })
+              const args = dynamic ? '' : '--retries=3'
+              const proc = run(
+                `./node_modules/.bin/playwright test -c playwright.config.js --max-failures=${maxFailures} ${args}`, {
+                  cwd,
+                  env: {
+                    ...getCiVisAgentlessConfig(receiver.port),
+                    TEST_DIR: './ci-visibility/playwright-dynamic-atr',
+                    DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+                    DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '3,3,3,3,3',
+                  },
+                })
+              const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+                proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+                  const tests = payloads.flatMap(({ payload }) => payload.events)
+                    .filter(event => event.type === 'test').map(event => event.content)
+                  assert.strictEqual(tests.length, version === oldest ? maxFailures : 4)
+                  assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+                  assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                  assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+                })
+              const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+              assert.strictEqual(exitCode, 1)
+            })
+        }
+      }
+
       for (const [scenario, counts, finalStatuses, args] of [
         ['different-budgets', [2, 4], ['pass', 'fail'], ''],
         ['earlier-fails-on-retry', [2, 3], ['fail', 'fail'], ''],
@@ -212,7 +293,8 @@ versions.forEach((version) => {
               const tests = payloads.flatMap(({ payload }) => payload.events)
                 .filter(event => event.type === 'test').map(event => event.content)
               const projects = scenario === 'two-projects' ? ['chromium', 'second-chromium'] : ['chromium']
-              assert.ok(tests.every(test => test.meta['_dd.playwright.serial_test_id'] === undefined))
+              assert.ok(tests.every(test => test.meta['_dd.playwright.retry_test_id'] === undefined))
+              assert.ok(tests.every(test => test.meta['_dd.playwright.defer_final_status'] === undefined))
               for (const project of projects) {
                 for (const [index, name] of ['earlier short test', 'later slow test'].entries()) {
                   const attempts = tests.filter(test => test.meta[TEST_NAME] === `different budgets ${name}` &&
