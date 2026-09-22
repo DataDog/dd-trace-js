@@ -17,6 +17,7 @@ let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
 let isDynamicAtrEnabled = false
+let isTextTerminal = false
 let hasWarnedMissingBeforeEachTaskResult = false
 let hasWarnedMissingBeforeEachRetryResult = false
 // Array of test names that have been retried and the reason
@@ -381,6 +382,8 @@ function configureTestRetries (test) {
     return
   }
 
+  if (!isTextTerminal) return
+
   const dynamicAtrRetryCount = dynamicAtrRetryCountByTest.get(getDynamicAtrTestKey(test))
   if (Number.isSafeInteger(dynamicAtrRetryCount)) {
     test._retries = dynamicAtrRetryCount
@@ -467,6 +470,7 @@ before(function () {
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
       isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
+      isTextTerminal = suiteConfig.isTextTerminal
       rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis

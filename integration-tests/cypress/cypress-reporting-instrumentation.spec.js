@@ -7,6 +7,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { format } = require('node:util')
+const { runInNewContext } = require('node:vm')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
@@ -2569,6 +2570,68 @@ moduleTypes.forEach(({
       sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
       sinon.assert.calledOnce(testSpan.finish)
     })
+
+    for (const isTextTerminal of [false, true]) {
+      for (const retries of [0, 2]) {
+        it(`only applies dynamic ATR in terminal mode (terminal=${isTextTerminal}, retries=${retries})`, async () => {
+          cypressPlugin.cypressConfig = { isTextTerminal, isInteractive: true }
+          cypressPlugin.testSuiteSpan = {}
+          sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(true)
+          const tasks = cypressPlugin.getTasks()
+          const hooks = {}
+          const events = {}
+          const currentTest = {
+            id: 'test-1',
+            title: 'fails',
+            fullTitle: () => 'fails',
+            state: 'failed',
+            duration: 1,
+            _retries: retries,
+          }
+          const runner = { runTests () {}, suite: { ctx: { currentTest } } }
+          const task = sinon.stub().callsFake((name, args) => {
+            const result = name === 'dd:testSuiteStart'
+              ? tasks[name](args)
+              : name === 'dd:afterEach' ? { dynamicAtrRetryCount: 3 } : {}
+            return Promise.resolve(result)
+          })
+
+          runInNewContext(fs.readFileSync(
+            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+          ), {
+            Cypress: {
+              on: (name, callback) => { events[name] = callback },
+              mocha: { getRunner: () => runner, getRootSuite: () => ({ file: 'test.cy.js' }) },
+            },
+            cy: { task, on () {} },
+            before: callback => { hooks.before = callback },
+            beforeEach: callback => { hooks.beforeEach = callback },
+            afterEach: callback => { hooks.afterEach = callback },
+            after: callback => { hooks.after = callback },
+          })
+
+          await hooks.before()
+          const entryPoints = [
+            () => events['test:before:run']({}, currentTest),
+            () => events['test:before:run:async']({}, currentTest),
+            () => hooks.beforeEach.call({ currentTest }),
+          ]
+          for (const startTest of entryPoints) {
+            currentTest._retries = retries
+            await startTest()
+            assert.strictEqual(currentTest._retries, isTextTerminal ? Math.max(1, retries) : retries)
+          }
+
+          await hooks.afterEach()
+          for (const startTest of entryPoints) {
+            currentTest._retries = retries
+            await startTest()
+            assert.strictEqual(currentTest._retries, isTextTerminal ? 3 : retries)
+          }
+          await hooks.after()
+        })
+      }
+    }
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
       const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }

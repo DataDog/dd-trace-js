@@ -2048,6 +2048,7 @@ class CypressPlugin {
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
           isDynamicAtrEnabled: this.isDynamicAtrEnabled,
+          isTextTerminal: this.cypressConfig.isTextTerminal,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
           rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
