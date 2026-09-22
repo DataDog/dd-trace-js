@@ -4402,7 +4402,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
 
     for (const parallel of [false, true]) {
-      it(`preserves dynamic ATR failures in per-test reporter results (parallel=${parallel})`, async () => {
+      const label = `parallel=${parallel}`
+      onlyJest28AndLaterIt(`preserves dynamic ATR failures in per-test reporter results (${label})`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
         let output = ''
         childProcess = exec(runTestsCommand, {
@@ -4437,7 +4438,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     for (const [callsSuper, preventExtensions] of [[true, false], [false, false], [true, true], [false, true]]) {
       const label = `callsSuper=${callsSuper}, preventExtensions=${preventExtensions}`
-      it(`restores dynamic ATR failures before custom describe finish (${label})`, async () => {
+      onlyJest28AndLaterIt(`restores dynamic ATR failures before custom describe finish (${label})`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true, early_flake_detection: { enabled: false } })
         let output = ''
         let stderr = ''
