@@ -404,7 +404,11 @@ describe('span processor', () => {
       })
       processor.process(span)
 
+      const beforeExitListeners = process.rawListeners('beforeExit')
       process.emit('beforeExit')
+      for (const listener of beforeExitListeners) {
+        if (listener.listener) process.once('beforeExit', listener.listener)
+      }
 
       sinon.assert.calledOnce(writer.append)
       assert.strictEqual(span.meta_struct, undefined)
