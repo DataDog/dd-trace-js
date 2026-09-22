@@ -124,6 +124,40 @@ function wrapStreamIterator (iterator, ctx) {
   }
 }
 
+/**
+ * Gives the SDK a detached copy of the response to decode, leaving the body the caller can still
+ * read through `asResponse()` untouched. The bytes are buffered instead of streamed from a live
+ * clone, and the controller is replaced, because the SDK cancels its reader and aborts its
+ * controller whenever a stream ends early: that abort would kill the caller's request, and on a
+ * cloned body that cancel blocks until the other branch is read, which the caller cannot do while
+ * it is still waiting for this parse.
+ *
+ * Any failure falls back to the original props and tells the wrapper to skip inspection, leaving
+ * the SDK to behave as it does untraced.
+ *
+ * @param {{response: Response}} props
+ * @param {() => void} onFailure
+ * @returns {object|Promise<object>}
+ */
+function detachResponse (props, onFailure) {
+  const { status, statusText, headers } = props.response
+  try {
+    return props.response.clone().arrayBuffer()
+      .then(body => ({
+        ...props,
+        response: new Response(body, { status, statusText, headers }),
+        controller: new AbortController(),
+      }))
+      .catch(() => {
+        onFailure()
+        return props
+      })
+  } catch {
+    onFailure()
+    return props
+  }
+}
+
 function wrapCreate (create) {
   return function (...args) {
     const stream = args[0]?.stream
@@ -161,21 +195,43 @@ function wrapCreate (create) {
 
       let parseResult
       let wrappedResponse
+      // Set around a `parse()` whose body a raw-response reader also holds, so the SDK decodes a
+      // copy and leaves that body to the caller. Plain streaming has no second reader and copies
+      // nothing.
+      let detach = false
 
+      // These helpers live on each returned APIPromise, so there is no module export for
+      // Orchestrion to replace; wrap this instance instead.
       shimmer.wrap(apiPromise, 'parse', parse => function (...parseArgs) {
         if (parseResult) return parseResult
 
-        parseResult = heldUntil(parse.apply(this, parseArgs), interceptCtx?.beforeResult?.())
+        let detachmentFailed = false
+        const responsePromise = detach ? this.responsePromise : undefined
+        if (responsePromise) {
+          this.responsePromise = responsePromise.then(props => detachResponse(props, () => {
+            detachmentFailed = true
+          }))
+        }
+
+        let result
+        try {
+          result = parse.apply(this, parseArgs)
+        } finally {
+          if (responsePromise) this.responsePromise = responsePromise
+        }
+
+        const onResult = interceptCtx?.onResult
+        parseResult = heldUntil(result, interceptCtx?.beforeResult?.())
           .then(response => {
             if (stream) {
-              if (!interceptCtx?.onResult) {
+              if (!onResult || detachmentFailed) {
                 if (tracing) {
                   shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
                 }
                 return response
               }
 
-              return Promise.resolve(interceptCtx.onResult(response)).then(deliveredResponse => {
+              return Promise.resolve(onResult(response)).then(deliveredResponse => {
                 if (tracing) {
                   shimmer.wrap(
                     deliveredResponse,
@@ -187,12 +243,12 @@ function wrapCreate (create) {
               })
             }
 
-            if (!interceptCtx?.onResult) {
+            if (!onResult) {
               finish(ctx, response)
               return response
             }
 
-            return Promise.resolve(interceptCtx.onResult(response)).then(deliveredResponse => {
+            return Promise.resolve(onResult(response)).then(deliveredResponse => {
               finish(ctx, response)
               return deliveredResponse
             })
@@ -206,29 +262,45 @@ function wrapCreate (create) {
         shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
           return heldUntil(origAsResponse.apply(this, asResponseArgs), interceptCtx?.beforeResult?.())
             .then(response => {
-              if (stream && interceptCtx?.onResult) {
-                // `messages.stream()` starts parse() before asResponse(); its parsed branch is delivered
-                // to the caller, so reusing it avoids buffering an unread clone of the raw body.
+              if (stream) {
+                // A caller holding the parsed stream closes the span as it drains it. When only
+                // the raw body is read, decode the stream here so it is still evaluated.
+                if (!interceptCtx?.onResult) return response
                 if (parseResult) return parseResult.then(() => response)
 
-                const rawResponse = response.clone()
-                // A direct asResponse() caller receives the raw copy only after the SDK has decoded
-                // and inspected the original body. No wrapped iterator will remain to finish this span.
-                return apiPromise.parse().then(() => {
-                  finish(ctx)
-                  return rawResponse
-                })
+                detach = true
+                try {
+                  return apiPromise.parse().then(() => {
+                    finish(ctx)
+                    return response
+                  })
+                } finally {
+                  detach = false
+                }
               }
 
               // Wrap json()/text()/clone() so the span still closes on the raw-response path,
               // and not twice for the same response.
-              if (!stream && wrappedResponse !== response) {
+              if (wrappedResponse !== response) {
                 wrappedResponse = response
                 wrapRawResponse(response, ctx, interceptCtx)
               }
               return response
             })
             .catch(error => finishAndThrow(ctx, error))
+        })
+      }
+
+      // `withResponse()` is the one SDK call that hands out the raw response *and* the parsed
+      // stream; it invokes `parse()` synchronously, so the flag only has to outlive that call.
+      if (stream && interceptCtx?.onResult && typeof apiPromise.withResponse === 'function') {
+        shimmer.wrap(apiPromise, 'withResponse', withResponse => function (...withResponseArgs) {
+          detach = true
+          try {
+            return withResponse.apply(this, withResponseArgs)
+          } finally {
+            detach = false
+          }
         })
       }
 

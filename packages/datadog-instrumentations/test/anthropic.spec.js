@@ -61,6 +61,50 @@ function createAnthropicRequest () {
   }
 }
 
+function messageStreamEvents () {
+  return [
+    {
+      type: 'message_start',
+      message: {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-4-1-20250805',
+        content: [],
+        stop_reason: null,
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    },
+    { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+    { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } },
+    { type: 'content_block_stop', index: 0 },
+    {
+      type: 'message_delta',
+      delta: { stop_reason: 'end_turn', stop_sequence: null },
+      usage: { output_tokens: 1 },
+    },
+    { type: 'message_stop' },
+  ]
+}
+
+/**
+ * Stands in for AI Guard's interceptor: evaluates one branch of the stream and delivers the other.
+ *
+ * @param {Array<object>} seen collects every event the evaluation observed
+ */
+function interceptStream (seen) {
+  return async stream => {
+    const [inspection, delivery] = stream.tee()
+    try {
+      for await (const event of inspection) seen.push(event)
+    } catch {
+      // A broken body is still evaluated on what arrived, exactly as AI Guard treats it.
+    }
+    return delivery
+  }
+}
+
 function createStream (chunks) {
   return {
     [Symbol.asyncIterator] () {
@@ -478,20 +522,20 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       apmChannel.subscribe(apmHandlers)
       const seen = []
       const { unsubscribe } = subscribeIntercept(ctx => {
-        ctx.onResult = async stream => {
-          for await (const event of stream) {
-            seen.push(event)
-          }
-          return stream
-        }
+        ctx.onResult = interceptStream(seen)
       })
       const event = { type: 'message_stop' }
-      const { body, response: rawResponse } = sseResponse([event])
+      const { body } = sseResponse([event])
+      class ExtendedResponse extends Response {}
+      const rawResponse = new ExtendedResponse(body, { headers: { 'content-type': 'text/event-stream' } })
+      rawResponse.customState = { endpoint: 'custom' }
       const options = { ...createAnthropicRequest(), stream: true }
 
       try {
         const response = await clientReturning(rawResponse).messages.create(options).asResponse()
 
+        assert.strictEqual(response, rawResponse)
+        assert.deepStrictEqual(response.customState, { endpoint: 'custom' })
         assert.deepStrictEqual(seen, [event])
         assert.strictEqual(await response.text(), body)
         assert.strictEqual(asyncEndCount, 1)
@@ -500,6 +544,180 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
         unsubscribe()
       }
     })
+
+    it('leaves the caller request alive when the inspected stream fails', async () => {
+      const seen = []
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = interceptStream(seen)
+      })
+      const delivered = { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } }
+      // The SDK throws out of its SSE iterator here, whose teardown aborts the request controller.
+      const { body } = sseResponse([delivered, { type: 'error', error: { type: 'overloaded_error' } }])
+      const rawResponse = new Response(body, { headers: { 'content-type': 'text/event-stream' } })
+      let requestSignal
+      const client = new Anthropic({
+        apiKey: 'test',
+        fetch: (url, init) => {
+          requestSignal = init.signal
+          return Promise.resolve(rawResponse)
+        },
+      })
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        const response = await client.messages.create(options).asResponse()
+
+        assert.deepStrictEqual(seen, [delivered])
+        assert.strictEqual(requestSignal.aborted, false)
+        assert.strictEqual(await response.text(), body)
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('copies the raw body only for callers that also read it', async () => {
+      const seen = []
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = interceptStream(seen)
+      })
+      const events = messageStreamEvents()
+      const { response: rawResponse } = sseResponse(events)
+      let copies = 0
+      const clone = rawResponse.clone.bind(rawResponse)
+      rawResponse.clone = () => {
+        copies++
+        return clone()
+      }
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        const stream = await clientReturning(rawResponse).messages.create(options)
+        for await (const event of stream) assert.ok(event.type)
+
+        assert.strictEqual(seen.length, events.length)
+        // Nobody asked for the raw response, so the SDK reads the body directly.
+        assert.strictEqual(copies, 0)
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('settles withResponse() and keeps the raw body when the stream fails', async () => {
+      const seen = []
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = interceptStream(seen)
+      })
+      const delivered = { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } }
+      const { body } = sseResponse([delivered, { type: 'error', error: { type: 'overloaded_error' } }])
+      const rawResponse = new Response(body, { headers: { 'content-type': 'text/event-stream' } })
+      let requestSignal
+      const client = new Anthropic({
+        apiKey: 'test',
+        fetch: (url, init) => {
+          requestSignal = init.signal
+          return Promise.resolve(rawResponse)
+        },
+      })
+      const options = { ...createAnthropicRequest(), stream: true }
+
+      try {
+        // Cancelling a live clone would block on the caller's unread branch; the copy must be
+        // detached so this resolves at all.
+        const { response } = await client.messages.create(options).withResponse()
+
+        assert.deepStrictEqual(seen, [delivered])
+        assert.strictEqual(requestSignal.aborted, false)
+        assert.strictEqual(await response.text(), body)
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('reuses the readable response for repeated streamed asResponse() calls', async () => {
+      const seen = []
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = interceptStream(seen)
+      })
+      const event = { type: 'message_stop' }
+      const { body, response: rawResponse } = sseResponse([event])
+      const options = { ...createAnthropicRequest(), stream: true }
+      const apiPromise = clientReturning(rawResponse).messages.create(options)
+
+      try {
+        const firstResponse = await apiPromise.asResponse()
+        const secondResponse = await apiPromise.asResponse()
+
+        assert.strictEqual(secondResponse, firstResponse)
+        assert.deepStrictEqual(seen, [event])
+        assert.strictEqual(await secondResponse.text(), body)
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    it('rejects every streamed asResponse() reader when inspection denies the output', async () => {
+      const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      let inspectionStarted
+      const started = new Promise(resolve => { inspectionStarted = resolve })
+      let deny
+      const denied = new Promise((resolve, reject) => { deny = reject })
+      const { unsubscribe } = subscribeIntercept(ctx => {
+        ctx.onResult = () => {
+          inspectionStarted()
+          return denied
+        }
+      })
+      const { response } = sseResponse([{ type: 'message_stop' }])
+      const options = { ...createAnthropicRequest(), stream: true }
+      const apiPromise = clientReturning(response).messages.create(options)
+
+      try {
+        const first = apiPromise.asResponse()
+        await started
+        const second = apiPromise.asResponse()
+        const rejections = [first, second].map(result => assert.rejects(result, candidate => candidate === error))
+
+        deny(error)
+        await Promise.all(rejections)
+      } finally {
+        unsubscribe()
+      }
+    })
+
+    for (const reader of ['parse()', 'withResponse()', 'await']) {
+      it(`keeps ${reader} readable after streamed asResponse() inspection`, async () => {
+        const inspected = []
+        const { unsubscribe } = subscribeIntercept(ctx => {
+          ctx.onResult = interceptStream(inspected)
+        })
+        const event = { type: 'message_stop' }
+        const { response: rawResponse } = sseResponse([event])
+        const options = { ...createAnthropicRequest(), stream: true }
+        const apiPromise = clientReturning(rawResponse).messages.create(options)
+
+        try {
+          assert.strictEqual(await apiPromise.asResponse(), rawResponse)
+
+          let stream
+          if (reader === 'parse()') {
+            stream = await apiPromise.parse()
+          } else if (reader === 'withResponse()') {
+            const result = await apiPromise.withResponse()
+            assert.strictEqual(result.response, rawResponse)
+            stream = result.data
+          } else {
+            stream = await apiPromise
+          }
+
+          const delivered = []
+          for await (const deliveredEvent of stream) delivered.push(deliveredEvent)
+          assert.deepStrictEqual(inspected, [event])
+          assert.deepStrictEqual(delivered, [event])
+        } finally {
+          unsubscribe()
+        }
+      })
+    }
 
     it('keeps a streamed raw response readable through withResponse()', async () => {
       const apmChannel = tracingChannel('apm:anthropic:request')
@@ -508,20 +726,29 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       apmChannel.subscribe(apmHandlers)
       const seen = []
       const { unsubscribe } = subscribeIntercept(ctx => {
-        ctx.onResult = async stream => {
-          for await (const event of stream) seen.push(event)
-          return stream
-        }
+        ctx.onResult = interceptStream(seen)
       })
       const event = { type: 'message_stop' }
-      const { body, response: rawResponse } = sseResponse([event])
+      const { body } = sseResponse([event])
+      class ExtendedResponse extends Response {}
+      const rawResponse = new ExtendedResponse(body, { headers: { 'content-type': 'text/event-stream' } })
+      rawResponse.customState = { endpoint: 'custom' }
       const options = { ...createAnthropicRequest(), stream: true }
 
       try {
-        const { response } = await clientReturning(rawResponse).messages.create(options).withResponse()
+        const { response, data } = await clientReturning(rawResponse).messages.create(options).withResponse()
 
+        assert.strictEqual(response, rawResponse)
+        assert.deepStrictEqual(response.customState, { endpoint: 'custom' })
         assert.deepStrictEqual(seen, [event])
         assert.strictEqual(await response.text(), body)
+        // The caller still holds the stream, so the span must stay open until it is drained.
+        assert.strictEqual(asyncEndCount, 0)
+
+        const delivered = []
+        for await (const deliveredEvent of data) delivered.push(deliveredEvent)
+
+        assert.deepStrictEqual(delivered, [event])
         assert.strictEqual(asyncEndCount, 1)
       } finally {
         apmChannel.unsubscribe(apmHandlers)
@@ -529,72 +756,77 @@ withVersions('anthropic', '@anthropic-ai/sdk', '>=0.33.0', version => {
       }
     })
 
-    it('does not clone the raw response used internally by messages.stream()', async () => {
+    it('keeps messages.stream() readable', async () => {
       const { unsubscribe } = subscribeIntercept(ctx => {
         ctx.onResult = stream => stream
       })
-      const events = [
-        {
-          type: 'message_start',
-          message: {
-            id: 'msg_1',
-            type: 'message',
-            role: 'assistant',
-            model: 'claude-opus-4-1-20250805',
-            content: [],
-            stop_reason: null,
-            stop_sequence: null,
-            usage: { input_tokens: 1, output_tokens: 1 },
-          },
-        },
-        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
-        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } },
-        { type: 'content_block_stop', index: 0 },
-        {
-          type: 'message_delta',
-          delta: { stop_reason: 'end_turn', stop_sequence: null },
-          usage: { output_tokens: 1 },
-        },
-        { type: 'message_stop' },
-      ]
+      const events = messageStreamEvents()
       const { response } = sseResponse(events)
-      response.clone = () => { throw new Error('response should not be cloned') }
 
       try {
         const stream = clientReturning(response).messages.stream(createAnthropicRequest())
         const seen = []
         for await (const event of stream) seen.push(event)
-        assert.deepStrictEqual(seen.map(event => event.type), [
-          'message_start',
-          'content_block_start',
-          'content_block_delta',
-          'content_block_stop',
-          'message_delta',
-          'message_stop',
-        ])
+        assert.deepStrictEqual(seen.map(event => event.type), events.map(event => event.type))
       } finally {
         unsubscribe()
       }
     })
 
-    it('rejects a direct streamed raw response when its body cannot be cloned', async () => {
-      const cloneError = new Error('locked body')
-      const { unsubscribe } = subscribeIntercept(ctx => {
-        ctx.onResult = stream => stream
+    // `messages.stream()` reaches the SDK through `withResponse()`, which resolves the raw response
+    // as soon as the headers arrive; the span must still close on the last chunk instead.
+    for (const intercepting of [false, true]) {
+      it(`publishes every messages.stream() chunk before closing the span${
+        intercepting ? ' while intercepting' : ''}`, async () => {
+        const apmChannel = tracingChannel('apm:anthropic:request')
+        const chunkChannel = channel('apm:anthropic:request:chunk')
+        const published = []
+        const apmHandlers = { start () {}, asyncEnd () { published.push('asyncEnd') } }
+        const onChunk = ({ chunk, done }) => published.push(done ? 'done' : chunk.type)
+        apmChannel.subscribe(apmHandlers)
+        chunkChannel.subscribe(onChunk)
+        const intercept = intercepting ? subscribeIntercept(ctx => { ctx.onResult = stream => stream }) : undefined
+        const events = messageStreamEvents()
+        const { response } = sseResponse(events)
+
+        try {
+          const stream = clientReturning(response).messages.stream(createAnthropicRequest())
+          for await (const event of stream) assert.ok(event.type)
+
+          assert.deepStrictEqual(published, [...events.map(event => event.type), 'done', 'asyncEnd'])
+        } finally {
+          apmChannel.unsubscribe(apmHandlers)
+          chunkChannel.unsubscribe(onChunk)
+          intercept?.unsubscribe()
+        }
       })
-      const { response } = sseResponse([{ type: 'message_stop' }])
-      response.clone = () => { throw cloneError }
-      const options = { ...createAnthropicRequest(), stream: true }
+    }
 
-      try {
-        await assert.rejects(
-          () => clientReturning(response).messages.create(options).asResponse(),
-          error => error === cloneError
-        )
-      } finally {
-        unsubscribe()
-      }
-    })
+    for (const [failure, breakClone] of [
+      ['cloning fails', response => { response.clone = () => { throw new Error('locked body') } }],
+      ['reading the clone fails', response => {
+        response.clone = () => ({ arrayBuffer: () => Promise.reject(new Error('broken body')) })
+      }],
+    ]) {
+      it(`keeps a direct streamed raw response readable when ${failure}`, async () => {
+        const { unsubscribe } = subscribeIntercept(ctx => {
+          ctx.onResult = stream => stream
+        })
+        const { body, response } = sseResponse([{ type: 'message_stop' }])
+        breakClone(response)
+        const options = { ...createAnthropicRequest(), stream: true }
+
+        try {
+          const rawResponse = await clientReturning(response).messages.create(options).asResponse()
+
+          assert.strictEqual(rawResponse, response)
+          assert.strictEqual(rawResponse.bodyUsed, false)
+          assert.strictEqual(await rawResponse.text(), body)
+        } finally {
+          unsubscribe()
+        }
+      })
+    }
 
     it('does not expose a streamed raw response when onResult rejects', async () => {
       const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })

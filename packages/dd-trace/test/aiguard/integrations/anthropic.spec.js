@@ -15,20 +15,25 @@ const messagesInterceptChannel = channel('dd-trace:anthropic:messages:intercept'
 const EVAL_OPTS = { block: true, source: SOURCE_AUTO, integration: 'anthropic' }
 
 class FakeStream {
-  constructor (chunks) {
+  constructor (chunks, error) {
     this.chunks = chunks
+    this.error = error
   }
 
   tee () {
-    return [new FakeStream(this.chunks), new FakeStream(this.chunks)]
+    return [new FakeStream(this.chunks, this.error), new FakeStream(this.chunks, this.error)]
   }
 
   [Symbol.asyncIterator] () {
     let index = 0
     return {
-      next: () => Promise.resolve(index < this.chunks.length
-        ? { done: false, value: this.chunks[index++] }
-        : { done: true, value: undefined }),
+      next: () => {
+        if (index < this.chunks.length) {
+          return Promise.resolve({ done: false, value: this.chunks[index++] })
+        }
+        if (this.error) return Promise.reject(this.error)
+        return Promise.resolve({ done: true, value: undefined })
+      },
     }
   }
 }
@@ -329,12 +334,58 @@ describe('AIGuard Anthropic integration', () => {
       ], EVAL_OPTS)
     })
 
+    it('evaluates once however many readers observe the same call', async () => {
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      const first = await ctx.onResult(new FakeStream(chunks))
+      const second = await ctx.onResult(new FakeStream(chunks))
+
+      assert.strictEqual(second, first)
+      sinon.assert.calledOnce(evaluate)
+    })
+
     it('rejects before returning the stream when After Model denies it', async () => {
       const error = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
       evaluate.rejects(error)
       const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
 
       await assert.rejects(() => ctx.onResult(new FakeStream(chunks)), candidate => candidate === error)
+
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello world' },
+      ], EVAL_OPTS)
+    })
+
+    it('evaluates partial output before returning a stream with a terminal read error', async () => {
+      const terminalError = new Error('stream failed')
+      const partialChunks = chunks.slice(0, 4)
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      const result = await ctx.onResult(new FakeStream(partialChunks, terminalError))
+
+      sinon.assert.calledOnceWithExactly(evaluate, [
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello world' },
+      ], EVAL_OPTS)
+
+      const iterator = result[Symbol.asyncIterator]()
+      for (const chunk of partialChunks) {
+        assert.deepStrictEqual(await iterator.next(), { done: false, value: chunk })
+      }
+      await assert.rejects(() => iterator.next(), candidate => candidate === terminalError)
+    })
+
+    it('blocks unsafe partial output before exposing a stream with a terminal read error', async () => {
+      const blockError = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      evaluate.rejects(blockError)
+      const partialChunks = chunks.slice(0, 4)
+      const ctx = intercept({ arguments: [{ messages: [{ role: 'user', content: 'Hi' }], stream: true }] })
+
+      await assert.rejects(
+        () => ctx.onResult(new FakeStream(partialChunks, new Error('stream failed'))),
+        candidate => candidate === blockError
+      )
 
       sinon.assert.calledOnceWithExactly(evaluate, [
         { role: 'user', content: 'Hi' },

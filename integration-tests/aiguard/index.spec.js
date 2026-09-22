@@ -590,23 +590,33 @@ describe('AIGuard SDK integration tests', () => {
     })
   })
 
+  for (const endpoint of ['/anthropic-stream-with-response', '/anthropic-message-stream']) {
+    it(`evaluates a streamed Anthropic response consumed through ${endpoint}`, async () => {
+      const response = await executeRequest(`${url}${endpoint}`)
+      assert.strictEqual(response.status, 200, JSON.stringify(response.body))
+      assert.strictEqual(response.body.blocked, false)
+      assert.ok(response.body.chunks > 0, `expected > 0 chunks, got ${response.body.chunks}`)
+      assert.strictEqual(response.body.text, 'Hello world')
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+        assert.strictEqual(guardSpans.length, 2)
+        assertGuardSpansChildOf(payload, 'anthropic.request')
+      })
+    })
+  }
+
   it('keeps the raw Anthropic response readable through .withResponse()', async () => {
     const response = await executeRequest(`${url}/anthropic-stream-with-response`)
     assert.strictEqual(response.status, 200, JSON.stringify(response.body))
-    assert.strictEqual(response.body.blocked, false)
-    assert.match(response.body.text, /event: message_start/)
-    assert.match(response.body.text, /"text":"Hello"/)
-    assert.match(response.body.text, /event: message_stop/)
-
-    await agent.assertMessageReceived(({ payload }) => {
-      const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
-      assert.strictEqual(guardSpans.length, 2)
-      assertGuardSpansChildOf(payload, 'anthropic.request')
-    })
+    assert.match(response.body.raw, /event: message_start/)
+    assert.match(response.body.raw, /"text":"Hello"/)
+    assert.match(response.body.raw, /event: message_stop/)
   })
 
   for (const [endpoint, output, target] of [
     ['/anthropic-stream-after-deny', 'text', 'prompt'],
+    ['/anthropic-message-stream-after-deny', 'messages.stream() text', 'prompt'],
     ['/anthropic-raw-stream-after-deny', 'raw SSE text', 'prompt'],
     ['/anthropic-stream-tool-after-deny', 'tool call', 'tool'],
   ]) {

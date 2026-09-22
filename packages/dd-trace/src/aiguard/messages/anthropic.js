@@ -432,17 +432,11 @@ function getMessagesOutputMessages (body) {
 }
 
 /**
- * @param {{index?: unknown}} event
- * @returns {number|undefined}
- */
-function getStreamedContentBlockIndex (event) {
-  const index = event.index ?? 0
-  if (!Number.isSafeInteger(index) || index < 0) return
-  return index
-}
-
-/**
  * Combines Anthropic message stream events into regular output messages.
+ *
+ * Accumulates exactly the way the SDK does: every `content_block_start` appends a block, and
+ * deltas address blocks by position. Keying blocks by `event.index` instead would let a repeated
+ * or out-of-range index hide output that the caller still receives.
  *
  * @param {Array<object>} events
  * @returns {Array<object>}
@@ -450,50 +444,45 @@ function getStreamedContentBlockIndex (event) {
 function getStreamedMessagesOutputMessages (events) {
   let message
   let contentBlocks
+  // Keyed by block, not by index: distinct indices can resolve to one block, and a second
+  // message must not inherit partial JSON accumulated for the first.
   const inputJson = new Map()
 
   for (const event of events) {
     if (!event || typeof event !== 'object') continue
 
     if (event.type === 'message_start' && event.message && typeof event.message === 'object') {
-      contentBlocks = new Map()
-      if (Array.isArray(event.message.content)) {
-        for (let index = 0; index < event.message.content.length; index++) {
-          contentBlocks.set(index, { ...event.message.content[index] })
-        }
-      }
+      contentBlocks = Array.isArray(event.message.content)
+        ? event.message.content.map(block => ({ ...block }))
+        : []
       message = { role: event.message.role || 'assistant' }
       continue
     }
 
     if (event.type === 'content_block_start' && event.content_block && typeof event.content_block === 'object') {
-      const index = getStreamedContentBlockIndex(event)
-      if (index === undefined) continue
       message ??= { role: 'assistant' }
-      contentBlocks ??= new Map()
-      contentBlocks.set(index, { ...event.content_block })
+      contentBlocks ??= []
+      contentBlocks.push({ ...event.content_block })
       continue
     }
 
     if (event.type !== 'content_block_delta' || !event.delta || typeof event.delta !== 'object') continue
 
-    const index = getStreamedContentBlockIndex(event)
-    if (index === undefined) continue
-    const block = contentBlocks?.get(index)
+    const block = contentBlocks?.at(event.index ?? 0)
     if (!block) continue
 
     if (event.delta.type === 'text_delta' && block.type === 'text' && typeof event.delta.text === 'string') {
       block.text = (block.text || '') + event.delta.text
     } else if (event.delta.type === 'input_json_delta' && typeof event.delta.partial_json === 'string') {
-      inputJson.set(index, (inputJson.get(index) || '') + event.delta.partial_json)
+      inputJson.set(block, (inputJson.get(block) || '') + event.delta.partial_json)
     }
   }
 
   if (!message) return []
 
-  for (const [index, json] of inputJson) {
-    const block = contentBlocks.get(index)
-    if (!block) continue
+  for (const [block, json] of inputJson) {
+    // An empty buffer is what a no-argument tool call accumulates; the SDK keeps `{}` there.
+    if (!json) continue
     try {
       block.input = JSON.parse(json)
     } catch {
@@ -501,9 +490,7 @@ function getStreamedMessagesOutputMessages (events) {
     }
   }
 
-  message.content = [...contentBlocks]
-    .sort(([left], [right]) => left - right)
-    .map(([, block]) => block)
+  message.content = contentBlocks
   return getMessagesOutputMessages(message)
 }
 
