@@ -20,17 +20,15 @@ on:
       - edited
       - ready_for_review
 
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
   team-freeze-guard:
     name: Team freeze guard
     runs-on: ubuntu-latest
-
+    permissions:
+      id-token: write
+      actions: write # for team membership cache
     steps:
-      - uses: DataDog/team-freeze-guard@d28a2e357903b426122feaae225629bd63fcd2c5 # v0.0.5
+      - uses: DataDog/team-freeze-guard@d972736cb1c9ae781bdb3cf4564193eb27ee6339 # v0.0.6
         with:
           # subset of pattern defined here:
           # .github/workflows/pr-title.yml#L22C85-L23C128
