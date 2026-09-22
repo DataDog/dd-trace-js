@@ -8,7 +8,7 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
+const { setup, sort, withAwsSdkV2Versions, withAwsSdkV3Versions, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
   // The config singleton is built lazily on the first `agent.load(...)` and is
@@ -521,6 +521,54 @@ describe('Plugin', () => {
           assert.strictEqual(sns.config.batchPropagationEnabled, true)
           assert.strictEqual(sqs.config.batchPropagationEnabled, true)
         })
+      })
+    })
+  })
+
+  describe('default service', () => {
+    setup()
+
+    withAwsSdkV3Versions(version => {
+      let client
+
+      before(async () => {
+        await agent.load('aws-sdk')
+
+        const Client = require(`../../../versions/@aws-sdk/smithy-client@${version}`).get().Client
+        class STSClient extends Client {}
+
+        client = new STSClient({
+          region: () => Promise.resolve('us-east-1'),
+          requestHandler: {},
+          serviceId: 'STS',
+        })
+      })
+
+      after(() => agent.close())
+
+      it('traces services without a dedicated plugin', async () => {
+        class GetCallerIdentityCommand {
+          constructor () {
+            this.input = {}
+          }
+
+          resolveMiddleware () {
+            return () => Promise.resolve({ output: { Account: '123456789012' } })
+          }
+        }
+
+        const tracePromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.strictEqual(span.name, 'aws.request')
+          assert.strictEqual(span.resource, 'getCallerIdentity')
+          assert.strictEqual(span.meta['aws.service'], 'STS')
+        })
+
+        const response = await client.send(new GetCallerIdentityCommand())
+
+        assert.deepStrictEqual(response, { Account: '123456789012' })
+        await tracePromise
       })
     })
   })
