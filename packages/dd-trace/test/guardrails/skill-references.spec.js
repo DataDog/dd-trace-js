@@ -1,56 +1,29 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
 const { describe, it } = require('mocha')
 
 const REPOSITORY_ROOT = path.resolve(__dirname, '../../../..')
-const SKILL_DIRECTORIES = [
-  '.agents/skills/apm-integrations',
-  '.agents/skills/llmobs-integration',
-]
-const REPOSITORY_PATH_PREFIXES = [
-  '.github/',
-  'docs/',
-  'integration-tests/',
-  'packages/',
-  'scripts/',
-  'vendor/',
-  'versions/',
-]
-const ROOT_PATHS = new Set([
-  'AGENTS.md',
-  'CONTRIBUTING.md',
-  'docker-compose.yml',
-  'index.d.ts',
-  'package.json',
-])
-const RELATIVE_IMPORT_BASES = [
-  'packages/datadog-plugin-example/src',
-  'packages/datadog-plugin-example/test',
-  'packages/datadog-plugin-example/test/integration-test',
-]
-const SHORT_PATH_BASES = {
-  'ai/': ['packages/dd-trace/src/llmobs/plugins'],
-  'anthropic/': ['packages/dd-trace/src/llmobs/plugins'],
-  'genai/': ['packages/dd-trace/src/llmobs/plugins'],
-  'helpers/': ['packages/datadog-instrumentations/src'],
-  'openai/': ['packages/dd-trace/src/llmobs/plugins'],
-  'plugins/test': ['.github/actions'],
-  'rewriter/': ['packages/datadog-instrumentations/src/helpers'],
-  'src/': [
-    'packages/datadog-instrumentations',
-    'packages/datadog-plugin-langchain',
-    'packages/datadog-plugin-langgraph',
-  ],
+
+function repositoryFiles () {
+  return execFileSync('git', ['ls-files', '-z'], { cwd: REPOSITORY_ROOT, encoding: 'utf8' })
+    .split('\0')
+    .filter(Boolean)
+    .map(file => path.join(REPOSITORY_ROOT, file))
 }
 
-function markdownFiles (directory) {
-  return fs.readdirSync(path.join(REPOSITORY_ROOT, directory), { recursive: true })
-    .filter(file => file.endsWith('.md'))
-    .map(file => path.join(directory, file))
+function skillFiles (files) {
+  const skillDirectories = new Set(
+    files.filter(file => path.basename(file) === 'SKILL.md').map(file => path.dirname(file))
+  )
+
+  return files.filter(file => {
+    return file.endsWith('.md') && [...skillDirectories].some(directory => file.startsWith(`${directory}${path.sep}`))
+  })
 }
 
 function codeSpans (source) {
@@ -62,34 +35,66 @@ function markdownLinks (source) {
 }
 
 function isTemplate (value) {
-  return /[<{]|\$\{/.test(value)
+  return /[<{]|\$\{|…/.test(value)
 }
 
-function repositoryPath (value) {
-  return ROOT_PATHS.has(value) || REPOSITORY_PATH_PREFIXES.some(prefix => value.startsWith(prefix))
+function isRepositoryPath (value) {
+  if (!value.includes('/') || /[\s:]/.test(value) || value.startsWith('@')) return false
+
+  if (path.posix.isAbsolute(value)) return value.startsWith(`${REPOSITORY_ROOT}/`)
+
+  if (!value.startsWith('.') && !value.endsWith('/') && !value.split('/').some(segment => path.posix.extname(segment))) {
+    return false
+  }
+
+  return value.startsWith('./') || value.startsWith('../') || fs.existsSync(path.join(REPOSITORY_ROOT, value.split('/')[0]))
+}
+
+function isRepositoryLink (value) {
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return false
+
+  return value.startsWith('.') || value.includes('/') || Boolean(path.posix.extname(value))
 }
 
 function pathExists (candidate) {
   return fs.existsSync(candidate) || fs.existsSync(`${candidate}.js`) || fs.existsSync(path.join(candidate, 'index.js'))
 }
 
-function shortPathExists (span) {
-  for (const [prefix, bases] of Object.entries(SHORT_PATH_BASES)) {
-    if (!span.startsWith(prefix)) continue
-
-    return bases.some(base => pathExists(path.join(REPOSITORY_ROOT, base, span)))
-  }
-  return undefined
+function pathVariants (reference) {
+  const relative = path.posix.normalize(reference).replace(/^(?:\.\.\/|\.\/)+/, '')
+  return [relative, `${relative}.js`, `${relative}/index.js`]
 }
 
-function classDefinitions () {
+function pathMatches (reference, candidate) {
+  const pattern = reference
+    .replaceAll('**', '\u0000')
+    .replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
+    .replaceAll('*', '[^/]*')
+    .replaceAll('\u0000', '.*')
+
+  return new RegExp(`(?:^|/)${pattern}$`).test(candidate)
+}
+
+function referencedPathExists (reference, files) {
+  const variants = pathVariants(reference)
+
+  return variants.some(variant => {
+    if (pathExists(path.join(REPOSITORY_ROOT, variant))) return true
+
+    return files.some(file => {
+      const relative = path.relative(REPOSITORY_ROOT, file).split(path.sep).join('/')
+      return pathMatches(variant, relative)
+    })
+  })
+}
+
+function classDefinitions (files) {
   const definitions = new Set()
-  const packages = path.join(REPOSITORY_ROOT, 'packages')
 
-  for (const file of fs.readdirSync(packages, { recursive: true })) {
-    if (!file.endsWith('.js') || file.includes('/node_modules/')) continue
+  for (const file of files) {
+    if (!file.endsWith('.js')) continue
 
-    const source = fs.readFileSync(path.join(packages, file), 'utf8')
+    const source = fs.readFileSync(file, 'utf8')
     for (const [, className] of source.matchAll(/\bclass\s+([A-Za-z_$][\w$]*)\b/g)) {
       definitions.add(className)
     }
@@ -98,55 +103,53 @@ function classDefinitions () {
   return definitions
 }
 
-describe('integration skill references', () => {
-  const files = SKILL_DIRECTORIES.flatMap(markdownFiles)
+function pluginClasses (source) {
+  return new Set(codeSpans(source).flatMap(span => {
+    if (isTemplate(span)) return []
 
-  it('references existing repository paths, links, and relative imports', () => {
-    for (const file of files) {
-      const source = fs.readFileSync(path.join(REPOSITORY_ROOT, file), 'utf8')
+    return span.match(/\b[A-Z][A-Za-z0-9]*Plugin\b/g) ?? []
+  }))
+}
+
+describe('skill references', () => {
+  const files = repositoryFiles()
+  const skills = skillFiles(files)
+
+  it('discovers every repository skill', () => {
+    assert.ok(skills.length > 0, 'expected at least one SKILL.md in the repository')
+  })
+
+  it('references existing repository paths and links', () => {
+    for (const file of skills) {
+      const source = fs.readFileSync(file, 'utf8')
 
       for (const destination of markdownLinks(source)) {
-        if (isTemplate(destination) || destination.startsWith('http://') || destination.startsWith('https://')) continue
+        if (isTemplate(destination) || !isRepositoryLink(destination)) continue
 
         assert.ok(
-          pathExists(path.resolve(REPOSITORY_ROOT, path.dirname(file), destination)),
-          `${file} links to missing path \`${destination}\``
+          pathExists(path.resolve(path.dirname(file), destination)),
+          `${path.relative(REPOSITORY_ROOT, file)} links to missing path \`${destination}\``
         )
       }
 
       for (const span of codeSpans(source)) {
-        if (isTemplate(span)) continue
+        if (isTemplate(span) || !isRepositoryPath(span)) continue
 
-        if (repositoryPath(span)) {
-          assert.ok(pathExists(path.join(REPOSITORY_ROOT, span)), `${file} references missing path \`${span}\``)
-          continue
-        }
-
-        if (span.startsWith('../')) {
-          const exists = RELATIVE_IMPORT_BASES.some(base => pathExists(path.resolve(REPOSITORY_ROOT, base, span)))
-          assert.ok(exists, `${file} references missing relative import \`${span}\``)
-          continue
-        }
-
-        const exists = shortPathExists(span)
-        if (exists !== undefined) {
-          assert.ok(exists, `${file} references missing short path \`${span}\``)
-        }
+        assert.ok(
+          referencedPathExists(span, files),
+          `${path.relative(REPOSITORY_ROOT, file)} references missing path \`${span}\``
+        )
       }
     }
   })
 
   it('references existing plugin classes', () => {
-    const definitions = classDefinitions()
+    const definitions = classDefinitions(files)
 
-    for (const file of files) {
-      const source = fs.readFileSync(path.join(REPOSITORY_ROOT, file), 'utf8')
-      const classes = new Set(source.match(/\b[A-Z][A-Za-z0-9]*Plugin\b/g) ?? [])
-
-      classes.add('Plugin')
-      classes.delete('MyPlugin') // Template class used in implementation examples.
-      for (const className of classes) {
-        assert.ok(definitions.has(className), `${file} references missing class \`${className}\``)
+    for (const file of skills) {
+      const source = fs.readFileSync(file, 'utf8')
+      for (const className of pluginClasses(source)) {
+        assert.ok(definitions.has(className), `${path.relative(REPOSITORY_ROOT, file)} references missing class \`${className}\``)
       }
     }
   })
