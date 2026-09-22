@@ -1,7 +1,7 @@
 'use strict'
 
 const { spawnSync } = require('node:child_process')
-const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs')
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
@@ -12,7 +12,20 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
+const { SourceMapConsumer } = require('../../../../../vendor/node_modules/@datadog/source-map')
 const { parse, query } = require('../../../src/helpers/rewriter/compiler')
+
+const SOURCE_MAP_MARKER = '//# sourceMappingURL=data:application/json;base64,'
+
+// V8 treats CR, LS and PS as line terminators just like LF, so shebang
+// restoration must locate the first of any of them.
+const LINE_TERMINATORS = {
+  LF: '\n',
+  CRLF: '\r\n',
+  CR: '\r',
+  'U+2028': '\u2028',
+  'U+2029': '\u2029',
+}
 
 // TODO: Test actual functionality and not just the start channel.
 describe('check-require-cache', () => {
@@ -412,9 +425,9 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement',
+          astQuery: 'FunctionDeclaration[id.name="runAfterSetup"] TryStatement > BlockStatement',
           channelName: 'trace_await_context_callback_at_try_start',
-          transform: 'awaitContextCallbackAtTryStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -439,7 +452,21 @@ describe('check-require-cache', () => {
           },
           astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
           channelName: 'trace_await_context_callback_at_function_start',
-          transform: 'awaitContextCallbackAtFunctionStart',
+          transform: 'awaitContextCallback',
+          transformOptions: {
+            callbackName: 'beforeStart',
+          },
+        },
+        // Matching the same function twice verifies that the transform checks its resolved insertion target.
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-await-context-callback.js',
+          },
+          astQuery: 'FunctionDeclaration[id.name="runFromStart"]',
+          channelName: 'trace_await_context_callback_at_function_start',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -462,9 +489,10 @@ describe('check-require-cache', () => {
             versionRange: '>=0.1',
             filePath: 'trace-await-context-callback-outer-try.js',
           },
-          astQuery: 'FunctionDeclaration[id.name="tracedNested"] CallExpression[callee.name="task"]',
+          astQuery: 'FunctionDeclaration[id.name="runNestedWithoutTry"] > BlockStatement > ' +
+            'TryStatement > BlockStatement',
           channelName: 'trace_await_context_callback_outer_try',
-          transform: 'awaitContextCallbackAtTryStart',
+          transform: 'awaitContextCallback',
           transformOptions: {
             callbackName: 'beforeStart',
           },
@@ -549,6 +577,59 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'durable-orchestration-executor.js',
+          },
+          functionQuery: {
+            className: 'TaskOrchestrationExecutor',
+            methodName: 'execute',
+          },
+          channelName: 'TaskOrchestrationExecutor_failure',
+          transform: 'publishDurableOrchestrationFailure',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-alias.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-async-handler.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-generator-handler.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
+            name: 'test-esm',
+            versionRange: '>=0.1',
+            filePath: 'postgres-query-alias.js',
+          },
+          astQuery: 'Program',
+          transform: 'postgresQueryHandlers',
+          channelName: 'query',
+        },
+        {
+          module: {
             name: 'test-esm',
             versionRange: '>=0.1',
             filePath: 'pregel-class.js',
@@ -584,6 +665,30 @@ describe('check-require-cache', () => {
           },
           transform: 'configureGraphqlFastPath',
           channelName: 'execute',
+        },
+        {
+          module: {
+            name: 'bullmq',
+            versionRange: '>=0.1',
+            filePath: 'activation.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: 'bullmq',
+            versionRange: '>=0.1',
+            filePath: 'mapped.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
         },
       ],
     })
@@ -1028,9 +1133,12 @@ describe('check-require-cache', () => {
     const { runFromStart } = compileFile('trace-await-context-callback')
     const steps = []
 
-    const [rewrittenFunction] = query(parse(content), 'FunctionDeclaration[id.name="runFromStart"] ' +
-      'VariableDeclarator[id.name="__apm$wrapped"] > FunctionExpression[async=true]')
+    const rewrittenFunction = query(parse(content),
+      ':matches(FunctionDeclaration, FunctionExpression)[async=true]')
+      .find(node => node.body.body[0]?.directive === 'use strict')
+    assert(rewrittenFunction)
     assert.equal(rewrittenFunction.body.body[0].directive, 'use strict')
+    assert.equal(query(rewrittenFunction, 'VariableDeclarator[id.name="__apm$beforeStart"]').length, 1)
 
     subs = {
       start (ctx) {
@@ -1071,7 +1179,7 @@ describe('check-require-cache', () => {
     assert.equal(await runAfterSetup(() => 'passed'), 'passed')
   })
 
-  it('should not use a try block outside the traced function', async () => {
+  it('should leave a matched block outside the traced function untouched', async () => {
     const filename = resolve(__dirname, 'node_modules', 'test', 'trace-await-context-callback-outer-try.js')
     const source = readFileSync(filename, 'utf8')
     const { runNestedWithoutTry } = compileFile('trace-await-context-callback-outer-try')
@@ -1233,6 +1341,32 @@ describe('check-require-cache', () => {
     assert.equal(subs.start.callCount, 0)
   })
 
+  it('should publish durable orchestration failures without wrapping the result', () => {
+    ch = tracingChannel('orchestrion:test:TaskOrchestrationExecutor_failure')
+    subs = { end: sinon.spy() }
+    ch.subscribe(subs)
+
+    const TaskOrchestrationExecutor = compileFile('durable-orchestration-executor')
+    const executor = new TaskOrchestrationExecutor()
+    const context = {}
+    const history = []
+
+    const result = executor.execute(context, history)
+    assert.deepStrictEqual(result, { context, history })
+    sinon.assert.notCalled(subs.end)
+
+    const error = new Error('orchestration failed')
+    executor.exception = error
+
+    assert.throws(() => executor.execute(context, history), candidate => candidate === error)
+    sinon.assert.calledOnce(subs.end)
+
+    const failure = subs.end.firstCall.args[0]
+    assert.strictEqual(failure.arguments[0], context)
+    assert.strictEqual(failure.arguments[1], history)
+    assert.strictEqual(failure.error, error)
+  })
+
   it('should leave dependencies without a rewrite target untouched', () => {
     const filename = resolve(__dirname, 'node_modules', 'test-esm', 'pregel-class.js')
     const source = readFileSync(filename, 'utf8')
@@ -1310,6 +1444,219 @@ describe('check-require-cache', () => {
 
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
   })
+
+  it('should ignore unrelated destructured requires and use an aliased Postgres Query binding', () => {
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-alias')
+    const queries = Postgres()
+
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 2)
+  })
+
+  it('should use an aliased Postgres Query import binding', async () => {
+    const fixtureDirectory = resolve(__dirname, 'node_modules', 'test-esm')
+    const filename = join(fixtureDirectory, 'postgres-query-alias.js')
+    const source = readFileSync(filename, 'utf8')
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'test-esm',
+      filePath: 'postgres-query-alias.js',
+    })
+    const directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-postgres-esm-'))
+    const outputFile = join(directory, 'postgres-query-alias.js')
+
+    writeFileSync(join(directory, 'package.json'), '{"type":"module"}')
+    writeFileSync(join(directory, 'query.js'), readFileSync(join(fixtureDirectory, 'query.js')))
+    writeFileSync(outputFile, rewritten)
+
+    ch = tracingChannel('orchestrion:test-esm:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const { default: Postgres } = await import(pathToFileURL(outputFile).href)
+    const queries = Postgres()
+
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 2)
+  })
+
+  it('should leave async Postgres handlers untouched', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'postgres-query-async-handler.js')
+    const source = readFileSync(filename, 'utf8')
+
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-async-handler')
+    const queries = await Promise.all(Postgres())
+
+    assert.strictEqual(content, source)
+    assert.strictEqual(queries.length, 2)
+    assert.strictEqual(subs.start.callCount, 0)
+  })
+
+  it('should leave generator Postgres handlers untouched', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'postgres-query-generator-handler.js')
+    const source = readFileSync(filename, 'utf8')
+
+    ch = tracingChannel('orchestrion:test:query')
+    subs = { start: sinon.spy() }
+    ch.subscribe(subs)
+
+    const Postgres = compileFile('postgres-query-generator-handler')
+    const queries = Postgres()
+
+    assert.strictEqual(content, source)
+    assert.strictEqual(queries[0].next().value.constructor.name, 'Query')
+    assert.strictEqual(queries[1].next().value.constructor.name, 'Query')
+    assert.strictEqual(subs.start.callCount, 0)
+  })
+
+  it('resolves module versions from file URLs with encoded characters', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter url-'))
+    const packageDirectory = join(dir, 'node_modules', 'bullmq')
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ version: '5.66.0' }))
+
+    try {
+      const filename = join(packageDirectory, 'activation.js')
+      const source = "'use strict'\nfunction work () { return true }\nmodule.exports = work\n"
+      const rewritten = rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+      })
+
+      assert.notStrictEqual(rewritten, source)
+    } finally {
+      rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
+  it('discovers rewrite targets in Windows paths through both entrypoints', () => {
+    const { rewrite, createBundlerRewriter } = require('../../../src/helpers/rewriter')
+    const directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-windows-'))
+    const packageDirectory = join(directory, 'node_modules', 'ai')
+    const source = 'function getTracer () { return {} }\n'
+
+    try {
+      mkdirSync(packageDirectory, { recursive: true })
+      writeFileSync(join(packageDirectory, 'package.json'), '{"version":"5.0.0"}')
+      const filename = join(packageDirectory, 'dist', 'index.js').replaceAll('/', '\\')
+      const rewriteBundled = createBundlerRewriter(require.resolve('dc-polyfill'))
+
+      assert.match(rewrite(source, filename, 'commonjs'), /orchestrion:ai:getTracer/)
+      assert.match(rewriteBundled(source, filename, 'commonjs').code, /orchestrion:ai:getTracer/)
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves input when file URL conversion fails through either entrypoint', () => {
+    const source = Buffer.from('function work () {}')
+    const sourceMap = { version: 3, mappings: '' }
+    const target = { moduleName: 'bullmq', filePath: 'activation.js' }
+    const rewriteBundled = rewriter.createBundlerRewriter(require.resolve('dc-polyfill'))
+
+    for (const invalidSegment of ['%ZZ', '%2F']) {
+      const url = `file:///C:/project/${invalidSegment}/node_modules/bullmq/activation.js`
+      assert.strictEqual(rewriter.rewrite(source, url, 'commonjs', target), source)
+      const result = rewriteBundled(source, url, 'commonjs', target, sourceMap)
+      assert.strictEqual(result.code, source)
+      assert.strictEqual(result.map, sourceMap)
+    }
+  })
+
+  it('preserves a shebang without a trailing newline', () => {
+    const source = '#!/usr/bin/env node'
+    const shebangRewriter = proxyquire('../../../src/helpers/rewriter', {
+      '../../../../../vendor/dist/@apm-js-collab/code-transformer': {
+        create: () => ({
+          addTransform () {},
+          getTransformer: () => ({ transform: () => ({ code: 'module.exports = true' }) }),
+        }),
+      },
+      './instrumentations': [],
+    })
+    const rewritten = shebangRewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'activation.js'),
+      'commonjs',
+      { moduleName: 'bullmq', filePath: 'activation.js' }
+    )
+
+    assert.equal(rewritten, `${source}\nmodule.exports = true`)
+  })
+
+  for (const [name, separator] of Object.entries(LINE_TERMINATORS)) {
+    it(`maps transformed pure source positions correctly after restoring a shebang followed by ${name}`, () => {
+      const filename = resolve(__dirname, 'node_modules', 'test', 'mapped.js')
+      const source = `#!/usr/bin/env node${separator}'use strict'${separator}function work () {${separator}` +
+        `  throw new Error('mapped')${separator}}${separator}module.exports = work${separator}`
+      const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'mapped.js',
+      })
+      const markerIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+
+      assert.notStrictEqual(markerIndex, -1)
+      const parsedMap = JSON.parse(Buffer.from(
+        rewritten.slice(markerIndex + SOURCE_MAP_MARKER.length).trim(),
+        'base64'
+      ).toString())
+      assert.equal(parsedMap.version, 3)
+
+      const generatedIndex = rewritten.indexOf('function work')
+      const generatedPrefix = rewritten.slice(0, generatedIndex)
+      const generatedLine = generatedPrefix.split('\n').length
+      const generatedColumn = generatedPrefix.length - generatedPrefix.lastIndexOf('\n') - 1
+      const consumer = new SourceMapConsumer(parsedMap)
+      const mapped = consumer.generatedPositionFor({
+        source: 'bullmq/mapped.js',
+        line: 3,
+        column: 9,
+      })
+
+      assert.equal(mapped.line, generatedLine)
+      assert.equal(mapped.column, generatedColumn)
+    })
+  }
+
+  for (const [name, separator] of Object.entries(LINE_TERMINATORS)) {
+    it(`restores a shebang followed by a ${name} line terminator without re-running the program`, () => {
+      const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+      // The top-level counter lives on globalThis because re-executed top-level
+      // code could reset a module scoped `var` back to its initial value.
+      const runsKey = `__dd_rewriter_shebang_runs_${name.replaceAll('+', '')}`
+      const source = `#!/usr/bin/env node${separator}'use strict'${separator}` +
+        `globalThis.${runsKey} = (globalThis.${runsKey} | 0) + 1${separator}` +
+        `function work () { return globalThis.${runsKey} }${separator}module.exports = work${separator}`
+      const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+      })
+
+      delete globalThis[runsKey]
+
+      try {
+        assert.notStrictEqual(rewritten, source)
+        assert.match(rewritten, /orchestrion:bullmq:work/)
+
+        const mod = new Module(filename, module.parent)
+        mod.filename = filename
+        mod.paths = Module._nodeModulePaths(dirname(filename))
+        mod._compile(rewritten, filename)
+
+        assert.strictEqual(typeof mod.exports, 'function')
+        assert.strictEqual(mod.exports(), 1)
+      } finally {
+        delete globalThis[runsKey]
+      }
+    })
+  }
 })
 
 describe('rewriter source-map trailer', () => {

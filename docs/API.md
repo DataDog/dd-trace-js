@@ -18,7 +18,8 @@ Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
 Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
 `DD_METRICS_OTEL_ENABLED` settings still apply.
 
-Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. During Test Optimization, it also submits
+best-effort formatted `console.warn` and `console.error` calls made with an active test, suite, or session span. Set
 `DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
@@ -135,6 +136,7 @@ tracer.use('openai', {
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -143,6 +145,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -221,6 +224,7 @@ tracer.use('openai', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [playwright](./interfaces/export_.plugins.playwright.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
@@ -229,6 +233,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
@@ -591,6 +596,18 @@ Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to ove
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=true` to enable dynamic Auto Test Retries budgets based on test
+duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
+determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
+and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
+Requires Auto Test Retries to be enabled by the backend.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
+overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets
+respectively). When unset, empty, or invalid, the Early Flake Detection retry settings from the backend are
+used with a minimum of one ATR retry. Local EFD retry-count overrides do not affect dynamic ATR.
+Only takes effect when `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED` is enabled.
 
 Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests

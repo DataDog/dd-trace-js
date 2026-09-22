@@ -280,7 +280,7 @@ describe('webdriverio instrumentation', () => {
     assert.match(rewrittenSource, /__apm\$ctx\.resolveCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rejectCallback/)
     assert.match(rewrittenSource, /__apm\$ctx\.rumCleanupCallback/)
-    assert.match(rewrittenSource, /__apm\$ctx\.rumStartCallback/)
+    assert.strictEqual(rewrittenSource.match(/__apm\$ctx\.rumStartCallback/g)?.length, 1)
     assert.match(rewrittenSource, /__apm\$ctx\.retryCallback/)
   })
 
@@ -3976,12 +3976,14 @@ describe('webdriverio instrumentation', () => {
       request.onDone({
         isTestDynamicInstrumentationEnabled: true,
         libraryConfig: {
+          dynamicAtrBuckets: [1, 2, 3, 4, 5],
           earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
           isCodeCoverageEnabled: true,
           isCoverageReportUploadEnabled: true,
           isDiEnabled: true,
+          isDynamicAtrEnabled: true,
           isEarlyFlakeDetectionEnabled: true,
           isFlakyTestRetriesEnabled: true,
           isImpactedTestsEnabled: true,
@@ -4121,13 +4123,17 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(firstWorker.sentMessages[0].content.requestId, 'first-request')
       assert.strictEqual(secondWorker.sentMessages[0].name, CONFIGURATION_RESPONSE)
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
+      assert.strictEqual(secondWorker.sentMessages[0].content.configuration.isDynamicAtrEnabled, true)
+      assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.dynamicAtrBuckets, [1, 2, 3, 4, 5])
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
+        dynamicAtrBuckets: [1, 2, 3, 4, 5],
         earlyFlakeDetectionFaultyThreshold: 30,
         earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
         isDiEnabled: true,
+        isDynamicAtrEnabled: true,
         isEarlyFlakeDetectionEnabled: true,
         isFlakyTestRetriesEnabled: true,
         isImpactedTestsEnabled: true,
@@ -4539,6 +4545,53 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  it('does not mark an empty worker failure as expected empty', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const sessionFinishes = []
+
+    function onTestFinish () {}
+    function onSessionFinish (event) {
+      sessionFinishes.push(event)
+      event.onDone()
+    }
+
+    testFinishCh.subscribe(onTestFinish)
+    testSessionFinishCh.subscribe(onSessionFinish)
+
+    try {
+      require('../src/webdriverio')
+
+      const localRunner = {
+        config: {
+          framework: 'mocha',
+          rootDir: process.cwd(),
+        },
+      }
+      const file = path.join(process.cwd(), 'empty.spec.js')
+      const worker = createWorker()
+
+      registerWorker(localRunner, worker, file)
+      requestConfiguration(worker, file, 'empty-request')
+      await new Promise(setImmediate)
+
+      worker.emit('message', {
+        name: 'testFrameworkInit',
+        content: { hasTests: false },
+      })
+      worker.emit('exit', { exitCode: 1, retries: 0 })
+
+      await finishLocalRunner(localRunner)
+
+      assert.strictEqual(sessionFinishes.length, 1)
+      assert.strictEqual(sessionFinishes[0].status, 'fail')
+      assert.strictEqual(sessionFinishes[0].isExpectedEmptySession, false)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
   it('reports a worker failure before Mocha loads', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')
     const libraryConfigurationCh = channel('ci:mocha:library-configuration')
@@ -4882,7 +4935,6 @@ function createJasmineResult (id, file, status) {
  *
  * @param {object} result
  * @param {string} file
- * @returns {void}
  */
 function reportJasmineSpecStarted (result, file) {
   channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specStarted:end').publish({
@@ -4897,7 +4949,6 @@ function reportJasmineSpecStarted (result, file) {
  * @param {object} localRunner
  * @param {object} worker
  * @param {string|string[]} file
- * @returns {void}
  */
 function registerWorker (localRunner, worker, file) {
   const specs = Array.isArray(file) ? file : [file]
@@ -4931,7 +4982,6 @@ function finishLocalRunner (localRunner, error) {
  * @param {EventEmitter} worker
  * @param {string|string[]} file
  * @param {string} requestId
- * @returns {void}
  */
 function requestConfiguration (worker, file, requestId) {
   const files = Array.isArray(file) ? file : [file]
@@ -4956,7 +5006,6 @@ function requestConfiguration (worker, file, requestId) {
  * @param {string} file
  * @param {string} [status]
  * @param {{message?: string, stack?: string}} [error]
- * @returns {void}
  */
 function reportSuiteFinish (worker, file, status = 'pass', error) {
   worker.emit('message', {

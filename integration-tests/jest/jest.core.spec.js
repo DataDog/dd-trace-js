@@ -2411,6 +2411,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     // which can cause downstream transform errors.
     this.timeout(60_000)
 
+    receiver.setSettings({ flaky_test_retries_enabled: true })
+
     let outputWithTracer = ''
     const command = 'node ./node_modules/jest/bin/jest --config ./jest/dd-trace-transform-repro.config.js --coverage'
     const eventsPromise = receiver
@@ -2425,7 +2427,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       command,
       {
         cwd,
-        env: getCiVisAgentlessConfig(receiver.port),
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+        },
       }
     )
 

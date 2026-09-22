@@ -6,16 +6,22 @@ const assert = require('node:assert/strict')
 const { channel } = require('dc-polyfill')
 const sinon = require('sinon')
 
+const satisfies = require('../../../../vendor/dist/semifies')
+
 describe('register', () => {
   let hooksMock
   let HookMock
   let instrumentationsMock
   let originalModuleProtoRequire
+  let requiredModules
+  let satisfiesMock
   let telemetryMock
 
   const clearRegisterCache = () => {
     const registerPath = require.resolve('../../src/helpers/register')
+    const instrumentationUtilsPath = require.resolve('../../src/helpers/instrumentation-utils')
     delete require.cache[registerPath]
+    delete require.cache[instrumentationUtilsPath]
   }
 
   beforeEach(() => {
@@ -33,13 +39,23 @@ describe('register', () => {
 
     HookMock = sinon.stub()
     instrumentationsMock = {}
+    requiredModules = []
+    satisfiesMock = sinon.spy(satisfies)
     telemetryMock = sinon.stub()
 
     const registerPath = require.resolve('../../src/helpers/register')
+    const instrumentationUtilsPath = require.resolve('../../src/helpers/instrumentation-utils')
     originalModuleProtoRequire = Module.prototype.require
 
     Module.prototype.require = function (request) {
+      if (this.filename === instrumentationUtilsPath && request === '../../../../vendor/dist/semifies') {
+        return satisfiesMock
+      }
       if (this.filename === registerPath) {
+        if (request === '../console') {
+          requiredModules.push(request)
+          return {}
+        }
         const stubs = {
           './hooks': hooksMock,
           './hook': HookMock,
@@ -102,6 +118,14 @@ describe('register', () => {
         registeredNames.push(names[0])
       }
       assert.deepStrictEqual(registeredNames.sort(), ['@confluentinc/kafka-javascript', 'mongodb-core'])
+    })
+  }
+
+  for (const disabledName of ['console', 'node:console']) {
+    it(`should not load console instrumentation when ${disabledName} is disabled`, () => {
+      loadRegisterWithEnv({ DD_TRACE_DISABLED_INSTRUMENTATIONS: disabledName })
+
+      assert.strictEqual(requiredModules.includes('../console'), false)
     })
   }
 
@@ -170,6 +194,25 @@ describe('register', () => {
     })
   })
 
+  it('should reject a nonmatching file before checking its version', () => {
+    const patch = sinon.stub()
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{
+      file: 'index.js',
+      versions: ['>=1'],
+      hook: patch,
+    }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(hook(moduleExports, 'example/internal.js', '/path/to/example', '1.0.0'), moduleExports)
+    sinon.assert.notCalled(satisfiesMock)
+    sinon.assert.notCalled(patch)
+  })
+
   it('should patch a package root namespace without also patching its default callback', () => {
     const patch = sinon.stub()
     hooksMock.mocha = { fn: sinon.stub() }
@@ -193,5 +236,57 @@ describe('register', () => {
 
     assert.strictEqual(hook(namespace, 'mocha', '/path/to/mocha', '12.0.0', true), namespace)
     sinon.assert.calledOnceWithExactly(patch, Mocha)
+  })
+
+  it('should match file patterns', () => {
+    const patch = sinon.stub()
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ filePattern: 'dist/cli.*', hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(
+      hook(moduleExports, 'example/dist/cli-123.js', '/path/to/example', '1.0.0'),
+      moduleExports
+    )
+    sinon.assert.calledOnceWithExactly(patch, moduleExports, '1.0.0', undefined, {
+      moduleBaseDir: '/path/to/example',
+      moduleName: 'example/dist/cli-123.js',
+    })
+  })
+
+  it('should match relative instrumentation names', () => {
+    const name = './runtime/library.js'
+    const patch = sinon.stub()
+    hooksMock[name] = { fn: sinon.stub() }
+    instrumentationsMock[name] = [{ hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === name)
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(hook(moduleExports, 'different/path.js', '/path/to/package', '1.0.0'), moduleExports)
+    sinon.assert.calledOnceWithExactly(patch, moduleExports, '1.0.0', undefined, {
+      moduleBaseDir: '/path/to/package',
+      moduleName: 'different/path.js',
+    })
+  })
+
+  it('should not treat an empty file pattern as a wildcard', () => {
+    const patch = sinon.stub()
+    hooksMock.example = { fn: sinon.stub() }
+    instrumentationsMock.example = [{ filePattern: '', hook: patch }]
+    loadRegisterWithEnv()
+
+    const hookCall = HookMock.getCalls().find(({ args }) => args[0][0] === 'example')
+    const hook = hookCall.args[2]
+    const moduleExports = {}
+
+    assert.strictEqual(hook(moduleExports, 'example/internal.js', '/path/to/example', '1.0.0'), moduleExports)
+    sinon.assert.notCalled(patch)
   })
 })

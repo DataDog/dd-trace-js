@@ -30,7 +30,6 @@ class SchemaManager {
    * @param {string} kind
    * @param {string} plugin
    * @param {object} opts
-   * @returns {string}
    */
   opName (type, kind, plugin, opts) {
     return this.schema.getOpName(type, kind, plugin, opts)

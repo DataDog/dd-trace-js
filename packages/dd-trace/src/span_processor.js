@@ -19,7 +19,8 @@ class SpanProcessor {
     this._config = config
     this._killAll = false
 
-    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED &&
+        !config.appsec?.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
@@ -45,7 +46,6 @@ class SpanProcessor {
    * `PrioritySampler.keepTrace()`), so `discard` only applies while the priority is still a reject.
    *
    * @param {import('./opentracing/span_context')} spanContext
-   * @returns {boolean}
    */
   #isDiscarded (spanContext) {
     return spanContext._sampling.discard && spanContext._sampling.priority <= AUTO_REJECT

@@ -119,7 +119,6 @@ addHook({
  * Returns whether this browser can preload and clean correlation across every browsing context.
  *
  * @param {object} browser
- * @returns {boolean}
  */
 function canCorrelateRumBrowser (browser) {
   return browser?.isBidi &&
@@ -132,7 +131,6 @@ function canCorrelateRumBrowser (browser) {
  * Releases retained state when a WebDriver session ends.
  *
  * @param {object} browser
- * @returns {void}
  */
 function releaseRumBrowser (browser) {
   rumBrowsers.delete(browser)
@@ -152,7 +150,6 @@ function releaseRumBrowser (browser) {
  * Retains a browser and watches for WebDriver's deleteSession result event.
  *
  * @param {object} browser
- * @returns {void}
  */
 function retainRumBrowser (browser) {
   rumBrowsers.add(browser)
@@ -171,7 +168,6 @@ function retainRumBrowser (browser) {
  * Returns whether RUM is inactive because its configured sampling rate is below 100%.
  *
  * @param {{isRumActive: boolean, isRumInstrumented: boolean, rumSamplingRate: number|null}} rumState
- * @returns {boolean}
  */
 function isRumSampledOut (rumState) {
   return rumState.isRumInstrumented && !rumState.isRumActive &&
@@ -652,7 +648,6 @@ function handleRumProtocolCommand (command) {
  * Wraps only WebDriver commands that need to wait for RUM work before their request starts.
  *
  * @param {{arguments?: unknown[], result?: Function}} context
- * @returns {void}
  */
 function wrapRumProtocolCommand (context) {
   const command = context.arguments?.[2]?.command
@@ -675,7 +670,6 @@ function wrapRumProtocolCommand (context) {
  * A tracing-channel start subscriber is synchronous and cannot delay the static async handler itself.
  *
  * @param {{result?: {_bidiHandler?: {value?: object}}}} context
- * @returns {void}
  */
 function wrapRumBidiNavigation (context) {
   const bidiHandler = context.result?._bidiHandler?.value
@@ -844,7 +838,6 @@ async function retryRumBrowsers (testExecutionId) {
  * Delays BiDi navigation until its RUM correlation preload is installed.
  *
  * @param {{rumPreloadCallback?: () => Promise<void>}} context
- * @returns {void}
  */
 function waitForRumNavigationStart (context) {
   if (!rumPageNavigateCh.hasSubscribers) return
@@ -860,7 +853,6 @@ function waitForRumNavigationStart (context) {
  * }} context
  * @param {() => Promise<unknown>} operation
  * @param {boolean} [waitForResolve]
- * @returns {void}
  */
 function setRumWaitCallbacks (context, operation, waitForResolve = true) {
   const waitForOperation = onDone => operation().then(onDone, onDone)
@@ -872,7 +864,6 @@ function setRumWaitCallbacks (context, operation, waitForResolve = true) {
  * Delays URL completion until RUM detection and correlation settle.
  *
  * @param {object} context
- * @returns {void}
  */
 function waitForRumNavigation (context) {
   if (!rumPageNavigateCh.hasSubscribers) return
@@ -884,7 +875,6 @@ function waitForRumNavigation (context) {
  * Correlation remains active until every afterEach hook has run.
  *
  * @param {{arguments?: unknown[]}} context
- * @returns {void}
  */
 function waitForRumCleanup (context) {
   const type = context.arguments?.[1]
@@ -904,7 +894,6 @@ function waitForRumCleanup (context) {
  * Correlation remains active until every afterEach hook has run.
  *
  * @param {{arguments?: unknown[]}} context
- * @returns {void}
  */
 function waitForFailedRumCleanup (context) {
   const type = context.arguments?.[1]
@@ -928,7 +917,6 @@ function waitForFailedRumCleanup (context) {
  * Prepares retained RUM state before the next test or non-afterEach hook starts.
  *
  * @param {{arguments?: unknown[], rumCleanupCallback?: () => Promise<void>}} context
- * @returns {void}
  */
 function waitForRumTestStart (context) {
   const type = context.arguments?.[1]
@@ -1014,12 +1002,14 @@ function waitForRumTestStart (context) {
  */
 function createWorkerConfiguration () {
   return {
+    dynamicAtrBuckets: undefined,
     earlyFlakeDetectionFaultyThreshold: 30,
     earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
     flakyTestRetriesCount: 0,
     isCodeCoverageEnabled: false,
     isCoverageReportUploadEnabled: false,
     isDiEnabled: false,
+    isDynamicAtrEnabled: false,
     isEarlyFlakeDetectionEnabled: false,
     isFlakyTestRetriesEnabled: false,
     isImpactedTestsEnabled: false,
@@ -1046,7 +1036,6 @@ function createWorkerConfiguration () {
  *   resolveCallback?: (onDone: () => void) => void,
  *   rejectCallback?: (onDone: () => void) => void
  * }} context
- * @returns {void}
  */
 function initializeJasmineWorker (adapter, context) {
   if (!isWebdriverioWorker) {
@@ -1061,7 +1050,6 @@ function initializeJasmineWorker (adapter, context) {
        * Publishes run-level failures that are absent from suiteDone.
        *
        * @param {object} result
-       * @returns {void}
        */
       jasmineDone (result) {
         jasmineDoneCh.publish({ result })
@@ -1073,7 +1061,6 @@ function initializeJasmineWorker (adapter, context) {
    * Waits until the coordinator has started this worker's parent spans.
    *
    * @param {() => void} onDone
-   * @returns {void}
    */
   const waitForCoordinator = onDone => {
     const requestId = `${process.pid}-${++jasmineWorkerRequestId}`
@@ -1083,7 +1070,6 @@ function initializeJasmineWorker (adapter, context) {
      * Releases Jasmine initialization exactly once.
      *
      * @param {object} [configuration]
-     * @returns {void}
      */
     function finish (configuration = createWorkerConfiguration()) {
       if (finished) {
@@ -1107,7 +1093,6 @@ function initializeJasmineWorker (adapter, context) {
      * Receives coordinator readiness for this worker.
      *
      * @param {object} message
-     * @returns {void}
      */
     function onMessage (message) {
       if (message?.name === WORKER_READY_RESPONSE && message.content?.requestId === requestId) {
@@ -1190,7 +1175,6 @@ function getCoordinatorState (localRunner) {
  * Normalizes a WebdriverIO spec identifier to a filesystem path.
  *
  * @param {string} file
- * @returns {string}
  */
 function normalizeFile (file) {
   return file.startsWith('file://') ? fileURLToPath(file) : file
@@ -1201,7 +1185,6 @@ function normalizeFile (file) {
  *
  * @param {CoordinatorState} state
  * @param {string[]} files
- * @returns {void}
  */
 function addScheduledFiles (state, files) {
   for (const file of files) {
@@ -1214,7 +1197,6 @@ function addScheduledFiles (state, files) {
  *
  * @param {string|undefined} workerNodeOptions
  * @param {string} launcherNodeOptions
- * @returns {boolean}
  */
 function includesNodeOptions (workerNodeOptions, launcherNodeOptions) {
   if (!workerNodeOptions) {
@@ -1240,7 +1222,6 @@ function includesNodeOptions (workerNodeOptions, launcherNodeOptions) {
  * Starts the single test session owned by the WebdriverIO launcher.
  *
  * @param {CoordinatorState} state
- * @returns {void}
  */
 function startSession (state) {
   if (state.sessionStarted) {
@@ -1264,7 +1245,6 @@ function startSession (state) {
  * Completes coordinator initialization and releases waiting workers.
  *
  * @param {CoordinatorState} state
- * @returns {void}
  */
 function completeCoordinatorInitialization (state) {
   if (state.initialized) {
@@ -1288,7 +1268,6 @@ function completeCoordinatorInitialization (state) {
  * @param {CoordinatorState} state
  * @param {import('node:diagnostics_channel').Channel} requestChannel
  * @param {(response: object) => void} onDone
- * @returns {void}
  */
 function requestCoordinatorData (state, requestChannel, onDone) {
   if (!requestChannel.hasSubscribers) {
@@ -1320,7 +1299,6 @@ function getMochaFrameworkData (frameworkData) {
  * Applies the worker configuration for an EFD session with faulty known-tests data.
  *
  * @param {object} configuration
- * @returns {void}
  */
 function setEarlyFlakeDetectionFaulty (configuration) {
   configuration.isEarlyFlakeDetectionEnabled = false
@@ -1333,7 +1311,6 @@ function setEarlyFlakeDetectionFaulty (configuration) {
  *
  * @param {CoordinatorState} state
  * @param {object|undefined} response
- * @returns {void}
  */
 function configureCoordinator (state, response) {
   const { configuration } = state
@@ -1354,10 +1331,14 @@ function configureCoordinator (state, response) {
     return
   }
 
+  configuration.dynamicAtrBuckets = libraryConfig.isDynamicAtrEnabled === true
+    ? libraryConfig.dynamicAtrBuckets
+    : undefined
   configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
   configuration.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   configuration.isDiEnabled = libraryConfig.isDiEnabled
+  configuration.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled === true
   configuration.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
   configuration.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   configuration.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
@@ -1371,7 +1352,6 @@ function configureCoordinator (state, response) {
   /**
    * Completes initialization after all enabled requests settle.
    *
-   * @returns {void}
    */
   function finishRequest () {
     pendingRequests--
@@ -1430,7 +1410,6 @@ function configureCoordinator (state, response) {
  *
  * @param {CoordinatorState} state
  * @param {(configuration: object) => void} [onDone]
- * @returns {void}
  */
 function initializeCoordinator (state, onDone) {
   if (state.initialized) {
@@ -1474,7 +1453,6 @@ function initializeCoordinator (state, onDone) {
  *
  * @param {WorkerRecord} workerRecord
  * @param {string[]} files
- * @returns {void}
  */
 function startWorkerSuites (workerRecord, files) {
   for (const rawFile of files) {
@@ -1502,7 +1480,6 @@ function startWorkerSuites (workerRecord, files) {
  * @param {WorkerRecord} workerRecord
  * @param {string} rawFile
  * @param {string} status
- * @returns {void}
  */
 function finishWorkerSuite (state, workerRecord, rawFile, status) {
   const file = normalizeFile(rawFile)
@@ -1524,7 +1501,6 @@ function finishWorkerSuite (state, workerRecord, rawFile, status) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {string} status
- * @returns {void}
  */
 function finishAllWorkerSuites (state, workerRecord, status) {
   let hasFailedSuite = false
@@ -1549,7 +1525,6 @@ function finishAllWorkerSuites (state, workerRecord, status) {
  *
  * @param {WorkerRecord} workerRecord
  * @param {object} message
- * @returns {void}
  */
 function sendWorkerMessage (workerRecord, message) {
   const childProcess = workerRecord.worker.childProcess
@@ -1570,7 +1545,6 @@ function sendWorkerMessage (workerRecord, message) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object} message
- * @returns {void}
  */
 function handleConfigurationRequest (state, workerRecord, message) {
   const { files = [], requestId } = message.content || {}
@@ -1594,7 +1568,6 @@ function handleConfigurationRequest (state, workerRecord, message) {
  *
  * @param {CoordinatorState} state
  * @param {string[]} files
- * @returns {void}
  */
 function updateEarlyFlakeDetectionFaultyState (state, files) {
   const { configuration } = state
@@ -1641,7 +1614,6 @@ function getWebdriverioSuiteError (error) {
  *
  * @param {WorkerRecord} workerRecord
  * @param {object} message
- * @returns {void}
  */
 function handleSuiteResults (workerRecord, message) {
   const { results = [] } = message.content || {}
@@ -1662,7 +1634,6 @@ function handleSuiteResults (workerRecord, message) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object|unknown[]} message
- * @returns {void}
  */
 function handleWorkerMessage (state, workerRecord, message) {
   if (message?.origin === WEBDRIVERIO_WORKER_ORIGIN && message.name === WEBDRIVERIO_WORKER_EVENT) {
@@ -1756,7 +1727,6 @@ function handleWorkerMessage (state, workerRecord, message) {
  * @param {CoordinatorState} state
  * @param {WorkerRecord} workerRecord
  * @param {object} exit
- * @returns {void}
  */
 function handleWorkerExit (state, workerRecord, exit) {
   state.activeWorkers--
@@ -1779,7 +1749,6 @@ function handleWorkerExit (state, workerRecord, exit) {
  * @param {CoordinatorState} state
  * @param {object} worker
  * @param {string[]} specs
- * @returns {void}
  */
 function registerWorker (state, worker, specs) {
   const normalizedSpecs = []
@@ -1811,7 +1780,6 @@ function registerWorker (state, worker, specs) {
  * Calculates the final status for the coordinated session.
  *
  * @param {CoordinatorState} state
- * @returns {string}
  */
 function getSessionStatus (state) {
   let hasPassingSuite = false
@@ -1838,12 +1806,25 @@ function getSessionStatus (state) {
 }
 
 /**
+ * Returns whether every started worker reported that it discovered no tests.
+ *
+ * @param {CoordinatorState} state
+ */
+function isExpectedEmptySession (state) {
+  if (state.workers.size === 0) return false
+
+  for (const workerRecord of state.workers) {
+    if (workerRecord.hasTests !== false) return false
+  }
+  return true
+}
+
+/**
  * Finishes the single WebdriverIO-owned test session.
  *
  * @param {CoordinatorState} state
  * @param {unknown} error
  * @param {() => void} onDone
- * @returns {void}
  */
 function finishCoordinator (state, error, onDone) {
   if (state.finished) {
@@ -1877,8 +1858,10 @@ function finishCoordinator (state, error, onDone) {
     return
   }
 
+  const status = error ? 'fail' : getSessionStatus(state)
   testSessionFinishCh.publish({
-    status: error ? 'fail' : getSessionStatus(state),
+    status,
+    isExpectedEmptySession: status === 'skip' && isExpectedEmptySession(state),
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,
@@ -1901,7 +1884,6 @@ function finishCoordinator (state, error, onDone) {
  *   resolveCallback?: (onDone: () => void) => void,
  *   rejectCallback?: (onDone: () => void) => void
  * }} context
- * @returns {void}
  */
 function waitForLogSubmissionAtWorkerExit (context) {
   const shouldCleanRum = rumBrowsers.size > 0
@@ -1926,7 +1908,6 @@ function waitForLogSubmissionAtWorkerExit (context) {
  * Cleans retained RUM browsers before WebdriverIO deletes the worker session.
  *
  * @param {{rumCleanupCallback?: () => Promise<void>}} context
- * @returns {void}
  */
 function waitForRumCleanupBeforeSessionEnd (context) {
   context.rumCleanupCallback = cleanupAllRumBrowsers

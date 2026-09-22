@@ -14,7 +14,7 @@ describe('Plugin', () => {
 
       beforeEach(async () => {
         // Provision DB/container without emitting azure-cosmos spans (plugin subscriptions stay off).
-        await agent.load('azure-cosmos', { enabled: false })
+        await agent.load('azure-cosmos', { enabled: false }, { spanComputePeerService: true })
         ; ({ client, container } = await setup())
         agent.reload('azure-cosmos', { enabled: true })
       })
@@ -34,6 +34,8 @@ describe('Plugin', () => {
             component: 'azure_cosmos',
             'db.system': 'cosmosdb',
             'db.name': 'testDatabase',
+            'peer.service': 'testDatabase',
+            '_dd.peer.service.source': 'db.name',
             'cosmosdb.container': 'testContainer',
             'cosmosdb.connection.mode': 'gateway',
             'span.kind': 'client',

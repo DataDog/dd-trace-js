@@ -87,7 +87,7 @@ function enable (_config) {
     appsecTelemetry.enable(_config)
     graphql.enable()
 
-    if (_config.appsec.rasp.enabled) {
+    if (_config.appsec.DD_APPSEC_RASP_ENABLED) {
       rasp.enable(_config)
     }
 
@@ -101,7 +101,7 @@ function enable (_config) {
 
     apiSecurity.configure(_config)
 
-    UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
+    UserTracking.setCollectionMode(_config.appsec.DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE, false)
 
     httpRequest.setConfig(_config)
 

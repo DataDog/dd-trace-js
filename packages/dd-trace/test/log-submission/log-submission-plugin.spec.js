@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -8,8 +9,12 @@ const sinon = require('sinon')
 
 require('../setup/core')
 
+const { storage } = require('../../../datadog-core')
 const { publishWithCompletion } = require('../../../datadog-instrumentations/src/helpers/channel')
 
+const legacyStorage = storage('legacy')
+const consoleConfigureCh = channel('ci:log-submission:console:configure')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
 const logSubmissionCh = channel('ci:log-submission:log')
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const winstonAddTransportCh = channel('ci:log-submission:winston:add-transport')
@@ -18,8 +23,19 @@ const request = sinon.stub()
 const log = {
   error: sinon.stub(),
 }
+const tracer = {
+  inject (span, format, carrier) {
+    carrier.dd = {
+      service: 'my service',
+      span_id: span.id,
+      trace_id: span.traceId,
+    }
+  },
+}
 const pluginConfig = {
   enabled: true,
+  isCiVisibility: true,
+  DD_AGENTLESS_LOG_SUBMISSION_ENABLED: true,
   DD_AGENTLESS_LOG_SUBMISSION_URL: 'http://127.0.0.1:8126',
   DD_API_KEY: 'secret',
   service: 'my service',
@@ -33,7 +49,6 @@ const LogSubmissionPlugin = proxyquire('../../src/log-submission/log-submission-
 /**
  * @param {string | Record<string, unknown>} message
  * @param {string} [source]
- * @returns {void}
  */
 function publishLog (message, source = 'bunyan') {
   logSubmissionCh.publish({ source, message })
@@ -51,7 +66,7 @@ describe('LogSubmissionPlugin', () => {
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     const previousBeforeExitHandlers = new Set(beforeExitHandlers)
-    plugin = new LogSubmissionPlugin({}, {})
+    plugin = new LogSubmissionPlugin(tracer, {})
     plugin.configure(pluginConfig)
     beforeExitHandler = [...beforeExitHandlers].find(handler => !previousBeforeExitHandlers.has(handler))
   })
@@ -109,6 +124,114 @@ describe('LogSubmissionPlugin', () => {
     assert.deepStrictEqual(JSON.parse(data), [{ level: 'info', message: 'hello' }])
     assert.strictEqual(options.path, '/api/v2/logs?ddsource=winston&service=my+service')
   })
+
+  it('submits best-effort formatted console warnings and errors', () => {
+    const logHolder = { dd: { service: 'my service', span_id: '1', trace_id: '2' } }
+    consoleLogSubmissionCh.publish({ args: ['warning: %s', 'details'], logHolder, method: 'warn' })
+    consoleLogSubmissionCh.publish({ args: [new Error('boom')], logHolder, method: 'error' })
+    clock.tick(1000)
+
+    const [data, options] = request.firstCall.args
+    const messages = JSON.parse(data)
+    assert.deepStrictEqual(messages[0], { dd: logHolder.dd, message: 'warning: details', status: 'warn' })
+    assert.deepStrictEqual({ dd: messages[1].dd, status: messages[1].status }, {
+      dd: logHolder.dd,
+      status: 'error',
+    })
+    assert.match(messages[1].message, /^Error: boom/)
+    assert.strictEqual(options.path, '/api/v2/logs?ddsource=nodejs&service=my+service')
+  })
+
+  it('preserves custom inspection when formatting console logs', () => {
+    const redacted = {
+      password: 'secret',
+      [inspect.custom]: () => '[REDACTED]',
+    }
+    const logHolder = { dd: { service: 'my service', span_id: '1', trace_id: '2' } }
+
+    consoleLogSubmissionCh.publish({ args: [redacted], logHolder, method: 'warn' })
+    clock.tick(1000)
+
+    const [message] = JSON.parse(request.firstCall.args[0])
+    assert.strictEqual(message.message, '[REDACTED]')
+  })
+
+  it('provides correlation only for active Test Optimization spans', () => {
+    let getLogHolder
+    const subscriber = payload => { getLogHolder = payload.getLogHolder }
+    consoleConfigureCh.subscribe(subscriber)
+    try {
+      plugin.configure(false)
+      plugin.configure(pluginConfig)
+    } finally {
+      consoleConfigureCh.unsubscribe(subscriber)
+    }
+
+    const createSpan = type => ({
+      id: `${type} span`,
+      traceId: `${type} trace`,
+      context: () => ({ getTag: () => type }),
+    })
+    const testSpan = createSpan('test')
+    const testSuiteSpan = createSpan('test_suite_end')
+    const applicationSpan = createSpan('web')
+    applicationSpan.context = () => ({
+      getTag: () => 'web',
+      _trace: { started: [testSuiteSpan, applicationSpan, testSpan] },
+    })
+    const testSessionSpan = createSpan('test_session_end')
+    const applicationSuiteSpan = createSpan('web')
+    applicationSuiteSpan.context = () => ({
+      getTag: () => 'web',
+      _trace: { started: [testSuiteSpan, applicationSuiteSpan] },
+    })
+
+    for (const [store, span] of [
+      [{ span: testSpan }, testSpan],
+      [{ span: applicationSpan }, testSpan],
+      [{ testSuiteSpan }, testSuiteSpan],
+      [{ span: applicationSuiteSpan }, testSuiteSpan],
+      [{ span: testSessionSpan }, testSessionSpan],
+    ]) {
+      legacyStorage.run(store, () => {
+        assert.deepStrictEqual(getLogHolder(), {
+          dd: { service: 'my service', span_id: span.id, trace_id: span.traceId },
+        })
+      })
+    }
+
+    legacyStorage.run({ span: createSpan('web') }, () => assert.strictEqual(getLogHolder(), undefined))
+    assert.strictEqual(getLogHolder(), undefined)
+
+    for (const config of [
+      { isCiVisibility: false },
+      { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: false },
+    ]) {
+      plugin.configure({ ...pluginConfig, ...config })
+      legacyStorage.run({ span: testSpan }, () => assert.strictEqual(getLogHolder(), undefined))
+    }
+  })
+
+  for (const { description, config } of [
+    { description: 'outside Test Optimization', config: { isCiVisibility: false } },
+    {
+      description: 'without agentless log submission',
+      config: { DD_AGENTLESS_LOG_SUBMISSION_ENABLED: false },
+    },
+  ]) {
+    it(`does not activate console instrumentation ${description}`, () => {
+      const subscriber = sinon.stub()
+      consoleConfigureCh.subscribe(subscriber)
+      try {
+        plugin.configure(false)
+        plugin.configure({ ...pluginConfig, ...config })
+      } finally {
+        consoleConfigureCh.unsubscribe(subscriber)
+      }
+
+      sinon.assert.notCalled(subscriber)
+    })
+  }
 
   it('flushes pending Bunyan logs before exit', () => {
     publishLog('{"msg":"hello"}')

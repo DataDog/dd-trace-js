@@ -1,7 +1,13 @@
 'use strict'
 
 const { Writable } = require('node:stream')
+const { formatWithOptions } = require('node:util')
 
+const { channel } = require('dc-polyfill')
+
+const { LOG } = require('../../../../ext/formats')
+const { SPAN_TYPE } = require('../../../../ext/tags')
+const { storage } = require('../../../datadog-core')
 const FinalFlushRequestTracker = require('../exporters/common/final-flush-request-tracker')
 const request = require('../exporters/common/request')
 const log = require('../log')
@@ -11,6 +17,13 @@ const MAX_BATCH_BYTES = 5 * 1024 * 1024
 const MAX_BATCH_LOGS = 1000
 const BATCH_FLUSH_INTERVAL = 1000
 const FINAL_FLUSH_TIMEOUT = 60_000
+const CONSOLE_METHOD_TO_STATUS = {
+  error: 'error',
+  warn: 'warn',
+}
+const TEST_OPTIMIZATION_SPAN_TYPES = new Set(['test', 'test_session_end', 'test_suite_end'])
+const consoleConfigureCh = channel('ci:log-submission:console:configure')
+const legacyStorage = storage('legacy')
 
 /**
  * @returns {Error & { code: string }}
@@ -59,10 +72,34 @@ function asTracerConfig (config) {
 /**
  * @param {import('../config/config-base')} config
  * @param {string} source
- * @returns {string}
  */
 function getLogSubmissionPath (config, source) {
   return `/api/v2/logs?${new URLSearchParams({ ddsource: source, service: config.service })}`
+}
+
+/**
+ * @param {object | undefined} store
+ */
+function getTestOptimizationSpan (store) {
+  const activeSpan = store?.span
+  if (activeSpan && TEST_OPTIMIZATION_SPAN_TYPES.has(activeSpan.context().getTag(SPAN_TYPE))) {
+    return activeSpan
+  }
+
+  // Child instrumentation spans replace store.span, so recover the enclosing test from their trace.
+  const traceSpans = activeSpan?.context()._trace?.started
+  if (traceSpans) {
+    let nestedTestSuiteSpan
+    for (const span of traceSpans) {
+      const spanType = span.context().getTag(SPAN_TYPE)
+      if (spanType === 'test') return span
+      if (spanType === 'test_suite_end') nestedTestSuiteSpan = span
+    }
+    if (nestedTestSuiteSpan) return nestedTestSuiteSpan
+  }
+
+  const testSuiteSpan = store?.testSuiteSpan
+  if (testSuiteSpan?.context().getTag(SPAN_TYPE) === 'test_suite_end') return testSuiteSpan
 }
 
 class LogSubmissionPlugin extends Plugin {
@@ -79,6 +116,22 @@ class LogSubmissionPlugin extends Plugin {
   #timer
   #beforeExitHandler = () => this.#flushLogs()
   #createWinstonJsonFormat
+  #getConsoleLogHolder = () => {
+    if (!this._enabled ||
+        !this.#logSubmissionUrl ||
+        !this.#config?.isCiVisibility ||
+        !this.#config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) return
+
+    const store = legacyStorage.getStore()
+    if (store?.noop) return
+    const span = getTestOptimizationSpan(store)
+    if (!span) return
+
+    const logHolder = {}
+    this.tracer.inject(span, LOG, logHolder)
+    return logHolder.dd ? logHolder : undefined
+  }
+
   #winstonStreamClass
   // Winston formats records inside its transports, not at logger.write time, so (unlike Bunyan/Pino)
   // the instrumentation can't publish a post-format line. A Stream transport pipes format.json()
@@ -135,6 +188,20 @@ class LogSubmissionPlugin extends Plugin {
     this.addSub('ci:log-submission:log', (payload) => {
       this.#enqueueLog(payload)
     })
+    this.addSub('ci:log-submission:console', ({ args, logHolder, method }) => {
+      let message
+      try {
+        message = formatWithOptions({}, ...args)
+      } catch (error) {
+        log.error('Could not format console log for automatic submission', error)
+        return
+      }
+
+      this.#enqueueLog({
+        source: 'nodejs',
+        message: { dd: logHolder.dd, message, status: CONSOLE_METHOD_TO_STATUS[method] },
+      })
+    })
     this.addSub('ci:log-submission:flush', ({ onDone } = {}) => {
       if (!onDone) {
         this.#flushLogs()
@@ -149,7 +216,6 @@ class LogSubmissionPlugin extends Plugin {
 
   /**
    * @param {boolean | (Record<string, unknown> & { enabled: boolean })} config
-   * @returns {void}
    */
   configure (config) {
     if (this._enabled) this.#flushLogs()
@@ -160,6 +226,12 @@ class LogSubmissionPlugin extends Plugin {
       ? getLogSubmissionUrl(this.#config)
       : undefined
     super.configure(config)
+    if (this._enabled &&
+        this.#logSubmissionUrl &&
+        this.#config?.isCiVisibility &&
+        this.#config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
+      consoleConfigureCh.publish({ getLogHolder: this.#getConsoleLogHolder })
+    }
 
     const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
     if (this._enabled) {
@@ -171,7 +243,6 @@ class LogSubmissionPlugin extends Plugin {
 
   /**
    * @param {{ source: string, message: string | Record<string, unknown> }} payload
-   * @returns {void}
    */
   #enqueueLog ({ source, message }) {
     if (!this.#logSubmissionUrl) return
@@ -210,9 +281,6 @@ class LogSubmissionPlugin extends Plugin {
     }
   }
 
-  /**
-   * @returns {void}
-   */
   #flushLogs () {
     clearTimeout(this.#timer)
     this.#timer = undefined

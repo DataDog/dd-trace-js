@@ -13,6 +13,9 @@ const {
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
+  getDynamicAtrRetryCount,
+} = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
   setScreenshotUploadTags,
@@ -65,6 +68,7 @@ const {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -184,7 +188,6 @@ function setWebdriverioRumTestCorrelation (context, activeSpan) {
  * Converts a screenshot capture failure into its upload result.
  *
  * @param {unknown} error
- * @returns {string}
  */
 function handleWebdriverioScreenshotError (error) {
   log.error('Error capturing WebdriverIO failure screenshot: %s', error?.message || String(error))
@@ -882,6 +885,7 @@ class MochaPlugin extends CiPlugin {
       isTestManagementEnabled,
       isParallel,
       isFrameworkError,
+      isExpectedEmptySession,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -893,6 +897,15 @@ class MochaPlugin extends CiPlugin {
         } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
+
+        if (isExpectedEmptySession) {
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            'No tests were executed',
+            'zero_tests'
+          )
+        }
 
         if (error) {
           this.testSessionSpan.setTag('error', error)
@@ -1027,7 +1040,17 @@ class MochaPlugin extends CiPlugin {
     } else if (isEarlyFlakeDetection) {
       retryCount = this.libraryConfig.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
     } else if (isAtr) {
-      retryCount = this.libraryConfig.flakyTestRetriesCount
+      // When dynamic ATR is enabled, use the max bucket value as the initial count.
+      // The actual duration-based count is computed after the first attempt.
+      if (this.libraryConfig.isDynamicAtrEnabled) {
+        const maximumDynamicAtrRetries = this.libraryConfig.dynamicAtrBuckets
+          ? Math.max(...this.libraryConfig.dynamicAtrBuckets)
+          : this.libraryConfig.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+        // Dynamic ATR guarantees one retry, including the >5m EFD fallback bucket.
+        retryCount = Math.max(1, maximumDynamicAtrRetries)
+      } else {
+        retryCount = this.libraryConfig.flakyTestRetriesCount
+      }
     }
 
     const test = {
@@ -1041,6 +1064,7 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFix,
       isAtr,
       isDisabled,
+      isDynamicAtr: isAtr && this.libraryConfig?.isDynamicAtrEnabled,
       isEarlyFlakeDetection,
       isModified,
       isNew,
@@ -1090,7 +1114,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {object|undefined} parentStore
-   * @returns {void}
    */
   #startWebdriverioJasmineAttempt (test, parentStore) {
     test.attemptStart = performance.now()
@@ -1121,7 +1144,6 @@ class MochaPlugin extends CiPlugin {
    * Delays Jasmine's parent runner until every Datadog-managed spec execution has completed.
    *
    * @param {object} context
-   * @returns {void}
    */
   #configureWebdriverioJasmineLifecycle (context) {
     const isLegacyJasmine = Boolean(context.self?.queueableFn)
@@ -1215,6 +1237,19 @@ class MochaPlugin extends CiPlugin {
       }
     }
 
+    // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+    if (
+      testStatus !== 'skip' &&
+      test.isDynamicAtr &&
+      test.attempt === 0
+    ) {
+      test.retryCount = getDynamicAtrRetryCount(
+        performance.now() - test.attemptStart,
+        this.libraryConfig.earlyFlakeDetectionRetryPolicy,
+        this.libraryConfig.dynamicAtrBuckets
+      )
+    }
+
     const hasManagedRetry = testStatus !== 'skip' && test.attempt < test.retryCount
     test.willRetry = hasManagedRetry && (
       test.isAttemptToFix ||
@@ -1250,7 +1285,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {void}
    */
   #finishWebdriverioJasmineRetry (test, result) {
     const status = getJasmineStatus(test.reportedStatus || result.status)
@@ -1290,7 +1324,6 @@ class MochaPlugin extends CiPlugin {
    * Advances a Jasmine test and starts its next attempt span.
    *
    * @param {object} test
-   * @returns {void}
    */
   #startNextWebdriverioJasmineAttempt (test) {
     test.attempt++
@@ -1404,7 +1437,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} test
    * @param {WebdriverioJasmineResult} result
-   * @returns {void}
    */
   #completeWebdriverioJasmineTest (test, result) {
     const state = this._webdriverioJasmineState
@@ -1460,7 +1492,6 @@ class MochaPlugin extends CiPlugin {
    *
    * @param {object} span - Failed test span
    * @param {() => void} [onDone] - Called after the screenshot upload finishes
-   * @returns {boolean} Whether a screenshot upload exists for the span
    */
   #startWebdriverioScreenshotUpload (span, onDone) {
     if (
@@ -1547,7 +1578,6 @@ class MochaPlugin extends CiPlugin {
    * @param {object} span - Failed test span
    * @param {{callbacks: Array<() => void>, finished: boolean}} upload - Upload state
    * @param {string} result - Aggregate screenshot upload result
-   * @returns {void}
    */
   #finishWebdriverioScreenshotUpload (span, upload, result) {
     if (upload.finished) return
@@ -1577,7 +1607,6 @@ class MochaPlugin extends CiPlugin {
    * @param {object} span - Failed test span
    * @param {string|string[]} screenshots - Base64-encoded PNG data
    * @param {(result: string) => void} onDone - Aggregate upload completion callback
-   * @returns {void}
    */
   #uploadWebdriverioScreenshots (span, screenshots, onDone) {
     const screenshotList = Array.isArray(screenshots) ? screenshots : [screenshots]
@@ -1647,7 +1676,6 @@ class MochaPlugin extends CiPlugin {
    *   resolveCallback?: (onDone: () => void) => void,
    *   rejectCallback?: (onDone: () => void) => void
    * }} context
-   * @returns {void}
    */
   #finishWebdriverioJasmineWorker (context) {
     const state = this._webdriverioJasmineState

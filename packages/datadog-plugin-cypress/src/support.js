@@ -93,7 +93,6 @@ function getTestProperties (testName) {
 
 /**
  * @param {string} message
- * @returns {void}
  */
 function warnMissingBeforeEachTaskResult (message) {
   // eslint-disable-next-line no-console
@@ -192,7 +191,6 @@ function setRumCorrelationCookie (traceId) {
 
 /**
  * @param {boolean} isCookieSet
- * @returns {void}
  */
 function restartRumSession (isCookieSet) {
   if (!isCookieSet || isTestIsolationEnabled || !originalWindow) {
