@@ -90,6 +90,7 @@ function enable (config) {
   spanProcessor = new LLMObsSpanProcessor(config)
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
+  const currentSpanProcessor = spanProcessor
   const currentEvalWriter = evalWriter
   const currentSpanWriter = spanWriter
 
@@ -112,7 +113,7 @@ function enable (config) {
   if (!isReinitializing) injectCh.subscribe(handleLLMObsInjection)
 
   setAgentStrategy(config, (useAgentless, agentAvailable) => {
-    spanProcessor?.setAgentAvailable(agentAvailable)
+    currentSpanProcessor.setAgentAvailable(agentAvailable)
 
     if (useAgentless && !(config.DD_API_KEY && config.site)) {
       if (DD_MAJOR < 6 || !config?.startupLogs) {

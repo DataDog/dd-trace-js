@@ -809,6 +809,26 @@ describe('module', () => {
     sinon.assert.calledOnce(retiredUnregister)
   })
 
+  it('applies transport selection to the processor being initialized', () => {
+    const setWriter = sinon.spy(LLMObsSpanProcessor.prototype, 'setWriter')
+    const setAgentAvailable = sinon.spy(LLMObsSpanProcessor.prototype, 'setAgentAvailable')
+    const config = {
+      llmobs: { DD_LLMOBS_ML_APP: 'test' },
+      DD_API_KEY: 'test',
+      site: 'datadoghq.com',
+    }
+    llmobsModule.enable(config)
+    const initialProcessor = setWriter.firstCall.thisValue
+
+    llmobsModule.enable(config)
+    const replacementProcessor = setWriter.secondCall.thisValue
+    fetchAgentInfoStub.firstCall.args[1](new Error('No agent running'))
+
+    assert.notStrictEqual(initialProcessor, replacementProcessor)
+    sinon.assert.calledOnceWithExactly(setAgentAvailable, false)
+    sinon.assert.calledOn(setAgentAvailable, initialProcessor)
+  })
+
   it('completes transport selection for writers retired during initialization', () => {
     loadLlmobsModuleOnVercel()
     llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
