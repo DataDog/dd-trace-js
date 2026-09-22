@@ -26,6 +26,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -72,7 +73,8 @@ tracer.init({
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
     { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
     { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
-    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } },
+    { sampleRate: 0, resource: '/health', discard: true }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -415,6 +417,13 @@ tracer.use('pg', { appendComment: true });
 tracer.use('pg', { truncate: true });
 tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
+tracer.use('postgres');
+tracer.use('postgres', { service: 'postgres-service' });
+tracer.use('postgres', { appendComment: true, dbmPropagationMode: 'full' });
+// @ts-expect-error Postgres DBM propagation accepts only the configured modes.
+tracer.use('postgres', { dbmPropagationMode: 'invalid' });
+tracer.use('postgres', { truncate: true });
+tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
@@ -427,6 +436,7 @@ tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
+tracer.use('supabase');
 tracer.use('tedious');
 tracer.use('undici');
 tracer.use('vitest');
@@ -566,6 +576,9 @@ const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
 provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
+const otelMeterProvider = metrics.getMeterProvider() as ReturnType<typeof metrics.getMeterProvider> &
+  opentelemetry.MeterProvider
+const otelShutdown: (callback?: (error: Error | null) => void) => void = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
 otelTracer.startSpan("name", { startTime: new Date() })

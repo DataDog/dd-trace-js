@@ -4,11 +4,18 @@
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
   _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
+  aiguard: {
+    DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
+    DD_AI_GUARD_BLOCK: boolean;
+    DD_AI_GUARD_ENABLED: boolean;
+    DD_AI_GUARD_ENDPOINT: string | undefined;
+    DD_AI_GUARD_MAX_CONTENT_SIZE: number;
+    DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
+    DD_AI_GUARD_REDACTION_ENABLED: boolean;
+    DD_AI_GUARD_TIMEOUT: number;
+  };
   apmTracingEnabled: boolean;
   appsec: {
-    blockedTemplateGraphql: string | undefined;
-    blockedTemplateHtml: string | undefined;
-    blockedTemplateJson: string | undefined;
     DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
     DD_API_SECURITY_ENABLED: boolean;
     DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: boolean;
@@ -17,30 +24,26 @@ export interface GeneratedConfig {
     DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
     DD_API_SECURITY_SAMPLE_DELAY: number;
     DD_APPSEC_AGENTIC_ONBOARDING: string;
+    DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE: string;
+    DD_APPSEC_COLLECT_ALL_HEADERS: boolean;
+    DD_APPSEC_ENABLED: boolean | undefined;
+    DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON: string | undefined;
+    DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED: boolean;
+    DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML: string | undefined;
+    DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON: string | undefined;
+    DD_APPSEC_MAX_COLLECTED_HEADERS: number;
+    DD_APPSEC_MAX_STACK_TRACE_DEPTH: number;
+    DD_APPSEC_MAX_STACK_TRACES: number;
+    DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP: string;
+    DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP: string;
+    DD_APPSEC_RASP_COLLECT_REQUEST_BODY: boolean;
+    DD_APPSEC_RASP_ENABLED: boolean;
+    DD_APPSEC_RULES: string | undefined;
     DD_APPSEC_SCA_ENABLED: boolean | undefined;
-    enabled: boolean | undefined;
-    eventTracking: {
-      mode: string;
-    };
-    extendedHeadersCollection: {
-      enabled: boolean;
-      maxHeaders: number;
-      redaction: boolean;
-    };
-    obfuscatorKeyRegex: string;
-    obfuscatorValueRegex: string;
-    rasp: {
-      bodyCollection: boolean;
-      enabled: boolean;
-    };
-    rateLimit: number;
-    rules: string | undefined;
-    stackTrace: {
-      enabled: boolean;
-      maxDepth: number;
-      maxStackTraces: number;
-    };
-    wafTimeout: number;
+    DD_APPSEC_STACK_TRACE_ENABLED: boolean;
+    DD_APPSEC_TRACE_RATE_LIMIT: number;
+    DD_APPSEC_WAF_TIMEOUT: number;
+    DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: boolean;
   };
   baggageMaxBytes: number;
   baggageMaxItems: number;
@@ -65,6 +68,7 @@ export interface GeneratedConfig {
   };
   dbmPropagationMode: "disabled" | "service" | "full" | "dynamic_service";
   DD_ACTION_EXECUTION_ID: string | undefined;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
   DD_API_KEY: string | undefined;
@@ -130,7 +134,7 @@ export interface GeneratedConfig {
   DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: boolean;
   DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: boolean;
   DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: string[];
-  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: number;
+  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: number | 'auto';
   DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: number;
   DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: boolean;
   DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: boolean;
@@ -357,6 +361,7 @@ export interface GeneratedConfig {
   DD_TRACE_PLAYWRIGHT_CORE_ENABLED: boolean;
   DD_TRACE_PLAYWRIGHT_ENABLED: boolean;
   DD_TRACE_PLAYWRIGHT_TEST_ENABLED: boolean;
+  DD_TRACE_POSTGRES_ENABLED: boolean;
   DD_TRACE_PRISMA_ENABLED: boolean;
   DD_TRACE_PROCESS_ENABLED: boolean;
   DD_TRACE_PROMISE_ENABLED: boolean;
@@ -385,6 +390,7 @@ export interface GeneratedConfig {
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
+  DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_UNDICI_ENABLED: boolean;
@@ -413,20 +419,6 @@ export interface GeneratedConfig {
   };
   env: string | undefined;
   experimental: {
-    aiguard: {
-      block: boolean;
-      enabled: boolean;
-      endpoint: string | undefined;
-      maxContentSize: number;
-      maxMessagesLength: number;
-      redactionEnabled: boolean;
-      timeout: number;
-    };
-    appsec: {
-      standalone: {
-        enabled: boolean;
-      };
-    };
     b3: boolean;
     enableGetRumData: boolean;
     exporter: string;
@@ -450,20 +442,18 @@ export interface GeneratedConfig {
   headerTags: string[];
   hostname: string;
   iast: {
-    dbRowsToTaint: number;
+    DD_IAST_DB_ROWS_TO_TAINT: number;
+    DD_IAST_DEDUPLICATION_ENABLED: boolean;
+    DD_IAST_ENABLED: boolean;
+    DD_IAST_MAX_CONCURRENT_REQUESTS: number;
+    DD_IAST_MAX_CONTEXT_OPERATIONS: number;
+    DD_IAST_REDACTION_ENABLED: boolean;
+    DD_IAST_REDACTION_NAME_PATTERN: string;
+    DD_IAST_REDACTION_VALUE_PATTERN: string;
+    DD_IAST_REQUEST_SAMPLING: number;
     DD_IAST_SECURITY_CONTROLS_CONFIGURATION: string | undefined;
-    deduplicationEnabled: boolean;
-    enabled: boolean;
-    maxConcurrentRequests: number;
-    maxContextOperations: number;
-    redactionEnabled: boolean;
-    redactionNamePattern: string;
-    redactionValuePattern: string;
-    requestSampling: number;
-    stackTrace: {
-      enabled: boolean;
-    };
-    telemetryVerbosity: string;
+    DD_IAST_STACK_TRACE_ENABLED: boolean;
+    DD_IAST_TELEMETRY_VERBOSITY: string;
   };
   inferredProxyServicesEnabled: boolean;
   langchain: {
@@ -472,19 +462,20 @@ export interface GeneratedConfig {
   };
   legacyBaggageEnabled: boolean;
   llmobs: {
-    agentlessEnabled: boolean | undefined;
+    DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
     DD_LLMOBS_ENABLED: boolean;
-    mlApp: string | undefined;
-    projectName: string | undefined;
-    sampleRate: number;
+    DD_LLMOBS_ML_APP: string | undefined;
+    DD_LLMOBS_PROJECT_NAME: string | undefined;
+    DD_LLMOBS_SAMPLE_RATE: number;
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   middlewareTracingEnabled: boolean;
   openai: {
+    DD_OPENAI_LOGS_ENABLED: boolean;
+    DD_OPENAI_REALTIME_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
-  openAiLogsEnabled: boolean;
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
   OTEL_BSP_MAX_QUEUE_SIZE: number;
   OTEL_BSP_SCHEDULE_DELAY: number;
@@ -492,14 +483,14 @@ export interface GeneratedConfig {
   OTEL_EXPORTER_OTLP_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_LOGS_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_METRICS_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
   OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: number;
-  OTEL_EXPORTER_OTLP_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
@@ -564,6 +555,8 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED: boolean;
     DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
     DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
+    DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: string[] | undefined;
+    DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: boolean;
     DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: boolean;
     DD_CIVISIBILITY_ENABLED: boolean;
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: number;
@@ -581,6 +574,7 @@ export interface GeneratedConfig {
     DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
     DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+    DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -610,8 +604,10 @@ export interface GeneratedEnvVarConfig {
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENT_HOST: string;
+  DD_AGENTLESS_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
+  DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED: boolean;
   DD_AI_GUARD_BLOCK: boolean;
   DD_AI_GUARD_ENABLED: boolean;
   DD_AI_GUARD_ENDPOINT: string | undefined;
@@ -660,6 +656,8 @@ export interface GeneratedEnvVarConfig {
   DD_CIVISIBILITY_CODE_COVERAGE_REPORT_UPLOAD_ENABLED: boolean;
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
+  DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: string[] | undefined;
+  DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: boolean;
   DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: boolean;
   DD_CIVISIBILITY_ENABLED: boolean;
   DD_CIVISIBILITY_FLAKY_RETRY_COUNT: number;
@@ -770,6 +768,7 @@ export interface GeneratedEnvVarConfig {
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
+  DD_OPENAI_REALTIME_ENABLED: boolean;
   DD_OPENAI_SPAN_CHAR_LIMIT: number;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
@@ -785,7 +784,7 @@ export interface GeneratedEnvVarConfig {
   DD_PROFILING_EXPERIMENTAL_CPU_ENABLED: boolean;
   DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED: boolean;
   DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: string[];
-  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: number;
+  DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: number | 'auto';
   DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: number;
   DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: boolean;
   DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED: boolean;
@@ -827,6 +826,7 @@ export interface GeneratedEnvVarConfig {
   DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: number | undefined;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
   DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
+  DD_TEST_FAILURE_VIDEOS_ENABLED: boolean | undefined;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -1067,6 +1067,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_PLAYWRIGHT_CORE_ENABLED: boolean;
   DD_TRACE_PLAYWRIGHT_ENABLED: boolean;
   DD_TRACE_PLAYWRIGHT_TEST_ENABLED: boolean;
+  DD_TRACE_POSTGRES_ENABLED: boolean;
   DD_TRACE_PRISMA_ENABLED: boolean;
   DD_TRACE_PROCESS_ENABLED: boolean;
   DD_TRACE_PROMISE_ENABLED: boolean;
@@ -1105,6 +1106,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_STARTUP_LOGS: boolean;
   DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   DD_TRACE_SUFFIXPLUGIN_ENABLED: boolean;
+  DD_TRACE_SUPABASE_ENABLED: boolean;
   DD_TRACE_TAGS: Record<string, string> | undefined;
   DD_TRACE_TEDIOUS_ENABLED: boolean;
   DD_TRACE_TELEMETRY_ENABLED: boolean;
@@ -1134,14 +1136,14 @@ export interface GeneratedEnvVarConfig {
   OTEL_EXPORTER_OTLP_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_LOGS_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_METRICS_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
   OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: number;
-  OTEL_EXPORTER_OTLP_PROTOCOL: string;
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc" | "http/json" | "http/protobuf";
   OTEL_EXPORTER_OTLP_TIMEOUT: number;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;

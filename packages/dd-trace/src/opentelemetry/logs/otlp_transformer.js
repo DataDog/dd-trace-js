@@ -43,7 +43,6 @@ const NANOSECONDS_PER_SECOND = 1_000_000_000n
 /**
  * Converts an OpenTelemetry HrTime to an exact OTLP uint64 decimal string.
  * @param {import('@opentelemetry/api').HrTime} hrTime
- * @returns {string}
  */
 function encodeHrTime (hrTime) {
   return (BigInt(hrTime[0]) * NANOSECONDS_PER_SECOND + BigInt(hrTime[1])).toString()
@@ -205,7 +204,6 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Maps OpenTelemetry severity number to protobuf severity number.
    * @param {number} severityNumber - OpenTelemetry severity number
-   * @returns {number} Protobuf severity number
    */
   #mapSeverityNumber (severityNumber) {
     const { protoSeverityNumber } = getProtobufTypes()

@@ -3,11 +3,15 @@
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
 
 const log = require('../log')
+const { isEmpty } = require('../util')
 const addresses = require('./addresses')
+const apiSecurity = require('./api_security')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
 const activeInvocations = new WeakMap()
+
+const MAX_RESPONSE_BODY_SIZE = 16 * 1024 * 1024
 
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
@@ -22,7 +26,7 @@ const activeInvocations = new WeakMap()
  */
 function onLambdaStartInvocation (data) {
   try {
-    const { span, headers, method, path, query, body, clientIp, pathParams, cookies } = data
+    const { span, headers, method, path, query, body, clientIp, pathParams, cookies, route } = data
 
     if (!span) {
       log.warn('[ASM] No span provided in Lambda start invocation')
@@ -30,7 +34,7 @@ function onLambdaStartInvocation (data) {
     }
 
     const req = { headers: headers ?? {} }
-    activeInvocations.set(span, req)
+    activeInvocations.set(span, { req, method, route })
 
     span.addTags({
       '_dd.appsec.enabled': 1,
@@ -80,15 +84,16 @@ function onLambdaStartInvocation (data) {
 }
 
 /**
- * Maps response data to WAF addresses, runs a final WAF pass,
- * disposes the WAF context, and finishes the request report.
+ * Maps response data to WAF addresses, takes the API Security sampling decision, runs a final
+ * WAF pass, disposes the WAF context, and finishes the request report.
  *
  * @param {{ span: object, statusCode: string | undefined,
- *           responseHeaders: Record<string, string> | undefined }} data
+ *           responseHeaders: Record<string, string> | undefined,
+ *           responseBody: unknown, isBase64Encoded: boolean | undefined }} data
  */
 function onLambdaEndInvocation (data) {
   try {
-    const { span, statusCode, responseHeaders } = data
+    const { span, statusCode, responseHeaders, responseBody, isBase64Encoded } = data
 
     if (!span) {
       log.warn('[ASM] No span provided in Lambda end invocation')
@@ -99,34 +104,116 @@ function onLambdaEndInvocation (data) {
       return
     }
 
-    const req = activeInvocations.get(span)
+    const { req, method, route } = activeInvocations.get(span)
     activeInvocations.delete(span)
 
-    let hasPersistentData = false
-    const persistent = {}
+    try {
+      const persistent = {}
 
-    if (statusCode) {
-      persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
-      hasPersistentData = true
+      if (statusCode) {
+        persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
+      }
+
+      if (responseHeaders) {
+        const filteredHeaders = { ...responseHeaders }
+        delete filteredHeaders['set-cookie']
+        persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
+      }
+
+      const samplingDecision = apiSecurity.sampleRootSpanRequest(span, {
+        method,
+        statusCode,
+        route,
+        // The tracer does not block in Lambda yet, so a response is never a blocked one.
+        blocked: false,
+      }, true)
+
+      if (samplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
+        persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
+
+        const parsedBody = parseResponseBody(responseBody, responseHeaders, isBase64Encoded)
+        if (parsedBody !== undefined) {
+          persistent[addresses.HTTP_INCOMING_RESPONSE_BODY] = parsedBody
+        }
+      }
+
+      let wafResult
+      if (!isEmpty(persistent)) {
+        wafResult = waf.run({ persistent }, req, undefined, span)
+      }
+
+      apiSecurity.reportRootSpanRequest(span, samplingDecision, wafResult)
+    } finally {
+      // The execution environment outlives the invocation, so the native WAF context and the
+      // module-level metrics queue must be released even if the work above threw.
+      waf.disposeContext(req)
+
+      Reporter.finishRequest(req, null, {}, undefined, span)
     }
-
-    if (responseHeaders) {
-      const filteredHeaders = { ...responseHeaders }
-      delete filteredHeaders['set-cookie']
-      persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
-      hasPersistentData = true
-    }
-
-    if (hasPersistentData) {
-      waf.run({ persistent }, req, undefined, span)
-    }
-
-    waf.disposeContext(req)
-
-    Reporter.finishRequest(req, null, {}, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda end-invocation handler', err)
   }
+}
+
+/**
+ * Turns the raw response body published by the Lambda layer into the object the WAF expects
+ *
+ * @param {unknown} rawBody
+ * @param {Record<string, string> | undefined} headers Already lowercased by the Lambda layer
+ * @param {boolean | undefined} isBase64Encoded
+ * @returns {object | undefined} The parsed body, or `undefined` when it cannot be used
+ */
+function parseResponseBody (rawBody, headers, isBase64Encoded) {
+  if (!rawBody) return
+
+  // A handler that answered with the payload itself needs no parsing, and no content type either.
+  if (typeof rawBody === 'object') return rawBody
+
+  if (typeof rawBody !== 'string') return
+
+  if (!isJsonContentType(headers?.['content-type'])) return
+
+  if (isOverSizeCap(rawBody, isBase64Encoded)) {
+    log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',
+      MAX_RESPONSE_BODY_SIZE)
+    return
+  }
+
+  const contentEncoding = headers?.['content-encoding']?.toLowerCase()
+  if (contentEncoding && contentEncoding !== 'identity') return
+
+  try {
+    const parsed = JSON.parse(isBase64Encoded ? Buffer.from(rawBody, 'base64').toString('utf8') : rawBody)
+
+    // A JSON scalar carries no schema worth extracting.
+    if (parsed === null || typeof parsed !== 'object') return
+
+    return parsed
+  } catch {
+    // The SyntaxError message embeds a fragment of the body, which is customer data.
+    log.debug('[ASM] Failed to parse Lambda response body')
+  }
+}
+
+/**
+ * @param {string | undefined} contentType
+ */
+function isJsonContentType (contentType) {
+  return typeof contentType === 'string' && contentType.toLowerCase().includes('json')
+}
+
+/**
+ * Tells whether a raw body exceeds the size cap, without decoding or measuring it when avoidable
+ *
+ * @param {string} rawBody
+ * @param {boolean | undefined} isBase64Encoded
+ */
+function isOverSizeCap (rawBody, isBase64Encoded) {
+  if (isBase64Encoded) return Math.floor(rawBody.length * 3 / 4) >= MAX_RESPONSE_BODY_SIZE
+  if (rawBody.length >= MAX_RESPONSE_BODY_SIZE) return true
+  if (rawBody.length * 3 < MAX_RESPONSE_BODY_SIZE) return false
+
+  return Buffer.byteLength(rawBody, 'utf8') >= MAX_RESPONSE_BODY_SIZE
 }
 
 module.exports = {

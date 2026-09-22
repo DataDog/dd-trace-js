@@ -15,6 +15,8 @@ const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryP
   schedulingRetryCount: 0,
 }
 const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+const dynamicAtrRetryPolicy = providedContext.dynamicAtrRetryPolicy
+const flakyTestRetriesConfiguration = providedContext.flakyTestRetriesConfiguration
 const isEfdSuiteAdmissionEnabled = providedContext.isEfdSuiteAdmissionEnabled === true
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
@@ -23,19 +25,15 @@ const quarantinedTests = providedContext.quarantinedTests || {}
 const isRumCorrelationEnabled = providedContext.isRumCorrelationEnabled !== false
 const rumTestExecutionIdCookieName = providedContext.rumTestExecutionIdCookieName
 const testPropertiesByFilepath = providedContext.testPropertiesByFilepath || {}
-let setVitestTaskFn
-if (isNoWorkerInitActive) {
-  try {
-    // Vitest does not expose setFn from the public setup API; keep this optional for strict installers.
-    const vitestRunner = await import('@vitest/runner')
-    setVitestTaskFn = vitestRunner.setFn
-  } catch {}
-}
+const setVitestTaskFn = globalThis[Symbol.for('dd-trace.vitest.set-fn')]
+const skipVitestTask = globalThis[Symbol.for('dd-trace.vitest.skip-task')]
+const importVitestBrowserContext = globalThis[Symbol.for('dd-trace.vitest.browser-context-importer')]
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
+const dynamicAtrExecutionStartByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
 let browserCommands
 let now
@@ -62,7 +60,7 @@ if (typeof globalThis.process?.uptime === 'function') {
 async function requestBrowserEfdSuiteAdmission (testSuite, hasNewTest) {
   try {
     if (!browserCommands) {
-      const vitestBrowser = await import('@vitest/browser/context')
+      const vitestBrowser = await importVitestBrowserContext()
       browserCommands = vitestBrowser.commands
     }
     return await browserCommands[efdSuiteAdmissionBrowserCommand](testSuite, hasNewTest) === true
@@ -91,6 +89,11 @@ if (isNoWorkerInitActive) {
     const isQuarantinedTest = quarantinedTests[testSuite]?.[testName] && !isAttemptToFixTest
     const attemptIndex = getNextAttemptIndex(task)
     const attemptStart = now()
+    if (task.retry?.__ddTestOptAtr && retryAttemptIndexByTask.get(task).index === 0) {
+      const executionStart = task.result.repeatCount > 0 ? attemptStart : task.result.startTime - timeOrigin
+      dynamicAtrExecutionStartByTask.set(task, executionStart)
+      task.meta.__ddTestOptAtrRetries = undefined
+    }
     if (attemptIndex > 0) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
     }
@@ -100,7 +103,7 @@ if (isNoWorkerInitActive) {
     } else if (isAttemptToFixTest && attemptIndex > 0) {
       task.result.state = 'run'
     } else if (isEarlyFlakeDetectionTestAttempt) {
-      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex)
+      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex, skip)
       if (!isSkippedRepeat && attemptIndex > 0) {
         task.result.state = 'run'
       }
@@ -158,8 +161,40 @@ function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
         task.repeats = earlyFlakeDetectionRetries
         task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
       }
+      configureDynamicAtr(task)
       wrapRetryCondition(task)
     }
+  }
+}
+
+/**
+ * Stops Datadog-managed retries at the initial attempt's duration budget, after the complete lifecycle.
+ *
+ * @param {object} task
+ */
+function configureDynamicAtr (task) {
+  if (!dynamicAtrRetryPolicy || !flakyTestRetriesConfiguration) return
+  const projectName = task.file.projectName
+  const isManagedProject = projectName
+    ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
+    : flakyTestRetriesConfiguration.includesUnnamedProject
+  if (!isManagedProject || !task.retry?.__ddTestOptAtr || task.retry.count <= 0) return
+
+  task.retry = {
+    ...task.retry,
+    condition () {
+      // AroundEach fixture teardown can fail after onTestFinished recorded the attempt's errors.
+      recordRetryErrorCount(task)
+      if (task.meta.__ddTestOptAtrRetries === undefined) {
+        const executionStart = dynamicAtrExecutionStartByTask.get(task) ?? task.result.startTime - timeOrigin
+        const duration = now() - executionStart
+        task.meta.__ddTestOptAtrRetries = dynamicAtrRetryPolicy.find(
+          ({ durationLimitMs }) => durationLimitMs === undefined || duration <= durationLimitMs
+        ).retryCount
+      }
+      const retryIndex = retryAttemptIndexByTask.get(task)?.index ?? task.result.retryCount
+      return retryIndex < task.meta.__ddTestOptAtrRetries
+    },
   }
 }
 
@@ -184,7 +219,6 @@ function getNextAttemptIndex (task) {
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {void}
  */
 function prepareRumCorrelation (task, attemptIndex) {
   // A per-origin cookie cannot identify overlapping attempts without racing.
@@ -218,7 +252,6 @@ function prepareRumCorrelation (task, attemptIndex) {
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {void}
  */
 function finishRumCorrelation (task, attemptIndex) {
   const testExecutionId = task.meta.__ddTestOptRumTestExecutionIds?.[attemptIndex]
@@ -233,7 +266,6 @@ function finishRumCorrelation (task, attemptIndex) {
  *
  * @param {object} task
  * @param {number} attemptIndex
- * @returns {void}
  */
 function recordRumActivity (task, attemptIndex) {
   if (!getIsRumActive(getRum())) return
@@ -257,7 +289,6 @@ function getRum () {
  * Returns whether the current RUM session is active.
  *
  * @param {object|undefined} rum
- * @returns {boolean}
  */
 function getIsRumActive (rum) {
   if (!rum) return false
@@ -274,7 +305,6 @@ function getIsRumActive (rum) {
  * Returns whether a task or any containing suite is concurrent.
  *
  * @param {object} task
- * @returns {boolean}
  */
 function isConcurrentTask (task) {
   let currentTask = task
@@ -313,7 +343,6 @@ function generateTestExecutionId () {
  * Sets and verifies the RUM correlation cookie for the current origin.
  *
  * @param {string} testExecutionId
- * @returns {boolean}
  */
 function setRumCorrelationCookie (testExecutionId) {
   try {
@@ -329,7 +358,6 @@ function setRumCorrelationCookie (testExecutionId) {
  * Clears the RUM correlation cookie if it still belongs to this attempt.
  *
  * @param {string} testExecutionId
- * @returns {void}
  */
 function clearRumCorrelationCookie (testExecutionId) {
   try {
@@ -445,7 +473,6 @@ function recordManualRepeatStatus (task, attemptIndex) {
  * Records cumulative errors at the end of each configured retry attempt.
  *
  * @param {object} task
- * @returns {void}
  */
 function recordRetryErrorCount (task) {
   const retryLimit = getRetryLimit(task)
@@ -462,7 +489,6 @@ function recordRetryErrorCount (task) {
  * @param {object} task
  * @param {number} attemptIndex
  * @param {number} attemptStart
- * @returns {void}
  */
 function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
   task.meta.__ddTestOptAttemptStartTimes ||= []
@@ -475,17 +501,15 @@ function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
  * Returns the configured retry count for numeric and object-form retry options.
  *
  * @param {object} task
- * @returns {number}
  */
 function getRetryLimit (task) {
-  return typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
+  return task.meta.__ddTestOptAtrRetries ?? (typeof task.retry === 'number' ? task.retry : task.retry?.count || 0)
 }
 
 /**
  * Wraps Vitest's retry condition so final-attempt handling follows the condition's actual result.
  *
  * @param {object} task
- * @returns {void}
  */
 function wrapRetryCondition (task) {
   if (typeof task.retry !== 'object' || !task.retry?.condition || getRetryLimit(task) === 0) return
@@ -577,7 +601,6 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
  * Converts a quarantined failure into the passing runner state expected by Vitest.
  *
  * @param {object} task
- * @returns {void}
  */
 function markQuarantinedFailure (task) {
   const testSuite = getTestSuite(task)
@@ -624,7 +647,7 @@ function getPreviousErrorCount (errorCounts, repeatCount) {
   return 0
 }
 
-function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
+function prepareEarlyFlakeDetectionAttempt (task, attemptIndex, skip) {
   if (attemptIndex === 0) {
     earlyFlakeDetectionStartByTask.set(task, now())
     return false
@@ -646,7 +669,8 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     return false
   }
 
-  if (!canReplaceVitestTaskFn()) {
+  const canReplaceTaskFn = canReplaceVitestTaskFn()
+  if (!canReplaceTaskFn && typeof skipVitestTask !== 'function') {
     earlyFlakeDetectionStartByTask.set(task, now())
     return false
   }
@@ -658,7 +682,11 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     })
   }
   task.meta.__ddTestOptEfdSkipCurrentAttempt = true
-  replaceVitestTaskFn(task, noopTest)
+  if (canReplaceTaskFn) {
+    replaceVitestTaskFn(task, noopTest)
+  } else {
+    skipVitestTask(skip)
+  }
   return true
 }
 
@@ -676,7 +704,6 @@ function noopTest () {}
 /**
  * Returns whether Vitest's private task function setter is available.
  *
- * @returns {boolean}
  */
 function canReplaceVitestTaskFn () {
   return typeof setVitestTaskFn === 'function'
@@ -703,7 +730,6 @@ function isEarlyFlakeDetectionTest (testSuite, testName) {
  * Returns whether Datadog admitted this task for EFD retries.
  *
  * @param {object} task
- * @returns {boolean}
  */
 function isEarlyFlakeDetectionTask (task) {
   return task.meta.__ddTestOptEfdRetries !== undefined
@@ -751,7 +777,6 @@ function getEarlyFlakeDetectionSuiteCandidate (suite) {
  *
  * @param {string} testSuite
  * @param {string} testName
- * @returns {boolean}
  */
 function isNewTest (testSuite, testName) {
   return !(knownTests[testSuite] || []).includes(testName)

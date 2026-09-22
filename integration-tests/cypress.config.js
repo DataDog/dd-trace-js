@@ -2,9 +2,12 @@
 
 const { defineConfig } = require('cypress')
 
+const getCypressTestEnvironment = require('./cypress-test-environment')
+
 const retries = Number(process.env.CYPRESS_RETRIES || 0)
 
 module.exports = defineConfig({
+  ...getCypressTestEnvironment(),
   defaultCommandTimeout: 1000,
   retries: process.env.CYPRESS_RETRIES_AS_NUMBER === undefined
     ? { runMode: retries, openMode: 0 }
@@ -67,6 +70,6 @@ module.exports = defineConfig({
   },
   // Off by default so most specs do not capture screenshots; the failure-screenshot
   // upload tests set CYPRESS_ENABLE_FAILURE_SCREENSHOTS=true for their runs.
-  video: false,
+  video: process.env.CYPRESS_ENABLE_FAILURE_VIDEOS === 'true',
   screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
 })

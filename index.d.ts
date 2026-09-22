@@ -298,6 +298,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -306,6 +307,7 @@ interface Plugins {
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
+  "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -466,6 +468,13 @@ declare namespace tracer {
      * Maximum number of traces matching this rule to sample per second.
      */
     maxPerSecond?: number
+
+    /**
+     * When `true`, a trace chunk rejected by this rule is fully dropped:
+     * it is excluded from client-side stats and never sent to the Agent.
+     * @default false
+     */
+    discard?: boolean
   }
 
   /**
@@ -650,6 +659,7 @@ declare namespace tracer {
      * Sampling rules to apply to priority sampling. Each rule matches against a trace's
      * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
      * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * Specify `"discard": true` to fully drop it from stats as well.
      * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
@@ -3120,6 +3130,25 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Postgres.js](https://github.com/porsager/postgres) module.
+     */
+    interface postgres extends DatabaseInstrumentation {
+      /**
+       * The service name to be used for this plugin.
+       */
+      service?: string;
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: TracerOptions['dbmPropagationMode'];
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
      */
     interface prisma extends PrismaClient, PrismaEngine {
@@ -3235,6 +3264,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Supabase JavaScript client](https://github.com/supabase/supabase-js).
+     */
+    interface supabase extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
@@ -3279,6 +3314,10 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider {
+      shutdown(callback?: (error: Error | null) => void): void;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */

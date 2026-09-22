@@ -6,6 +6,10 @@ const URL = require('url').URL
 
 const { version: tracerVersion } = require('../../../../../package.json')
 const { EMPTY_EFD_RETRY_POLICY, createEfdRetryPolicy } = require('../efd-retry-policy')
+const {
+  getDynamicAtrBuckets,
+  isDynamicAtrEnabled,
+} = require('../dynamic-atr-retries')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
@@ -16,7 +20,11 @@ const { writeSettingsToCache } = require('../test-optimization-cache')
 const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { MAX_RETRIES } = require('../test-optimization-http-cache-schema')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
-const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
+const {
+  uploadTestScreenshot: uploadTestScreenshotRequest,
+  uploadTestSuiteVideo: uploadTestSuiteVideoRequest,
+  uploadTestVideo: uploadTestVideoRequest,
+} = require('../requests/upload-test-screenshot')
 const { parsers } = require('../../config/parsers')
 const log = require('../../log')
 const { getSegment } = require('../../util')
@@ -27,6 +35,7 @@ const {
   FINAL_FLUSH_FALLBACK_DELAY,
   FINAL_FLUSH_TIMEOUT,
 } = require('../final-flush')
+const { incrementCountMetric, recordDynamicAtrRetries, TELEMETRY_ENDPOINT_PAYLOAD_DROPPED } = require('../telemetry')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
 const buildSettingsCacheKey = require('./settings-cache-key')
 
@@ -103,7 +112,6 @@ function isValidRetryCount (value) {
  * Checks whether a cached EFD retry policy has the complete parsed shape.
  *
  * @param {unknown} retryPolicy - Candidate retry policy.
- * @returns {boolean}
  */
 function isValidCachedEfdRetryPolicy (retryPolicy) {
   if (retryPolicy === null || typeof retryPolicy !== 'object' || Array.isArray(retryPolicy)) return false
@@ -156,6 +164,8 @@ function isValidCachedSettings (settings) {
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 const MAX_COVERAGE_REPORT_FLAGS = 32
+// Give a 200 MiB background video five minutes; final flush still caps shutdown at 60 seconds.
+const BACKGROUND_VIDEO_UPLOAD_TIMEOUT = 5 * FINAL_FLUSH_TIMEOUT
 
 /**
  * @param {string} tags
@@ -190,8 +200,9 @@ function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSh
 class CiVisibilityExporter extends BufferingExporter {
   #finalFlush
   #deferredTestSessionTraces = []
-  #pendingScreenshotUploads = new Set()
-  #screenshotFlushWaiters = new Set()
+  #pendingMediaUploads = new Set()
+  #mediaFlushWaiters = new Set()
+  #deferredTestSuiteSpans = new Map()
   #gitUploadTimeoutId
 
   constructor (config, options = {}) {
@@ -200,6 +211,11 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
+    const dynamicAtrEnabled = config?.testOptimization?.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED
+    const dynamicAtrBuckets = config?.testOptimization?.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS
+    this._dynamicAtrEnabled = isDynamicAtrEnabled(dynamicAtrEnabled)
+    this._dynamicAtrBuckets = this._dynamicAtrEnabled ? getDynamicAtrBuckets(dynamicAtrBuckets) ?? undefined : undefined
+    this._hasRecordedDynamicAtrTelemetry = false
     this._testOptimizationHttpCache = options.testOptimizationHttpCache || new TestOptimizationHttpCache()
     this._isTestOptimizationCacheOnly = options.cacheOnly === true
     const coverageReportFlags = parsers.ARRAY(config?.testOptimization?.DD_CODE_COVERAGE_FLAGS)
@@ -218,6 +234,8 @@ class CiVisibilityExporter extends BufferingExporter {
 
     this._isTestFailureScreenshotsEnabled =
       Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
+    this._isTestFailureVideosEnabled =
+      Boolean(config?.testOptimization?.DD_TEST_FAILURE_VIDEOS_ENABLED)
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
@@ -347,7 +365,6 @@ class CiVisibilityExporter extends BufferingExporter {
    *
    * @param {TestConfiguration} testConfiguration
    * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} callback
-   * @returns {void}
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
@@ -400,6 +417,7 @@ class CiVisibilityExporter extends BufferingExporter {
           // `_gitUploadPromise` itself. Do not call `_resolveGit()`.
           writeSettingsToCache(libraryConfig)
           this._libraryConfig = this.filterConfiguration(libraryConfig)
+          this._recordDynamicAtrTelemetry()
           return callback(null, this._libraryConfig)
         }
         // Filesystem cache hit: no git upload was started in this process.
@@ -434,11 +452,11 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
    * @param {boolean} isFilesystemCache - Whether settings came from the cross-process cache.
    * @param {Function} callback - Completion callback.
-   * @returns {void}
    */
   _applyCachedSettings (settings, configuration, repositoryUrl, isFilesystemCache, callback) {
     writeSettingsToCache(settings)
     this._libraryConfig = this.filterConfiguration(settings)
+    this._recordDynamicAtrTelemetry()
     const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
       this._testOptimizationHttpCache.hasValidSkippableSuites({
         testLevel: configuration.testLevel,
@@ -461,7 +479,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * @param {string} repositoryUrl - Repository URL for git metadata upload.
    * @param {string|null} cacheKey - Filesystem cache key when this process owns the lock, null otherwise.
    * @param {Function} done - Completion callback.
-   * @returns {void}
    */
   _fetchLibraryConfigurationFromBackend (configuration, repositoryUrl, cacheKey, done) {
     this.sendGitMetadata(repositoryUrl)
@@ -522,6 +539,7 @@ class CiVisibilityExporter extends BufferingExporter {
       DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: configuredAttemptToFixRetries = 0,
       DD_TEST_MANAGEMENT_ENABLED: isTestManagementAllowed,
     } = testOptimization
+
     const earlyFlakeDetectionRetryPolicy = earlyFlakeDetectionRetryCount === undefined
       ? remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
       : createEfdRetryPolicy({
@@ -533,6 +551,20 @@ class CiVisibilityExporter extends BufferingExporter {
     const testManagementAttemptToFixRetries =
       remoteConfiguration.testManagementAttemptToFixRetries ?? configuredAttemptToFixRetries
 
+    const isFlakyTestRetriesEnabled =
+      remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true
+    // Dynamic ATR only replaces the flat ATR policy when backend ATR is enabled.
+    const isDynamicAtrEnabled = isFlakyTestRetriesEnabled && this._dynamicAtrEnabled
+    let dynamicAtrBuckets
+    if (isDynamicAtrEnabled) {
+      // Resolve the backend fallback before local EFD overrides can reach any runner.
+      const backendPolicy = remoteConfiguration.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+      dynamicAtrBuckets = this._dynamicAtrBuckets ?? Object.freeze([
+        ...backendPolicy.durationRetryCounts.map(({ retryCount }) => Math.max(1, retryCount)),
+        1,
+      ])
+    }
+
     return Object.freeze({
       isCodeCoverageEnabled: remoteConfiguration.isCodeCoverageEnabled === true,
       isSuitesSkippingEnabled: remoteConfiguration.isSuitesSkippingEnabled === true,
@@ -542,9 +574,10 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isEarlyFlakeDetectionEnabled === true && isEarlyFlakeDetectionAllowed === true,
       earlyFlakeDetectionRetryPolicy,
       earlyFlakeDetectionFaultyThreshold: remoteConfiguration.earlyFlakeDetectionFaultyThreshold ?? 30,
-      isFlakyTestRetriesEnabled:
-        remoteConfiguration.isFlakyTestRetriesEnabled === true && isFlakyTestRetriesAllowed === true,
+      isFlakyTestRetriesEnabled,
       flakyTestRetriesCount,
+      isDynamicAtrEnabled,
+      dynamicAtrBuckets,
       isDiEnabled: remoteConfiguration.isDiEnabled === true && isFailedTestReplayAllowed === true,
       isKnownTestsEnabled: remoteConfiguration.isKnownTestsEnabled === true,
       isTestManagementEnabled:
@@ -554,6 +587,13 @@ class CiVisibilityExporter extends BufferingExporter {
         remoteConfiguration.isImpactedTestsEnabled === true && isImpactedTestsAllowed === true,
       isCoverageReportUploadEnabled: remoteConfiguration.isCoverageReportUploadEnabled === true,
     })
+  }
+
+  _recordDynamicAtrTelemetry () {
+    if (!this._hasRecordedDynamicAtrTelemetry && this._libraryConfig?.isDynamicAtrEnabled) {
+      this._hasRecordedDynamicAtrTelemetry = true
+      recordDynamicAtrRetries(this._dynamicAtrBuckets !== undefined)
+    }
   }
 
   sendGitMetadata (repositoryUrl) {
@@ -597,7 +637,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * Exports spans that are not retained for late updates to session, module, or suite events.
    *
    * @param {Array<object>} trace
-   * @returns {void}
    */
   #exportTrace (trace) {
     // Until it's initialized, we just store the traces as is
@@ -623,7 +662,6 @@ class CiVisibilityExporter extends BufferingExporter {
    * Retries session, module, and suite traces rejected by writer backpressure within the final deadline.
    *
    * @param {{ deadline?: number }} options final-flush options
-   * @returns {void}
    */
   #exportDeferredTestSessionTraces (options) {
     if (!this._writer || !this.canReportSessionTraces()) return
@@ -686,11 +724,17 @@ class CiVisibilityExporter extends BufferingExporter {
     }
 
     this.#resetFinalFlush()
-    this._export(
+    const appended = this._export(
       this.formatLogMessage(testEnvironmentMetadata, logMessage),
       this._logsWriter,
       '_logsTimer'
     )
+    if (appended === false) {
+      incrementCountMetric(
+        TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
+        { endpoint: 'di_logs', statusCode: undefined, errorType: 'encoder_limit' }
+      )
+    }
   }
 
   flush (done) {
@@ -706,8 +750,9 @@ class CiVisibilityExporter extends BufferingExporter {
 
     if (isFinalFlush && !this._isInitialized &&
       this._traceBuffer.length === 0 && this._coverageBuffer.length === 0 &&
-      this.#deferredTestSessionTraces.length === 0 &&
-      this.#pendingScreenshotUploads.size === 0) {
+      this.#deferredTestSuiteSpans.size === 0 && this.#deferredTestSessionTraces.length === 0 &&
+      this.#pendingMediaUploads.size === 0) {
+      this._initializationRequest?.controller.abort()
       onDone()
       return
     }
@@ -724,6 +769,9 @@ class CiVisibilityExporter extends BufferingExporter {
     const deadline = isFinalFlush ? Date.now() + FINAL_FLUSH_TIMEOUT : undefined
     let hasCompleted = false
     let initializationTimeoutId
+    let mediaTimeoutId
+    let writersFlushed = false
+    let writerFlushError
 
     const fallbackTimeoutId = isFinalFlush
       ? setTimeout(() => {
@@ -736,7 +784,8 @@ class CiVisibilityExporter extends BufferingExporter {
       hasCompleted = true
       clearTimeout(fallbackTimeoutId)
       clearTimeout(initializationTimeoutId)
-      this.#screenshotFlushWaiters.delete(flushWriters)
+      clearTimeout(mediaTimeoutId)
+      this.#mediaFlushWaiters.delete(completeAfterMedia)
       if (error) log.error('Error flushing Test Optimization data', error)
       if (!isFinalFlush) {
         onDone(error)
@@ -756,12 +805,21 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     }
 
-    const flushWriters = () => {
-      if (isFinalFlush && this.#pendingScreenshotUploads.size !== 0) {
-        this.#screenshotFlushWaiters.add(flushWriters)
+    const completeAfterMedia = () => {
+      if (writersFlushed) complete(writerFlushError)
+    }
+
+    const onWritersFlushed = (error) => {
+      writersFlushed = true
+      writerFlushError = error
+      if (isFinalFlush && this.#pendingMediaUploads.size !== 0) {
+        this.#mediaFlushWaiters.add(completeAfterMedia)
         return
       }
+      complete(error)
+    }
 
+    const flushWriters = () => {
       const options = deadline === undefined ? undefined : { deadline }
       if (isFinalFlush) {
         this.#exportDeferredTestSessionTraces(options)
@@ -777,24 +835,31 @@ class CiVisibilityExporter extends BufferingExporter {
       let flushError
 
       if (remaining === 0) {
-        complete()
+        onWritersFlushed()
         return
       }
 
       const onFlushComplete = (error) => {
         flushError ||= error
         remaining -= 1
-        if (remaining === 0) complete(flushError)
+        if (remaining === 0) onWritersFlushed(flushError)
       }
 
       for (const writer of writers) writer.flush(onFlushComplete, options)
     }
 
+    if (isFinalFlush && this.#pendingMediaUploads.size !== 0) {
+      mediaTimeoutId = setTimeout(() => {
+        const error = createFinalFlushTimeoutError()
+        for (const controller of this.#pendingMediaUploads) controller.abort(error)
+      }, Math.max(0, deadline - Date.now()))
+      mediaTimeoutId.unref?.()
+    }
+
     if (isFinalFlush && this._initializationRequest) {
       const initializationRequest = this._initializationRequest
-      const { controller, options } = initializationRequest
+      const { controller } = initializationRequest
       initializationRequest.finalFlush = finalFlush
-      options.deadline = deadline
       initializationTimeoutId = setTimeout(() => {
         const error = createFinalFlushTimeoutError()
         if (initializationRequest.finalFlush === finalFlush) controller.abort(error)
@@ -822,7 +887,6 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Allows later test activity to establish a new finalization boundary.
    *
-   * @returns {void}
    */
   #resetFinalFlush () {
     this.#finalFlush = undefined
@@ -896,31 +960,105 @@ class CiVisibilityExporter extends BufferingExporter {
   /**
    * Returns whether the exporter can upload test failure screenshots.
    *
-   * @returns {boolean}
    */
   canUploadTestScreenshots () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
   }
 
   /**
+   * Returns whether the exporter can upload test failure videos.
+   *
+   */
+  canUploadTestVideos () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideosEnabled
+  }
+
+  /**
    * Uploads a single test screenshot to the Test Optimization media intake.
    *
    * @param {object} options - Upload options
-   * @param {string} options.filePath - Path to the screenshot file
+   * @param {string} [options.filePath] - Path to the screenshot file
+   * @param {Buffer} [options.content] - In-memory screenshot content
    * @param {string} options.traceId - Test trace id used as the screenshot key
    * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
    * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
    * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
    * @param {Function} callback - Callback function (err)
    */
-  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
+  uploadTestScreenshot ({ filePath, content, traceId, idempotencyKey, capturedAtMs, signal }, callback) {
     if (!this._testScreenshotUploadUrl) {
       return callback(new Error('Test screenshot upload URL not configured'))
     }
 
+    this.#uploadTestMedia(uploadTestScreenshotRequest, {
+      filePath,
+      content,
+      traceId,
+      idempotencyKey,
+      capturedAtMs,
+      signal,
+    }, callback)
+  }
+
+  /**
+   * Uploads a test-scoped failure video to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the video file
+   * @param {string} options.traceId - Test trace id used as the media key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadTestVideo (options, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test video upload URL not configured'))
+    }
+
+    this.#uploadTestMedia(uploadTestVideoRequest, options, callback, BACKGROUND_VIDEO_UPLOAD_TIMEOUT)
+  }
+
+  /**
+   * Uploads a suite-scoped failure video to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the video file
+   * @param {string} options.testSessionId - Test session id used as the media key
+   * @param {string} options.testSuiteId - Test suite id used as the media key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {AbortSignal} [options.signal] - Additional signal used to cancel the upload
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadTestSuiteVideo (options, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test suite video upload URL not configured'))
+    }
+
+    this.#uploadTestMedia(uploadTestSuiteVideoRequest, options, callback, BACKGROUND_VIDEO_UPLOAD_TIMEOUT)
+  }
+
+  /**
+   * Starts and tracks one media upload so final flush waits for it.
+   *
+   * @param {Function} uploadRequest - Media request function
+   * @param {object} uploadOptions - Media request options
+   * @param {AbortSignal} [uploadOptions.signal] - Additional signal used to cancel the upload
+   * @param {Function} callback - Callback function (err)
+   * @param {number} [timeoutMs] - Maximum background upload duration
+   */
+  #uploadTestMedia (uploadRequest, uploadOptions, callback, timeoutMs = FINAL_FLUSH_TIMEOUT) {
+    const { signal } = uploadOptions
+
+    if (signal?.aborted) {
+      const error = signal.reason || Object.assign(new Error('Test screenshot upload aborted'), { code: 'ABORT_ERR' })
+      callback(error)
+      return
+    }
     this.#resetFinalFlush()
+    const deadline = Date.now() + timeoutMs
     const controller = new AbortController()
-    const deadline = Date.now() + FINAL_FLUSH_TIMEOUT
     let settled = false
     const complete = (error) => {
       if (settled) return
@@ -931,10 +1069,10 @@ class CiVisibilityExporter extends BufferingExporter {
       try {
         callback(error)
       } finally {
-        this.#pendingScreenshotUploads.delete(controller)
-        if (this.#pendingScreenshotUploads.size === 0) {
-          const waiters = [...this.#screenshotFlushWaiters]
-          this.#screenshotFlushWaiters.clear()
+        this.#pendingMediaUploads.delete(controller)
+        if (this.#pendingMediaUploads.size === 0) {
+          const waiters = [...this.#mediaFlushWaiters]
+          this.#mediaFlushWaiters.clear()
           for (const waiter of waiters) queueMicrotask(waiter)
         }
       }
@@ -945,25 +1083,23 @@ class CiVisibilityExporter extends BufferingExporter {
       complete(error)
     }
 
-    this.#pendingScreenshotUploads.add(controller)
-    signal?.addEventListener('abort', onAbort, { once: true })
     const timeoutId = setTimeout(() => {
       const error = createFinalFlushTimeoutError()
       controller.abort(error)
       complete(error)
-    }, FINAL_FLUSH_TIMEOUT)
+    }, Math.max(0, deadline - Date.now()))
     timeoutId.unref?.()
+
+    this.#pendingMediaUploads.add(controller)
+    signal?.addEventListener('abort', onAbort, { once: true })
 
     if (signal?.aborted) {
       onAbort()
       return
     }
 
-    uploadTestScreenshotRequest({
-      filePath,
-      traceId,
-      idempotencyKey,
-      capturedAtMs,
+    uploadRequest({
+      ...uploadOptions,
       url: this._testScreenshotUploadUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,

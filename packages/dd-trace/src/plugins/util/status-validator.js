@@ -101,7 +101,6 @@ function getStatusValidator (config, optionName, defaultValidator, originName) {
 
   /**
    * @param {number} code
-   * @returns {boolean}
    */
   function isValidStatusCode (code) {
     return errorStatusCodes[code] !== 1

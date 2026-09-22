@@ -7,6 +7,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { DEFAULT_QUEUE_MAX_BYTES, MAX_MESSAGE_LENGTH } = require('../../../src/debugger/constants')
+const { DROPPED_REASON, EVENT_TYPE, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
 const { version: debuggerVersion } = require('../../../../../package.json')
 const { getRequestOptions } = require('./utils')
@@ -21,11 +23,10 @@ const repositoryUrl = 'my-repository-url'
 const url = 'my-url'
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
-const message = { message: true }
+const message = 'my-message'
 const logger = { logger: true }
 const dd = { dd: true }
-const snapshot = { snapshot: true }
-
+const snapshot = { snapshot: true, probe: { id: 'my-probe-id' } }
 describe('input message http requests', function () {
   /** @type {sinon.SinonFakeTimers} */
   let clock
@@ -35,8 +36,12 @@ describe('input message http requests', function () {
   let request
   /** @type {sinon.SinonSpy} */
   let jsonBufferWrite
+  /** @type {typeof JSONBuffer} */
+  let JSONBufferSpy
   /** @type {sinon.SinonStub} */
   let pruneSnapshotStub
+  /** @type {{ captureIncomplete: sinon.SinonStub, eventDropped: sinon.SinonStub, '@noCallThru': boolean }} */
+  let guardrailMetrics
 
   beforeEach(function () {
     clock = sinon.useFakeTimers({
@@ -49,7 +54,10 @@ describe('input message http requests', function () {
     pruneSnapshotStub = sinon.stub()
     pruneSnapshotStub['@noCallThru'] = true
 
-    class JSONBufferSpy extends JSONBuffer {
+    guardrailMetrics = { captureIncomplete: sinon.stub(), eventDropped: sinon.stub(), '@noCallThru': true }
+
+    JSONBufferSpy = class JSONBufferSpy extends JSONBuffer {
+      /** @param {ConstructorParameters<typeof JSONBuffer>} args */
       constructor (...args) {
         super(...args)
         jsonBufferWrite = sinon.spy(this, 'write')
@@ -61,6 +69,7 @@ describe('input message http requests', function () {
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
     })
   })
 
@@ -69,23 +78,23 @@ describe('input message http requests', function () {
   })
 
   it('should buffer instead of calling request directly', function () {
-    send(message, logger, dd, snapshot)
+    send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
     sinon.assert.notCalled(request)
     sinon.assert.calledOnceWithMatch(jsonBufferWrite, JSON.stringify(getPayload()))
   })
 
   it('should call request with the expected payload once the buffer is flushed', function (done) {
-    send({ message: 1 }, logger, dd, snapshot)
-    send({ message: 2 }, logger, dd, snapshot)
-    send({ message: 3 }, logger, dd, snapshot)
+    send('message-1', logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+    send('message-2', logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+    send('message-3', logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
     sinon.assert.notCalled(request)
 
     clock.tick(1000)
 
     sinon.assert.calledOnceWithMatch(request, JSON.stringify([
-      getPayload({ message: 1 }),
-      getPayload({ message: 2 }),
-      getPayload({ message: 3 }),
+      getPayload('message-1'),
+      getPayload('message-2'),
+      getPayload('message-3'),
     ]))
 
     const opts = getRequestOptions(request)
@@ -116,9 +125,10 @@ describe('input message http requests', function () {
       './log': logStub,
       '../../exporters/common/request': request,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
     })
 
-    sendWithInvalidTag(message, logger, dd, snapshot)
+    sendWithInvalidTag(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
     clock.tick(1000)
 
     sinon.assert.calledOnce(request)
@@ -144,9 +154,10 @@ describe('input message http requests', function () {
       './json-buffer': JSONBuffer,
       '../../exporters/common/request': request,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
     })
 
-    sendWithNumericTag(message, logger, dd, snapshot)
+    sendWithNumericTag(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
     clock.tick(1000)
 
     sinon.assert.calledOnce(request)
@@ -166,6 +177,7 @@ describe('input message http requests', function () {
       './json-buffer': JSONBuffer,
       '../../exporters/common/request': request,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
     })
 
     sendV2(message, logger, dd, snapshot)
@@ -183,8 +195,39 @@ describe('input message http requests', function () {
     done()
   })
 
+  it('should send directly to the debugger intake in agentless mode', function () {
+    const sendAgentless = proxyquire('../../../src/debugger/devtools_client/send', {
+      './config': createConfigMock({
+        agentless: true,
+        inputPath: '/api/v2/debugger',
+        runtimeId: 'test-runtime-id',
+        url: new URL('https://debugger-intake.us3.datadoghq.com'),
+      }),
+      './json-buffer': JSONBuffer,
+      '../../exporters/common/request': request,
+      './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
+    })
+
+    sendAgentless(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const options = getRequestOptions(request)
+    assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
+    assert.match(options.path, /runtime_id%3Atest-runtime-id/)
+    assert.strictEqual(options.url.href, 'https://debugger-intake.us3.datadoghq.com/')
+    assert.strictEqual(Object.hasOwn(options.headers, 'DD-API-KEY'), false)
+    assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'agent-debugger')
+    assert.strictEqual(options.agent, undefined)
+  })
+
   it('should fallback to /debugger/v1/diagnostics on 404 from v2 endpoint', function (done) {
-    const configStub = createConfigMock({ inputPath: '/debugger/v2/input' })
+    const queueMaxBytes = Buffer.byteLength(JSON.stringify(getPayload())) + 2
+    const configStub = createConfigMock({
+      inputPath: '/debugger/v2/input',
+      queueMaxBytes,
+    })
 
     // Mock request to return 404 on first call (v2), then succeed on second call (diagnostics)
     let callCount = 0
@@ -201,9 +244,10 @@ describe('input message http requests', function () {
 
     const sendV2 = proxyquire('../../../src/debugger/devtools_client/send', {
       './config': configStub,
-      './json-buffer': JSONBuffer,
+      './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': requestWith404,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
     })
 
     sendV2(message, logger, dd, snapshot)
@@ -229,6 +273,12 @@ describe('input message http requests', function () {
     // Verify config was updated to diagnostics
     assert.strictEqual(configStub.inputPath, '/debugger/v1/diagnostics')
 
+    // The fallback completion releases the first payload, allowing another maximum-sized payload to be sent
+    sendV2(message, logger, dd, snapshot)
+    clock.tick(1000)
+    sinon.assert.calledThrice(requestWith404)
+    sinon.assert.notCalled(guardrailMetrics.eventDropped)
+
     done()
   })
 
@@ -253,6 +303,7 @@ describe('input message http requests', function () {
       './json-buffer': JSONBuffer,
       '../../exporters/common/request': requestWith404,
       './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+      './guardrail-metrics': guardrailMetrics,
     })
 
     // First send - should trigger v2 → diagnostics fallback
@@ -281,7 +332,7 @@ describe('input message http requests', function () {
 
   it('should include process_tags at root level when provided', function () {
     const processTags = 'entrypoint.name:banana,entrypoint.type:script'
-    send(message, logger, dd, snapshot, processTags)
+    send(message, logger, dd, snapshot, processTags, EVENT_TYPE.LOG, 0)
 
     const writtenJson = jsonBufferWrite.getCall(0).args[0]
     const written = JSON.parse(writtenJson)
@@ -291,7 +342,7 @@ describe('input message http requests', function () {
   })
 
   it('should not include process_tags when not provided', function () {
-    send(message, logger, dd, snapshot)
+    send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
 
     const writtenJson = jsonBufferWrite.getCall(0).args[0]
     const written = JSON.parse(writtenJson)
@@ -300,19 +351,8 @@ describe('input message http requests', function () {
   })
 
   describe('snapshot pruning', function () {
-    const largeSnapshot = {
-      id: '123',
-      stack: [{ function: 'test' }],
-      captures: {
-        lines: {
-          10: {
-            locals: {
-              largeData: { type: 'string', value: 'x'.repeat(2 * 1024 * 1024) },
-            },
-          },
-        },
-      },
-    }
+    /** @type {object} */
+    let largeSnapshot
     const prunedPayload = {
       ...getPayload(message),
       debugger: {
@@ -332,8 +372,25 @@ describe('input message http requests', function () {
       },
     }
 
+    beforeEach(function () {
+      // Recreated for each test since the pruning fallback mutates the snapshot in place
+      largeSnapshot = {
+        id: '123',
+        stack: [{ function: 'test' }],
+        captures: {
+          lines: {
+            10: {
+              locals: {
+                largeData: { type: 'string', value: 'x'.repeat(2 * 1024 * 1024) },
+              },
+            },
+          },
+        },
+      }
+    })
+
     it('should not attempt to prune if payload is under size limit', function () {
-      send(message, logger, dd, snapshot)
+      send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
       sinon.assert.notCalled(pruneSnapshotStub)
     })
 
@@ -341,7 +398,7 @@ describe('input message http requests', function () {
       const prunedJson = JSON.stringify(getPayload(message, largeSnapshot))
       pruneSnapshotStub.returns(prunedJson)
 
-      send(message, logger, dd, largeSnapshot)
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.LOG, 0)
 
       sinon.assert.calledOnce(pruneSnapshotStub)
       const call = pruneSnapshotStub.getCall(0)
@@ -354,7 +411,7 @@ describe('input message http requests', function () {
       const prunedJson = JSON.stringify(prunedPayload)
       pruneSnapshotStub.returns(prunedJson)
 
-      send(message, logger, dd, largeSnapshot)
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.LOG, 0)
 
       sinon.assert.calledOnce(pruneSnapshotStub)
       sinon.assert.calledOnceWithMatch(jsonBufferWrite, prunedJson)
@@ -363,7 +420,7 @@ describe('input message http requests', function () {
     it('should fall back to deleting captures if pruning fails', function () {
       pruneSnapshotStub.returns(undefined)
 
-      send(message, logger, dd, largeSnapshot)
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.LOG, 0)
 
       sinon.assert.calledOnce(pruneSnapshotStub)
 
@@ -372,12 +429,165 @@ describe('input message http requests', function () {
       const written = JSON.parse(writtenJson)
 
       assert.deepStrictEqual(written.debugger.snapshot.captures.lines[10], { pruned: true })
+      assert.strictEqual(written.message, message)
+    })
+
+    it('should not throw if pruning fails for a snapshot without captures', function () {
+      // Log probes don't capture anything, so there's nothing for the fallback to drop
+      pruneSnapshotStub.returns(undefined)
+      const logSnapshot = {
+        id: '123',
+        probe: { id: 'probe-id' },
+        stack: [{ function: 'x'.repeat(2 * 1024 * 1024) }],
+      }
+
+      send(message, logger, dd, logSnapshot, undefined, EVENT_TYPE.LOG, 0)
+
+      sinon.assert.calledOnce(pruneSnapshotStub)
+      sinon.assert.calledOnce(jsonBufferWrite)
+
+      const written = JSON.parse(jsonBufferWrite.getCall(0).args[0])
+
+      assert.deepStrictEqual(written.debugger.snapshot, logSnapshot)
+      assert.strictEqual(written.message, message)
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.LOG
+      )
+    })
+
+    it('should record the snapshot as incomplete due to its size when pruned', function () {
+      pruneSnapshotStub.returns(JSON.stringify(prunedPayload))
+
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.PAYLOAD_TOO_LARGE, EVENT_TYPE.SNAPSHOT
+      )
+    })
+
+    it('should record the snapshot as incomplete due to its size when pruning fails', function () {
+      pruneSnapshotStub.returns(undefined)
+
+      send(message, logger, dd, largeSnapshot, undefined, EVENT_TYPE.SNAPSHOT, INCOMPLETE_REASON.DEPTH)
+
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete,
+        INCOMPLETE_REASON.DEPTH | INCOMPLETE_REASON.PAYLOAD_TOO_LARGE,
+        EVENT_TYPE.SNAPSHOT
+      )
+    })
+  })
+
+  describe('upload queue', function () {
+    it('should bound the queue using the configured maximum', function () {
+      const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
+        './config': createConfigMock({ queueMaxBytes: 1024 }),
+        './json-buffer': JSONBufferSpy,
+        '../../exporters/common/request': request,
+        './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+        './guardrail-metrics': guardrailMetrics,
+      })
+      const largeMessage = 'x'.repeat(2048)
+
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.SNAPSHOT, INCOMPLETE_REASON.DEPTH)
+
+      sinon.assert.calledOnceWithExactly(guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.SNAPSHOT)
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
+      clock.tick(1000)
+      sinon.assert.notCalled(request)
+    })
+
+    it('should drop probe results while uploads still in flight fill the queue', function () {
+      const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
+        './config': createConfigMock({ queueMaxBytes: 1024 }),
+        './json-buffer': JSONBufferSpy,
+        '../../exporters/common/request': request,
+        './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+        './guardrail-metrics': guardrailMetrics,
+      })
+      const largeMessage = 'x'.repeat(600)
+
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+      sinon.assert.calledOnce(request)
+
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+
+      sinon.assert.calledOnceWithExactly(guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.LOG)
+
+      // Completing the upload releases the queue
+      request.lastCall.args[2](null, '', 202)
+      boundedSend(largeMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+
+      sinon.assert.calledOnce(guardrailMetrics.eventDropped)
+      sinon.assert.calledTwice(request)
+    })
+
+    it('should release the payload from the queue when the upload fails', function () {
+      const queueMaxBytes = Buffer.byteLength(JSON.stringify(getPayload())) + 2
+      const boundedSend = proxyquire('../../../src/debugger/devtools_client/send', {
+        './config': createConfigMock({ queueMaxBytes }),
+        './json-buffer': JSONBufferSpy,
+        '../../exporters/common/request': request,
+        './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+        './guardrail-metrics': guardrailMetrics,
+      })
+
+      boundedSend(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+      sinon.assert.calledOnce(request)
+
+      request.lastCall.args[2](new Error('boom'))
+      boundedSend(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+      clock.tick(1000)
+
+      sinon.assert.calledTwice(request)
+      sinon.assert.notCalled(guardrailMetrics.eventDropped)
+    })
+  })
+
+  describe('guardrail metrics', function () {
+    it('should not record complete captures', function () {
+      send(message, logger, dd, snapshot, undefined, EVENT_TYPE.SNAPSHOT, 0)
+
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
+    })
+
+    it('should record the enforced capture limits once the event is queued', function () {
+      const reasons = INCOMPLETE_REASON.DEPTH | INCOMPLETE_REASON.STRING_LENGTH
+
+      send(message, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, reasons)
+
+      sinon.assert.calledOnce(jsonBufferWrite)
+      sinon.assert.calledOnceWithExactly(guardrailMetrics.captureIncomplete, reasons, EVENT_TYPE.LOG)
+      assert.ok(
+        guardrailMetrics.captureIncomplete.calledAfter(jsonBufferWrite),
+        'should record after the event is queued'
+      )
+    })
+
+    it('should record a truncated message as an enforced string length limit', function () {
+      const longMessage = 'x'.repeat(MAX_MESSAGE_LENGTH + 1)
+
+      send(longMessage, logger, dd, snapshot, undefined, EVENT_TYPE.LOG, INCOMPLETE_REASON.DEPTH)
+
+      assert.strictEqual(JSON.parse(jsonBufferWrite.firstCall.args[0]).message, 'x'.repeat(MAX_MESSAGE_LENGTH) + '…')
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.captureIncomplete, INCOMPLETE_REASON.DEPTH | INCOMPLETE_REASON.STRING_LENGTH, EVENT_TYPE.LOG
+      )
+    })
+
+    it('should not record a message that fits as truncated', function () {
+      send('x'.repeat(MAX_MESSAGE_LENGTH), logger, dd, snapshot, undefined, EVENT_TYPE.LOG, 0)
+
+      sinon.assert.notCalled(guardrailMetrics.captureIncomplete)
     })
   })
 })
 
 /**
- * @param {object} [_message] - The message to get the payload for. Defaults to the {@link message} object.
+ * @param {string} [_message] - The message to get the payload for. Defaults to the {@link message} string.
  * @param {object} [_snapshot] - The snapshot to get the payload for. Defaults to the {@link snapshot} object.
  * @returns {object} - The payload.
  */
@@ -408,6 +618,7 @@ function createConfigMock (overrides = {}) {
     url,
     inputPath: '/debugger/v2/input',
     maxTotalPayloadSize: 5 * 1024 * 1024,
+    queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
     dynamicInstrumentation: {
       uploadIntervalSeconds: 1,
     },

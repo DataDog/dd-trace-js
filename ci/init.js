@@ -63,7 +63,9 @@ if (isValidationModeRequested && !isValidationMode) {
 let shouldInit = isValidationModeRequested
   ? isValidationMode && !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
   : getValueFromEnvSources('DD_CIVISIBILITY_ENABLED', true) !== false
-const isAgentlessEnabled = getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
+const isGlobalAgentlessEnabled = getValueFromEnvSources('DD_AGENTLESS_ENABLED')
+const isAgentlessEnabled = isGlobalAgentlessEnabled ||
+  getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
 
 if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
@@ -85,8 +87,11 @@ if (isTestWorker) {
         exporter: 'datadog',
       }
     } else {
+      const configurationName = isGlobalAgentlessEnabled
+        ? 'DD_AGENTLESS_ENABLED'
+        : 'DD_CIVISIBILITY_AGENTLESS_ENABLED'
       console.error(
-        'DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
+        `${configurationName} is set, but neither ` +
         'DD_API_KEY nor DATADOG_API_KEY are set in your environment, so ' +
         'dd-trace will not be initialized.'
       )

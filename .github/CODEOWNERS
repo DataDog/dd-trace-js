@@ -3,6 +3,8 @@
 # Shared repository tooling
 /.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.cursor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/.gemini/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -76,6 +78,7 @@
 # IDM
 /.agents/skills/apm-integrations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /.claude/skills/apm-integrations @DataDog/dd-trace-js @DataDog/apm-idm-js
+/.cursor/skills/apm-integrations @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 /benchmark/sirun/child_process/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/dd-trace-js @DataDog/apm-idm-js
@@ -101,11 +104,13 @@
 /index.electron.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/electron/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/integration-tests/turbopack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/pino/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/dd-trace-js @DataDog/apm-idm-js
 
 /packages/datadog-esbuild/ @DataDog/dd-trace-js @DataDog/apm-idm-js
+/packages/datadog-turbopack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-webpack/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
@@ -190,7 +195,7 @@
 /packages/datadog-instrumentations/src/cucumber-worker-threads.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress-config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress-legacy-finalizers.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
-/packages/datadog-instrumentations/src/playwright-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/rum-browser-scripts.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/playwright-reporter.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/webdriverio.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/nyc.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
@@ -240,6 +245,7 @@
 /integration-tests/cypress-return-config.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-support-file-false.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/cypress-test-environment.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-typescript.config.ts @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
@@ -297,6 +303,8 @@
 /benchmark/sirun/test-codeowners/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /benchmark/sirun/test-optimization/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 
+/integration-tests/automatic-log-submission.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/integration-tests/fixtures/automatic-log-submission/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/log_injection/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/log_injection.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
@@ -313,6 +321,8 @@
 /packages/dd-trace/src/config/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/config/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/log/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/log-submission/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/log-submission/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentelemetry/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/opentelemetry/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentracing/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
@@ -411,6 +421,7 @@
 /packages/dd-trace/src/web-tags-cache.js @DataDog/dd-trace-js @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 /packages/dd-trace/test/otel-thread-ctx.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
+/packages/dd-trace/test/profiler.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 
 # Language Platform
@@ -465,6 +476,7 @@
 /integration-tests/mocha-parallel-files.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+/integration-tests/process-lifecycle.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /integration-tests/tsconfig.json @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -540,6 +552,8 @@
 /packages/dd-trace/test/tagger.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/tracer.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
+
+/.llm-validation/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 # Multiple teams
 /devdocs/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js

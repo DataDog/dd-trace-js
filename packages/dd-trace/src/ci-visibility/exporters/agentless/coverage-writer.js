@@ -24,7 +24,7 @@ class Writer extends BaseWriter {
   #requestTracker
 
   constructor ({ url, evpProxyPrefix = '' }) {
-    super(...arguments)
+    super({ ...arguments[0], retainOnBackpressure: true })
     this.#requestTracker = new TestOptimizationRequestTracker(this)
     this._url = url
     this._encoder = new CoverageCIVisibilityEncoder(this)
@@ -36,7 +36,6 @@ class Writer extends BaseWriter {
    *
    * @param {(error?: Error) => void} [done]
    * @param {{ deadline?: number }} [options]
-   * @returns {void}
    */
   flush (done, options) {
     this.#requestTracker.flush(done, options)
@@ -79,11 +78,11 @@ class Writer extends BaseWriter {
       if (err) {
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-          { endpoint: 'code_coverage', statusCode }
+          { endpoint: 'code_coverage', statusCode, errorType: statusCode ? undefined : err.code }
         )
         incrementCountMetric(
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
-          { endpoint: 'code_coverage' }
+          { endpoint: 'code_coverage', statusCode, errorType: statusCode ? undefined : err.code }
         )
         log.error('Error sending CI coverage payload', err)
         done(err)

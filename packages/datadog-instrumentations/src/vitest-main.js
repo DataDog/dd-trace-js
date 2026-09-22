@@ -68,8 +68,11 @@ const finishWrappedContexts = new WeakSet()
 const runFilesWrappedPrototypes = new WeakSet()
 const activeRunFilesContexts = new WeakSet()
 const runErrorsByContext = new WeakMap()
+const typecheckPoolWorkerRequests = new WeakMap()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
+let isDynamicAtrEnabled = false
+let dynamicAtrBuckets
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let earlyFlakeDetectionFaultyThreshold = 0
@@ -146,6 +149,10 @@ function getVitestExport (vitestPackage) {
 
 function getTypecheckerExport (vitestPackage) {
   return findExportByName(vitestPackage, 'Typechecker')
+}
+
+function getTypecheckPoolWorkerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'TypecheckPoolWorker')
 }
 
 function getForksPoolWorkerExport (vitestPackage) {
@@ -227,7 +234,6 @@ function getTestFilepaths (ctx, testSpecifications) {
  *
  * @param {string} testFilepath
  * @param {string} repositoryRoot
- * @returns {string}
  */
 function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
   const testSuiteAbsolutePath = path.isAbsolute(testFilepath) ? testFilepath : path.join(repositoryRoot, testFilepath)
@@ -237,7 +243,6 @@ function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
 /**
  * Resets suite-level EFD admission state between Vitest runs.
  *
- * @returns {void}
  */
 function resetEfdSuiteTracker () {
   activeNoWorkerInitState = undefined
@@ -250,7 +255,6 @@ function resetEfdSuiteTracker () {
  * Returns whether a Vitest pool has a transport for runtime EFD suite admission.
  *
  * @param {string|undefined} pool
- * @returns {boolean}
  */
 function isEfdSuiteAdmissionPool (pool) {
   return pool === undefined || pool === 'forks' || pool === 'threads' || pool === 'browser'
@@ -262,7 +266,6 @@ function isEfdSuiteAdmissionPool (pool) {
  * @param {string} frameworkVersion
  * @param {object[]|undefined} testSpecifications
  * @param {object} ctx
- * @returns {boolean}
  */
 function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
   if (!satisfies(frameworkVersion, '>=4.0.0')) return false
@@ -283,7 +286,6 @@ function supportsEfdSuiteAdmission (frameworkVersion, testSpecifications, ctx) {
  *
  * @param {string[]} testFilepaths
  * @param {string} repositoryRoot
- * @returns {void}
  */
 function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
   const testSuites = new Set()
@@ -303,7 +305,6 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  *
  * @param {string} testSuite
  * @param {boolean} hasNewTest
- * @returns {boolean}
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
   if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
@@ -646,6 +647,8 @@ function wrapSessionFinish (ctx) {
 function resetLibraryConfig () {
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
+  isDynamicAtrEnabled = false
+  dynamicAtrBuckets = undefined
   isEarlyFlakeDetectionEnabled = false
   earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   earlyFlakeDetectionFaultyThreshold = 0
@@ -662,6 +665,8 @@ function resetLibraryConfig () {
 function applyLibraryConfig (libraryConfig) {
   isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+  isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
+  dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
   isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
   earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold ?? 0
@@ -683,6 +688,8 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsEfdSuiteAdmissionEnabled: false,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
+    _ddIsDynamicAtrEnabled: false,
+    _ddDynamicAtrBuckets: undefined,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
     _ddFlakyTestRetriesProjectNames: undefined,
     _ddIsImpactedTestsEnabled: false,
@@ -761,6 +768,8 @@ async function runMainProcessSetup (
       resetLibraryConfig()
     } else {
       applyLibraryConfig(libraryConfig)
+      // Older runners cache a numeric ceiling and cannot stop retries before the next lifecycle starts.
+      isDynamicAtrEnabled &&= satisfies(frameworkVersion, '>=4.1.0')
     }
   } catch {
     requestErrorTags = {}
@@ -827,6 +836,8 @@ async function runMainProcessSetup (
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
+      _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, 'Could not send library configuration to workers.')
@@ -967,6 +978,8 @@ function getNoWorkerInitState () {
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,
+    isDynamicAtrEnabled,
+    dynamicAtrBuckets,
     isKnownTestsEnabled,
     newTestsWithDynamicNames,
     requestErrorTags,
@@ -1034,14 +1047,21 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
-  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return
+  if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
+  const maximumDynamicAtrRetries = dynamicAtrBuckets
+    ? Math.max(...dynamicAtrBuckets)
+    : earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+  const retryCount = isDynamicAtrEnabled
+    ? Math.max(1, maximumDynamicAtrRetries)
+    : flakyTestRetriesCount
   let configured = false
   let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
-    if (!config.retry) {
-      config.retry = flakyTestRetriesCount
+    if (!config.retry || config.retry.__ddTestOptAtr) {
+      // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
+      config.retry = isDynamicAtrEnabled ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)
@@ -1203,8 +1223,19 @@ function getFinishWrapper (exitOrClose) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
+    const hasNoTestFiles = this.state.pathsSet.size === 0
+    const hasUnexpectedEmptySession = hasNoTestFiles && !areAllSuitesSkipped && !this.config.passWithNoTests
+    if (!error && hasUnexpectedEmptySession) {
+      error = new Error('No test files were found.')
+    }
+    const status = runError || hasUnexpectedEmptySession
+      ? 'fail'
+      : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state))
+    const isExpectedEmptySession = !runError && !hasUnexpectedEmptySession &&
+      (areAllSuitesSkipped || hasNoTestFiles)
     const flushPromise = getChannelPromise(testSessionFinishCh, {
-      status: runError ? 'fail' : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state)),
+      status,
+      isExpectedEmptySession,
       testCodeCoverageLinesTotal,
       error,
       isEarlyFlakeDetectionEnabled,
@@ -1301,7 +1332,6 @@ function getTestSpecificationPool (testSpecification) {
  * Detect whether Vitest selected only TypeScript typecheck specifications.
  *
  * @param {unknown} testSpecifications
- * @returns {boolean}
  */
 function hasOnlyTypecheckTestSpecifications (testSpecifications) {
   if (!Array.isArray(testSpecifications) || testSpecifications.length === 0) return false
@@ -1408,7 +1438,6 @@ function getTypecheckTaskStatus (task) {
  *
  * @param {string|undefined} suiteName
  * @param {string} testSuiteAbsolutePath
- * @returns {boolean}
  */
 function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
   if (!suiteName || !testSuiteAbsolutePath) return false
@@ -1424,7 +1453,6 @@ function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
  *
  * @param {object} task
  * @param {string} testSuiteAbsolutePath
- * @returns {string}
  */
 function getTypecheckTestName (task, testSuiteAbsolutePath) {
   let testName = task.name || task.fullTestName
@@ -1503,7 +1531,6 @@ function updateTypecheckTaskResultForTestManagement (task, status, testManagemen
  * Recompute suite/file typecheck results after Test Management rewrites child test results.
  *
  * @param {object} task
- * @returns {string}
  */
 function updateTypecheckTaskTreeResult (task) {
   if (!Array.isArray(task.tasks)) return getTypecheckTaskStatus(task)
@@ -1547,7 +1574,6 @@ function updateTypecheckTaskTreeResult (task) {
  *   sourceErrors?: object[],
  *   state?: string
  * }} result
- * @returns {boolean}
  */
 function updateTypecheckResult (result) {
   if (result.sourceErrors?.length) return false
@@ -1690,9 +1716,9 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
   })
 }
 
-async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
+async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
   if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files)) return
+  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (
@@ -1702,7 +1728,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
     await ensureMainProcessSetup(
       ctx,
       frameworkVersion,
-      result.files,
+      files,
       false,
       !setupState || setupState.disableTestImpactAnalysis
     )
@@ -1712,7 +1738,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx, typechecke
     ? await getChannelPromise(testSessionConfigurationCh, { frameworkVersion }) || {}
     : {}
 
-  await Promise.all(result.files.map(file => reportTypecheckFile(
+  await Promise.all(files.map(file => reportTypecheckFile(
     file,
     sessionConfiguration,
     frameworkVersion,
@@ -1739,6 +1765,51 @@ function getTypecheckerWrapper (vitestPackage, frameworkVersion) {
     wrapTypechecker(typechecker.value, frameworkVersion)
   }
   return vitestPackage
+}
+
+function wrapTypecheckPoolWorker (TypecheckPoolWorker, frameworkVersion) {
+  if (!TypecheckPoolWorker?.prototype?.send || !TypecheckPoolWorker.prototype.on) return
+
+  shimmer.wrap(TypecheckPoolWorker.prototype, 'send', send => function (message) {
+    typecheckPoolWorkerRequests.set(this, {
+      type: message?.type,
+      filepaths: new Set(message?.context?.files?.map(file => file.filepath)),
+    })
+    return send.apply(this, arguments)
+  })
+  shimmer.wrap(TypecheckPoolWorker.prototype, 'on', on => function (event, callback) {
+    if (event !== 'message') return on.apply(this, arguments)
+
+    const worker = this
+    arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
+      const typechecker = worker.project?.typechecker
+      const request = typecheckPoolWorkerRequests.get(worker)
+      if (
+        message?.type !== 'testfileFinished' ||
+        request?.type !== 'run' ||
+        !typechecker
+      ) {
+        return callback.apply(this, arguments)
+      }
+
+      const result = typechecker.getResult?.()
+      const files = result?.files?.filter(file => request.filepaths.has(file.filepath))
+      return reportTypecheckResults(
+        result,
+        frameworkVersion,
+        worker.project?.vitest,
+        typechecker,
+        files
+      ).then(
+        () => callback.apply(this, arguments),
+        (error) => {
+          log.error('Could not report Vitest typecheck results: %s', error?.message)
+          return callback.apply(this, arguments)
+        }
+      )
+    })
+    return on.apply(this, arguments)
+  })
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
@@ -1895,7 +1966,6 @@ function getWrappedOn (on) {
  * @param {object} workerProcess
  * @param {number} interprocessCode
  * @param {object} data
- * @returns {boolean}
  */
 function handleEfdAdmissionMessage (workerProcess, interprocessCode, data) {
   if (interprocessCode !== VITEST_WORKER_EFD_SUITE_ADMISSION_REQUEST_CODE) return false
@@ -1962,14 +2032,23 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   }
   const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
   shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  const createVitestExport = findExportByName(cliApiPackage, 'createVitest')
+  if (createVitestExport) {
+    shimmer.wrap(cliApiPackage, createVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  }
   wrapMessagePortOn()
 
-  const vitest = getVitestExport(cliApiPackage)
+  wrapVitestInternals(cliApiPackage, frameworkVersion)
+  return cliApiPackage
+}
+
+function wrapVitestInternals (vitestPackage, frameworkVersion) {
+  const vitest = getVitestExport(vitestPackage)
   if (vitest) {
     wrapVitestRunFiles(vitest.value, frameworkVersion)
   }
 
-  const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
+  const forksPoolWorker = getForksPoolWorkerExport(vitestPackage)
   if (forksPoolWorker) {
     // function is async
     shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
@@ -1981,7 +2060,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     shimmer.wrap(forksPoolWorker.value.prototype, 'on', getWrappedOn)
   }
 
-  const threadsPoolWorker = getThreadsPoolWorkerExport(cliApiPackage)
+  const threadsPoolWorker = getThreadsPoolWorkerExport(vitestPackage)
   if (threadsPoolWorker) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
@@ -1991,7 +2070,6 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
-  return cliApiPackage
 }
 
 addHook({
@@ -2079,6 +2157,32 @@ addHook({
     )
   }
   return coveragePackage
+})
+
+// Vitest 5 moved the core and pool worker exports out of cli-api into an index chunk.
+addHook({
+  name: 'vitest',
+  versions: ['>=5.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, (vitestPackage, frameworkVersion) => {
+  if (!getVitestExport(vitestPackage)) return vitestPackage
+
+  wrapVitestInternals(vitestPackage, frameworkVersion)
+
+  const typecheckPoolWorker = getTypecheckPoolWorkerExport(vitestPackage)
+  if (typecheckPoolWorker) {
+    wrapTypecheckPoolWorker(typecheckPoolWorker.value, frameworkVersion)
+  }
+
+  const baseSequencer = getBaseSequencerExport(vitestPackage)
+  if (baseSequencer) {
+    shimmer.wrap(
+      baseSequencer.value.prototype,
+      'sort',
+      sort => getSortWrapper(sort, frameworkVersion)
+    )
+  }
+  return vitestPackage
 })
 
 addHook({

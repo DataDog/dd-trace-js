@@ -1,6 +1,8 @@
 /* eslint-disable */
+const { getTestEnvironment } = require('../support/test-environment')
+
 let numAttempt = 0
-const passAttempt = Number(Cypress.env('FLAKY_PASS_ATTEMPT') || 2)
+const passAttempt = Number(getTestEnvironment('FLAKY_PASS_ATTEMPT') || 2)
 describe('flaky with hooks', () => {
   beforeEach(() => {
     cy.visit('/')

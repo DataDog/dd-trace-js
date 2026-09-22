@@ -14,6 +14,7 @@ const {
   hasEfdRetries,
   shouldSkipEfdRetry,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const {
   parseAnnotations,
   getTestSuitePath,
@@ -65,11 +66,13 @@ const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const dispatcherRunCh = tracingChannel('orchestrion:playwright:Dispatcher_run')
 const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatcher_createWorker')
+const filterForShardCh = tracingChannel('orchestrion:playwright:filterForShard')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
+const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomaticVideo')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
 const testToCtx = new WeakMap()
@@ -80,9 +83,12 @@ const testsToTestStatuses = new Map()
 const activeRumPages = new Set()
 
 const RUM_FLUSH_WAIT_TIME = getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')
+const isPlaywrightWorker = getValueFromEnvSources('DD_PLAYWRIGHT_WORKER') === '1'
 const DD_PROPERTIES_TIMEOUT = 5000
 const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
+const isFailureVideoUploadEnabled =
+  getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') === true
 
 let applyRepeatEachIndex = null
 let reporterError
@@ -91,7 +97,7 @@ let hasReporterError = false
 let startedSuites = []
 
 // Browser-side callbacks live in a coverage-excluded file so coverage counters can't reach chromium.
-const { detectRum, stopRumSession } = require('./playwright-browser-scripts')
+const { detectRum, stopRumSession } = require('./rum-browser-scripts')
 
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
@@ -108,6 +114,8 @@ let isEarlyFlakeDetectionFaulty = false
 let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
+let isDynamicAtrEnabled = false
+let dynamicAtrBuckets
 let knownTests = {}
 let isTestManagementTestsEnabled = false
 let testManagementAttemptToFixRetries = 0
@@ -117,6 +125,9 @@ let modifiedFiles = {}
 let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
+let reportedTestExecutions = new WeakMap()
+let hasTestsAssignedToShard = false
+let hasTestsBeforeSharding = false
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
@@ -127,6 +138,8 @@ const efdRetryTestsById = new Map()
 const efdScheduledOriginalTestKeys = new Set()
 const efdStartedOriginalTestKeys = new Set()
 const efdSlowAbortedTests = new Set()
+const dynamicAtrRetryCountByTestKey = new Map()
+const automaticRetryProjects = new Set()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
 const disabledTestIds = new Set()
@@ -134,27 +147,39 @@ let rootDir = ''
 let sessionProjects = []
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
+const MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE = '>=1.38.0'
 const EFD_RETRY_COUNT_REQUEST = 'ddEfdRetryCountRequest'
 const EFD_RETRY_COUNT_RESPONSE = 'ddEfdRetryCountResponse'
 const DD_PROPERTIES_REQUEST = 'ddPropertiesRequest'
 const DD_PROPERTIES_RESPONSE = 'ddProperties'
 const kDdPlaywrightDisabledTestIds = Symbol('ddPlaywrightDisabledTestIds')
 const kDdPlaywrightFailureScreenshots = Symbol('ddPlaywrightFailureScreenshots')
+const kDdPlaywrightFailureVideos = Symbol('ddPlaywrightFailureVideos')
 const kDdPlaywrightReporterConfigured = Symbol('ddPlaywrightReporterConfigured')
 const kDdPlaywrightWorkerHostInstrumented = Symbol('ddPlaywrightWorkerHostInstrumented')
 const kDdPlaywrightWorkerInstrumented = Symbol('ddPlaywrightWorkerInstrumented')
 const instrumentedPlaywrightReporters = new WeakSet()
 const PLAYWRIGHT_FAILURE_SCREENSHOT_PATH_RE = /(?:^|[\\/])test-failed-\d+\.png$/
+const PLAYWRIGHT_FAILURE_VIDEO_PATH_RE = /(?:^|[\\/])video(?:-\d+)?\.webm$/
 const automaticFailureScreenshotPaths = new Set()
+const automaticFailureVideoPaths = new Set()
 
 /**
  * Returns whether Playwright's internal screenshot recorder created an attachment.
  *
  * @param {object} attachment - Playwright attachment payload
- * @returns {boolean}
  */
 function isAutomaticFailureScreenshotAttachment (attachment) {
   return typeof attachment?.path === 'string' && automaticFailureScreenshotPaths.delete(attachment.path)
+}
+
+/**
+ * Returns whether Playwright's internal video recorder created an attachment.
+ *
+ * @param {object} attachment - Playwright attachment payload
+ */
+function isAutomaticFailureVideoAttachment (attachment) {
+  return typeof attachment?.path === 'string' && automaticFailureVideoPaths.delete(attachment.path)
 }
 
 function isValidKnownTests (receivedKnownTests) {
@@ -212,7 +237,6 @@ function getTestRepeatEachKey (test) {
 
 /**
  * @param {object} test
- * @returns {string}
  */
 function getTestEfdKey (test) {
   const projectKey = getTestProjectKey(test)
@@ -245,9 +269,6 @@ function registerEfdRetryTest (test) {
   })
 }
 
-/**
- * @returns {boolean}
- */
 function shouldRunEarlyFlakeDetection () {
   return isEarlyFlakeDetectionEnabled && hasEfdRetries(earlyFlakeDetectionRetryPolicy)
 }
@@ -371,7 +392,6 @@ function sendDdPropertiesToWorkerWhenAvailable (workerProcess, testId) {
 
 /**
  * @param {object} test
- * @returns {boolean}
  */
 function shouldRequestEfdRetryCount (test) {
   // The main process remains the source of truth. repeatEachIndex is only used as
@@ -501,6 +521,8 @@ function getTestsBySuiteFromTestsById (testsById) {
 }
 
 function getPlaywrightConfig (playwrightRunner) {
+  if (!playwrightRunner) return {}
+
   try {
     return playwrightRunner._configLoader.fullConfig()
   } catch {
@@ -540,7 +562,6 @@ function getProjectsFromRunner (runner, configArg) {
  * Returns whether at least one Playwright project captures automatic screenshots for failed tests.
  *
  * @param {Array<object>} projects - Playwright projects with resolved use options
- * @returns {boolean} Whether failure screenshot capture is enabled
  */
 function isFailureScreenshotCaptureEnabled (projects) {
   for (const project of projects) {
@@ -549,6 +570,20 @@ function isFailureScreenshotCaptureEnabled (projects) {
     if (mode === 'on' || mode === 'only-on-failure' || mode === 'on-first-failure') {
       return true
     }
+  }
+  return false
+}
+
+/**
+ * Returns whether at least one Playwright project records videos that can be retained for failures.
+ *
+ * @param {Array<object>} projects - Playwright projects with resolved use options
+ */
+function isFailureVideoCaptureEnabled (projects) {
+  for (const project of projects) {
+    const video = project.use?.video
+    const mode = typeof video === 'object' && video !== null ? video.mode : video
+    if (mode === 'on' || mode === 'retain-on-failure') return true
   }
   return false
 }
@@ -566,14 +601,19 @@ function getProjectsFromDispatcher (dispatcher) {
   return dispatcher._loader?.fullConfig()?.projects
 }
 
-function getBrowserNameFromProjects (projects, test) {
+/**
+ * Resolves the configured project by Playwright's unique ID or legacy index.
+ * @param {object[]} projects
+ * @param {object} test
+ */
+function getTestProject (projects, test) {
   if (!projects || !test) {
     return null
   }
   const { _projectIndex, _projectId: testProjectId } = test
 
   if (_projectIndex !== undefined) {
-    return projects[_projectIndex]?.name
+    return projects[_projectIndex]
   }
 
   return projects.find(({ __projectId, _id, name }) => {
@@ -584,7 +624,12 @@ function getBrowserNameFromProjects (projects, test) {
       return _id === testProjectId
     }
     return name === testProjectId
-  })?.name
+  })
+}
+
+function getBrowserNameFromProjects (projects, test) {
+  const project = getTestProject(projects, test)
+  return project && project.name
 }
 
 function formatTestHookError (error, hookType, isTimeout) {
@@ -638,8 +683,8 @@ function getTestByTestId (dispatcher, testId) {
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
-function testWillRetry (test, testStatus) {
-  return testStatus === 'fail' && test.results.length <= test.retries
+function testWillRetry (test, status, expectedStatus = test.expectedStatus) {
+  return status !== 'skipped' && status !== expectedStatus && test.results.length <= test.retries
 }
 
 function getFinalStatus ({
@@ -649,7 +694,6 @@ function getFinalStatus ({
   isAtrRetry,
   isEfdManagedTest,
   isAttemptToFix,
-  hasFailedAllRetries,
   hasFailedAttemptToFixRetries,
   hasPassedAnyEfdAttempt,
   testStatus,
@@ -661,7 +705,7 @@ function getFinalStatus ({
     return 'skip'
   }
   if (isAtrRetry) {
-    return hasFailedAllRetries ? 'fail' : 'pass'
+    return testStatus
   }
   if (isEfdManagedTest) {
     return hasPassedAnyEfdAttempt ? 'pass' : 'fail'
@@ -670,6 +714,17 @@ function getFinalStatus ({
     return hasFailedAttemptToFixRetries ? 'fail' : 'pass'
   }
   return testStatus
+}
+
+/**
+ * Reports whether another test in the serial group can trigger this test to run again.
+ * @param {object} test
+ */
+function isSerialTest (test) {
+  for (let suite = test.parent; suite; suite = suite.parent) {
+    if (suite._parallelMode === 'serial') return true
+  }
+  return false
 }
 
 function getTestFullname (test) {
@@ -756,7 +811,6 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
  *
  * @param {object} test
  * @param {string} testSuiteAbsolutePath
- * @returns {void}
  */
 function recordSkippedTestOptimizationExecution (test, testSuiteAbsolutePath) {
   if (recordedTestOptimizationExecutions.has(test) ||
@@ -819,6 +873,37 @@ function finishTestSuiteIfDone (testSuiteAbsolutePath, projects) {
   }
 }
 
+/**
+ * Checks whether a test inherits the retry limit assigned by Test Optimization.
+ * @param {object} test
+ * @param {object[]} projects
+ */
+function hasAutomaticRetries (test, projects) {
+  if (!automaticRetryProjects.has(getTestProject(projects, test))) return false
+  for (let suite = test.parent; suite; suite = suite.parent) {
+    if (suite._retries !== undefined) return false
+  }
+  return true
+}
+
+/**
+ * Records a completed test in its suite and removes it from pending executions.
+ * @param {object} test
+ * @param {string} testStatus
+ * @param {object} [error]
+ */
+function recordFinalTestStatus (test, testStatus, error) {
+  const testSuiteAbsolutePath = test._requireFile
+  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
+    testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
+  } else {
+    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+  }
+  if (error) addErrorToTestSuite(testSuiteAbsolutePath, error)
+  remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
+    .filter(currentTest => currentTest !== test)
+}
+
 function testEndHandler ({
   test,
   annotations,
@@ -827,6 +912,9 @@ function testEndHandler ({
   isTimeout,
   shouldCreateTestSpan,
   projects,
+  testDuration,
+  testResultStatus,
+  expectedStatus = test.expectedStatus,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -859,19 +947,23 @@ function testEndHandler ({
 
   const isEfdManagedTest = isTestEfdManaged(test)
   const testFqn = getTestFullyQualifiedName(test)
-  const testStatusKey = isEfdManagedTest ? getTestEfdKey(test) : testFqn
+  // Dynamic ATR budgets and retry status must be isolated per Playwright project.
+  const testStatusKey = (isEfdManagedTest || isDynamicAtrEnabled) ? getTestEfdKey(test) : testFqn
   const testStatuses = testsToTestStatuses.get(testStatusKey) || []
 
   if (testStatuses.length === 0) {
-    testsToTestStatuses.set(testStatusKey, [testStatus])
+    testsToTestStatuses.set(testStatusKey, testStatuses)
     if (test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test))) {
       newTestsWithDynamicNames.add(`${getTestSuitePath(test._requireFile, rootDir)} › ${getTestFullname(test)}`)
     }
-  } else {
-    testStatuses.push(testStatus)
+  }
+  testStatuses.push(testStatus)
+  if (testStatus === 'pass' || testStatus === 'fail') {
+    reportedTestExecutions.set(test, { status: testStatus, error })
   }
 
   const testEfdKey = getTestEfdKey(test)
+  const dynamicAtrTestKey = testEfdKey
   if (isEfdManagedTest && !test._ddIsEfdRetry && !efdRetryCountByTestKey.has(testEfdKey)) {
     const testResult = results.at(-1)
     const duration = testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime
@@ -883,6 +975,23 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+  if (
+    isDynamicAtrEnabled &&
+    isFlakyTestRetriesEnabled &&
+    !testProperties.attemptToFix &&
+    !test._ddIsEfdRetry &&
+    !isEfdManagedTest &&
+    hasAutomaticRetries(test, projects) &&
+    !dynamicAtrRetryCountByTestKey.has(dynamicAtrTestKey)
+  ) {
+    const testResult = results.at(-1)
+    const duration = testDuration ??
+      (testResult?.duration > 0 ? testResult.duration : performance.now() - test._ddStartTime)
+    const retryCount = getDynamicAtrRetryCount(duration, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets)
+    dynamicAtrRetryCountByTestKey.set(dynamicAtrTestKey, retryCount)
+    // Serial groups may skip this test before its first actual execution.
+    test.retries = (testResult?.retry ?? 0) + retryCount
+  }
   const hasRecordedTestOptimizationExecution = recordedTestOptimizationExecutions.has(test)
 
   if (!hasRecordedTestOptimizationExecution) {
@@ -935,34 +1044,40 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
-  // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  const willRetry = testWillRetry(test, testResultStatus, expectedStatus)
+
+  // ATR: use the effective native limit for tests with explicit Playwright retries.
+  const atrRetryCount = isDynamicAtrEnabled
+    ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey) ?? test.retries
+    : flakyTestRetriesCount
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
-    flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
-    testStatuses.length === flakyTestRetriesCount + 1 &&
+    atrRetryCount != null && atrRetryCount > 0 &&
+    !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }
 
-  const willRetry = testWillRetry(test, testStatus)
-
-  // this handles tests that do not go through the worker process (because they're skipped)
+  // Legacy Playwright also creates executed test spans in the main process.
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
     const testCtx = testToCtx.get(test)
+    const retryTestId = testStatus !== 'skip' && !isEfdManagedTest &&
+      !test._ddIsAttemptToFix && test.retries > 0
+      ? test.id ?? test._id
+      : undefined
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
     const finalStatus = getFinalStatus({
-      isFinalExecution: !willRetry,
+      isFinalExecution: retryTestId !== undefined || !willRetry,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry,
       isEfdManagedTest,
       isAttemptToFix: test._ddIsAttemptToFix,
-      hasFailedAllRetries: test._ddHasFailedAllRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       hasPassedAnyEfdAttempt: testStatuses.includes('pass'),
       testStatus,
@@ -988,28 +1103,15 @@ function testEndHandler ({
         isAtrRetry,
         isModified: test._ddIsModified,
         finalStatus,
+        retryTestId,
+        deferFinalStatus: willRetry,
         earlyFlakeAbortReason: efdSlowAbortedTests.has(testEfdKey) ? 'slow' : undefined,
         ...testCtx.currentStore,
       })
     }
   }
 
-  if (!willRetry) {
-    if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-      testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
-    } else {
-      testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
-    }
-
-    if (error) {
-      addErrorToTestSuite(testSuiteAbsolutePath, error)
-    }
-  }
-
-  if (!willRetry) {
-    remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
-      .filter(currentTest => currentTest !== test)
-  }
+  if (!willRetry) recordFinalTestStatus(test, testStatus, error)
 
   finishTestSuiteIfDone(testSuiteAbsolutePath, projects)
 }
@@ -1017,8 +1119,33 @@ function testEndHandler ({
 function dispatcherRunWrapper (run) {
   return function (...args) {
     remainingTestsByFile = getTestsBySuiteFromTestsById(this._testById)
+    for (const tests of Object.values(remainingTestsByFile)) {
+      if (tests.length > 0) {
+        hasTestsAssignedToShard = true
+        break
+      }
+    }
     return run.apply(this, args)
   }
+}
+
+function recordTestsBeforeSharding (testGroups) {
+  hasTestsBeforeSharding = testGroups.some(group => group.tests.length > 0)
+}
+
+function testGroupsHook (testGroupsPackage) {
+  const filterForShard = testGroupsPackage.filterForShard
+  const wrappedFilterForShard = function (...args) {
+    recordTestsBeforeSharding(args.at(-1))
+    return filterForShard.apply(this, args)
+  }
+
+  return new Proxy(testGroupsPackage, {
+    get (target, prop, receiver) {
+      if (prop === 'filterForShard') return wrappedFilterForShard
+      return Reflect.get(target, prop, receiver)
+    },
+  })
 }
 
 function deferEfdRetryGroups (testGroups) {
@@ -1056,6 +1183,13 @@ function deferEfdRetryGroups (testGroups) {
 
 function prepareDispatcherRun (dispatcher, args) {
   let testGroups = args[0]
+
+  for (const group of testGroups) {
+    if (group.tests.length > 0) {
+      hasTestsAssignedToShard = true
+      break
+    }
+  }
 
   // Filter out disabled tests from testGroups before they get scheduled,
   // unless they have attemptToFix (in which case they should still run and be retried)
@@ -1095,6 +1229,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
   const projects = getProjectsFromDispatcher(dispatcher)
   sessionProjects = projects
   const automaticFailureScreenshotsByTestId = new Map()
+  const failureVideosByTestId = new Map()
 
   if (disabledTestIds.size && !worker[kDdPlaywrightWorkerHostInstrumented] &&
       typeof worker.runTestGroup === 'function') {
@@ -1120,22 +1255,30 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     if (!test) return
 
     automaticFailureScreenshotsByTestId.clear()
+    failureVideosByTestId.clear()
     const browser = getBrowserNameFromProjects(projects, test)
     const shouldCreateTestSpan = test.expectedStatus === 'skipped'
     testBeginHandler(test, browser, shouldCreateTestSpan)
   })
   worker.on('attach', (attachment) => {
-    const { testId, _ddIsAutomaticFailureScreenshot } = attachment
-    if (!_ddIsAutomaticFailureScreenshot) return
-
-    let screenshots = automaticFailureScreenshotsByTestId.get(testId)
-    if (!screenshots) {
-      screenshots = []
-      automaticFailureScreenshotsByTestId.set(testId, screenshots)
+    const { testId, _ddIsAutomaticFailureScreenshot, _ddIsAutomaticFailureVideo } = attachment
+    if (_ddIsAutomaticFailureScreenshot) {
+      let screenshots = automaticFailureScreenshotsByTestId.get(testId)
+      if (!screenshots) {
+        screenshots = []
+        automaticFailureScreenshotsByTestId.set(testId, screenshots)
+      }
+      screenshots.push(attachment)
+    } else if (isFailureVideoUploadEnabled && _ddIsAutomaticFailureVideo) {
+      let videos = failureVideosByTestId.get(testId)
+      if (!videos) {
+        videos = []
+        failureVideosByTestId.set(testId, videos)
+      }
+      videos.push(attachment)
     }
-    screenshots.push(attachment)
   })
-  worker.on('testEnd', ({ testId, status, errors, annotations }) => {
+  worker.on('testEnd', ({ testId, status, errors, annotations, duration, expectedStatus }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
@@ -1154,6 +1297,9 @@ function onDispatcherCreateWorker (dispatcher, worker) {
         isTimeout,
         shouldCreateTestSpan,
         projects,
+        testDuration: duration,
+        testResultStatus: status,
+        expectedStatus,
       }
     )
     const testResult = test.results.at(-1)
@@ -1171,6 +1317,14 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       }
       worker[kDdPlaywrightFailureScreenshots] ??= []
       worker[kDdPlaywrightFailureScreenshots].push(screenshots)
+    }
+    if (isFailureVideoUploadEnabled &&
+        !shouldCreateTestSpan &&
+        !test._ddShouldSkipEfdRetry &&
+        !disabledTestIds.has(testId)) {
+      const videos = testStatus === 'fail' ? failureVideosByTestId.get(testId) : undefined
+      worker[kDdPlaywrightFailureVideos] ??= []
+      worker[kDdPlaywrightFailureVideos].push(videos)
     }
     const isAtrRetry = testResult?.retry > 0 &&
       isFlakyTestRetriesEnabled &&
@@ -1191,10 +1345,16 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     } else if (test._ddIsAttemptToFix) {
       isFinalExecution = !!(test._ddHasPassedAttemptToFixRetries || test._ddHasFailedAttemptToFixRetries)
     } else {
-      isFinalExecution = !testWillRetry(test, testStatus)
+      isFinalExecution = !testWillRetry(test, status, expectedStatus)
     }
 
+    const retryTestId = !isEfdManagedTest && !test._ddIsAttemptToFix && test.retries > 0 ? test.id : undefined
+    const deferFinalStatus = retryTestId !== undefined &&
+      (!isFinalExecution || (isSerialTest(test) && test.results.length <= test.retries))
+
     const ddProperties = {
+      _ddRetryTestId: retryTestId,
+      _ddDeferFinalStatus: deferFinalStatus,
       _ddIsDisabled: test._ddIsDisabled,
       _ddIsQuarantined: test._ddIsQuarantined,
       _ddIsAttemptToFix: test._ddIsAttemptToFix,
@@ -1245,6 +1405,7 @@ function dispatcherHook (dispatcherExport) {
             test,
             annotations: params.annotations,
             testStatus: STATUS_TO_TEST_STATUS[testResult.status],
+            testResultStatus: testResult.status,
             error: testResult.error,
             isTimeout,
             shouldCreateTestSpan: true,
@@ -1271,9 +1432,32 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    // A later run must not inherit ATR settings when configuration fails or the plugin is disabled.
+    isFlakyTestRetriesEnabled = false
+    flakyTestRetriesCount = 0
+    isDynamicAtrEnabled = false
+    dynamicAtrBuckets = undefined
+    if (!libraryConfigurationCh.hasSubscribers) {
+      // Instrumentation hooks still run when the plugin is disabled between runs.
+      isKnownTestsEnabled = false
+      isEarlyFlakeDetectionEnabled = false
+      isTestManagementTestsEnabled = false
+      isImpactedTestsEnabled = false
+      knownTests = {}
+      testManagementTests = {}
+      modifiedFiles = {}
+      return runAllTests.apply(this, arguments)
+    }
+
+    testsToTestStatuses.clear()
+    reportedTestExecutions = new WeakMap()
+    dynamicAtrRetryCountByTestKey.clear()
+    automaticRetryProjects.clear()
     reporterError = undefined
     hasReporterError = false
     playwrightRunSummary = undefined
+    hasTestsAssignedToShard = false
+    hasTestsBeforeSharding = false
     let restoreReporterConsoleError
     if (satisfies(playwrightVersion, '>=1.60.0') && config?.config) {
       const DatadogPlaywrightReporter = require('./playwright-reporter')
@@ -1283,9 +1467,13 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         config.config.reporter.unshift([require.resolve('./playwright-reporter')])
       }
     }
+    const runnerConfig = getPlaywrightConfig(this)
+    const playwrightConfig = config?.config || runnerConfig.config || runnerConfig
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
     const isFailureScreenshotEnabled = isFailureScreenshotCaptureEnabled(projects)
+    const isFailureVideoEnabled = isFailureVideoCaptureEnabled(projects)
+    const isFailureVideoUploadSupported = satisfies(playwrightVersion, MINIMUM_FAILURE_VIDEO_UPLOAD_VERSION_RANGE)
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
     testSessionStartCh.publish({
@@ -1293,6 +1481,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       frameworkVersion: playwrightVersion,
       rootDir,
       isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
     })
 
     try {
@@ -1307,6 +1497,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+        isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
+        dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
@@ -1319,7 +1511,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       log.error('Playwright session start error', e)
     }
 
-    testSessionConfigurationCh.publish({ isFailureScreenshotEnabled })
+    testSessionConfigurationCh.publish({
+      isFailureScreenshotEnabled,
+      isFailureVideoEnabled,
+      isFailureVideoUploadSupported,
+    })
 
     const isTestOptimizationSupported = satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)
     const shouldGetKnownTests = isKnownTestsEnabled && isTestOptimizationSupported
@@ -1389,11 +1585,23 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // ATR and `--retries` are now compatible with Test Management.
     // Test Management tests have their retries set to 0 at the test level,
     // preventing them from being retried by ATR or `--retries`.
-    const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    const shouldSetATRRetries = isFlakyTestRetriesEnabled &&
+      (isDynamicAtrEnabled || flakyTestRetriesCount > 0)
+    const projectsWithAutomaticRetries = []
     if (shouldSetATRRetries) {
+      // Dynamic ATR starts at the maximum budget, then narrows each test after
+      // its initial duration is known.
+      const maximumDynamicAtrRetries = dynamicAtrBuckets
+        ? Math.max(...dynamicAtrBuckets)
+        : earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+      const atrRetries = isDynamicAtrEnabled
+        ? Math.max(1, maximumDynamicAtrRetries)
+        : flakyTestRetriesCount
       for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
-          project.retries = flakyTestRetriesCount
+          projectsWithAutomaticRetries.push(project)
+          automaticRetryProjects.add(project)
+          project.retries = atrRetries
         }
       }
     }
@@ -1417,6 +1625,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       hasReporterError = false
       throw error
     } finally {
+      for (const project of projectsWithAutomaticRetries) {
+        project.retries = 0
+      }
       restoreReporterConsoleError?.()
     }
 
@@ -1428,6 +1639,14 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
+        const lastExecution = reportedTestExecutions.get(test)
+        if (lastExecution) {
+          // Preserve a reported execution whose retry was canceled. Playwright can
+          // also synthesize failed results after hook errors without emitting testEnd.
+          recordFinalTestStatus(test, lastExecution.status, lastExecution.error)
+          finishTestSuiteIfDone(test._requireFile, projects)
+          continue
+        }
         const alreadyReported = testsReportedInGenerateSummary.has(test)
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, !alreadyReported)
@@ -1435,6 +1654,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           test,
           annotations: [],
           testStatus: 'skip',
+          testResultStatus: 'skipped',
           error: null,
           isTimeout: false,
           shouldCreateTestSpan: !alreadyReported,
@@ -1462,8 +1682,14 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
+    const isExpectedEmptyShard = finalStatus === 'pass' &&
+      Boolean(playwrightConfig.shard) &&
+      hasTestsBeforeSharding &&
+      !hasTestsAssignedToShard &&
+      testsReportedInGenerateSummary.size === 0
     await getChannelPromise(testSessionFinishCh, {
-      status: finalStatus,
+      status: isExpectedEmptyShard ? 'skip' : finalStatus,
+      isExpectedEmptyShard,
       error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
@@ -1479,6 +1705,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     playwrightRunSummary = undefined
     recordedTestOptimizationExecutions = new Set()
     testsReportedInGenerateSummary = new Set()
+    hasTestsAssignedToShard = false
+    hasTestsBeforeSharding = false
     efdManagedTestKeys.clear()
     efdRetryCountByTestKey.clear()
     efdRetryCountRequestsByTestKey.clear()
@@ -1635,6 +1863,12 @@ dispatcherCreateWorkerCh.subscribe({
   },
 })
 
+filterForShardCh.subscribe({
+  start (ctx) {
+    recordTestsBeforeSharding(ctx.arguments.at(-1))
+  },
+})
+
 processHostStartRunnerCh.subscribe({
   start (ctx) {
     prepareProcessHostStartRunner(ctx.self)
@@ -1655,6 +1889,9 @@ createRootSuiteCh.subscribe({
 
 pageGotoCh.subscribe({
   asyncEnd (ctx) {
+    // Playwright library consumers such as Vitest have no Playwright test span and may navigate during page startup.
+    if (!isPlaywrightWorker) return
+
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
     const rumDetectionPromise = handlePageGoto(ctx.self)
     ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
@@ -1673,7 +1910,6 @@ reporterRunSummaryCh.subscribe((runSummary) => {
  * Records a reporter failure even when the reporter throws a falsy value.
  *
  * @param {unknown} error
- * @returns {void}
  */
 function recordReporterError (error) {
   if (hasReporterError) return
@@ -1695,7 +1931,6 @@ function recordReporterError (error) {
  * Records a path created by Playwright's automatic screenshot recorder.
  *
  * @param {object} ctx - Orchestrion context
- * @returns {void}
  */
 function recordAutomaticFailureScreenshotPath (ctx) {
   if (isFailureScreenshotUploadEnabled &&
@@ -1705,8 +1940,32 @@ function recordAutomaticFailureScreenshotPath (ctx) {
   }
 }
 
+/**
+ * Records only the destination used by Playwright's automatic video recorder.
+ *
+ * @param {object} ctx - Orchestrion context
+ */
+function recordAutomaticFailureVideoPath (ctx) {
+  const video = ctx.arguments?.[0]
+  if (!isFailureVideoUploadEnabled || typeof video?.saveAs !== 'function') return
+
+  const saveAs = video.saveAs
+  ctx.arguments[0] = new Proxy(video, {
+    get (target, property, receiver) {
+      if (property !== 'saveAs') return Reflect.get(target, property, receiver)
+      return function (filePath) {
+        if (typeof filePath === 'string' && PLAYWRIGHT_FAILURE_VIDEO_PATH_RE.test(filePath)) {
+          automaticFailureVideoPaths.add(filePath)
+        }
+        return Reflect.apply(saveAs, target, arguments)
+      }
+    },
+  })
+}
+
 artifactsRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
 snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreenshotPath })
+saveAutomaticVideoCh.subscribe({ start: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
   addHook({
@@ -1781,6 +2040,12 @@ addHook({
   file: 'lib/runner/dispatcher.js',
   versions: ['>=1.38.0 <1.60.0'],
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
+
+addHook({
+  name: 'playwright',
+  file: 'lib/runner/testGroups.js',
+  versions: ['>=1.38.0 <1.60.0'],
+}, testGroupsHook)
 
 addHook({
   name: 'playwright',
@@ -2069,6 +2334,7 @@ function finishProcessHostStartRunner (processHost) {
       workerReportCh.publish({
         serializedTraces: message[1],
         screenshots: processHost[kDdPlaywrightFailureScreenshots]?.shift(),
+        videos: processHost[kDdPlaywrightFailureVideos]?.shift(),
       })
     } else if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TELEMETRY_PAYLOAD_CODE) {
       workerReportTelemetryCh.publish(message[1])
@@ -2373,14 +2639,16 @@ function instrumentWorkerMainMethods (workerMain) {
     })
     await Promise.race([ddPropertiesPromise, ddPropertiesTimeoutPromise])
 
+    const retryTestId = test._ddRetryTestId
     const finalStatus = getFinalStatus({
-      isFinalExecution: test._ddIsFinalExecution,
+      // Retain a candidate final status while a native retry is possible. The main
+      // process removes it when another execution arrives, or keeps it if retries stop.
+      isFinalExecution: retryTestId !== undefined || test._ddIsFinalExecution,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry: test._ddIsAtrRetry,
       isEfdManagedTest: test._ddIsEfdManagedTest,
       isAttemptToFix: test._ddIsAttemptToFix,
-      hasFailedAllRetries: test._ddHasFailedAllRetries,
       hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
       hasPassedAnyEfdAttempt: test._ddHasPassedAnyEfdAttempt,
       testStatus: STATUS_TO_TEST_STATUS[status],
@@ -2388,6 +2656,8 @@ function instrumentWorkerMainMethods (workerMain) {
 
     await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
+      retryTestId,
+      deferFinalStatus: test._ddDeferFinalStatus,
       steps: steps.filter(step => step.testId === testId),
       error,
       extraTags: annotationTags,
@@ -2417,6 +2687,7 @@ function instrumentWorkerMainMethods (workerMain) {
   shimmer.wrap(workerMain, 'dispatchEvent', dispatchEvent => function (event, payload) {
     if (event === 'testBegin') {
       automaticFailureScreenshotPaths.clear()
+      automaticFailureVideoPaths.clear()
     } else if (event === 'stepBegin') {
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
@@ -2433,8 +2704,12 @@ function instrumentWorkerMainMethods (workerMain) {
         duration: payload.wallTime - stepInfo.startTime,
         error: payload.error,
       })
-    } else if (event === 'attach' && isAutomaticFailureScreenshotAttachment(payload)) {
-      payload._ddIsAutomaticFailureScreenshot = true
+    } else if (event === 'attach') {
+      if (isAutomaticFailureScreenshotAttachment(payload)) {
+        payload._ddIsAutomaticFailureScreenshot = true
+      } else if (isAutomaticFailureVideoAttachment(payload)) {
+        payload._ddIsAutomaticFailureVideo = true
+      }
     }
     return dispatchEvent.apply(this, arguments)
   })

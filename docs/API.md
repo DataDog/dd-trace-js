@@ -6,6 +6,24 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
+<h2 id="agentless-mode">Agentless mode</h2>
+
+Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
+Agentless mode disables features that require an Agent.
+
+Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+Agentless crash tracking requires this key and sends crash data directly to Datadog.
+
+Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
+`DD_METRICS_OTEL_ENABLED` settings still apply.
+
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. During Test Optimization, it also submits
+best-effort formatted `console.warn` and `console.error` calls made with an active test, suite, or session span. Set
+`DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+`DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
@@ -118,6 +136,7 @@ tracer.use('openai', {
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -126,6 +145,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -204,6 +224,7 @@ tracer.use('openai', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [playwright](./interfaces/export_.plugins.playwright.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
@@ -212,6 +233,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
@@ -501,7 +523,8 @@ dd-trace-js includes experimental support for OpenTelemetry metrics, designed as
 require('dd-trace').init()
 const { metrics } = require('@opentelemetry/api')
 
-const meter = metrics.getMeter('my-service', '1.0.0')
+const meterProvider = metrics.getMeterProvider()
+const meter = meterProvider.getMeter('my-service', '1.0.0')
 
 // Counter - monotonically increasing values
 const requestCounter = meter.createCounter('http.requests', {
@@ -536,6 +559,11 @@ cpuGauge.addCallback((result) => {
 })
 ```
 
+Short-lived processes can call `meterProvider.shutdown(callback)` after the final measurement to export once more and
+stop collection. The optional callback receives `null` on success or an error on failure. This method isn't part of the
+OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
+`import('dd-trace').opentelemetry.MeterProvider` to use it.
+
 #### Supported Configuration
 
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
@@ -568,6 +596,18 @@ Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to ove
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=true` to enable dynamic Auto Test Retries budgets based on test
+duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
+determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
+and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
+Requires Auto Test Retries to be enabled by the backend.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
+overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets
+respectively). When unset, empty, or invalid, the Early Flake Detection retry settings from the backend are
+used with a minimum of one ATR retry. Local EFD retry-count overrides do not affect dynamic ATR.
+Only takes effect when `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED` is enabled.
 
 Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests

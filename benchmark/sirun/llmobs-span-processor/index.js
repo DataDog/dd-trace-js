@@ -1,7 +1,8 @@
 'use strict'
 
-const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
+// eslint-disable-next-line import/order -- The startup guard must run before every other require.
+const assert = require('node:assert/strict')
 
 globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 

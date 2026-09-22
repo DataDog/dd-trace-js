@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false'
   # TODO: remove this once we have stable tests
   MOCHA_OPTIONS: --retries 2
 
@@ -22,7 +23,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/test-environment
@@ -157,7 +158,8 @@ jobs:
           - playwright-reporting
           - playwright-efd
           - playwright-atr
-          - playwright-test-management
+          - playwright-test-management-attempt-to-fix
+          - playwright-test-management-disabled-quarantine
           - playwright-active-test-span
           - playwright-impacted-tests
           - playwright-final-status
@@ -232,12 +234,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Keep the regular and Test Optimization suites in separate lanes; together they exceed the CI time budget.
         include:
           - node-version: oldest
             webdriverio-version: oldest
+            spec: webdriverio
           - node-version: latest
             webdriverio-version: latest
-    name: integration-webdriverio (${{ matrix.webdriverio-version }}, node-${{ matrix.node-version }})
+            spec: webdriverio
+          - node-version: oldest
+            webdriverio-version: oldest
+            spec: webdriverio.test-optimization
+          - node-version: latest
+            webdriverio-version: latest
+            spec: webdriverio.test-optimization
+    name: >-
+      integration-webdriverio (${{ matrix.webdriverio-version }},
+      node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -246,11 +259,12 @@ jobs:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: npm run test:instrumentations:ci
+        if: matrix.spec == 'webdriverio'
         env:
           PLUGINS: webdriverio
       - uses: ./.github/actions/upload-junit-artifacts
         id: webdriverio_instrumentation_upload
-        if: "!cancelled()"
+        if: "!cancelled() && matrix.spec == 'webdriverio'"
         with:
           id: ${{ github.job }}-${{ strategy.job-index }}-instrumentation
       - name: Clear uploaded instrumentation JUnit reports
@@ -259,10 +273,12 @@ jobs:
       - id: webdriverio_integration
         run: npm run test:integration:webdriverio:coverage
         env:
+          SPEC: ${{ matrix.spec }}
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/coverage
         with:
-          flags: test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
+          flags: >-
+            test-optimization-webdriverio-${{ matrix.node-version }}-${{ matrix.webdriverio-version }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled() && steps.webdriverio_integration.outcome != 'skipped'"
         with:
@@ -523,7 +539,27 @@ jobs:
           - vitest.advanced
           - vitest.msw
           - vitest.no-worker-init
-    name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})
+        # TIA is the only Vitest spec whose two supported versions exceed the CI time budget when run together.
+        vitest-version: [all]
+        exclude:
+          - spec: vitest.tia
+            vitest-version: all
+        include:
+          - version: oldest
+            spec: vitest.tia
+            vitest-version: oldest
+          - version: oldest
+            spec: vitest.tia
+            vitest-version: latest
+          - version: latest
+            spec: vitest.tia
+            vitest-version: oldest
+          - version: latest
+            spec: vitest.tia
+            vitest-version: latest
+    name: >-
+      integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }},
+      vitest-${{ matrix.vitest-version }})
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
@@ -541,23 +577,35 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           SPEC: ${{ matrix.spec }}
+          VITEST_VERSION: ${{ matrix.vitest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
 
   integration-vitest-browser:
-    needs: playwright-image
+    needs: [playwright-image, selenium-image]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     strategy:
       fail-fast: false
       matrix:
-        version: [oldest, latest]
-    name: integration-vitest-browser (node-${{ matrix.version }})
+        include:
+          - version: oldest
+            browser-provider: playwright
+            container-image: ${{ fromJson(needs.playwright-image.outputs.images).oldest.latest }}
+          - version: latest
+            browser-provider: playwright
+            container-image: ${{ fromJson(needs.playwright-image.outputs.images).latest.latest }}
+          - version: latest
+            browser-provider: webdriverio
+            container-image: ${{ needs.selenium-image.outputs.image }}
+            browser-binary: /usr/bin/google-chrome
+            browser-driver-binary: /usr/bin/chromedriver
+    name: integration-vitest-browser (${{ matrix.browser-provider }}, node-${{ matrix.version }})
     container:
-      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.version].latest }}
+      image: ${{ matrix.container-image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -588,6 +636,9 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
           SPEC: vitest.browser
+          VITEST_BROWSER_PROVIDER: ${{ matrix.browser-provider }}
+          VITEST_BROWSER_BINARY: ${{ matrix.browser-binary }}
+          VITEST_BROWSER_DRIVER_BINARY: ${{ matrix.browser-driver-binary }}
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-browser-${{ matrix.version }}

@@ -63,6 +63,7 @@ const {
   TEST_SUITE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
+const { describeDynamicAtr } = require('./dynamic-atr')
 
 const DEFAULT_NODE_OPTIONS = '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init'
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
@@ -367,7 +368,7 @@ describe('vitest no-worker init instrumentation selection', () => {
       configureNoWorkerReporter(ctx)
 
       assert.strictEqual(ctx.config.includeTaskLocation, true)
-      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-setup.mjs')
+      assert.strictEqual(path.basename(ctx.config.setupFiles[0]), 'vitest-no-worker-init-runner-setup.mjs')
       assert.deepStrictEqual(ctx.config.setupFiles.slice(1), ['/repo/user-setup.mjs'])
     })
 
@@ -419,8 +420,10 @@ describe('vitest no-worker init instrumentation selection', () => {
       accessPlugin.configResolved(resolvedConfig)
 
       assert.strictEqual(resolvedConfig.server.fs.allow[0], '/repo')
-      assert.strictEqual(resolvedConfig.server.fs.allow.length, 2)
+      assert.strictEqual(resolvedConfig.server.fs.allow.length, 4)
       assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[1]), 'vitest-no-worker-init-setup.mjs')
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[2]), 'vitest-no-worker-init-runner-setup.mjs')
+      assert.strictEqual(path.basename(resolvedConfig.server.fs.allow[3]), 'vitest-no-worker-init-v5-setup.mjs')
     })
 
     it('does not install the Vite access plugin for Node test projects', () => {
@@ -875,6 +878,18 @@ SUPPORTED_VERSIONS.forEach((version) => {
 
       const [exitCode] = await once(childProcess, 'exit')
       return exitCode
+    }
+
+    if (version === 'latest') {
+      describeDynamicAtr({
+        mode: 'no-worker',
+        getContext: () => ({
+          cwd,
+          receiver,
+          env: { [VITEST_NO_WORKER_INIT_REQUEST_ENV]: 'true', POOL_CONFIG: 'forks' },
+          onChildProcess: child => { childProcess = child },
+        }),
+      })
     }
 
     for (const poolConfig of ['forks', 'threads']) {
