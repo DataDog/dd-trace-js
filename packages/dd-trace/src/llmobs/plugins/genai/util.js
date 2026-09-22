@@ -147,7 +147,7 @@ function extractMetadata (config) {
   let metadata
   for (const [metadataKey, configKey] of Object.entries(fieldMap)) {
     const value = config[configKey]
-    if (value !== undefined && value !== null) {
+    if (value != null) {
       metadata ??= {}
       metadata[metadataKey] = value
     }

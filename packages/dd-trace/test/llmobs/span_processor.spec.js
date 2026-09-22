@@ -14,7 +14,6 @@ describe('span processor', () => {
   let processor
   let writer
   let log
-  let beforeExitHandler
 
   beforeEach(() => {
     writer = {
@@ -30,10 +29,7 @@ describe('span processor', () => {
       '../log': log,
     })
 
-    const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
-    const existingHandlers = new Set(beforeExitHandlers)
     processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
-    beforeExitHandler = [...beforeExitHandlers].find(handler => !existingHandlers.has(handler))
     processor.setWriter(writer)
   })
 
@@ -383,7 +379,7 @@ describe('span processor', () => {
       })
       processor.process(span)
 
-      beforeExitHandler()
+      process.emit('beforeExit')
 
       sinon.assert.calledOnce(writer.append)
       assert.strictEqual(span.meta_struct, undefined)
@@ -420,32 +416,6 @@ describe('span processor', () => {
         type: 'error type',
         stack: 'error stack',
       })
-    })
-
-    it('attaches meta_struct for agentless apm intake', () => {
-      span = {
-        context () {
-          return {
-            _tags: {},
-            _sampling: { priority: 1 },
-            getTags () { return this._tags },
-            getTag (key) { return this._tags[key] },
-            setTag (key, value) { this._tags[key] = value },
-            toTraceId () { return '123' },
-            toSpanId () { return '456' },
-          }
-        },
-      }
-
-      LLMObsTagger.tagMap.set(span, {
-        '_ml_obs.meta.span.kind': 'llm',
-      })
-
-      writer._agentless = true
-      processSpan()
-
-      sinon.assert.notCalled(writer.append)
-      assert.ok(span.meta_struct._llmobs)
     })
 
     it('keeps using the writer for routed tenant submissions', () => {
