@@ -18,6 +18,16 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - name: Verify merge queue event
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          INPUT_PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+        run: |
+          test "$EVENT_NAME" = pull_request
+          test "$EVENT_ACTION" = enqueued
+          test "$EVENT_PULL_REQUEST_NUMBER" = "$INPUT_PULL_REQUEST_NUMBER"
       - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
