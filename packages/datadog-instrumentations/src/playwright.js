@@ -125,6 +125,7 @@ let modifiedFiles = {}
 let playwrightRunSummary
 let recordedTestOptimizationExecutions = new Set()
 let testsReportedInGenerateSummary = new Set()
+let reportedTestExecutions = new WeakMap()
 let hasTestsAssignedToShard = false
 let hasTestsBeforeSharding = false
 const newTestsWithDynamicNames = new Set()
@@ -957,6 +958,9 @@ function testEndHandler ({
     }
   }
   testStatuses.push(testStatus)
+  if (testStatus === 'pass' || testStatus === 'fail') {
+    reportedTestExecutions.set(test, { status: testStatus, error })
+  }
 
   const testEfdKey = getTestEfdKey(test)
   const dynamicAtrTestKey = testEfdKey
@@ -1446,6 +1450,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     }
 
     testsToTestStatuses.clear()
+    reportedTestExecutions = new WeakMap()
     dynamicAtrRetryCountByTestKey.clear()
     automaticRetryProjects.clear()
     reporterError = undefined
@@ -1634,12 +1639,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
-        const lastExecution = test.results.findLast(result =>
-          result.status === 'passed' || result.status === 'failed' || result.status === 'timedOut')
+        const lastExecution = reportedTestExecutions.get(test)
         if (lastExecution) {
-          // Fail-fast can cancel the expected retry. Its retained worker trace is
-          // the final execution, so do not also synthesize a skipped test.
-          recordFinalTestStatus(test, STATUS_TO_TEST_STATUS[lastExecution.status], lastExecution.error)
+          // Preserve a reported execution whose retry was canceled. Playwright can
+          // also synthesize failed results after hook errors without emitting testEnd.
+          recordFinalTestStatus(test, lastExecution.status, lastExecution.error)
           finishTestSuiteIfDone(test._requireFile, projects)
           continue
         }
