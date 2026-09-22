@@ -705,6 +705,17 @@ function getFinalStatus ({
   return testStatus
 }
 
+/**
+ * Identifies serial tests whose native retries can be triggered by another test in the group.
+ * @param {object} test
+ */
+function getSerialTestId (test) {
+  if (isTestEfdManaged(test) || test._ddIsAttemptToFix) return
+  for (let suite = test.parent; suite; suite = suite.parent) {
+    if (suite._parallelMode === 'serial') return test.id
+  }
+}
+
 function getTestFullname (test) {
   let parent = test.parent
   const names = [test.title]
@@ -862,6 +873,24 @@ function hasAutomaticRetries (test, projects) {
     if (suite._retries !== undefined) return false
   }
   return true
+}
+
+/**
+ * Records a completed test in its suite and removes it from pending executions.
+ * @param {object} test
+ * @param {string} testStatus
+ * @param {object} [error]
+ */
+function recordFinalTestStatus (test, testStatus, error) {
+  const testSuiteAbsolutePath = test._requireFile
+  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
+    testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
+  } else {
+    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+  }
+  if (error) addErrorToTestSuite(testSuiteAbsolutePath, error)
+  remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
+    .filter(currentTest => currentTest !== test)
 }
 
 function testEndHandler ({
@@ -1062,22 +1091,7 @@ function testEndHandler ({
     }
   }
 
-  if (!willRetry) {
-    if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-      testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
-    } else {
-      testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
-    }
-
-    if (error) {
-      addErrorToTestSuite(testSuiteAbsolutePath, error)
-    }
-  }
-
-  if (!willRetry) {
-    remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
-      .filter(currentTest => currentTest !== test)
-  }
+  if (!willRetry) recordFinalTestStatus(test, testStatus, error)
 
   finishTestSuiteIfDone(testSuiteAbsolutePath, projects)
 }
@@ -1598,6 +1612,15 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
       for (const test of tests) {
+        const lastExecution = getSerialTestId(test) && test.results.findLast(result =>
+          result.status === 'passed' || result.status === 'failed' || result.status === 'timedOut')
+        if (lastExecution) {
+          // Fail-fast can cancel the expected retry. Its retained worker trace is
+          // the final execution, so do not also synthesize a skipped test.
+          recordFinalTestStatus(test, STATUS_TO_TEST_STATUS[lastExecution.status], lastExecution.error)
+          finishTestSuiteIfDone(test._requireFile, projects)
+          continue
+        }
         const alreadyReported = testsReportedInGenerateSummary.has(test)
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, !alreadyReported)
@@ -2590,8 +2613,11 @@ function instrumentWorkerMainMethods (workerMain) {
     })
     await Promise.race([ddPropertiesPromise, ddPropertiesTimeoutPromise])
 
+    const serialTestId = getSerialTestId(test)
     const finalStatus = getFinalStatus({
-      isFinalExecution: test._ddIsFinalExecution,
+      // A passing serial test can run again after a later test fails. The main
+      // process retains its last execution and decides finality once the run ends.
+      isFinalExecution: serialTestId !== undefined || test._ddIsFinalExecution,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry: test._ddIsAtrRetry,
@@ -2604,6 +2630,7 @@ function instrumentWorkerMainMethods (workerMain) {
 
     await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
+      serialTestId,
       steps: steps.filter(step => step.testId === testId),
       error,
       extraTags: annotationTags,

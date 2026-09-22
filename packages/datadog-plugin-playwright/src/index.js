@@ -72,6 +72,7 @@ const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
 const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
 const EMPTY_SHARD_REASON = 'zero_test_shard'
+const SERIAL_TEST_ID = '_dd.playwright.serial_test_id'
 const noop = () => {}
 
 /**
@@ -103,6 +104,7 @@ class PlaywrightPlugin extends CiPlugin {
   #isFinalizingAfterError = false
   #finishPendingTestFinishes
   #pendingTestFinishCallbacks = new Map()
+  #pendingSerialTestFinishes = new Map()
 
   constructor (...args) {
     super(...args)
@@ -187,6 +189,9 @@ class PlaywrightPlugin extends CiPlugin {
       error,
       onDone,
     }) => {
+      for (const finish of this.#pendingSerialTestFinishes.values()) finish(true)
+      this.#pendingSerialTestFinishes.clear()
+
       if (error) {
         this.#isFinalizingAfterError = true
         for (const testSuiteSpan of this._testSuiteSpansByTestSuiteAbsolutePath.values()) {
@@ -383,10 +388,28 @@ class PlaywrightPlugin extends CiPlugin {
         formattedTraces.push(formattedTrace)
       }
 
+      const serialTestId = formattedTestSpan?.meta[SERIAL_TEST_ID]
+      if (serialTestId !== undefined) delete formattedTestSpan.meta[SERIAL_TEST_ID]
+      let readyToExport = false
+      let isFinalExecution
       const exportTraces = () => {
+        readyToExport = true
+        if (serialTestId !== undefined && isFinalExecution === undefined) return
         for (const trace of formattedTraces) {
           this.tracer._exporter.export(trace)
         }
+      }
+
+      if (serialTestId !== undefined) {
+        // Keep one execution per serial test. Media uploads may finish before or
+        // after the next retry arrives, so finality and upload readiness are separate.
+        const finishPrevious = this.#pendingSerialTestFinishes.get(serialTestId)
+        finishPrevious?.(false)
+        this.#pendingSerialTestFinishes.set(serialTestId, (isFinal) => {
+          isFinalExecution = isFinal
+          if (!isFinal) delete formattedTestSpan.meta[TEST_FINAL_STATUS]
+          if (readyToExport) exportTraces()
+        })
       }
 
       if (!formattedTestSpan || (!screenshots && !videos) || this.#isFinalizingAfterError) {
@@ -512,6 +535,7 @@ class PlaywrightPlugin extends CiPlugin {
       isAtrRetry,
       isModified,
       finalStatus,
+      serialTestId,
       earlyFlakeAbortReason,
       onDone,
     }) => {
@@ -578,6 +602,10 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (serialTestId !== undefined) {
+        // This identifier is removed by the main process before exporting the trace.
+        span.setTag(SERIAL_TEST_ID, serialTestId)
       }
       if (earlyFlakeAbortReason) {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)

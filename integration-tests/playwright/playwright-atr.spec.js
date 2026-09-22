@@ -16,6 +16,8 @@ const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
   TEST_FINAL_STATUS,
+  TEST_BROWSER_NAME,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_NAME,
   TEST_IS_NEW,
   TEST_HAS_DYNAMIC_NAME,
@@ -186,6 +188,68 @@ versions.forEach((version) => {
           })
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
           assert.strictEqual(exitCode, outcome === 'fails' ? 0 : 1)
+        })
+      }
+
+      for (const [scenario, counts, finalStatuses, args] of [
+        ['different-budgets', [2, 4], ['pass', 'fail'], ''],
+        ['earlier-fails-on-retry', [2, 3], ['fail', 'fail'], ''],
+        ['later-recovers', [2, 2], ['pass', 'pass'], ''],
+        ['all-pass', [1, 1], ['pass', 'pass'], ''],
+        // Playwright 1.38 counts failed attempts before retries when enforcing maxFailures.
+        ['fail-fast', version === oldest ? [1, 1] : [2, 4], ['pass', 'fail'], '--max-failures=1'],
+        ['native-retries', [2, 2], ['pass', 'fail'], '--retries=1'],
+        ['two-projects', [2, 4], ['pass', 'fail'], ''],
+        ['screenshots', [2, 4], ['pass', 'fail'], ''],
+      ]) {
+        it(`finalizes serial ATR executions once for ${scenario}`, async (receiver, run) => {
+          if (scenario === 'screenshots') receiver.setMediaResponseDelay(1500)
+          receiver.setSettings({ flaky_test_retries_enabled: true })
+          let output = ''
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url === '/api/v2/citestcycle',
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              const projects = scenario === 'two-projects' ? ['chromium', 'second-chromium'] : ['chromium']
+              assert.ok(tests.every(test => test.meta['_dd.playwright.serial_test_id'] === undefined))
+              for (const project of projects) {
+                for (const [index, name] of ['earlier short test', 'later slow test'].entries()) {
+                  const attempts = tests.filter(test => test.meta[TEST_NAME] === `different budgets ${name}` &&
+                    test.meta[TEST_BROWSER_NAME] === project)
+                  const executions = attempts.filter(test => test.meta[TEST_STATUS] !== 'skip')
+                  assert.strictEqual(executions.length, counts[index], name)
+                  const finalExecutions = attempts.filter(test => test.meta[TEST_FINAL_STATUS] !== undefined)
+                  assert.strictEqual(finalExecutions.length, 1, name)
+                  assert.strictEqual(executions.at(-1).meta[TEST_FINAL_STATUS], finalStatuses[index], name)
+                  if (scenario === 'screenshots' && index === 1) {
+                    assert.ok(executions.every(test => test.meta[TEST_FAILURE_SCREENSHOT_UPLOADED] === 'true'))
+                  }
+                }
+              }
+            }, 30000).catch(error => {
+            error.message += `\nPlaywright output:\n${output}`
+            throw error
+          })
+          const proc = run(`./node_modules/.bin/playwright test -c playwright.config.js ${args}`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-dynamic-atr-serial',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+              PLAYWRIGHT_SERIAL_SCENARIO: scenario,
+              ADD_DUPLICATE_PLAYWRIGHT_PROJECT: scenario === 'two-projects' ? '1' : '',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(scenario === 'screenshots'),
+              PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: scenario === 'screenshots' ? 'only-on-failure' : 'off',
+            },
+          })
+          proc.stdout?.on('data', chunk => { output += chunk.toString() })
+          proc.stderr?.on('data', chunk => { output += chunk.toString() })
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+          // Playwright 1.38 classifies a failure with a skipped retry as flaky, so this run succeeds.
+          const isOldSerialFlaky = version === oldest && scenario === 'earlier-fails-on-retry'
+          assert.strictEqual(exitCode, finalStatuses.includes('fail') && !isOldSerialFlaky ? 1 : 0, output)
         })
       }
 
