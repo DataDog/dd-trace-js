@@ -22,6 +22,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
 const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
@@ -4089,6 +4090,49 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
+      it('should default dynamic ATR configuration in the testOptimization namespace', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, false)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, undefined)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED'), false)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS'), false)
+      })
+      for (const [value, expected] of [['true', true], ['false', false], ['invalid', false]]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=${value}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = value
+          const config = getConfig(options)
+          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, expected)
+        })
+      }
+      for (const [value, parsed, expected] of [
+        ['1, 2,3,4,20', ['1', '2', '3', '4', '20'], [1, 2, 3, 4, 20]],
+        ['', [], null],
+        ['1,invalid,3', ['1', 'invalid', '3'], null],
+      ]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS=${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          // Preserve positions until ATR validates the complete list.
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
+          assert.deepStrictEqual(
+            getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), expected
+          )
+        })
+      }
+      for (const [value, parsed] of [
+        ['1,2,,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',1,2,3,4,5', ['', '1', '2', '3', '4', '5']],
+        ['1,2,3,4,5,', ['1', '2', '3', '4', '5', '']],
+        ['1,2, ,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',,,,,', ['', '', '', '', '', '']],
+      ]) {
+        it(`should reject empty dynamic ATR bucket entries in ${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
+          assert.strictEqual(getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), null)
+        })
+      }
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true)
