@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { createServer } = require('node:http')
 const satisfies = require('semifies')
 
 const {
@@ -195,49 +194,32 @@ versions.forEach((version) => {
       for (const retryMode of ['disabled', 'suite-zero', 'flat-zero']) {
         it(`exports serial tests before session end with ${retryMode} retries`, async (receiver, run) => {
           receiver.setSettings({ flaky_test_retries_enabled: retryMode !== 'disabled' })
-          let traceReceived = false
-          let waitingResponse
-          const server = createServer((req, res) => {
-            if (traceReceived) res.end()
-            else waitingResponse = res
+          receiver.setInfoResponse({ traceReceived: false })
+          const traceReceived = receiver.payloadReceived(({ url, payload }) =>
+            url === '/api/v2/citestcycle' && payload.events.some(event =>
+              event.type === 'test' && event.content.meta[TEST_NAME] === 'exports completed test'),
+          30000).then(() => receiver.setInfoResponse({ traceReceived: true }))
+          const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-serial-no-retries',
+              TRACE_RECEIVED_URL: `http://localhost:${receiver.port}/info`,
+              PLAYWRIGHT_SUITE_RETRIES: retryMode === 'suite-zero' ? '0' : '',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: retryMode === 'flat-zero' ? '0' : '1',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(retryMode !== 'flat-zero'),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+            },
           })
-          const onPayload = ({ url, payload }) => {
-            if (url !== '/api/v2/citestcycle') return
-            if (payload.events.some(event => event.type === 'test' &&
-              event.content.meta[TEST_NAME] === 'exports completed test')) {
-              traceReceived = true
-              waitingResponse?.end()
-            }
-          }
-          receiver.on('message', onPayload)
-          await new Promise(resolve => server.listen(0, resolve))
-          try {
-            const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: './ci-visibility/playwright-serial-no-retries',
-                TRACE_RECEIVED_URL: `http://localhost:${server.address().port}`,
-                PLAYWRIGHT_SUITE_RETRIES: retryMode === 'suite-zero' ? '0' : '',
-                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: retryMode === 'flat-zero' ? '0' : '1',
-                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(retryMode !== 'flat-zero'),
-                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
-              },
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+              assert.ok(tests.every(test => test.meta[TEST_FINAL_STATUS] === 'pass'))
             })
-            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
-              proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
-                const tests = payloads.flatMap(({ payload }) => payload.events)
-                  .filter(event => event.type === 'test').map(event => event.content)
-                assert.strictEqual(tests.length, 2)
-                assert.ok(tests.every(test => test.meta[TEST_FINAL_STATUS] === 'pass'))
-              })
-            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
-            assert.strictEqual(exitCode, 0)
-          } finally {
-            receiver.off('message', onPayload)
-            server.closeAllConnections()
-            await new Promise(resolve => server.close(resolve))
-          }
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise, traceReceived])
+          assert.strictEqual(exitCode, 0)
         })
       }
 
