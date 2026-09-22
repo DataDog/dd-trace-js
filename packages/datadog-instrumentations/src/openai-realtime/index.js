@@ -51,13 +51,6 @@ const liveSessions = new Set()
 function noop () {}
 
 /**
- * @param {() => void} fn
- */
-function runNow (fn) {
-  fn()
-}
-
-/**
  * Replay a finished turn as a back-dated span tree. Nesting falls out of the synchronous scoping of
  * `traceSync`: the phase spans are created inside the turn root's callback, so each picks the root
  * up as its parent from the active store without any explicit parent stamping.
@@ -65,7 +58,7 @@ function runNow (fn) {
  * @param {TurnDescriptor} turn
  */
 function emitTurn (turn) {
-  const run = turn.runInContext ?? runNow
+  const run = turn.runInContext ?? (fn => fn())
 
   run(() => {
     turnChannel.traceSync(() => {

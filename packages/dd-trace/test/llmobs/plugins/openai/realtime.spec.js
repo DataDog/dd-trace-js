@@ -932,6 +932,40 @@ describe('integrations', () => {
             assert.strictEqual(byName(llmobsSpans, USER_SPEECH).status, 'ok')
           })
 
+          // `failed` on its own reaches the backend as a bare `error: 1`. The provider's own account
+          // of the failure is the only actionable part, and the LLM Observability error event reads
+          // the same tags the tracing plugin sets, so one place serves both.
+          it('carries the provider failure detail onto the llm span and the turn root', async () => {
+            sessionCreated({ transcription: false })
+
+            mic.stream(100)
+            mic.commit('item_1')
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            clock.tick(30)
+            socket.deliver({
+              type: 'response.done',
+              response: {
+                id: 'resp_1',
+                status: 'failed',
+                status_details: {
+                  type: 'failed',
+                  error: { type: 'server_error', code: 'internal_error', message: 'upstream unavailable' },
+                },
+              },
+            })
+
+            const { llmobsSpans, apmSpans } = await getEvents(3)
+            const llm = byName(llmobsSpans, LLM)
+
+            assert.strictEqual(llm.meta['error.type'], 'server_error')
+            assert.strictEqual(llm.meta['error.message'], 'upstream unavailable')
+
+            // And on the APM span the tags came from, so an APM-only user is served too.
+            const apm = apmSpansById(apmSpans).get(llm.span_id)
+            assert.strictEqual(apm.meta['error.type'], 'server_error')
+            assert.strictEqual(apm.meta['error.message'], 'upstream unavailable')
+          })
+
           it('holds a turn open for a late input transcription', async () => {
             sessionCreated({ transcription: true })
 

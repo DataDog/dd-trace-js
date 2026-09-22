@@ -283,6 +283,71 @@ describe('openai realtime RealtimeSession', () => {
     })
   })
 
+  describe('failed responses', () => {
+    // `failed` alone reaches the backend as a bare `error: 1`, which says a realtime call broke but
+    // nothing about why. The provider's detail is the only actionable part.
+    it('carries the provider error detail off status_details', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.onServerEvent({
+        type: 'response.done',
+        response: {
+          id: 'resp_1',
+          status: 'failed',
+          status_details: {
+            type: 'failed',
+            error: { type: 'server_error', code: 'internal_error', message: 'upstream unavailable' },
+          },
+        },
+      }, now())
+
+      assert.strictEqual(emitted.length, 1)
+      assert.strictEqual(emitted[0].failed, true)
+      assert.deepStrictEqual(emitted[0].error, {
+        type: 'server_error',
+        code: 'internal_error',
+        message: 'upstream unavailable',
+      })
+    })
+
+    it('reports no error detail when the provider gave none', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.onServerEvent({
+        type: 'response.done',
+        response: { id: 'resp_1', status: 'failed', status_details: { type: 'failed' } },
+      }, now())
+
+      assert.strictEqual(emitted[0].failed, true)
+      assert.strictEqual(emitted[0].error, undefined)
+    })
+
+    it('keeps only the documented fields, as strings', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.onServerEvent({
+        type: 'response.done',
+        response: {
+          id: 'resp_1',
+          status: 'failed',
+          // A provider object is not copied wholesale onto a span tag.
+          status_details: { error: { type: 'x', code: 42, nested: { secret: 1 }, param: 'audio' } },
+        },
+      }, now())
+
+      assert.deepStrictEqual(emitted[0].error, { type: 'x', code: '42' })
+    })
+  })
+
   describe('input transcription configuration', () => {
     // Latching the flag on would defer every later turn in #awaiting for a transcript that a
     // disabled session will never send.

@@ -152,6 +152,14 @@ class ResponseTurn {
   status = undefined
 
   /**
+   * The provider's own account of a failure, from `response.done`'s `status_details.error`. Carried
+   * separately from `status` because `failed` alone leaves a span with no way to say what went wrong.
+   *
+   * @type {{ type?: string, code?: string, message?: string } | undefined}
+   */
+  error = undefined
+
+  /**
    * Wall clock (epoch ms) when `response.done` arrived. The llm span ends here — generation
    * complete — not when the agent finishes speaking.
    *

@@ -1,6 +1,7 @@
 'use strict'
 
 const { MEASURED } = require('../../../ext/tags')
+const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
@@ -63,7 +64,19 @@ class RealtimeTracingPlugin extends TracingPlugin {
     const span = ctx.currentStore?.span
     if (span === undefined) return
 
-    if (ctx.turn.failed && this.constructor.flagsFailure) span.setTag('error', 1)
+    if (ctx.turn.failed && this.constructor.flagsFailure) {
+      span.setTag('error', 1)
+
+      // The provider's own account of the failure, when `response.done` carried one. Without it the
+      // span says only that a realtime call broke. The LLM Observability error event reads these
+      // same tags, so setting them here serves both.
+      const { error } = ctx.turn
+      if (error !== undefined) {
+        if (error.type !== undefined) span.setTag(ERROR_TYPE, error.type)
+        const message = error.message ?? error.code
+        if (message !== undefined) span.setTag(ERROR_MESSAGE, message)
+      }
+    }
     span.finish(ctx.finishTime)
   }
 }

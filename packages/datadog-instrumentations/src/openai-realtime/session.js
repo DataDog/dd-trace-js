@@ -55,6 +55,7 @@ const MAX_PENDING_RESPONSE_CREATES = 8
  *   metadata: Record<string, unknown>,
  *   usage: object | undefined,
  *   failed: boolean,
+ *   error: { type?: string, code?: string, message?: string } | undefined,
  *   runInContext: ((fn: () => void) => void) | undefined,
  *   root: { startTime: number, finishTime: number },
  *   llm: { startTime: number, finishTime: number },
@@ -74,6 +75,28 @@ const MAX_PENDING_RESPONSE_CREATES = 8
 function toFiniteNumber (value) {
   const number = Number(value)
   return Number.isFinite(number) ? number : undefined
+}
+
+/**
+ * Flatten the provider's failure detail to plain strings, or `undefined` when it said nothing
+ * usable. Kept to the three fields OpenAI documents so a span carries the type and message a
+ * responder actually needs, without copying an arbitrary provider object onto a tag.
+ *
+ * @param {unknown} error
+ */
+function providerError (error) {
+  if (error === null || typeof error !== 'object') return
+
+  /** @type {{ type?: string, code?: string, message?: string }} */
+  const flattened = {}
+  let reported = false
+  for (const field of ['type', 'code', 'message']) {
+    if (error[field] == null) continue
+    flattened[field] = String(error[field])
+    reported = true
+  }
+
+  return reported ? flattened : undefined
 }
 
 /**
@@ -727,6 +750,9 @@ class RealtimeSession {
     turn.usage = response?.usage
     turn.model = response?.model || turn.model || this.#model
     turn.status = response?.status
+    // The provider's actionable detail for a failure. Without it a failed turn reaches the backend
+    // as a bare `error: 1`, which says a realtime call broke but nothing about why.
+    turn.error = providerError(response?.status_details?.error)
 
     const { toolCalls, toolResults } = extractResponseTools(response)
     turn.toolCalls = toolCalls
@@ -883,6 +909,7 @@ class RealtimeSession {
       metadata: { ...this.#sessionConfig },
       usage: turn.usage,
       failed: turn.status === 'failed',
+      error: turn.error,
       runInContext: turn.runInContext,
       root: { startTime: rootStartTime, finishTime: rootFinishTime },
       llm: { startTime: llmStartTime, finishTime: llmFinishTime },
