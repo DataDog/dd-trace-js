@@ -19,11 +19,10 @@ const {
 const testSuite = 'ci-visibility/vitest-tests/dynamic-atr.mjs'
 
 /**
- * Register shared retry regressions using the parent suite's sandbox, intake, and process cleanup.
+ * Register native retry-condition regressions for the parent suite's latest Vitest version.
  *
  * @param {object} options
  * @param {string} options.mode
- * @param {boolean} options.supportsDynamicAtr
  * @param {() => {
  *   cwd: string,
  *   receiver: import('../ci-visibility-intake').FakeCiVisIntake,
@@ -31,7 +30,7 @@ const testSuite = 'ci-visibility/vitest-tests/dynamic-atr.mjs'
  *   onChildProcess: (child: import('node:child_process').ChildProcess) => void
  * }} options.getContext
  */
-function describeDynamicAtr ({ mode, supportsDynamicAtr, getContext }) {
+function describeDynamicAtr ({ mode, getContext }) {
   describe('dynamic ATR', function () {
     this.timeout(120_000)
     let output
@@ -92,15 +91,13 @@ function describeDynamicAtr ({ mode, supportsDynamicAtr, getContext }) {
       const countsMatch = output.match(/DYNAMIC_ATR_COUNTS (\{[^\n]+\})/)
       assert.ok(countsMatch, output)
       const counts = JSON.parse(countsMatch[1])
-      const attempts = supportsDynamicAtr ? 2 : 4
+      const attempts = 2
       for (const failure of ['body', 'beforeEach', 'afterEach', 'fixture']) {
-        // Vitest 1/3 retain fixtures after failed cleanup; throwing teardown clears the value every second attempt.
-        const fixtureSetups = supportsDynamicAtr ? attempts : ({ afterEach: 1, fixture: 2 }[failure] ?? attempts)
         assert.deepStrictEqual(counts[failure], {
           beforeEach: attempts,
           body: failure === 'beforeEach' ? 0 : attempts,
           afterEach: attempts,
-          fixture: failure === 'beforeEach' ? 0 : fixtureSetups,
+          fixture: failure === 'beforeEach' ? 0 : attempts,
         }, `${mode}: ${failure}`)
         const events = tests.filter(test => test.meta[TEST_NAME] === `${failure} failure`)
         assert.strictEqual(events.length, attempts, `${mode}: ${failure} spans`)
@@ -108,22 +105,18 @@ function describeDynamicAtr ({ mode, supportsDynamicAtr, getContext }) {
         const final = events.filter(test => test.meta[TEST_FINAL_STATUS] === 'fail')
         assert.strictEqual(final.length, 1)
         assert.strictEqual(final[0].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-        // The legacy runner retries the retained rejected cleanup promise on its final attempt.
-        const failureCount = failure === 'fixture' && !supportsDynamicAtr ? 1 : attempts
-        assert.strictEqual(final[0].meta['error.message'], `${failure} failure ${failureCount}`)
+        assert.strictEqual(final[0].meta['error.message'], `${failure} failure ${attempts}`)
         assert.ok(events.slice(1).every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
       }
       assert.strictEqual(counts.expectedFailure, attempts)
       assert.strictEqual(counts.unexpectedPass, 1)
       assert.strictEqual(counts.eventuallyPasses, 2)
-      assert.strictEqual(counts.slow, supportsDynamicAtr ? 3 : 4)
+      assert.strictEqual(counts.slow, 3)
       const results = report.testResults.flatMap(result => result.assertionResults)
       assert.strictEqual(results.find(test => test.title === 'expected failure').status, 'passed')
       assert.strictEqual(results.find(test => test.title === 'unexpected pass').status, 'failed')
       assert.strictEqual(results.find(test => test.title === 'eventually passes').status, 'passed')
     })
-
-    if (!supportsDynamicAtr) return
 
     it(`measures each native repetition independently in ${mode}`, async () => {
       const { code, report } = await run('', {

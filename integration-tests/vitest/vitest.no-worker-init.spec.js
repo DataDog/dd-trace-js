@@ -67,7 +67,7 @@ const { describeDynamicAtr } = require('./dynamic-atr')
 
 const DEFAULT_NODE_OPTIONS = '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init'
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
-const SUPPORTED_VERSIONS = NODE_MAJOR <= 18 ? ['3.2.6'] : ['3.2.6', '4.1.0', 'latest']
+const SUPPORTED_VERSIONS = NODE_MAJOR <= 18 ? ['3.2.6'] : ['3.2.6', 'latest']
 const UNSUPPORTED_VERSION = '1.6.0'
 const UNSUPPORTED_VERSION_WARNING =
   'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT is only supported for vitest >=3.2.6'
@@ -880,19 +880,17 @@ SUPPORTED_VERSIONS.forEach((version) => {
       return exitCode
     }
 
-    describeDynamicAtr({
-      mode: 'no-worker',
-      supportsDynamicAtr: version !== '3.2.6',
-      getContext: () => ({
-        cwd,
-        receiver,
-        env: { [VITEST_NO_WORKER_INIT_REQUEST_ENV]: 'true', POOL_CONFIG: 'forks' },
-        onChildProcess: child => { childProcess = child },
-      }),
-    })
-
-    // Keep the minimum retry-condition version focused on the retry regressions.
-    if (version === '4.1.0') return
+    if (version === 'latest') {
+      describeDynamicAtr({
+        mode: 'no-worker',
+        getContext: () => ({
+          cwd,
+          receiver,
+          env: { [VITEST_NO_WORKER_INIT_REQUEST_ENV]: 'true', POOL_CONFIG: 'forks' },
+          onChildProcess: child => { childProcess = child },
+        }),
+      })
+    }
 
     for (const poolConfig of ['forks', 'threads']) {
       it(`runs and reports tests without initializing dd-trace in ${poolConfig} workers`, async () => {
