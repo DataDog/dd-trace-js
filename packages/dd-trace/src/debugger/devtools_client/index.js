@@ -134,7 +134,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
   // This can happen if sampled probe indexes are inconsistent with the worker state. Those cases are logged above.
   if (probes.length === 0) {
-    return resume(start)
+    await session.post('Debugger.resume')
+    reportPauseDuration(start)
+    return
   }
 
   const timestamp = Date.now()
@@ -183,7 +185,8 @@ session.on('Debugger.paused', async ({ params }) => {
     }
   }
 
-  await resume(start)
+  await session.post('Debugger.resume')
+  reportPauseDuration(start)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
@@ -348,13 +351,12 @@ session.on('Debugger.paused', async ({ params }) => {
 })
 
 /**
- * Resume before reporting the elapsed time so telemetry does not extend the pause. This measures from receipt of the
+ * Called after resuming so reporting the elapsed time doesn't extend the pause. This measures from receipt of the
  * pause notification through the resume response, not the full time V8 suspends the instrumented thread.
  *
  * @param {bigint} start - Monotonic time when the pause notification was received, in nanoseconds.
  */
-async function resume (start) {
-  await session.post('Debugger.resume')
+function reportPauseDuration (start) {
   const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000
   parentPort.postMessage({ type: 'thread-paused', durationMs })
   log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: ~%d ms',
