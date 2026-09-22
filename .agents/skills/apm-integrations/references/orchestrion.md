@@ -6,15 +6,12 @@ matched.** Orchestrion rewrites a library at load time (CJS + ESM) and injects
 source hooks, ESM support, and avoiding runtime monkey-patching.
 
 Engine: `@apm-js-collab/code-transformer` (mirror of
-[nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)), vendored at
-`vendor/dist/@apm-js-collab/code-transformer/`. Installed version is in
-`vendor/package-lock.json`.
+[nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)). Its
+installed version is recorded in `vendor/package-lock.json`.
 
 > **Verify before relying on a field/transform.** The engine is actively
-> developed and the config surface changes between releases. This doc tracks
-> the vendored version (currently 0.18.1); confirm anything below against the
-> package source: `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
-> `#visit`) and `lib/transforms.js`.
+> developed and the config surface changes between releases. Confirm anything
+> below against the installed package source before relying on it.
 
 ## Decision Rule
 
@@ -23,7 +20,7 @@ declaration, class/object method, named expression, or assignment to a named
 receiver. Do **not** use shimmer just because users reach it through a decorated
 runtime handle; match the source function behind the handle instead.
 
-Inactive-path cost is **not zero** in the vendored 0.18.1 templates. The wrapper
+Inactive-path cost is **not zero** in the current templates. The wrapper
 builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
 operator checks `hasSubscribers`. The check skips channel work and the wrapped
 call's tracing body, not the wrapper's array/object/closure setup. For very hot
@@ -142,7 +139,7 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 
 ## Result Mutation
 
-Code-transformer 0.18.1 lets a subscriber replace the value returned to the
+The code transformer lets a subscriber replace the value returned to the
 caller:
 
 - For `kind: 'Sync'`, reassign `ctx.result` in `end`.
@@ -230,9 +227,9 @@ for (const matcher of [matcherCjs, matcherEsm]) {
 }
 ```
 
-The package exports `create()`, not `InstrumentationMatcher`; registration goes
-through the matcher instances returned by `create()`. Select the registered
-name from a config with `transform: '<name>'` (it overrides `kind`). Pass
+Register transforms through the matcher instances returned by the package's
+`create()` factory. Select the registered name from a config with
+`transform: '<name>'` (it overrides `kind`). Pass
 configuration from the integration entry through `transformOptions` and read it
 from `state.transformOptions`. Signature: `(state, node, parent, ancestry) =>
 void`, mutating the AST in place.
