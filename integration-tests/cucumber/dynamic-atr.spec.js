@@ -5,6 +5,8 @@ const { spawn } = require('node:child_process')
 
 const satisfies = require('semifies')
 
+const { engines, nodeMaxMajor } = require('../../package.json')
+const { isTrue } = require('../../packages/dd-trace/src/guardrails/util')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { getCiVisAgentlessConfig, sandboxCwd, useSandbox } = require('../helpers')
 const {
@@ -18,7 +20,10 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 const version = process.env.CUCUMBER_VERSION || 'latest'
-const describeRetries = version === 'latest' || satisfies(version, '>=8.0.0') ? describe : describe.skip
+const supportsTracer = satisfies(process.versions.node, `${engines.node} <${nodeMaxMajor}`) ||
+  isTrue(process.env.DD_INJECT_FORCE)
+const supportsRetries = version === 'latest' || satisfies(version, '>=8.0.0')
+const describeRetries = supportsTracer && supportsRetries ? describe : describe.skip
 const fixture = 'ci-visibility/cucumber-dynamic-atr'
 const durationBuckets = [
   [0, 0], [4999, 0], [5000, 0], [5001, 1], [10000, 1],
@@ -31,8 +36,13 @@ describeRetries(`cucumber@${version} dynamic ATR`, function () {
 
   useSandbox([`@cucumber/cucumber@${version}`, 'sinon'], true)
 
-  before(() => {
+  before(function () {
     cwd = sandboxCwd()
+    const cucumber = require(`${cwd}/node_modules/@cucumber/cucumber/package.json`)
+    if (!satisfies(process.versions.node, cucumber.engines.node)) {
+      // Cucumber exits before running scenarios on unsupported Node.js versions.
+      this.skip()
+    }
   })
 
   beforeEach(async () => {
