@@ -34,6 +34,8 @@ const {
   TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_SCOPE,
   TEST_IS_RUM_ACTIVE,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -432,6 +434,43 @@ moduleTypes.forEach(({
     // current Node.js ESM hooks chain (ERR_LOADER_CHAIN_INCOMPLETE), so TS configs
     // under `"type": "module"` can't be loaded at all, regardless of dd-trace.
     const over14It = (version === 'latest' || semver.gte(version, '14.0.0')) ? it : it.skip
+    over10It('reports successful zero-test runs as skipped with an explanation', async () => {
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: 'cypress/e2e/empty.cy.js',
+          },
+        }
+      )
+
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assert.strictEqual(events.some(({ type }) => type === 'test'), false)
+
+          for (const eventType of ['test_session_end', 'test_module_end']) {
+            const event = events.find(({ type }) => type === eventType)
+            assert.ok(event, `expected ${eventType}`)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'No tests were executed')
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+          }
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
+    })
+
     over10It('is backwards compatible with the old manual plugin approach', async () => {
       receiver.setInfoResponse({ endpoints: [] })
 

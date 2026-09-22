@@ -417,6 +417,13 @@ tracer.use('pg', { appendComment: true });
 tracer.use('pg', { truncate: true });
 tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
+tracer.use('postgres');
+tracer.use('postgres', { service: 'postgres-service' });
+tracer.use('postgres', { appendComment: true, dbmPropagationMode: 'full' });
+// @ts-expect-error Postgres DBM propagation accepts only the configured modes.
+tracer.use('postgres', { dbmPropagationMode: 'invalid' });
+tracer.use('postgres', { truncate: true });
+tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
