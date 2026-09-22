@@ -19,6 +19,7 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -288,6 +289,97 @@ moduleTypes.forEach(({
           receiverPromise,
         ])
       })
+
+      for (const [scenario, description] of [
+        ['duplicates', 'keeps dynamic ATR budgets and final statuses separate for duplicate titles'],
+        ['local-retries', 'applies dynamic ATR budgets over local test and suite retry overrides'],
+        ['late-hook', 'corrects dynamic ATR final status after late hook failures'],
+        ['late-hook-flat', 'corrects fixed ATR final status after late hook failures'],
+      ]) {
+        it(description, async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            flaky_test_retries_count: 2,
+            early_flake_detection: { enabled: false },
+          })
+
+          const specToRun = `cypress/e2e/dynamic-atr-${scenario.replace('-flat', '')}.js`
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                SPEC_PATTERN: specToRun,
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: scenario.endsWith('-flat') ? 'false' : 'true',
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: scenario === 'duplicates' ? '1,3,3,3,3' : '2,2,2,2,2',
+                ...(scenario === 'duplicates' ? { CYPRESS_DYNAMIC_ATR_DURATION_MS: '1' } : {}),
+              },
+            }
+          )
+
+          let testOutput = ''
+          childProcess.stdout.on('data', chunk => { testOutput += chunk })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk })
+
+          await receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              if (scenario === 'duplicates') {
+                assert.strictEqual(tests.length, 12, testOutput)
+                for (const order of ['1,5100', '5100,1']) {
+                  for (const duration of ['1', '5100']) {
+                    const attempts = tests.filter(test =>
+                      test.meta[TEST_NAME] === `durations ${order} duplicate title` &&
+                      test.meta['fixture.duration'] === duration
+                    )
+                    assert.strictEqual(attempts.length, duration === '1' ? 2 : 4)
+                    assert.strictEqual(attempts[0].meta[TEST_IS_RETRY], undefined)
+                    assert.ok(attempts.slice(1).every(test =>
+                      test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+                    ))
+                    assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_STATUS] === 'fail'))
+                    assert.strictEqual(attempts.at(-1).meta[TEST_STATUS], duration === '1' ? 'fail' : 'pass')
+                    assert.strictEqual(
+                      attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], duration === '1' ? 'true' : undefined
+                    )
+                    assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], duration === '1' ? 'fail' : 'pass')
+                    assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+                  }
+                }
+              } else if (scenario === 'local-retries') {
+                assert.strictEqual(tests.length, 15, testOutput)
+                const names = new Set(tests.map(test => test.meta[TEST_NAME]))
+                assert.strictEqual(names.size, 5)
+                for (const name of names) {
+                  const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+                  assert.strictEqual(attempts.length, 3, name)
+                  assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                  assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                }
+              } else {
+                assert.strictEqual(tests.length, 5, testOutput)
+                const passing = tests.filter(test => test.meta[TEST_NAME] === 'eventually passes the late hook')
+                const failing = tests.filter(test => test.meta[TEST_NAME] === 'always fails in a late hook')
+                assert.deepStrictEqual(passing.map(test => test.meta[TEST_STATUS]), ['fail', 'pass'])
+                assert.strictEqual(passing.at(-1).meta[TEST_FINAL_STATUS], 'pass')
+                assert.strictEqual(passing.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+                assert.deepStrictEqual(failing.map(test => test.meta[TEST_STATUS]), ['fail', 'fail', 'fail'])
+                assert.strictEqual(failing.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                assert.strictEqual(failing.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              }
+            }, { hardTimeout: 60000 }
+          )
+        })
+      }
 
       it('uses the cached dynamic budget instead of a conflicting flat count', async () => {
         receiver.setSettings({

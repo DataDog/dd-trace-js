@@ -1010,24 +1010,24 @@ class CypressPlugin {
    * Stores the dynamic ATR retry count for a test after its first execution duration is known.
    *
    * @param {string} testSuite
-   * @param {string} testName
+   * @param {string} testId
    * @param {number | undefined} duration
    */
-  setDynamicAtrRetryCountForTest (testSuite, testName, duration) {
+  setDynamicAtrRetryCountForTest (testSuite, testId, duration) {
     if (!this.dynamicAtrRetryCountByTest) {
       this.dynamicAtrRetryCountByTest = new Map()
     }
-    let retryCountByTestName = this.dynamicAtrRetryCountByTest.get(testSuite)
-    if (!retryCountByTestName) {
-      retryCountByTestName = new Map()
-      this.dynamicAtrRetryCountByTest.set(testSuite, retryCountByTestName)
+    let retryCountByTestId = this.dynamicAtrRetryCountByTest.get(testSuite)
+    if (!retryCountByTestId) {
+      retryCountByTestId = new Map()
+      this.dynamicAtrRetryCountByTest.set(testSuite, retryCountByTestId)
     }
     const retryCount = getDynamicAtrRetryCount(
       duration ?? 0,
       this.earlyFlakeDetectionRetryPolicy,
       this.dynamicAtrBuckets
     )
-    retryCountByTestName.set(testName, retryCount)
+    retryCountByTestId.set(testId, retryCount)
     return retryCount
   }
 
@@ -1043,8 +1043,12 @@ class CypressPlugin {
     return shouldSkipEfdRetry(efdRetryIndex, testSuiteRetries?.[testName])
   }
 
-  getDynamicAtrRetryCountForTest (testSuite, testName) {
-    return this.dynamicAtrRetryCountByTest.get(testSuite)?.get(testName)
+  /**
+   * @param {string} testSuite
+   * @param {string} testId
+   */
+  getDynamicAtrRetryCountForTest (testSuite, testId) {
+    return this.dynamicAtrRetryCountByTest.get(testSuite)?.get(testId)
   }
 
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
@@ -1605,19 +1609,26 @@ class CypressPlugin {
     // Cypress will report the last run test as failed, but we don't know that yet at `dd:afterEach`
     let latestError
 
-    // Test titles are user-defined. Use a Map so names such as "constructor"
-    // cannot collide with Object.prototype while grouping completed attempts.
-    const finishedTestsByTestName = new Map()
+    // Cypress preserves IDs across retry clones, so duplicate titles remain independent.
+    const finishedTestsByTest = new Map()
     for (const finishedTest of finishedTests) {
-      let finishedTestAttempts = finishedTestsByTestName.get(finishedTest.testName)
+      const testIdentifier = finishedTest.testId ?? finishedTest.testName
+      let finishedTestAttempts = finishedTestsByTest.get(testIdentifier)
       if (!finishedTestAttempts) {
         finishedTestAttempts = []
-        finishedTestsByTestName.set(finishedTest.testName, finishedTestAttempts)
+        finishedTestsByTest.set(testIdentifier, finishedTestAttempts)
       }
       finishedTestAttempts.push(finishedTest)
     }
 
-    for (const [testName, finishedTestAttempts] of finishedTestsByTestName) {
+    const matchedCypressTests = new Set()
+    for (const finishedTestAttempts of finishedTestsByTest.values()) {
+      const { testName } = finishedTestAttempts[0]
+      // Public Cypress results omit runnable IDs but retain declaration order.
+      const matchingCypressTest = cypressTests.find(test =>
+        test.title.join(' ') === testName && !matchedCypressTests.has(test)
+      )
+      matchedCypressTests.add(matchingCypressTest)
       for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
@@ -1625,7 +1636,7 @@ class CypressPlugin {
         const cypressTest = isDatadogManagedAttempt
           ? getMatchingCypressTest(cypressTests, testName, attemptIndex, finishedTest.testStatus, isLastAttempt) ||
             cypressTests.find(test => test.title.join(' ') === testName)
-          : cypressTests.find(test => test.title.join(' ') === testName)
+          : matchingCypressTest
         if (!cypressTest) {
           continue
         }
@@ -1720,7 +1731,14 @@ class CypressPlugin {
             isDynamicAtrEnabled: this.isDynamicAtrEnabled,
           })
 
-          const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          let hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          if (retryKind === FINAL_STATUS_RETRY_KIND.atr) {
+            // Late hooks can change every attempt after dd:afterEach has captured its status.
+            hasFailedAllRetries = finishedTestAttempts.every(attempt =>
+              attempt.testSpan.context().getTag(TEST_STATUS) === 'fail'
+            )
+            finishedTest.testSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, hasFailedAllRetries ? 'true' : undefined)
+          }
           const hasPassedAllAtfRetries =
             testSpanTags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
           const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
@@ -2024,6 +2042,7 @@ class CypressPlugin {
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
+          isDynamicAtrEnabled: this.isDynamicAtrEnabled,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
           rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
@@ -2091,6 +2110,7 @@ class CypressPlugin {
           testSourceStack,
           testSuite,
           testSuiteAbsolutePath,
+          testId,
           testName,
           testItTitle,
           isNew,
@@ -2146,16 +2166,16 @@ class CypressPlugin {
           !isAttemptToFix &&
           !isEfdRetry &&
           !isEfdManagedTest &&
-          this.getDynamicAtrRetryCountForTest(testSuite, testName) === undefined
+          this.getDynamicAtrRetryCountForTest(testSuite, testId) === undefined
         ) {
-          this.setDynamicAtrRetryCountForTest(testSuite, testName, duration)
+          this.setDynamicAtrRetryCountForTest(testSuite, testId, duration)
         }
         if (didAbortSlowEfdRetries && testStatus === 'skip' && !error && duration > 0) {
           testStatus = 'pass'
         }
         this.activeTestSpan.setTag(TEST_STATUS, testStatus)
 
-        const testIdentifier = `${testSuite}\0${testName}`
+        const testIdentifier = `${testSuite}\0${testId ?? testName}`
         let testStatuses = this.testStatuses[testIdentifier]
         if (testStatuses) {
           testStatuses.push(testStatus)
@@ -2246,7 +2266,7 @@ class CypressPlugin {
           })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
-        const dynamicAtrRetryCount = this.getDynamicAtrRetryCountForTest(testSuite, testName)
+        const dynamicAtrRetryCount = this.getDynamicAtrRetryCountForTest(testSuite, testId)
         const atrRetryCount = this.isDynamicAtrEnabled ? dynamicAtrRetryCount : this.flakyTestRetriesCount
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
           atrRetryCount > 0 && testStatuses.length === atrRetryCount + 1 &&
@@ -2289,6 +2309,7 @@ class CypressPlugin {
         }
 
         const finishedTest = {
+          testId,
           testName,
           testStatus,
           finishTime: this._now(),

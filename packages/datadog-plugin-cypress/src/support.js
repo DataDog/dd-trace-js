@@ -16,6 +16,7 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
+let isDynamicAtrEnabled = false
 let hasWarnedMissingBeforeEachTaskResult = false
 let hasWarnedMissingBeforeEachRetryResult = false
 // Array of test names that have been retried and the reason
@@ -363,10 +364,17 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   return oldRunTests.apply(this, [suite, fn])
 }
 
+/**
+ * @param {{ id: string }} test
+ */
 function getDynamicAtrTestKey (test) {
-  return `${Cypress.mocha.getRootSuite().file}\0${test.fullTitle()}`
+  // Cypress preserves the runnable ID when cloning a retry, including across browser reloads.
+  return `${Cypress.mocha.getRootSuite().file}\0${test.id}`
 }
 
+/**
+ * @param {{ id: string, _retries: number }} test
+ */
 function configureTestRetries (test) {
   if (shouldDisableFrameworkRetries(test)) {
     disableFrameworkRetries(test)
@@ -375,7 +383,11 @@ function configureTestRetries (test) {
 
   const dynamicAtrRetryCount = dynamicAtrRetryCountByTest.get(getDynamicAtrTestKey(test))
   if (Number.isSafeInteger(dynamicAtrRetryCount)) {
-    test.retries(dynamicAtrRetryCount)
+    test._retries = dynamicAtrRetryCount
+  } else if (isDynamicAtrEnabled) {
+    // Cypress forbids calling retries(count) on the original runnable.
+    // Ensure local retries: 0 overrides still reach the duration-based budget selection.
+    test._retries = Math.max(1, test._retries)
   }
 }
 
@@ -389,6 +401,8 @@ Cypress.on('test:before:run:async', (attributes, test) => {
 
 beforeEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  // The first test:before:run event can precede the suite configuration task.
+  configureTestRetries(currentTest)
   const testName = currentTest.fullTitle()
 
   const retryMessage = retryReasonsByTestName.get(testName)
@@ -452,6 +466,7 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
       rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
@@ -489,6 +504,7 @@ afterEach(function () {
     : currentTest.err
 
   const testInfo = {
+    testId: currentTest.id,
     testName,
     testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
