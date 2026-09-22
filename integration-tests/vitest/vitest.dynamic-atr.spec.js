@@ -61,10 +61,10 @@ for (const version of versions) {
       await receiver.stop()
     })
 
-    async function run (mode, pattern = '') {
+    async function run (mode, pattern = '', { env, command } = {}) {
       childProcess = exec(
-        './node_modules/.bin/vitest run --reporter=default --reporter=json --outputFile=dynamic-atr-results.json' +
-        (pattern ? ` -t "${pattern}"` : ''),
+        command || './node_modules/.bin/vitest run --reporter=default --reporter=json' +
+        ' --outputFile=dynamic-atr-results.json' + (pattern ? ` -t "${pattern}"` : ''),
         {
           cwd,
           env: {
@@ -78,6 +78,7 @@ for (const version of versions) {
             POOL_CONFIG: mode === 'threads' ? 'threads' : 'forks',
             VITEST_BROWSER_MODE: mode === 'browser' ? '1' : undefined,
             VITEST_BROWSER_PROVIDER_FACTORY: '1',
+            ...env,
           },
         }
       )
@@ -91,8 +92,10 @@ for (const version of versions) {
           ({ url }) => url === '/api/v2/citestcycle',
           received => { payloads = received }
         ),
-      ])
-      const report = JSON.parse(fs.readFileSync(path.join(cwd, 'dynamic-atr-results.json'), 'utf8'))
+      ]).catch(error => { throw new Error(output, { cause: error }) })
+      const report = command
+        ? undefined
+        : JSON.parse(fs.readFileSync(path.join(cwd, 'dynamic-atr-results.json'), 'utf8'))
       const tests = payloads.flatMap(({ payload }) => payload.events)
         .filter(event => event.type === 'test').map(event => event.content)
       return { code, tests, report }
@@ -139,6 +142,58 @@ for (const version of versions) {
       })
 
       if (!supportsDynamicAtr) continue
+
+      it(`preserves explicit test and suite retries in ${mode}`, async () => {
+        const { code, tests, report } = await run(mode, '', {
+          env: { TEST_DIR: 'ci-visibility/vitest-tests/dynamic-atr-overrides.mjs' },
+        })
+        assert.strictEqual(code, 1, output)
+        const expectedAttempts = {
+          inherited: 2,
+          'retry 0': 1,
+          'retry 2': 3,
+          'retry 5': 6,
+          'retry 8': 9,
+          'suite override failure': 6,
+          'object override': 3,
+          'eventual override': 3,
+        }
+        for (const [name, count] of Object.entries(expectedAttempts)) {
+          const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+          assert.strictEqual(attempts.length, count, `${name}: ${output}`)
+          const reason = name === 'inherited' ? TEST_RETRY_REASON_TYPES.atr : TEST_RETRY_REASON_TYPES.ext
+          assert.ok(attempts.slice(1).every(test => test.meta[TEST_RETRY_REASON] === reason), name)
+        }
+        const results = report.testResults.flatMap(result => result.assertionResults)
+        assert.strictEqual(results.find(test => test.title === 'eventual override').status, 'passed')
+      })
+
+      it(`uses real elapsed time with fake timers in ${mode}`, async () => {
+        const { code, tests } = await run(mode, '', {
+          env: {
+            TEST_DIR: 'ci-visibility/vitest-tests/dynamic-atr-fake-timers.mjs',
+            VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/fake-timers-setup.mjs',
+          },
+        })
+        assert.strictEqual(code, 1, output)
+        assert.strictEqual(tests.length, 2, output)
+        assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+        assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+      })
+
+      it(`retains retry ownership across programmatic runs in ${mode}`, async () => {
+        const { code, tests } = await run(mode, '', {
+          command: 'node ci-visibility/vitest-tests-programmatic-api/run-dynamic-atr-rerun.mjs',
+          env: { TEST_DIR: 'ci-visibility/vitest-tests-programmatic-api/dynamic-atr-*.mjs' },
+        })
+        assert.strictEqual(code, 1, output)
+        const results = output.match(/DYNAMIC_ATR_RERUNS (\[[^\n]+\])/)
+        assert.ok(results, output)
+        assert.deepStrictEqual(JSON.parse(results[1]), [1, 1, 4])
+        assert.strictEqual(tests.length, 9, output)
+        assert.strictEqual(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 2)
+        assert.strictEqual(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.ext).length, 4)
+      })
 
       it(`keeps exhausted quarantined failures successful in ${mode}`, async () => {
         receiver.setSettings({

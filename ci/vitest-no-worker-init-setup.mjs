@@ -172,10 +172,10 @@ function configureDynamicAtr (task) {
   const isManagedProject = projectName
     ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
     : flakyTestRetriesConfiguration.includesUnnamedProject
-  if (!isManagedProject || typeof task.retry !== 'number' || task.retry <= 0) return
+  if (!isManagedProject || !task.retry?.__ddTestOptAtr || task.retry.count <= 0) return
 
   task.retry = {
-    count: task.retry,
+    ...task.retry,
     condition () {
       // AroundEach fixture teardown can fail after onTestFinished recorded the attempt's errors.
       recordRetryErrorCount(task)

@@ -255,6 +255,7 @@ function getProvidedContext () {
 
 function isFlakyTestRetriesEnabledForTask (providedContext, task) {
   if (!providedContext.isFlakyTestRetriesEnabled) return false
+  if (providedContext.isDynamicAtrEnabled && !task.retry?.__ddTestOptAtr) return false
 
   const { flakyTestRetriesProjectNames } = providedContext
   if (!Array.isArray(flakyTestRetriesProjectNames)) return true

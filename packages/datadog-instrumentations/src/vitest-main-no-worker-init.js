@@ -933,6 +933,7 @@ function createMainProcessReporter (reporterState) {
     const { flakyTestRetriesConfiguration } = testOptimizationData
     const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
       isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
+      isDynamicAtrEnabled: state.isDynamicAtrEnabled,
       flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, task)

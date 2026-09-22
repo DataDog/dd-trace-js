@@ -595,16 +595,16 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !attemptToFixTasks.has(task) &&
       !efdRetryTasks.has(task) &&
-      typeof task.retry === 'number' && task.retry > 0
+      task.retry?.__ddTestOptAtr && task.retry.count > 0
     ) {
-      const executionStart = performance.now()
+      const executionStart = process.uptime()
       // The runner caches count, but evaluates condition after hooks and fixture cleanup.
       task.retry = {
-        count: task.retry,
+        ...task.retry,
         condition () {
           if (!dynamicAtrRetryCountByTask.has(task)) {
             dynamicAtrRetryCountByTask.set(task, getDynamicAtrRetryCount(
-              performance.now() - executionStart,
+              (process.uptime() - executionStart) * 1000,
               earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY,
               providedContext.dynamicAtrBuckets
             ))
