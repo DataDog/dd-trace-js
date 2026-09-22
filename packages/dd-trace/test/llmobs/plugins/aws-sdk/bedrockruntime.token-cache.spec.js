@@ -105,10 +105,42 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     })
   })
 
+  it('releases the pending headers when the request fails', () => {
+    publishDeserialize('req-failed', { input: 5, output: 3 })
+
+    // the rejection path builds a response with the error and no top-level $metadata
+    completeCh.publish({
+      response: {
+        request: { operation: 'converse', params: { modelId: 'amazon.titan' } },
+        error: Object.assign(new Error('ThrottlingException'), { $metadata: { requestId: 'req-failed' } }),
+      },
+    })
+
+    // reusing the id surfaces a leak: zero header tokens means the failed :complete: consumed it
+    completeCh.publish(buildLlmComplete('req-failed', 'amazon.titan'))
+
+    sinon.assert.calledOnce(tagMetricsSpy)
+    assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
   it('caches nothing when the response reports no token counts', () => {
     deserializeCh.publish({ headers: { 'x-amzn-requestid': 'req-no-counts' } })
 
     completeCh.publish(buildLlmComplete('req-no-counts', 'amazon.titan'))
+
+    sinon.assert.calledOnce(tagMetricsSpy)
+    assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
+  })
+
+  it('evicts the oldest pending headers instead of growing without bound', () => {
+    publishDeserialize('req-oldest', { input: 9, output: 9 })
+
+    // retried attempts publish headers no :complete: will claim, so the cache is capped
+    for (let i = 0; i < 1000; i++) {
+      publishDeserialize(`req-unclaimed-${i}`, { input: 1, output: 1 })
+    }
+
+    completeCh.publish(buildLlmComplete('req-oldest', 'amazon.titan'))
 
     sinon.assert.calledOnce(tagMetricsSpy)
     assert.deepStrictEqual(tagMetricsSpy.firstCall.args[1], emptyMetrics())
