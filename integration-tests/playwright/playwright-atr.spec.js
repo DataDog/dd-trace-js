@@ -42,6 +42,8 @@ versions.forEach((version) => {
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
+    // Worker trace finalization and these fixtures require the Playwright 1.38+ integration.
+    const modernRetryTest = satisfies(version, '>=1.38.0') || version === 'latest' ? it : global.it.skip
 
     let cwd, webAppPort, webAppServer
 
@@ -192,7 +194,7 @@ versions.forEach((version) => {
       }
 
       for (const retryMode of ['disabled', 'suite-zero', 'flat-zero']) {
-        it(`exports serial tests before session end with ${retryMode} retries`, async (receiver, run) => {
+        modernRetryTest(`exports serial tests before session end with ${retryMode} retries`, async (receiver, run) => {
           receiver.setSettings({ flaky_test_retries_enabled: retryMode !== 'disabled' })
           receiver.setInfoResponse({ traceReceived: false })
           const traceReceived = receiver.payloadReceived(({ url, payload }) =>
@@ -225,7 +227,7 @@ versions.forEach((version) => {
 
       for (const dynamic of [false, true]) {
         for (const maxFailures of [1, 2]) {
-          it(`finalizes non-serial canceled retries (dynamic=${dynamic}, maxFailures=${maxFailures})`,
+          modernRetryTest(`finalizes non-serial canceled retries (dynamic=${dynamic}, maxFailures=${maxFailures})`,
             async (receiver, run) => {
               receiver.setSettings({ flaky_test_retries_enabled: dynamic })
               const args = dynamic ? '' : '--retries=3'
@@ -265,7 +267,7 @@ versions.forEach((version) => {
         ['two-projects', [2, 4], ['pass', 'fail'], ''],
         ['screenshots', [2, 4], ['pass', 'fail'], ''],
       ]) {
-        it(`finalizes serial ATR executions once for ${scenario}`, async (receiver, run) => {
+        modernRetryTest(`finalizes serial ATR executions once for ${scenario}`, async (receiver, run) => {
           if (scenario === 'screenshots') receiver.setMediaResponseDelay(1500)
           receiver.setSettings({ flaky_test_retries_enabled: true })
           let output = ''
@@ -303,6 +305,7 @@ versions.forEach((version) => {
               DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
               DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
               PLAYWRIGHT_SERIAL_SCENARIO: scenario,
+              PLAYWRIGHT_OUTPUT_DIR: `./test-results-serial-atr-${scenario}`,
               ADD_DUPLICATE_PLAYWRIGHT_PROJECT: scenario === 'two-projects' ? '1' : '',
               DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(scenario === 'screenshots'),
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: scenario === 'screenshots' ? 'only-on-failure' : 'off',
@@ -362,6 +365,7 @@ versions.forEach((version) => {
         },
         {
           name: 'serial retry offset',
+          requiresModernPlaywright: true,
           buckets: '1,1,1,1,1',
           attempts: 2,
           env: { PLAYWRIGHT_SERIAL_RETRY: '1' },
@@ -372,6 +376,7 @@ versions.forEach((version) => {
           if (scope === 'CLI' && retries === 0) continue // Zero project retries enables ATR.
           dynamicCases.push({
             name: `${scope} retries=${retries}`,
+            requiresModernPlaywright: scope === 'suite',
             buckets: retries === 1 ? '3,3,3,3,3' : '1,1,1,1,1',
             attempts: retries + 1,
             args: scope === 'CLI' ? `--retries=${retries}` : '',
@@ -380,7 +385,8 @@ versions.forEach((version) => {
         }
       }
       for (const scenario of dynamicCases) {
-        it(`respects dynamic ATR ${scenario.name}`, async (receiver, run) => {
+        const runTest = scenario.requiresModernPlaywright ? modernRetryTest : it
+        runTest(`respects dynamic ATR ${scenario.name}`, async (receiver, run) => {
           receiver.setSettings({ flaky_test_retries_enabled: true })
           const eventsPromise = receiver.gatherPayloadsMaxTimeout(
             ({ url }) => url === '/api/v2/citestcycle',
