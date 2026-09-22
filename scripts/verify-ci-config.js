@@ -176,6 +176,8 @@ const IGNORED_WORKFLOWS = {
     'release-4.yml',
     'release-dev.yml',
     'release-latest.yml',
+    'release-proposal-merge-trigger.yml',
+    'release-proposal-merge.yml',
     'release-proposal.yml',
     'release-validate.yml',
     'retry.yml',

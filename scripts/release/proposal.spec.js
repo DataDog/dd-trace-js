@@ -61,6 +61,61 @@ describe('release proposal', () => {
     assert.strictEqual(fail.firstCall.args[0], stopped)
   })
 
+  it('applies more than 100 commits', () => {
+    const stopped = new Error('proposal stopped after applying changes')
+    const shas = Array.from({ length: 101 }, (_, index) => index.toString(16).padStart(40, '0'))
+    const createReleaseChangelog = sinon.stub().returns({
+      isMinor: true,
+      markdown: '',
+      warnings: [],
+    })
+    const fail = sinon.stub()
+    const run = sinon.stub().callsFake(command => {
+      if (command.startsWith('npm version')) throw stopped
+    })
+
+    /**
+     * @param {string} command
+     */
+    function capture (command) {
+      if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
+      if (command.includes('--format=sha --reverse v5.x master')) return shas.join('\n')
+      if (command === `git rev-parse ${shas.at(-1)}`) return shas.at(-1)
+      if (command.includes('--format=sha --reverse v5.x') && command.includes(shas.at(-1))) {
+        return shas.join('\n')
+      }
+      if (command.startsWith('git show -s --format=%s')) return 'fix(core): apply change'
+      if (command === 'git log -1 --pretty=%B') return 'v5.127.0'
+      if (command.startsWith('git log --format="%H%x09%s"')) return `${VERSION_FULL_SHA}\tv5.127.0`
+      if (command.includes(`v5.127.0-proposal ${shas.at(-1)}`)) return 'fix(core): apply changes'
+      throw new Error(`Unexpected command: ${command}`)
+    }
+
+    const loadProposal = proxyquire.noCallThru().noPreserveCache()
+    loadProposal('./proposal', {
+      '../../version': { DD_MAJOR: 5, DD_MINOR: 126, DD_PATCH: 0, VERSION: '5.126.0' },
+      './changelog': { createReleaseChangelog },
+      './helpers/requirements': { checkAll: sinon.stub() },
+      './helpers/terminal': {
+        capture,
+        checkpoint: sinon.stub(),
+        fail,
+        fatal: sinon.stub(),
+        flags: {},
+        log: sinon.stub(),
+        params: ['5'],
+        pass: sinon.stub(),
+        run,
+        start: sinon.stub(),
+      },
+      './metadata': { hydrateReleaseEntries: sinon.stub().returnsArg(0) },
+    })
+
+    const cherryPick = run.args.find(([command]) => command.startsWith('git cherry-pick --allow-empty'))[0]
+    assert.strictEqual(cherryPick.split(' ').length - 3, shas.length)
+    assert.strictEqual(fail.firstCall.args[0], stopped)
+  })
+
   it('reports both sides when proposal history does not match master', () => {
     const stopped = new Error('proposal stopped after detecting divergence')
     const createReleaseChangelog = sinon.stub().returns({

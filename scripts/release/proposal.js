@@ -84,20 +84,11 @@ try {
 
   start('Determine version increment')
 
-  // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
-  const MAX_CHERRY_PICKS = 99
-
   // Get all applicable commits from the release branch to main.
-  // Used to derive the capped upper bound before checking out any branch,
-  // avoiding a circular dependency between isMinor and the proposal branch state.
   const allMainShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
     .split('\n').filter(Boolean)
 
-  // The upper bound is the last main SHA that will fit in the proposal across all
-  // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
-  // how many commits are already on the branch (proven by:
-  // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
-  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1) ||
+  const upperBoundSha = allMainShas.at(-1) ||
     (isPreRelease ? capture(`git rev-parse v${releaseLine}.x`) : undefined)
 
   if (!upperBoundSha) {
@@ -109,8 +100,7 @@ try {
   // Abbreviated SHAs like "980e663509" match JS float syntax and become Infinity.
   const upperBoundRef = capture(`git rev-parse ${upperBoundSha}`)
 
-  // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
-  // the capped commits actually included in the proposal, not deferred ones.
+  // notesShas is scoped to upperBoundSha so links use the original commits on main.
   // Excludes changes that are listed in the dedicated breaking changes section.
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n')
@@ -195,19 +185,11 @@ try {
 
   const existingCherryPicked = proposalCommits.length
   const proposalShas = allMainShas.slice(existingCherryPicked)
-  const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
-  const truncated = shasToApply.length < proposalShas.length
-  const totalCommits = existingCherryPicked + shasToApply.length + 1
 
-  if (shasToApply.length > 0) {
-    // Show only commits being applied; upperBoundSha is the last main SHA that fits.
+  if (proposalShas.length > 0) {
     const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundRef}`)
-    const truncationNote = truncated
-      ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
-        ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
-      : ''
 
-    pass(`\n${newChanges}${truncationNote}`)
+    pass(`\n${newChanges}`)
 
     start('Apply changes from the main branch')
 
@@ -216,10 +198,10 @@ try {
       run('git reset --hard HEAD~1')
     }
 
-    // Cherry-pick commits up to the GitHub rebase limit. Preserve empty main commits
-    // so the proposal commit count stays aligned with the ordered main commit list.
+    // Preserve empty main commits so the proposal commit count stays aligned with
+    // the ordered main commit list.
     try {
-      run(`git cherry-pick --allow-empty ${shasToApply.join(' ')}`)
+      run(`git cherry-pick --allow-empty ${proposalShas.join(' ')}`)
 
       pass()
     } catch (error) {
@@ -252,9 +234,6 @@ try {
 
       fatal(...messages)
     }
-  } else if (proposalShas.length > 0) {
-    pass(`⚠️  Proposal is at the commit limit (${MAX_CHERRY_PICKS}/${MAX_CHERRY_PICKS}).` +
-      ` ${proposalShas.length} new commit(s) require a separate release.`)
   } else {
     pass('none')
   }
@@ -352,14 +331,6 @@ try {
 
   if (process.env.CI) {
     log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
-  }
-
-  if (process.env.GITHUB_OUTPUT) {
-    fs.appendFileSync(process.env.GITHUB_OUTPUT, [
-      `commit_count=${totalCommits}`,
-      `version=v${newVersion}`,
-      `pr_url=${pullRequest.url}`,
-    ].join('\n') + '\n')
   }
 } catch (e) {
   fail(e)

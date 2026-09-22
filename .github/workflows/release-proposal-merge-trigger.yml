@@ -1,0 +1,28 @@
+name: "[Release Proposal Merge Trigger]"
+
+on:
+  pull_request:
+    branches:
+      - v[0-9]+.x
+    types:
+      - labeled
+      - ready_for_review
+      - reopened
+  pull_request_review:
+    types:
+      - dismissed
+      - submitted
+
+jobs:
+  trigger-release-proposal-merge:
+    name: Trigger release proposal merge
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.base.ref, 'v') &&
+      endsWith(github.event.pull_request.base.ref, '.x') &&
+      contains(github.event.pull_request.labels.*.name, 'release-proposal-automerge')
+    permissions:
+      id-token: write
+    uses: DataDog/dd-trace-js/.github/workflows/release-proposal-merge.yml@master
+    with:
+      pull-request-number: ${{ github.event.pull_request.number }}
