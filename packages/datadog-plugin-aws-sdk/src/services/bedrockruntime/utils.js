@@ -568,10 +568,19 @@ function resolveToolResultItem (item) {
   return `[Unsupported content type(s): ${getContentBlockType(item)}]`
 }
 
+/**
+ * Normalize a Converse usage object onto the LLMObs metric names.
+ *
+ * @param {object} [usage]
+ * @returns {{
+ *   inputTokens?: number, outputTokens?: number, cacheReadTokens?: number, cacheWriteTokens?: number
+ * }}
+ */
 function buildUsage (usage = {}) {
   return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
+    // the `*Count` spellings are what `amazon-bedrock-invocationMetrics` uses
+    inputTokens: usage.inputTokens ?? usage.inputTokenCount,
+    outputTokens: usage.outputTokens ?? usage.outputTokenCount,
     cacheReadTokens: usage.cacheReadInputTokens ?? usage.cacheReadInputTokenCount,
     cacheWriteTokens: usage.cacheWriteInputTokens ?? usage.cacheWriteInputTokenCount,
   }
@@ -714,6 +723,7 @@ function extractTextAndResponseReasonConverseFromStream (chunks) {
 
 module.exports = {
   Generation,
+  buildUsage,
   RequestParams,
   extractTextAndResponseReasonFromStream,
   parseModelId,

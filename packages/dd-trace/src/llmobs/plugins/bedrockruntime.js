@@ -3,6 +3,7 @@
 const { storage } = require('../../../../datadog-core')
 const telemetry = require('../telemetry')
 const {
+  buildUsage,
   extractRequestParams,
   extractTextAndResponseReason,
   parseModelId,
@@ -12,6 +13,7 @@ const {
   extractTextAndResponseReasonConverse,
   extractTextAndResponseReasonConverseFromStream,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const { safeJsonParse } = require('../util')
 const BaseLLMObsPlugin = require('./base')
 
 const llmobsStore = storage('llmobs')
@@ -23,6 +25,7 @@ const ENABLED_OPERATIONS = new Set([
   'converseStream',
 ])
 const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
+const INVOCATION_METRICS_KEY = 'amazon-bedrock-invocationMetrics'
 
 /**
  * @typedef {{
@@ -52,12 +55,37 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       // avoids instrumenting other non supported runtime operations
       if (!ENABLED_OPERATIONS.has(operation)) return
 
-      const { modelProvider, modelName } = parseModelId(request.params.modelId)
+      // the SDK rejects a request with no model id, and the parser assumes a string
+      const modelId = request.params?.modelId
+      if (typeof modelId !== 'string') return
+
+      const { modelProvider, modelName } = parseModelId(modelId)
 
       // avoids instrumenting non llm type
       if (modelName.includes('embed')) return
 
       const span = ctx.currentStore?.span
+      if (!span) return
+
+      if (!this._llmobsEnabled) {
+        // no LLMObs payload to build, so the usage comes from the response headers and, where
+        // those are absent, from the response or the chunk that reported it: Converse puts it on
+        // the response, and every streamed operation puts it on a chunk
+        const responseUsage = CONVERSE_OPERATIONS.has(operation) ? response.usage : undefined
+        const usage = responseUsage ?? ctx.streamedUsage
+
+        this._setGenAiApmTags(span, {
+          spanKind: 'llm',
+          modelName: modelId.toLowerCase(),
+          modelProvider: 'amazon_bedrock',
+          // reporting zeros for every metric would be worse than reporting none
+          metrics: tokensFromHeaders || usage
+            ? extractTokens({ tokensFromHeaders, usage: buildUsage(usage) })
+            : undefined,
+        })
+        return
+      }
+
       this.setLLMObsTags({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders })
     })
 
@@ -71,6 +99,10 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const cacheReadTokenCount = headers['x-amzn-bedrock-cache-read-input-token-count']
       const cacheWriteTokenCount = headers['x-amzn-bedrock-cache-write-input-token-count']
 
+      // Responses that report no counts at all, error responses included, would otherwise cache a
+      // record of undefined fields that reads as a measurement of zero.
+      if (!inputTokenCount && !outputTokenCount && !cacheReadTokenCount && !cacheWriteTokenCount) return
+
       pendingTokenHeaders.set(requestId, {
         inputTokensFromHeaders: inputTokenCount && Number.parseInt(inputTokenCount, 10),
         outputTokensFromHeaders: outputTokenCount && Number.parseInt(outputTokenCount, 10),
@@ -80,6 +112,14 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
+      if (!this._llmobsEnabled) {
+        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies are
+        // left to the LLMObs path
+        const usage = chunk?.metadata?.usage ?? readInvocationMetrics(chunk)
+        if (usage) ctx.streamedUsage = usage
+        return
+      }
+
       if (!ctx.chunks) ctx.chunks = []
 
       if (chunk) ctx.chunks.push(chunk)
@@ -156,6 +196,25 @@ function consumeTokenHeaders (requestId) {
   const tokens = pendingTokenHeaders.get(requestId)
   pendingTokenHeaders.delete(requestId)
   return tokens
+}
+
+/**
+ * `invokeModelWithResponseStream` reports its token counts in the body of one chunk instead of in
+ * the headers `invokeModel` sends. Searches the raw bytes for the key first, so every other chunk
+ * on a streamed response costs a byte scan rather than a decode and a parse.
+ *
+ * @param {{ chunk?: { bytes?: Uint8Array } }} [chunk]
+ * @returns {Record<string, number> | undefined}
+ */
+function readInvocationMetrics (chunk) {
+  const bytes = chunk?.chunk?.bytes
+  if (!ArrayBuffer.isView(bytes)) return
+
+  // a view, not a copy: this runs on every chunk of every streamed response
+  const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (!body.includes(INVOCATION_METRICS_KEY)) return
+
+  return safeJsonParse(body.toString('utf8'), null)?.[INVOCATION_METRICS_KEY]
 }
 
 /**
