@@ -1646,35 +1646,41 @@ versions.forEach((version) => {
       await Promise.all([receiverPromise, once(proc, 'exit')])
     }, { retries: 1 })
 
-    it('works when before all fails and step durations are negative', async (receiver, run) => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSuiteEvent = events.find(event => event.type === 'test_suite_end').content
-          const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-          assertObjectContains(testSuiteEvent.meta, {
-            [TEST_STATUS]: 'fail',
+    for (const hookFailure of ['times out', 'throws']) {
+      it(`works when before all ${hookFailure} and step durations are negative`, async (receiver, run) => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assert.strictEqual(events.filter(event => event.type === 'test').length, 1)
+            const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(testSuiteEvents.length, 1)
+            const testSuiteEvent = testSuiteEvents[0].content
+            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+            assertObjectContains(testSuiteEvent.meta, {
+              [TEST_STATUS]: 'fail',
+            })
+            assertObjectContains(testSessionEvent.meta, {
+              [TEST_STATUS]: 'fail',
+            })
+            assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
+            assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
           })
-          assertObjectContains(testSessionEvent.meta, {
-            [TEST_STATUS]: 'fail',
-          })
-          assert.ok(testSuiteEvent.meta[ERROR_MESSAGE])
-          assert.match(testSessionEvent.meta[ERROR_MESSAGE], /Test suites failed: 1/)
-        })
-      const proc = run(
-        './node_modules/.bin/playwright test -c playwright.config.js',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            PW_BASE_URL: `http://localhost:${webAppPort}`,
-            TEST_DIR: './ci-visibility/playwright-tests-error',
-            TEST_TIMEOUT: '3000',
-          },
-        }
-      )
-      await Promise.all([receiverPromise, once(proc, 'exit')])
-    })
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-error',
+              TEST_TIMEOUT: '3000',
+              PLAYWRIGHT_BEFORE_ALL_ERROR: hookFailure === 'throws' ? 'throw' : '',
+            },
+          }
+        )
+        await Promise.all([receiverPromise, once(proc, 'exit')])
+      })
+    }
 
     it('reports multiple test suite errors', async (receiver, run) => {
       const receiverPromise = receiver
