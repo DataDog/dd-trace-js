@@ -37,8 +37,8 @@ class DatadogTracer {
     // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
     // vars set in their environment (e.g. for a separate telemetry integration)
     // silently lose all test spans. The same applies to the Electron exporter:
-    // spans must reach the Electron SDK's IPC bridge, not an OTLP endpoint,
-    // even when OTEL_* vars are set for unrelated telemetry.
+    // spans must reach the Electron SDK's span-processing pipeline, not an OTLP endpoint,
+    // because the SDK does not support OTLP export.
     // A Lambda without the extension or the mini agent reaches the backend only by writing spans
     // to its log for the Forwarder, so replacing that transport with an OTLP endpoint nobody
     // listens on loses them silently.
