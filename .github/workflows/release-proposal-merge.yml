@@ -28,57 +28,49 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
           PR_URL: https://github.com/${{ github.repository }}/pull/${{ inputs.pull-request-number }}
-          REQUIRED_LABEL: release-proposal-automerge
         run: |
           proposal=$(gh pr view "$PR_URL" \
-            --json baseRefName,headRefName,headRefOid,isDraft,labels,reviewDecision,state)
+            --json baseRefName,headRefName,headRefOid,isCrossRepository,isDraft,reviewDecision,state)
 
-          if ! jq -e --arg required_label "$REQUIRED_LABEL" '
+          jq -e '
             .state == "OPEN" and
             .isDraft == false and
+            .isCrossRepository == false and
             .reviewDecision == "APPROVED" and
-            any(.labels[]; .name == $required_label) and
             (.baseRefName | test("^v[0-9]+\\.x$")) and
             (.headRefName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-proposal$"))
-          ' <<< "$proposal" > /dev/null; then
-            echo "eligible=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          ' <<< "$proposal" > /dev/null
 
           {
-            echo "eligible=true"
             echo "base_ref=$(jq -r .baseRefName <<< "$proposal")"
             echo "head_sha=$(jq -r .headRefOid <<< "$proposal")"
           } >> "$GITHUB_OUTPUT"
-      - name: Wait for required checks
-        if: steps.proposal.outputs.eligible == 'true'
-        env:
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
-          PR_URL: https://github.com/${{ github.repository }}/pull/${{ inputs.pull-request-number }}
-        run: gh pr checks "$PR_URL" --fail-fast --required --watch
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.proposal.outputs.eligible == 'true'
         with:
           fetch-depth: 0
           ref: ${{ steps.proposal.outputs.head_sha }}
           token: ${{ steps.octo-sts.outputs.token }}
       - name: Fast-forward release branch
-        if: steps.proposal.outputs.eligible == 'true'
         env:
           BASE_REF: ${{ steps.proposal.outputs.base_ref }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
           HEAD_SHA: ${{ steps.proposal.outputs.head_sha }}
           PR_URL: https://github.com/${{ github.repository }}/pull/${{ inputs.pull-request-number }}
-          REQUIRED_LABEL: release-proposal-automerge
         run: |
-          proposal=$(gh pr view "$PR_URL" \
-            --json baseRefName,headRefName,headRefOid,isDraft,labels,reviewDecision,state)
+          gh pr checks "$PR_URL" --required
 
-          jq -e --arg head_sha "$HEAD_SHA" --arg required_label "$REQUIRED_LABEL" '
+          proposal=$(gh pr view "$PR_URL" \
+            --json baseRefName,headRefName,headRefOid,isCrossRepository,isDraft,reviewDecision,state)
+
+          jq -e \
+            --arg base_ref "$BASE_REF" \
+            --arg head_sha "$HEAD_SHA" '
             .state == "OPEN" and
             .isDraft == false and
+            .isCrossRepository == false and
             .reviewDecision == "APPROVED" and
-            any(.labels[]; .name == $required_label) and
+            .baseRefName == $base_ref and
+            (.headRefName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-proposal$")) and
             .headRefOid == $head_sha
           ' <<< "$proposal" > /dev/null
 

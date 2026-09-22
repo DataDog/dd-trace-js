@@ -3,7 +3,7 @@ issuer: https://token.actions.githubusercontent.com
 subject: repo:DataDog/dd-trace-js:pull_request
 
 claim_pattern:
-  event_name: (pull_request|pull_request_review)
+  event_name: pull_request
   ref: refs/pull/[0-9]+/merge
   job_workflow_ref: DataDog/dd-trace-js/.github/workflows/release-proposal-merge.yml@refs/heads/master
 

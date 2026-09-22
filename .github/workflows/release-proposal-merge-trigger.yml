@@ -1,26 +1,43 @@
-name: "[Release Proposal Merge Trigger]"
+name: "[Release Proposal Merge Queue]"
 
 on:
   pull_request:
     branches:
-      - v[0-9]+.x
+      - v*.x
     types:
-      - labeled
-      - ready_for_review
+      - enqueued
+      - opened
       - reopened
-  pull_request_review:
+      - synchronize
+  merge_group:
+    branches:
+      - v*.x
     types:
-      - dismissed
-      - submitted
+      - checks_requested
 
 jobs:
+  release-proposal-merge-queue:
+    name: Release proposal merge queue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block the GitHub merge queue
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Release proposals are fast-forwarded by the release proposal merge workflow."
+          exit 1
+      - name: Allow the pull request into the queue
+        if: github.event_name == 'pull_request'
+        run: echo "Release proposal is eligible to enter the merge queue."
+
   trigger-release-proposal-merge:
-    name: Trigger release proposal merge
+    name: Fast-forward release proposal
+    needs: release-proposal-merge-queue
     if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'enqueued' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.base.ref, 'v') &&
-      endsWith(github.event.pull_request.base.ref, '.x') &&
-      contains(github.event.pull_request.labels.*.name, 'release-proposal-automerge')
+      endsWith(github.event.pull_request.base.ref, '.x')
     permissions:
       id-token: write
     uses: DataDog/dd-trace-js/.github/workflows/release-proposal-merge.yml@master
