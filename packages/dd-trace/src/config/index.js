@@ -449,12 +449,11 @@ class Config extends ConfigBase {
 
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       if (this.spanAttributeSchema !== 'v0') {
-        log.warn('DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0')
+        log.warn('Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0')
       }
       if (this.spanComputePeerService) {
         log.warn(
-          'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED is set to true, but %s is enabled. Using false instead.',
-          'DD_TRACE_OTEL_SEMANTICS_ENABLED'
+          'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
         )
       }
       setAndTrack(this, 'spanAttributeSchema', 'v0')

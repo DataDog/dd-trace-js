@@ -2499,11 +2499,10 @@ describe('Config', () => {
       assert.strictEqual(config.spanAttributeSchema, 'v0')
       assert.strictEqual(config.spanComputePeerService, false)
       assert(log.warn.calledWith(
-        'DD_TRACE_OTEL_SEMANTICS_ENABLED overrides DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0'
+        'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0'
       ))
       assert(log.warn.calledWith(
-        'DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED is set to true, but %s is enabled. Using false instead.',
-        'DD_TRACE_OTEL_SEMANTICS_ENABLED'
+        'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
       ))
     })
   })
