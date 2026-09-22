@@ -1002,12 +1002,14 @@ function waitForRumTestStart (context) {
  */
 function createWorkerConfiguration () {
   return {
+    dynamicAtrBuckets: undefined,
     earlyFlakeDetectionFaultyThreshold: 30,
     earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
     flakyTestRetriesCount: 0,
     isCodeCoverageEnabled: false,
     isCoverageReportUploadEnabled: false,
     isDiEnabled: false,
+    isDynamicAtrEnabled: false,
     isEarlyFlakeDetectionEnabled: false,
     isFlakyTestRetriesEnabled: false,
     isImpactedTestsEnabled: false,
@@ -1329,10 +1331,14 @@ function configureCoordinator (state, response) {
     return
   }
 
+  configuration.dynamicAtrBuckets = libraryConfig.isDynamicAtrEnabled === true
+    ? libraryConfig.dynamicAtrBuckets
+    : undefined
   configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
   configuration.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   configuration.isDiEnabled = libraryConfig.isDiEnabled
+  configuration.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled === true
   configuration.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
   configuration.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   configuration.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
@@ -1800,6 +1806,20 @@ function getSessionStatus (state) {
 }
 
 /**
+ * Returns whether every started worker reported that it discovered no tests.
+ *
+ * @param {CoordinatorState} state
+ */
+function isExpectedEmptySession (state) {
+  if (state.workers.size === 0) return false
+
+  for (const workerRecord of state.workers) {
+    if (workerRecord.hasTests !== false) return false
+  }
+  return true
+}
+
+/**
  * Finishes the single WebdriverIO-owned test session.
  *
  * @param {CoordinatorState} state
@@ -1838,8 +1858,10 @@ function finishCoordinator (state, error, onDone) {
     return
   }
 
+  const status = error ? 'fail' : getSessionStatus(state)
   testSessionFinishCh.publish({
-    status: error ? 'fail' : getSessionStatus(state),
+    status,
+    isExpectedEmptySession: status === 'skip' && isExpectedEmptySession(state),
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,

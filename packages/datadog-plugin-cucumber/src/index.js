@@ -35,6 +35,7 @@ const {
   TEST_SOURCE_START,
   TEST_STATUS,
   TEST_FINAL_STATUS,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -72,6 +73,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
+      isExpectedEmptySession,
       error,
       onDone,
     }) => {
@@ -116,6 +118,14 @@ class CucumberPlugin extends CiPlugin {
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (isExpectedEmptySession) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          'No scenarios were executed',
+          'zero_tests'
+        )
+      }
       if (error) {
         for (const testSuiteSpan of this._testSuiteSpansByTestSuite.values()) {
           testSuiteSpan.setTag(TEST_STATUS, 'fail')

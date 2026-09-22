@@ -138,7 +138,7 @@ You can also sign your commits manually using one of the following methods:
 If you have already created commits without signing them, you can sign them retroactively by using an interactive rebase:
 
 ```sh
-$ git rebase --exec 'git commit --amend --no-edit -n -S' -i <base-branch>
+git rebase --exec 'git commit --amend --no-edit -n -S' -i <base-branch>
 ```
 
 ## Development Requirements
@@ -151,13 +151,13 @@ should always work.
 We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easiest way to install yarn 1.x with with npm:
 
 ```sh
-$ npm install -g yarn
+npm install -g yarn
 ```
 
 To install dependencies once you have Node and yarn installed, run this in the project directory:
 
 ```sh
-$ yarn
+yarn
 ```
 
 ## Coding Standards
@@ -485,7 +485,7 @@ conforms to our coding standards.
 To run the linter, use:
 
 ```sh
-$ npm run lint
+npm run lint
 ```
 
 This also checks that the `LICENSE-3rdparty.csv` file is up-to-date, and checks
@@ -502,7 +502,7 @@ a benchmark in the `benchmark/index.js` module so that we can keep track of the
 most efficient algorithm. To run your benchmark, use:
 
 ```sh
-$ npm run bench
+npm run bench
 ```
 
 [1]: https://docs.datadoghq.com/help

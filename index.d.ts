@@ -3137,6 +3137,14 @@ declare namespace tracer {
        * The service name to be used for this plugin.
        */
       service?: string;
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: TracerOptions['dbmPropagationMode'];
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
     }
 
     /**
