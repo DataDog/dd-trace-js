@@ -8,6 +8,10 @@
 # frozen-teams: |
 #   @DataDog/team-a
 #   @DataDog/team-b
+#
+# ----
+#
+# Events push, schedule and workflow_dispatch are used to warm the membership cache, to avoid any GH API call during PRs
 
 name: Team freeze guard
 
@@ -19,6 +23,25 @@ on:
       - synchronize
       - edited
       - ready_for_review
+  push:
+    branches:
+      - master # default branch
+    paths:
+      - .github/workflows/team-freeze-guard.yml
+  schedule:
+    - cron: "0 12 * * *" # if team composition changes
+  workflow_dispatch: # force cache update
+
+concurrency:
+  # Serializes push/schedule/workflow_dispatch warm-up runs against each other so a
+  # slower run can never finish after a faster one and overwrite its fresher cache
+  # entry with a stale one. Each pull_request_target run gets its own group by PR
+  # number so PR evaluations are never queued behind cache warm-ups or each other.
+  group: >-
+    ${{ contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event_name)
+        && 'team-freeze-guard-cache-warmup'
+        || format('team-freeze-guard-pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: false
 
 jobs:
   team-freeze-guard:
