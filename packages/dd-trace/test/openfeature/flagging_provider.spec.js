@@ -33,6 +33,7 @@ describe('FlaggingProvider', () => {
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
+      DD_METRICS_OTEL_ENABLED: true,
       featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
       experimental: {
         flaggingProvider: {
@@ -119,10 +120,30 @@ describe('FlaggingProvider', () => {
       disabled.onClose()
     })
 
-    it('should create EvalMetricsHook with config', () => {
+    it('creates exactly one EvalMetricsHook when OTel metrics are enabled', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
       sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
+    })
+
+    it('does not create or register EvalMetricsHook unless OTel metrics are strictly enabled', () => {
+      for (const enabled of [false, undefined, 'true', 1]) {
+        mockConfig.DD_METRICS_OTEL_ENABLED = enabled
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+        assert.ok(!provider.hooks.includes(mockEvalMetricsHook))
+      }
+
+      sinon.assert.notCalled(mockEvalMetricsHookClass)
+    })
+
+    it('keeps independently enabled span and EVP hooks when OTel metrics are disabled', () => {
+      mockConfig.DD_METRICS_OTEL_ENABLED = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.deepStrictEqual(provider.hooks, [mockSpanEnrichmentHook, mockEVPHook])
+      sinon.assert.calledOnceWithExactly(mockSpanEnrichmentHookClass, mockTracer)
+      sinon.assert.calledOnceWithExactly(mockEVPHookClass, mockConfig)
     })
 
     it('should create SpanEnrichmentHook with tracer when span enrichment is enabled', () => {
