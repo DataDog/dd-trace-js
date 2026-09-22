@@ -332,6 +332,14 @@ try {
   if (process.env.CI) {
     log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
   }
+
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+      `commit_count=${allMainShas.length + 1}`,
+      `version=v${newVersion}`,
+      `pr_url=${pullRequest.url}`,
+    ].join('\n') + '\n')
+  }
 } catch (e) {
   fail(e)
 }
