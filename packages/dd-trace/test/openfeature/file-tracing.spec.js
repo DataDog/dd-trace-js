@@ -11,6 +11,8 @@ const { NODE_MAJOR } = require('../../../../version')
 const repoRoot = path.resolve(__dirname, '../../../..')
 const expectedTracedFiles = [
   'vendor/dist/@datadog/openfeature-node-server/index.js',
+  'packages/dd-trace/src/openfeature/writers/flag-eval-evp-hook.js',
+  'packages/dd-trace/src/openfeature/writers/flag-evaluations.js',
 ]
 
 if (NODE_MAJOR < 20) {
@@ -73,6 +75,8 @@ describe('OpenFeature file tracing', () => {
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/exporters/common/client-library-headers'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/index'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/writers/exposures'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/writers/flag-eval-evp-hook'))}),
+        require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/writers/flag-evaluations'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/flagging_provider'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/configuration_source'))}),
         require.resolve(${JSON.stringify(path.join(packagePath, 'src/openfeature/agentless_configuration_source'))}),
@@ -98,7 +102,7 @@ describe('OpenFeature file tracing', () => {
           })
 
           assert.strictEqual(result.status, 0, result.stderr)
-          assert.deepStrictEqual(JSON.parse(result.stdout), Array(9).fill(false))
+          assert.deepStrictEqual(JSON.parse(result.stdout), Array(11).fill(false))
         }
       }
     }

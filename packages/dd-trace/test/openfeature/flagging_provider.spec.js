@@ -21,6 +21,8 @@ describe('FlaggingProvider', () => {
   let mockEvalMetricsHookClass
   let mockSpanEnrichmentHook
   let mockSpanEnrichmentHookClass
+  let mockEVPHook
+  let mockEVPHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -31,6 +33,7 @@ describe('FlaggingProvider', () => {
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
+      featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
       experimental: {
         flaggingProvider: {
           enabled: true,
@@ -67,6 +70,8 @@ describe('FlaggingProvider', () => {
       destroy: sinon.spy(),
     }
     mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
+    mockEVPHook = { destroy: sinon.spy() }
+    mockEVPHookClass = sinon.stub().returns(mockEVPHook)
 
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
@@ -76,6 +81,7 @@ describe('FlaggingProvider', () => {
       './configuration_source': configurationSource,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
+      './writers/flag-eval-evp-hook': mockEVPHookClass,
       '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })
@@ -97,6 +103,22 @@ describe('FlaggingProvider', () => {
   })
 
   describe('hooks', () => {
+    it('creates the owned EVP hook only when evaluation counts are enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      sinon.assert.calledOnceWithExactly(mockEVPHookClass, mockConfig)
+      assert.ok(provider.hooks.includes(mockEVPHook))
+      provider.onClose()
+      provider.onClose()
+      sinon.assert.calledOnce(mockEVPHook.destroy)
+
+      mockEVPHookClass.resetHistory()
+      mockConfig.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = false
+      const disabled = new FlaggingProvider(mockTracer, mockConfig)
+      assert.deepStrictEqual(disabled.hooks, [mockEvalMetricsHook, mockSpanEnrichmentHook])
+      sinon.assert.notCalled(mockEVPHookClass)
+      disabled.onClose()
+    })
+
     it('should create EvalMetricsHook with config', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
@@ -126,7 +148,7 @@ describe('FlaggingProvider', () => {
     it('should register EvalMetricsHook and SpanEnrichmentHook as hooks when enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks.length, 2)
+      assert.strictEqual(provider.hooks.length, 3)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
       assert.strictEqual(provider.hooks[1], mockSpanEnrichmentHook)
     })
@@ -135,7 +157,7 @@ describe('FlaggingProvider', () => {
       mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.strictEqual(provider.hooks.length, 1)
+      assert.strictEqual(provider.hooks.length, 2)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
     })
 

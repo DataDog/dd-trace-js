@@ -61,6 +61,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
       './configuration_source': {
         create: sinon.stub(),
       },
+      './writers/flag-eval-evp-hook': sinon.stub().returns({ destroy: sinon.spy() }),
       '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
     })
   })

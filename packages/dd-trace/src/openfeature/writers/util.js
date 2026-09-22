@@ -28,7 +28,7 @@ function warnExposureDeliveryUnavailable () {
 /**
  * Preserves Agent exposure delivery for the Remote Configuration source.
  *
- * @param {import('../../config')} config - Tracer configuration object
+ * @param {import('../../config/config-base')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
@@ -57,7 +57,7 @@ function setAgentStrategy (config, setWriterEnabledValue) {
  * Local discovery is optional for delivery. A missing listener, discovery
  * error, or incompatible receiver selects direct intake when credentials exist.
  *
- * @param {import('../../config')} config - Tracer configuration object
+ * @param {import('../../config/config-base')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
  */
 function setAgentlessStrategy (config, setWriterEnabledValue) {
@@ -100,8 +100,9 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
 /**
  * Applies the exposure-delivery strategy for the configured Feature Flags source.
  *
- * @param {import('../../config')} config - Tracer configuration object
- * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
+ * @param {import('../../config/config-base')} config - Tracer configuration object
+ * @param {(enabled: boolean, route?: import('./flag-evaluations').FlagEvaluationRoute) => void} setWriterEnabledValue
+ *   Callback to set the writer enabled state
  */
 function setExposureDeliveryStrategy (config, setWriterEnabledValue) {
   if (config.featureFlags?.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE === 'agentless') {

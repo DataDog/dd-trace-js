@@ -1,0 +1,155 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
+const { OpenFeature } = require('@openfeature/server-sdk')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+require('../setup/core')
+const telemetryMetrics = require('../../src/telemetry/metrics')
+
+const now = 1_759_276_800_000
+
+describe('FlaggingProvider EVP lifecycle', () => {
+  let clock
+  let provider
+  let request
+  let selectRoute
+  let Provider
+  let handlers
+  let config
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({ now })
+    handlers = new Set(globalThis[Symbol.for('dd-trace')].beforeExitHandlers)
+    request = sinon.stub().callsFake((body, options, callback) => callback(null, '', 202))
+    const BaseWriter = proxyquire('../../src/openfeature/writers/base', {
+      '../../exporters/common/request': request,
+    })
+    const Writer = proxyquire('../../src/openfeature/writers/flag-evaluations', { './base': BaseWriter })
+    selectRoute = sinon.stub()
+    const Hook = proxyquire('../../src/openfeature/writers/flag-eval-evp-hook', {
+      './flag-evaluations': Writer,
+      './util': { setExposureDeliveryStrategy: selectRoute },
+    })
+    Provider = proxyquire('../../src/openfeature/flagging_provider', {
+      './writers/flag-eval-evp-hook': Hook,
+      './configuration_source': { create: sinon.stub() },
+      '../../../../vendor/dist/@datadog/openfeature-node-server': { DatadogNodeServerProvider },
+    })
+    config = {
+      url: new URL('http://localhost:8126'),
+      service: 'checkout',
+      featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
+      experimental: { flaggingProvider: { initializationTimeoutMs: 1000 } },
+    }
+  })
+
+  afterEach(async () => {
+    provider?.onClose()
+    await OpenFeature.clearProviders()
+    assert.deepStrictEqual(globalThis[Symbol.for('dd-trace')].beforeExitHandlers, handlers)
+    clock.runMicrotasks()
+    assert.strictEqual(clock.countTimers(), 0)
+    clock.restore()
+    sinon.restore()
+    telemetryMetrics.manager.namespace('general').reset()
+  })
+
+  async function register (enabled = true) {
+    config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = enabled
+    provider = new Provider({}, config)
+    provider.setConfiguration({ flags: {} })
+    await OpenFeature.setProviderAndWait('evp-lifecycle', provider)
+    return OpenFeature.getClient('evp-lifecycle')
+  }
+
+  function enable () {
+    selectRoute.firstCall.args[1](true, { url: config.url, basePath: '/evp_proxy/v2' })
+  }
+
+  function resolve (consent, doLog) {
+    sinon.stub(provider, 'resolveBooleanEvaluation').returns({
+      value: true,
+      variant: 'on',
+      flagMetadata: {
+        __dd_observe_full_evaluation_data: consent,
+        __dd_eval_timestamp_ms: now - 100,
+        __dd_allocation_key: 'allocation',
+        __dd_do_log: doLog,
+      },
+    })
+  }
+
+  for (const doLog of [false, true]) {
+    it(`drains accepted events exactly once and releases owned resources with DoLog=${doLog}`, async () => {
+      const client = await register()
+      enable()
+      resolve(true, doLog)
+      const context = { targetingKey: 'full-customer', nested: { plan: 'pro' } }
+      await client.getBooleanValue('checkout', false, context)
+      context.nested.plan = 'changed-after-evaluation'
+      sinon.assert.notCalled(request)
+      assert.strictEqual(globalThis[Symbol.for('dd-trace')].beforeExitHandlers.size, handlers.size + 1)
+      assert.ok(clock.countTimers() > 0)
+      clock.setSystemTime(now + 1000)
+      provider.onClose()
+      provider.onClose()
+      enable()
+      sinon.assert.calledOnce(request)
+      const [encoded, options] = request.firstCall.args
+      const [row] = JSON.parse(encoded).flagEvaluations
+      assert.strictEqual(options.path, '/evp_proxy/v2/api/v2/flagevaluation')
+      assert.strictEqual(row.evaluation_count, 1)
+      assert.strictEqual(row.first_evaluation, now - 100)
+      assert.strictEqual(row.last_evaluation, now - 100)
+      assert.strictEqual(row.timestamp, now + 1000)
+      assert.strictEqual(row.targeting_key, 'full-customer')
+      assert.deepStrictEqual(row.context.evaluation, { 'nested.plan': 'pro' })
+      assert.strictEqual(row.targeting_rule, undefined)
+      assert.strictEqual(encoded.includes('changed-after-evaluation'), false)
+    })
+  }
+
+  it('never buffers unavailable evaluations or revives the writer after close', async () => {
+    const client = await register()
+    resolve(true, true)
+    await client.getBooleanValue('before-route', false)
+    enable()
+    await client.getBooleanValue('accepted', false)
+    provider.onClose()
+    enable()
+    await client.getBooleanValue('after-close', false)
+    clock.tick(20_000)
+    sinon.assert.calledOnce(request)
+    assert.deepStrictEqual(JSON.parse(request.firstCall.args[0]).flagEvaluations.map(row => row.flag.key), ['accepted'])
+  })
+
+  it('keeps evaluation working without EVP route, timers or request work when disabled', async () => {
+    const client = await register(false)
+    resolve(true, true)
+    assert.strictEqual(await client.getBooleanValue('disabled', false, { targetingKey: 'customer' }), true)
+    provider.onClose()
+    sinon.assert.notCalled(selectRoute)
+    sinon.assert.notCalled(request)
+  })
+
+  it('omits an invalid targeting key once without dropping the evaluation', async () => {
+    const client = await register()
+    enable()
+    resolve(false, false)
+    await client.getBooleanValue('invalid', false, { targetingKey: '\uD800', secret: 'protected-context' })
+    provider.onClose()
+    const [encoded] = request.firstCall.args
+    const [row] = JSON.parse(encoded).flagEvaluations
+    assert.strictEqual(row.evaluation_count, 1)
+    assert.strictEqual(row.targeting_key, undefined)
+    assert.strictEqual(row.context, undefined)
+    assert.strictEqual(encoded.includes('protected-context'), false)
+    const series = telemetryMetrics.manager.namespace('general').toJSON().metrics.series
+    assert.strictEqual(series.find(metric => metric.metric === 'flagevaluation.targeting_key.omitted').points[0][1], 1)
+  })
+})

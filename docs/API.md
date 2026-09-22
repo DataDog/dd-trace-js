@@ -24,6 +24,12 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
+<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Counts</h2>
+
+Feature Flagging collects aggregated evaluation telemetry by default. Set
+`DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
+flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
