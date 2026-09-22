@@ -659,12 +659,13 @@ describe('integrations', () => {
             mic.stream(300)
             mic.commit('item_1')
 
-            // The app asks for a summary on the side while the user's turn is still buffered.
+            // The app asks for a summary on the side while the user's turn is still buffered. The
+            // server reports it as belonging to no conversation, which is how it is recognised.
             realtime.send({
               type: 'response.create',
               response: { conversation: 'none', input: [{ type: 'message', role: 'user', content: 'Summarize.' }] },
             })
-            socket.deliver({ type: 'response.created', response: { id: 'resp_oob' } })
+            socket.deliver({ type: 'response.created', response: { id: 'resp_oob', conversation_id: null } })
             socket.deliver({
               type: 'response.output_audio_transcript.done',
               response_id: 'resp_oob',
@@ -672,8 +673,8 @@ describe('integrations', () => {
             })
             socket.deliver({ type: 'response.done', response: { id: 'resp_oob', status: 'completed' } })
 
-            // Then server VAD creates the real turn, with no client `response.create` of its own.
-            socket.deliver({ type: 'response.created', response: { id: 'resp_1' } })
+            // Then server VAD creates the real turn, which the server places in the conversation.
+            socket.deliver({ type: 'response.created', response: { id: 'resp_1', conversation_id: 'conv_1' } })
             socket.deliver({
               type: 'response.output_audio_transcript.done',
               response_id: 'resp_1',

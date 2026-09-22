@@ -112,14 +112,15 @@ function createConnection (emitter) {
     // The URL shape is not guaranteed across SDK versions; the session works without it.
   }
 
-  // Settled before any connection exists: plugins subscribe at tracer init, and user code cannot
-  // open a realtime socket before that.
+  // Asked per segment rather than snapshotted here: a plugin can be reconfigured while a connection
+  // is open, and a session that outlived its consumer would otherwise keep buffering audio nothing
+  // reads.
   const session = new RealtimeSession({
     emitTurn,
     captureContext,
     model,
     basePath,
-    retainAudio: audioChannel.hasSubscribers,
+    shouldRetainAudio: () => audioChannel.hasSubscribers,
   })
 
   const reference = new WeakRef(session)

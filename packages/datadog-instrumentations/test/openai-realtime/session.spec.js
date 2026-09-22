@@ -83,7 +83,7 @@ function runTurn ({ retainAudio = true } = {}) {
     emitTurn: descriptor => emitted.push(descriptor),
     captureContext: () => {},
     model: 'gpt-realtime',
-    retainAudio,
+    shouldRetainAudio: () => retainAudio,
   })
 
   let now = 1_000_000
@@ -156,28 +156,105 @@ describe('openai realtime RealtimeSession', () => {
     })
   })
 
+  // The answer can change while a connection is open: `tracer.use('openai', { llmobs: false })`
+  // unsubscribes mid-session. A snapshot taken at connect would keep buffering for a consumer that
+  // had gone away, and would strand a session that later gained one.
+  describe('audio retention re-evaluated per segment', () => {
+    it('stops retaining once the consumer goes away, and resumes if it returns', () => {
+      let consuming = true
+      const emitted = []
+      const session = new RealtimeSession({
+        emitTurn: descriptor => emitted.push(descriptor),
+        captureContext: () => {},
+        model: 'gpt-realtime',
+        shouldRetainAudio: () => consuming,
+      })
+
+      let clock = 1_000_000
+      const now = () => clock
+      const harness = { session, emitted, now, tick: ms => { clock += ms } }
+
+      session.onServerEvent({
+        type: 'session.created',
+        session: { audio: { input: { format: { type: 'audio/pcm', rate: 24_000 } } } },
+      }, now())
+
+      const turn = id => {
+        speak(harness, `item_${id}`)
+        session.onServerEvent({
+          type: 'response.created',
+          response: { id, conversation_id: 'conv_1' },
+        }, now())
+        session.onServerEvent({ type: 'response.done', response: { id, status: 'completed' } }, now())
+      }
+
+      turn('resp_1')
+      assert.strictEqual(emitted[0].input.audio.length, 200 * PCM16_BYTES_PER_MS, 'retained while consumed')
+
+      consuming = false
+      turn('resp_2')
+      assert.strictEqual(emitted[1].input.audio.length, 0, 'stops retaining once nothing reads it')
+      // The window still comes out of the byte count, so timing is unaffected.
+      assert.deepStrictEqual(emitted[1].userSpeech !== undefined, true)
+
+      consuming = true
+      turn('resp_3')
+      assert.strictEqual(emitted[2].input.audio.length, 200 * PCM16_BYTES_PER_MS, 'resumes when it returns')
+    })
+  })
+
   // An out-of-band response runs alongside the conversation rather than as part of it, so it must
-  // neither consume the buffered turn nor disturb turns already in flight.
+  // neither consume the buffered turn nor disturb turns already in flight. The server identifies one
+  // for us: `conversation: 'none'` yields a null `conversation_id`.
   describe('out-of-band responses', () => {
+    it('does not consume the buffered user input', () => {
+      const harness = openSession()
+      const { session, emitted, now } = harness
+
+      speak(harness, 'item_1')
+      session.onServerEvent({
+        type: 'response.created',
+        response: { id: 'resp_oob', conversation_id: null },
+      }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_oob', status: 'completed' } }, now())
+
+      assert.strictEqual(emitted.length, 1)
+      assert.strictEqual(emitted[0].userSpeech, undefined, 'the side request owns no speech')
+      assert.strictEqual(emitted[0].input.audio.length, 0)
+
+      // The real turn that follows still has it.
+      session.onServerEvent({
+        type: 'response.created',
+        response: { id: 'resp_1', conversation_id: 'conv_1' },
+      }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
+
+      assert.strictEqual(emitted.length, 2)
+      assert.ok(emitted[1].userSpeech, 'the conversational turn keeps its user speech')
+      assert.strictEqual(emitted[1].input.audio.length, 200 * PCM16_BYTES_PER_MS)
+    })
+
     it('does not flush a turn still waiting for its input transcript', () => {
       const harness = openSession({ transcription: true })
       const { session, emitted, now } = harness
 
-      // A conversational turn completes, but its transcript has not arrived — it parks in #awaiting.
       speak(harness, 'item_1')
-      session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
+      session.onServerEvent({
+        type: 'response.created',
+        response: { id: 'resp_1', conversation_id: 'conv_1' },
+      }, now())
       session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
       assert.strictEqual(emitted.length, 0, 'the turn should be awaiting its transcript')
 
-      // A parallel out-of-band response must not force that turn out without its transcript.
-      session.onClientEvent({ type: 'response.create', response: { conversation: 'none' } }, now())
-      session.onServerEvent({ type: 'response.created', response: { id: 'resp_oob' } }, now())
+      session.onServerEvent({
+        type: 'response.created',
+        response: { id: 'resp_oob', conversation_id: null },
+      }, now())
       session.onServerEvent({ type: 'response.done', response: { id: 'resp_oob', status: 'completed' } }, now())
 
-      const conversational = emitted.find(turn => turn.input.itemId !== undefined || turn.userSpeech !== undefined)
-      assert.strictEqual(conversational, undefined, 'the conversational turn should still be awaiting')
+      assert.strictEqual(emitted.filter(turn => turn.userSpeech !== undefined).length, 0,
+        'the conversational turn should still be awaiting')
 
-      // The transcript arrives and amends the turn, which is the whole point of deferring it.
       session.onServerEvent({
         type: 'conversation.item.input_audio_transcription.completed',
         item_id: 'item_1',
@@ -185,51 +262,51 @@ describe('openai realtime RealtimeSession', () => {
       }, now())
 
       const amended = emitted.find(turn => turn.userSpeech !== undefined)
-      assert.ok(amended, 'the conversational turn should be emitted once its transcript lands')
+      assert.ok(amended, 'emitted once its transcript lands')
       assert.strictEqual(amended.input.transcript, 'What is the weather?')
     })
 
-    // A rejected create never produces a `response.created`, so its queue entry would be consumed by
-    // the next response — handing a genuine turn a fresh InputTurn and dropping its user speech.
-    it('does not let a rejected create misclassify the next turn', () => {
+    // The beta realtime surface does not report `conversation_id` at all. An unknown conversation is
+    // treated as the conversation, which is how that surface behaved before out-of-band responses
+    // were modelled: better to attribute the input than to strand a real turn without it.
+    it('treats a response with no conversation_id as conversational', () => {
       const harness = openSession()
       const { session, emitted, now } = harness
 
-      session.onClientEvent({ type: 'response.create', response: { conversation: 'none' } }, now())
-      session.onServerEvent({
-        type: 'error',
-        error: { type: 'invalid_request_error', code: 'conversation_already_has_active_response' },
-      }, now())
-
-      // The next response is a genuine server-VAD turn and owns the buffered audio.
       speak(harness, 'item_1')
       session.onServerEvent({ type: 'response.created', response: { id: 'resp_1' } }, now())
       session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
 
-      assert.strictEqual(emitted.length, 1)
-      assert.ok(emitted[0].userSpeech, 'the real turn keeps its user-speech span')
+      assert.ok(emitted[0].userSpeech)
       assert.strictEqual(emitted[0].input.audio.length, 200 * PCM16_BYTES_PER_MS)
     })
 
-    it('leaves the queue alone when the error names a different client event', () => {
+    // A `response.create` the server rejects produces no `response.created` at all. Classifying from
+    // the server event means there is nothing left behind to mis-classify the next turn, which a
+    // client-side correlation queue could not guarantee.
+    it('is unaffected by a client create the server rejected', () => {
       const harness = openSession()
       const { session, emitted, now } = harness
 
       session.onClientEvent({
         type: 'response.create',
-        event_id: 'evt_create',
-        response: { conversation: 'none' },
+        response: { conversation: 'none', input: [{ type: 'message', role: 'user', content: 'Summarize.' }] },
       }, now())
-      // An unrelated failure — a bad audio append, say — must not retire the pending create.
-      session.onServerEvent({ type: 'error', error: { type: 'invalid_request_error', event_id: 'evt_append' } }, now())
+      session.onServerEvent({
+        type: 'error',
+        error: { type: 'invalid_request_error', code: 'conversation_already_has_active_response' },
+      }, now())
 
       speak(harness, 'item_1')
-      session.onServerEvent({ type: 'response.created', response: { id: 'resp_oob' } }, now())
-      session.onServerEvent({ type: 'response.done', response: { id: 'resp_oob', status: 'completed' } }, now())
+      session.onServerEvent({
+        type: 'response.created',
+        response: { id: 'resp_1', conversation_id: 'conv_1' },
+      }, now())
+      session.onServerEvent({ type: 'response.done', response: { id: 'resp_1', status: 'completed' } }, now())
 
       assert.strictEqual(emitted.length, 1)
-      assert.strictEqual(emitted[0].userSpeech, undefined, 'the out-of-band response owns no speech')
-      assert.strictEqual(emitted[0].input.audio.length, 0)
+      assert.ok(emitted[0].userSpeech, 'the real turn keeps its user-speech span')
+      assert.strictEqual(emitted[0].input.audio.length, 200 * PCM16_BYTES_PER_MS)
     })
   })
 

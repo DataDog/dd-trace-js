@@ -65,8 +65,8 @@ class ItemText {
 /** Accumulated user input — audio plus transcript or text — for a single turn. */
 class InputTurn {
   /**
-   * @param {boolean} [retainAudio] - False when nothing consumes the bytes, so only their count is
-   *   kept. See `AudioAccumulator`.
+   * @param {(() => boolean) | boolean} [retainAudio] - Whether anything consumes the bytes, so only
+   *   their count is kept when not. Resolved when the segment opens. See `AudioAccumulator`.
    */
   constructor (retainAudio = true) {
     this.audio = new AudioAccumulator(retainAudio)
@@ -129,8 +129,8 @@ class ResponseTurn {
    * @param {InputTurn} input
    * @param {number} createdTime - Epoch ms at which `response.created` arrived. The fallback start
    *   for the turn root and llm spans when the turn produced no user speech to back-date to.
-   * @param {boolean} [retainAudio] - False when nothing consumes the bytes, so only their count is
-   *   kept. See `AudioAccumulator`.
+   * @param {(() => boolean) | boolean} [retainAudio] - Whether anything consumes the bytes, so only
+   *   their count is kept when not. Resolved when the segment opens. See `AudioAccumulator`.
    */
   constructor (input, createdTime, retainAudio = true) {
     this.input = input

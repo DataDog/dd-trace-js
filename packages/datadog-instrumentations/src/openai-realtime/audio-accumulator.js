@@ -60,14 +60,28 @@ class AudioAccumulator {
   /** Bytes currently retained across `chunks`. */
   #retainedBytes = 0
 
-  /** Whether anything consumes the bytes. When false only `totalDecodedBytes` is maintained. */
-  #retain
+  /**
+   * Whether anything consumes the bytes. When false only `totalDecodedBytes` is maintained.
+   *
+   * Resolved from `#shouldRetain` on the frame that opens the segment, not at construction: a
+   * pending input segment is created as soon as the previous turn starts and then sits open across
+   * the whole agent response, so construction time can be many seconds before any audio arrives and
+   * whatever was true then may not be true now. Deciding on the opening frame is as late as
+   * possible while still being once per segment, so retention can never flip mid-clip and leave a
+   * segment holding only part of itself.
+   *
+   * @type {boolean}
+   */
+  #retain = true
+
+  /** @type {() => boolean} */
+  #shouldRetain
 
   /**
-   * @param {boolean} [retain]
+   * @param {(() => boolean) | boolean} [shouldRetain]
    */
-  constructor (retain = true) {
-    this.#retain = retain
+  constructor (shouldRetain = true) {
+    this.#shouldRetain = typeof shouldRetain === 'function' ? shouldRetain : () => shouldRetain
   }
 
   /**
@@ -85,6 +99,7 @@ class AudioAccumulator {
       this.startTime = now
       this.mimeType = mimeType
       this.sampleRate = sampleRate
+      this.#retain = this.#shouldRetain()
     }
     this.present = true
 

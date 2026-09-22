@@ -20,12 +20,6 @@ const DEFAULT_AUDIO_RATE = 24_000
 // the caller's thread, and this state machine is only safe because every path runs on it.
 const PARK_MAX_MS = 5000
 
-// How many un-acknowledged `response.create`s to remember. Each is matched off by the next
-// `response.created`, so the queue is normally empty or holds one; the bound only stops a client
-// whose creates are rejected — the server answers with `error`, which carries no response id — from
-// growing it across a long connection.
-const MAX_PENDING_RESPONSE_CREATES = 8
-
 /**
  * @typedef {import('./turns').ResponseTurn} Turn
  * @typedef {import('./turns').ToolCall} ToolCall
@@ -169,23 +163,24 @@ class RealtimeSession {
   #pendingInputBytes = 0
 
   /**
-   * Whether anything consumes the captured audio. Only LLM Observability does, so with it disabled
-   * — the default — the segments keep their byte counts, which size the speech windows, and hold no
-   * bytes. See `AudioAccumulator`.
+   * Whether anything consumes the captured audio, asked once per segment rather than held as a
+   * snapshot. Only LLM Observability does, so with it disabled — the default — the segments keep
+   * their byte counts, which size the speech windows, and hold no bytes. See `AudioAccumulator`.
+   *
+   * A predicate because the answer can change while a connection is open: `tracer.use('openai', {
+   * llmobs: false })` unsubscribes mid-session, and a snapshot taken at connect would keep buffering
+   * megabytes for a consumer that had gone away (or keep a session that gained one unable to
+   * capture). `AudioAccumulator` resolves it on the frame that opens a segment, which is as late as
+   * possible while still being once per segment: asking per frame could flip retention mid-clip and
+   * leave a segment holding only part of itself, while resolving at construction would be far too
+   * early — a pending input segment is built as soon as the previous turn starts.
+   *
+   * @type {() => boolean}
    */
-  #retainAudio
+  #shouldRetainAudio
 
   /** @type {InputTurn} */
   #pendingInput
-
-  /**
-   * One entry per client `response.create` still waiting for its `response.created`, recording
-   * whether that response supplies its own input and the client event id a server `error` would
-   * name. FIFO: the server acknowledges creates in order.
-   *
-   * @type {Array<{ outOfBand: boolean, eventId: string | undefined }>}
-   */
-  #responseCreates = []
 
   /** @type {Map<string, Turn>} */
   #responses = new Map()
@@ -225,15 +220,15 @@ class RealtimeSession {
    * @param {(turn: Turn) => void} options.captureContext
    * @param {string} [options.model]
    * @param {string} [options.basePath]
-   * @param {boolean} [options.retainAudio]
+   * @param {() => boolean} [options.shouldRetainAudio]
    */
-  constructor ({ emitTurn, captureContext, model, basePath = '', retainAudio = true }) {
+  constructor ({ emitTurn, captureContext, model, basePath = '', shouldRetainAudio = () => true }) {
     this.#emitTurn = emitTurn
     this.#captureContext = captureContext
     this.#model = model
     this.#basePath = basePath
-    this.#retainAudio = retainAudio
-    this.#pendingInput = new InputTurn(retainAudio)
+    this.#shouldRetainAudio = shouldRetainAudio
+    this.#pendingInput = new InputTurn(shouldRetainAudio)
   }
 
   // -- event entry points ---------------------------------------------------
@@ -264,9 +259,6 @@ class RealtimeSession {
           break
         case 'conversation.item.create':
           this.#absorbInputItem(event.item, now)
-          break
-        case 'response.create':
-          this.#onResponseCreate(event.response, event.event_id)
           break
       }
     } catch (error) {
@@ -322,15 +314,10 @@ class RealtimeSession {
           this.#onInputTranscript(event.item_id, '', now)
           return
         case 'response.created':
-          this.#startResponse(event.response?.id ?? event.response_id, now)
+          this.#startResponse(event.response?.id ?? event.response_id, event.response, now)
           return
         case 'response.done':
           this.#finishResponse(event.response?.id ?? event.response_id, event.response, now)
-          return
-        case 'error':
-          // A rejected `response.create` never produces the `response.created` its queue entry is
-          // waiting for, so retire it before it misclassifies the next response.
-          this.#discardFailedResponseCreate(event.error)
           return
         default:
           this.#handleResponseDelta(event, eventType, now)
@@ -371,7 +358,7 @@ class RealtimeSession {
       // transport objects keeps their sessions reachable through the connection map, and a
       // server-VAD client streams the microphone continuously, so this is up to the whole retention
       // cap per closed connection with nothing left to consume it.
-      this.#pendingInput = new InputTurn(this.#retainAudio)
+      this.#pendingInput = new InputTurn(this.#shouldRetainAudio)
     } catch (error) {
       log.debug('Error finalizing OpenAI realtime session: %s', error?.message)
     }
@@ -651,70 +638,30 @@ class RealtimeSession {
   // -- turn lifecycle -------------------------------------------------------
 
   /**
-   * Note a client-initiated response, so the `response.created` it produces knows whether it owns
-   * the buffered user input.
-   *
-   * A response that carries its own `input`, or that is explicitly out-of-band
-   * (`conversation: 'none'`), is not the user's turn — the app is asking the model something on the
-   * side, which OpenAI supports running in parallel with the conversation. Letting it consume the
-   * pending input would attribute the user's microphone audio and transcript to it *and* leave the
-   * next real turn with nothing, dropping that turn's user-speech span entirely.
-   *
-   * @param {Record<string, unknown> | undefined} response
-   * @param {unknown} eventId - The client event's own `event_id`, when it set one, so a server
-   *   `error` naming it can retire this entry.
-   */
-  #onResponseCreate (response, eventId) {
-    if (this.#responseCreates.length >= MAX_PENDING_RESPONSE_CREATES) this.#responseCreates.shift()
-
-    this.#responseCreates.push({
-      outOfBand: Array.isArray(response?.input) || response?.conversation === 'none',
-      eventId: eventId == null ? undefined : String(eventId),
-    })
-  }
-
-  /**
-   * Retire the queue entry for a `response.create` the server rejected.
-   *
-   * A rejected create never produces a `response.created` — the server answers with `error` — so its
-   * entry would otherwise be consumed by the *next* response and misclassify it. Getting that wrong
-   * in the out-of-band direction is the expensive one: a genuine turn would be handed a fresh
-   * `InputTurn` and lose the user speech it had buffered.
-   *
-   * `error.event_id` names the client event at fault when the app set one, which resolves this
-   * exactly: an error naming some other event (a bad audio append, say) means no create failed and
-   * the queue is left alone. Without an id there is nothing to correlate on, so the most recent
-   * create is retired — the errors that reach this state are overwhelmingly about the create just
-   * sent, and being wrong merely restores the pre-existing behaviour of treating the next response as
-   * conversational.
-   *
-   * @param {Record<string, unknown> | undefined} error
-   */
-  #discardFailedResponseCreate (error) {
-    if (this.#responseCreates.length === 0) return
-
-    const eventId = error?.event_id
-    if (eventId != null) {
-      const index = this.#responseCreates.findIndex(create => create.eventId === String(eventId))
-      if (index !== -1) this.#responseCreates.splice(index, 1)
-      return
-    }
-
-    this.#responseCreates.pop()
-  }
-
-  /**
    * @param {unknown} responseId
+   * @param {Record<string, unknown> | undefined} response - The created response, which says which
+   *   conversation it belongs to.
    * @param {number} now
    */
-  #startResponse (responseId, now) {
+  #startResponse (responseId, response, now) {
     if (responseId == null) return
 
-    // An empty queue means the server created this response on its own — server VAD deciding the
-    // user finished speaking — which is exactly the case that owns the pending input. Classify
-    // before flushing: an out-of-band response runs *alongside* the conversation, so it is not
-    // evidence that a pending turn's transcript has stopped coming.
-    const outOfBand = this.#responseCreates.shift()?.outOfBand === true
+    // The server tells us directly: a response created with `conversation: 'none'` reports a null
+    // `conversation_id`, while one in the default conversation — including every response server VAD
+    // creates on its own — reports an id. Only the latter owns the buffered user input.
+    //
+    // Read off `response.created` rather than correlated back to the client's `response.create`.
+    // Position-matching the two streams cannot survive a create the server rejects (no
+    // `response.created` ever arrives) or several in flight at once, and both of those
+    // mis-classifications cost a real turn its user speech.
+    //
+    // `conversation_id` is absent rather than null on the beta realtime surface, which is why this
+    // tests for null exactly: an unknown conversation is treated as the conversation, matching how
+    // that surface behaved before out-of-band responses were modelled at all.
+    const outOfBand = response?.conversation_id === null
+
+    // Classify before flushing: an out-of-band response runs *alongside* the conversation, so it is
+    // not evidence that a pending turn's transcript has stopped coming.
 
     if (!outOfBand) {
       // A new conversational turn starting means a prior turn's input transcription is almost
@@ -724,9 +671,9 @@ class RealtimeSession {
       this.#flushPlaying(now, true)
     }
 
-    const input = outOfBand ? new InputTurn(this.#retainAudio) : this.#pendingInput
-    const turn = new ResponseTurn(input, now, this.#retainAudio)
-    if (!outOfBand) this.#pendingInput = new InputTurn(this.#retainAudio)
+    const input = outOfBand ? new InputTurn(this.#shouldRetainAudio) : this.#pendingInput
+    const turn = new ResponseTurn(input, now, this.#shouldRetainAudio)
+    if (!outOfBand) this.#pendingInput = new InputTurn(this.#shouldRetainAudio)
     turn.model = this.#model
 
     this.#captureContext(turn)
