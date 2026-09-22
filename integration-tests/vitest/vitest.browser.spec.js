@@ -24,6 +24,7 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
+  TEST_HAS_FAILED_ALL_RETRIES,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
@@ -46,7 +47,6 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const latestVersions = require('../../packages/dd-trace/test/plugins/versions/package.json').dependencies
-const { describeDynamicAtr } = require('./dynamic-atr')
 
 const isLegacyBrowserProvider = process.env.VITEST_BROWSER_LEGACY === '1' || NODE_MAJOR <= 18
 const browserProvider = process.env.VITEST_BROWSER_PROVIDER || 'playwright'
@@ -146,22 +146,6 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       payloads => assertions(getEvents(payloads), payloads),
       60_000
     )
-  }
-
-  if (!isLegacyBrowserProvider) {
-    describeDynamicAtr({
-      mode: 'browser',
-      getContext: () => ({
-        cwd,
-        receiver,
-        env: {
-          VITEST_BROWSER_MODE: '1',
-          VITEST_BROWSER_PROVIDER: browserProvider,
-          VITEST_BROWSER_PROVIDER_FACTORY: '1',
-        },
-        onChildProcess: child => { childProcess = child },
-      }),
-    })
   }
 
   it('reports each browser test once with browser identity', async () => {
@@ -663,6 +647,38 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
 
     assert.strictEqual(exitCode, 0, testOutput)
   })
+
+  if (!isLegacyBrowserProvider) {
+    it('applies the dynamic ATR budget to browser tests', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: { enabled: false },
+      })
+
+      const payloadsPromise = gatherEvents(events => {
+        const tests = getEventContents(events, 'test')
+        assert.strictEqual(tests.length, 2)
+        for (const test of tests) {
+          assert.strictEqual(test.meta[TEST_TYPE], 'browser')
+          assert.strictEqual(test.meta[TEST_BROWSER_NAME], browserName)
+          assert.strictEqual(test.meta[TEST_BROWSER_DRIVER], browserProvider)
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+        }
+        assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+        assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(tests[1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+      })
+
+      await Promise.all([
+        runVitest('browser-multiple-errors.mjs', {
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+        }, 1),
+        payloadsPromise,
+      ])
+    })
+  }
 
   {
     const objectRetryTest = isLegacyBrowserProvider ? it.skip : it
