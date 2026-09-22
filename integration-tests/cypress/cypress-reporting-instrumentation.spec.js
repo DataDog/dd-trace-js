@@ -2571,10 +2571,11 @@ moduleTypes.forEach(({
       sinon.assert.calledOnce(testSpan.finish)
     })
 
-    for (const isTextTerminal of [false, true]) {
+    for (const [isTextTerminal, pluginMode] of [[false, false], [true, true], [false], [true]]) {
       for (const retries of [0, 2]) {
-        it(`only applies dynamic ATR in terminal mode (terminal=${isTextTerminal}, retries=${retries})`, async () => {
-          cypressPlugin.cypressConfig = { isTextTerminal, isInteractive: true }
+        const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, retries=${retries}`
+        it(`only applies dynamic ATR in terminal mode (${configDescription})`, async () => {
+          cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
           cypressPlugin.testSuiteSpan = {}
           sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(true)
           const tasks = cypressPlugin.getTasks()
@@ -2600,6 +2601,10 @@ moduleTypes.forEach(({
             path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
           ), {
             Cypress: {
+              config: name => {
+                assert.strictEqual(name, 'isTextTerminal')
+                return isTextTerminal
+              },
               on: (name, callback) => { events[name] = callback },
               mocha: { getRunner: () => runner, getRootSuite: () => ({ file: 'test.cy.js' }) },
             },
