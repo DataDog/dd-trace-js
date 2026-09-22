@@ -419,10 +419,24 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    // OTel semantics requires OTLP, which the Electron exporter does not support.
+    // Checking if OTel semantics can be enabled, since it requires OTLP exporting.
+
+    // Electron exporter does not support OTLP.
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && this.experimental.exporter === exporters.ELECTRON) {
       log.warn(
         'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      )
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+    }
+
+    // Lambda Extension and mini-agent support OTLP, but it's disabled by default;
+    // we'll only enable OTel semantics if an explicit OTLP endpoint is configured.
+    const awsLambdaFuncName = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+    const hasOtlpTraceEndpoint = this.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
+      this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && awsLambdaFuncName !== undefined && !hasOtlpTraceEndpoint) {
+      log.warn(
+        'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
       )
       setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
     }
@@ -495,7 +509,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
-    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+    if (awsLambdaFuncName && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       setAndTrack(this, 'flushInterval', 0)
     }
 
@@ -621,7 +635,7 @@ class Config extends ConfigBase {
       if (!this.service) {
         const serverlessName = IS_SERVERLESS
           ? (
-              getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
+              awsLambdaFuncName ||
               getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
               getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
               getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions

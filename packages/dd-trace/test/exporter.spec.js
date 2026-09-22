@@ -67,8 +67,9 @@ describe('exporter', () => {
   })
 
   it('should require the Lambda log transport when configured OTLP endpoints are empty', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+
     for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
-      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
       process.env[key] = ''
 
       assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true, key)
@@ -121,17 +122,6 @@ describe('exporter', () => {
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
       assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), false)
     })
-  })
-
-  it('should require the Lambda log transport when an OTLP endpoint is empty', () => {
-    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-
-    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
-      process.env[key] = ''
-
-      assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true, key)
-      delete process.env[key]
-    }
   })
 
   it('should create an AgentExporter when in Lambda environment with an extension', () => {

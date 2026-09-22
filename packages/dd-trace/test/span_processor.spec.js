@@ -446,6 +446,40 @@ describe('SpanProcessor', () => {
       }
     })
 
+    it('preserves legacy HTTP fields when Lambda disables requested OTel semantics', () => {
+      const previousFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
+      const previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+
+      try {
+        spanFormat.returns(formattedHttpSpan())
+        const lambdaConfig = getConfigFresh()
+        const lambdaProcessor = new SpanProcessor(exporter, prioritySampler, lambdaConfig)
+        trace.started = [finishedSpan]
+        trace.finished = [finishedSpan]
+
+        lambdaProcessor.process(finishedSpan)
+
+        const exported = exporter.export.firstCall.args[0][0]
+        assert.strictEqual(lambdaConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+        assert.strictEqual(exported.meta['http.method'], 'GET')
+        assert.strictEqual(exported.meta['http.status_code'], '200')
+        assert.ok(!('http.request.method' in exported.meta))
+      } finally {
+        if (previousFunctionName === undefined) {
+          delete process.env.AWS_LAMBDA_FUNCTION_NAME
+        } else {
+          process.env.AWS_LAMBDA_FUNCTION_NAME = previousFunctionName
+        }
+        if (previousSemantics === undefined) {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        } else {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
+        }
+      }
+    })
+
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())
       const otelConfig = {

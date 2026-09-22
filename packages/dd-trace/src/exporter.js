@@ -62,8 +62,8 @@ function hasCiValidationEnvironment () {
 function requiresLambdaLogExporter () {
   if (!usesLambdaLogExporter()) return false
 
-  // `createOtlpTraceExporter` reads the trace-specific endpoint and `Config` fills in a default
-  // for it, so only the environment shows whether the caller chose one.
+  // Config later fills in a default trace endpoint, so read the environment to distinguish an
+  // endpoint supplied by the user from that calculated value.
   return !getEnvironmentVariable('OTEL_EXPORTER_OTLP_ENDPOINT') &&
     !getEnvironmentVariable('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
 }

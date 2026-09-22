@@ -399,6 +399,36 @@ describe('otlp export flags', () => {
     }
   })
 
+  it('otlp_traces_export_enabled should be false when Lambda semantics lacks an explicit endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    const existsSync = sinon.stub(fs, 'existsSync').returns(true)
+
+    try {
+      assert.strictEqual(startupLogObj().otlp_traces_export_enabled, false)
+    } finally {
+      existsSync.restore()
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    }
+  })
+
+  it('otlp_traces_export_enabled should be true when Lambda semantics has an explicit endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
+    const existsSync = sinon.stub(fs, 'existsSync').returns(false)
+
+    try {
+      assert.strictEqual(startupLogObj().otlp_traces_export_enabled, true)
+    } finally {
+      existsSync.restore()
+      delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    }
+  })
+
   it('otlp_metrics_export_enabled should be true when DD_METRICS_OTEL_ENABLED is true', () => {
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
     assert.strictEqual(startupLogObj().otlp_metrics_export_enabled, true)

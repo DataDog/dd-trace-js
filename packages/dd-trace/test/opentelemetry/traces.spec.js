@@ -891,19 +891,57 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
     })
 
-    it('DatadogTracer keeps the Lambda log exporter when an OTLP endpoint is empty', () => {
+    it('DatadogTracer disables OTel semantics and keeps the Lambda log exporter without an OTLP endpoint', () => {
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
       const loadTracer = proxyquire.noPreserveCache()
       const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
       const LogExporter = require('../../src/exporters/log')
       sinon.stub(fs, 'existsSync').returns(false)
 
-      for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
-        process.env[key] = ''
-        const tracer = new DatadogTracer(getConfigFresh())
+      for (const key of [undefined, 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        if (key) process.env[key] = ''
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
 
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, key)
         assert(tracer._exporter instanceof LogExporter, key)
+        if (key) delete process.env[key]
+      }
+    })
+
+    it('DatadogTracer does not infer Lambda OTLP support from transport markers', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const AgentExporter = require('../../src/exporters/agent')
+      const existsSync = sinon.stub(fs, 'existsSync')
+
+      for (const marker of ['/opt/extensions/datadog-agent', '/tmp/datadog/mini_agent_ready']) {
+        existsSync.callsFake(path => path === marker)
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, marker)
+        assert(tracer._exporter instanceof AgentExporter, marker)
+      }
+    })
+
+    it('DatadogTracer uses OTLP semantics in Lambda with either explicit OTLP endpoint', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        process.env[key] = 'http://collector:4318'
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true, key)
+        assert(tracer._exporter instanceof OtlpHttpTraceExporter, key)
         delete process.env[key]
       }
     })
