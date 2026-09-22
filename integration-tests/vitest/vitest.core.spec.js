@@ -1540,7 +1540,7 @@ versions.forEach((version) => {
         }).catch(done)
       })
 
-      it('uses the cached dynamic budget instead of a conflicting flat count', (done) => {
+      it('uses the cached dynamic budget when supported and the flat count otherwise', (done) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -1556,7 +1556,7 @@ versions.forEach((version) => {
             const tests = payloads.flatMap(({ payload }) => payload.events)
               .filter(event => event.type === 'test').map(event => event.content)
             const neverPassingTest = tests.filter(test => test.resource === FLAKY_NEVER_PASSING_RESOURCE)
-            assert.strictEqual(neverPassingTest.length, 2, 'one initial execution plus the first dynamic bucket')
+            assert.strictEqual(neverPassingTest.length, version === 'latest' ? 2 : 6)
             assert.ok(neverPassingTest.every(test => test.meta[TEST_STATUS] === 'fail'))
           }
         )

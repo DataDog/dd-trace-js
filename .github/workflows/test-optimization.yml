@@ -639,6 +639,13 @@ jobs:
           VITEST_BROWSER_PROVIDER: ${{ matrix.browser-provider }}
           VITEST_BROWSER_BINARY: ${{ matrix.browser-binary }}
           VITEST_BROWSER_DRIVER_BINARY: ${{ matrix.browser-driver-binary }}
+      - name: Test dynamic ATR across Vitest execution modes
+        if: matrix.browser-provider == 'playwright'
+        run: npm run test:integration:vitest:coverage
+        env:
+          NODE_OPTIONS: "-r ./ci/init"
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          SPEC: vitest.dynamic-atr
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-browser-${{ matrix.version }}

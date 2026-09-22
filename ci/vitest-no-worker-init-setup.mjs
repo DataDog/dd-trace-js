@@ -15,6 +15,8 @@ const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryP
   schedulingRetryCount: 0,
 }
 const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+const dynamicAtrRetryPolicy = providedContext.dynamicAtrRetryPolicy
+const flakyTestRetriesConfiguration = providedContext.flakyTestRetriesConfiguration
 const isEfdSuiteAdmissionEnabled = providedContext.isEfdSuiteAdmissionEnabled === true
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
@@ -153,8 +155,39 @@ function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
         task.repeats = earlyFlakeDetectionRetries
         task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
       }
+      configureDynamicAtr(task)
       wrapRetryCondition(task)
     }
+  }
+}
+
+/**
+ * Stops Datadog-managed retries at the initial attempt's duration budget, after the complete lifecycle.
+ *
+ * @param {object} task
+ */
+function configureDynamicAtr (task) {
+  if (!dynamicAtrRetryPolicy || !flakyTestRetriesConfiguration) return
+  const projectName = task.file.projectName
+  const isManagedProject = projectName
+    ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
+    : flakyTestRetriesConfiguration.includesUnnamedProject
+  if (!isManagedProject || typeof task.retry !== 'number' || task.retry <= 0) return
+
+  task.retry = {
+    count: task.retry,
+    condition () {
+      // AroundEach fixture teardown can fail after onTestFinished recorded the attempt's errors.
+      recordRetryErrorCount(task)
+      if (task.meta.__ddTestOptAtrRetries === undefined) {
+        // Vitest's startTime is available before aroundEach/beforeEach, including hooks that throw.
+        const duration = timeOrigin + now() - task.result.startTime
+        task.meta.__ddTestOptAtrRetries = dynamicAtrRetryPolicy.find(
+          ({ durationLimitMs }) => durationLimitMs === undefined || duration <= durationLimitMs
+        ).retryCount
+      }
+      return task.result.retryCount < task.meta.__ddTestOptAtrRetries
+    },
   }
 }
 
@@ -463,7 +496,7 @@ function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
  * @param {object} task
  */
 function getRetryLimit (task) {
-  return typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
+  return task.meta.__ddTestOptAtrRetries ?? (typeof task.retry === 'number' ? task.retry : task.retry?.count || 0)
 }
 
 /**

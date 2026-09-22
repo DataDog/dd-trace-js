@@ -768,6 +768,8 @@ async function runMainProcessSetup (
       resetLibraryConfig()
     } else {
       applyLibraryConfig(libraryConfig)
+      // Older runners cache a numeric ceiling and cannot stop retries before the next lifecycle starts.
+      isDynamicAtrEnabled &&= satisfies(frameworkVersion, '>=4.1.0')
     }
   } catch {
     requestErrorTags = {}
@@ -976,6 +978,8 @@ function getNoWorkerInitState () {
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,
+    isDynamicAtrEnabled,
+    dynamicAtrBuckets,
     isKnownTestsEnabled,
     newTestsWithDynamicNames,
     requestErrorTags,
