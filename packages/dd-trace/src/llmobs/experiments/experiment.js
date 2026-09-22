@@ -2,6 +2,7 @@
 
 const id = require('../../id')
 const log = require('../../log')
+const { EvaluatorContext, EvaluatorResult, SummaryEvaluatorContext } = require('../evaluators/base')
 
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
@@ -67,17 +68,30 @@ function toSpan (row, metadata, ids, spanName, userTags, recordTags) {
   }
 }
 
-// One metric per evaluator per row or summary evaluator.
+/**
+ * Split an evaluator return value into the metric value and the optional
+ * `EvaluatorResult` annotations (reasoning, assessment, metadata, tags).
+ * @param {unknown} result
+ * @returns {{ value: unknown, annotations: EvaluatorResult | null }}
+ */
+function unwrapEvaluatorResult (result) {
+  if (result instanceof EvaluatorResult) return { value: result.value, annotations: result }
+  return { value: result, annotations: null }
+}
+
+// One metric per evaluator per row or summary evaluator. `result` may be a raw
+// value or an `EvaluatorResult`, whose annotations are copied onto the metric.
 function toMetric (
-  label, value, errorMessage, spanId, traceId, timestampMs, experimentId, userTags, source = 'custom', ids = {}
+  label, result, errorMessage, spanId, traceId, timestampMs, experimentId, userTags, source = 'custom', ids = {}
 ) {
+  const { value, annotations } = unwrapEvaluatorResult(result)
   const metric = {
     metric_source: source,
     label,
     span_id: spanId,
     trace_id: traceId,
     timestamp_ms: timestampMs,
-    tags: buildTags(userTags, {
+    tags: buildTags(mergeTags(userTags, annotations?.tags ?? undefined), {
       experiment_id: experimentId,
       run_id: ids.runId,
       run_iteration: ids.runIteration,
@@ -89,6 +103,12 @@ function toMetric (
     metric.metric_type = 'categorical'
     metric.error = { message: errorMessage }
     return metric
+  }
+
+  if (annotations !== null) {
+    if (annotations.reasoning !== null) metric.reasoning = annotations.reasoning
+    if (annotations.assessment !== null) metric.assessment = annotations.assessment
+    if (annotations.metadata !== null) metric.metadata = annotations.metadata
   }
 
   const type = inferMetricType(value)
@@ -720,18 +740,27 @@ class Experiment {
     }
 
     try {
-      const value = await limit(() => this.#runWithRetries(
-        () => evaluator(record.input, row.output, record.expectedOutput),
+      const context = new EvaluatorContext({
+        inputData: record.input,
+        outputData: row.output,
+        expectedOutput: record.expectedOutput,
+        metadata: buildSpanMetadata(record.metadata, this.#config),
+        spanId: row.spanId,
+        traceId: row.traceId,
+      })
+      const result = await limit(() => this.#runWithRetries(
+        () => evaluator(record.input, row.output, record.expectedOutput, context),
         maxRetries,
         retryDelay
       ), throwOnErrors)
+      const { value } = unwrapEvaluatorResult(result)
       row.evaluations[label] = value
       return {
         label,
         value,
         metric: toMetric(
           label,
-          value,
+          result,
           null,
           row.spanId,
           row.traceId,
@@ -941,17 +970,25 @@ class Experiment {
     options,
   }) {
     try {
-      const value = await options.limit(() => this.#runWithRetries(
-        () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata),
+      const context = new SummaryEvaluatorContext({
+        inputs,
+        outputs,
+        expectedOutputs,
+        evaluationResults: evaluatorResults,
+        metadata,
+      })
+      const result = await options.limit(() => this.#runWithRetries(
+        () => evaluator(inputs, outputs, expectedOutputs, evaluatorResults, metadata, context),
         options.maxRetries,
         options.retryDelay
       ), options.throwOnErrors)
+      const { value } = unwrapEvaluatorResult(result)
       return {
         label,
         evaluation: { value, error: null },
         metric: toMetric(
           label,
-          value,
+          result,
           null,
           '',
           '',

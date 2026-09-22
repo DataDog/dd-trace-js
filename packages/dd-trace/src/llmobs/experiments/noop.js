@@ -269,6 +269,60 @@ class NoopExperiments {
     this.#warn()
     return Promise.resolve(new ExternalExperiment(new NoopExperiment(options.name, true)))
   }
+
+  /**
+   * @returns {Promise<{ uiUrl: null }>}
+   */
+  publishEvaluator () {
+    this.#warn()
+    return Promise.resolve({ uiUrl: null })
+  }
+
+  /**
+   * @param {string} experimentId
+   * @returns {Promise<object>}
+   */
+  pullExperiment (experimentId = '') {
+    this.#warn()
+    return Promise.resolve({
+      id: experimentId,
+      name: '',
+      experiment: '',
+      projectId: '',
+      projectName: '',
+      datasetId: '',
+      datasetVersion: 0,
+      description: '',
+      config: {},
+      runCount: 0,
+      tags: {},
+      parentExperimentId: null,
+      aggregateData: null,
+      status: null,
+      error: null,
+      createdAt: null,
+      updatedAt: null,
+      url: null,
+      result: { experimentId: null, rows: [], summaryEvaluations: {}, runs: [], url: null },
+    })
+  }
+
+  /**
+   * @returns {Promise<never[]>}
+   */
+  listExperiments () {
+    this.#warn()
+    return Promise.resolve([])
+  }
+
+  /**
+   * @param {{ datasetName?: string, description?: string }} [options]
+   * @returns {Promise<NoopDataset>}
+   */
+  createDatasetFromCsv (options = {}) {
+    this.#warn()
+    return Promise.resolve(new NoopDataset(options.datasetName, { description: options.description }))
+  }
 }
 
 module.exports = NoopExperiments
