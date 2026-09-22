@@ -257,7 +257,9 @@ addHook({
 /**
  * Byte length of an outgoing payload, following the coercion `ws` applies in `Sender.send`:
  * strings and blobs are measured directly and everything else goes through `toBuffer()`, which
- * yields one byte per element for plain arrays rather than concatenating them.
+ * yields one byte per element for plain arrays rather than concatenating them. Blob-likes carry
+ * neither a `byteLength` nor an array shape, so they are matched last to keep the common
+ * buffer path first.
  *
  * @param {WebSocketMessageData | number | undefined} data
  */
@@ -265,14 +267,18 @@ function sentDataLength (data) {
   if (typeof data === 'string') {
     return Buffer.byteLength(data)
   }
-  if (data instanceof Blob) {
-    return data.size
+  // An array is one byte per element even when it carries an unrelated `byteLength`.
+  if (Array.isArray(data)) {
+    return data.length
   }
   // Covers views as well as `ArrayBuffer` and `SharedArrayBuffer`.
   if (typeof (/** @type {{ byteLength?: unknown }} */ (data)?.byteLength) === 'number') {
     return /** @type {{ byteLength: number }} */ (data).byteLength
   }
-  return Array.isArray(data) ? data.length : 0
+  // Blobs and files, detected the way `ws` does: structurally, so shimmed and cross-realm
+  // implementations it accepts are measured instead of silently reported as empty.
+  const { size } = /** @type {{ size?: unknown }} */ (data) ?? {}
+  return typeof size === 'number' ? size : 0
 }
 
 /**
