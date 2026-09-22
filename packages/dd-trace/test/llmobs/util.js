@@ -3,6 +3,8 @@
 const util = require('node:util')
 const assert = require('node:assert')
 const { inspect } = require('node:util')
+
+const msgpack = require('@msgpack/msgpack')
 const { before, beforeEach, afterEach, after } = require('mocha')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
@@ -410,7 +412,10 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {object} options.tracerConfigOptions
  * @param {number} [options.traceTimeoutMs] - maximum time to wait for APM traces
  * @returns {{
- *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   getEvents: (
+ *     numLlmObsSpans?: number,
+ *     options?: { writerOnly?: boolean }
+ *   ) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
  *   assertNoLlmObsSpans: (windowMs?: number) => Promise<void>,
  *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
  * }}
@@ -464,24 +469,54 @@ function useLlmObs ({
   })
 
   return {
-    getEvents: async function (numLlmObsSpans = 1) {
-      // get apm spans from the agent
-      const apmSpans = await apmTracesPromise
-      resetTracesPromises()
-
-      // get llmobs span events requests from the agent
-      // because llmobs process spans on span finish and submits periodically,
-      // we need to aggregate all of the span events
-      // tests should know how many spans they expect to see, otherwise tests will timeout
+    getEvents: async function (numLlmObsSpans = 1, { writerOnly = false } = {}) {
+      const apmSpans = []
       const llmobsSpans = []
+      let apmError
+      let apmTracesReceived = false
+      let apmTraces = waitForApmTraces()
 
       while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
-        await new Promise(resolve => setImmediate(resolve))
+        await Promise.race([apmTraces, new Promise(resolve => setImmediate(resolve))])
+
         const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
         llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
+
+        if (apmError && llmobsSpans.length < numLlmObsSpans) throw apmError
+
+        if (apmTracesReceived && llmobsSpans.length < numLlmObsSpans) {
+          apmTracesReceived = false
+          apmTraces = waitForApmTraces()
+        }
       }
 
-      return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+      if (!writerOnly) {
+        await apmTraces
+        if (apmError) throw apmError
+      }
+
+      return {
+        apmSpans,
+        llmobsSpans: llmobsSpans.sort((a, b) => {
+          const startDifference = a.start_ns - b.start_ns
+          if (startDifference) return startDifference
+          if (a.parent_id === b.span_id) return -1
+          if (b.parent_id === a.span_id) return 1
+          return a.duration - b.duration
+        }),
+      }
+
+      function waitForApmTraces () {
+        return apmTracesPromise.then(spans => {
+          apmSpans.push(...spans)
+          llmobsSpans.push(...getLlmObsSpansFromApmSpans(spans))
+          apmTracesReceived = true
+          resetTracesPromises()
+        }, error => {
+          apmError = error
+          apmTracesReceived = true
+        })
+      }
     },
 
     /**
@@ -489,7 +524,9 @@ function useLlmObs ({
      * @returns {Promise<void>}
      */
     assertNoLlmObsSpans: async function (windowMs = 100) {
-      await apmTracesPromise
+      const apmSpans = await apmTracesPromise
+      const llmobsSpansFromApm = getLlmObsSpansFromApmSpans(apmSpans)
+      assert.equal(llmobsSpansFromApm.length, 0, `expected no LLMObs spans, got ${llmobsSpansFromApm.length}`)
       resetTracesPromises()
 
       const deadline = Date.now() + windowMs
@@ -518,6 +555,76 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
   return llmobsSpanEventsRequests
     .flatMap(request => request)
     .map(request => request.spans[0])
+}
+
+function getLlmObsSpansFromApmSpans (apmSpans) {
+  const llmobsSpans = []
+  for (const apmSpan of apmSpans) {
+    const llmobsMetaStruct = decodeMetaStructValue(apmSpan.meta_struct?._llmobs)
+    if (!llmobsMetaStruct) continue
+
+    llmobsSpans.push(formatLlmObsSpanFromMetaStruct(apmSpan, llmobsMetaStruct))
+  }
+  return llmobsSpans
+}
+
+function decodeMetaStructValue (value) {
+  if (!value) return
+  if (value instanceof Uint8Array) return msgpack.decode(value)
+  return value
+}
+
+function formatLlmObsSpanFromMetaStruct (apmSpan, llmobsMetaStruct) {
+  const spanId = fromBuffer(apmSpan.span_id)
+  const apmTraceId = fromBuffer(apmSpan.trace_id)
+  const llmobsTraceId = llmobsMetaStruct.trace_id
+  const llmobsSpan = {
+    trace_id: llmobsTraceId,
+    span_id: spanId,
+    parent_id: llmobsMetaStruct.parent_id ?? 'undefined',
+    name: llmobsMetaStruct.name ?? apmSpan.name,
+    tags: Object.entries(llmobsMetaStruct.tags ?? {}).map(([key, value]) => `${key}:${value ?? ''}`),
+    start_ns: fromBuffer(apmSpan.start, true),
+    duration: fromBuffer(apmSpan.duration, true),
+    status: apmSpan.error ? 'error' : 'ok',
+    meta: getLlmObsSpanEventMeta(llmobsMetaStruct.meta ?? {}),
+    metrics: llmobsMetaStruct.metrics ?? {},
+    _dd: {
+      ...(llmobsMetaStruct._dd ?? {}),
+      span_id: spanId,
+      trace_id: apmTraceId,
+      apm_trace_id: apmTraceId,
+    },
+  }
+
+  if (llmobsMetaStruct.session_id) llmobsSpan.session_id = llmobsMetaStruct.session_id
+  if (llmobsMetaStruct.config) llmobsSpan.config = llmobsMetaStruct.config
+  if (llmobsMetaStruct.span_links) llmobsSpan.span_links = llmobsMetaStruct.span_links
+
+  return llmobsSpan
+}
+
+function getLlmObsSpanEventMeta (llmobsMeta) {
+  const meta = {}
+
+  for (const [key, value] of Object.entries(llmobsMeta)) {
+    if (key === 'span') {
+      meta['span.kind'] = value.kind
+    } else if (key === 'error') {
+      meta[ERROR_MESSAGE] = value.message
+      meta[ERROR_TYPE] = value.type
+      meta[ERROR_STACK] = value.stack
+    } else if (key === 'agent_attribution') {
+      meta.agent_attribution = {
+        pagent_name: value.pagent_name ?? null,
+        pagent_span_id: value.pagent_span_id,
+      }
+    } else {
+      meta[key] = value
+    }
+  }
+
+  return meta
 }
 
 /**
@@ -581,6 +688,7 @@ module.exports = {
   assertLlmObsEvaluationMetric,
   assertLlmObsSpanEvent,
   assertPromptTracking,
+  getLlmObsSpansFromApmSpans,
   removeDestroyHandler,
   useLlmObs,
   MOCK_NOT_NULLISH,

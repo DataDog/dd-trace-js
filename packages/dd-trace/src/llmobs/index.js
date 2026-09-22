@@ -22,6 +22,7 @@ const {
   PROPAGATED_SAMPLING_DECISION_KEY,
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
+  LLMOBS_SUBMITTED_TAG_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const { agentNameWireSafe, resolveAgentAttribution } = require('./util')
@@ -35,6 +36,8 @@ const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 const { llmObsTraceIdToWire } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
+const spanAppendCh = channel('llmobs:span:append')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -80,6 +83,7 @@ function enable (config) {
   const retiredEvalWriter = evalWriter
   const isReinitializing = Boolean(retiredSpanWriter || retiredEvalWriter)
   unregisterTelemetryFlusher?.()
+  spanProcessor?.destroy()
   retireWriters(retiredSpanWriter, retiredEvalWriter)
 
   const startTime = performance.now()
@@ -97,6 +101,8 @@ function enable (config) {
     evalMetricAppendCh.subscribe(handleEvalMetricAppend)
     flushCh.subscribe(handleFlush)
     registerUserSpanProcessorCh.subscribe(handleRegisterProcessor)
+    traceSampledCh.subscribe(handleTraceSampled)
+    spanAppendCh.subscribe(handleSpanAppend)
   }
 
   // span processing
@@ -131,11 +137,14 @@ function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
+  if (traceSampledCh.hasSubscribers) traceSampledCh.unsubscribe(handleTraceSampled)
+  if (spanAppendCh.hasSubscribers) spanAppendCh.unsubscribe(handleSpanAppend)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   const retiredSpanWriter = spanWriter
   const retiredEvalWriter = evalWriter
+  spanProcessor?.destroy()
   spanProcessor?.setWriter(null)
   unregisterTelemetryFlusher?.()
   unregisterTelemetryFlusher = undefined
@@ -261,6 +270,7 @@ function flushWriters (done, currentSpanWriter = spanWriter, currentEvalWriter =
 }
 
 function handleFlush () {
+  spanProcessor.processPending()
   const err = flushWriters() ? 'writer_flush_error' : ''
   telemetry.recordUserFlush(err)
 }
@@ -271,6 +281,23 @@ function handleRegisterProcessor (userSpanProcessor) {
 
 function handleSpanProcess (span) {
   spanProcessor.process(span)
+}
+
+function handleTraceSampled (trace) {
+  spanProcessor.processTrace(trace)
+}
+
+function handleSpanAppend ({ span, event, routing }) {
+  try {
+    const enqueued = spanWriter.append(event, routing)
+    if (enqueued) span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+  } catch (e) {
+    log.warn(
+      'Failed to rescue span through LLM Observability intake. Span won\'t be sent to LLM Observability: %s',
+      e.message,
+      e
+    )
+  }
 }
 
 function handleEvalMetricAppend ({ payload, routing }) {
