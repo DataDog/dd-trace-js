@@ -31,19 +31,7 @@ class DatadogTracer {
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
 
-    // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
-    // exporter when the tracer is running in Test Optimization mode. Test spans
-    // (test_session/test_module/ test_suite/test) belong on the citestcycle
-    // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
-    // vars set in their environment (e.g. for a separate telemetry integration)
-    // silently lose all test spans. The same applies to the Electron exporter:
-    // spans must reach the Electron SDK's span-processing pipeline, not an OTLP endpoint,
-    // because the SDK does not support OTLP export.
-    // A Lambda without the extension or the mini agent reaches the backend only by writing spans
-    // to its log for the Forwarder, so replacing that transport with an OTLP endpoint nobody
-    // listens on loses them silently.
-    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
-      config.experimental.exporter !== 'electron' && !getExporter.requiresLambdaLogExporter()) {
+    if (getExporter.usesOtlpTraceExporter(config)) {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
     } else {

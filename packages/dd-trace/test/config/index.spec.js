@@ -1034,6 +1034,29 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
+  it('should disable OTel semantics without overriding Electron exporter settings', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.experimental.exporter, 'electron')
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(config.spanAttributeSchema, 'v1')
+    assert.strictEqual(config.spanComputePeerService, true)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+    )
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
+    ])
+  })
+
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'

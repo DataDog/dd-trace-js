@@ -878,13 +878,15 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
     })
 
-    it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
+    it('DatadogTracer disables OTel semantics and prefers the Electron exporter over OTLP', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
       const loadTracer = proxyquire.noPreserveCache()
       const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
       const ElectronExporter = require('../../src/exporters/electron')
       const config = getConfigFresh({ experimental: { exporter: 'electron' } })
       const tracer = new DatadogTracer(config)
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
       assert(tracer._exporter instanceof ElectronExporter,
         'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
     })

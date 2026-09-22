@@ -11,6 +11,7 @@ require('./setup/core')
 
 const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
+const { getConfigFresh } = require('./helpers/config')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -36,6 +37,7 @@ describe('SpanProcessor', () => {
     trace = {
       started: [],
       finished: [],
+      tags: {},
     }
 
     let tags = {}
@@ -416,6 +418,33 @@ describe('SpanProcessor', () => {
         metrics: {},
       }
     }
+
+    it('preserves legacy HTTP fields when Electron disables requested OTel semantics', () => {
+      const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+
+      try {
+        spanFormat.returns(formattedHttpSpan())
+        const electronConfig = getConfigFresh({ experimental: { exporter: 'electron' } })
+        const electronProcessor = new SpanProcessor(exporter, prioritySampler, electronConfig)
+        trace.started = [finishedSpan]
+        trace.finished = [finishedSpan]
+
+        electronProcessor.process(finishedSpan)
+
+        const exported = exporter.export.firstCall.args[0][0]
+        assert.strictEqual(electronConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+        assert.strictEqual(exported.meta['http.method'], 'GET')
+        assert.strictEqual(exported.meta['http.status_code'], '200')
+        assert.ok(!('http.request.method' in exported.meta))
+      } finally {
+        if (previousValue === undefined) {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        } else {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousValue
+        }
+      }
+    })
 
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())

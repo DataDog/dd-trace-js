@@ -419,6 +419,14 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
+    // OTel semantics requires OTLP, which the Electron exporter does not support.
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && this.experimental.exporter === exporters.ELECTRON) {
+      log.warn(
+        'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      )
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+    }
+
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
     }

@@ -87,6 +87,42 @@ describe('exporter', () => {
     }
   })
 
+  describe('usesOtlpTraceExporter', () => {
+    function config (overrides = {}) {
+      return {
+        OTEL_TRACES_EXPORTER: 'otlp',
+        isCiVisibility: false,
+        experimental: {},
+        ...overrides,
+      }
+    }
+
+    it('should select OTLP when requested without a transport exception', () => {
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), true)
+    })
+
+    it('should not select OTLP when it is not requested', () => {
+      assert.strictEqual(
+        require('../src/exporter').usesOtlpTraceExporter(config({ OTEL_TRACES_EXPORTER: 'none' })),
+        false
+      )
+    })
+
+    it('should not select OTLP for Test Optimization', () => {
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config({ isCiVisibility: true })), false)
+    })
+
+    it('should not select OTLP for Electron', () => {
+      const electronConfig = config({ experimental: { exporter: 'electron' } })
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(electronConfig), false)
+    })
+
+    it('should not select OTLP when Lambda requires log export', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), false)
+    })
+  })
+
   it('should require the Lambda log transport when an OTLP endpoint is empty', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
 
