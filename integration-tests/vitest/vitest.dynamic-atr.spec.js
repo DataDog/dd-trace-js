@@ -143,6 +143,21 @@ for (const version of versions) {
 
       if (!supportsDynamicAtr) continue
 
+      it(`measures each native repetition independently in ${mode}`, async () => {
+        const { code, report } = await run(mode, '', {
+          env: { TEST_DIR: 'ci-visibility/vitest-tests/dynamic-atr-repeats.mjs' },
+        })
+        assert.strictEqual(code, 1, output)
+        const counts = output.match(/DYNAMIC_ATR_REPEATS (\{[^\n]+\})/)
+        assert.ok(counts, output)
+        assert.deepStrictEqual(JSON.parse(counts[1]), {
+          'slow pass then fast fail': [1, 2],
+          'fast fail then slow fail': [2, 3],
+          'slow fail then fast fail': [3, 2],
+        })
+        assert.ok(report.testResults.flatMap(result => result.assertionResults).every(test => test.status === 'failed'))
+      })
+
       it(`preserves explicit test and suite retries in ${mode}`, async () => {
         const { code, tests, report } = await run(mode, '', {
           env: { TEST_DIR: 'ci-visibility/vitest-tests/dynamic-atr-overrides.mjs' },

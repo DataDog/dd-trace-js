@@ -33,6 +33,7 @@ const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
+const dynamicAtrExecutionStartByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
 let browserCommands
 let now
@@ -88,6 +89,11 @@ if (isNoWorkerInitActive) {
     const isQuarantinedTest = quarantinedTests[testSuite]?.[testName] && !isAttemptToFixTest
     const attemptIndex = getNextAttemptIndex(task)
     const attemptStart = now()
+    if (task.retry?.__ddTestOptAtr && retryAttemptIndexByTask.get(task).index === 0) {
+      const executionStart = task.result.repeatCount > 0 ? attemptStart : task.result.startTime - timeOrigin
+      dynamicAtrExecutionStartByTask.set(task, executionStart)
+      task.meta.__ddTestOptAtrRetries = undefined
+    }
     if (attemptIndex > 0) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
     }
@@ -180,13 +186,14 @@ function configureDynamicAtr (task) {
       // AroundEach fixture teardown can fail after onTestFinished recorded the attempt's errors.
       recordRetryErrorCount(task)
       if (task.meta.__ddTestOptAtrRetries === undefined) {
-        // Vitest's startTime is available before aroundEach/beforeEach, including hooks that throw.
-        const duration = timeOrigin + now() - task.result.startTime
+        const executionStart = dynamicAtrExecutionStartByTask.get(task) ?? task.result.startTime - timeOrigin
+        const duration = now() - executionStart
         task.meta.__ddTestOptAtrRetries = dynamicAtrRetryPolicy.find(
           ({ durationLimitMs }) => durationLimitMs === undefined || duration <= durationLimitMs
         ).retryCount
       }
-      return task.result.retryCount < task.meta.__ddTestOptAtrRetries
+      const retryIndex = retryAttemptIndexByTask.get(task)?.index ?? task.result.retryCount
+      return retryIndex < task.meta.__ddTestOptAtrRetries
     },
   }
 }
