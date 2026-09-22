@@ -5411,6 +5411,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         hookFailure,
       })
     }
+    for (const enabled of [true, false]) {
+      for (const hookAttempt of [0, 1]) {
+        dynamicCases.push({
+          name: `body and afterEach failure at attempt ${hookAttempt}, enabled=${enabled}`,
+          buckets: '3,3,3,3,3',
+          attempts: hookAttempt + 1,
+          enabled,
+          hookFailure: 'afterEach',
+          hookAttempt,
+          failBody: true,
+        })
+      }
+    }
     for (const parallel of [false, true]) {
       for (const scenario of dynamicCases) {
         const runTest = parallel ? parallelIt : it
@@ -5432,7 +5445,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(last.meta[TEST_STATUS], scenario.recover ? 'pass' : 'fail')
               assert.strictEqual(last.meta[TEST_FINAL_STATUS], scenario.recover ? 'pass' : 'fail')
               assert.strictEqual(last.meta[TEST_HAS_FAILED_ALL_RETRIES], scenario.recover ? undefined : 'true')
-              assert.strictEqual(last.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              assert.strictEqual(last.meta[TEST_RETRY_REASON],
+                scenario.attempts > 1 ? TEST_RETRY_REASON_TYPES.atr : undefined)
               assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
               if (scenario.hookFailure) {
                 assert.match(last.meta[ERROR_MESSAGE], new RegExp(`retry ${scenario.hookFailure} failed`))
@@ -5451,12 +5465,36 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
               ...(scenario.recover ? { DYNAMIC_ATR_RECOVER: '1' } : {}),
               ...(scenario.hookFailure ? { DYNAMIC_ATR_HOOK_FAILURE: scenario.hookFailure } : {}),
+              ...(scenario.failBody
+                ? { DYNAMIC_ATR_FAIL_BODY: '1', DYNAMIC_ATR_HOOK_ATTEMPT: String(scenario.hookAttempt) }
+                : {}),
             },
           })
           const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
           assert.strictEqual(exitCode, scenario.recover ? 0 : 1)
         })
       }
+    }
+
+    for (const nativeRetries of [0, 1]) {
+      it(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        let output = ''
+        childProcess = exec('node ./ci-visibility/run-mocha-atr-rerun.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            MOCHA_NATIVE_RETRIES: String(nativeRetries),
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '3,3,3,3,3',
+          },
+        })
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const [exitCode] = await once(childProcess, 'close')
+        assert.strictEqual(exitCode, 0, output)
+        assert.ok(output.includes(`RETRY_COUNTS [4,${nativeRetries + 1}]`), output)
+      })
     }
 
     // retry listener was released in mocha@6.0.0

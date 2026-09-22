@@ -16,14 +16,16 @@ describe('dynamic ATR', () => {
   })
 
   afterEach(function () {
-    if (process.env.DYNAMIC_ATR_HOOK_FAILURE === 'afterEach' && this.currentTest.currentRetry() === 1) {
+    if (process.env.DYNAMIC_ATR_HOOK_FAILURE === 'afterEach' &&
+      this.currentTest.currentRetry() === Number(process.env.DYNAMIC_ATR_HOOK_ATTEMPT || 1)) {
       assert.fail('retry afterEach failed')
     }
   })
 
   it('uses the duration budget', function () {
-    if (this.test.currentRetry() === 1 &&
-      (process.env.DYNAMIC_ATR_RECOVER || process.env.DYNAMIC_ATR_HOOK_FAILURE === 'afterEach')) return
+    const recover = process.env.DYNAMIC_ATR_RECOVER ||
+      (process.env.DYNAMIC_ATR_HOOK_FAILURE === 'afterEach' && !process.env.DYNAMIC_ATR_FAIL_BODY)
+    if (this.test.currentRetry() === 1 && recover) return
     assert.fail('test body failed')
   })
 })

@@ -1107,9 +1107,16 @@ function wrapMochaRun (Mocha, frameworkVersion) {
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
+    const originalDelay = this.options.delay
     this.options.delay = true
 
-    const runner = run.apply(this, args)
+    let runner
+    try {
+      runner = run.apply(this, args)
+    } finally {
+      // Only this runner needs the configuration delay, including when the next run disables the plugin.
+      this.options.delay = originalDelay
+    }
 
     this.files.forEach((path) => {
       const isUnskippable = isMarkedAsUnskippable({ path })
@@ -1119,7 +1126,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
     })
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
-      if (isFailedTestReplayEnabled()) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       if (config.isKnownTestsEnabled) {
@@ -1201,6 +1208,7 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
+      resetRunState(this.suite)
       return runMochaRunner(run, this, args)
     }
 
