@@ -94,9 +94,19 @@ function wrapSend (send) {
       return send.apply(this, arguments)
     }
 
+    const socket = this._sender?._socket
+    // No socket is attached before the handshake completes or after it is torn down.
+    if (!socket) {
+      return send.apply(this, arguments)
+    }
+
     const [data, options, cb] = arguments
 
-    const ctx = { data, socket: this._sender?._socket }
+    // `ws` stringifies numbers and otherwise infers binariness from the payload type.
+    const payload = typeof data === 'number' ? data.toString() : data
+    const binary = options?.binary ?? typeof payload !== 'string'
+    const byteLength = dataLength(/** @type {WebSocketMessageData} */ (payload))
+    const ctx = { data, binary, socket, byteLength }
 
     return typeof cb === 'function'
       ? producerCh.traceCallback(send, undefined, ctx, this, data, options, cb)
