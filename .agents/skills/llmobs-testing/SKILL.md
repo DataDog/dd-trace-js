@@ -128,7 +128,7 @@ See [references/test-structure.md](references/test-structure.md) for complete te
 
 `SPAN_KINDS` in `packages/dd-trace/src/llmobs/constants/tags.js` is the list the public SDK validates against:
 `llm` (chat / completions), `workflow`, `agent`, `task` (a unit of work inside a workflow), `tool`, `embedding`,
-`retrieval`. Plugins set the kind directly and skip that validation, so kinds outside the list exist — `ai` v7
+`retrieval`, `experiment`. Plugins set the kind directly and skip that validation, so kinds outside the list exist — `ai` v7
 and claude-agent-sdk both emit `step`.
 
 Pinning a field the kind never emits asserts metadata production does not produce:
@@ -137,9 +137,14 @@ Pinning a field the kind never emits asserts metadata production does not produc
   `metadata`
 - `embedding` — `modelName`, `modelProvider`, `inputDocuments`, `outputValue`, sometimes `metrics`
 - `retrieval` — `inputValue`, `outputDocuments`
+- `experiment` — `inputValue`, `outputValue`, metadata, and any experiment tags the surface emits
 - `workflow` / `agent` / `task` / `step` / `tool` — kind-specific `inputValue` / `outputValue`, sometimes
   `metadata`, never
   model fields or token metrics
+
+For an `llm` operation that exposes `audioParts` or `imageParts`, assert the parts on both input and output
+messages instead of only their flattened text. Each part has a `mimeType` and exactly one of base64 `content` or
+`attachmentKey`.
 
 Cover every instrumented method, and a multi-turn conversation where the surface takes one.
 
