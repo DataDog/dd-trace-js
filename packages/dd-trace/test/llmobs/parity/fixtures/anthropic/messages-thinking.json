@@ -1,0 +1,21 @@
+{
+  "responses": [
+    {
+      "match": { "method": "POST", "path": "/v1/messages" },
+      "status": 200,
+      "body": {
+        "id": "msg-parity-thinking",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-3-7-sonnet-20250219",
+        "content": [
+          { "type": "thinking", "thinking": "I should answer briefly.", "signature": "x" },
+          { "type": "text", "text": "Parity." }
+        ],
+        "stop_reason": "end_turn",
+        "stop_sequence": null,
+        "usage": { "input_tokens": 10, "output_tokens": 8 }
+      }
+    }
+  ]
+}
