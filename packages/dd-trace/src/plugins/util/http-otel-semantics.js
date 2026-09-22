@@ -33,7 +33,6 @@ const KNOWN_METHODS = new Set([
  *
  * @param {string} method
  * @param {string} [route]
- * @returns {string}
  */
 function otelHttpResourceName (method, route) {
   const normalizedMethod = KNOWN_METHODS.has(method) ? method : 'HTTP'
@@ -47,7 +46,6 @@ function otelHttpResourceName (method, route) {
  *
  * @param {import('../../opentracing/span')} span
  * @param {string} resource
- * @returns {void}
  */
 function setInstrumentationHttpResource (span, resource) {
   span.setTag('resource.name', resource)
@@ -75,7 +73,6 @@ const INT_VALUED_OTEL_ATTRIBUTES = new Set([HTTP_RESPONSE_STATUS_CODE, SERVER_PO
  * Whether a value is usable as one of the int-typed OTel attributes, which are unsigned integers.
  *
  * @param {unknown} value
- * @returns {boolean}
  */
 function isCanonicalIntegerAttribute (value) {
   // `Number.isSafeInteger` rather than `isInteger`: a longer digit string becomes Infinity, which
@@ -91,7 +88,6 @@ function isCanonicalIntegerAttribute (value) {
  *
  * @param {string | undefined} currentResource
  * @param {string | undefined} instrumentationResource
- * @returns {boolean}
  */
 function isInstrumentationOwnedResource (currentResource, instrumentationResource) {
   if (!currentResource) return true

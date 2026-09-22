@@ -534,7 +534,6 @@ function applyRouteOrEndpointTag (context) {
 
 /**
  * @param {import('../../opentracing/span_context')} spanContext
- * @returns {boolean}
  */
 function ownsResource (spanContext) {
   return isInstrumentationOwnedResource(

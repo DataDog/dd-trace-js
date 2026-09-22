@@ -17,7 +17,6 @@ function isWebRequest (req) {
  * @param {{ setTag: (key: string, value: unknown) => void }} span
  * @param {Record<string, unknown>} config
  * @param {import('node:http').IncomingMessage | Request} req
- * @returns {void}
  */
 function addOtelRequestTags (span, config, req) {
   if (!config.DD_TRACE_OTEL_SEMANTICS_ENABLED || !req.headers) return

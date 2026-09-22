@@ -39,7 +39,6 @@ module.exports = function getExporter (name) {
  * case in a Lambda with neither the Datadog extension nor the mini agent. Nothing else can reach
  * the backend from there, so this transport must not be replaced.
  *
- * @returns {boolean}
  */
 function usesLambdaLogExporter () {
   if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return false
@@ -59,7 +58,6 @@ function hasCiValidationEnvironment () {
  * transport: true in a Lambda that can only reach the backend through its log, and only while the
  * caller has not pointed OTLP at a collector of their own.
  *
- * @returns {boolean}
  */
 function requiresLambdaLogExporter () {
   if (!usesLambdaLogExporter()) return false
