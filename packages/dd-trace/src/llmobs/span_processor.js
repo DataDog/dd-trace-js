@@ -67,6 +67,7 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
+  #agentAvailable
   #destroyer
 
   /** @type {import('../config/config-base')} */
@@ -91,6 +92,11 @@ class LLMObsSpanProcessor {
 
   setWriter (writer) {
     this.#writer = writer
+  }
+
+  /** @param {boolean | undefined} agentAvailable */
+  setAgentAvailable (agentAvailable) {
+    this.#agentAvailable = agentAvailable
   }
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
@@ -356,7 +362,8 @@ class LLMObsSpanProcessor {
    * @param {boolean | undefined} supportsMetaStruct
    */
   #shouldAttachMetaStruct (routing, event, samplingPriority, isRecording, supportsMetaStruct) {
-    return supportsMetaStruct !== false &&
+    return this.#agentAvailable !== false &&
+      supportsMetaStruct !== false &&
       isRecording !== false &&
       !routing.apiKey &&
       !this.#hasRepeatedTagKeys(event.tags) &&

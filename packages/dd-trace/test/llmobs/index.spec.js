@@ -604,6 +604,14 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
+
+        it('marks the agent as available', () => {
+          const setAgentAvailable = sinon.stub(LLMObsSpanProcessor.prototype, 'setAgentAvailable')
+
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
+
+          sinon.assert.calledOnceWithExactly(setAgentAvailable, true)
+        })
       })
 
       describe('when the agent has the correct proxy endpoint', () => {
@@ -651,6 +659,14 @@ describe('module', () => {
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
+        })
+
+        it('marks the agent as unavailable', () => {
+          const setAgentAvailable = sinon.stub(LLMObsSpanProcessor.prototype, 'setAgentAvailable')
+
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
+
+          sinon.assert.calledOnceWithExactly(setAgentAvailable, false)
         })
       })
     })

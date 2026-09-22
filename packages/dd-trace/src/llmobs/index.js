@@ -111,7 +111,9 @@ function enable (config) {
   // distributed tracing for llmobs
   if (!isReinitializing) injectCh.subscribe(handleLLMObsInjection)
 
-  setAgentStrategy(config, useAgentless => {
+  setAgentStrategy(config, (useAgentless, agentAvailable) => {
+    spanProcessor?.setAgentAvailable(agentAvailable)
+
     if (useAgentless && !(config.DD_API_KEY && config.site)) {
       if (DD_MAJOR < 6 || !config?.startupLogs) {
         // eslint-disable-next-line no-console

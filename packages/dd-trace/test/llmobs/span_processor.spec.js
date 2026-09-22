@@ -191,6 +191,7 @@ describe('span processor', () => {
         '_ml_obs.sampling_decision': '1',
         '_ml_obs.trace_id': 'mlob123',
       })
+      processor.setAgentAvailable(true)
 
       processSpan()
 
@@ -331,6 +332,30 @@ describe('span processor', () => {
 
       processor.process(span)
       processor.processTrace({ spans: [span], samplingPriority: 1, supportsMetaStruct: false })
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('uses the writer when the agent is unavailable', () => {
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'workflow',
+      })
+      processor.setAgentAvailable(false)
+
+      processSpan(1)
 
       sinon.assert.calledOnce(writer.append)
       assert.strictEqual(span.meta_struct, undefined)

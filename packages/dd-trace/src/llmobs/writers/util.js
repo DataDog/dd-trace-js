@@ -7,7 +7,7 @@ const { fetchAgentInfo } = require('../../agent/info')
 
 /**
  * @param {import('../../config/config-base')} config
- * @param {(agentless: boolean) => void} setWritersAgentlessValue
+ * @param {(agentless: boolean, agentAvailable?: boolean) => void} setWritersAgentlessValue
  */
 function setAgentStrategy (config, setWritersAgentlessValue) {
   const agentlessEnabled = config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
@@ -19,13 +19,13 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
 
   fetchAgentInfo(config.url, (err, agentInfo) => {
     if (err) {
-      setWritersAgentlessValue(true)
+      setWritersAgentlessValue(true, false)
       return
     }
 
     const endpoints = agentInfo.endpoints
     const hasEndpoint = Array.isArray(endpoints) && endpoints.includes(EVP_PROXY_AGENT_BASE_PATH)
-    setWritersAgentlessValue(!hasEndpoint)
+    setWritersAgentlessValue(!hasEndpoint, true)
   })
 }
 
