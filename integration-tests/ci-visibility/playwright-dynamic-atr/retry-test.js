@@ -14,6 +14,14 @@ if (process.env.PLAYWRIGHT_SERIAL_RETRY) {
 }
 
 test('always fails', async () => {
+  if (process.env.PLAYWRIGHT_EXPECTED_FAILURE) {
+    test.fail()
+    if (process.env.PLAYWRIGHT_EXPECTED_FAILURE === 'passes') return
+    if (process.env.PLAYWRIGHT_EXPECTED_FAILURE === 'times-out') {
+      test.setTimeout(100)
+      await new Promise(() => {})
+    }
+  }
   if (process.env.PLAYWRIGHT_SLOW_INITIAL_ATTEMPT && test.info().retry === 0) {
     await new Promise(resolve => setTimeout(resolve, 6000))
   }

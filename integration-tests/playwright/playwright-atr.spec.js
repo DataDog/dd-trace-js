@@ -157,6 +157,38 @@ versions.forEach((version) => {
         await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
+      for (const outcome of ['fails', 'passes', 'times-out']) {
+        it(`finalizes dynamic ATR when an expected failure ${outcome}`, async (receiver, run) => {
+          receiver.setSettings({ flaky_test_retries_enabled: true, flaky_test_retries_count: 0 })
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url === '/api/v2/citestcycle',
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              const status = outcome === 'passes' ? 'pass' : 'fail'
+              assert.strictEqual(tests.length, outcome === 'fails' ? 1 : 3)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === status))
+              assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], status)
+              assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+              if (outcome === 'fails') {
+                assert.strictEqual(tests[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+              }
+            }, 30000)
+          const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-dynamic-atr',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+              PLAYWRIGHT_EXPECTED_FAILURE: outcome,
+            },
+          })
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, outcome === 'fails' ? 0 : 1)
+        })
+      }
+
       const dynamicCases = [
         {
           name: 'elapsed duration',

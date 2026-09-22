@@ -672,8 +672,8 @@ function getTestByTestId (dispatcher, testId) {
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
 // We can't use test.outcome() directly because it's set on follow up handlers:
 // our `testEndHandler` is called before the outcome is set.
-function testWillRetry (test, testStatus) {
-  return testStatus === 'fail' && test.results.length <= test.retries
+function testWillRetry (test, status, expectedStatus = test.expectedStatus) {
+  return status !== 'skipped' && status !== expectedStatus && test.results.length <= test.retries
 }
 
 function getFinalStatus ({
@@ -873,6 +873,8 @@ function testEndHandler ({
   shouldCreateTestSpan,
   projects,
   testDuration,
+  testResultStatus,
+  expectedStatus = test.expectedStatus,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -999,7 +1001,7 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
-  const willRetry = testWillRetry(test, testStatus)
+  const willRetry = testWillRetry(test, testResultStatus, expectedStatus)
 
   // ATR: use the effective native limit for tests with explicit Playwright retries.
   const atrRetryCount = isDynamicAtrEnabled
@@ -1008,7 +1010,7 @@ function testEndHandler ({
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
-    !willRetry &&
+    !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }
@@ -1242,7 +1244,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       videos.push(attachment)
     }
   })
-  worker.on('testEnd', ({ testId, status, errors, annotations, duration }) => {
+  worker.on('testEnd', ({ testId, status, errors, annotations, duration, expectedStatus }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
@@ -1262,6 +1264,8 @@ function onDispatcherCreateWorker (dispatcher, worker) {
         shouldCreateTestSpan,
         projects,
         testDuration: duration,
+        testResultStatus: status,
+        expectedStatus,
       }
     )
     const testResult = test.results.at(-1)
@@ -1307,7 +1311,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
     } else if (test._ddIsAttemptToFix) {
       isFinalExecution = !!(test._ddHasPassedAttemptToFixRetries || test._ddHasFailedAttemptToFixRetries)
     } else {
-      isFinalExecution = !testWillRetry(test, testStatus)
+      isFinalExecution = !testWillRetry(test, status, expectedStatus)
     }
 
     const ddProperties = {
@@ -1361,6 +1365,7 @@ function dispatcherHook (dispatcherExport) {
             test,
             annotations: params.annotations,
             testStatus: STATUS_TO_TEST_STATUS[testResult.status],
+            testResultStatus: testResult.status,
             error: testResult.error,
             isTimeout,
             shouldCreateTestSpan: true,
@@ -1387,11 +1392,15 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config) {
+    // A later run must not inherit ATR settings when configuration fails or the plugin is disabled.
+    isFlakyTestRetriesEnabled = false
+    flakyTestRetriesCount = 0
+    isDynamicAtrEnabled = false
+    dynamicAtrBuckets = undefined
     if (!libraryConfigurationCh.hasSubscribers) {
       // Instrumentation hooks still run when the plugin is disabled between runs.
       isKnownTestsEnabled = false
       isEarlyFlakeDetectionEnabled = false
-      isFlakyTestRetriesEnabled = false
       isTestManagementTestsEnabled = false
       isImpactedTestsEnabled = false
       knownTests = {}
@@ -1596,6 +1605,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           test,
           annotations: [],
           testStatus: 'skip',
+          testResultStatus: 'skipped',
           error: null,
           isTimeout: false,
           shouldCreateTestSpan: !alreadyReported,

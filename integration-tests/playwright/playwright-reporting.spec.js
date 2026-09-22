@@ -653,6 +653,33 @@ versions.forEach((version) => {
             assert.strictEqual(exitCode, 0)
           })
 
+          it('clears dynamic ATR after a settings request fails between runs', async (receiver, run) => {
+            receiver.setSettings({ flaky_test_retries_enabled: true })
+            receiver.setSettingsResponseStatusCodes([200, 404])
+            const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const tests = payloads.flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test').map(event => event.content)
+                assert.strictEqual(tests.length, 4, 'three attempts on the first run, one on the second')
+                const secondRun = tests.filter(test => test.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] === 'true')
+                assert.strictEqual(secondRun.length, 1)
+                assert.strictEqual(secondRun[0].meta[TEST_FINAL_STATUS], 'fail')
+              }, 30000)
+            const proc = run('node ./ci-visibility/playwright-rerun-console.js', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-disabled',
+                TEST_SHOULD_FAIL: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+                DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+              },
+            })
+            const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+            assert.strictEqual(exitCode, 0)
+          })
+
           for (const retries of [0, 1]) {
             it(`preserves ${retries} configured retries after disabling the plugin`, async (receiver, run) => {
               receiver.setSettings({ flaky_test_retries_enabled: true })
