@@ -32,6 +32,10 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  empty: {
+    maxInstances: 1,
+    specs: ['./empty.e2e.js'],
+  },
   automaticLogSubmission: {
     after () {
       const loggers = require('./automatic-log-submission-logger')
@@ -41,6 +45,10 @@ const scenarioConfig = {
     },
     maxInstances: 1,
     specs: ['./automatic-log-submission.e2e.js'],
+  },
+  automaticConsoleLogSubmission: {
+    maxInstances: 1,
+    specs: ['./automatic-console-log-submission.e2e.js'],
   },
   atr: {
     maxInstances: 1,

@@ -45,6 +45,39 @@ describe('Dynamic Instrumentation', function () {
       assert.deepStrictEqual(snapshots, [])
     })
 
+    it('should report an error result if the condition throws, once per throttle window', async function () {
+      const rcConfig = t.generateRemoteConfig({
+        captureSnapshot: true,
+        when: { dsl: 'definitelyDoesNotExist == "never"', json: { eq: [{ ref: 'definitelyDoesNotExist' }, 'never'] } },
+      })
+      const probeInstalled = t.waitForProbeStatus([rcConfig.config.id], 'INSTALLED')
+
+      t.agent.addRemoteConfig(rcConfig)
+      await probeInstalled
+
+      const resultReceived = new Promise(resolve => {
+        t.agent.once('debugger-input', ({ payload }) => resolve(payload[0]))
+      })
+      const [snapshots, result] = await Promise.all([
+        t.captureSnapshotsUntilExit(1, async () => {
+          await t.request(t.breakpoint.url)
+          await Promise.all([t.request(t.breakpoint.url), t.request(t.breakpoint.url)])
+          await delay(1500)
+        }),
+        resultReceived,
+      ])
+
+      assert.strictEqual(snapshots.length, 1, 'should only report the condition error once')
+      assert.strictEqual(result.message, 'ReferenceError: definitelyDoesNotExist is not defined')
+      const [snapshot] = snapshots
+      assert.deepStrictEqual(snapshot.evaluationErrors, [{
+        expr: 'definitelyDoesNotExist == "never"',
+        message: 'ReferenceError: definitelyDoesNotExist is not defined',
+      }])
+      assert.strictEqual(snapshot.captures, undefined, 'should not capture anything for a failing condition')
+      assert.strictEqual(snapshot.probe.id, rcConfig.config.id)
+    })
+
     it('should report error if condition cannot be compiled', async function () {
       const rcConfig = t.generateRemoteConfig({
         when: { dsl: 'original dsl', json: { ref: 'this is not a valid ref' } },

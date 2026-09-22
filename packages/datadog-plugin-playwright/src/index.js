@@ -56,6 +56,7 @@ const {
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
   TEST_FINAL_STATUS,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -69,6 +70,10 @@ const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
+const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
+const EMPTY_SHARD_REASON = 'zero_test_shard'
+const RETRY_TEST_ID = '_dd.playwright.retry_test_id'
+const DEFER_FINAL_STATUS = '_dd.playwright.defer_final_status'
 const noop = () => {}
 
 /**
@@ -100,6 +105,7 @@ class PlaywrightPlugin extends CiPlugin {
   #isFinalizingAfterError = false
   #finishPendingTestFinishes
   #pendingTestFinishCallbacks = new Map()
+  #pendingRetryTestFinishes = new Map()
 
   constructor (...args) {
     super(...args)
@@ -180,9 +186,13 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isExpectedEmptyShard,
       error,
       onDone,
     }) => {
+      for (const finish of this.#pendingRetryTestFinishes.values()) finish(true)
+      this.#pendingRetryTestFinishes.clear()
+
       if (error) {
         this.#isFinalizingAfterError = true
         for (const testSuiteSpan of this._testSuiteSpansByTestSuiteAbsolutePath.values()) {
@@ -201,6 +211,15 @@ class PlaywrightPlugin extends CiPlugin {
       const finishSession = (flushDone) => {
         this.testModuleSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_STATUS, status)
+
+        if (isExpectedEmptyShard) {
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            EMPTY_SHARD_SKIP_REASON,
+            EMPTY_SHARD_REASON
+          )
+        }
 
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
@@ -370,9 +389,34 @@ class PlaywrightPlugin extends CiPlugin {
         formattedTraces.push(formattedTrace)
       }
 
+      const retryTestId = formattedTestSpan?.meta[RETRY_TEST_ID]
+      const deferFinalStatus = formattedTestSpan?.meta[DEFER_FINAL_STATUS] === 'true'
+      if (retryTestId !== undefined) {
+        delete formattedTestSpan.meta[RETRY_TEST_ID]
+        delete formattedTestSpan.meta[DEFER_FINAL_STATUS]
+      }
+      let readyToExport = false
+      let isFinalExecution
       const exportTraces = () => {
+        readyToExport = true
+        if (deferFinalStatus && isFinalExecution === undefined) return
         for (const trace of formattedTraces) {
           this.tracer._exporter.export(trace)
+        }
+      }
+
+      if (retryTestId !== undefined) {
+        // Keep at most one execution while another attempt is possible. Media uploads
+        // can finish before or after finality is known, so track readiness separately.
+        const finishPrevious = this.#pendingRetryTestFinishes.get(retryTestId)
+        finishPrevious?.(false)
+        this.#pendingRetryTestFinishes.delete(retryTestId)
+        if (deferFinalStatus) {
+          this.#pendingRetryTestFinishes.set(retryTestId, (isFinal) => {
+            isFinalExecution = isFinal
+            if (!isFinal) delete formattedTestSpan.meta[TEST_FINAL_STATUS]
+            if (readyToExport) exportTraces()
+          })
         }
       }
 
@@ -499,6 +543,8 @@ class PlaywrightPlugin extends CiPlugin {
       isAtrRetry,
       isModified,
       finalStatus,
+      retryTestId,
+      deferFinalStatus,
       earlyFlakeAbortReason,
       onDone,
     }) => {
@@ -508,6 +554,8 @@ class PlaywrightPlugin extends CiPlugin {
       }
 
       const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
+      const isDeferredMainTest = !this._tracerConfig.DD_PLAYWRIGHT_WORKER &&
+        retryTestId !== undefined && deferFinalStatus
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -563,8 +611,13 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
-      if (finalStatus) {
+      if (finalStatus && !isDeferredMainTest) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (retryTestId !== undefined && this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
+        // This identifier is removed by the main process before exporting the trace.
+        span.setTag(RETRY_TEST_ID, retryTestId)
+        if (deferFinalStatus) span.setTag(DEFER_FINAL_STATUS, 'true')
       }
       if (earlyFlakeAbortReason) {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
@@ -589,10 +642,6 @@ class PlaywrightPlugin extends CiPlugin {
         }
         stepSpan.finish(stepStartTime + stepDuration)
       }
-      if (finalStatus === 'fail') {
-        this.numFailedTests++
-      }
-
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
@@ -606,6 +655,28 @@ class PlaywrightPlugin extends CiPlugin {
           isModified,
         }
       )
+      if (retryTestId !== undefined && !this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
+        const finishPrevious = this.#pendingRetryTestFinishes.get(retryTestId)
+        finishPrevious?.(false)
+        this.#pendingRetryTestFinishes.delete(retryTestId)
+        if (isDeferredMainTest) {
+          // Legacy spans have no worker report. Retain the last execution until a
+          // successor arrives or session end confirms that its retry was canceled.
+          const finishTime = span._getTime()
+          finishAllTraceSpans(span)
+          this.#pendingRetryTestFinishes.set(retryTestId, (isFinal) => {
+            if (isFinal) {
+              span.setTag(TEST_FINAL_STATUS, finalStatus)
+              if (finalStatus === 'fail') this.numFailedTests++
+            }
+            span.finish(finishTime)
+          })
+          return
+        }
+      }
+      if (finalStatus === 'fail') {
+        this.numFailedTests++
+      }
       span.finish()
 
       finishAllTraceSpans(span)

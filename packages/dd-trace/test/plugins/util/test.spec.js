@@ -51,6 +51,10 @@ const {
   getTestParentSpan,
   setRumTestCorrelation,
   setRumTestTags,
+  setExpectedEmptyTestSessionTags,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
+  TEST_STATUS,
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
@@ -94,6 +98,31 @@ describe('finishAllTraceSpans', () => {
 
     sinon.assert.notCalled(completedSpan.finish)
     sinon.assert.calledOnceWithExactly(activeSpan.finish)
+  })
+})
+
+describe('setExpectedEmptyTestSessionTags', () => {
+  it('marks both the session and module as skipped with an explanation', () => {
+    const testSessionSpan = { setTag: sinon.spy() }
+    const testModuleSpan = { setTag: sinon.spy() }
+
+    setExpectedEmptyTestSessionTags(testSessionSpan, testModuleSpan, 'No tests were executed', 'zero_tests')
+
+    for (const span of [testSessionSpan, testModuleSpan]) {
+      sinon.assert.calledWithExactly(span.setTag, TEST_STATUS, 'skip')
+      sinon.assert.calledWithExactly(span.setTag, TEST_SKIP_REASON, 'No tests were executed')
+      sinon.assert.calledWithExactly(span.setTag, TEST_SESSION_EMPTY_REASON, 'zero_tests')
+    }
+  })
+
+  it('marks the session when an empty run does not create a module', () => {
+    const testSessionSpan = { setTag: sinon.spy() }
+
+    setExpectedEmptyTestSessionTags(testSessionSpan, undefined, 'No tests were executed', 'zero_tests')
+
+    sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_STATUS, 'skip')
+    sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_SKIP_REASON, 'No tests were executed')
+    sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_SESSION_EMPTY_REASON, 'zero_tests')
   })
 })
 
