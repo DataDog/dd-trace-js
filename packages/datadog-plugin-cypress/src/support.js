@@ -457,6 +457,7 @@ before(function () {
   cy.task('dd:testSuiteStart', {
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
+    isTextTerminal: Cypress.config('isTextTerminal'),
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
@@ -470,10 +471,7 @@ before(function () {
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
       isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
-      // Cypress 6 omits the execution mode from the Node plugin configuration.
-      isTextTerminal = suiteConfig.isTextTerminal === undefined
-        ? Cypress.config('isTextTerminal')
-        : suiteConfig.isTextTerminal
+      isTextTerminal = suiteConfig.isTextTerminal
       rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis

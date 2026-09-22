@@ -25,6 +25,11 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
+  TEST_IS_RETRY,
+  TEST_RETRY_REASON,
+  TEST_RETRY_REASON_TYPES,
+  TEST_HAS_FAILED_ALL_RETRIES,
   TEST_COMMAND,
   TEST_MODULE,
   TEST_FRAMEWORK,
@@ -2168,7 +2173,13 @@ moduleTypes.forEach(({
         const tags = {}
         return {
           tags,
-          context: () => ({ _trace: { started: [] }, toTraceId: () => '123' }),
+          context: () => ({
+            _trace: { started: [] },
+            toTraceId: () => '123',
+            toSpanId: () => '456',
+            getTag: name => tags[name],
+            getTags: () => tags,
+          }),
           finish: sinon.stub(),
           setTag: sinon.stub().callsFake((name, value) => { tags[name] = value }),
         }
@@ -2192,7 +2203,7 @@ moduleTypes.forEach(({
       sinon.stub(cypressPlugin, 'reportTestSessionCoverage')
       sinon.stub(cypressPlugin, 'ciVisEvent')
 
-      return { testModuleSpan, testSessionSpan }
+      return { testModuleSpan, testSessionSpan, createSpan }
     }
 
     it('waits for the existing initialization before the first run', async () => {
@@ -2634,6 +2645,55 @@ moduleTypes.forEach(({
             assert.strictEqual(currentTest._retries, isTextTerminal ? 3 : retries)
           }
           await hooks.after()
+        })
+      }
+
+      for (const isDynamicAtrEnabled of [false, true]) {
+        const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, dynamic=${isDynamicAtrEnabled}`
+        it(`only accounts for ATR in terminal mode (${configDescription})`, () => {
+          const { createSpan } = prepareRunFinalization()
+          cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
+          cypressPlugin.testSuiteSpan = createSpan()
+          sinon.stub(cypressPlugin, 'isFlakyTestRetriesEnabled').value(true)
+          sinon.stub(cypressPlugin, 'flakyTestRetriesCount').value(1)
+          sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(isDynamicAtrEnabled)
+          sinon.stub(cypressPlugin, 'dynamicAtrBuckets').value([1, 1, 1, 1, 1])
+          sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
+          sinon.stub(cypressPlugin, '_now').returns(123)
+
+          const testSuite = 'cypress/e2e/retries.js'
+          const tasks = cypressPlugin.getTasks()
+          tasks['dd:testSuiteStart']({ testSuite, isTextTerminal })
+          const records = []
+          const tests = []
+          for (const state of ['failed', 'passed']) {
+            const attempts = [{ state: 'failed' }, { state }]
+            tests.push({ title: [state], state, attempts })
+            for (const [attemptIndex, attempt] of attempts.entries()) {
+              const test = { testSuite, testId: state, testName: state, state: attempt.state, duration: 1 }
+              tasks['dd:beforeEach'](test)
+              const span = cypressPlugin.activeTestSpan
+              const result = tasks['dd:afterEach']({ test })
+              records.push({ span, result, attemptIndex, state: attempt.state, tagsAfterEach: { ...span.tags } })
+            }
+          }
+
+          cypressPlugin.afterSpec({ relative: testSuite }, { tests, stats: { tests: 2, failures: 1, passes: 1 } })
+
+          for (const { span, result, attemptIndex, state, tagsAfterEach } of records) {
+            const isRetry = attemptIndex > 0
+            const hasFailedAllRetries = isTextTerminal && isRetry && state === 'failed' ? 'true' : undefined
+            assert.strictEqual(span.tags[TEST_IS_RETRY], isRetry ? 'true' : undefined)
+            assert.strictEqual(span.tags[TEST_RETRY_REASON], isRetry
+              ? TEST_RETRY_REASON_TYPES[isTextTerminal ? 'atr' : 'ext']
+              : undefined)
+            assert.strictEqual(tagsAfterEach[TEST_HAS_FAILED_ALL_RETRIES], hasFailedAllRetries)
+            assert.strictEqual(span.tags[TEST_HAS_FAILED_ALL_RETRIES], hasFailedAllRetries)
+            const finalStatus = state === 'passed' ? 'pass' : 'fail'
+            assert.strictEqual(span.tags[TEST_FINAL_STATUS], isRetry ? finalStatus : undefined)
+            assert.deepStrictEqual(result, isTextTerminal && isDynamicAtrEnabled ? { dynamicAtrRetryCount: 1 } : null)
+            sinon.assert.calledOnce(span.finish)
+          }
         })
       }
     }

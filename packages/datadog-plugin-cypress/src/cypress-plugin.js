@@ -2033,7 +2033,14 @@ class CypressPlugin {
 
   getTasks () {
     return {
-      'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
+      'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal }) => {
+        // Cypress 6 omits the execution mode from the Node plugin configuration.
+        const isTextTerminal = this.cypressConfig.isTextTerminal ?? browserIsTextTerminal
+        if (!isTextTerminal) {
+          this.isFlakyTestRetriesEnabled = false
+          this.isDynamicAtrEnabled = false
+          this.flakyTestRetriesCount = 0
+        }
         const suitePayload = {
           isEarlyFlakeDetectionEnabled:
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
@@ -2048,7 +2055,7 @@ class CypressPlugin {
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
           isDynamicAtrEnabled: this.isDynamicAtrEnabled,
-          isTextTerminal: this.cypressConfig.isTextTerminal,
+          isTextTerminal,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
           rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
