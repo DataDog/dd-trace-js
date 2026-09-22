@@ -137,16 +137,20 @@ class DistributionMetric extends Metric {
 
   /**
    * @param {number} [value]
+   * @param {number} [count] - How many times `value` was observed. Lets a caller that already aggregated its samples
+   *   record them without one call per sample.
    */
-  track (value = 1) {
+  track (value = 1, count = 1) {
     if (typeof value !== 'number' || !Number.isFinite(value)) return
+    // The sketch rejects a non-positive weight, and there is nothing to record for one anyway
+    if (!(count > 0)) return
 
     if (this.sketch === undefined) {
       this.sketch = createSketch()
     }
 
-    this.sketch.accept(value)
-    this.pointCount++
+    this.sketch.accept(value, count)
+    this.pointCount += count
   }
 
   /**
