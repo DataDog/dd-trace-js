@@ -450,7 +450,7 @@ function getFinalStatusRetryKind ({
 function getFinalStatus ({
   status,
   retryKind,
-  hasFailedAllRetries,
+  hasFailedAllAttempts,
   hasPassedAllAtfRetries,
   isQuarantined,
   isDisabled,
@@ -464,7 +464,7 @@ function getFinalStatus ({
     case FINAL_STATUS_RETRY_KIND.atr:
     case FINAL_STATUS_RETRY_KIND.efd:
       // These modes report the aggregate result across attempts.
-      return hasFailedAllRetries ? 'fail' : 'pass'
+      return hasFailedAllAttempts ? 'fail' : 'pass'
     case FINAL_STATUS_RETRY_KIND.atf:
       // Attempt-to-fix only passes if every execution passed.
       return hasPassedAllAtfRetries ? 'pass' : 'fail'
@@ -1731,12 +1731,17 @@ class CypressPlugin {
             isDynamicAtrEnabled: this.isDynamicAtrEnabled,
           })
 
-          let hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          let hasFailedAllAttempts = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
           if (retryKind === FINAL_STATUS_RETRY_KIND.atr) {
             // Late hooks can change every attempt after dd:afterEach has captured its status.
-            hasFailedAllRetries = finishedTestAttempts.every(attempt =>
+            hasFailedAllAttempts = finishedTestAttempts.every(attempt =>
               attempt.testSpan.context().getTag(TEST_STATUS) === 'fail'
             )
+            const atrRetryCount = this.isDynamicAtrEnabled
+              ? this.getDynamicAtrRetryCountForTest(spec.relative, finishedTest.testId)
+              : this.flakyTestRetriesCount
+            // An aborted run can fail without using the entire selected retry budget.
+            const hasFailedAllRetries = hasFailedAllAttempts && finishedTestAttempts.length > atrRetryCount
             finishedTest.testSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, hasFailedAllRetries ? 'true' : undefined)
           }
           const hasPassedAllAtfRetries =
@@ -1747,7 +1752,7 @@ class CypressPlugin {
           const finalStatus = getFinalStatus({
             status: cypressTestStatus,
             retryKind,
-            hasFailedAllRetries,
+            hasFailedAllAttempts,
             hasPassedAllAtfRetries,
             isQuarantined,
             isDisabled,

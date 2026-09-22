@@ -295,6 +295,8 @@ moduleTypes.forEach(({
         ['local-retries', 'applies dynamic ATR budgets over local test and suite retry overrides'],
         ['late-hook', 'corrects dynamic ATR final status after late hook failures'],
         ['late-hook-flat', 'corrects fixed ATR final status after late hook failures'],
+        ['stop', 'does not mark dynamic ATR retries exhausted when Cypress stops early'],
+        ['stop-flat', 'does not mark fixed ATR retries exhausted when Cypress stops early'],
       ]) {
         it(description, async () => {
           receiver.setSettings({
@@ -365,6 +367,13 @@ moduleTypes.forEach(({
                   assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
                 }
+              } else if (scenario.startsWith('stop')) {
+                assert.strictEqual(tests.length, 2, testOutput)
+                assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+                assert.ok(tests.every(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === undefined))
+                assert.strictEqual(tests[0].meta[TEST_FINAL_STATUS], undefined)
+                assert.strictEqual(tests[1].meta[TEST_FINAL_STATUS], 'fail')
+                assert.strictEqual(tests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
               } else {
                 assert.strictEqual(tests.length, 5, testOutput)
                 const passing = tests.filter(test => test.meta[TEST_NAME] === 'eventually passes the late hook')
