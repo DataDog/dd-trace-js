@@ -195,8 +195,10 @@ function snapshotEvaluationContext (context) {
         stack.push(createFrame(value, prefix, depth, reasons))
         continue
       }
-    } else if (value !== null && typeof value !== 'boolean' &&
-               (typeof value !== 'number' || !Number.isFinite(value))) {
+    } else if (
+      value !== null && typeof value !== 'boolean' &&
+      (typeof value !== 'number' || !Number.isFinite(value))
+    ) {
       reasons.add('unsupported_type')
       continue
     }
