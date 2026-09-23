@@ -14,86 +14,27 @@ concurrency:
 jobs:
   merge-release-proposal:
     name: Merge release proposal
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'enqueued' &&
+      github.event.pull_request.number == inputs.pull-request-number
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     steps:
-      - name: Verify merge queue event
-        env:
-          EVENT_ACTION: ${{ github.event.action }}
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
-          INPUT_PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
-        run: |
-          test "$EVENT_NAME" = pull_request
-          test "$EVENT_ACTION" = enqueued
-          test "$EVENT_PULL_REQUEST_NUMBER" = "$INPUT_PULL_REQUEST_NUMBER"
       - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
           policy: release-proposal-merge
-      - name: Check release proposal state
-        id: proposal
-        env:
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
-          PR_URL: https://github.com/${{ github.repository }}/pull/${{ inputs.pull-request-number }}
-        run: |
-          proposal=$(gh pr view "$PR_URL" \
-            --json baseRefName,headRefName,headRefOid,isCrossRepository,isDraft,reviewDecision,state)
-
-          jq -e '
-            .state == "OPEN" and
-            .isDraft == false and
-            .isCrossRepository == false and
-            .reviewDecision == "APPROVED" and
-            (.baseRefName | test("^v[0-9]+\\.x$")) and
-            (.headRefName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-proposal$"))
-          ' <<< "$proposal" > /dev/null
-
-          {
-            echo "base_ref=$(jq -r .baseRefName <<< "$proposal")"
-            echo "head_ref=$(jq -r .headRefName <<< "$proposal")"
-            echo "head_sha=$(jq -r .headRefOid <<< "$proposal")"
-          } >> "$GITHUB_OUTPUT"
       - name: Check out trusted repository state
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           ref: master
           token: ${{ steps.octo-sts.outputs.token }}
-      - name: Fetch release proposal
+      - name: Fast-forward release proposal
         env:
-          HEAD_REF: ${{ steps.proposal.outputs.head_ref }}
-          HEAD_SHA: ${{ steps.proposal.outputs.head_sha }}
-        run: |
-          git fetch --no-tags origin "refs/heads/$HEAD_REF"
-          test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
-          git update-ref refs/heads/release-proposal "$HEAD_SHA"
-      - name: Fast-forward release branch
-        env:
-          BASE_REF: ${{ steps.proposal.outputs.base_ref }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
-          HEAD_REF: ${{ steps.proposal.outputs.head_ref }}
-          HEAD_SHA: ${{ steps.proposal.outputs.head_sha }}
-          PR_URL: https://github.com/${{ github.repository }}/pull/${{ inputs.pull-request-number }}
-        run: |
-          gh pr checks "$PR_URL" --required
-
-          proposal=$(gh pr view "$PR_URL" \
-            --json baseRefName,headRefName,headRefOid,isCrossRepository,isDraft,reviewDecision,state)
-
-          jq -e \
-            --arg base_ref "$BASE_REF" \
-            --arg head_ref "$HEAD_REF" \
-            --arg head_sha "$HEAD_SHA" '
-            .state == "OPEN" and
-            .isDraft == false and
-            .isCrossRepository == false and
-            .reviewDecision == "APPROVED" and
-            .baseRefName == $base_ref and
-            .headRefName == $head_ref and
-            .headRefOid == $head_sha
-          ' <<< "$proposal" > /dev/null
-
-          git push origin "refs/heads/release-proposal:refs/heads/$BASE_REF"
+          PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+        run: node scripts/release/merge-proposal.js "$PULL_REQUEST_NUMBER"
