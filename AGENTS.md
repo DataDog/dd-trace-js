@@ -83,21 +83,17 @@ See `CONTRIBUTING.md#testing` for detailed test conventions and service setup.
 
 ### Test Optimization: v5 framework compatibility
 
-Whenever adding or modifying tests for Test Optimization features or test framework integrations, validate every added
-or modified test with both the current configuration and the v5 framework configuration before declaring the work
-complete.
+When adding or modifying Test Optimization or test framework integration tests, validate each changed test with both
+the current and v5 framework configurations before declaring the work complete.
 
 - Before writing tests, check which framework versions the suite runs on v5 and reuse existing version-based skip
   conditions when applicable.
-- For v5 validation, temporarily set only the root `package.json` version to `"5.0.0"`, then run the affected
-  integration tests through their normal commands, explicitly selecting the older framework versions used by v5
-  (for example, `MOCHA_VERSION=oldest` or `JEST_VERSION=oldest`). Confirm which framework versions the run actually
-  exercises.
-- Every added or modified test must either pass or be explicitly skipped under v5. New functionality does not have to
-  support older frameworks.
-- When a test requires unavailable framework functionality, use the existing conditional skip patterns and document the
-  missing capability and minimum supported version. Prefer framework-version gates; combine them with `DD_MAJOR` from
-  `version.js` when release-line behavior matters.
+- For v5 validation, temporarily set only the root `package.json` version to `"5.0.0"`. Run integration tests with
+  their normal commands and v5's older frameworks (for example, `MOCHA_VERSION=oldest` or `JEST_VERSION=oldest`).
+  Confirm the framework versions actually exercised.
+- Every changed test must pass or be explicitly skipped under v5; new functionality need not support older frameworks.
+- For unavailable framework features, document the missing capability and minimum version and use conditional skips.
+  Prefer framework-version gates; combine with `DD_MAJOR` from `version.js` when release-line behavior matters.
 - Scope skips to unsupported cases. Do not blanket-skip v5, weaken assertions, or convert unexplained failures into
   skips. Verify the test still executes and passes on a supported framework version.
 - Ensure unsupported imports, fixtures, or setup cannot fail before the skip takes effect.
