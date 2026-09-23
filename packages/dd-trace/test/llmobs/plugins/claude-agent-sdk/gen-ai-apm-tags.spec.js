@@ -31,6 +31,67 @@ describe('claude-agent-sdk gen_ai APM attributes with LLM Observability disabled
     plugin.configure({ enabled: false })
   })
 
+  // the query span learns its session only once the stream resolves, so the reduced path has to
+  // pick it up from the end hook rather than from the register options
+  describe('query span', () => {
+    const QueryPlugin = plugins.find(plugin => plugin.id === 'llmobs_claude_agent_sdk_query')
+    const queryStartCh = dc.channel(`${QueryPlugin.prefix}:start`)
+    const queryAsyncEndCh = dc.channel(`${QueryPlugin.prefix}:asyncEnd`)
+
+    let queryPlugin
+
+    beforeEach(() => {
+      queryPlugin = new QueryPlugin({}, {
+        llmobs: { DD_LLMOBS_ENABLED: false },
+        service: 'test-service',
+      })
+      queryPlugin.configure({ enabled: true })
+    })
+
+    afterEach(() => {
+      queryPlugin.configure({ enabled: false })
+    })
+
+    it('tags the session the stream reports at the end', () => {
+      const ctx = buildQueryCtx()
+
+      queryStartCh.publish(ctx)
+      assert.equal(apmTags['gen_ai.operation.name'], 'agent')
+      assert.equal(apmTags['gen_ai.conversation.id'], undefined)
+
+      ctx.streamResolved = true
+      ctx.session_id = 'sess-from-stream'
+      queryAsyncEndCh.publish(ctx)
+
+      assert.equal(apmTags['gen_ai.conversation.id'], 'sess-from-stream')
+      assert.equal(apmTags['_dd.llmobs.artificial_gen_ai_tags'], 'true')
+    })
+
+    it('leaves the session off when the stream never reports one', () => {
+      const ctx = buildQueryCtx()
+
+      queryStartCh.publish(ctx)
+      ctx.streamResolved = true
+      queryAsyncEndCh.publish(ctx)
+
+      assert.equal(apmTags['gen_ai.operation.name'], 'agent')
+      assert.equal(apmTags['gen_ai.conversation.id'], undefined)
+    })
+
+    function buildQueryCtx () {
+      const spanContext = {
+        _trace: { tags: {} },
+        getTags: () => ({}),
+        getTag: () => undefined,
+        setTag (key, value) {
+          apmTags[key] = value
+        },
+      }
+
+      return { currentStore: { span: { context: () => spanContext } } }
+    }
+  })
+
   it('tags the inner llm span with the model, session and token usage', () => {
     const spanContext = {
       _trace: { tags: {} },
