@@ -25,7 +25,6 @@ const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const traceSampledCh = channel('dd-trace:trace:sampled')
-const spanAppendCh = channel('llmobs:span:append')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -723,21 +722,6 @@ describe('module', () => {
     sinon.assert.calledOnceWithExactly(processor.processTrace, decision)
   })
 
-  it('appends exporter rescue events to the span writer', () => {
-    llmobsModule.enable({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_AGENTLESS_ENABLED: false } })
-    const writer = LLMObsSpanWriterSpy.firstCall.returnValue
-    const setTag = sinon.stub()
-    const span = { context: () => ({ setTag }) }
-    const event = { name: 'llm.request' }
-    const routing = { apiKey: 'tenant' }
-    writer.append.returns(true)
-
-    spanAppendCh.publish({ span, event, routing })
-
-    sinon.assert.calledOnceWithExactly(writer.append, event, routing)
-    sinon.assert.calledOnceWithExactly(setTag, '_dd.llmobs.submitted', '1')
-  })
-
   it('removes all subscribers when disabling', () => {
     llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
@@ -747,7 +731,6 @@ describe('module', () => {
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
     assert.strictEqual(traceSampledCh.hasSubscribers, false)
-    assert.strictEqual(spanAppendCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
     sinon.assert.calledOnce(unregisterTelemetryFlusher)
   })

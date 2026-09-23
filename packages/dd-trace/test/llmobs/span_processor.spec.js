@@ -22,14 +22,7 @@ describe('span processor', () => {
       append: sinon.stub(),
     }
     LLMObsExporter = class {}
-    exporter = Object.assign(new LLMObsExporter(), {
-      exportLlmobsSpan: sinon.stub().callsFake((span, event, routing) => {
-        const enqueued = writer.append(event, routing)
-        if (enqueued) span.context().setTag('_dd.llmobs.submitted', '1')
-        return enqueued
-      }),
-      registerLlmobsEvent: sinon.stub(),
-    })
+    exporter = new LLMObsExporter()
     const setTagMap = LLMObsTagger.tagMap.set.bind(LLMObsTagger.tagMap)
     sinon.stub(LLMObsTagger.tagMap, 'set').callsFake((span, tags) => {
       span.tracer ??= () => ({ _exporter: exporter })
@@ -869,7 +862,7 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
-    it('attaches kept events to meta_struct and registers their fallback with the exporter', () => {
+    it('attaches kept events to meta_struct', () => {
       const { span } = createSpan()
 
       processor.process(span)
@@ -890,7 +883,6 @@ describe('span processor', () => {
         },
       })
       sinon.assert.notCalled(writer.append)
-      sinon.assert.calledOnce(exporter.registerLlmobsEvent)
       processor.processPending()
       sinon.assert.notCalled(writer.append)
     })
@@ -941,7 +933,7 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
-    it('does not retain attached events after handing their fallback to the exporter', () => {
+    it('does not retain attached events after handing them to the APM trace', () => {
       const { span } = createSpan()
 
       processor.process(span)
@@ -950,7 +942,6 @@ describe('span processor', () => {
 
       assert.ok(span.meta_struct._llmobs)
       sinon.assert.notCalled(writer.append)
-      sinon.assert.calledOnce(exporter.registerLlmobsEvent)
     })
   })
 })

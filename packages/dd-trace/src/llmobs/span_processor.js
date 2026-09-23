@@ -152,7 +152,6 @@ class LLMObsSpanProcessor {
         const { event, metaStructTags, routing } = cached
         if (this.#shouldAttachMetaStruct(routing, event, willExport)) {
           this.#attachMetaStruct(span, event, metaStructTags)
-          span.tracer()._exporter.registerLlmobsEvent(span, event, routing)
           this.#cachedEvents.delete(cacheKey)
         } else {
           this.#cachedEvents.delete(cacheKey)
