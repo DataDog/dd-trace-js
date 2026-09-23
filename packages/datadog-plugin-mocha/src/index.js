@@ -13,6 +13,9 @@ const {
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const {
+  getDynamicAtrRetryCount,
+} = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
   setScreenshotUploadTags,
@@ -1037,7 +1040,17 @@ class MochaPlugin extends CiPlugin {
     } else if (isEarlyFlakeDetection) {
       retryCount = this.libraryConfig.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
     } else if (isAtr) {
-      retryCount = this.libraryConfig.flakyTestRetriesCount
+      // When dynamic ATR is enabled, use the max bucket value as the initial count.
+      // The actual duration-based count is computed after the first attempt.
+      if (this.libraryConfig.isDynamicAtrEnabled) {
+        const maximumDynamicAtrRetries = this.libraryConfig.dynamicAtrBuckets
+          ? Math.max(...this.libraryConfig.dynamicAtrBuckets)
+          : this.libraryConfig.earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+        // Dynamic ATR guarantees one retry, including the >5m EFD fallback bucket.
+        retryCount = Math.max(1, maximumDynamicAtrRetries)
+      } else {
+        retryCount = this.libraryConfig.flakyTestRetriesCount
+      }
     }
 
     const test = {
@@ -1051,6 +1064,7 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFix,
       isAtr,
       isDisabled,
+      isDynamicAtr: isAtr && this.libraryConfig?.isDynamicAtrEnabled,
       isEarlyFlakeDetection,
       isModified,
       isNew,
@@ -1221,6 +1235,19 @@ class MochaPlugin extends CiPlugin {
       if (test.retryCount === 0) {
         test.earlyFlakeAbortReason = 'slow'
       }
+    }
+
+    // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+    if (
+      testStatus !== 'skip' &&
+      test.isDynamicAtr &&
+      test.attempt === 0
+    ) {
+      test.retryCount = getDynamicAtrRetryCount(
+        performance.now() - test.attemptStart,
+        this.libraryConfig.earlyFlakeDetectionRetryPolicy,
+        this.libraryConfig.dynamicAtrBuckets
+      )
     }
 
     const hasManagedRetry = testStatus !== 'skip' && test.attempt < test.retryCount

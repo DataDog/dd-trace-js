@@ -94,8 +94,12 @@ function applyMochaOptions (options) {
   if (options._ddIsFlakyTestRetriesEnabled) {
     config.isFlakyTestRetriesEnabled = true
     config.flakyTestRetriesCount = options._ddFlakyTestRetriesCount
+    config.isDynamicAtrEnabled = options._ddIsDynamicAtrEnabled
+    config.dynamicAtrBuckets = options._ddDynamicAtrBuckets
     delete options._ddIsFlakyTestRetriesEnabled
     delete options._ddFlakyTestRetriesCount
+    delete options._ddIsDynamicAtrEnabled
+    delete options._ddDynamicAtrBuckets
   }
   if (options._ddIsFailedTestReplayEnabled) {
     config.isTestDynamicInstrumentationEnabled = true
@@ -412,7 +416,7 @@ function wrapMochaRun (Mocha, frameworkVersion) {
         })
       }
       filterSkippedFiles(runner, skippedFiles)
-      if (isFailedTestReplayEnabled()) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       configurationReady = true
@@ -449,7 +453,7 @@ addHook({
     if (!workerFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-    if (isFailedTestReplayEnabled()) {
+    if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
       patchFailedTestReplayHookUp(Runner)
     }
     if (isWebdriverioWorker) {

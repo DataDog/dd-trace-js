@@ -15,6 +15,7 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/guardrail-metrics')
 const telemetryLogs = require('../../src/telemetry/logs')
 const logCollector = require('../../src/telemetry/logs/log-collector')
+const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 describe('debugger/index', () => {
   let DynamicInstrumentation
@@ -295,6 +296,61 @@ describe('debugger/index', () => {
         sinon.assert.calledOnce(channel.port1.unref)
         sinon.assert.calledOnce(channel.port2.unref)
       }
+    })
+  })
+
+  describe('pause duration telemetry', () => {
+    beforeEach(() => {
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    afterEach(() => {
+      DynamicInstrumentation.stop()
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    it('should aggregate worker pause durations into an untagged distribution', () => {
+      DynamicInstrumentation.start(config, rc)
+      const onMessage = Worker.lastCall.returnValue.on.args.find(([event]) => event === 'message')[1]
+      onMessage({ type: 'thread-paused', durationMs: 0 })
+      onMessage({ type: 'thread-paused', durationMs: 1.25 })
+      onMessage({ type: 'thread-paused', durationMs: 3.5 })
+
+      const { metrics, sketches } = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).toJSON()
+      assert.strictEqual(metrics, undefined)
+      assert.strictEqual(sketches.namespace, 'live_debugger')
+      assert.strictEqual(sketches.series.length, 1)
+      const [series] = sketches.series
+      assert.strictEqual(series.metric, 'execution.pause.duration')
+      assert.strictEqual(series.common, true)
+      assert.deepStrictEqual(series.tags, [])
+      const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))
+      assert.strictEqual(sketch.count, 3)
+      assert.strictEqual(sketch.getValueAtQuantile(0), 0)
+      assert.ok(Math.abs(sketch.getValueAtQuantile(0.5) - 1.25) < 0.0125)
+      assert.ok(Math.abs(sketch.getValueAtQuantile(1) - 3.5) < 0.035)
+    })
+
+    it('should continue recording after a telemetry flush', () => {
+      DynamicInstrumentation.start(config, rc)
+      const onMessage = Worker.lastCall.returnValue.on.args.find(([event]) => event === 'message')[1]
+      onMessage({ type: 'thread-paused', durationMs: 2 })
+      const namespace = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE)
+      namespace.reset()
+      onMessage({ type: 'thread-paused', durationMs: 3 })
+
+      const [series] = namespace.toJSON().sketches.series
+      const sketch = DDSketch.fromProto(Buffer.from(series.sketch_b64, 'base64'))
+      assert.strictEqual(sketch.count, 1)
+      assert.ok(Math.abs(sketch.getValueAtQuantile(0.5) - 3) < 0.03)
+    })
+
+    it('should ignore other worker messages', () => {
+      DynamicInstrumentation.start(config, rc)
+      const onMessage = Worker.lastCall.returnValue.on.args.find(([event]) => event === 'message')[1]
+      onMessage({ type: 'other', durationMs: 2 })
+
+      assert.strictEqual(telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).toJSON().sketches, undefined)
     })
   })
 

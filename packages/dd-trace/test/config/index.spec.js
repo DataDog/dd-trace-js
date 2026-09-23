@@ -8,6 +8,7 @@ const path = require('node:path')
 const os = require('node:os')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
 const context = describe
@@ -21,6 +22,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
 const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
@@ -1210,6 +1212,10 @@ describe('Config', () => {
       DD_INSTRUMENTATION_INSTALL_TYPE: undefined,
       instrumentationSource: 'manual',
       DD_INSTRUMENTATION_CONFIG_ID: undefined,
+      DD_LLMOBS_PROMPTS_CACHE_DIR: undefined,
+      DD_LLMOBS_PROMPTS_CACHE_TTL: 60,
+      DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: false,
+      DD_LLMOBS_PROMPTS_TIMEOUT: 5,
       llmobs: {
         DD_LLMOBS_AGENTLESS_ENABLED: undefined,
         DD_LLMOBS_ENABLED: false,
@@ -1364,12 +1370,17 @@ describe('Config', () => {
       { name: 'DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE', value: 1.0, origin: 'default' },
       { name: 'DD_LLMOBS_AGENTLESS_ENABLED', value: null, origin: 'default' },
       { name: 'DD_LLMOBS_ML_APP', value: null, origin: 'default' },
+      { name: 'DD_LLMOBS_PROMPTS_CACHE_DIR', value: null, origin: 'default' },
+      { name: 'DD_LLMOBS_PROMPTS_CACHE_TTL', value: 60, origin: 'default' },
+      { name: 'DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_LLMOBS_PROMPTS_TIMEOUT', value: 5, origin: 'default' },
       { name: 'DD_TEST_FAILED_TEST_REPLAY_ENABLED', value: true, origin: 'default' },
       { name: 'DD_LOGS_INJECTION', value: true, origin: 'default' },
       { name: 'lookup', value: dns.lookup, origin: 'default' },
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_SPAN_CHAR_LIMIT', value: 128, origin: 'default' },
       { name: 'DD_OPENAI_LOGS_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_OPENAI_REALTIME_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: '', origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
@@ -4080,6 +4091,49 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
+      it('should default dynamic ATR configuration in the testOptimization namespace', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, false)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, undefined)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED'), false)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS'), false)
+      })
+      for (const [value, expected] of [['true', true], ['false', false], ['invalid', false]]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=${value}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = value
+          const config = getConfig(options)
+          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, expected)
+        })
+      }
+      for (const [value, parsed, expected] of [
+        ['1, 2,3,4,20', ['1', '2', '3', '4', '20'], [1, 2, 3, 4, 20]],
+        ['', [], null],
+        ['1,invalid,3', ['1', 'invalid', '3'], null],
+      ]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS=${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          // Preserve positions until ATR validates the complete list.
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
+          assert.deepStrictEqual(
+            getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), expected
+          )
+        })
+      }
+      for (const [value, parsed] of [
+        ['1,2,,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',1,2,3,4,5', ['', '1', '2', '3', '4', '5']],
+        ['1,2,3,4,5,', ['1', '2', '3', '4', '5', '']],
+        ['1,2, ,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',,,,,', ['', '', '', '', '', '']],
+      ]) {
+        it(`should reject empty dynamic ATR bucket entries in ${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
+          assert.strictEqual(getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), null)
+        })
+      }
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true)
@@ -4189,6 +4243,29 @@ describe('Config', () => {
       for (const provider of ['github', 'gitlab', 'circleci', 'jenkins']) {
         process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
         assert.strictEqual(getConfig(options).testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
+      }
+    })
+  })
+
+  context('LLMObs prompts', () => {
+    it('parses prompt cache and timeout environment values in seconds', () => {
+      process.env.DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS = '12.5'
+      process.env.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED = 'true'
+      process.env.DD_LLMOBS_PROMPTS_CACHE_DIR = '/tmp/prompts'
+      process.env.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS = '2.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_LLMOBS_PROMPTS_CACHE_TTL, 12.5)
+      assert.strictEqual(config.DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED, true)
+      assert.strictEqual(config.DD_LLMOBS_PROMPTS_CACHE_DIR, '/tmp/prompts')
+      assert.strictEqual(config.DD_LLMOBS_PROMPTS_TIMEOUT, 2.5)
+    })
+
+    it('uses the default for invalid prompt timeout values', () => {
+      for (const value of ['-1', 'Infinity']) {
+        process.env.DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS = value
+        assert.strictEqual(getConfig().DD_LLMOBS_PROMPTS_TIMEOUT, 5)
       }
     })
   })
@@ -5333,6 +5410,28 @@ rules:
         logInjection: true,
         sampleRate: 0.5,
       })
+    })
+  })
+
+  describe('config update channel', () => {
+    let subscriber
+    let configUpdateChannel
+
+    beforeEach(() => {
+      configUpdateChannel = dc.channel('datadog:config:update')
+      subscriber = sinon.spy()
+      configUpdateChannel.subscribe(subscriber)
+    })
+
+    afterEach(() => {
+      configUpdateChannel.unsubscribe(subscriber)
+    })
+
+    it('publishes the config on setRemoteConfig', () => {
+      const config = getConfig()
+      config.setRemoteConfig({ DD_TRACE_SAMPLE_RATE: '0.5' })
+      sinon.assert.calledOnce(subscriber)
+      assert.strictEqual(subscriber.firstCall.args[0], config)
     })
   })
 
