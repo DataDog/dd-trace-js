@@ -89,7 +89,9 @@ describe('Plugin', () => {
             assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
           }).then(done).catch(done)
 
-          httpRequest.get(`http://localhost:${otelPort}/user`).catch(done)
+          httpRequest.get(`http://localhost:${otelPort}/user`, {
+            headers: { 'User-Agent': 'dd-trace-test' }
+          }).catch(done)
         })
       })
 
