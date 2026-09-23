@@ -85,6 +85,9 @@ function enable (config) {
   retireWriters(retiredSpanWriter, retiredEvalWriter)
 
   const startTime = performance.now()
+  // Register the processor lifecycle first so pending events reach the writers before they shut down.
+  spanProcessor = new LLMObsSpanProcessor(config)
+
   // create writers and eval writer append and flush channels
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
@@ -102,8 +105,6 @@ function enable (config) {
     traceSampledCh.subscribe(handleTraceSampled)
   }
 
-  // span processing
-  spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
   if (!isReinitializing) spanFinishCh.subscribe(handleSpanProcess)
 

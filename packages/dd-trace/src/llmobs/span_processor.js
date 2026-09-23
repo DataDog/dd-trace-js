@@ -96,7 +96,7 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
-  /** @type {Map<object | string, object>} */
+  /** @type {Map<import('../opentracing/span'), object>} */
   #cachedEvents = new Map()
 
   #destroyer
@@ -159,7 +159,7 @@ class LLMObsSpanProcessor {
       if (!useApmIntake || this.#config.DD_TRACE_ENABLED === false || !trace || trace.record === false) {
         this.#appendToWriter(span, formattedEvent, routing)
       } else {
-        this.#cachedEvents.set(this.#getCacheKey(span), { span, event: formattedEvent, metaStructTags, routing })
+        this.#cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
       }
     } catch (e) {
       // this should be a rare case
@@ -181,21 +181,20 @@ class LLMObsSpanProcessor {
    */
   processTrace ({ spans, willExport }) {
     for (const span of spans) {
-      const cacheKey = this.#getCacheKey(span)
-      const cached = this.#cachedEvents.get(cacheKey)
+      const cached = this.#cachedEvents.get(span)
       if (!cached) continue
 
       try {
         const { event, metaStructTags, routing } = cached
         if (this.#shouldAttachMetaStruct(span, routing, event, willExport)) {
           this.#attachMetaStruct(span, event, metaStructTags)
-          this.#cachedEvents.delete(cacheKey)
+          this.#cachedEvents.delete(span)
         } else {
-          this.#cachedEvents.delete(cacheKey)
+          this.#cachedEvents.delete(span)
           this.#appendToWriter(span, event, routing)
         }
       } catch {
-        this.#cachedEvents.delete(cacheKey)
+        this.#cachedEvents.delete(span)
         try {
           this.#appendToWriter(span, cached.event, cached.routing)
         } catch (appendError) {
@@ -207,11 +206,11 @@ class LLMObsSpanProcessor {
 
   /** Routes events still awaiting an APM decision through the traditional LLMObs writer. */
   processPending () {
-    for (const [cacheKey, cached] of this.#cachedEvents) {
-      this.#cachedEvents.delete(cacheKey)
+    for (const [span, cached] of this.#cachedEvents) {
+      this.#cachedEvents.delete(span)
 
       try {
-        this.#appendToWriter(cached.span, cached.event, cached.routing)
+        this.#appendToWriter(span, cached.event, cached.routing)
       } catch (error) {
         this.#logAppendError(error)
       }
@@ -399,12 +398,6 @@ class LLMObsSpanProcessor {
       !routing.apiKey &&
       !routing.site &&
       !this.#hasRepeatedTagKeys(event.tags)
-  }
-
-  /** @param {import('../opentracing/span') | object} span */
-  #getCacheKey (span) {
-    const context = span.context?.()
-    return context?._spanId ?? context?.toSpanId() ?? span.span_id
   }
 
   /**

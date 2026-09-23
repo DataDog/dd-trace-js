@@ -103,4 +103,22 @@ describe('LLMObsExporter', () => {
 
     sinon.assert.calledOnceWithExactly(agentExporter.setUrl, url)
   })
+
+  it('waits for transport selection before completing a flush', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const trace = [{ name: 'llm.request' }]
+    const done = sinon.spy()
+
+    exporter.export(trace)
+    exporter.flush(done)
+
+    sinon.assert.notCalled(done)
+    sinon.assert.notCalled(agentExporter.flush)
+
+    selectStrategy(false)
+
+    sinon.assert.callOrder(agentExporter.export, agentExporter.flush)
+    sinon.assert.calledOnceWithExactly(agentExporter.flush, done)
+    sinon.assert.calledOnce(done)
+  })
 })

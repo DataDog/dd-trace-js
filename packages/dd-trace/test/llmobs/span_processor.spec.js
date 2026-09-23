@@ -991,5 +991,17 @@ describe('span processor', () => {
       assert.ok(span.meta_struct._llmobs)
       sinon.assert.notCalled(writer.append)
     })
+
+    it('caches spans by identity when separate traces use the same span id', () => {
+      const first = createSpan({ '_ml_obs.name': 'first' }).span
+      const second = createSpan({ '_ml_obs.name': 'second' }).span
+
+      processor.process(first)
+      processor.process(second)
+      processor.processTrace({ spans: [first, second], willExport: true })
+
+      assert.strictEqual(first.meta_struct._llmobs.name, 'first')
+      assert.strictEqual(second.meta_struct._llmobs.name, 'second')
+    })
   })
 })

@@ -722,6 +722,22 @@ describe('module', () => {
     sinon.assert.calledOnceWithExactly(processor.processTrace, decision)
   })
 
+  it('constructs the span processor before writers so pending events drain before writer shutdown', () => {
+    llmobsModule.disable()
+    const processor = {
+      destroy: sinon.stub(),
+      processPending: sinon.stub(),
+      setWriter: sinon.stub(),
+    }
+    const LLMObsSpanProcessorSpy = sinon.stub().returns(processor)
+    llmobsModuleProxyRequireMeta['./span_processor'] = LLMObsSpanProcessorSpy
+    loadLlmobsModule()
+
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+    sinon.assert.callOrder(LLMObsSpanProcessorSpy, LLMObsEvalMetricsWriterSpy, LLMObsSpanWriterSpy)
+  })
+
   it('removes all subscribers when disabling', () => {
     llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 

@@ -11,6 +11,8 @@ const BufferingExporter = require('../common/buffering-exporter')
  */
 class LLMObsExporter extends BufferingExporter {
   #exporter
+  /** @type {Array<Function | undefined>} */
+  #pendingFlushes = []
   #prioritySampler
 
   /**
@@ -34,6 +36,10 @@ class LLMObsExporter extends BufferingExporter {
 
       this._isInitialized = true
       this.exportUncodedTraces()
+
+      const pendingFlushes = this.#pendingFlushes
+      this.#pendingFlushes = []
+      for (const done of pendingFlushes) this.#exporter.flush(done)
     })
   }
 
@@ -49,8 +55,11 @@ class LLMObsExporter extends BufferingExporter {
 
   /** @param {Function} [done] */
   flush (done) {
-    if (this._isInitialized) this.#exporter.flush(done)
-    else done?.()
+    if (this._isInitialized) {
+      this.#exporter.flush(done)
+    } else {
+      this.#pendingFlushes.push(done)
+    }
   }
 
   /** @param {string | URL} url */
