@@ -490,7 +490,7 @@ function useLlmObs ({
         }
       }
 
-      if (!writerOnly) {
+      if (!writerOnly && apmSpans.length === 0) {
         await apmTraces
         if (apmError) throw apmError
       }

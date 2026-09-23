@@ -6,6 +6,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
@@ -821,11 +822,12 @@ describe('span processor', () => {
   })
 
   describe('APM meta_struct routing', () => {
-    function createSpan (extraTags = {}) {
+    function createSpan (extraTags = {}, priority) {
       const apmTags = {}
       const trace = {}
       const context = {
         _spanId: '456',
+        _sampling: { priority },
         _tags: apmTags,
         _trace: trace,
         getTags () { return this._tags },
@@ -862,8 +864,8 @@ describe('span processor', () => {
       sinon.assert.calledOnce(writer.append)
     })
 
-    it('attaches kept events to meta_struct', () => {
-      const { span } = createSpan()
+    it('attaches kept events to meta_struct without marking direct submission', () => {
+      const { apmTags, span } = createSpan({}, AUTO_KEEP)
 
       processor.process(span)
       processor.processTrace({ spans: [span], willExport: true })
@@ -882,10 +884,25 @@ describe('span processor', () => {
           model_provider: 'provider',
         },
       })
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
       sinon.assert.notCalled(writer.append)
       processor.processPending()
       sinon.assert.notCalled(writer.append)
     })
+
+    for (const priority of [USER_REJECT, AUTO_REJECT]) {
+      it(`uses the writer when sampling priority ${priority} predicts the APM trace will be dropped`, () => {
+        const { apmTags, span } = createSpan({}, priority)
+        writer.append.returns(true)
+
+        processor.process(span)
+        processor.processTrace({ spans: [span], willExport: true })
+
+        assert.strictEqual(span.meta_struct, undefined)
+        sinon.assert.calledOnce(writer.append)
+        assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+      })
+    }
 
     it('rescues events when the APM trace will not be exported', () => {
       const { apmTags, span } = createSpan()

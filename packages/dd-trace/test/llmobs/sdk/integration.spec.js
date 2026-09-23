@@ -5,7 +5,6 @@ const assert = require('node:assert')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { MANUAL_DROP } = require('../../../../../ext/tags')
 const { useLlmObs, assertLlmObsSpanEvent, assertLlmObsEvaluationMetric } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
@@ -212,28 +211,6 @@ describe('end to end sdk integration tests', () => {
       const firstSpan = apmSpans[0]
       assert.match(firstSpan.meta.llmobs_trace_id, /^[0-9a-f]{32}$/)
       assert.ok(firstSpan.meta.llmobs_parent_id)
-    })
-
-    it('submits rejected llmobs spans through the writer fallback', async () => {
-      llmobs.trace({ kind: 'workflow', name: 'rejected' }, span => {
-        span.setTag(MANUAL_DROP, true)
-      })
-
-      const { llmobsSpans } = await getEvents(1, { writerOnly: true })
-
-      assert.equal(llmobsSpans.length, 1)
-    })
-
-    it('rescues a finished llmobs child when its apm trace is rejected later', async () => {
-      tracer.trace('rejected-root', root => {
-        llmobs.trace({ kind: 'workflow', name: 'rejected-child' }, () => {})
-        root.setTag(MANUAL_DROP, true)
-      })
-
-      const { llmobsSpans } = await getEvents(1, { writerOnly: true })
-
-      assert.equal(llmobsSpans.length, 1)
-      assert.equal(llmobsSpans[0].name, 'rejected-child')
     })
   })
 
