@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - v*.x
+    # Enqueueing is the final merge command. Dequeueing is intentionally unsupported
+    # and does not cancel an already-triggered fast-forward.
     types:
       - enqueued
       - opened
