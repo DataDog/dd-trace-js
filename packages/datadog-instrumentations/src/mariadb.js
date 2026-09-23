@@ -34,6 +34,31 @@ const poolAcquireChannels = {
 const wrappedPools = new WeakSet()
 
 /**
+ * Extracts the query text from MariaDB's string and object command forms.
+ *
+ * @param {unknown} command
+ * @returns {unknown}
+ */
+function normalizeSql (command) {
+  return command?.sql ?? command
+}
+
+/**
+ * Returns the command to hand to the driver once subscribers may have rewritten the query text
+ * (e.g. the DBM propagation comment added by the mysql plugin in `bindStart`), preserving the
+ * original string or object form.
+ *
+ * @param {unknown} original
+ * @param {unknown} injected
+ * @returns {unknown}
+ */
+function withInjectedSql (original, injected) {
+  if (typeof injected !== 'string' || injected === normalizeSql(original)) return original
+
+  return typeof original === 'string' ? injected : { ...original, sql: injected }
+}
+
+/**
  * @typedef {object} PoolAcquireTiming
  * @property {number} [poolAcquireStart]
  * @property {number} [poolAcquireStartedAt]
@@ -72,7 +97,12 @@ function wrapCommandStart (start, ctx) {
       }
     })
 
-    return startCh.runStores(ctx, start, this, ...args)
+    // Subscribers may rewrite `ctx.sql` (DBM propagation comment). The command encodes `this.sql` when it
+    // starts, so copy the rewritten text back first, as the mysql and mysql2 instrumentations do.
+    return startCh.runStores(ctx, function (...startArgs) {
+      if (typeof ctx.sql === 'string') this.sql = ctx.sql
+      return start.apply(this, startArgs)
+    }, this, ...args)
   })
 }
 
@@ -97,11 +127,14 @@ function createWrapQuery (options) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
-      const ctx = { sql, conf: options }
+      const ctx = { sql: normalizeSql(sql), conf: options }
       const poolWaitTime = takePoolWaitTime(this)
       if (poolWaitTime !== undefined) ctx.poolWaitTime = poolWaitTime
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      return startCh.runStores(ctx, function (...queryArgs) {
+        queryArgs[0] = withInjectedSql(queryArgs[0], ctx.sql)
+        return query.apply(this, queryArgs)
+      }, this, ...arguments)
         .then(result => {
           ctx.result = result
           finishCh.publish(ctx)
@@ -122,7 +155,7 @@ function createWrapQueryCallback (options) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
       const cb = arguments[arguments.length - 1]
-      const ctx = { sql, conf: options }
+      const ctx = { sql: normalizeSql(sql), conf: options }
       const wrapper = (cb) => function (err) {
         if (err) {
           ctx.error = err
@@ -141,7 +174,10 @@ function createWrapQueryCallback (options) {
         arguments[arguments.length - 1] = wrapper()
       }
 
-      return startCh.runStores(ctx, query, this, ...arguments)
+      return startCh.runStores(ctx, function (...queryArgs) {
+        queryArgs[0] = withInjectedSql(queryArgs[0], ctx.sql)
+        return query.apply(this, queryArgs)
+      }, this, ...arguments)
     }
   }
 }
