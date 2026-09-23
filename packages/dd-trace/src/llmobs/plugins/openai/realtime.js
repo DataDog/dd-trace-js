@@ -213,11 +213,15 @@ class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
   constructor (...args) {
     super(...args)
 
-    // This plugin is the only consumer of a turn's audio bytes, and the instrumentation keeps them
-    // only while something is subscribed here — a disabled plugin unsubscribes, so an APM-only
-    // process never buffers audio it cannot use. Nothing is ever published; the subscription is the
-    // signal. Keep it if `buildMessage` stops reading `side.audio`, and the buffering stops with it.
-    this.addSub('dd-trace:openai:realtime:audio', () => {})
+    // The LLMObs payload is the only consumer of a turn's audio bytes, and the instrumentation
+    // keeps them only while something is subscribed here. Nothing is ever published; the
+    // subscription is the signal. Gated on LLMObs itself, not just on the plugin being enabled:
+    // the reduced path emits `gen_ai.*` tags without building a payload, so it never reads the
+    // audio and must not make the instrumentation retain it. Keep this if `buildMessage` stops
+    // reading `side.audio`, and the buffering stops with it.
+    if (this._llmobsEnabled) {
+      this.addSub('dd-trace:openai:realtime:audio', () => {})
+    }
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
@@ -231,6 +235,14 @@ class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
       modelProvider,
       sessionId: turn.sessionId,
     }
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    // the turn reports its usage only once the response completes
+    return { metrics: usageMetrics(ctx.turn?.usage) }
   }
 
   setLLMObsTags (ctx) {
