@@ -160,11 +160,13 @@ describe('debugger/index', () => {
     it('should retain discriminants across a real worker failure', async () => {
       const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
       const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      // Match the debugger worker's preload isolation, including under the CI coverage runner.
+      const { execArgv, env } = Worker.lastCall.args[1]
       const failingWorker = new NativeWorker(`
         throw Object.assign(new TypeError('customer-secret'), {
           code: 'MODULE_NOT_FOUND', reason: 'unexpected_pause_reason'
         })
-      `, { eval: true })
+      `, { eval: true, execArgv, env })
       failingWorker.on('error', onError)
       failingWorker.once('exit', onExit)
       const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
