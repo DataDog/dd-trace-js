@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert/strict')
+const assert = require('assert').strict
 
 describe('dynamic ATR duplicates', () => {
   it('same name', () => assert.fail('first declaration'))

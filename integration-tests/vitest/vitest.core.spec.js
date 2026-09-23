@@ -64,6 +64,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { NODE_MAJOR } = require('../../version')
+const { describeDynamicAtr } = require('./dynamic-atr')
 
 const NUM_RETRIES_EFD = 3
 const CUSTOM_SEQUENCER_MARKER = 'dd-trace custom vitest sequencer was used'
@@ -148,6 +149,20 @@ versions.forEach((version) => {
     })
 
     const poolConfig = ['forks', 'threads']
+
+    if (version === 'latest') {
+      for (const pool of poolConfig) {
+        describeDynamicAtr({
+          mode: pool,
+          getContext: () => ({
+            cwd,
+            receiver,
+            env: { POOL_CONFIG: pool },
+            onChildProcess: child => { childProcess = child },
+          }),
+        })
+      }
+    }
 
     newerVitestIt('reports a failed session when a custom reporter rejects onTestRunEnd', async function () {
       this.timeout(20_000)
@@ -1538,6 +1553,42 @@ versions.forEach((version) => {
           }
           done()
         }).catch(done)
+      })
+
+      it('uses the cached dynamic budget when supported and the flat count otherwise', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 0,
+          early_flake_detection: { enabled: false },
+        })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            const neverPassingTest = tests.filter(test => test.resource === FLAKY_NEVER_PASSING_RESOURCE)
+            assert.strictEqual(neverPassingTest.length, version === 'latest' ? 2 : 6)
+            assert.ok(neverPassingTest.every(test => test.meta[TEST_STATUS] === 'fail'))
+          }
+        )
+
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,4,5',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          },
+        })
+
+        Promise.all([eventsPromise, once(childProcess, 'exit')]).then(() => done(), done)
       })
 
       it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {

@@ -420,7 +420,8 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+          () => this.openfeature)
 
         if (config.aiguard.DD_AI_GUARD_ENABLED) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
