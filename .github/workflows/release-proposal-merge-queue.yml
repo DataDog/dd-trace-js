@@ -9,13 +9,25 @@ on:
       - opened
       - reopened
       - synchronize
+  merge_group:
+    branches:
+      - v*.x
+    types:
+      - checks_requested
 
 jobs:
   release-proposal-merge-queue:
     name: Release proposal merge queue
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Release proposal is eligible to enter the merge queue."
+      - name: Block the GitHub merge queue
+        if: github.event_name == 'merge_group'
+        run: |
+          echo "Release proposals are fast-forwarded by the release proposal merge workflow."
+          exit 1
+      - name: Allow the pull request into the queue
+        if: github.event_name == 'pull_request'
+        run: echo "Release proposal is eligible to enter the merge queue."
 
   trigger-release-proposal-merge:
     name: Fast-forward release proposal
