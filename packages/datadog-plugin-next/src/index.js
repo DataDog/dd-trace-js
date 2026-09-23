@@ -25,8 +25,7 @@ const nextParentRoutes = new WeakMap()
  *   backgroundRevalidationRequest?: import('node:http').IncomingMessage
  * }} NextRequestStore
  *
- * @typedef {object} NextRequest
- * @property {unknown} [error]
+ * @typedef {Request & { error?: unknown }} NextRequest
  *
  * @typedef {object} NextRequestContext
  * @property {import('node:http').IncomingMessage} req
@@ -128,7 +127,9 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = ctx.error ?? span.context().getTag('error')
-    const requestError = req.error || nextRequest.error
+    const requestError = req.error || nextRequest?.error
+
+    if (nextRequest) addOtelRequestTags(span, this.config, nextRequest)
 
     if (requestError) {
       // prioritize user-set errors from API routes

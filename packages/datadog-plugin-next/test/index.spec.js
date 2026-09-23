@@ -2085,6 +2085,14 @@ describe('compiled Next runtimes', () => {
       class AppRouteRouteModule {
         definition = { pathname: '/api/web-request' }
 
+        prepare () {
+          return Promise.resolve()
+        }
+
+        handleResponse ({ responseGenerator }) {
+          return responseGenerator()
+        }
+
         handle (_request, _context) {
           return Promise.resolve({ status: 503 })
         }
@@ -2113,15 +2121,34 @@ describe('compiled Next runtimes', () => {
           },
         })
       })
+      const nodeRequest = { headers: {}, method: 'PROPFIND', url: '/api/web-request?token=secret' }
+      const nodeResponse = new http.ServerResponse(nodeRequest)
+      const routeModule = new AppRouteRouteModule()
 
-      const response = await new AppRouteRouteModule().handle(request, {})
-      assert.strictEqual(response.status, 503)
+      await routeModule.prepare(nodeRequest, nodeResponse, {})
+      const result = await routeModule.handleResponse({
+        req: nodeRequest,
+        responseGenerator: async () => {
+          const response = await routeModule.handle(request, {})
+          return { response, value: { status: response.status } }
+        },
+      })
+      nodeResponse.emit('finish')
+      assert.strictEqual(result.response.status, 503)
       await trace
     })
 
     it('updates the HTTP parent resource through the App Route lifecycle', async () => {
       class AppRouteRouteModule {
         definition = { pathname: '/api/web-request' }
+
+        prepare () {
+          return Promise.resolve()
+        }
+
+        handleResponse ({ responseGenerator }) {
+          return responseGenerator()
+        }
 
         handle () {
           return Promise.resolve({ status: 201 })
@@ -2132,8 +2159,15 @@ describe('compiled Next runtimes', () => {
       const server = http.createServer(async (req, res) => {
         try {
           const request = new Request(`http://${req.headers.host}${req.url}`, { method: req.method })
-          const response = await routeModule.handle(request, {})
-          res.statusCode = response.status
+          await routeModule.prepare(req, res, {})
+          const result = await routeModule.handleResponse({
+            req,
+            responseGenerator: async () => {
+              const response = await routeModule.handle(request, {})
+              return { value: { status: response.status } }
+            },
+          })
+          res.statusCode = result.value.status
           res.end()
         } catch (error) {
           res.destroy(error)
