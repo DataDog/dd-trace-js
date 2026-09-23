@@ -1,6 +1,7 @@
 'use strict'
 
-const { setAgentStrategy } = require('../../llmobs/writers/util')
+const { fetchAgentInfo } = require('../../agent/info')
+const { getValueFromEnvSources } = require('../../config/helper')
 const AgentExporter = require('../agent')
 const AgentlessExporter = require('../agentless')
 const BufferingExporter = require('../common/buffering-exporter')
@@ -24,23 +25,34 @@ class LLMObsExporter extends BufferingExporter {
     this.#prioritySampler = prioritySampler
     this._url = undefined
 
-    setAgentStrategy(config, (useAgentless, agentAvailable) => {
-      const useAgent = agentAvailable ?? !useAgentless
-      const Exporter = useAgent ? AgentExporter : AgentlessExporter
+    const agentlessEnabled = getValueFromEnvSources('DD_AGENTLESS_ENABLED', true)
 
-      // Preserve a setUrl() call made while agent discovery was pending.
-      const pendingUrl = this._url
-      this.#exporter = new Exporter(this._config, this.#prioritySampler)
-      if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
-      this._url = this.#exporter._url
+    if (agentlessEnabled === undefined) {
+      fetchAgentInfo(config.url, (err) => {
+        this.#initialize(err != null)
+      }, { retry: false })
+    } else {
+      this.#initialize(agentlessEnabled)
+    }
+  }
 
-      this._isInitialized = true
-      this.exportUncodedTraces()
+  /**
+   *
+   * @param {boolean} useAgentless
+   */
+  #initialize (useAgentless) {
+    const Exporter = useAgentless ? AgentlessExporter : AgentExporter
+    const pendingUrl = this._url
+    this.#exporter = new Exporter(this._config, this.#prioritySampler)
+    if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
+    this._url = this.#exporter._url
 
-      const pendingFlushes = this.#pendingFlushes
-      this.#pendingFlushes = []
-      for (const done of pendingFlushes) this.#exporter.flush(done)
-    })
+    this._isInitialized = true
+    this.exportUncodedTraces()
+
+    const pendingFlushes = this.#pendingFlushes
+    this.#pendingFlushes = []
+    for (const done of pendingFlushes) this.#exporter.flush(done)
   }
 
   /** @param {object[]} trace */

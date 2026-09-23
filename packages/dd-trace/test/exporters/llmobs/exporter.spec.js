@@ -11,7 +11,8 @@ describe('LLMObsExporter', () => {
   let AgentlessExporter
   let agentExporter
   let agentlessExporter
-  let selectStrategy
+  let fetchAgentInfo
+  let getValueFromEnvSources
   let Exporter
 
   beforeEach(() => {
@@ -29,13 +30,14 @@ describe('LLMObsExporter', () => {
     }
     AgentExporter = sinon.stub().returns(agentExporter)
     AgentlessExporter = sinon.stub().returns(agentlessExporter)
+    fetchAgentInfo = sinon.stub()
+    getValueFromEnvSources = sinon.stub().returns(undefined)
 
     Exporter = proxyquire('../../../src/exporters/llmobs', {
+      '../../agent/info': { fetchAgentInfo },
+      '../../config/helper': { getValueFromEnvSources },
       '../agent': AgentExporter,
       '../agentless': AgentlessExporter,
-      '../../llmobs/writers/util': {
-        setAgentStrategy: sinon.stub().callsFake((config, callback) => { selectStrategy = callback }),
-      },
     })
   })
 
@@ -50,7 +52,7 @@ describe('LLMObsExporter', () => {
     }
   }
 
-  it('buffers traces and drains them to the Agent exporter when selected', () => {
+  it('buffers traces and drains them to the Agent exporter when discovery succeeds', () => {
     const config = getConfig()
     const prioritySampler = {}
     const exporter = new Exporter(config, prioritySampler)
@@ -58,22 +60,24 @@ describe('LLMObsExporter', () => {
 
     assert.strictEqual(exporter.export(trace), true)
     sinon.assert.notCalled(AgentExporter)
+    sinon.assert.calledOnceWithExactly(getValueFromEnvSources, 'DD_AGENTLESS_ENABLED', true)
+    sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, { retry: false })
 
-    selectStrategy(false)
+    fetchAgentInfo.yield(null, { endpoints: [] })
 
     sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
     sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
     sinon.assert.notCalled(AgentlessExporter)
   })
 
-  it('buffers traces and drains them to the agentless exporter when selected', () => {
+  it('buffers traces and drains them to the agentless exporter when discovery fails', () => {
     const config = getConfig()
     const prioritySampler = {}
     const exporter = new Exporter(config, prioritySampler)
     const trace = [{ name: 'llm.request' }]
 
     exporter.export(trace)
-    selectStrategy(true, false)
+    fetchAgentInfo.yield(new Error('Agent unavailable'))
 
     sinon.assert.calledOnceWithExactly(AgentlessExporter, config, prioritySampler)
     sinon.assert.calledOnceWithExactly(agentlessExporter.export, trace)
@@ -81,16 +85,33 @@ describe('LLMObsExporter', () => {
     sinon.assert.notCalled(AgentExporter)
   })
 
-  it('uses the Agent exporter when the Agent is available without the LLMObs EVP endpoint', () => {
+  it('uses the agentless exporter immediately when global agentless mode is explicitly enabled', () => {
+    getValueFromEnvSources.returns(true)
     const config = getConfig()
-    const exporter = new Exporter(config, {})
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
     const trace = [{ name: 'llm.request' }]
 
     exporter.export(trace)
-    selectStrategy(true, true)
 
-    sinon.assert.calledOnce(AgentExporter)
+    sinon.assert.calledOnceWithExactly(AgentlessExporter, config, prioritySampler)
+    sinon.assert.calledOnceWithExactly(agentlessExporter.export, trace)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('uses the Agent exporter immediately when global agentless mode is explicitly disabled', () => {
+    getValueFromEnvSources.returns(false)
+    const config = getConfig()
+    const prioritySampler = {}
+    const exporter = new Exporter(config, prioritySampler)
+    const trace = [{ name: 'llm.request' }]
+
+    exporter.export(trace)
+
+    sinon.assert.calledOnceWithExactly(AgentExporter, config, prioritySampler)
     sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+    sinon.assert.notCalled(fetchAgentInfo)
     sinon.assert.notCalled(AgentlessExporter)
   })
 
@@ -99,7 +120,7 @@ describe('LLMObsExporter', () => {
     const url = new URL('http://custom-agent:8126')
 
     exporter.setUrl(url)
-    selectStrategy(false)
+    fetchAgentInfo.yield(null, { endpoints: [] })
 
     sinon.assert.calledOnceWithExactly(agentExporter.setUrl, url)
   })
@@ -115,7 +136,7 @@ describe('LLMObsExporter', () => {
     sinon.assert.notCalled(done)
     sinon.assert.notCalled(agentExporter.flush)
 
-    selectStrategy(false)
+    fetchAgentInfo.yield(null, { endpoints: [] })
 
     sinon.assert.callOrder(agentExporter.export, agentExporter.flush)
     sinon.assert.calledOnceWithExactly(agentExporter.flush, done)
