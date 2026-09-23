@@ -13,22 +13,6 @@
         "OPERATIONS": "1000000"
       }
     },
-    "scale": {
-      "env": {
-        "VARIANT": "scale",
-        "CONSENT": "false",
-        "OPERATIONS": "20000",
-        "WARMUP": "500"
-      }
-    },
-    "stress": {
-      "env": {
-        "VARIANT": "stress",
-        "CONSENT": "false",
-        "OPERATIONS": "2000",
-        "WARMUP": "50"
-      }
-    },
     "typical-full": {
       "env": {
         "VARIANT": "typical",
@@ -50,20 +34,6 @@
         "CONSENT": "true",
         "OPERATIONS": "2000",
         "WARMUP": "50"
-      }
-    },
-    "hostile-full": {
-      "env": {
-        "VARIANT": "hostile",
-        "CONSENT": "true",
-        "OPERATIONS": "1000000"
-      }
-    },
-    "hostile": {
-      "env": {
-        "VARIANT": "hostile",
-        "CONSENT": "false",
-        "OPERATIONS": "1000000"
       }
     }
   }

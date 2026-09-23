@@ -39,6 +39,32 @@ not need consent metadata; every EVP-capable revision must receive literal true
 from the real evaluator in full mode. No metadata is fabricated. The output
 records `evaluationConsentMetadata` so older providers are visible.
 
+The always-on CI matrix contains four scenarios:
+
+- `typical`: normal context, protected mode.
+- `typical-full`: normal context, full consent.
+- `scale-full`: near-limit context, full consent.
+- `stress-full`: oversized nested context, full consent.
+
+The latter two measure capture near the retained-field limit and the cost of
+discarding excess input. Protected-mode size variants and hostile inputs remain
+available on demand, rather than multiplying the end-to-end CI matrix. This keeps
+the current suite within six 24-core groups without reducing retained scenarios'
+iterations, operation counts, privacy checks, or startup-share assertions.
+
+Run the additional cases from this directory:
+
+```sh
+VARIANT=scale CONSENT=false OPERATIONS=20000 WARMUP=500 node index.js
+VARIANT=stress CONSENT=false OPERATIONS=2000 WARMUP=50 node index.js
+for consent in false true; do
+  VARIANT=hostile CONSENT="$consent" OPERATIONS=1000000 node index.js
+done
+```
+
+These direct runs retain the assertions but are not repeated Sirun measurements.
+The focused snapshot microbenchmarks below still cover all four input shapes.
+
 CI compares the total PR change, including the provider upgrade. For a separate
 comparison isolating tracer overhead, use the identical released provider bundle
 on both sides and explicitly report this baseline-only dependency overlay:
