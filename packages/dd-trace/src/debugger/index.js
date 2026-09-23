@@ -15,6 +15,7 @@ const {
   DEBUGGER_INPUT_V2,
   GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
+  WORKER_ERROR_REASON,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
@@ -40,10 +41,7 @@ const WORKER_ERROR_CODES = new Set([
   'ERR_WORKER_UNSERIALIZABLE_ERROR', 'ERR_INSPECTOR_COMMAND', 'ERR_INSPECTOR_NOT_ACTIVE', 'ERR_INSPECTOR_CLOSED',
   'ERR_INSPECTOR_ALREADY_CONNECTED', 'ERR_INSPECTOR_NOT_CONNECTED', 'ERR_DLOPEN_FAILED', 'ERR_REQUIRE_ESM',
 ])
-const WORKER_ERROR_REASONS = new Set([
-  'unexpected_pause_reason', 'unsupported_probe_type', 'unsupported_insertion_point',
-  'conflicting_capture_options', 'unknown_remote_config_action',
-])
+const WORKER_ERROR_REASONS = new Set(Object.values(WORKER_ERROR_REASON))
 
 let worker = null
 let configChannel = null

@@ -1,6 +1,7 @@
 'use strict'
 
 const { workerData: { probePort } } = require('node:worker_threads')
+const { WORKER_ERROR_REASON } = require('../constants')
 const { addBreakpoint, removeBreakpoint, modifyBreakpoint } = require('./breakpoints')
 const { ackReceived, ackInstalled, ackError } = require('./status')
 const log = require('./log')
@@ -75,18 +76,18 @@ async function processMsg (action, probe) {
   if (probe.type !== 'LOG_PROBE') {
     throw Object.assign(new Error(
       `Unsupported probe type: ${probe.type} (id: ${probe.id}, version: ${probe.version})`
-    ), { reason: 'unsupported_probe_type' })
+    ), { reason: WORKER_ERROR_REASON.UNSUPPORTED_PROBE_TYPE })
   }
   if (!probe.where.sourceFile && !probe.where.lines) {
     throw Object.assign(new Error(
       // eslint-disable-next-line @stylistic/max-len
       `Unsupported probe insertion point! Only line-based probes are supported (id: ${probe.id}, version: ${probe.version})`
-    ), { reason: 'unsupported_insertion_point' })
+    ), { reason: WORKER_ERROR_REASON.UNSUPPORTED_INSERTION_POINT })
   }
   if (probe.captureSnapshot && probe.captureExpressions?.length > 0) {
     throw Object.assign(new Error(
       `Cannot set both captureSnapshot and captureExpressions (probe: ${probe.id}, version: ${probe.version})`
-    ), { reason: 'conflicting_capture_options' })
+    ), { reason: WORKER_ERROR_REASON.CONFLICTING_CAPTURE_OPTIONS })
   }
 
   switch (action) {
@@ -104,6 +105,6 @@ async function processMsg (action, probe) {
     default:
       throw Object.assign(new Error(
         `Cannot process probe ${probe.id} (version: ${probe.version}) - unknown remote configuration action: ${action}`
-      ), { reason: 'unknown_remote_config_action' })
+      ), { reason: WORKER_ERROR_REASON.UNKNOWN_REMOTE_CONFIG_ACTION })
   }
 }
