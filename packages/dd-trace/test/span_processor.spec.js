@@ -419,6 +419,36 @@ describe('SpanProcessor', () => {
       }
     }
 
+    it('preserves legacy HTTP fields when Test Optimization disables requested OTel semantics', () => {
+      const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+
+      try {
+        spanFormat.returns(formattedHttpSpan())
+        const testOptimizationConfig = getConfigFresh({
+          isCiVisibility: true,
+          experimental: { exporter: 'jest_worker' },
+        })
+        const testOptimizationProcessor = new SpanProcessor(exporter, prioritySampler, testOptimizationConfig)
+        trace.started = [finishedSpan]
+        trace.finished = [finishedSpan]
+
+        testOptimizationProcessor.process(finishedSpan)
+
+        const exported = exporter.export.firstCall.args[0][0]
+        assert.strictEqual(testOptimizationConfig.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+        assert.strictEqual(exported.meta['http.method'], 'GET')
+        assert.strictEqual(exported.meta['http.status_code'], '200')
+        assert.ok(!('http.request.method' in exported.meta))
+      } finally {
+        if (previousValue === undefined) {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        } else {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousValue
+        }
+      }
+    })
+
     it('preserves legacy HTTP fields when Electron disables requested OTel semantics', () => {
       const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
       process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'

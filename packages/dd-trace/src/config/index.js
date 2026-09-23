@@ -441,6 +441,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
     }
 
+    // Test Optimization does not support OTLP export.
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && this.isCiVisibility) {
+      log.warn('Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false')
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+    }
+
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
     }

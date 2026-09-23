@@ -327,6 +327,7 @@ describe('otlp export flags', () => {
     delete process.env.OTEL_TRACES_EXPORTER
     delete process.env.OTEL_METRICS_EXPORTER
     delete process.env.OTEL_LOGS_EXPORTER
+    delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
     delete process.env.DD_METRICS_OTEL_ENABLED
     delete process.env.DD_LOGS_OTEL_ENABLED
   }
@@ -371,9 +372,10 @@ describe('otlp export flags', () => {
     assert.strictEqual(startupLogObj().otlp_traces_export_enabled, false)
   })
 
-  it('otlp_traces_export_enabled should be false in Test Optimization mode even when exporter is otlp', () => {
-    // Test Optimization keeps test spans on the citestcycle endpoint, so the OTLP
-    // trace exporter is not used regardless of OTEL_TRACES_EXPORTER (see exporter.js).
+  it('otlp_traces_export_enabled should be false when Test Optimization disables OTel semantics', () => {
+    // Test Optimization keeps test spans on the citestcycle endpoint, so neither OTel semantics nor an explicit
+    // OTEL_TRACES_EXPORTER=otlp changes its effective trace exporter.
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     assert.strictEqual(startupLogObj({ isCiVisibility: true }).otlp_traces_export_enabled, false)
   })

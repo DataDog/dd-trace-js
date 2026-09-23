@@ -1034,6 +1034,31 @@ describe('Config', () => {
     assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
+  it('should disable OTel semantics without overriding Test Optimization settings', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA = 'v1'
+    process.env.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED = 'true'
+
+    const config = getConfig({
+      isCiVisibility: true,
+      experimental: { exporter: 'jest_worker' },
+    })
+
+    assert.strictEqual(config.experimental.exporter, 'jest_worker')
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
+    assert.strictEqual(config.spanAttributeSchema, 'v1')
+    assert.strictEqual(config.spanComputePeerService, true)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+    )
+    assertConfigUpdateContains(updateConfig.firstCall.args[0], [
+      { name: 'DD_TRACE_OTEL_SEMANTICS_ENABLED', value: false, origin: 'calculated' },
+    ])
+  })
+
   it('should disable OTel semantics without overriding Electron exporter settings', () => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
     process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
