@@ -1491,6 +1491,19 @@ describe('sdk', () => {
       })
     })
 
+    it('uses a provided finished span', () => {
+      let span
+      llmobs.trace({ kind: 'workflow', name: 'test' }, currentSpan => {
+        span = currentSpan
+      })
+
+      const spanCtx = llmobs.exportSpan(span)
+      const traceId = LLMObsTagger.tagMap.get(span)['_ml_obs.trace_id']
+      const spanId = span.context().toSpanId()
+
+      assert.deepStrictEqual(spanCtx, { traceId, spanId })
+    })
+
     it('uses the active span in an llmobs scope', () => {
       llmobs.trace({ kind: 'workflow', name: 'test' }, span => {
         const spanCtx = llmobs.exportSpan()

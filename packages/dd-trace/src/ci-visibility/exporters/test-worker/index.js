@@ -97,6 +97,8 @@ function getInterprocessTelemetryCode () {
  * Currently used by Jest, Cucumber and Mocha workers.
  */
 class TestWorkerCiVisibilityExporter {
+  supportsMetaStruct = false
+
   constructor () {
     const interprocessTraceCode = getInterprocessTraceCode()
     const interprocessCoverageCode = getInterprocessCoverageCode()

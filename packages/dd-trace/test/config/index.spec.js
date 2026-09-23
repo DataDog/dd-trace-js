@@ -1563,7 +1563,7 @@ describe('Config', () => {
     process.env.DD_INSTRUMENTATION_INSTALL_TYPE = 'k8s_single_step'
     process.env.DD_LANGCHAIN_SPAN_CHAR_LIMIT = '50'
     process.env.DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE = '0.5'
-    process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'true'
+    process.env.DD_LLMOBS_AGENTLESS_ENABLED = 'false'
     process.env.DD_LLMOBS_ML_APP = 'myMlApp'
     process.env.DD_PROFILING_ENABLED = 'true'
     process.env.DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS = '42'
@@ -1707,11 +1707,11 @@ describe('Config', () => {
       },
       DD_INSTRUMENTATION_CONFIG_ID: 'abcdef123',
       llmobs: {
-        DD_LLMOBS_AGENTLESS_ENABLED: true,
+        DD_LLMOBS_AGENTLESS_ENABLED: false,
         DD_LLMOBS_ML_APP: 'myMlApp',
       },
       middlewareTracingEnabled: false,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
       remoteConfig: {
         DD_REMOTE_CONFIGURATION_ENABLED: false,
@@ -1851,7 +1851,7 @@ describe('Config', () => {
       { name: 'DD_INSTRUMENTATION_CONFIG_ID', value: 'abcdef123', origin: 'env_var' },
       { name: 'DD_LANGCHAIN_SPAN_CHAR_LIMIT', value: 50, origin: 'env_var' },
       { name: 'DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE', value: 0.5, origin: 'env_var' },
-      { name: 'DD_LLMOBS_AGENTLESS_ENABLED', value: true, origin: 'env_var' },
+      { name: 'DD_LLMOBS_AGENTLESS_ENABLED', value: false, origin: 'env_var' },
       { name: 'DD_LLMOBS_ML_APP', value: 'myMlApp', origin: 'env_var' },
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: false, origin: 'env_var' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: 'c:cc, d:dd', origin: 'env_var' },
@@ -2254,7 +2254,7 @@ describe('Config', () => {
       hostname: 'agent',
       llmobs: {
         mlApp: 'myMlApp',
-        agentlessEnabled: true,
+        agentlessEnabled: false,
       },
       logger,
       logLevel,
@@ -2357,7 +2357,7 @@ describe('Config', () => {
         DD_IAST_TELEMETRY_VERBOSITY: 'DEBUG',
       },
       llmobs: {
-        DD_LLMOBS_AGENTLESS_ENABLED: true,
+        DD_LLMOBS_AGENTLESS_ENABLED: false,
         DD_LLMOBS_ML_APP: 'myMlApp',
       },
       logLevel,
@@ -2366,7 +2366,7 @@ describe('Config', () => {
       peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: 6218,
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -2506,7 +2506,7 @@ describe('Config', () => {
       },
       { name: 'DD_IAST_STACK_TRACE_ENABLED', value: false, origin: 'code' },
       { name: 'DD_IAST_TELEMETRY_VERBOSITY', value: 'DEBUG', origin: 'code' },
-      { name: 'DD_LLMOBS_AGENTLESS_ENABLED', value: true, origin: 'code' },
+      { name: 'DD_LLMOBS_AGENTLESS_ENABLED', value: false, origin: 'code' },
       { name: 'DD_LLMOBS_ML_APP', value: 'myMlApp', origin: 'code' },
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: false, origin: 'code' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: 'd:dd', origin: 'code' },
@@ -3032,7 +3032,7 @@ describe('Config', () => {
       },
       middlewareTracingEnabled: true,
       peerServiceMapping: { d: 'dd' },
-      protocolVersion: '0.5',
+      protocolVersion: '0.4',
       remoteConfig: {
         pollInterval: 42,
       },
@@ -4324,9 +4324,12 @@ describe('Config', () => {
       }])
     })
 
-    it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
+    it('should enable llmobs and global agentless mode with agentless options', () => {
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
+      assert.strictEqual(config.DD_AGENTLESS_ENABLED, true)
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.protocolVersion, '0.4')
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -4376,11 +4379,22 @@ describe('Config', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
       assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
+      assert.strictEqual(config.DD_AGENTLESS_ENABLED, false)
+      assert.notStrictEqual(config.experimental.exporter, 'agentless')
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
         name: 'DD_LLMOBS_ENABLED', value: false, origin: 'env_var',
       }])
+    })
+
+    it('should force trace protocol 0.4 when llmobs is enabled', () => {
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.protocolVersion, '0.4')
     })
   })
 

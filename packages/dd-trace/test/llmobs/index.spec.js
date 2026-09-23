@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const LLMObsSpanProcessor = require('../../src/llmobs/span_processor')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
 const {
@@ -24,6 +25,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -602,6 +604,14 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
+
+        it('marks the agent as available', () => {
+          const setAgentAvailable = sinon.stub(LLMObsSpanProcessor.prototype, 'setAgentAvailable')
+
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
+
+          sinon.assert.calledOnceWithExactly(setAgentAvailable, true)
+        })
       })
 
       describe('when the agent has the correct proxy endpoint', () => {
@@ -650,6 +660,14 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
+
+        it('marks the agent as unavailable', () => {
+          const setAgentAvailable = sinon.stub(LLMObsSpanProcessor.prototype, 'setAgentAvailable')
+
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
+
+          sinon.assert.calledOnceWithExactly(setAgentAvailable, false)
+        })
       })
     })
   })
@@ -662,6 +680,28 @@ describe('module', () => {
     evalMetricAppendCh.publish({ payload })
 
     sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
+  })
+
+  it('routes sampled trace chunks through the LLMObs span processor', () => {
+    const processTrace = sinon.stub(LLMObsSpanProcessor.prototype, 'processTrace')
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const trace = { spans: [{}], samplingPriority: 1 }
+
+    traceSampledCh.publish(trace)
+
+    sinon.assert.calledOnceWithExactly(processTrace, trace)
+  })
+
+  it('routes pending spans before flushing the writers', () => {
+    const processPending = sinon.stub(LLMObsSpanProcessor.prototype, 'processPending')
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
+    const spanWriter = LLMObsSpanWriterSpy.firstCall.returnValue
+    const evalWriter = LLMObsEvalMetricsWriterSpy.firstCall.returnValue
+
+    flushCh.publish()
+
+    sinon.assert.calledOnce(processPending)
+    sinon.assert.callOrder(processPending, spanWriter.flush, evalWriter.flush)
   })
 
   it('registers both LLMObs writers for lifecycle flushing', () => {
@@ -708,6 +748,7 @@ describe('module', () => {
     assert.strictEqual(injectCh.hasSubscribers, false)
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(traceSampledCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
     sinon.assert.calledOnce(unregisterTelemetryFlusher)
   })
@@ -766,6 +807,26 @@ describe('module', () => {
     sinon.assert.notCalled(retiredUnregister)
     destroyEvaluation()
     sinon.assert.calledOnce(retiredUnregister)
+  })
+
+  it('applies transport selection to the processor being initialized', () => {
+    const setWriter = sinon.spy(LLMObsSpanProcessor.prototype, 'setWriter')
+    const setAgentAvailable = sinon.spy(LLMObsSpanProcessor.prototype, 'setAgentAvailable')
+    const config = {
+      llmobs: { DD_LLMOBS_ML_APP: 'test' },
+      DD_API_KEY: 'test',
+      site: 'datadoghq.com',
+    }
+    llmobsModule.enable(config)
+    const initialProcessor = setWriter.firstCall.thisValue
+
+    llmobsModule.enable(config)
+    const replacementProcessor = setWriter.secondCall.thisValue
+    fetchAgentInfoStub.firstCall.args[1](new Error('No agent running'))
+
+    assert.notStrictEqual(initialProcessor, replacementProcessor)
+    sinon.assert.calledOnceWithExactly(setAgentAvailable, false)
+    sinon.assert.calledOn(setAgentAvailable, initialProcessor)
   })
 
   it('completes transport selection for writers retired during initialization', () => {

@@ -78,7 +78,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     const inputMessages = formatInputMessages(inputs.contents)
 
     const metadata = extractMetadata(config)
-    this._tagger.tagMetadata(span, metadata)
+    if (metadata) this._tagger.tagMetadata(span, metadata)
 
     const toolDefinitions = extractToolDefinitions(config)
     if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
