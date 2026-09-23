@@ -118,6 +118,10 @@ export interface GeneratedConfig {
   DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: number;
   DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: boolean;
   DD_LAMBDA_HANDLER: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_TTL: number;
+  DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LOGS_OTEL_ENABLED: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
@@ -474,6 +478,7 @@ export interface GeneratedConfig {
   middlewareTracingEnabled: boolean;
   openai: {
     DD_OPENAI_LOGS_ENABLED: boolean;
+    DD_OPENAI_REALTIME_ENABLED: boolean;
     DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
@@ -762,6 +767,12 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
   DD_LLMOBS_PROJECT_NAME: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_DIR: string | undefined;
+  DD_LLMOBS_PROMPTS_CACHE_TTL: number;
+  DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS: number;
+  DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED: boolean;
+  DD_LLMOBS_PROMPTS_TIMEOUT: number;
+  DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
   DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
@@ -769,6 +780,7 @@ export interface GeneratedEnvVarConfig {
   DD_METRICS_OTEL_ENABLED: boolean;
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
+  DD_OPENAI_REALTIME_ENABLED: boolean;
   DD_OPENAI_SPAN_CHAR_LIMIT: number;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
