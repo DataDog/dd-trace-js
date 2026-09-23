@@ -107,10 +107,10 @@ describe('esm', () => {
         const span = await spanPromise
         assertObjectContains(span.attributes, [
           { key: '_dd.p.ksr', value: { stringValue: '0.5' } },
-          { key: '_sampling_priority_v1', value: { intValue: 2 } },
           { key: 'url.scheme', value: { stringValue: 'http' } },
           { key: 'url.path', value: { stringValue: '/api/httptest2' } },
           { key: 'url.query', value: { stringValue: 'page=2' } },
+          { key: '_sampling_priority_v1', value: { intValue: 2 } },
         ])
       }).timeout(60_000)
     })
