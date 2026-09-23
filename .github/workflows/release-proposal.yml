@@ -191,8 +191,7 @@ jobs:
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
-          fromJSON(steps.proposal.outputs.commit_count) >= 50 &&
-          fromJSON(steps.proposal.outputs.commit_count) < 100
+          fromJSON(steps.proposal.outputs.commit_count) >= 50
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -205,26 +204,6 @@ jobs:
                   type: "mrkdwn"
                   text: >-
                     :warning: *Release proposal
-                    <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
-                    has ${{ steps.proposal.outputs.commit_count }} commits queued.
-                    Consider cutting this release soon.
-      - uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v2.1.0
-        if: >
-          github.event_name == 'schedule' &&
-          steps.proposal.outputs.commit_count != '' &&
-          fromJSON(steps.proposal.outputs.commit_count) >= 100
-        with:
-          method: chat.postMessage
-          token: ${{ secrets.SLACK_BOT_TOKEN }}
-          errors: true
-          payload: |
-            channel: ${{ secrets.SLACK_CHANNEL_ID }}
-            blocks:
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: >-
-                    :rotating_light: *Release proposal
                     <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
                     has ${{ steps.proposal.outputs.commit_count }} commits queued.
                     Consider cutting this release soon.

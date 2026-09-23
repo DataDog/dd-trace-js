@@ -61,9 +61,9 @@ describe('release proposal', () => {
     assert.strictEqual(fail.firstCall.args[0], stopped)
   })
 
-  it('applies more than 100 commits', () => {
+  it('applies every applicable commit', () => {
     const stopped = new Error('proposal stopped after applying changes')
-    const shas = Array.from({ length: 101 }, (_, index) => index.toString(16).padStart(40, '0'))
+    const shas = Array.from({ length: 125 }, (_, index) => index.toString(16).padStart(40, '0'))
     const createReleaseChangelog = sinon.stub().returns({
       isMinor: true,
       markdown: '',
