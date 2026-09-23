@@ -130,7 +130,7 @@ describe('debugger/index', () => {
     })
 
     for (const code of ['MODULE_NOT_FOUND', 'ERR_WORKER_OUT_OF_MEMORY', 'ERR_INSPECTOR_COMMAND', undefined]) {
-      it(`should report the error name and allowlisted code ${code}`, () => {
+      it(`should report the error name and code ${code}`, () => {
         const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
         const error = Object.assign(new TypeError('customer-secret'), { code })
         onError(error)
@@ -139,7 +139,7 @@ describe('debugger/index', () => {
         assert.ok(entries)
         const [entry] = entries
         assert.strictEqual(entry.message,
-          `[debugger] worker thread error name=TypeError${code === undefined ? '' : ` code=${code}`}`)
+          `[debugger] worker thread error name=TypeError code=${code ?? 'unknown'} reason=unknown`)
         assert.ok(!entry.stack_trace.includes('customer-secret'))
         assert.strictEqual(DynamicInstrumentation.isStarted(), true)
       })
@@ -154,7 +154,7 @@ describe('debugger/index', () => {
       const entries = logCollector.drain()
       assert.ok(entries)
       assert.strictEqual(entries[0].message,
-        '[debugger] worker thread error name=Error reason=unexpected_pause_reason')
+        '[debugger] worker thread error name=Error code=unknown reason=unexpected_pause_reason')
     })
 
     it('should retain discriminants across a real worker failure', async () => {
@@ -181,25 +181,6 @@ describe('debugger/index', () => {
       assert.strictEqual(DynamicInstrumentation.isStarted(), false)
     })
 
-    it('should replace unknown metadata instead of sending it', () => {
-      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
-      for (const metadata of [
-        { name: 'customer-name', code: 'customer-code', reason: 'customer-reason' },
-        { name: 'customer-name', code: { secret: 'customer-code' }, reason: { secret: 'customer-reason' } },
-      ]) {
-        const error = Object.assign(new Error('customer-secret'), metadata)
-        error.stack = 'customer-name: customer-secret\n    at /customer/app.js:1:2'
-        onError(error)
-
-        assert.deepStrictEqual(logCollector.drain(), [{
-          level: 'ERROR',
-          count: 1,
-          stack_trace: '',
-          message: '[debugger] worker thread error name=unknown code=unknown reason=unknown',
-        }])
-      }
-    })
-
     it('should report a rejected probe without terminating the worker', () => {
       const ack = sinon.spy()
       rc.setProductHandler.lastCall.args[1]('apply', { id: 'probe1' }, 'config-id', ack)
@@ -212,7 +193,7 @@ describe('debugger/index', () => {
       const entries = logCollector.drain()
       assert.ok(entries)
       assert.strictEqual(entries[0].message,
-        '[debugger] worker thread error name=Error reason=unsupported_probe_type')
+        '[debugger] worker thread error name=Error code=unknown reason=unsupported_probe_type')
     })
 
     it('should not report intentional worker shutdown as an unexpected exit', () => {

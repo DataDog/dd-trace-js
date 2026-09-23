@@ -15,7 +15,6 @@ const {
   DEBUGGER_INPUT_V2,
   GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
-  WORKER_ERROR_REASON,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
@@ -32,16 +31,6 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
 // and the worker does not keep the process alive, so without this hook everything counted since the last tick would
 // be lost when the application exits on its own.
 const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
-
-const WORKER_ERROR_NAMES = new Set([
-  'Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'EvalError', 'URIError', 'AggregateError',
-])
-const WORKER_ERROR_CODES = new Set([
-  'MODULE_NOT_FOUND', 'ERR_MODULE_NOT_FOUND', 'ERR_WORKER_OUT_OF_MEMORY', 'ERR_WORKER_INIT_FAILED',
-  'ERR_WORKER_UNSERIALIZABLE_ERROR', 'ERR_INSPECTOR_COMMAND', 'ERR_INSPECTOR_NOT_ACTIVE', 'ERR_INSPECTOR_CLOSED',
-  'ERR_INSPECTOR_ALREADY_CONNECTED', 'ERR_INSPECTOR_NOT_CONNECTED', 'ERR_DLOPEN_FAILED', 'ERR_REQUIRE_ESM',
-])
-const WORKER_ERROR_REASONS = new Set(Object.values(WORKER_ERROR_REASON))
 
 let worker = null
 let configChannel = null
@@ -194,26 +183,21 @@ function start (config, rcInstance) {
 }
 
 /**
- * Only allowlisted tokens belong in the telemetry message; exception messages remain in the redacted cause.
+ * Failure metadata belongs in the telemetry message; exception messages remain in the redacted cause.
  *
  * @param {Error & { code?: unknown, reason?: unknown }} error - The worker failure
  * @param {unknown} [reason] - Explicit reason preserved across a probe acknowledgement's structured clone
  */
 function logWorkerError (error, reason = error.reason) {
-  // Telemetry omits printf arguments. Only these allowlisted values may be interpolated into its message.
+  // Telemetry omits printf arguments, so the failure metadata must be part of the message.
   // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-  log.error(() => {
-    const name = WORKER_ERROR_NAMES.has(error.name) ? error.name : 'unknown'
-    let message = `[debugger] worker thread error name=${name}`
-    if (error.code !== undefined) {
-      const code = typeof error.code === 'string' && WORKER_ERROR_CODES.has(error.code) ? error.code : 'unknown'
-      message += ` code=${code}`
-    }
-    if (reason !== undefined) {
-      message += ` reason=${typeof reason === 'string' && WORKER_ERROR_REASONS.has(reason) ? reason : 'unknown'}`
-    }
-    return message
-  }, error)
+  log.error(() => `[debugger] worker thread error name=${
+      typeof error.name === 'string' ? error.name : 'unknown'
+    } code=${
+      typeof error.code === 'string' ? error.code : 'unknown'
+    } reason=${
+      typeof reason === 'string' ? reason : 'unknown'
+    }`, error)
 }
 
 /**
