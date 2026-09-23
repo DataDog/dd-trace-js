@@ -929,6 +929,17 @@ declare namespace tracer {
          */
         initializationTimeoutMs?: number
         /**
+         * Verbose debug logging for the Feature Flags provider. Logs setup/initialization errors and
+         * full evaluation details for every flag evaluation directly to the console.
+         * Intended for troubleshooting during setup; generates a high volume of logs.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_DEBUG environment variable.
+         *
+         * @default false
+         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_DEBUG
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        debug?: boolean
+        /**
          * Configuration for span enrichment with feature flag evaluation data.
          */
         spanEnrichment?: {

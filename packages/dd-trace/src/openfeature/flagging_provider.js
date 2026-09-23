@@ -6,6 +6,7 @@ const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
+const DebugLoggingHook = require('./debug-logging-hook')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 
@@ -20,6 +21,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
 
+  /** @type {boolean} */
+  #debug
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
@@ -30,7 +34,13 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
+    this.#debug = config.experimental.flaggingProvider.debug === true
+
     this.hooks.push(new EvalMetricsHook(config))
+
+    if (this.#debug) {
+      this.hooks.push(new DebugLoggingHook())
+    }
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
@@ -60,6 +70,15 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // `initializationTimeoutMs` while waiting for configuration to arrive.
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
+
+    if (this.#debug) {
+      // Observes the rejection for logging only. Does not alter it: `promise` itself is
+      // returned unmodified below, so the caller still sees the original rejection.
+      promise.catch((error) => {
+        // eslint-disable-next-line no-console
+        console.error('[dd-trace] Feature flag provider failed to initialize:', error)
+      })
+    }
 
     return promise
   }

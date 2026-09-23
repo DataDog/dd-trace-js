@@ -423,6 +423,7 @@ export interface GeneratedConfig {
     enableGetRumData: boolean;
     exporter: string;
     flaggingProvider: {
+      debug: boolean;
       enabled: boolean;
       initializationTimeoutMs: number;
       spanEnrichment: {
@@ -690,6 +691,7 @@ export interface GeneratedEnvVarConfig {
   DD_ENV: string | undefined;
   DD_EXPERIMENTAL_API_SECURITY_ENABLED: boolean;
   DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: boolean;
+  DD_EXPERIMENTAL_FLAGGING_PROVIDER_DEBUG: boolean;
   DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: boolean;
   DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: number;
   DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: boolean;
