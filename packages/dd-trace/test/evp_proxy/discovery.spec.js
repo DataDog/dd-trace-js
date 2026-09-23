@@ -120,6 +120,17 @@ describe('EVP proxy discovery', () => {
       })
     })
 
+    it('passes an explicit retry policy to the Agent information request', (done) => {
+      fetchAgentInfo.yields(null, { endpoints: ['/evp_proxy/v2'] })
+
+      discoverEVPProxy(url, { ...options, retry: false }, (error, route) => {
+        assert.ifError(error)
+        assert.strictEqual(route.basePath, '/evp_proxy/v2')
+        sinon.assert.calledOnceWithExactly(fetchAgentInfo, url, sinon.match.func, { retry: false })
+        done()
+      })
+    })
+
     it('returns information request errors', (done) => {
       const expectedError = new Error('Agent unavailable')
       fetchAgentInfo.yields(expectedError)
