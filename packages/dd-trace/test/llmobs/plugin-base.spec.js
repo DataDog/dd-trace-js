@@ -59,17 +59,31 @@ describe('LLMObs plugin with LLM Observability disabled', () => {
       'gen_ai.operation.name': 'llm',
       'gen_ai.request.model': 'gpt-4',
       'gen_ai.provider.name': 'openai',
-      'gen_ai.application.name': 'test-service',
       'gen_ai.conversation.id': 'sess-1',
       '_dd.llmobs.artificial_gen_ai_tags': 'true',
     })
   })
 
-  it('inherits the session from the trace when the integration has none', () => {
+  // the in-process trace default is written by the tagger, which never runs on this path, so an
+  // upstream service is the only place an inherited session can come from
+  it('inherits a propagated session when the integration has none', () => {
+    traceTags['_dd.p.llmobs_sid'] = 'sess-from-upstream'
+    publishStart()
+
+    assert.equal(apmTags['gen_ai.conversation.id'], 'sess-from-upstream')
+  })
+
+  it('does not read the in-process trace session default, which this path never writes', () => {
     traceTags['_ml_obs.trace_session_id'] = 'sess-from-trace'
     publishStart()
 
-    assert.equal(apmTags['gen_ai.conversation.id'], 'sess-from-trace')
+    assert.equal(apmTags['gen_ai.conversation.id'], undefined)
+  })
+
+  it('does not tag the ml app, which is an LLM Observability concept', () => {
+    publishStart()
+
+    assert.equal(apmTags['gen_ai.application.name'], undefined)
   })
 
   it('emits nothing for an operation without a span kind', () => {

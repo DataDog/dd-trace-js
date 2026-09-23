@@ -19,6 +19,7 @@ describe('google-genai gen_ai APM attributes with LLM Observability disabled', (
 
   const startCh = dc.channel(`${TestGenAiPlugin.prefix}:start`)
   const asyncEndCh = dc.channel(`${TestGenAiPlugin.prefix}:asyncEnd`)
+  const chunkCh = dc.channel('apm:google:genai:request:chunk')
 
   let plugin
   let apmTags
@@ -46,24 +47,33 @@ describe('google-genai gen_ai APM attributes with LLM Observability disabled', (
     assert.equal(apmTags['gen_ai.operation.name'], 'llm')
     assert.equal(apmTags['gen_ai.request.model'], 'gemini-2.0-flash')
     assert.equal(apmTags['gen_ai.provider.name'], 'google')
-    assert.equal(apmTags['gen_ai.application.name'], 'test-service')
     assert.equal(apmTags['_dd.llmobs.artificial_gen_ai_tags'], 'true')
     assert.equal(apmTags['gen_ai.usage.input_tokens'], 8)
     assert.equal(apmTags['gen_ai.usage.output_tokens'], 3)
     assert.equal(apmTags['gen_ai.usage.total_tokens'], 11)
   })
 
-  // a streamed call reports its usage on the aggregated metadata rather than the result
-  it('falls back to the streamed usage metadata', () => {
-    publish({
-      methodName: 'generateContentStream',
-      args: [{ model: 'gemini-2.0-flash' }],
-      result: undefined,
-      streamedUsageMetadata: { promptTokenCount: 4, candidatesTokenCount: 2, totalTokenCount: 6 },
+  // a streamed call reports its usage on the chunks rather than on a result
+  it('reads the usage the streamed chunks report', () => {
+    const ctx = buildCtx({ methodName: 'generateContentStream', args: [{ model: 'gemini-2.0-flash' }] })
+
+    startCh.publish(ctx)
+    chunkCh.publish({ ctx, chunk: { candidates: [{ content: { parts: [{ text: 'ignored' }] } }] } })
+    chunkCh.publish({
+      ctx,
+      chunk: { usageMetadata: { promptTokenCount: 4, candidatesTokenCount: 2, totalTokenCount: 6 } },
+      done: true,
     })
+    asyncEndCh.publish(ctx)
 
     assert.equal(apmTags['gen_ai.usage.input_tokens'], 4)
+    assert.equal(apmTags['gen_ai.usage.output_tokens'], 2)
     assert.equal(apmTags['gen_ai.usage.total_tokens'], 6)
+
+    // the reduced path keeps none of the aggregation the LLMObs payload needs
+    assert.equal(ctx.chunks, undefined)
+    assert.equal(ctx.isStreaming, undefined)
+    assert.equal(ctx.result, undefined)
   })
 
   it('omits usage when neither the result nor the stream reported any', () => {
@@ -79,7 +89,7 @@ describe('google-genai gen_ai APM attributes with LLM Observability disabled', (
     assert.deepStrictEqual(apmTags, {})
   })
 
-  function publish ({ methodName, args, result, streamedUsageMetadata }) {
+  function buildCtx ({ methodName, args, result }) {
     const spanContext = {
       _trace: { tags: {} },
       getTags: () => ({}),
@@ -88,14 +98,12 @@ describe('google-genai gen_ai APM attributes with LLM Observability disabled', (
         apmTags[key] = value
       },
     }
-    const ctx = {
-      currentStore: { span: { context: () => spanContext } },
-      methodName,
-      args,
-      result,
-      streamedUsageMetadata,
-    }
 
+    return { currentStore: { span: { context: () => spanContext } }, methodName, args, result }
+  }
+
+  function publish (options) {
+    const ctx = buildCtx(options)
     startCh.publish(ctx)
     asyncEndCh.publish(ctx)
   }

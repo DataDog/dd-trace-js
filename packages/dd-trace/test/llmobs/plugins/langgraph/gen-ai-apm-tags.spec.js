@@ -42,7 +42,6 @@ describe('langgraph gen_ai APM attributes with LLM Observability disabled', () =
 
     assert.deepStrictEqual(apmTags, {
       'gen_ai.operation.name': 'workflow',
-      'gen_ai.application.name': 'test-service',
       '_dd.llmobs.artificial_gen_ai_tags': 'true',
     })
   })

@@ -1,12 +1,8 @@
 'use strict'
 
 const log = require('../../log')
-const {
-  PROPAGATED_ML_APP_KEY,
-  PROPAGATED_SESSION_ID_KEY,
-  SESSION_ID_TRACE_DEFAULT_KEY,
-} = require('../constants/tags')
-const { setGenAiApmTags, updateGenAiApmTags } = require('../gen-ai-tags')
+const { PROPAGATED_SESSION_ID_KEY } = require('../constants/tags')
+const { MODEL_BACKED_SPAN_KINDS, setGenAiApmTags, updateGenAiApmTags } = require('../gen-ai-tags')
 const { storage: llmobsStorage } = require('../storage')
 const telemetry = require('../telemetry')
 
@@ -136,16 +132,17 @@ class LLMObsPlugin extends TracingPlugin {
       const registerOptions = this.getLLMObsSpanRegisterOptions(ctx)
       if (!registerOptions?.kind) return
 
-      // the usage metrics only arrive at `asyncEnd`, by which point the kind is gone
-      ctx.genAiApmSpanKind = registerOptions.kind
-
-      this._setGenAiApmTags(span, {
+      // `asyncEnd` needs these back: the kind to gate the usage metrics, and the model in case an
+      // integration promotes the kind to one that must always report a model
+      ctx.genAiApmStartTags = {
         spanKind: registerOptions.kind,
         modelName: registerOptions.modelName,
         modelProvider: registerOptions.modelProvider,
         mlApp: registerOptions.mlApp,
         sessionId: registerOptions.sessionId,
-      })
+      }
+
+      this._setGenAiApmTags(span, ctx.genAiApmStartTags)
     } catch (e) {
       log.debug('Failed to set gen_ai APM tags for %s:', this.constructor.name, e.message)
     }
@@ -156,38 +153,49 @@ class LLMObsPlugin extends TracingPlugin {
    */
   #setGenAiApmEndTags (ctx) {
     const span = ctx.currentStore?.span
-    const spanKind = ctx.genAiApmSpanKind
-    if (!span || !spanKind) return
+    const startTags = ctx.genAiApmStartTags
+    if (!span || !startTags) return
+
+    const { spanKind } = startTags
 
     try {
       const endTags = this.getGenAiApmEndTags(ctx, spanKind)
-      // an integration may also correct the kind, the way the tagger's `changeKind` does
-      if (endTags) updateGenAiApmTags(span, { spanKind, ...endTags })
+      if (!endTags) return
+
+      // An integration may correct the kind, the way the tagger's `changeKind` does. A correction
+      // into a model-backed kind has to go back through `setGenAiApmTags`, which applies the model
+      // and provider defaults a model-backed span always reports; an update alone would leave the
+      // span claiming a kind the enabled path could never emit without a model.
+      const promotedToModelBacked = endTags.spanKind &&
+        endTags.spanKind !== spanKind &&
+        MODEL_BACKED_SPAN_KINDS.has(endTags.spanKind)
+
+      if (promotedToModelBacked) {
+        this._setGenAiApmTags(span, { ...startTags, ...endTags })
+      } else {
+        updateGenAiApmTags(span, { spanKind, ...endTags })
+      }
     } catch (e) {
       log.debug('Failed to set gen_ai APM end tags for %s:', this.constructor.name, e.message)
     }
   }
 
   /**
-   * Writes the `gen_ai.*` APM attributes, defaulting the application and conversation to what the
-   * tagger would have resolved for the LLMObs span event.
+   * Writes the `gen_ai.*` APM attributes.
+   *
+   * No `gen_ai.application.name`: ml_app is an LLM Observability concept, and with LLMObs off the
+   * only value left to report is the service name the span already carries. dd-trace-py's reduced
+   * path leaves it out for the same reason.
    *
    * @param {import('../../opentracing/span')} span
    * @param {import('../gen-ai-tags').GenAiApmTags} tags
    */
   _setGenAiApmTags (span, tags) {
-    const traceTags = span.context()._trace.tags
+    // the in-process session default is written by the tagger, which never runs on this path, so
+    // an inherited session can only have come from an upstream service
+    const propagatedSessionId = span.context()._trace.tags[PROPAGATED_SESSION_ID_KEY]
 
-    setGenAiApmTags(span, {
-      ...tags,
-      mlApp: tags.mlApp ||
-        traceTags[PROPAGATED_ML_APP_KEY] ||
-        this._tracerConfig.llmobs.DD_LLMOBS_ML_APP ||
-        this._tracerConfig.service,
-      sessionId: tags.sessionId ||
-        traceTags[SESSION_ID_TRACE_DEFAULT_KEY] ||
-        traceTags[PROPAGATED_SESSION_ID_KEY],
-    })
+    setGenAiApmTags(span, { ...tags, sessionId: tags.sessionId || propagatedSessionId })
   }
 
   configure (config) {

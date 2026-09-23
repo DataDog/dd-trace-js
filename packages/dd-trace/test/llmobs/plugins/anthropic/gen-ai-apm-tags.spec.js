@@ -41,15 +41,16 @@ describe('Plugin', () => {
             'gen_ai.operation.name': meta['gen_ai.operation.name'],
             'gen_ai.request.model': meta['gen_ai.request.model'],
             'gen_ai.provider.name': meta['gen_ai.provider.name'],
-            'gen_ai.application.name': meta['gen_ai.application.name'],
           },
           {
             'gen_ai.operation.name': 'llm',
             'gen_ai.request.model': 'claude-3-7-sonnet-20250219',
             'gen_ai.provider.name': 'anthropic',
-            'gen_ai.application.name': 'test',
           }
         )
+
+        // ml_app is an LLM Observability concept, so the reduced path leaves it off
+        assert.equal(meta['gen_ai.application.name'], undefined)
 
         assert.equal(typeof metrics['gen_ai.usage.input_tokens'], 'number')
         assert.equal(typeof metrics['gen_ai.usage.output_tokens'], 'number')

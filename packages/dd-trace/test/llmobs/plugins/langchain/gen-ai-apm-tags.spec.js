@@ -54,6 +54,16 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
     assert.equal(apmTags['gen_ai.provider.name'], 'openai')
   })
 
+  // a model-backed span always reports a model, so a promotion has to pick up the defaults the
+  // enabled path would have written
+  it('defaults the model when the promotion finds none on the span', () => {
+    publish({ response_format: { type: 'json_object' } }, 'openai', undefined, { omitModel: true })
+
+    assert.equal(apmTags['gen_ai.operation.name'], 'llm')
+    assert.equal(apmTags['gen_ai.request.model'], 'custom')
+    assert.equal(apmTags['gen_ai.provider.name'], 'openai')
+  })
+
   it('leaves a non-openai provider as a workflow', () => {
     publish({ response_format: { type: 'json_object' } }, 'anthropic')
 
@@ -94,12 +104,12 @@ describe('langchain gen_ai APM attributes with LLM Observability disabled', () =
     assert.equal(apmTags['gen_ai.usage.total_tokens'], undefined)
   })
 
-  function publish (options, provider = 'openai', result) {
+  function publish (options, provider = 'openai', result, { omitModel = false } = {}) {
     const tags = {
       'resource.name': 'langchain.chat_model',
       'langchain.request.provider': provider,
-      'langchain.request.model': 'gpt-4o',
     }
+    if (!omitModel) tags['langchain.request.model'] = 'gpt-4o'
     const spanContext = {
       _trace: { tags: {} },
       getTags: () => tags,

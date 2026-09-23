@@ -31,11 +31,13 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       '../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils': {
         parseModelId (modelId) {
           if (modelId.includes('embed')) return { modelProvider: 'amazon', modelName: 'embed' }
-          return { modelProvider: 'amazon', modelName: 'titan' }
+          const [modelProvider, modelName] = modelId.split('.')
+          return { modelProvider, modelName }
         },
         extractRequestParams: () => ({ temperature: 0, maxTokens: 0, prompt: '' }),
         extractTextAndResponseReason: () => ({ message: '', role: '', usage: {} }),
-        extractTextAndResponseReasonFromStream: () => ({ message: '', role: '', usage: {} }),
+        // the real one: the reduced path reads streamed token counts through it, and the shapes
+        // it understands are the point of those tests
       },
     })
 
@@ -153,7 +155,6 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.operation.name': 'llm',
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
-        'gen_ai.application.name': 'test',
         'gen_ai.usage.input_tokens': 8,
         'gen_ai.usage.output_tokens': 3,
         'gen_ai.usage.total_tokens': 11,
@@ -178,7 +179,6 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.operation.name': 'llm',
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
-        'gen_ai.application.name': 'test',
         // input tokens are normalized to also count cached tokens
         'gen_ai.usage.input_tokens': 11,
         'gen_ai.usage.output_tokens': 2,
@@ -192,13 +192,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     // `invokeModelWithResponseStream` sends no token headers and no Converse metadata event; the
     // counts ride in the body of one chunk
     it('reads invokeModel stream usage off the invocation metrics chunk', () => {
-      const ctx = {
-        currentStore: { span: buildSpan() },
-        response: {
-          request: { operation: 'invokeModelWithResponseStream', params: { modelId: 'amazon.titan' } },
-          $metadata: { requestId: 'req-invoke-stream' },
-        },
-      }
+      const ctx = buildStreamCtx('req-invoke-stream')
 
       streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ outputText: 'ignored' }) })
       streamedChunkCh.publish({
@@ -218,7 +212,6 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.operation.name': 'llm',
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
-        'gen_ai.application.name': 'test',
         // input tokens are normalized to also count cached tokens
         'gen_ai.usage.input_tokens': 12,
         'gen_ai.usage.output_tokens': 4,
@@ -229,14 +222,42 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       })
     })
 
+    // Amazon models report their counts as plain body fields rather than invocation metrics
+    it('reads invokeModel stream usage off the Amazon token-count fields', () => {
+      const ctx = buildStreamCtx('req-invoke-stream-amazon')
+
+      streamedChunkCh.publish({
+        ctx,
+        chunk: invokeModelChunk({ outputText: 'hi', inputTextTokenCount: 6, totalOutputTextTokenCount: 2 }),
+      })
+      completeCh.publish(ctx)
+
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 6)
+      assert.equal(apmTags['gen_ai.usage.output_tokens'], 2)
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
+    })
+
+    // Anthropic reports its counts on the `message_start` body
+    it('reads invokeModel stream usage off the Anthropic message usage', () => {
+      const ctx = buildStreamCtx('req-invoke-stream-anthropic', 'anthropic.claude')
+
+      streamedChunkCh.publish({
+        ctx,
+        chunk: invokeModelChunk({ type: 'message_start', message: { usage: { input_tokens: 5, output_tokens: 0 } } }),
+      })
+      streamedChunkCh.publish({
+        ctx,
+        chunk: invokeModelChunk({ type: 'message_delta', message: { usage: { input_tokens: 5, output_tokens: 3 } } }),
+      })
+      completeCh.publish(ctx)
+
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 5)
+      assert.equal(apmTags['gen_ai.usage.output_tokens'], 3)
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
+    })
+
     it('omits usage for a streamed invokeModel whose chunks report no invocation metrics', () => {
-      const ctx = {
-        currentStore: { span: buildSpan() },
-        response: {
-          request: { operation: 'invokeModelWithResponseStream', params: { modelId: 'amazon.titan' } },
-          $metadata: { requestId: 'req-invoke-stream-none' },
-        },
-      }
+      const ctx = buildStreamCtx('req-invoke-stream-none')
 
       streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ outputText: 'ignored' }) })
       completeCh.publish(ctx)
@@ -246,13 +267,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
     })
 
     it('survives a chunk whose body is not JSON', () => {
-      const ctx = {
-        currentStore: { span: buildSpan() },
-        response: {
-          request: { operation: 'invokeModelWithResponseStream', params: { modelId: 'amazon.titan' } },
-          $metadata: { requestId: 'req-invoke-stream-bad' },
-        },
-      }
+      const ctx = buildStreamCtx('req-invoke-stream-bad')
 
       const bytes = new TextEncoder().encode('amazon-bedrock-invocationMetrics: not json')
       streamedChunkCh.publish({ ctx, chunk: { chunk: { bytes } } })
@@ -289,7 +304,6 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.operation.name': 'llm',
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
-        'gen_ai.application.name': 'test',
         '_dd.llmobs.artificial_gen_ai_tags': 'true',
       })
     })
@@ -305,7 +319,6 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         'gen_ai.operation.name': 'llm',
         'gen_ai.request.model': 'amazon.titan',
         'gen_ai.provider.name': 'amazon_bedrock',
-        'gen_ai.application.name': 'test',
         '_dd.llmobs.artificial_gen_ai_tags': 'true',
       })
     })
@@ -339,6 +352,16 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
 
       assert.deepStrictEqual(apmTags, {})
     })
+
+    function buildStreamCtx (requestId, modelId = 'amazon.titan') {
+      return {
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'invokeModelWithResponseStream', params: { modelId } },
+          $metadata: { requestId },
+        },
+      }
+    }
 
     function buildSpan () {
       const spanContext = {

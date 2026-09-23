@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const telemetry = require('../telemetry')
 const {
   buildUsage,
@@ -13,7 +14,6 @@ const {
   extractTextAndResponseReasonConverse,
   extractTextAndResponseReasonConverseFromStream,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
-const { safeJsonParse } = require('../util')
 const BaseLLMObsPlugin = require('./base')
 
 const llmobsStore = storage('llmobs')
@@ -25,7 +25,6 @@ const ENABLED_OPERATIONS = new Set([
   'converseStream',
 ])
 const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
-const INVOCATION_METRICS_KEY = 'amazon-bedrock-invocationMetrics'
 
 /**
  * @typedef {{
@@ -71,8 +70,13 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
         // no LLMObs payload to build, so the usage comes from the response headers and, where
         // those are absent, from the response or the chunk that reported it: Converse puts it on
         // the response, and every streamed operation puts it on a chunk
-        const responseUsage = CONVERSE_OPERATIONS.has(operation) ? response.usage : undefined
-        const usage = responseUsage ?? ctx.streamedUsage
+        // Converse reports usage on the response or a metadata event, in its own spelling; a
+        // streamed `invokeModel` reports it in the chunk bodies, which the shared extractor
+        // normalizes per provider
+        const converseUsage = CONVERSE_OPERATIONS.has(operation) ? response.usage ?? ctx.streamedUsage : undefined
+        const usage = converseUsage
+          ? buildUsage(converseUsage)
+          : streamedInvokeModelUsage(ctx, modelProvider, modelName)
 
         this._setGenAiApmTags(span, {
           spanKind: 'llm',
@@ -80,7 +84,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
           modelProvider: 'amazon_bedrock',
           // reporting zeros for every metric would be worse than reporting none
           metrics: tokensFromHeaders || usage
-            ? extractTokens({ tokensFromHeaders, usage: buildUsage(usage) })
+            ? extractTokens({ tokensFromHeaders, usage: usage ?? {} })
             : undefined,
         })
         return
@@ -113,10 +117,16 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
       if (!this._llmobsEnabled) {
-        // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies are
-        // left to the LLMObs path
-        const usage = chunk?.metadata?.usage ?? readInvocationMetrics(chunk)
-        if (usage) ctx.streamedUsage = usage
+        // Converse reports usage on a metadata event; `invokeModel` streams report it in a chunk
+        // body, in a shape that varies by provider, so those are read through the shared
+        // extractor at `:complete:` once the model id names the provider.
+        const usage = chunk?.metadata?.usage
+        if (usage) {
+          ctx.streamedUsage = usage
+        } else if (chunk) {
+          ctx.chunks ??= []
+          ctx.chunks.push(chunk)
+        }
         return
       }
 
@@ -199,22 +209,32 @@ function consumeTokenHeaders (requestId) {
 }
 
 /**
- * `invokeModelWithResponseStream` reports its token counts in the body of one chunk instead of in
- * the headers `invokeModel` sends. Searches the raw bytes for the key first, so every other chunk
- * on a streamed response costs a byte scan rather than a decode and a parse.
+ * Token usage for a streamed `invokeModel` call. Each provider reports it in its own shape, and
+ * some only through `amazon-bedrock-invocationMetrics`, so this defers to the same extractor the
+ * LLMObs path uses rather than reimplementing that knowledge.
  *
- * @param {{ chunk?: { bytes?: Uint8Array } }} [chunk]
- * @returns {Record<string, number> | undefined}
+ * @param {{ chunks?: Array<object> }} ctx
+ * @param {string} modelProvider
+ * @param {string} modelName
+ * @returns {Record<string, number | undefined> | undefined}
  */
-function readInvocationMetrics (chunk) {
-  const bytes = chunk?.chunk?.bytes
-  if (!ArrayBuffer.isView(bytes)) return
+function streamedInvokeModelUsage (ctx, modelProvider, modelName) {
+  if (!ctx.chunks?.length) return
 
-  // a view, not a copy: this runs on every chunk of every streamed response
-  const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  if (!body.includes(INVOCATION_METRICS_KEY)) return
+  let generation
+  try {
+    generation = extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
+  } catch (e) {
+    // the extractor parses each chunk body; a malformed one must not reach the application
+    log.debug('Failed to read streamed Bedrock usage:', e.message)
+    return
+  }
 
-  return safeJsonParse(body.toString('utf8'), null)?.[INVOCATION_METRICS_KEY]
+  // already on the LLMObs metric names, the same ones `buildUsage` maps the Converse shape onto
+  const usage = generation.usage
+  if (!usage?.inputTokens && !usage?.outputTokens && !usage?.cacheReadTokens && !usage?.cacheWriteTokens) return
+
+  return usage
 }
 
 /**

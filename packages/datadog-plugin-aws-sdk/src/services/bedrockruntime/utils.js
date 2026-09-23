@@ -578,9 +578,8 @@ function resolveToolResultItem (item) {
  */
 function buildUsage (usage = {}) {
   return {
-    // the `*Count` spellings are what `amazon-bedrock-invocationMetrics` uses
-    inputTokens: usage.inputTokens ?? usage.inputTokenCount,
-    outputTokens: usage.outputTokens ?? usage.outputTokenCount,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
     cacheReadTokens: usage.cacheReadInputTokens ?? usage.cacheReadInputTokenCount,
     cacheWriteTokens: usage.cacheWriteInputTokens ?? usage.cacheWriteInputTokenCount,
   }

@@ -57,7 +57,6 @@ describe('claude-agent-sdk gen_ai APM attributes with LLM Observability disabled
       'gen_ai.operation.name': 'llm',
       'gen_ai.request.model': 'claude-sonnet-4-5',
       'gen_ai.provider.name': 'anthropic',
-      'gen_ai.application.name': 'test-service',
       'gen_ai.conversation.id': 'sess-1',
       // input tokens are normalized to also count cached tokens
       'gen_ai.usage.input_tokens': 13,

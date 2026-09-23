@@ -50,7 +50,6 @@ describe('openai gen_ai APM attributes with LLM Observability disabled', () => {
 
     assert.equal(apmTags['gen_ai.operation.name'], 'llm')
     assert.equal(apmTags['gen_ai.provider.name'], 'openai')
-    assert.equal(apmTags['gen_ai.application.name'], 'test-service')
     assert.equal(apmTags['_dd.llmobs.artificial_gen_ai_tags'], 'true')
     assert.equal(apmTags['gen_ai.usage.input_tokens'], 11)
     assert.equal(apmTags['gen_ai.usage.output_tokens'], 5)
