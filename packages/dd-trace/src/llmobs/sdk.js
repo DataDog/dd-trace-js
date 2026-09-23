@@ -633,7 +633,8 @@ class LLMObs extends NoopLLMObs {
   flush () {
     if (!this.enabled) return
 
-    flushCh.publish()
+    flushCh.publish() // communicates with llmobs-specific writers
+    this._tracer.flushAll?.() // trigger any flushes for meta_struct-bound llmobs spans
   }
 
   #autoAnnotate (span, kind, input, output) {
