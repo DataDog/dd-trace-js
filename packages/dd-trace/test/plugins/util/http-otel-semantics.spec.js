@@ -18,11 +18,14 @@ describe('http-otel-semantics', () => {
       )
     })
 
-    it('omits the port when it is the scheme default', () => {
-      assert.deepStrictEqual(
-        decomposeServerUrl('https://example.com/p', 'https://example.com/p'),
-        { scheme: 'https', address: 'example.com', port: undefined, path: '/p', query: undefined }
-      )
+    it('populates implicit scheme-default ports', () => {
+      assert.strictEqual(decomposeServerUrl('http://example.com/p', '').port, '80')
+      assert.strictEqual(decomposeServerUrl('https://example.com/p', '').port, '443')
+    })
+
+    it('populates explicit scheme-default ports', () => {
+      assert.strictEqual(decomposeServerUrl('http://example.com:80/p', '').port, '80')
+      assert.strictEqual(decomposeServerUrl('https://example.com:443/p', '').port, '443')
     })
 
     it('keeps an explicit non-default port and omits an absent query', () => {
@@ -37,16 +40,21 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(parts.query, '<redacted>')
     })
 
-    it('strips brackets from an IPv6 server.address', () => {
-      const parts = decomposeServerUrl('http://[::1]:8080/p', 'http://[::1]:8080/p')
+    it('strips brackets from an IPv6 server.address and populates its default port', () => {
+      const parts = decomposeServerUrl('http://[::1]/p', 'http://[::1]/p')
       assert.strictEqual(parts.address, '::1')
-      assert.strictEqual(parts.port, '8080')
+      assert.strictEqual(parts.port, '80')
     })
 
-    it('omits server.address when the Host header is absent', () => {
+    it('omits port 0', () => {
+      assert.strictEqual(decomposeServerUrl('http://example.com:0/p', '').port, undefined)
+    })
+
+    it('omits server.address and server.port when the Host header is absent', () => {
       // extractURL builds `http://undefined/...` when req.headers.host is missing.
       const parts = decomposeServerUrl('http://undefined/p', 'http://undefined/p')
       assert.strictEqual(parts.address, undefined)
+      assert.strictEqual(parts.port, undefined)
       assert.strictEqual(parts.path, '/p')
     })
 

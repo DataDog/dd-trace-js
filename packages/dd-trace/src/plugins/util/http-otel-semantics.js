@@ -102,16 +102,16 @@ function stripIpv6Brackets (host) {
  * @typedef {object} ServerUrlParts
  * @property {string} [scheme] value for `url.scheme`
  * @property {string} [address] value for `server.address`
- * @property {string} [port] value for `server.port`, as the digits the URL already held
+ * @property {string} [port] value for `server.port`
  * @property {string} path value for `url.path`
  * @property {string} [query] value for `url.query` (omitted when empty)
  */
 
 /**
  * Decompose a server request URL into the OpenTelemetry `url.*` / `server.*`
- * parts. Structural fields (scheme, address, port, path) are read from the raw
- * URL; the query is taken from the already-obfuscated URL so the configured
- * query-string obfuscation is preserved.
+ * parts. Structural fields (scheme, address, path) are read from the raw URL;
+ * the port is explicit or inferred from the scheme. The query comes from the
+ * already-obfuscated URL so configured query-string obfuscation is preserved.
  *
  * @param {string} rawUrl full request URL (`scheme://host[:port]/path?query`)
  * @param {string} obfuscatedUrl same URL with its query string obfuscated
@@ -130,10 +130,9 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
     const hostname = parsed.hostname
     if (hostname && hostname !== 'undefined') {
       address = stripIpv6Brackets(hostname)
+      port = parsed.port || defaultPortForUrl(rawUrl)
+      if (port === '0') port = undefined
     }
-    // `URL` rejects non-numeric ports and drops the scheme default, so what is left is digits.
-    // Port 0 is never a real listening port.
-    if (parsed.port && parsed.port !== '0') port = parsed.port
     path = parsed.pathname || '/'
   } catch {
     // Malformed or relative URL: fall back to a best-effort path only.
