@@ -59,4 +59,3 @@ jobs:
           frozen-teams: |
             @DataDog/apm-idm-js
             @DataDog/ml-observability
-            @DataDog/lang-platform-js
