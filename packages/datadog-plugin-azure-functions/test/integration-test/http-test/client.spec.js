@@ -105,13 +105,14 @@ describe('esm', () => {
         await response.text()
 
         const span = await spanPromise
-        assertObjectContains(span.attributes, [
-          { key: '_dd.p.ksr', value: { stringValue: '0.5' } },
-          { key: 'url.scheme', value: { stringValue: 'http' } },
-          { key: 'url.path', value: { stringValue: '/api/httptest2' } },
-          { key: 'url.query', value: { stringValue: 'page=2' } },
-          { key: '_sampling_priority_v1', value: { intValue: 2 } },
-        ])
+        const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+        assertObjectContains(attributes, {
+          '_dd.p.ksr': { stringValue: '0.5' },
+          'url.scheme': { stringValue: 'http' },
+          'url.path': { stringValue: '/api/httptest2' },
+          'url.query': { stringValue: 'page=2' },
+          _sampling_priority_v1: { intValue: 2 },
+        })
       }).timeout(60_000)
     })
   })

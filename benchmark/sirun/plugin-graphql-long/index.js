@@ -40,6 +40,8 @@ function getBenchmarkExporter () {
   return BenchmarkExporter
 }
 
+getBenchmarkExporter.usesOtlpTraceExporter = () => false
+
 if (process.env.WITH_TRACER) {
   require.cache[exporterPath] = {
     id: exporterPath,
