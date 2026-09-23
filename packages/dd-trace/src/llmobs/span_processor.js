@@ -2,6 +2,7 @@
 
 const util = require('node:util')
 
+const { AUTO_REJECT } = require('../../../../ext/priority')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const LLMObsExporter = require('../exporters/llmobs')
@@ -150,7 +151,7 @@ class LLMObsSpanProcessor {
 
       try {
         const { event, metaStructTags, routing } = cached
-        if (this.#shouldAttachMetaStruct(routing, event, willExport)) {
+        if (this.#shouldAttachMetaStruct(span, routing, event, willExport)) {
           this.#attachMetaStruct(span, event, metaStructTags)
           this.#cachedEvents.delete(cacheKey)
         } else {
@@ -348,12 +349,17 @@ class LLMObsSpanProcessor {
   }
 
   /**
+   * @param {import('../opentracing/span')} span
    * @param {{ apiKey?: string, site?: string }} routing
    * @param {object} event
    * @param {boolean} willExport
    */
-  #shouldAttachMetaStruct (routing, event, willExport) {
+  #shouldAttachMetaStruct (span, routing, event, willExport) {
+    const priority = span.context()._sampling?.priority
+    const predictedDrop = priority != null && priority <= AUTO_REJECT
+
     return willExport &&
+      !predictedDrop &&
       !routing.apiKey &&
       !routing.site &&
       !this.#hasRepeatedTagKeys(event.tags)
