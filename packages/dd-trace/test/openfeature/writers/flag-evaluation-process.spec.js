@@ -11,6 +11,18 @@ const exec = promisify(execFile)
 const fixture = join(__dirname, 'fixtures/worker-app.js')
 const preload = join(__dirname, 'fixtures/worker-preload.js')
 
+describe('flag evaluation flush retention', () => {
+  for (const mode of ['keys', 'entries']) {
+    it(`releases unnecessary ${mode} while a multi-payload flush is paused`, async function () {
+      this.timeout(10000)
+      const fixture = join(__dirname, 'fixtures/payload-retention.js')
+      const { stdout, stderr } = await exec(process.execPath, ['--expose-gc', fixture, mode], { timeout: 7000 })
+      assert.strictEqual(stdout, '')
+      assert.strictEqual(stderr, '')
+    })
+  }
+})
+
 describe('flag evaluation real worker processes', () => {
   for (const mode of ['progress', 'fallback', 'unix', 'nested']) {
     it(`delivers protected and full counts under continuous evaluation (${mode})`, async function () {

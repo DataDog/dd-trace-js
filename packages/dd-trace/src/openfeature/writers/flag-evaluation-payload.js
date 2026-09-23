@@ -69,7 +69,7 @@ function makeRow (entry, timestamp, degraded) {
 }
 
 /**
- * Serialize aggregate maps into exact EVP envelopes.
+ * Consume aggregate snapshots and serialize them into exact EVP envelopes.
  *
  * @param {Map<string, AggregationEntry>} full
  * @param {Map<string, AggregationEntry>} degraded
@@ -83,6 +83,7 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
 
 /**
  * Advance serialization only when the transport has room for another complete envelope.
+ * Takes ownership of the detached aggregate maps and clears them when iteration starts.
  *
  * @param {Map<string, AggregationEntry>} full
  * @param {Map<string, AggregationEntry>} degraded
@@ -124,7 +125,13 @@ function * iterateFlagEvaluationPayloads (full, degraded, context, timestamp, on
   for (const entry of full.values()) entries.push([entry, false])
   for (const entry of degraded.values()) entries.push([entry, true])
 
-  for (const [entry, aggregateDegraded] of entries) {
+  // Lookup keys are no longer needed after aggregation. Pop entries in their original
+  // order so a paused flush does not retain entries that have already been encoded.
+  full.clear()
+  degraded.clear()
+  entries.reverse()
+  while (entries.length > 0) {
+    const [entry, aggregateDegraded] = /** @type {[AggregationEntry, boolean]} */ (entries.pop())
     const row = makeRow(entry, timestamp, aggregateDegraded)
     if (row === undefined) {
       drop('serialization_error', entry.count)
