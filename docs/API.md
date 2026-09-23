@@ -53,29 +53,9 @@ tracer.use('pg', {
 })
 ```
 
-LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability capture for that integration only: it keeps emitting APM spans and propagating distributed trace context, but produces no LLM Observability spans and no `gen_ai.*` APM tags. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
+LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected, aside from basic `gen_ai.*` tags (span kind, model, provider and token usage), which the integration stops emitting too. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
 The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
-
-### `gen_ai.*` APM tags
-
-These integrations also tag their APM spans with the scalar `gen_ai.*` attributes, so model,
-provider and token usage are searchable in APM rather than only on the LLM Observability track:
-
-| Tag | Description |
-| --- | --- |
-| `gen_ai.operation.name` | The span kind, such as `llm`, `embedding`, `workflow`, `tool` or `task`. |
-| `gen_ai.request.model` | The model, on model-backed spans. Defaults to `custom`. |
-| `gen_ai.provider.name` | The provider, on model-backed spans. Defaults to `custom`. |
-| `gen_ai.conversation.id` | The session, when the integration or an upstream service reports one. |
-| `gen_ai.usage.*_tokens` | Token counts, on model-backed spans, as span metrics. |
-
-Message bodies stay off the APM span. `gen_ai.application.name` is emitted only while LLM
-Observability is enabled, since ml_app is an LLM Observability concept.
-
-This happens whether or not LLM Observability is enabled, so an application running with
-`DD_LLMOBS_ENABLED` unset still gets the tags. To turn them off for an integration, set its
-`llmobs` option to `false`.
 
 ```javascript
 // Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.

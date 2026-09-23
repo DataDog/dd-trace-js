@@ -2023,13 +2023,11 @@ declare namespace tracer {
     /** @hidden */
     interface LLMObsIntegration extends Integration {
       /**
-       * Whether to capture LLM Observability data for this integration. When set to `false`, the
-       * integration keeps emitting APM spans and propagating trace context, but produces no LLM
-       * Observability spans and no `gen_ai.*` APM tags. Useful when another integration already
-       * captures the same operation and the payloads would otherwise be stored twice.
-       *
-       * Note that the `gen_ai.*` tags are emitted whether or not LLM Observability itself is
-       * enabled, so this is the only way to turn them off for an integration.
+       * Whether to capture LLM Observability spans for this integration. When set to `false`,
+       * the integration keeps emitting APM spans and propagating trace context, but no LLM
+       * Observability spans and no basic `gen_ai.*` APM tags are produced. Useful when another
+       * integration already captures the same operation and the payloads would otherwise be
+       * stored twice.
        * @default true
        */
       llmobs?: boolean;
