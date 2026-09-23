@@ -95,7 +95,7 @@ describe('esm', () => {
 
       it('uses the route for sampling before outbound propagation', async () => {
         const spanPromise = waitForOtlpSpan(agent, 'GET /api/httptest2', 50_000)
-        const response = await fetch('http://127.0.0.1:7071/api/httptest2', {
+        const response = await fetch('http://127.0.0.1:7071/api/httptest2?page=2', {
           headers: {
             'x-datadog-parent-id': '2',
             'x-datadog-trace-id': '1',
@@ -108,6 +108,9 @@ describe('esm', () => {
         assertObjectContains(span.attributes, [
           { key: '_dd.p.ksr', value: { stringValue: '0.5' } },
           { key: '_sampling_priority_v1', value: { intValue: 2 } },
+          { key: 'url.scheme', value: { stringValue: 'http' } },
+          { key: 'url.path', value: { stringValue: '/api/httptest2' } },
+          { key: 'url.query', value: { stringValue: 'page=2' } },
         ])
       }).timeout(60_000)
     })

@@ -33,11 +33,15 @@ class AzureFunctionsPlugin extends TracingPlugin {
 
     if (isHttpTrigger) {
       const { httpRequest } = ctx
-      const path = (new URL(httpRequest.url)).pathname
+      const url = new URL(httpRequest.url)
+      const headers = Object.fromEntries(httpRequest.headers)
+      const path = url.pathname
+      headers.host = url.host
       const req = {
         method: httpRequest.method,
-        headers: Object.fromEntries(httpRequest.headers),
-        url: path,
+        headers,
+        url: `${path}${url.search}`,
+        socket: { encrypted: url.protocol === 'https:' },
       }
       // Patch the request to create web context
       const webContext = web.patch(req)
