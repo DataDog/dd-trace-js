@@ -5,7 +5,6 @@ on:
     branches:
       - v*.x
     types:
-      - dequeued
       - enqueued
       - opened
       - reopened
@@ -32,13 +31,3 @@ jobs:
     uses: DataDog/dd-trace-js/.github/workflows/release-proposal-merge.yml@master
     with:
       pull-request-number: ${{ github.event.pull_request.number }}
-
-  cancel-release-proposal-merge:
-    name: Cancel release proposal merge
-    if: github.event.action == 'dequeued'
-    concurrency:
-      group: release-proposal-merge-${{ github.event.pull_request.number }}
-      cancel-in-progress: true
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Cancelled the release proposal merge."
