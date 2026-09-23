@@ -2,7 +2,7 @@
 
 const { EVP_EVENT_SIZE_LIMIT, EVP_PAYLOAD_SIZE_LIMIT } = require('../constants/constants')
 const { validateContextSnapshot } = require('./flag-evaluation-context')
-const { hashTargetingKey, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { prefixedTargetingKeyDigest, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped, recordPayloadSplit } = require('./flag-evaluation-telemetry')
 
 /** @typedef {import('./flag-evaluation-aggregation').AggregationEntry} AggregationEntry */
@@ -60,7 +60,7 @@ function makeRow (entry, timestamp, degraded) {
   if (!degraded) {
     const targetingKey = entry.consent === true
       ? normalizeTargetingKey(entry.rawTargetingKey)
-      : hashTargetingKey(entry.rawTargetingKey)
+      : prefixedTargetingKeyDigest(entry.rawTargetingKey)
     if (targetingKey !== undefined) row.targeting_key = targetingKey
     const attrs = entry.consent === true ? validateContextSnapshot(entry.attrs) : undefined
     if (attrs !== undefined) row.context = { evaluation: attrs }

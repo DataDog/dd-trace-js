@@ -45,7 +45,7 @@ function normalizeTargetingKey (value) {
  * @param {unknown} value - Raw evaluation targeting key, never a previously emitted hash
  * @returns {string | undefined}
  */
-function hashTargetingKey (value) {
+function prefixedTargetingKeyDigest (value) {
   const key = normalizeTargetingKey(value)
   if (key === undefined || key === '') return key
   return 'sha256_' + digestTargetingKey(key)
@@ -65,6 +65,6 @@ function protectedErrorCode (value) {
 
 module.exports = {
   normalizeTargetingKey,
-  hashTargetingKey,
+  prefixedTargetingKeyDigest,
   protectedErrorCode,
 }

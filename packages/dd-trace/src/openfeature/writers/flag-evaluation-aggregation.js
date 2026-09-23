@@ -6,7 +6,7 @@ const {
   FLAG_EVALUATION_PER_FLAG_CAP,
 } = require('../constants/constants')
 const { canonicalContextKey, validateContextSnapshot } = require('./flag-evaluation-context')
-const { hashTargetingKey, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { prefixedTargetingKeyDigest, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
 
 /** @typedef {import('./flag-evaluation-context').ContextSnapshot} ContextSnapshot */
@@ -94,7 +94,7 @@ class FlagEvaluationAggregator {
     const targetingKey = normalizeTargetingKey(event.targetingKey)
     const attrs = consent ? validateContextSnapshot(event.attrs) : undefined
     const contextKey = consent && attrs ? canonicalContextKey(attrs) : ''
-    const protectedKey = consent ? targetingKey : hashTargetingKey(targetingKey)
+    const protectedKey = consent ? targetingKey : prefixedTargetingKeyDigest(targetingKey)
     const error = protectedErrorCode(event.errorCode)
     const variant = optionalKey(event.variant)
     const allocation = optionalKey(event.allocationKey)

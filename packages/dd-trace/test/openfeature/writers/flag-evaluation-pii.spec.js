@@ -8,7 +8,7 @@ const { describe, it } = require('mocha')
 
 const {
   normalizeTargetingKey,
-  hashTargetingKey,
+  prefixedTargetingKeyDigest,
   protectedErrorCode,
 } = require('../../../src/openfeature/writers/flag-evaluation-pii')
 const { hashTargetingKey: spanDigest } = require('../../../src/openfeature/encoding')
@@ -40,7 +40,7 @@ describe('flag evaluation privacy policy', () => {
     for (const [input, expected] of vectors) {
       it(`matches the shared vector for ${input}`, () => {
         assert.strictEqual(normalizeTargetingKey(input), input)
-        assert.strictEqual(hashTargetingKey(input), expected)
+        assert.strictEqual(prefixedTargetingKeyDigest(input), expected)
         assert.strictEqual(spanDigest(input), expected.slice(7))
       })
     }
@@ -52,22 +52,22 @@ describe('flag evaluation privacy policy', () => {
       it(`preserves the exact UTF-8 bytes of ${JSON.stringify(input)}`, () => {
         const expected = 'sha256_' + createHash('sha256').update(Buffer.from(input, 'utf8')).digest('hex')
         assert.strictEqual(normalizeTargetingKey(input), input)
-        assert.strictEqual(hashTargetingKey(input), expected)
-        assert.match(hashTargetingKey(input), /^sha256_[0-9a-f]{64}$/)
+        assert.strictEqual(prefixedTargetingKeyDigest(input), expected)
+        assert.match(prefixedTargetingKeyDigest(input), /^sha256_[0-9a-f]{64}$/)
       })
     }
 
     it('does not normalize case, whitespace, Unicode, or an apparent hash prefix', () => {
-      assert.notStrictEqual(hashTargetingKey('Alice'), hashTargetingKey('alice'))
-      assert.notStrictEqual(hashTargetingKey(' alice '), hashTargetingKey('alice'))
-      assert.notStrictEqual(hashTargetingKey('\u00e9'), hashTargetingKey('e\u0301'))
+      assert.notStrictEqual(prefixedTargetingKeyDigest('Alice'), prefixedTargetingKeyDigest('alice'))
+      assert.notStrictEqual(prefixedTargetingKeyDigest(' alice '), prefixedTargetingKeyDigest('alice'))
+      assert.notStrictEqual(prefixedTargetingKeyDigest('\u00e9'), prefixedTargetingKeyDigest('e\u0301'))
       const [input, expected] = vectors[0]
-      assert.notStrictEqual(hashTargetingKey(expected), hashTargetingKey(input))
+      assert.notStrictEqual(prefixedTargetingKeyDigest(expected), prefixedTargetingKeyDigest(input))
     })
 
     it('preserves empty targeting text without hashing it', () => {
       assert.strictEqual(normalizeTargetingKey(''), '')
-      assert.strictEqual(hashTargetingKey(''), '')
+      assert.strictEqual(prefixedTargetingKeyDigest(''), '')
     })
 
     const malformed = [
@@ -79,20 +79,20 @@ describe('flag evaluation privacy policy', () => {
     for (const input of malformed) {
       it(`omits malformed UTF-16 ${JSON.stringify(input)} without replacement`, () => {
         assert.strictEqual(normalizeTargetingKey(input), undefined)
-        assert.strictEqual(hashTargetingKey(input), undefined)
+        assert.strictEqual(prefixedTargetingKeyDigest(input), undefined)
       })
     }
 
     it('accepts an actual replacement character as valid input', () => {
       assert.strictEqual(normalizeTargetingKey('\ufffd'), '\ufffd')
-      assert.strictEqual(hashTargetingKey('\ufffd'),
+      assert.strictEqual(prefixedTargetingKeyDigest('\ufffd'),
         'sha256_' + createHash('sha256').update(Buffer.from([0xef, 0xbf, 0xbd])).digest('hex'))
     })
 
     for (const input of [undefined, null, true, false, 0, 1, NaN, 1n, [], {}, Buffer.from('user'), Symbol('user')]) {
       it(`omits targeting input of type ${typeof input} without coercion`, () => {
         assert.strictEqual(normalizeTargetingKey(input), undefined)
-        assert.strictEqual(hashTargetingKey(input), undefined)
+        assert.strictEqual(prefixedTargetingKeyDigest(input), undefined)
       })
     }
 
@@ -102,10 +102,10 @@ describe('flag evaluation privacy policy', () => {
         getPrototypeOf () { assert.fail('must not inspect non-string input') },
       })
       assert.strictEqual(normalizeTargetingKey(hostile), undefined)
-      assert.strictEqual(hashTargetingKey(hostile), undefined)
+      assert.strictEqual(prefixedTargetingKeyDigest(hostile), undefined)
       const revoked = Proxy.revocable({}, {})
       revoked.revoke()
-      assert.strictEqual(hashTargetingKey(revoked.proxy), undefined)
+      assert.strictEqual(prefixedTargetingKeyDigest(revoked.proxy), undefined)
     })
   })
 
