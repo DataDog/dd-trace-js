@@ -27,7 +27,7 @@ OpenTelemetry log exporter instead. Direct log submission takes precedence if bo
 <h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Counts</h2>
 
 Feature Flagging collects aggregated evaluation telemetry by default. Set
-`DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
 flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>

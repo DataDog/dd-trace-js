@@ -67,7 +67,7 @@ async function main () {
   const provider = new Provider({}, /** @type {import('../../../../src/config/config-base')} */ ({
     url,
     service: 'released-provider-test',
-    featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
+    featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
     experimental: { flaggingProvider: { initializationTimeoutMs: 1000 } },
   }))
   try {

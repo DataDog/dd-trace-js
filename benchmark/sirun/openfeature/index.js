@@ -129,7 +129,7 @@ async function main () {
     const config = {
       url: new URL(collectorUrl),
       service: 'openfeature-benchmark',
-      featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
+      featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
       experimental: { flaggingProvider: { initializationTimeoutMs: 1000 } },
     }
     provider = new Provider({}, config)
@@ -207,7 +207,9 @@ async function main () {
     }
     assert.ok(privacyValid, 'Collected rows must match the requested privacy mode')
     const elapsedNs = evaluationLoopNs + drainElapsedNs
-    process.stdout.write(JSON.stringify({
+    // Sirun inherits stdout for its own NDJSON measurement records.
+    const output = process.env.SIRUN_VARIANT ? process.stderr : process.stdout
+    output.write(JSON.stringify({
       root,
       providerArtifact: process.env.DD_BENCH_PROVIDER_MODULE || 'repository vendor bundle',
       boundary: 'real SDK/provider and production EVP delivery to loopback HTTP',

@@ -77,7 +77,10 @@ VARIANT=typical OPERATIONS=1000000 node --expose-gc index.js
 Optional DD_BENCH_SOURCE_ROOT selects an exported baseline source directory.
 WARMUP defaults to 5000.
 JSON output identifies the source, artifact, consent, dimensions, counts, timing,
-and heap delta. `evaluationLoopNs` and `nsPerEvaluation` include benchmark admission
+and heap delta. Standalone runs write this summary to stdout; under Sirun
+(`SIRUN_VARIANT` set), it goes to stderr so it cannot enter Sirun's NDJSON
+measurement stream. Only Sirun's own records contain its `iterations` array.
+`evaluationLoopNs` and `nsPerEvaluation` include benchmark admission
 checks, capacity waits and scheduled yields. `admissionWaitNs` isolates capacity
 waits; `evaluationElapsedNs` subtracts only those waits and is not a pure provider
 microbenchmark. `drainElapsedNs` measures final delivery and actual worker exit;

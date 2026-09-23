@@ -14,7 +14,7 @@ class FlagEvalEVPHook {
 
   /** @param {import('../../config/config-base')} config */
   constructor (config) {
-    if (config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED === false) return
+    if (config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED === false) return
 
     const writer = new FlagEvaluationsWriter(config)
     this.#writer = writer

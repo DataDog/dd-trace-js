@@ -50,7 +50,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.experimental.flaggingProvider.initializationTimeoutMs)
 
-    if (config.featureFlags?.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED !== false) {
+    if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false) {
       this.#flagEvalEVPHook = new FlagEvalEVPHook(config)
       this.hooks.push(this.#flagEvalEVPHook)
     }

@@ -5805,17 +5805,17 @@ rules:
 
   context('Feature Flagging configuration source', () => {
     it('enables evaluation counts by default', () => {
-      assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED'], true)
-      assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED, true)
+      assert.strictEqual(defaults['featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'], true)
+      assert.strictEqual(getConfig().featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
     })
 
     for (const enabled of [false, true]) {
       it(`sets evaluation counts to ${enabled} from the environment independently of Feature Flagging`, () => {
-        process.env.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = String(enabled)
+        process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = String(enabled)
         const config = getConfig()
-        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED, enabled)
+        assert.strictEqual(config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, enabled)
         assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
-        assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED'), 'env_var')
+        assert.strictEqual(config.getOrigin('featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'), 'env_var')
       })
     }
 

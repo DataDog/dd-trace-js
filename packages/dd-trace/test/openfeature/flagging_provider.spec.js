@@ -34,7 +34,7 @@ describe('FlaggingProvider', () => {
       version: '1.0.0',
       env: 'test',
       DD_METRICS_OTEL_ENABLED: true,
-      featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
+      featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
       experimental: {
         flaggingProvider: {
           enabled: true,
@@ -113,7 +113,7 @@ describe('FlaggingProvider', () => {
       sinon.assert.calledOnce(mockEVPHook.destroy)
 
       mockEVPHookClass.resetHistory()
-      mockConfig.featureFlags.DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED = false
+      mockConfig.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = false
       const disabled = new FlaggingProvider(mockTracer, mockConfig)
       assert.deepStrictEqual(disabled.hooks, [mockEvalMetricsHook, mockSpanEnrichmentHook])
       sinon.assert.notCalled(mockEVPHookClass)

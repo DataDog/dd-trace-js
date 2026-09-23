@@ -13,7 +13,7 @@ const telemetryMetrics = require('../../../src/telemetry/metrics')
 const config = {
   url: new URL('http://localhost:8126'),
   service: 'checkout',
-  featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: true },
+  featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
 }
 const route = { url: config.url, basePath: '/evp_proxy/v2' }
 const now = 1_759_276_800_000
@@ -131,7 +131,7 @@ describe('FlagEvalEVPHook', () => {
   it('does not construct a writer or select a route when disabled', () => {
     Writer.resetHistory()
     selectRoute.resetHistory()
-    const disabled = new Hook({ ...config, featureFlags: { DD_FEATURE_FLAGS_EVALUATION_COUNTS_ENABLED: false } })
+    const disabled = new Hook({ ...config, featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false } })
     const hostile = new Proxy({}, { get () { throw new Error('disabled') } })
     disabled.finally(hostile, hostile)
     disabled.destroy()
