@@ -56,20 +56,75 @@ describe('TraceState', () => {
     })
   })
 
-  it('should bound vendor fields before parsing when a byte limit is provided', () => {
-    const prefix = `rv:1234567890abcd;th:8;unknown:${'x'.repeat(225)}`
-    const ts = TraceState.fromString(`ot=${prefix};outside:value`)
-    assert.strictEqual(Buffer.byteLength(prefix), 256)
+  it('should accept 256-character member values and reject 257-character member values', () => {
+    const accepted = 'x'.repeat(256)
+    const ts = TraceState.fromString(`a=${accepted},b=${'x'.repeat(257)},c=ok`)
 
-    ts.forVendor('ot', state => {
-      assert.strictEqual(state.size, 3)
-      assert.strictEqual(state.get('rv'), '1234567890abcd')
-      assert.strictEqual(state.get('th'), '8')
-      assert.strictEqual(state.get('outside'), undefined)
-    }, 256)
-
-    assert.strictEqual(ts.get('ot'), prefix)
+    assert.strictEqual(ts.get('a'), accepted)
+    assert.strictEqual(ts.get('b'), undefined)
+    assert.strictEqual(ts.get('c'), 'ok')
   })
+
+  it('should accept 256-character updates and reject 257-character updates', () => {
+    const accepted = 'x'.repeat(256)
+    const ts = TraceState.fromString('a=original')
+
+    ts.set('a', accepted)
+    ts.set('a', 'x'.repeat(257))
+
+    assert.strictEqual(ts.get('a'), accepted)
+  })
+
+  it('should remove a vendor member when required fields exceed the value limit', () => {
+    const ts = TraceState.fromString('dd=required:original')
+
+    ts.forVendor('dd', state => state.set('required', 'x'.repeat(250)), () => false)
+
+    assert.strictEqual(ts.get('dd'), undefined)
+  })
+
+  it('should not inspect optional fields when an update fits the value limit', () => {
+    const ts = TraceState.fromString('dd=required:original')
+    let calls = 0
+
+    ts.forVendor('dd', state => state.set('required', 'updated'), () => {
+      calls++
+      return true
+    })
+
+    assert.strictEqual(calls, 0)
+    assert.strictEqual(ts.get('dd'), 'required:updated')
+  })
+
+  it('should remove a vendor member when its only field is optional and exceeds the value limit', () => {
+    const ts = TraceState.fromString('dd=optional:original')
+
+    ts.forVendor('dd', state => state.set('optional', 'x'.repeat(250)), () => true)
+
+    assert.strictEqual(ts.get('dd'), undefined)
+  })
+
+  for (const valueLength of [226, 227]) {
+    it(`should prune optional fields once in reverse order at ${valueLength + 30} characters`, () => {
+      const ts = new TraceState()
+      const inspected = new Set()
+      const value = 'x'.repeat(valueLength)
+
+      ts.forVendor('dd', state => {
+        state.set('t.keep', value)
+        state.set('s', '1')
+        state.set('t.drop1', 'x'.repeat(20))
+        state.set('p', '0123456789abcdef')
+        state.set('t.drop2', 'x'.repeat(20))
+      }, key => {
+        assert.strictEqual(inspected.has(key), false)
+        inspected.add(key)
+        return key.startsWith('t.')
+      })
+
+      assert.strictEqual(ts.get('dd'), 'p:0123456789abcdef;s:1' + (valueLength === 226 ? `;t.keep:${value}` : ''))
+    })
+  }
 
   it('should mutate value in tracestate when changing value', () => {
     const ts = TraceState.fromString('other=bleh,dd=s:2;o:foo:bar;t.dm:-4')
@@ -141,6 +196,15 @@ describe('TraceState', () => {
     assert.strictEqual(ts.size, 32)
   })
 
+  it('should cap constructor entries at 32 list-members', () => {
+    const entries = Array.from({ length: 33 }, (_, index) => [`k${32 - index}`, `v${32 - index}`])
+    const ts = new TraceState(entries)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.get('k32'), undefined)
+    assert.strictEqual(ts.toString().split(',').at(-1), 'k31=v31')
+  })
+
   it('should keep the 32 leftmost list-members after updates', () => {
     const header = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`).join(',')
     const ts = TraceState.fromString(header)
@@ -148,15 +212,22 @@ describe('TraceState', () => {
     ts.set('dd', 's:1')
 
     const members = ts.toString().split(',')
+    assert.strictEqual(ts.size, 32)
     assert.strictEqual(members.length, 32)
     assert.deepStrictEqual(members.slice(0, 3), ['dd=s:1', 'ot=rv:f0948a54d43b8e;th:8', 'k0=v0'])
     assert.strictEqual(members[31], 'k29=v29')
+
+    ts.delete('dd')
+    const remainingMembers = ts.toString().split(',')
+    assert.strictEqual(remainingMembers.length, 31)
+    assert.strictEqual(remainingMembers[30], 'k29=v29')
   })
 
-  it('should not impose an aggregate byte limit', () => {
-    const ts = TraceState.fromString(`a=${'x'.repeat(511)}`)
+  it('should not impose an aggregate length limit', () => {
+    const value = 'x'.repeat(170)
+    const ts = TraceState.fromString(`a=${value},b=${value},c=${value}`)
 
-    assert.strictEqual(Buffer.byteLength(ts.toString()), 513)
+    assert.strictEqual(ts.toString().length, 518)
   })
 
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {

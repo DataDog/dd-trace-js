@@ -4,7 +4,6 @@ const { AUTO_KEEP } = require('../../../ext/priority')
 const knuthHash = require('./knuth-hash')
 const { SAMPLING_AGENT_DECISION, SAMPLING_RULE_DECISION } = require('./constants')
 
-const MAX_OTEL_VALUE_BYTES = 256
 const MAX_THRESHOLD = 2n ** 56n
 const MAX_ENCODABLE_THRESHOLD = MAX_THRESHOLD - 1n
 const UINT64_MASK = 2n ** 64n - 1n
@@ -130,7 +129,7 @@ function sanitizeFields (state) {
  */
 function normalizeOtelTraceState (traceState) {
   if (traceState.get('ot') === undefined) return
-  traceState.forVendor('ot', sanitizeFields, MAX_OTEL_VALUE_BYTES)
+  traceState.forVendor('ot', sanitizeFields)
 }
 
 /**
@@ -161,7 +160,7 @@ function updateOtelTraceState (context, traceState) {
         state.set('rv', generated.randomValue)
       }
     }
-  }, MAX_OTEL_VALUE_BYTES)
+  })
 }
 
 module.exports = {
