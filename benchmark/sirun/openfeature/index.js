@@ -154,7 +154,9 @@ async function main () {
     const preflight = await client.getBooleanDetails('flag', false, context)
     assert.strictEqual(preflight.value, true)
     assert.strictEqual(preflight.variant, 'on')
-    if (consent) {
+    // A historical tracer without EVP cannot collect identity/context at all.
+    // Every EVP-capable source must still prove the real evaluator granted consent.
+    if (consent && hasEVP) {
       assert.strictEqual(preflight.flagMetadata.__dd_observe_full_evaluation_data, true,
         'Full-consent timing requires a provider artifact producing real consent metadata')
     }
@@ -213,6 +215,7 @@ async function main () {
       delivery: workerCount > 0 ? 'worker' : hasEVP ? 'same-thread' : 'none',
       hasEVP,
       consent,
+      evaluationConsentMetadata: preflight.flagMetadata.__dd_observe_full_evaluation_data ?? null,
       shape,
       operations,
       warmup,

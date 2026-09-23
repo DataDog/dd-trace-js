@@ -33,20 +33,23 @@ retain the unchanged startup-share assertion; a one-operation run without report
 mode is expected to fail it. Final drain cannot dilute that guard because it is
 evaluated immediately after the measured evaluation loop.
 
-The standard variants use protected consent and the repository's installed
-provider bundle. They remain runnable on master before EVP exists. Full consent
-requires upstream evaluation-time metadata; no metadata is fabricated. To
-measure that mode before publication, explicitly supply the exact staged bundle:
+The standard variants cover protected and full consent using each revision's
+installed provider bundle. Historical master without EVP emits no rows and does
+not need consent metadata; every EVP-capable revision must receive literal true
+from the real evaluator in full mode. No metadata is fabricated. The output
+records `evaluationConsentMetadata` so older providers are visible.
+
+CI compares the total PR change, including the provider upgrade. For a separate
+comparison isolating tracer overhead, use the identical released provider bundle
+on both sides and explicitly report this baseline-only dependency overlay:
 
 ```sh
-CONSENT=true DD_BENCH_PROVIDER_MODULE=/absolute/path/to/provider/bundle \
+CONSENT=true DD_BENCH_PROVIDER_MODULE=/absolute/path/to/released/provider/bundle \
 VARIANT=typical OPERATIONS=1000000 node --expose-gc index.js
 ```
 
-Full mode fails if real result metadata does not contain literal true. Add full
-CI variants when the dependency upgrade is available on both comparison sides.
 Optional DD_BENCH_SOURCE_ROOT selects an exported baseline source directory.
-Use the identical provider artifact for both sides. WARMUP defaults to 5000.
+WARMUP defaults to 5000.
 JSON output identifies the source, artifact, consent, dimensions, counts, timing,
 and heap delta. `evaluationLoopNs` and `nsPerEvaluation` include benchmark admission
 checks, capacity waits and scheduled yields. `admissionWaitNs` isolates capacity

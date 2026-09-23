@@ -250,11 +250,17 @@
   resolved "https://registry.yarnpkg.com/@bcoe/v8-coverage/-/v8-coverage-1.0.2.tgz#bbe12dca5b4ef983a0d0af4b07b9bc90ea0ababa"
   integrity sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==
 
-"@datadog/flagging-core@2.2.0":
-  version "2.2.0"
-  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-2.2.0.tgz#30272038ea7119033a68b0dc0962396aa6a10114"
-  integrity sha512-LvGCpR9+77pciClCd/bTaD4mOeJUtRFhqcsSbF3CWGgw4Qp1NUuVzgAIUUAxOPIsEArbi1dvSwRGiK4FGCbbQA==
+"@bufbuild/protobuf@^2.13.0":
+  version "2.15.0"
+  resolved "https://registry.yarnpkg.com/@bufbuild/protobuf/-/protobuf-2.15.0.tgz#9706bf5dea2c27bc9dcaccc0c2aac24e0efa6677"
+  integrity sha512-DAheWUkVr/SJTWCc+lg9dhY0eN4SaWlf4+bG1KzHeXbnqt0AfB/NX0Z+VunGlM1ki1B4zVvye27MpKh/svySUA==
+
+"@datadog/flagging-core@3.1.0":
+  version "3.1.0"
+  resolved "https://registry.yarnpkg.com/@datadog/flagging-core/-/flagging-core-3.1.0.tgz#b9e224b3e754f86434bef6c7d40a70831afe8bf7"
+  integrity sha512-3Hf4dzE6JcOdm6GN/e0BCCyMIpfsieV4VbYXBlbaqF73dIMFJREAhmtI3lfZsgVFFuS6DaGI96yGZaCwxkpA0w==
   dependencies:
+    "@bufbuild/protobuf" "^2.13.0"
     spark-md5 "^3.0.2"
 
 "@datadog/libdatadog-extras@^0.21.0":
@@ -296,12 +302,12 @@
     node-addon-api "^6.1.0"
     node-gyp-build "^3.9.0"
 
-"@datadog/openfeature-node-server@2.3.0":
-  version "2.3.0"
-  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.3.0.tgz#57c280b783b531b55fcb17595b7075dc39d18dc5"
-  integrity sha512-/WfRzg6HAKTwDP3ap/JOAfeDslYzDw4oT8K3To4KYOt08JlOS0Uxpmb/Zw8ZkVzaKlOftnqryI2ZFs8BpvSnEg==
+"@datadog/openfeature-node-server@2.4.0":
+  version "2.4.0"
+  resolved "https://registry.yarnpkg.com/@datadog/openfeature-node-server/-/openfeature-node-server-2.4.0.tgz#07abf920f1b374910a8f82a7d9af625394057577"
+  integrity sha512-pZQ1YLv6UY3LEGahh2teMYBsLwKBJ2WA0FvulARHibL8ichkEmhnpQKFTvVLtOIR8mJ6tDB3+hiJsUFl89jxaQ==
   dependencies:
-    "@datadog/flagging-core" "2.2.0"
+    "@datadog/flagging-core" "3.1.0"
 
 "@datadog/pprof@5.19.0":
   version "5.19.0"
