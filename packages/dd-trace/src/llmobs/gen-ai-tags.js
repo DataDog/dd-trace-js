@@ -26,7 +26,8 @@ const {
 /** @type {Set<string | undefined>} */
 const MODEL_BACKED_SPAN_KINDS = new Set(['llm', 'embedding'])
 
-// null prototype: the keys are metric names, which users control through `LLMObs.annotate()`
+// null prototype: a metric named after an `Object.prototype` member must not resolve to an
+// inherited property
 const GEN_AI_USAGE_METRIC_KEYS = Object.assign(Object.create(null), {
   [INPUT_TOKENS_METRIC_KEY]: GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY,
   [OUTPUT_TOKENS_METRIC_KEY]: GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY,

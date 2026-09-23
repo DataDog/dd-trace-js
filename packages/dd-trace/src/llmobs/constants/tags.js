@@ -71,9 +71,8 @@ module.exports = {
   CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
 
-  // integrations build metric objects with these camelCase spellings. Null prototype: metric names
-  // come from `LLMObs.annotate()` too, so a custom metric named after an `Object.prototype` member
-  // must not resolve to an inherited property.
+  // integrations build metric objects with these camelCase spellings. Null prototype: a metric
+  // named after an `Object.prototype` member must not resolve to an inherited property.
   METRIC_KEY_ALIASES: Object.assign(Object.create(null), {
     inputTokens: INPUT_TOKENS_METRIC_KEY,
     outputTokens: OUTPUT_TOKENS_METRIC_KEY,
