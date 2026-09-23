@@ -81,6 +81,10 @@ SERVICES="<service>" PLUGINS="<name>" npm run test:plugins:ci
 
 See `CONTRIBUTING.md#testing` for detailed test conventions and service setup.
 
+When adding or modifying Test Optimization or test framework tests, follow
+[the testing workflow](.agents/skills/test-optimization-testing/SKILL.md).
+Every added or modified test must pass or be explicitly skipped under v5.
+
 ## Code Style
 
 - Use `npm run lint` and `npm run lint:fix`; lines are limited to 120 characters.
