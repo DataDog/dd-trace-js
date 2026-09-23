@@ -207,10 +207,11 @@ class BaseFFEWriter {
    *
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Number of rows represented by the batch
+   * @param {() => void} [onComplete] - Called after delivery including any fallback attempt
    */
-  _sendPayload (payload, eventCount) {
+  _sendPayload (payload, eventCount, onComplete) {
     const route = this.#createActiveRoute()
-    this.#sendRequest(payload, eventCount, route, this._fallbackRoute)
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute, onComplete)
   }
 
   /**
@@ -271,8 +272,9 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
+   * @param {() => void} [onComplete] - Final delivery completion
    */
-  #sendRequest (payload, eventCount, route, fallbackRoute) {
+  #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
     request(payload, route.requestOptions, (error, response, statusCode) => {
       if (fallbackRoute && isDefinitiveRejection(error, statusCode)) {
         log.debug(
@@ -281,9 +283,11 @@ class BaseFFEWriter {
           route.url.href,
           route.endpoint
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        this.#sendRequest(payload, eventCount, fallbackRoute)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+        }
+        this.#sendRequest(payload, eventCount, fallbackRoute, undefined, onComplete)
         return
       }
 
@@ -294,9 +298,11 @@ class BaseFFEWriter {
           route.url.href,
           route.endpoint
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        this.#sendRequest(payload, eventCount, fallbackRoute)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+        }
+        this.#sendRequest(payload, eventCount, fallbackRoute, undefined, onComplete)
         return
       }
 
@@ -307,6 +313,7 @@ class BaseFFEWriter {
       } else {
         log.warn('Events request returned status %d', statusCode)
       }
+      onComplete?.()
     })
   }
 }

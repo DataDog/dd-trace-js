@@ -13,6 +13,9 @@ const expectedTracedFiles = [
   'vendor/dist/@datadog/openfeature-node-server/index.js',
   'packages/dd-trace/src/openfeature/writers/flag-eval-evp-hook.js',
   'packages/dd-trace/src/openfeature/writers/flag-evaluations.js',
+  'packages/dd-trace/src/openfeature/writers/flag-evaluation-worker.js',
+  'packages/dd-trace/src/openfeature/writers/flag-evaluation-consumer.js',
+  'packages/dd-trace/src/openfeature/writers/flag-evaluation-telemetry.js',
 ]
 
 if (NODE_MAJOR < 20) {

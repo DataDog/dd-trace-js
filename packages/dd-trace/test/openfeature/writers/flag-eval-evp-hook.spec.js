@@ -48,6 +48,7 @@ describe('FlagEvalEVPHook', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
     writer = {
+      isAvailable: sinon.stub().returns(true),
       hasCapacity: sinon.stub().returns(true),
       enqueue: sinon.spy(),
       setEnabled: sinon.spy(),
@@ -136,6 +137,16 @@ describe('FlagEvalEVPHook', () => {
     disabled.destroy()
     sinon.assert.notCalled(Writer)
     sinon.assert.notCalled(selectRoute)
+    sinon.assert.notCalled(writer.enqueue)
+  })
+
+  it('counts worker failure as unavailable before touching context rather than queue overflow', () => {
+    enable()
+    writer.isAvailable.returns(false)
+    const input = { flagKey: 'flag', get context () { throw new Error('context accessed') } }
+    hook.finally(input, details())
+    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 1)
+    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'pre_queue_overflow'), 0)
     sinon.assert.notCalled(writer.enqueue)
   })
 

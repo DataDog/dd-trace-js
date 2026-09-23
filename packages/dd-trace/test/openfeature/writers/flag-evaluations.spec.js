@@ -32,7 +32,7 @@ function loadWriter (overrides = {}) {
   const payload = proxyquire('../../../src/openfeature/writers/flag-evaluation-payload', {
     '../constants/constants': overriddenConstants,
   })
-  return proxyquire('../../../src/openfeature/writers/flag-evaluations', {
+  return proxyquire('../../../src/openfeature/writers/flag-evaluation-consumer', {
     '../constants/constants': overriddenConstants,
     './flag-evaluation-aggregation': aggregation,
     './flag-evaluation-payload': payload,

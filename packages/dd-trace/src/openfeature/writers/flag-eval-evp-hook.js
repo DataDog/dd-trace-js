@@ -35,7 +35,7 @@ class FlagEvalEVPHook {
   finally (hookContext, evaluationDetails) {
     if (!this.#writer) return
     try {
-      if (this.#closed || !this.#ready) {
+      if (this.#closed || !this.#ready || !this.#writer.isAvailable()) {
         recordDropped(this.#closed ? 'closed' : 'unavailable')
         return
       }

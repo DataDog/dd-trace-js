@@ -30,7 +30,15 @@ describe('FlaggingProvider EVP lifecycle', () => {
     const BaseWriter = proxyquire('../../src/openfeature/writers/base', {
       '../../exporters/common/request': request,
     })
-    const Writer = proxyquire('../../src/openfeature/writers/flag-evaluations', { './base': BaseWriter })
+    const Consumer = /** @type {typeof import('../../src/openfeature/writers/flag-evaluation-consumer')} */ (
+      proxyquire('../../src/openfeature/writers/flag-evaluation-consumer', { './base': BaseWriter })
+    )
+    // Keep SDK-to-serialization semantics at the consumer boundary under fake time.
+    // Separate producer and real-process tests cover worker ownership and scheduling.
+    class Writer extends Consumer {
+      isAvailable () { return this.hasCapacity() }
+    }
+    Writer['@noCallThru'] = true
     selectRoute = sinon.stub()
     const Hook = proxyquire('../../src/openfeature/writers/flag-eval-evp-hook', {
       './flag-evaluations': Writer,

@@ -28,7 +28,7 @@ const { recordDegraded, recordDropped, recordPayloadSplit } = require('./flag-ev
  * @property {{ key: string }} [targeting_rule]
  * @property {{ message: string }} [error]
  */
-/** @typedef {{ encoded: string, rows: number }} EncodedFlagEvaluationPayload */
+/** @typedef {{ encoded: string, rows: number, evaluations: number }} EncodedFlagEvaluationPayload */
 
 /**
  * @param {AggregationEntry} entry
@@ -78,19 +78,45 @@ function makeRow (entry, timestamp, degraded) {
  * @returns {EncodedFlagEvaluationPayload[]}
  */
 function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
+  return [...iterateFlagEvaluationPayloads(full, degraded, context, timestamp)]
+}
+
+/**
+ * Advance serialization only when the transport has room for another complete envelope.
+ *
+ * @param {Map<string, AggregationEntry>} full
+ * @param {Map<string, AggregationEntry>} degraded
+ * @param {FlagEvaluationBatchContext} context
+ * @param {number} timestamp
+ * @param {(count: number) => void} [onConsumed] - Transfer observation ownership on encoding or discard
+ * @yields {EncodedFlagEvaluationPayload} One envelope bounded by the existing EVP payload limit.
+ */
+function * iterateFlagEvaluationPayloads (full, degraded, context, timestamp, onConsumed) {
   const prefix = '{"context":' + JSON.stringify(context) + ',"flagEvaluations":['
   const suffix = ']}'
-  /** @type {EncodedFlagEvaluationPayload[]} */
-  const payloads = []
   /** @type {string[]} */
   let encodedRows = []
+  let evaluations = 0
+  let payloadCount = 0
   let size = Buffer.byteLength(prefix) + Buffer.byteLength(suffix)
 
   const close = () => {
-    if (encodedRows.length === 0) return
-    payloads.push({ encoded: prefix + encodedRows.join(',') + suffix, rows: encodedRows.length })
+    const payload = { encoded: prefix + encodedRows.join(',') + suffix, rows: encodedRows.length, evaluations }
+    if (payloadCount > 0) recordPayloadSplit()
+    payloadCount++
+    evaluations = 0
     encodedRows = []
     size = Buffer.byteLength(prefix) + Buffer.byteLength(suffix)
+    return payload
+  }
+
+  /**
+   * @param {string} reason
+   * @param {number} count
+   */
+  const drop = (reason, count) => {
+    onConsumed?.(count)
+    recordDropped(reason, count)
   }
 
   /** @type {Array<[AggregationEntry, boolean]>} */
@@ -101,7 +127,7 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
   for (const [entry, aggregateDegraded] of entries) {
     const row = makeRow(entry, timestamp, aggregateDegraded)
     if (row === undefined) {
-      recordDropped('serialization_error', entry.count)
+      drop('serialization_error', entry.count)
       continue
     }
     let serializedRow = row
@@ -109,7 +135,7 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
     try {
       encoded = JSON.stringify(serializedRow)
     } catch {
-      recordDropped('serialization_error', serializedRow.evaluation_count)
+      drop('serialization_error', serializedRow.evaluation_count)
       continue
     }
 
@@ -128,37 +154,37 @@ function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
     try {
       if (Buffer.byteLength(encoded) > EVP_EVENT_SIZE_LIMIT) degrade()
     } catch {
-      recordDropped('serialization_error', serializedRow.evaluation_count)
+      drop('serialization_error', serializedRow.evaluation_count)
       continue
     }
     if (Buffer.byteLength(encoded) > EVP_EVENT_SIZE_LIMIT) {
-      recordDropped('payload_limit', serializedRow.evaluation_count)
+      drop('payload_limit', serializedRow.evaluation_count)
       continue
     }
 
     let addition = Buffer.byteLength(encoded) + Number(encodedRows.length > 0)
     if (size + addition > EVP_PAYLOAD_SIZE_LIMIT && encodedRows.length > 0) {
-      close()
+      yield close()
       addition = Buffer.byteLength(encoded)
     }
     if (size + addition > EVP_PAYLOAD_SIZE_LIMIT) {
       try {
         if (degrade()) addition = Buffer.byteLength(encoded)
       } catch {
-        recordDropped('serialization_error', serializedRow.evaluation_count)
+        drop('serialization_error', serializedRow.evaluation_count)
         continue
       }
     }
     if (size + addition > EVP_PAYLOAD_SIZE_LIMIT) {
-      recordDropped('payload_limit', serializedRow.evaluation_count)
+      drop('payload_limit', serializedRow.evaluation_count)
       continue
     }
     encodedRows.push(encoded)
+    onConsumed?.(serializedRow.evaluation_count)
+    evaluations += serializedRow.evaluation_count
     size += addition
   }
-  close()
-  if (payloads.length > 1) recordPayloadSplit(payloads.length - 1)
-  return payloads
+  if (encodedRows.length > 0) yield close()
 }
 
-module.exports = { buildFlagEvaluationPayloads }
+module.exports = { buildFlagEvaluationPayloads, iterateFlagEvaluationPayloads }

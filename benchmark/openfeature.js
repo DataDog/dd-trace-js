@@ -81,7 +81,9 @@ const BaseWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/base
     callback(null, '', 202)
   },
 })
-const FlagEvaluationsWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/flag-evaluations', {
+// These synchronous microbenchmarks measure the worker's consumer stages only.
+// The sirun/openfeature scenario measures the real SDK, producer, worker and HTTP delivery together.
+const FlagEvaluationConsumer = proxyquire('../packages/dd-trace/src/openfeature/writers/flag-evaluation-consumer', {
   './base': BaseWriter,
 })
 
@@ -125,11 +127,11 @@ for (const consent of [false, true]) {
   })
   for (const flush of [false, true]) {
     let calls
-    suite.add(`EVP enqueue+${flush ? 'drain+serialize' : 'discard'} (256 accepted, ${mode})`, {
+    suite.add(`EVP consumer-only enqueue+${flush ? 'drain+serialize' : 'discard'} (256 accepted, ${mode})`, {
       onStart () {
         calls = 0
         payloadCount = 0
-        queueWriter = new FlagEvaluationsWriter(config)
+        queueWriter = new FlagEvaluationConsumer(config)
         queueWriter.setEnabled(true)
       },
       fn () {
@@ -150,9 +152,9 @@ for (const consent of [false, true]) {
       },
     })
   }
-  suite.add(`EVP queue-full rejection (${mode})`, {
+  suite.add(`EVP consumer-only queue-full rejection (${mode})`, {
     onStart () {
-      queueWriter = new FlagEvaluationsWriter(config)
+      queueWriter = new FlagEvaluationConsumer(config)
       queueWriter.setEnabled(true)
       for (let i = 0; i < 4096; i++) assert.strictEqual(queueWriter.enqueue(event), true)
     },

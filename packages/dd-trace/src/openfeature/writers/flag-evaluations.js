@@ -1,73 +1,68 @@
 'use strict'
 
-const {
-  FLAG_EVALUATION_ENDPOINT,
-  FLAG_EVALUATION_FLUSH_INTERVAL,
-  FLAG_EVALUATION_QUEUE_CAP,
-} = require('../constants/constants')
-const {
-  EVP_EVENT_PLATFORM_SUBDOMAIN,
-  EVP_PROXY_PATH_V2,
-  EVP_SUBDOMAIN_HEADER_NAME,
-} = require('../../evp_proxy/constants')
-const { joinEVPProxyPath } = require('../../evp_proxy/path')
-const { FlagEvaluationAggregator } = require('./flag-evaluation-aggregation')
-const { buildFlagEvaluationPayloads } = require('./flag-evaluation-payload')
-const { normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
-const { recordDropped, recordTargetingKeyOmitted } = require('./flag-evaluation-telemetry')
-const BaseFFEWriter = require('./base')
+const { join } = require('node:path')
 
+const { FLAG_EVALUATION_FLUSH_INTERVAL, FLAG_EVALUATION_QUEUE_CAP } = require('../constants/constants')
+const { EVP_PROXY_PATH_V2 } = require('../../evp_proxy/constants')
+const { getEnvironmentVariables } = require('../../config/helper')
+const log = require('../../log')
+const { normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const {
+  collectWorkerTelemetry, createWorkerState, recordDropped, recordTargetingKeyOmitted,
+} = require('./flag-evaluation-telemetry')
+
+/** @typedef {import('./flag-evaluation-consumer').FlagEvaluationRoute} FlagEvaluationRoute */
 /** @typedef {import('./flag-evaluation-aggregation').FlagEvaluationEvent} FlagEvaluationEvent */
 
-/**
- * @typedef {object} FlagEvaluationRoute
- * @property {URL} url
- * @property {string} basePath
- * @property {object} [headers]
- * @property {import('node:https').Agent} [agent]
- * @property {FlagEvaluationRoute} [fallback]
- */
-
-/** @param {unknown} value */
-function optionalKey (value) {
-  const key = normalizeTargetingKey(value)
-  return key === undefined || key.length === 0 ? undefined : key
+/** @param {FlagEvaluationRoute} route */
+function serializeRoute (route) {
+  // Live custom agents cannot cross isolates. The common request helper recreates env proxy agents in the worker.
+  if (route.agent) throw new Error('Custom EVP route agents are not supported in the flag evaluation worker')
+  return {
+    url: route.url.href,
+    basePath: route.basePath,
+    headers: route.headers,
+    fallback: route.fallback ? serializeRoute(route.fallback) : undefined,
+  }
 }
 
-class FlagEvaluationsWriter extends BaseFFEWriter {
+class FlagEvaluationsWriter {
   #enabled = false
   #closed = false
-  #queue = []
+  #failed = false
+  #worker
+  #state = createWorkerState()
+  #batch = []
   #immediate
-  #aggregator = new FlagEvaluationAggregator()
+  #periodic
+  #deadline
+  #destroyer
+  #route
   #context
+  #failureReason = 'worker_failure'
 
   /**
    * @param {import('../../config/config-base')} config
    * @param {FlagEvaluationRoute} [route]
    */
   constructor (config, route) {
-    route ??= {
-      url: /** @type {URL} */ (config.url),
-      basePath: EVP_PROXY_PATH_V2,
+    this.#route = route ?? { url: /** @type {URL} */ (config.url), basePath: EVP_PROXY_PATH_V2 }
+    this.#context = {
+      service: typeof config.service === 'string' ? config.service : '',
+      env: typeof config.env === 'string' ? config.env : undefined,
+      version: typeof config.version === 'string' ? config.version : undefined,
     }
-    const headers = route.headers ?? { [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN }
-    super({
-      config,
-      interval: FLAG_EVALUATION_FLUSH_INTERVAL,
-      agentUrl: route.url,
-      endpoint: joinEVPProxyPath(route.basePath, FLAG_EVALUATION_ENDPOINT),
-      headers,
-    })
-    if (route.agent || route.fallback) this.#setRoute({ ...route, headers })
-
-    this.#context = { service: typeof config.service === 'string' ? config.service : '' }
-    if (typeof config.env === 'string') this.#context.env = config.env
-    if (typeof config.version === 'string') this.#context.version = config.version
+    this.#destroyer = () => this.destroy()
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   hasCapacity () {
-    return this.#enabled && !this.#closed && this.#queue.length < FLAG_EVALUATION_QUEUE_CAP
+    return this.isAvailable() &&
+      Atomics.load(this.#state, 0) < FLAG_EVALUATION_QUEUE_CAP && Atomics.load(this.#state, 1) < 0x7F_FF_F0_00
+  }
+
+  isAvailable () {
+    return this.#enabled && !this.#closed && !this.#failed
   }
 
   /**
@@ -75,85 +70,114 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @param {FlagEvaluationRoute} [route]
    */
   setEnabled (enabled, route) {
-    if (route) this.#setRoute(route)
-    if (!enabled && this.#enabled) this.#discardBuffered('unavailable')
-    this.#enabled = enabled && !this.#closed
+    if (this.#closed || this.#failed) return
+    if (route) this.#route = route
+    if (!enabled) {
+      this.#discardPartial('unavailable')
+      this.#post({ type: 'enabled', enabled: false })
+      this.#enabled = false
+      return
+    }
+    try {
+      const serializedRoute = serializeRoute(this.#route)
+      if (this.#worker) {
+        this.#post({ type: 'enabled', enabled: true, route: serializedRoute })
+      } else {
+        const { Worker } = require('node:worker_threads')
+        // The worker must not initialize the application tracer through inherited preload options.
+        const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
+        this.#worker = new Worker(join(__dirname, 'flag-evaluation-worker.js'), {
+          name: 'dd-flag-evaluation',
+          execArgv: [],
+          env,
+          workerData: { route: serializedRoute, context: this.#context, state: this.#state.buffer },
+        })
+        this.#worker.on('error', () => this.#fail())
+        this.#worker.on('messageerror', () => this.#fail())
+        this.#worker.once('exit', () => this.#exited())
+        this.#worker.unref?.()
+        this.#periodic = setInterval(() => collectWorkerTelemetry(this.#state), FLAG_EVALUATION_FLUSH_INTERVAL)
+        this.#periodic.unref?.()
+      }
+      this.#enabled = !this.#failed
+    } catch {
+      this.#fail()
+    }
   }
 
   /** @param {FlagEvaluationEvent} event */
   enqueue (event) {
-    if (this.#closed) {
-      recordDropped('closed')
+    if (!this.hasCapacity()) {
+      recordDropped(this.#closed ? 'closed' : this.#enabled ? 'queue_overflow' : 'unavailable')
       return false
     }
-    if (!this.#enabled) {
-      recordDropped('unavailable')
-      return false
-    }
-    if (this.#queue.length >= FLAG_EVALUATION_QUEUE_CAP) {
-      recordDropped('queue_overflow')
-      return false
-    }
-
-    const consent = event.observeFullEvaluationData === true
     const targetingKey = normalizeTargetingKey(event.targetingKey)
     if (targetingKey === undefined && event.targetingKey !== undefined && event.targetingKey !== null) {
       recordTargetingKeyOmitted()
     }
-    this.#queue.push({
+    const consent = event.observeFullEvaluationData === true
+    const normalized = {
       flagKey: normalizeTargetingKey(event.flagKey),
-      variant: optionalKey(event.variant),
-      allocationKey: optionalKey(event.allocationKey),
-      targetingRuleKey: optionalKey(event.targetingRuleKey),
+      variant: normalizeTargetingKey(event.variant),
+      allocationKey: normalizeTargetingKey(event.allocationKey),
+      targetingRuleKey: normalizeTargetingKey(event.targetingRuleKey),
       runtimeDefault: event.runtimeDefault === true,
       errorCode: protectedErrorCode(event.errorCode),
       targetingKey,
       attrs: consent ? event.attrs : undefined,
       observeFullEvaluationData: consent,
       timestamp: typeof event.timestamp === 'number' ? event.timestamp : NaN,
-    })
-    if (this.#immediate === undefined) {
-      this.#immediate = setImmediate(() => this.#drain())
+    }
+    Atomics.add(this.#state, 0, 1)
+    Atomics.add(this.#state, 1, 1)
+    this.#batch.push(normalized)
+    if (this.#batch.length === 8) this.#sendBatch()
+    else if (this.#immediate === undefined) {
+      this.#immediate = setImmediate(() => this.#sendBatch())
       this.#immediate.unref?.()
     }
     return true
   }
 
   flush () {
-    this.#cancelImmediate()
-    this.#drain()
-    if (!this.#enabled || this.#aggregator.size === 0) return
-
-    const { full, degraded } = this.#aggregator.take()
-    const payloads = buildFlagEvaluationPayloads(full, degraded, this.#context, Date.now())
-    for (const payload of payloads) this._sendPayload(payload.encoded, payload.rows)
+    if (this.#closed || this.#failed) return
+    this.#sendBatch()
+    this.#post({ type: 'flush' })
+    collectWorkerTelemetry(this.#state)
   }
 
   destroy () {
     if (this.#closed) return
-    this.#cancelImmediate()
-    this.#drain()
-    this.flush()
+    this.#sendBatch()
     this.#closed = true
     this.#enabled = false
-    super.destroy()
+    this.#cleanup()
+    if (!this.#worker || this.#failed) return
+    // Keep only a bounded final drain alive. Ordinary traffic and idle workers never keep the app alive.
+    this.#worker.ref()
+    this.#deadline = setTimeout(() => {
+      this.#failureReason = 'shutdown_timeout'
+      this.#fail()
+    }, 5000)
+    this.#post({ type: 'close' })
   }
 
-  /** @param {FlagEvaluationRoute} route */
-  #setRoute (route) {
-    const headers = route.headers ?? { [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN }
-    const fallback = route.fallback && {
-      url: route.fallback.url,
-      endpoint: joinEVPProxyPath(route.fallback.basePath, FLAG_EVALUATION_ENDPOINT),
-      headers: route.fallback.headers ?? {},
-      agent: route.fallback.agent,
+  #sendBatch () {
+    this.#cancelImmediate()
+    if (this.#batch.length === 0) return
+    const events = this.#batch
+    this.#batch = []
+    this.#post({ type: 'batch', events })
+  }
+
+  /** @param {object} message */
+  #post (message) {
+    if (!this.#worker || this.#failed) return
+    try {
+      this.#worker.postMessage(message)
+    } catch {
+      this.#fail()
     }
-    this._setRoutes({
-      url: route.url,
-      endpoint: joinEVPProxyPath(route.basePath, FLAG_EVALUATION_ENDPOINT),
-      headers,
-      agent: route.agent,
-    }, fallback)
   }
 
   #cancelImmediate () {
@@ -161,18 +185,45 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     this.#immediate = undefined
   }
 
-  #drain () {
-    this.#immediate = undefined
-    const queue = this.#queue
-    this.#queue = []
-    for (const event of queue) this.#aggregator.add(event)
+  /** @param {string} reason */
+  #discardPartial (reason) {
+    this.#cancelImmediate()
+    const count = this.#batch.length
+    this.#batch = []
+    Atomics.sub(this.#state, 0, count)
+    Atomics.sub(this.#state, 1, count)
+    recordDropped(reason, count)
   }
 
-  #discardBuffered (reason) {
+  #cleanup () {
+    clearInterval(this.#periodic)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+    collectWorkerTelemetry(this.#state)
+  }
+
+  #fail () {
+    if (this.#failed) return
+    this.#failed = true
+    this.#enabled = false
     this.#cancelImmediate()
-    const count = this.#queue.length + this.#aggregator.clear()
-    this.#queue = []
-    recordDropped(reason, count)
+    this.#batch = []
+    this.#cleanup()
+    log.debug('Flag evaluation worker stopped; disabling this writer')
+    if (this.#worker) this.#worker.terminate()
+    else this.#exited()
+  }
+
+  #exited () {
+    clearTimeout(this.#deadline)
+    this.#failed = true
+    this.#enabled = false
+    this.#worker = undefined
+    this.#cancelImmediate()
+    this.#batch = []
+    this.#cleanup()
+    // Only settle ownership once the worker cannot mutate counters anymore.
+    recordDropped(this.#failureReason, Atomics.exchange(this.#state, 1, 0))
+    Atomics.store(this.#state, 0, 0)
   }
 }
 
