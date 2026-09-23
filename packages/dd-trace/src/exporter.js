@@ -83,12 +83,15 @@ function usesOtlpTraceExporter (config) {
   // spans must reach the Electron SDK's span-processing pipeline, not an OTLP endpoint,
   // because the SDK does not support OTLP export.
   // A Lambda without the extension or the mini agent reaches the backend only by writing spans
-  // to its log for the Forwarder, so replacing that transport with an OTLP endpoint nobody
-  // listens on loses them silently.
+  // to its log for the Forwarder, so the OTLP export implicitly selected by OTel semantics must
+  // yield to that transport. An explicit OTEL_TRACES_EXPORTER=otlp still uses the standard OTLP
+  // endpoint when the user did not configure one.
+  const otlpExporterWasForced = config.getOrigin?.('OTEL_TRACES_EXPORTER') === 'calculated'
+
   return config.OTEL_TRACES_EXPORTER === 'otlp' &&
     !config.isCiVisibility &&
     config.experimental?.exporter !== exporters.ELECTRON &&
-    !requiresLambdaLogExporter()
+    (!otlpExporterWasForced || !requiresLambdaLogExporter())
 }
 
 module.exports.usesLambdaLogExporter = usesLambdaLogExporter

@@ -94,6 +94,7 @@ describe('exporter', () => {
         OTEL_TRACES_EXPORTER: 'otlp',
         isCiVisibility: false,
         experimental: {},
+        getOrigin: () => 'env_var',
         ...overrides,
       }
     }
@@ -118,9 +119,15 @@ describe('exporter', () => {
       assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(electronConfig), false)
     })
 
-    it('should not select OTLP when Lambda requires log export', () => {
+    it('should select explicitly configured OTLP in Lambda without an endpoint', () => {
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
-      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), false)
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), true)
+    })
+
+    it('should not select OTLP forced by OTel semantics when Lambda requires log export', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      const forcedConfig = config({ getOrigin: () => 'calculated' })
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(forcedConfig), false)
     })
   })
 
