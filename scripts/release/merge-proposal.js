@@ -2,15 +2,22 @@
 
 const { execFileSync } = require('node:child_process')
 
-const pullRequestFields = [
-  'baseRefName',
-  'headRefName',
-  'headRefOid',
-  'isCrossRepository',
-  'isDraft',
-  'reviewDecision',
-  'state',
-].join(',')
+const pullRequestQuery = `
+  query($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) {
+      pullRequest(number: $number) {
+        baseRefName
+        headRefName
+        headRefOid
+        isCrossRepository
+        isDraft
+        isInMergeQueue
+        reviewDecision
+        state
+      }
+    }
+  }
+`
 
 /**
  * @typedef {object} Proposal
@@ -19,6 +26,7 @@ const pullRequestFields = [
  * @property {string} headRefOid
  * @property {boolean} isCrossRepository
  * @property {boolean} isDraft
+ * @property {boolean} isInMergeQueue
  * @property {string} reviewDecision
  * @property {string} state
  */
@@ -40,17 +48,40 @@ function run (command, args) {
 }
 
 /**
+ * @param {string} remoteUrl
+ */
+function getRepositoryFromRemote (remoteUrl) {
+  const match = remoteUrl.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/)
+  if (!match) throw new Error('Unable to determine the GitHub repository from origin.')
+
+  return `${match[1]}/${match[2]}`
+}
+
+/**
  * @param {number} pullRequestNumber
+ * @param {string} repository
  * @returns {Proposal}
  */
-function getProposal (pullRequestNumber) {
-  return JSON.parse(capture('gh', [
-    'pr',
-    'view',
-    String(pullRequestNumber),
-    '--json',
-    pullRequestFields,
+function getProposal (pullRequestNumber, repository) {
+  const [owner, name, unexpected] = repository.split('/')
+  if (!owner || !name || unexpected) throw new Error(`Invalid GitHub repository: ${repository}`)
+
+  const response = JSON.parse(capture('gh', [
+    'api',
+    'graphql',
+    '-f',
+    `query=${pullRequestQuery}`,
+    '-f',
+    `owner=${owner}`,
+    '-f',
+    `name=${name}`,
+    '-F',
+    `number=${pullRequestNumber}`,
   ]))
+  const proposal = response.data?.repository?.pullRequest
+  if (!proposal) throw new Error(`Pull request not found: ${repository}#${pullRequestNumber}`)
+
+  return proposal
 }
 
 /**
@@ -69,6 +100,9 @@ function validateProposal (proposal) {
   if (proposal.reviewDecision !== 'APPROVED') {
     throw new Error('Release proposal must be approved.')
   }
+  if (!proposal.isInMergeQueue) {
+    throw new Error('Release proposal must still be in the merge queue.')
+  }
   if (!/^v[0-9]+\.x$/.test(proposal.baseRefName)) {
     throw new Error(`Invalid release branch: ${proposal.baseRefName}`)
   }
@@ -79,13 +113,18 @@ function validateProposal (proposal) {
 
 /**
  * @param {number} pullRequestNumber
+ * @param {string} [repository]
  */
-function mergeProposal (pullRequestNumber) {
+function mergeProposal (pullRequestNumber, repository) {
   if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) {
     throw new Error('Pull request number must be a positive integer.')
   }
 
-  const proposal = getProposal(pullRequestNumber)
+  repository ||= process.env.GITHUB_REPOSITORY || getRepositoryFromRemote(
+    capture('git', ['remote', 'get-url', 'origin'])
+  )
+
+  const proposal = getProposal(pullRequestNumber, repository)
   validateProposal(proposal)
 
   const { baseRefName, headRefName, headRefOid } = proposal
@@ -100,7 +139,7 @@ function mergeProposal (pullRequestNumber) {
   run('git', ['update-ref', 'refs/heads/release-proposal', headRefOid])
   run('gh', ['pr', 'checks', String(pullRequestNumber), '--required'])
 
-  const currentProposal = getProposal(pullRequestNumber)
+  const currentProposal = getProposal(pullRequestNumber, repository)
   validateProposal(currentProposal)
 
   if (

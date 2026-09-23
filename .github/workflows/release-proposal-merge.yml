@@ -8,7 +8,7 @@ on:
         type: number
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.pull-request-number }}
+  group: release-proposal-merge-${{ inputs.pull-request-number }}
   cancel-in-progress: false
 
 jobs:
