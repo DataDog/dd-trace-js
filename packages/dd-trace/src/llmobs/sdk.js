@@ -7,6 +7,8 @@ const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
 const {
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
@@ -300,13 +302,18 @@ class LLMObs extends NoopLLMObs {
 
       const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
 
-      if (inputData || outputData) {
+      const hasInputOrOutput = spanKind === 'experiment'
+        ? inputData !== undefined || outputData !== undefined
+        : inputData || outputData
+      if (hasInputOrOutput) {
         if (spanKind === 'llm') {
           this._tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {
           this._tagger.tagEmbeddingIO(span, inputData, outputData)
         } else if (spanKind === 'retrieval') {
           this._tagger.tagRetrievalIO(span, inputData, outputData)
+        } else if (spanKind === 'experiment') {
+          this._tagger.tagExperimentIO(span, inputData, outputData)
         } else {
           this._tagger.tagTextIO(span, inputData, outputData)
         }
@@ -638,11 +645,19 @@ class LLMObs extends NoopLLMObs {
 
   #autoAnnotate (span, kind, input, output) {
     const annotations = {}
-    if (input && !['llm', 'embedding'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[INPUT_VALUE]) {
+    const spanTags = LLMObsTagger.tagMap.get(span)
+    const inputKey = kind === 'experiment' ? EXPERIMENT_INPUT : INPUT_VALUE
+    const outputKey = kind === 'experiment' ? EXPERIMENT_OUTPUT : OUTPUT_VALUE
+    const hasInput = kind === 'experiment' ? input !== undefined : input
+    const hasOutput = kind === 'experiment' ? output !== undefined : output
+    const hasInputTag = spanTags !== undefined && Object.hasOwn(spanTags, inputKey)
+    const hasOutputTag = spanTags !== undefined && Object.hasOwn(spanTags, outputKey)
+
+    if (hasInput && !['llm', 'embedding'].includes(kind) && !hasInputTag) {
       annotations.inputData = input
     }
 
-    if (output && !['llm', 'retrieval'].includes(kind) && !LLMObsTagger.tagMap.get(span)?.[OUTPUT_VALUE]) {
+    if (hasOutput && !['llm', 'retrieval'].includes(kind) && !hasOutputTag) {
       annotations.outputData = output
     }
 

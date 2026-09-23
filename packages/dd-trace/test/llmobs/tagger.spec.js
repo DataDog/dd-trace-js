@@ -1330,6 +1330,40 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagExperimentIO', () => {
+      it('preserves structured experiment io', () => {
+        const inputData = { prompt: 'smoke test' }
+        const outputData = {
+          status: 'ok',
+          count: 3,
+          nested: { a: 1, b: [1, 2, 3] },
+        }
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, inputData, outputData)
+
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.input': inputData,
+          '_ml_obs.meta.output': outputData,
+        })
+      })
+
+      it('preserves falsey JSON values', () => {
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, false, null)
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input'], false)
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.output'], null)
+      })
+
+      it('throws when a value is not JSON serializable', () => {
+        tagger._register(span)
+
+        assert.throws(() => tagger.tagExperimentIO(span, undefined, unserializableObject()))
+      })
+    })
+
     describe('changeKind', () => {
       it('changes the span kind', () => {
         tagger._register(span)
