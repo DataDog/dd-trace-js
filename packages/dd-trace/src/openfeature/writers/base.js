@@ -60,7 +60,9 @@ function isSafeToReplay (error, statusCode) {
  * @param {number | undefined} statusCode - HTTP response status
  */
 function isTransportFailure (error, statusCode) {
-  return error !== null && error !== undefined && statusCode === undefined
+  // SDK backpressure says nothing about the local receiver's health.
+  return error !== null && error !== undefined && statusCode === undefined &&
+    error.code !== 'ERR_DD_REQUEST_BUFFER_FULL'
 }
 
 /**

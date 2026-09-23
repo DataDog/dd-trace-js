@@ -116,6 +116,9 @@ describe('agent/info', () => {
 
     describe('caching', () => {
       let clock
+      const fetchInfo = (agentUrl, options) => new Promise((resolve, reject) => {
+        fetchAgentInfo(agentUrl, (error, result) => error ? reject(error) : resolve(result), options)
+      })
 
       beforeEach(() => {
         clearCache()
@@ -128,6 +131,36 @@ describe('agent/info', () => {
         clock.restore()
         clearCache()
       })
+
+      for (const [firstOptions, secondOptions] of [
+        [{}, { path: '/agent-prefix/info' }],
+        [{ path: '/agent-prefix/info' }, {}],
+      ]) {
+        it(`invalidates cached ${firstOptions.path ?? '/info'} when the request path changes`, async () => {
+          const agentUrl = new URL(`${url}/agent-prefix/`)
+          const firstInfo = { endpoints: ['/evp_proxy/v2'] }
+          const secondInfo = { endpoints: ['/evp_proxy/v4'] }
+          const first = nock(url).get(firstOptions.path ?? '/info').reply(200, firstInfo)
+          const second = nock(url).get(secondOptions.path ?? '/info').reply(200, secondInfo)
+
+          assert.deepStrictEqual(await fetchInfo(agentUrl, firstOptions), firstInfo)
+          assert.deepStrictEqual(await fetchInfo(agentUrl, secondOptions), secondInfo)
+          first.done()
+          second.done()
+        })
+      }
+
+      for (const path of ['/info', '/agent-prefix/info']) {
+        it(`reuses cached ${path} for the same effective request path`, async () => {
+          const agentUrl = new URL(`${url}/agent-prefix/`)
+          const agentInfo = { endpoints: ['/evp_proxy/v4'] }
+          const scope = nock(url).get(path).once().reply(200, agentInfo)
+
+          assert.deepStrictEqual(await fetchInfo(agentUrl, path === '/info' ? {} : { path }), agentInfo)
+          assert.deepStrictEqual(await fetchInfo(agentUrl, { path }), agentInfo)
+          scope.done()
+        })
+      }
 
       it('should cache responses for 1 minute', (done) => {
         const agentInfo = { endpoints: ['/evp_proxy/v2'] }

@@ -1,15 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
 
 const { describe, it, afterEach } = require('mocha')
 const nock = require('nock')
 
 require('../../setup/core')
-const { clearCache } = require('../../../src/agent/info')
+const { clearCache, fetchAgentInfo } = require('../../../src/agent/info')
+const request = require('../../../src/exporters/common/request')
 const ExposuresWriter = require('../../../src/openfeature/writers/exposures')
 const { setExposureDeliveryStrategy } = require('../../../src/openfeature/writers/util')
 const tracerVersion = require('../../../../../package.json').version
+const fetchInfo = promisify(fetchAgentInfo)
+const sendRequest = promisify(request)
 
 describe('OpenFeature Exposures Writer transport', () => {
   let writer
@@ -216,7 +220,7 @@ describe('OpenFeature Exposures Writer transport', () => {
     assert.strictEqual(directHeaders['x-datadog-evp-subdomain'], undefined)
   })
 
-  it('preserves the configured Agent path prefix without leaking the API key locally', async () => {
+  it('discovers the prefixed Agent despite cached root info, without leaking the API key locally', async () => {
     const config = {
       url: new URL('http://localhost:8126/agent-prefix/'),
       site: 'datadoghq.com',
@@ -224,6 +228,9 @@ describe('OpenFeature Exposures Writer transport', () => {
       service: 'test-service',
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
     }
+    const rootInfo = nock('http://localhost:8126').get('/info').reply(200, { endpoints: [] })
+    await fetchInfo(config.url)
+    rootInfo.done()
     const infoRequest = nock('http://localhost:8126')
       .get('/agent-prefix/info')
       .reply(200, {
@@ -267,6 +274,79 @@ describe('OpenFeature Exposures Writer transport', () => {
     assert.strictEqual(localHeaders['dd-evp-origin-version'], tracerVersion)
     assert.strictEqual(localHeaders['x-datadog-evp-subdomain'], 'event-platform-intake')
   })
+
+  for (const hasCredentials of [true, false]) {
+    it(`keeps local delivery after the real request buffer fills (credentials=${hasCredentials})`, async () => {
+      const config = {
+        url: new URL('http://localhost:8126'),
+        site: 'datadoghq.com',
+        DD_API_KEY: hasCredentials ? 'test-api-key' : undefined,
+        service: 'test-service',
+        featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+      }
+      const infoRequest = nock('http://localhost:8126').get('/info').reply(200, {
+        endpoints: ['/evp_proxy/v4'],
+        evp_proxy_allowed_headers: ['DD-EVP-ORIGIN', 'DD-EVP-ORIGIN-VERSION'],
+      })
+      const updates = []
+      writer = new ExposuresWriter(config)
+      await new Promise(resolve => {
+        stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+          updates.push({ enabled, path: route?.basePath })
+          writer.setEnabled(enabled, route)
+          resolve()
+        })
+      })
+      infoRequest.done()
+
+      const deliveries = []
+      const local = nock('http://localhost:8126')
+        .post('/evp_proxy/v4/api/v2/exposures')
+        .reply((path, body) => {
+          deliveries.push(body)
+          return [202, '']
+        })
+      const direct = nock('https://event-platform-intake.datadoghq.com')
+        .post('/api/v2/exposures')
+        .reply(202)
+      const busy = nock('http://localhost:8126').post('/busy').reply(202)
+      // Reserve the real sender's entire shared budget before any HTTP response can release it.
+      const drained = sendRequest(Buffer.alloc(64 * 1024 * 1024), {
+        url: config.url,
+        path: '/busy',
+        method: 'POST',
+        retry: false,
+      })
+      const event = {
+        timestamp: 1672531200000,
+        allocation: { key: 'allocation' },
+        flag: { key: 'checkout' },
+        variant: { key: 'enabled' },
+        subject: { id: 'dropped' },
+      }
+      try {
+        assert.strictEqual(request.writable, false)
+        writer.append(event)
+        writer.flush()
+      } finally {
+        await drained
+      }
+      busy.done()
+      assert.strictEqual(request.writable, true)
+      assert.deepStrictEqual(deliveries, [])
+      assert.strictEqual(direct.isDone(), false)
+      assert.deepStrictEqual(updates, [{ enabled: true, path: '/evp_proxy/v4' }])
+
+      writer.append({ ...event, subject: { id: 'next' } })
+      writer.flush()
+      await waitFor(() => deliveries.length > 0)
+
+      local.done()
+      assert.strictEqual(deliveries.length, 1)
+      assert.deepStrictEqual(deliveries[0].exposures, [{ ...event, subject: { id: 'next' } }])
+      assert.strictEqual(direct.isDone(), false)
+    })
+  }
 
   it('does not follow a direct-intake redirect or forward credentials to its target', async () => {
     const config = {

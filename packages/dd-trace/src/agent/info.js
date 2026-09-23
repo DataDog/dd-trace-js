@@ -22,10 +22,10 @@ module.exports = {
  * @param {Function} [makeRequest] - Request implementation
  */
 function fetchAgentInfo (url, callback, options = {}, makeRequest = request) {
-  const urlKey = url.href
+  const urlKey = JSON.stringify([url.href, options.path ?? '/info'])
 
   if (cachedUrl !== null && cachedUrl !== urlKey) {
-    // Clear cache if URL changes
+    // Different consumers may query different paths on the same Agent URL.
     clearCache()
   } else if (cachedData !== null && (Date.now() - cachedTimestamp) < CACHE_TTL_MS) {
     // Return cached result if still valid

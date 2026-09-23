@@ -165,4 +165,38 @@ describe('OpenFeature Base FFE Writer transport', () => {
     sinon.assert.calledOnce(request)
     sinon.assert.calledOnce(onUnavailable)
   })
+
+  for (const hasFallback of [true, false]) {
+    it(`keeps the local route after a full request buffer (fallback=${hasFallback})`, async () => {
+      const localUrl = new URL('http://localhost:8126')
+      const onFallback = sinon.spy()
+      const onUnavailable = sinon.spy()
+      request.onFirstCall().yieldsAsync(Object.assign(new Error('buffer full'), { code: 'ERR_DD_REQUEST_BUFFER_FULL' }))
+      writer.setRoute({
+        url: localUrl,
+        basePath: '/evp_proxy/v4',
+        headers: { 'X-Datadog-EVP-Subdomain': 'event-platform-intake' },
+        onFallback,
+        onUnavailable,
+        fallback: hasFallback
+          ? { url: new URL('https://event-platform-intake.datadoghq.com'), basePath: '' }
+          : undefined,
+      })
+
+      writer.send('{"flag":"dropped","count":1}', 1)
+      await clock.tickAsync(0)
+
+      sinon.assert.calledOnce(request)
+      sinon.assert.calledOnce(log.error)
+      sinon.assert.notCalled(onFallback)
+      sinon.assert.notCalled(onUnavailable)
+
+      writer.send('{"flag":"next","count":1}', 1)
+      await clock.tickAsync(0)
+
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(request.secondCall.args[0], '{"flag":"next","count":1}')
+      assert.strictEqual(request.secondCall.args[1].url, localUrl)
+    })
+  }
 })
