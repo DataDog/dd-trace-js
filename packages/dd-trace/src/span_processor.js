@@ -13,7 +13,7 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, otlpStatsExporter, otlpTraceExport = false) {
+  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
@@ -31,7 +31,9 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
-    this._nativeExport = !otlpTraceExport
+    // Mirrors the OTLP exporter selection in opentracing/tracer.js; OTLP exports carry the marker on the resource.
+    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp' || Boolean(config.isCiVisibility) ||
+      config.tracing?.DD_TRACE_EXPERIMENTAL_EXPORTER === 'electron'
   }
 
   sample (span) {

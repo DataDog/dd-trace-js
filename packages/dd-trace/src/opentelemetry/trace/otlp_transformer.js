@@ -5,7 +5,6 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
-const { SDK_OTLP_EXPORT_KEY, SDK_SEMANTICS_KEY } = require('../../constants')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -68,14 +67,11 @@ const SPAN_KIND_MAP = {
 const STATUS_CODE_UNSET = 0
 const STATUS_CODE_ERROR = 2
 
-// DD meta keys that are mapped to dedicated OTLP span fields, or are tracer-owned resource
-// attributes that a user tag must not contradict, and should not appear as span attributes
+// DD meta keys that are mapped to dedicated OTLP span fields and should not appear as attributes
 const EXCLUDED_META_KEYS = new Set([
   '_dd.span_links',
   'span.kind',
   TRACE_ID_128,
-  SDK_OTLP_EXPORT_KEY,
-  SDK_SEMANTICS_KEY,
 ])
 
 // DD-only error tags that should not appear as attributes when OTel trace semantics are enabled.

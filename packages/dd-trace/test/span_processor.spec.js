@@ -360,7 +360,8 @@ describe('SpanProcessor', () => {
 
   it('should not request the native export marker when traces are exported over OTLP', () => {
     config.flushMinSpans = 1
-    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)

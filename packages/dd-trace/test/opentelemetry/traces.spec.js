@@ -369,24 +369,6 @@ describe('OpenTelemetry Traces', () => {
       assert(keys.includes('keep.this'), 'Other meta keys should be present')
     })
 
-    it('excludes the resource-scoped SDK adoption markers from span attributes', () => {
-      const transformer = new OtlpTraceTransformer({})
-      const span = createMockSpan({
-        meta: {
-          '_dd.sdk.otlp_export': 'false',
-          'datadog.sdk.semantics': 'otel',
-          'keep.this': 'value',
-        },
-      })
-
-      const decoded = decodePayload(transformer.transformSpans([span]))
-      const keys = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes.map(a => a.key)
-
-      assert(!keys.includes('_dd.sdk.otlp_export'))
-      assert(!keys.includes('datadog.sdk.semantics'))
-      assert(keys.includes('keep.this'))
-    })
-
     it('includes resource, service, type, and operation name as attributes', () => {
       const transformer = new OtlpTraceTransformer({})
       const span = createMockSpan()
@@ -934,20 +916,13 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(resource['datadog.sdk.semantics'], 'otel')
       })
 
-      it('does not let global or span tags with the same keys contradict the resource', () => {
-        const span = createMockSpan({
-          meta: { '_dd.sdk.otlp_export': 'false', 'datadog.sdk.semantics': 'otel', 'keep.this': 'value' },
-        })
-
-        const { resource, spanKeys } = exportAndCapture({
+      it('does not let global tags with the same keys override the resource', () => {
+        const { resource } = exportAndCapture({
           DD_TAGS: '_dd.sdk.otlp_export:false,datadog.sdk.semantics:otel',
-        }, [span])
+        })
 
         assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
         assert.strictEqual(resource['datadog.sdk.semantics'], 'datadog')
-        assert(!spanKeys.includes('_dd.sdk.otlp_export'))
-        assert(!spanKeys.includes('datadog.sdk.semantics'))
-        assert(spanKeys.includes('keep.this'))
       })
     })
   })

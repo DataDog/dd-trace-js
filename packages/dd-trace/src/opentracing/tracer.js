@@ -39,9 +39,8 @@ class DatadogTracer {
     // silently lose all test spans. The same applies to the Electron exporter:
     // spans must reach the Electron SDK's IPC bridge, not an OTLP endpoint,
     // even when OTEL_* vars are set for unrelated telemetry.
-    const otlpTraceExport = config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
-      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'
-    if (otlpTraceExport) {
+    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility &&
+      config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron') {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
     } else {
@@ -54,9 +53,7 @@ class DatadogTracer {
       const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
       otlpStatsExporter = createOtlpSpanStatsExporter(config)
     }
-    this._processor = new SpanProcessor(
-      this._exporter, this._prioritySampler, config, otlpStatsExporter, otlpTraceExport
-    )
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
     this._url = this._exporter._url
     this._enableGetRumData = config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
