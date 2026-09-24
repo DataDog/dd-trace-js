@@ -509,6 +509,15 @@ describe('Tracer', () => {
       assert.ok(new WrappedCallback() instanceof Callback)
     })
 
+    it('should reject a frozen class constructor', () => {
+      const Callback = Object.freeze(class Callback {})
+
+      assert.throws(() => tracer.wrap('name', {}, Callback), {
+        name: 'TypeError',
+        message: 'Target is a native class constructor and cannot be wrapped.',
+      })
+    })
+
     it('should preserve constructor behavior', () => {
       function Value (value) {
         this.value = value

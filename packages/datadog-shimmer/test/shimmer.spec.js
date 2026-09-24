@@ -552,6 +552,20 @@ describe('shimmer', () => {
       assert.throws(() => shimmer.wrapFunction(Counter, Counter => function () {}), /Target is a native class constructor and cannot be wrapped\./)
     })
 
+    it('should not wrap a frozen class constructor', () => {
+      const Counter = Object.freeze(class Counter {})
+
+      assert.throws(() => shimmer.wrapFunction(Counter, () => function () {}),
+        /Target is a native class constructor and cannot be wrapped\./)
+    })
+
+    it('should not wrap a sealed class constructor', () => {
+      const Counter = Object.seal(class Counter {})
+
+      assert.throws(() => shimmer.wrapFunction(Counter, () => function () {}),
+        /Target is a native class constructor and cannot be wrapped\./)
+    })
+
     it('should not wrap the class constructor with invalid toString()', () => {
       class Counter {
         constructor (start) {

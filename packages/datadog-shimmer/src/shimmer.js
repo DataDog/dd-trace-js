@@ -330,14 +330,13 @@ function assertMethod (target, name, method) {
  * Asserts that a target is not an identifiable class constructor.
  *
  * @param {Function} target - The target function.
- * @throws {Error} If the target is a non-frozen class constructor.
+ * @throws {TypeError} If the target is an identifiable class constructor.
  */
 function assertNotClass (target) {
-  // Class constructors have a non-writable `prototype` property, but frozen
-  // functions do as well. Frozen targets are accepted when the descriptors are ambiguous.
+  // Frozen functions also have a non-writable `prototype`; inspect their source only then.
   if ('prototype' in target &&
       Object.getOwnPropertyDescriptor(target, 'prototype').writable === false &&
-      !Object.isFrozen(target)) {
+      (!Object.isFrozen(target) || Function.prototype.toString.call(target).startsWith('class'))) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }
