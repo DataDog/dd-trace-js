@@ -85,9 +85,19 @@ describe('ManagedPrompt', () => {
       {
         role: 'assistant',
         content: null,
-        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
+        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1', function: null, type: null }],
       },
       { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+      {
+        role: 'assistant',
+        tool_calls: [{
+          id: 'call-2',
+          type: 'function',
+          function: { name: 'lookup', arguments: '{"id":2}' },
+          provider_extension: { opaque: true },
+        }],
+      },
+      { role: 'tool', content: 'found', tool_call_id: 'call-2', tool_calls: null, tool_results: null },
     ]
     const variables = { plan: 'pro', question: 'Why?', history, empty: [] }
 
@@ -125,6 +135,14 @@ describe('ManagedPrompt', () => {
       [{ role: 'assistant', content: null }],
       [{ role: 'assistant', tool_calls: [] }],
       [{ role: 'assistant', content: [{ type: 'image' }], tool_calls: [{}] }],
+      [{ role: 'assistant', tool_calls: [{ function: { name: 'lookup', arguments: {} } }] }],
+      [{ role: 'assistant', tool_calls: [{ function: { name: 42, arguments: '{}' } }] }],
+      [{ role: 'assistant', tool_calls: [{ function: Object.assign([], { name: 'lookup', arguments: '{}' }) }] }],
+      [{ role: 'assistant', content: 'text', tool_calls: 'invalid' }],
+      [{ role: 'assistant', tool_calls: [null] }],
+      [{ role: 'assistant', tool_calls: [{ name: 42 }] }],
+      [{ role: 'tool', content: 'result', tool_call_id: 42 }],
+      [{ role: 'tool', tool_results: [42] }],
       [{ type: 'placeholder', name: 'nested', role: 'user', content: 'x' }],
     ]) {
       assert.throws(() => prompt.format({ history: malformed, empty: [] }), {

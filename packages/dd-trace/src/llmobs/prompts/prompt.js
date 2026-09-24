@@ -15,6 +15,27 @@ function isPlaceholder (value) {
   return value?.type === 'placeholder' && typeof value?.name === 'string'
 }
 
+function isObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isTool (value) {
+  return isObject(value) &&
+    (value.id == null || typeof value.id === 'string') &&
+    (value.type == null || typeof value.type === 'string') &&
+    (value.tool_id == null || typeof value.tool_id === 'string') &&
+    (value.name == null || typeof value.name === 'string')
+}
+
+function hasValidTools (message) {
+  return (message.tool_call_id == null || typeof message.tool_call_id === 'string') &&
+    (message.tool_calls == null || (Array.isArray(message.tool_calls) && message.tool_calls.every(call =>
+      isTool(call) && (call.function == null ||
+        (isObject(call.function) &&
+          typeof call.function.name === 'string' && typeof call.function.arguments === 'string'))))) &&
+    (message.tool_results == null || (Array.isArray(message.tool_results) && message.tool_results.every(isTool)))
+}
+
 function render (template, variables) {
   return template.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {
     const name = doubleName ?? singleName
@@ -47,7 +68,7 @@ class ManagedPrompt {
   /**
    * Render the prompt without changing its stored template.
    * @param {Record<string, unknown>} [variables]
-   * @returns {string | Array<{role: string, content: string}>}
+   * @returns {string | import('../../../../../index').llmobs.FormattedPromptMessage[]}
    */
   format (variables = {}) {
     if (typeof this.template === 'string') return render(this.template, variables)
@@ -57,7 +78,7 @@ class ManagedPrompt {
         throw new TypeError(`Missing message placeholder variable '${item.name}'`)
       }
       const messages = variables[item.name]
-      if (!Array.isArray(messages) || !messages.every(isMessage)) {
+      if (!Array.isArray(messages) || !messages.every(message => isMessage(message) && hasValidTools(message))) {
         throw new TypeError(`Invalid message placeholder variable '${item.name}': expected an array of messages`)
       }
       return messages.map(message => ({ ...message }))

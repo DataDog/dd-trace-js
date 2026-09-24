@@ -4113,6 +4113,34 @@ declare namespace tracer {
       content: string
     }
 
+    /** Provider fields on expanded messages; authored templates remain text-only. */
+    interface FormattedPromptMessage extends PromptTemplateMessage {
+      // The inherited content type stays string for compatibility; tool-only payloads can omit it or contain null.
+      tool_calls?: PromptToolCall[] | null,
+      tool_results?: PromptToolResult[] | null,
+      tool_call_id?: string | null
+    }
+
+    interface PromptToolCall {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      arguments?: unknown,
+      function?: {
+        name: string,
+        arguments: string
+      } | null
+    }
+
+    interface PromptToolResult {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      result?: unknown
+    }
+
     interface PromptMessagePlaceholder {
       type: 'placeholder',
       name: string
@@ -4169,7 +4197,7 @@ declare namespace tracer {
       readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
-      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
       toAnnotation (variables?: Record<string, unknown>): Prompt
     }
 
