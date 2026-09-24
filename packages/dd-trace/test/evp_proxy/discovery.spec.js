@@ -110,13 +110,27 @@ describe('EVP proxy discovery', () => {
         })
         sinon.assert.calledOnceWithExactly(fetchAgentInfo, url, sinon.match.func, {
           path: '/info',
-          retry: false,
+          retry: undefined,
         })
         sinon.assert.calledOnceWithExactly(
           log.debug,
           'EVP proxy route %s discovered through the configured local receiver',
           '/evp_proxy/v2'
         )
+        done()
+      })
+    })
+
+    it('lets callers disable the default request retry policy', (done) => {
+      fetchAgentInfo.yields(null, { endpoints: ['/info'] })
+
+      discoverEVPProxy(url, { ...options, retry: false }, (error, route) => {
+        assert.ifError(error)
+        assert.strictEqual(route, undefined)
+        sinon.assert.calledOnceWithExactly(fetchAgentInfo, url, sinon.match.func, {
+          path: '/info',
+          retry: false,
+        })
         done()
       })
     })
@@ -159,7 +173,7 @@ describe('EVP proxy discovery', () => {
         })
         sinon.assert.calledOnceWithExactly(fetchAgentInfo, prefixedUrl, sinon.match.func, {
           path: '/agent-prefix/info',
-          retry: false,
+          retry: undefined,
         })
         done()
       })

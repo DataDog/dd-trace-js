@@ -104,6 +104,7 @@ describe('OpenFeature event delivery strategy', () => {
     sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
       requiredHeaders: ['DD-EVP-ORIGIN', 'DD-EVP-ORIGIN-VERSION'],
       supportedPaths: ['/evp_proxy/v4', '/evp_proxy/v2'],
+      retry: false,
     }, sinon.match.func)
     sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, {
       ...localRoute,

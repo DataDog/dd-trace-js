@@ -25,8 +25,9 @@ const { joinAgentURLPath, stripTrailingSlashes } = require('./path')
  * serverless-init image or deployment type.
  *
  * This module only discovers a candidate route. A missing or unresponsive
- * `/info` endpoint returns an error through a bounded send-once request. A
- * valid response without a compatible path returns no route.
+ * `/info` endpoint returns an error after the request's bounded retry policy.
+ * Callers can disable retries to make discovery a single attempt. A valid
+ * response without a compatible path returns no route.
  * Discovery sends no events, so the caller can safely select direct intake
  * after either result. The caller also owns later delivery failures. Exposure
  * delivery decides whether a failed batch can be replayed and which route
@@ -104,6 +105,7 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
  * @param {string[]} options.supportedPaths - Supported paths in preference order
  * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
  * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
+ * @param {boolean} [options.retry] - Set false to disable the request's default bounded retries
  * @param {(error: Error|null, route?: {url: URL, basePath: string}) => void} callback - Result callback
  */
 function discoverEVPProxy (url, options, callback) {
@@ -123,7 +125,7 @@ function discoverEVPProxy (url, options, callback) {
     callback(null, { url, basePath: joinAgentURLPath(url, basePath) })
   }, {
     path: joinAgentURLPath(url, '/info'),
-    retry: false,
+    retry: options.retry,
   })
 }
 

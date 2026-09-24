@@ -133,6 +133,8 @@ function setAgentlessStrategy (config, setWriterEnabledValue) {
     discoverEVPProxy(config.url, {
       requiredHeaders: REQUIRED_LOCAL_HEADERS,
       supportedPaths: [EVP_PROXY_PATH_V4, EVP_PROXY_PATH_V2],
+      // Agentless owns fallback and unavailable-state recovery; do not delay them with HTTP retries.
+      retry: false,
     }, (error, localRoute) => {
       discovering = false
       if (stopped || state === 'direct') return
