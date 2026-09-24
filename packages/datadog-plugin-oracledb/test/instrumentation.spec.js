@@ -42,7 +42,7 @@ describe('oracledb instrumentation', () => {
   }
 
   /**
-   * @param {{ homogeneous?: boolean, poolUser?: string, connectionUser?: string | (() => string) }} options
+   * @param {{ homogeneous?: boolean, poolUser?: string }} options
    */
   function createOracledb (options) {
     class Connection {
@@ -61,13 +61,6 @@ describe('oracledb instrumentation', () => {
           callback = connectionOptions
         }
         const connection = new Connection()
-        if (options.connectionUser !== undefined) {
-          Object.defineProperty(connection, 'user', {
-            get: typeof options.connectionUser === 'function'
-              ? options.connectionUser
-              : () => options.connectionUser,
-          })
-        }
         if (callback) {
           callback(undefined, connection)
           return
@@ -101,101 +94,108 @@ describe('oracledb instrumentation', () => {
     })
   }
 
-  it('publishes a heterogeneous Promise acquisition user override', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base', connectionUser: 'proxy' })
-    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+  /**
+   * @param {{ homogeneous?: boolean, poolUser?: string }} options
+   * @param {{ homogeneous?: boolean, user?: string, username?: string }} poolAttrs
+   * @param {(pool: { getConnection: Function }) => Promise<unknown>} acquire
+   * @returns {Promise<string | undefined>}
+   */
+  async function getStartUser (options, poolAttrs, acquire) {
+    let startUser
+    subscribe(poolAcquireStartChannel, ctx => { startUser = ctx.user })
+    const pool = await createOracledb(options).createPool(poolAttrs)
 
-    await pool.getConnection({ user: 'proxy' })
+    await acquire(pool)
 
-    assert.strictEqual(finishContext.user, 'proxy')
+    return startUser
+  }
+
+  it('publishes a heterogeneous Promise acquisition user override at start', async () => {
+    const user = await getStartUser(
+      { homogeneous: false, poolUser: 'base' },
+      { homogeneous: false, user: 'base' },
+      pool => pool.getConnection({ user: 'proxy' })
+    )
+
+    assert.strictEqual(user, 'proxy')
   })
 
-  it('publishes a heterogeneous callback acquisition user override', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base', connectionUser: 'proxy' })
-    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+  it('publishes a heterogeneous callback acquisition username override at start', async () => {
+    const user = await getStartUser(
+      { homogeneous: false, poolUser: 'base' },
+      { homogeneous: false, user: 'base' },
+      getConnectionWithCallback
+    )
 
-    await getConnectionWithCallback(pool)
-
-    assert.strictEqual(finishContext.user, 'proxy')
+    assert.strictEqual(user, 'proxy')
   })
 
-  it('does not read the connection user for a homogeneous pool', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({
-      homogeneous: true,
-      poolUser: 'base',
-      connectionUser: () => { throw new Error('user getter was read') },
-    })
-    const pool = await oracledb.createPool({ homogeneous: true, user: 'base' })
+  it('falls back to the pool user for a heterogeneous acquisition without credentials', async () => {
+    const user = await getStartUser(
+      { homogeneous: false, poolUser: 'base' },
+      { homogeneous: false, user: 'base' },
+      pool => pool.getConnection({ tag: '' })
+    )
 
-    await pool.getConnection()
-
-    assert.strictEqual(finishContext.user, undefined)
+    assert.strictEqual(user, 'base')
   })
 
-  it('publishes the acquired user for a heterogeneous pool', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base', connectionUser: 'base' })
-    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+  it('falls back to the pool user for a heterogeneous callback-only acquisition', async () => {
+    const user = await getStartUser(
+      { homogeneous: false, poolUser: 'base' },
+      { homogeneous: false, user: 'base' },
+      pool => new Promise((resolve, reject) => {
+        pool.getConnection((error, connection) => error ? reject(error) : resolve(connection))
+      })
+    )
 
-    await pool.getConnection()
-
-    assert.strictEqual(finishContext.user, 'base')
+    assert.strictEqual(user, 'base')
   })
 
-  it('does not publish a heterogeneous user when OracleDB does not expose it', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base' })
-    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+  it('publishes the pool user for a homogeneous pool', async () => {
+    const user = await getStartUser(
+      { homogeneous: true, poolUser: 'base' },
+      { homogeneous: true, user: 'base' },
+      pool => pool.getConnection()
+    )
 
-    await pool.getConnection()
+    assert.strictEqual(user, 'base')
+  })
 
-    assert.strictEqual(finishContext.user, undefined)
+  it('uses the username pool option when OracleDB 5 does not expose the pool user', async () => {
+    const user = await getStartUser(
+      { homogeneous: true },
+      { homogeneous: true, username: 'alias' },
+      pool => pool.getConnection()
+    )
+
+    assert.strictEqual(user, 'alias')
   })
 
   it('uses the pool options when public homogeneous metadata is unavailable', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({ poolUser: 'base', connectionUser: 'proxy' })
-    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+    const user = await getStartUser(
+      { poolUser: 'base' },
+      { homogeneous: false, user: 'base' },
+      pool => pool.getConnection({ user: 'proxy' })
+    )
 
-    await pool.getConnection()
-
-    assert.strictEqual(finishContext.user, 'proxy')
+    assert.strictEqual(user, 'proxy')
   })
 
   it('defaults to a homogeneous pool when metadata is unavailable', async () => {
-    let finishContext
-    subscribe(poolAcquireStartChannel, () => {})
-    subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({
-      poolUser: 'base',
-      connectionUser: () => { throw new Error('user getter was read') },
-    })
-    const pool = await oracledb.createPool({ user: 'base' })
+    const user = await getStartUser(
+      { poolUser: 'base' },
+      { user: 'base' },
+      pool => pool.getConnection({ user: 'proxy' })
+    )
 
-    await pool.getConnection()
-
-    assert.strictEqual(finishContext.user, undefined)
+    assert.strictEqual(user, 'base')
   })
 
   it('does not publish an inactive callback acquisition', async () => {
     let finishContext
     subscribe(poolAcquireFinishChannel, ctx => { finishContext = ctx })
-    const oracledb = createOracledb({ homogeneous: true, poolUser: 'base', connectionUser: 'base' })
+    const oracledb = createOracledb({ homogeneous: true, poolUser: 'base' })
     const pool = await oracledb.createPool({ homogeneous: true, user: 'base' })
 
     const connection = await getConnectionWithCallback(pool)

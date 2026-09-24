@@ -29,13 +29,14 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
 
   /**
    * @param {{
-   *   connectionAttrs: { connectString?: string, homogeneous: boolean, user?: string },
+   *   connectionAttrs: { connectString?: string },
    *   pool: object,
-   *   poolAttrs: object
+   *   poolAttrs: object,
+   *   user?: string
    * }} ctx
    */
   bindStart (ctx) {
-    const { connectionAttrs, pool, poolAttrs } = ctx
+    const { connectionAttrs, pool, poolAttrs, user } = ctx
     let metadata = this.#poolMetadata.get(pool)
     if (metadata === undefined) {
       parser ??= require('./connection-parser')
@@ -62,7 +63,7 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
       type: 'sql',
       kind: 'client',
       meta: {
-        'db.user': connectionAttrs.homogeneous ? connectionAttrs.user : undefined,
+        'db.user': user,
         'db.instance': dbInstance,
         'db.name': dbInstance,
         'db.hostname': hostname,
@@ -72,19 +73,6 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
     }, ctx)
 
     return ctx.currentStore
-  }
-
-  /**
-   * @param {{
-   *   currentStore?: { span: import('../../dd-trace').Span },
-   *   user?: string
-   * }} ctx
-   */
-  finish (ctx) {
-    if (ctx.user !== undefined) {
-      ctx.currentStore?.span.setTag('db.user', ctx.user)
-    }
-    super.finish(ctx)
   }
 }
 
