@@ -13,7 +13,7 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
+  constructor (exporter, prioritySampler, config, otlpStatsExporter, otlpTraceExport = false) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
@@ -31,6 +31,7 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
+    this._nativeExport = !otlpTraceExport
   }
 
   sample (span) {
@@ -76,7 +77,7 @@ class SpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else if (!discard) {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags, this._nativeExport)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
           }

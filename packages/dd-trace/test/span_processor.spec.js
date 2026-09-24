@@ -342,6 +342,32 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 
+  it('should request the native export marker on the first span of each chunk', () => {
+    config.flushMinSpans = 2
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    trace.started = [activeSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan]
+    processor.process(finishedSpan)
+
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    sinon.assert.calledWithExactly(spanFormat.getCall(0), finishedSpan, true, false, true)
+    sinon.assert.calledWithExactly(spanFormat.getCall(1), finishedSpan, false, false, true)
+    sinon.assert.calledWithExactly(spanFormat.getCall(2), finishedSpan, true, false, true)
+  })
+
+  it('should not request the native export marker when traces are exported over OTLP', () => {
+    config.flushMinSpans = 1
+    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    sinon.assert.calledWithExactly(spanFormat, finishedSpan, true, false, false)
+  })
+
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
     config.flushMinSpans = 2

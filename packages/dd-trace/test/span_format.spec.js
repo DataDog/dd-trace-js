@@ -541,6 +541,17 @@ describe('spanFormat', () => {
       })
     })
 
+    it('should add the native export marker to the chunk root on native APM export', () => {
+      trace = spanFormat(span, true, false, true)
+
+      assert.strictEqual(trace.meta['_dd.sdk.otlp_export'], 'false')
+    })
+
+    it('should not add the native export marker outside the chunk root or native APM export', () => {
+      assert.ok(!('_dd.sdk.otlp_export' in spanFormat(span, false, false, true).meta))
+      assert.ok(!('_dd.sdk.otlp_export' in spanFormat(span, true, false, false).meta))
+    })
+
     it('truncates overlong chunk tag keys and values to the agent limit', () => {
       const { MAX_META_KEY_LENGTH, MAX_META_VALUE_LENGTH } = require('../src/encode/tags-processors')
       const overlongChunkKey = `${'k'.repeat(MAX_META_KEY_LENGTH)}!`
