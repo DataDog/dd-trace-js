@@ -14,7 +14,7 @@ const {
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const { FlagEvaluationAggregator } = require('./flag-evaluation-aggregation')
 const { iterateFlagEvaluationPayloads } = require('./flag-evaluation-payload')
-const { normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { normalizeTargetingKey, optionalKey, protectedErrorCode } = require('./flag-evaluation-pii')
 const { recordDropped, recordTargetingKeyOmitted } = require('./flag-evaluation-telemetry')
 const BaseFFEWriter = require('./base')
 
@@ -28,12 +28,6 @@ const BaseFFEWriter = require('./base')
  * @property {import('node:https').Agent} [agent]
  * @property {FlagEvaluationRoute} [fallback]
  */
-
-/** @param {unknown} value */
-function optionalKey (value) {
-  const key = normalizeTargetingKey(value)
-  return key === undefined || key.length === 0 ? undefined : key
-}
 
 class FlagEvaluationConsumer extends BaseFFEWriter {
   #enabled = false

@@ -6,7 +6,8 @@ const {
   FLAG_EVALUATION_PER_FLAG_CAP,
 } = require('../constants/constants')
 const { validatedContextEntries, snapshotFromEntries } = require('./flag-evaluation-context')
-const { prefixedTargetingKeyDigest, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { prefixedTargetingKeyDigest, normalizeTargetingKey, optionalKey, protectedErrorCode } =
+  require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
 
 /** @typedef {import('./flag-evaluation-context').ContextSnapshot} ContextSnapshot */
@@ -47,12 +48,6 @@ const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
  * @property {Map<string, AggregationEntry>} full
  * @property {Map<string, AggregationEntry>} degraded
  */
-
-/** @param {unknown} value */
-function optionalKey (value) {
-  const key = normalizeTargetingKey(value)
-  return key === undefined || key.length === 0 ? undefined : key
-}
 
 /**
  * Merge one observation into an aggregation entry.
@@ -113,14 +108,12 @@ class FlagEvaluationAggregator {
       this.#addDegraded(event, { flagKey, variant, allocation, rule, error })
       return
     }
-    if (this.#perFlag.has(flagKey) || this.#full.size < FLAG_EVALUATION_GLOBAL_CAP) {
-      this.#perFlag.set(flagKey, perFlag + 1)
-    }
     if (this.#full.size >= FLAG_EVALUATION_GLOBAL_CAP) {
       this.#addDegraded(event, { flagKey, variant, allocation, rule, error })
       return
     }
 
+    this.#perFlag.set(flagKey, perFlag + 1)
     this.#full.set(fullKey, {
       flagKey,
       variant,

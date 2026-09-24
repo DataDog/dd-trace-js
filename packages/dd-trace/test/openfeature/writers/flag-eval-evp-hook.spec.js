@@ -50,7 +50,7 @@ describe('FlagEvalEVPHook', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
     writer = {
-      isAvailable: sinon.stub().returns(true),
+      getUnavailableReason: sinon.stub().returns(undefined),
       hasCapacity: sinon.stub().returns(true),
       enqueue: sinon.spy(),
       setEnabled: sinon.spy(),
@@ -143,12 +143,21 @@ describe('FlagEvalEVPHook', () => {
     sinon.assert.notCalled(writer.enqueue)
   })
 
-  it('counts worker failure as unavailable before touching context rather than queue overflow', () => {
+  it('uses the default-enabled path when the featureFlags group is absent', () => {
+    hook.destroy()
+    hook = new Hook({ ...config, featureFlags: undefined })
+    selectRoute.lastCall.args[1](true, route)
+    hook.finally({ flagKey: 'flag', context: {} }, details())
+    assert.strictEqual(writer.enqueue.lastCall.args[0].flagKey, 'flag')
+  })
+
+  it('counts worker failure separately before touching context', () => {
     enable()
-    writer.isAvailable.returns(false)
+    writer.getUnavailableReason.returns('worker_failure')
     const input = { flagKey: 'flag', get context () { throw new Error('context accessed') } }
     hook.finally(input, details())
-    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 1)
+    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'worker_failure'), 1)
+    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 0)
     assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'pre_queue_overflow'), 0)
     sinon.assert.notCalled(writer.enqueue)
   })

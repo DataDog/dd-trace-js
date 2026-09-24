@@ -40,6 +40,10 @@ function normalizeTargetingKey (value) {
 
 /**
  * Apply EVP's protected targeting-key policy using the shared SHA-256 primitive.
+ * The cross-SDK contract deliberately uses an unsalted, stable digest for subject counts.
+ * This is pseudonymization, not anonymity: guessable keys remain guessable and equal
+ * keys produce equal hashes across services and organizations. An org-scoped salt
+ * requires a coordinated configuration/backend contract, not a JS-only secret.
  * This runs after queue handoff; hashing must not move onto the evaluation hot path.
  *
  * @param {unknown} value - Raw evaluation targeting key, never a previously emitted hash
@@ -63,8 +67,20 @@ function protectedErrorCode (value) {
   return typeof value === 'string' && ERROR_CODES.has(value) ? value : 'GENERAL'
 }
 
+/**
+ * Optional metadata dimensions omit empty text; targeting keys deliberately preserve it.
+ *
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+function optionalKey (value) {
+  const key = normalizeTargetingKey(value)
+  return key === undefined || key.length === 0 ? undefined : key
+}
+
 module.exports = {
   normalizeTargetingKey,
+  optionalKey,
   prefixedTargetingKeyDigest,
   protectedErrorCode,
 }

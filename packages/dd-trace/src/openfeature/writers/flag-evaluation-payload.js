@@ -69,19 +69,6 @@ function makeRow (entry, timestamp, degraded) {
 }
 
 /**
- * Consume aggregate snapshots and serialize them into exact EVP envelopes.
- *
- * @param {Map<string, AggregationEntry>} full
- * @param {Map<string, AggregationEntry>} degraded
- * @param {FlagEvaluationBatchContext} context
- * @param {number} timestamp
- * @returns {EncodedFlagEvaluationPayload[]}
- */
-function buildFlagEvaluationPayloads (full, degraded, context, timestamp) {
-  return [...iterateFlagEvaluationPayloads(full, degraded, context, timestamp)]
-}
-
-/**
  * Advance serialization only when the transport has room for another complete envelope.
  * Takes ownership of the detached aggregate maps and clears them when iteration starts.
  *
@@ -194,4 +181,4 @@ function * iterateFlagEvaluationPayloads (full, degraded, context, timestamp, on
   if (encodedRows.length > 0) yield close()
 }
 
-module.exports = { buildFlagEvaluationPayloads, iterateFlagEvaluationPayloads }
+module.exports = { iterateFlagEvaluationPayloads }

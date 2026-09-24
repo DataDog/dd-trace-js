@@ -26,6 +26,9 @@ module.exports = {
   FLAG_EVALUATION_PER_FLAG_CAP: 10_000,
   FLAG_EVALUATION_DEGRADED_CAP: 32_768,
 
+  // ECMAScript Date's maximum absolute time value, in milliseconds.
+  MAX_EVALUATION_TIMESTAMP_MS: 8_640_000_000_000_000,
+
   /**
    * @constant
    * @type {string} Channel name for exposure event submission

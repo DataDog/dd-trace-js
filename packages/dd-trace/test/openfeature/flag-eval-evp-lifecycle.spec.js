@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../setup/core')
+const { snapshotEvaluationContext } = require('../../src/openfeature/writers/flag-evaluation-context')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 
 const now = 1_759_276_800_000
@@ -21,6 +22,7 @@ describe('FlaggingProvider EVP lifecycle', () => {
   let Provider
   let handlers
   let config
+  let snapshotContext
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
@@ -35,12 +37,14 @@ describe('FlaggingProvider EVP lifecycle', () => {
     // Keep SDK-to-serialization semantics at the consumer boundary under fake time.
     // Separate producer and real-process tests cover worker ownership and scheduling.
     class Writer extends Consumer {
-      isAvailable () { return this.hasCapacity() }
+      getUnavailableReason () { return this.hasCapacity() ? undefined : 'unavailable' }
     }
     Writer['@noCallThru'] = true
     selectRoute = sinon.stub()
+    snapshotContext = sinon.stub().callsFake(snapshotEvaluationContext)
     const Hook = proxyquire('../../src/openfeature/writers/flag-eval-evp-hook', {
       './flag-evaluations': Writer,
+      './flag-evaluation-context': { snapshotEvaluationContext: snapshotContext },
       './util': { setExposureDeliveryStrategy: selectRoute },
     })
     Provider = proxyquire('../../src/openfeature/flagging_provider', {
@@ -121,6 +125,52 @@ describe('FlaggingProvider EVP lifecycle', () => {
         assert.strictEqual(bytes.includes(Buffer.from('error-code-canary')), false)
       })
     }
+  }
+
+  for (const consent of [false, true]) {
+    it(`preserves counts and privacy when snapshotting fails, consent=${consent}`, async () => {
+      const client = await register()
+      enable()
+      resolve(consent, false)
+      snapshotContext.onFirstCall().throws(new Error('snapshot-error-secret-canary'))
+      snapshotContext.onSecondCall().throws(new Error('snapshot-error-secret-canary'))
+      const targetingKey = 'jane.doe@datadoghq.com'
+      for (let i = 0; i < 2; i++) {
+        assert.strictEqual(await client.getBooleanValue('checkout', false, {
+          targetingKey, secret: 'failed-context-canary',
+        }), true)
+      }
+      // A failed snapshot must not disable capture of subsequent healthy evaluations.
+      assert.strictEqual(await client.getBooleanValue('checkout', false, { targetingKey, plan: 'pro' }), true)
+      provider.onClose()
+
+      sinon.assert.calledOnce(request)
+      const bytes = Buffer.from(request.firstCall.args[0])
+      const rows = JSON.parse(bytes.toString()).flagEvaluations
+      assert.deepStrictEqual(rows.map(row => row.evaluation_count), consent ? [2, 1] : [3])
+      assert.deepStrictEqual(rows.map(row => row.context), consent
+        ? [undefined, { evaluation: { plan: 'pro' } }]
+        : [undefined])
+      for (const row of rows) {
+        assert.strictEqual(row.targeting_key, consent
+          ? targetingKey
+          : 'sha256_b4698f9b6d186781fa8dc59e533578fa2d8379a46b1cf6db85cda6aa9c99e51b')
+        assert.deepStrictEqual(row.variant, { key: 'on' })
+        assert.deepStrictEqual(row.allocation, { key: 'allocation' })
+        assert.strictEqual(row.first_evaluation, now - 100)
+        assert.strictEqual(row.last_evaluation, now - 100)
+      }
+      assert.strictEqual(bytes.includes('snapshot-error-secret-canary'), false)
+      assert.strictEqual(bytes.includes('failed-context-canary'), false)
+      assert.strictEqual(snapshotContext.callCount, consent ? 3 : 0)
+      const series = telemetryMetrics.manager.namespace('general').toJSON().metrics?.series ?? []
+      const failures = series.find(metric => metric.metric === 'flagevaluation.context.truncated' &&
+        metric.tags.includes('reason:snapshot_error'))
+      assert.strictEqual(failures?.points[0][1] ?? 0, consent ? 2 : 0)
+      assert.strictEqual(series.some(metric => metric.metric === 'flagevaluation.hook.errors'), false)
+      assert.strictEqual(series.some(metric => metric.metric === 'flagevaluation.rows.dropped'), false)
+      assert.strictEqual(series.some(metric => metric.metric === 'flagevaluation.rows.degraded'), false)
+    })
   }
 
   for (const doLog of [false, true]) {

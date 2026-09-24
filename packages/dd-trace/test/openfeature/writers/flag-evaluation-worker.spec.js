@@ -91,7 +91,8 @@ describe('flag evaluation worker producer', () => {
     writer.setEnabled(true)
     assert.strictEqual(workers.length, 1)
     assert.strictEqual(writer.enqueue({ flagKey: 'later', timestamp: 100 }), false)
-    assert.strictEqual(dropped('worker_failure'), 8)
+    assert.strictEqual(dropped('worker_failure'), 9)
+    assert.strictEqual(dropped('unavailable'), 0)
   })
 
   it('flushes partial work before close and forces a bounded drain', () => {
@@ -110,14 +111,14 @@ describe('flag evaluation worker producer', () => {
   it('fails closed on startup errors and unsupported live route agents without restarting', () => {
     startupError = true
     writer.setEnabled(true)
-    assert.strictEqual(writer.isAvailable(), false)
+    assert.strictEqual(writer.getUnavailableReason(), 'worker_failure')
     startupError = false
     writer.setEnabled(true)
     assert.strictEqual(workers.length, 0)
     writer.destroy()
     writer = new Writer({ url: new URL('http://localhost:8126') })
     writer.setEnabled(true, { url: new URL('http://localhost:8126'), basePath: '', agent: {} })
-    assert.strictEqual(writer.isAvailable(), false)
+    assert.strictEqual(writer.getUnavailableReason(), 'worker_failure')
     assert.strictEqual(workers.length, 0)
   })
 
@@ -127,7 +128,7 @@ describe('flag evaluation worker producer', () => {
     const state = new Int32Array(workers[0].options.workerData.state)
     Atomics.sub(state, 0, 8)
     workers[0].emit('error', new Error('worker failed after aggregation'))
-    assert.strictEqual(writer.isAvailable(), false)
+    assert.strictEqual(writer.getUnavailableReason(), 'worker_failure')
     assert.strictEqual(dropped('worker_failure'), 8)
   })
 

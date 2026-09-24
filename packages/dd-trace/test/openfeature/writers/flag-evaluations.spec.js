@@ -11,7 +11,7 @@ require('../../setup/core')
 const constants = require('../../../src/openfeature/constants/constants')
 const aggregationModule = require('../../../src/openfeature/writers/flag-evaluation-aggregation')
 const { FlagEvaluationAggregator } = aggregationModule
-const { buildFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
+const { iterateFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
 const flagEvaluationTelemetry = require('../../../src/openfeature/writers/flag-evaluation-telemetry')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
 
@@ -198,12 +198,12 @@ describe('OpenFeature flag evaluations writer', () => {
       first: 1_759_276_800_000,
       last: 1_759_276_800_000,
     }]])
-    const [payload] = buildFlagEvaluationPayloads(
+    const [payload] = [...iterateFlagEvaluationPayloads(
       full,
       degraded,
       { service: 'test' },
       1_759_276_800_500
-    )
+    )]
     const rows = JSON.parse(payload.encoded).flagEvaluations
 
     assert.strictEqual(rows[0].context, undefined)
@@ -357,6 +357,42 @@ describe('OpenFeature flag evaluations writer', () => {
     assert.strictEqual(large.targeting_key, undefined)
     assert.strictEqual(metricValue('flagevaluation.rows.degraded', 'payload_limit'), 2)
     assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'payload_limit'), 1)
+    assert.strictEqual(metricValue('flagevaluation.payload.splits'), 1)
+  })
+
+  it('removes raw PII when a row fits the event limit but not a fresh envelope after splitting', () => {
+    const { iterateFlagEvaluationPayloads } = proxyquire('../../../src/openfeature/writers/flag-evaluation-payload', {
+      '../constants/constants': { ...constants, EVP_EVENT_SIZE_LIMIT: 1000, EVP_PAYLOAD_SIZE_LIMIT: 600 },
+    })
+    const aggregator = new FlagEvaluationAggregator()
+    aggregator.add(event({ flagKey: 'first', targetingKey: undefined, attrs: undefined, timestamp: 100 }))
+    aggregator.add(event({
+      flagKey: 'second',
+      targetingKey: 'post-split-target-canary',
+      attrs: { secret: 'post-split-context-canary' + 'x'.repeat(240) },
+      timestamp: 100,
+    }))
+    const { full, degraded } = aggregator.take()
+    // The shared envelope consumes enough space that the second row needs degradation,
+    // even on its own. Its undegraded row is still comfortably below the 1000-byte event cap.
+    const iterator = iterateFlagEvaluationPayloads(full, degraded, { service: 's'.repeat(300) }, 100)
+    const first = iterator.next().value
+    // No per-event degradation has happened when the first envelope closes.
+    assert.strictEqual(metricValue('flagevaluation.rows.degraded', 'payload_limit'), 0)
+    const payloads = [first, ...iterator]
+    assert.strictEqual(payloads.length, 2)
+    assert.deepStrictEqual(payloads.map(payload => payload.evaluations), [1, 1])
+    for (const payload of payloads) assert.ok(Buffer.byteLength(payload.encoded) <= 600)
+    const bytes = Buffer.from(payloads[1].encoded)
+    assert.strictEqual(bytes.includes('post-split-target-canary'), false)
+    assert.strictEqual(bytes.includes('post-split-context-canary'), false)
+    const [row] = JSON.parse(bytes.toString()).flagEvaluations
+    assert.strictEqual(row.flag.key, 'second')
+    assert.strictEqual(row.targeting_key, undefined)
+    assert.strictEqual(row.context, undefined)
+    assert.strictEqual(row.evaluation_count, 1)
+    assert.strictEqual(metricValue('flagevaluation.rows.degraded', 'payload_limit'), 1)
+    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'payload_limit'), 0)
     assert.strictEqual(metricValue('flagevaluation.payload.splits'), 1)
   })
 

@@ -7,7 +7,7 @@ const { ErrorCode } = require('@openfeature/server-sdk')
 const { describe, it } = require('mocha')
 
 const { FlagEvaluationAggregator } = require('../../../src/openfeature/writers/flag-evaluation-aggregation')
-const { buildFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
+const { iterateFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
 
 const target = 'independent-target-canary'
 const digest = 'sha256_' + createHash('sha256').update(target).digest('hex')
@@ -34,7 +34,7 @@ describe('flag evaluation independent privacy boundaries', () => {
       assert.strictEqual(Object.isFrozen(entry.attrs), true)
       assert.strictEqual(Object.getPrototypeOf(entry.attrs), null)
     }
-    const [payload] = buildFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)
+    const [payload] = [...iterateFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)]
     assert.deepStrictEqual(JSON.parse(payload.encoded).flagEvaluations.map(row => ({
       context: row.context.evaluation,
       count: row.evaluation_count,
@@ -58,7 +58,7 @@ describe('flag evaluation independent privacy boundaries', () => {
     ]
     for (const context of contexts) aggregator.add({ ...event, attrs: context })
     const { full, degraded } = aggregator.take()
-    const [payload] = buildFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)
+    const [payload] = [...iterateFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)]
     const rows = JSON.parse(payload.encoded).flagEvaluations
     assert.deepStrictEqual(rows.map(row => [row.context?.evaluation, row.evaluation_count]), [
       [undefined, 3], [{ x: 0 }, 2], [{ x: '0' }, 1], [{ x: false }, 1], [{ x: null }, 1],
@@ -118,9 +118,9 @@ describe('flag evaluation independent privacy boundaries', () => {
             last: 200,
           }
           const entries = new Map([['untrusted-boundary-input', entry]])
-          const [payload] = buildFlagEvaluationPayloads(
+          const [payload] = [...iterateFlagEvaluationPayloads(
             degraded ? new Map() : entries, degraded ? entries : new Map(), { service: 'test' }, 300
-          )
+          )]
           const bytes = Buffer.from(payload.encoded)
           const [row] = JSON.parse(bytes).flagEvaluations
           assert.strictEqual(row.evaluation_count, 7)

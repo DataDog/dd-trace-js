@@ -1,5 +1,6 @@
 'use strict'
 
+const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
 const { recordContextTruncated, recordDropped, recordHookError } = require('./flag-evaluation-telemetry')
 const FlagEvaluationsWriter = require('./flag-evaluations')
@@ -14,7 +15,7 @@ class FlagEvalEVPHook {
 
   /** @param {import('../../config/config-base')} config */
   constructor (config) {
-    if (config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED === false) return
+    if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED === false) return
 
     const writer = new FlagEvaluationsWriter(config)
     this.#writer = writer
@@ -35,8 +36,9 @@ class FlagEvalEVPHook {
   finally (hookContext, evaluationDetails) {
     if (!this.#writer) return
     try {
-      if (this.#closed || !this.#ready || !this.#writer.isAvailable()) {
-        recordDropped(this.#closed ? 'closed' : 'unavailable')
+      const unavailableReason = this.#closed ? 'closed' : this.#writer.getUnavailableReason()
+      if (unavailableReason !== undefined || !this.#ready) {
+        recordDropped(unavailableReason ?? 'unavailable')
         return
       }
       if (!this.#writer.hasCapacity()) {
@@ -48,16 +50,24 @@ class FlagEvalEVPHook {
       const consent = metadata?.__dd_observe_full_evaluation_data === true
       const capturedTime = metadata?.__dd_eval_timestamp_ms
       const timestamp = typeof capturedTime === 'number' && Number.isSafeInteger(capturedTime) &&
-        Math.abs(capturedTime) <= 8_640_000_000_000_000
+        Math.abs(capturedTime) <= MAX_EVALUATION_TIMESTAMP_MS
         ? capturedTime
         : Date.now()
       const context = hookContext.context
       const targetingKey = context?.targetingKey
       let attrs
       if (consent) {
-        const snapshot = snapshotEvaluationContext(context)
-        attrs = snapshot.attrs
-        for (const reason of snapshot.reasons) recordContextTruncated(reason)
+        let snapshot
+        try {
+          snapshot = snapshotEvaluationContext(context)
+        } catch {
+          // Preserve the evaluation count without the failed context. Never log caller-controlled errors.
+          recordContextTruncated('snapshot_error')
+        }
+        if (snapshot !== undefined) {
+          attrs = snapshot.attrs
+          for (const reason of snapshot.reasons) recordContextTruncated(reason)
+        }
       }
 
       this.#writer.enqueue({

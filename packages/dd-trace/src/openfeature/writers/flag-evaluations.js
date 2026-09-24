@@ -6,7 +6,7 @@ const { FLAG_EVALUATION_FLUSH_INTERVAL, FLAG_EVALUATION_QUEUE_CAP } = require('.
 const { EVP_PROXY_PATH_V2 } = require('../../evp_proxy/constants')
 const { getEnvironmentVariables } = require('../../config/helper')
 const log = require('../../log')
-const { normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { normalizeTargetingKey, optionalKey, protectedErrorCode } = require('./flag-evaluation-pii')
 const {
   collectWorkerTelemetry, createWorkerState, recordDropped, recordTargetingKeyOmitted,
 } = require('./flag-evaluation-telemetry')
@@ -57,12 +57,15 @@ class FlagEvaluationsWriter {
   }
 
   hasCapacity () {
-    return this.isAvailable() &&
+    return this.getUnavailableReason() === undefined &&
       Atomics.load(this.#state, 0) < FLAG_EVALUATION_QUEUE_CAP && Atomics.load(this.#state, 1) < 0x7F_FF_F0_00
   }
 
-  isAvailable () {
-    return this.#enabled && !this.#closed && !this.#failed
+  /** @returns {'closed' | 'worker_failure' | 'unavailable' | undefined} */
+  getUnavailableReason () {
+    if (this.#closed) return 'closed'
+    if (this.#failed) return 'worker_failure'
+    return this.#enabled ? undefined : 'unavailable'
   }
 
   /**
@@ -84,7 +87,8 @@ class FlagEvaluationsWriter {
         this.#post({ type: 'enabled', enabled: true, route: serializedRoute })
       } else {
         const { Worker } = require('node:worker_threads')
-        // The worker must not initialize the application tracer through inherited preload options.
+        // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
+        // Strip preloads so the worker cannot initialize the application tracer recursively.
         const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
         this.#worker = new Worker(join(__dirname, 'flag-evaluation-worker.js'), {
           name: 'dd-flag-evaluation',
@@ -108,7 +112,7 @@ class FlagEvaluationsWriter {
   /** @param {FlagEvaluationEvent} event */
   enqueue (event) {
     if (!this.hasCapacity()) {
-      recordDropped(this.#closed ? 'closed' : this.#enabled ? 'queue_overflow' : 'unavailable')
+      recordDropped(this.getUnavailableReason() ?? 'queue_overflow')
       return false
     }
     const targetingKey = normalizeTargetingKey(event.targetingKey)
@@ -118,9 +122,9 @@ class FlagEvaluationsWriter {
     const consent = event.observeFullEvaluationData === true
     const normalized = {
       flagKey: normalizeTargetingKey(event.flagKey),
-      variant: normalizeTargetingKey(event.variant),
-      allocationKey: normalizeTargetingKey(event.allocationKey),
-      targetingRuleKey: normalizeTargetingKey(event.targetingRuleKey),
+      variant: optionalKey(event.variant),
+      allocationKey: optionalKey(event.allocationKey),
+      targetingRuleKey: optionalKey(event.targetingRuleKey),
       runtimeDefault: event.runtimeDefault === true,
       errorCode: protectedErrorCode(event.errorCode),
       targetingKey,
@@ -153,7 +157,9 @@ class FlagEvaluationsWriter {
     this.#enabled = false
     this.#cleanup()
     if (!this.#worker || this.#failed) return
-    // Keep only a bounded final drain alive. Ordinary traffic and idle workers never keep the app alive.
+    // Keep only a bounded final drain alive. An unresponsive worker can delay graceful
+    // exit by up to five seconds; unref'ing the deadline would not bypass the ref'd worker.
+    // Ordinary traffic and idle workers never keep the app alive.
     this.#worker.ref()
     this.#deadline = setTimeout(() => {
       this.#failureReason = 'shutdown_timeout'

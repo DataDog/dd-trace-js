@@ -8,6 +8,7 @@ const { describe, it } = require('mocha')
 
 const {
   normalizeTargetingKey,
+  optionalKey,
   prefixedTargetingKeyDigest,
   protectedErrorCode,
 } = require('../../../src/openfeature/writers/flag-evaluation-pii')
@@ -25,6 +26,16 @@ const APPROVED_CODES = [
 ]
 
 describe('flag evaluation privacy policy', () => {
+  it('omits empty optional dimensions without changing the targeting-key policy', () => {
+    for (const [input, expected] of [
+      [undefined, undefined], [null, undefined], ['', undefined], ['\uD800', undefined],
+      [42, undefined], [' on ', ' on '], ['\uD83D\uDE00', '\uD83D\uDE00'],
+    ]) {
+      assert.strictEqual(optionalKey(input), expected)
+    }
+    assert.strictEqual(normalizeTargetingKey(''), '')
+  })
+
   describe('targeting keys', () => {
     const vectors = [
       [

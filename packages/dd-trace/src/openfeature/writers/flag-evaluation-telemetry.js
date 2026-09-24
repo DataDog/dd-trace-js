@@ -12,7 +12,6 @@ const DROP_REASONS = new Set([
   'degraded_cap',
   'payload_limit',
   'serialization_error',
-  'delivery_overflow',
   'worker_failure',
   'shutdown_timeout',
 ])
