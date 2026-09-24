@@ -17,7 +17,7 @@ function collectFlushErrors (results) {
     reasons.push(result.reason)
   }
 
-  if (reasons.length > 0) return Promise.reject(getFlushError(reasons))
+  return reasons.length > 0 ? Promise.reject(getFlushError(reasons)) : undefined
 }
 
 /**

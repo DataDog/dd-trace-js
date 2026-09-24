@@ -40,7 +40,7 @@ function flushExporter (exporter) {
     if (typeof exporter.forceFlush === 'function') {
       exporter.forceFlush(done)
     } else {
-      exporter.flush(done, { reportErrors: true })
+      /** @type {Required<TraceExporter>} */ (exporter).flush(done, { reportErrors: true })
     }
   }
 

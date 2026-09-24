@@ -15,8 +15,9 @@ function collectReason (reason, reasons) {
 
 /**
  * Preserves a single rejection reason and aggregates independent failures.
- * @param {unknown[]} flushReasons
- * @returns {unknown}
+ * @template T
+ * @param {T[]} flushReasons
+ * @returns {T | AggregateError | undefined}
  */
 function getFlushError (flushReasons) {
   if (flushReasons.length < 2) return flushReasons[0]
