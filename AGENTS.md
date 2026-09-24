@@ -77,6 +77,7 @@ Every added or modified test must pass or be explicitly skipped under v5.
 ## Code Style
 
 - Use `npm run lint` and `npm run lint:fix`; lines are limited to 120 characters.
+- Run `npm run lint:editorconfig` after text edits; it requires Docker and runs as a separate CI job.
 - Use kebab-case filenames and end files with one newline.
 - Prefer optional chaining, destructuring, `undefined` over `null`, and short expressive names over abbreviations.
 - Comments should explain non-obvious intent, constraints, or trade-offs, not narrate the code.
