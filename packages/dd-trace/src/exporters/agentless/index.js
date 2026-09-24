@@ -29,9 +29,6 @@ class AgentlessExporter {
    */
   constructor (config) {
     this.#deliveryTracker = createServerlessDeliveryTracker()
-    if (!this.#deliveryTracker && TelemetryDeliveryTracker.isProcessTrackingEnabled()) {
-      this.#deliveryTracker = new TelemetryDeliveryTracker()
-    }
     this.#config = config
     const site = config.site ?? 'datadoghq.com'
 

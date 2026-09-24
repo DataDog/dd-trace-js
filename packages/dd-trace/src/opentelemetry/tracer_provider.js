@@ -4,7 +4,6 @@ const { trace, context, propagation } = require('@opentelemetry/api')
 const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentelemetry/core')
 
 const tracer = require('../../')
-const TelemetryDeliveryTracker = require('../serverless/telemetry-delivery-tracker')
 
 const ContextManager = require('./context_manager')
 const { MultiSpanProcessor, NoopSpanProcessor, settleAllFlushes } = require('./span_processor')
@@ -55,7 +54,6 @@ class TracerProvider {
   #tracers = new Map()
 
   constructor (config = {}) {
-    TelemetryDeliveryTracker.enableProcessTracking()
     tracer._tracer?._exporter?.enableDeliveryTracking?.()
     this.config = config
     this.resource = config.resource
@@ -125,6 +123,8 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
+    // The exporter does not exist yet when the provider is constructed before `tracer.init()`.
+    exporter.enableDeliveryTracking?.()
     return settleAllFlushes([
       flushExporter(exporter),
       this.#activeProcessor.forceFlush(),

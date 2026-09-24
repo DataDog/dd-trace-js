@@ -62,7 +62,6 @@ function handleAgentRequest (request, response) {
 
 /**
  * @param {Error & { status?: number }} error
- * @returns {boolean}
  */
 function isAgentFailure (error) {
   assert.strictEqual(error.status, 500)
@@ -70,21 +69,6 @@ function isAgentFailure (error) {
 }
 
 describe('OTel TracerProvider', () => {
-  let deliveryTrackingEnabled
-
-  before(() => {
-    deliveryTrackingEnabled = globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled
-  })
-
-  after(() => {
-    const ddTrace = globalThis[Symbol.for('dd-trace')]
-    if (deliveryTrackingEnabled === undefined) {
-      delete ddTrace.telemetryDeliveryTrackingEnabled
-    } else {
-      ddTrace.telemetryDeliveryTrackingEnabled = deliveryTrackingEnabled
-    }
-  })
-
   it('enables delivery tracking on the initialized exporter', () => {
     const datadogTracer = require('../../index')._tracer
     const originalExporter = datadogTracer._exporter
@@ -98,6 +82,30 @@ describe('OTel TracerProvider', () => {
     }
 
     sinon.assert.calledOnce(exporter.enableDeliveryTracking)
+  })
+
+  it('enables delivery tracking on an exporter created after the provider', async () => {
+    const datadogTracer = require('../../index')._tracer
+    const originalExporter = datadogTracer._exporter
+    const calls = []
+    const exporter = {
+      enableDeliveryTracking: sinon.spy(() => calls.push('enable')),
+      flush: sinon.spy((done) => {
+        calls.push('flush')
+        done()
+      }),
+    }
+    datadogTracer._exporter = undefined
+
+    try {
+      const provider = new TracerProvider()
+      datadogTracer._exporter = exporter
+      await provider.forceFlush()
+    } finally {
+      datadogTracer._exporter = originalExporter
+    }
+
+    assert.deepStrictEqual(calls, ['enable', 'flush'])
   })
 
   it('should register with OTel API', () => {

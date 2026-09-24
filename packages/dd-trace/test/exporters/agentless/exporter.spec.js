@@ -19,12 +19,8 @@ describe('AgentlessExporter', () => {
   let writer
   let initialHandlersSize
   let clock
-  let deliveryTrackingEnabled
 
   beforeEach(() => {
-    const ddTrace = globalThis[Symbol.for('dd-trace')]
-    deliveryTrackingEnabled = ddTrace.telemetryDeliveryTrackingEnabled
-    ddTrace.telemetryDeliveryTrackingEnabled = false
     clock = sinon.useFakeTimers()
 
     writer = {
@@ -49,13 +45,7 @@ describe('AgentlessExporter', () => {
   afterEach(() => {
     clock.restore()
     sinon.restore()
-    const ddTrace = globalThis[Symbol.for('dd-trace')]
-    ddTrace.beforeExitHandlers.clear()
-    if (deliveryTrackingEnabled === undefined) {
-      delete ddTrace.telemetryDeliveryTrackingEnabled
-    } else {
-      ddTrace.telemetryDeliveryTrackingEnabled = deliveryTrackingEnabled
-    }
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.clear()
   })
 
   describe('constructor', () => {
@@ -378,8 +368,8 @@ describe('AgentlessExporter', () => {
       Exporter = proxyquire('../../../src/exporters/agentless', {
         './writer': ControlledWriter,
       })
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ flushInterval: 1 })
+      exporter.enableDeliveryTracking()
       const done = sinon.spy()
 
       exporter.export([{ name: 'active' }])
@@ -428,8 +418,8 @@ describe('AgentlessExporter', () => {
     it('supports a tracked flush without a completion callback after a non-error failure', () => {
       const error = { toString: () => 'writer failed' }
       writer.flush.callsFake(() => { throw error })
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ flushInterval: 1000 })
+      exporter.enableDeliveryTracking()
 
       exporter.flush()
 
@@ -438,8 +428,8 @@ describe('AgentlessExporter', () => {
 
     it('suppresses tracked synchronous writer failures by default', () => {
       writer.flush.throws(new Error('writer failed'))
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ flushInterval: 1000 })
+      exporter.enableDeliveryTracking()
       const done = sinon.spy()
 
       exporter.flush(done)

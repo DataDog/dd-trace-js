@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const URL = require('url').URL
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -19,18 +19,14 @@ describe('Exporter', () => {
   let prioritySampler
   let span
   let writerOptions
-  let deliveryTrackingEnabled
 
   beforeEach(() => {
-    const ddTrace = globalThis[Symbol.for('dd-trace')]
-    deliveryTrackingEnabled = ddTrace.telemetryDeliveryTrackingEnabled
-    ddTrace.telemetryDeliveryTrackingEnabled = false
     url = 'http://www.example.com:8126'
     flushInterval = 1000
     span = {}
     writer = {
       append: sinon.spy(),
-      enableDeliveryTracking: sinon.spy(),
+      enableDeliveryTracking: sinon.spy(deliveryTracker => { writerOptions.deliveryTracker = deliveryTracker }),
       flush: sinon.spy(),
       setUrl: sinon.spy(),
     }
@@ -42,15 +38,6 @@ describe('Exporter', () => {
     Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer,
     })
-  })
-
-  afterEach(() => {
-    const ddTrace = globalThis[Symbol.for('dd-trace')]
-    if (deliveryTrackingEnabled === undefined) {
-      delete ddTrace.telemetryDeliveryTrackingEnabled
-    } else {
-      ddTrace.telemetryDeliveryTrackingEnabled = deliveryTrackingEnabled
-    }
   })
 
   it('does not enable delivery tracking without an OTel TracerProvider', () => {
@@ -66,13 +53,6 @@ describe('Exporter', () => {
     exporter.enableDeliveryTracking()
 
     sinon.assert.calledOnceWithExactly(writer.enableDeliveryTracking, sinon.match.object)
-  })
-
-  it('enables delivery tracking when process tracking is already enabled', () => {
-    globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
-    exporter = new Exporter({ url, flushInterval }, prioritySampler)
-
-    assert.ok(writerOptions.deliveryTracker)
   })
 
   it('keeps serverless delivery tracking without an OTel TracerProvider', () => {
@@ -177,8 +157,8 @@ describe('Exporter', () => {
       writer.flush = sinon.spy(done => {
         writerOptions.deliveryTracker.track(callback => callbacks.push(callback), done)
       })
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.export([span])
@@ -195,8 +175,8 @@ describe('Exporter', () => {
       const flushDirect = sinon.spy(done => callbacks.push(done))
       writer.flushDirect = flushDirect
       writer.flush = sinon.spy(done => writerOptions.deliveryTracker.track(flushDirect, done))
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       // This is the path the encoder uses when it crosses its soft limit.
@@ -229,8 +209,8 @@ describe('Exporter', () => {
         writerOptions.deliveryTracker.track(callback => { inFlightDone = callback }, done)
       })
       writer.flush.onSecondCall().throws(new Error('encode failed'))
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.export([span])
@@ -246,8 +226,8 @@ describe('Exporter', () => {
       writer.flush = sinon.spy(done => {
         writerOptions.deliveryTracker.track(complete => complete(error), done)
       })
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.flush(flushed, { reportErrors: true })
@@ -259,8 +239,8 @@ describe('Exporter', () => {
       writer.flush = sinon.spy(done => {
         writerOptions.deliveryTracker.track(complete => complete(new Error('agent failed')), done)
       })
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.flush(flushed)
@@ -277,8 +257,8 @@ describe('Exporter', () => {
     })
 
     it('supports a tracked flush without a completion callback', () => {
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
 
       exporter.flush()
 
@@ -296,8 +276,8 @@ describe('Exporter', () => {
       writer.flush.onSecondCall().callsFake(done => {
         writerOptions.deliveryTracker.track(() => { throw boundaryError }, done)
       })
-      globalThis[Symbol.for('dd-trace')].telemetryDeliveryTrackingEnabled = true
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.export([span])

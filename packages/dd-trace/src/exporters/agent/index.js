@@ -13,9 +13,6 @@ class AgentExporter {
 
   constructor (config, prioritySampler) {
     this.#deliveryTracker = createServerlessDeliveryTracker()
-    if (!this.#deliveryTracker && TelemetryDeliveryTracker.isProcessTrackingEnabled()) {
-      this.#deliveryTracker = new TelemetryDeliveryTracker()
-    }
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled, flushInterval } = config
     this._url = config.url
