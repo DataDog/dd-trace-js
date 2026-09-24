@@ -274,6 +274,25 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       assert.equal(apmTags['gen_ai.usage.total_tokens'], 4)
     })
 
+    // the markers are field names, so text about token usage is still only text
+    it('does not retain a frame whose generated text mentions the usage fields', () => {
+      const ctx = buildStreamCtx('req-invoke-stream-prose')
+
+      streamedChunkCh.publish({
+        ctx,
+        chunk: invokeModelChunk({ outputText: 'On "usage": the inputTextTokenCount field reports it.' }),
+      })
+      assert.equal(ctx.chunks, undefined)
+
+      streamedChunkCh.publish({
+        ctx,
+        chunk: invokeModelChunk({ 'amazon-bedrock-invocationMetrics': { inputTokenCount: 3, outputTokenCount: 1 } }),
+      })
+      completeCh.publish(ctx)
+
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 4)
+    })
+
     it('omits usage for a streamed invokeModel whose chunks report no invocation metrics', () => {
       const ctx = buildStreamCtx('req-invoke-stream-none')
 

@@ -26,11 +26,17 @@ const ENABLED_OPERATIONS = new Set([
 ])
 const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 
-// Byte markers for the fields the stream extractor reads token counts out of: the invocation
-// metrics every provider can send, Amazon's own `*TokenCount` pair, and Anthropic's `message.usage`.
-// Matching is a byte search over the raw frame, so a chunk carrying nothing but generated text is
-// dropped instead of held until the response completes.
-const USAGE_MARKERS = ['invocationMetrics', 'TokenCount', 'usage'].map(marker => Buffer.from(marker))
+// The fields the stream extractor reads token counts out of: the invocation metrics every provider
+// can send, Amazon's own pair, and Anthropic's `message.usage`. Matching is a byte search over the
+// raw frame, so a chunk carrying nothing but generated text is dropped instead of held until the
+// response completes. Quoted, so that a field name matches and prose does not: a quote inside a
+// JSON string arrives escaped, leaving `\"usage\"` where the closing quote would be.
+const USAGE_MARKERS = [
+  '"amazon-bedrock-invocationMetrics"',
+  '"inputTextTokenCount"',
+  '"totalOutputTextTokenCount"',
+  '"usage"',
+].map(field => Buffer.from(field))
 
 /**
  * @typedef {{
