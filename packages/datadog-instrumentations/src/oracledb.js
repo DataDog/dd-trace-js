@@ -22,19 +22,19 @@ const poolSessionStartChannel = channel('apm:oracledb:pool:session:start')
 const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
 
 /**
- * @param {{
- *   connectionAttrs: { homogeneous: boolean, user?: string },
- *   poolAttrs: object,
- *   user?: string
- * }} acquireCtx
- * @param {{ user?: string }} connection
+ * OracleDB only sets `Connection#user` for standalone connections, and Thick mode leaves the
+ * schema fallback empty, so a heterogeneous pool's user comes from the acquisition options.
+ *
+ * @param {{ homogeneous: boolean, user?: string }} connectionAttrs
+ * @param {unknown} options
+ * @returns {string | undefined}
  */
-function setAcquiredConnection (acquireCtx, connection) {
-  connectionAttributes.set(connection, acquireCtx.poolAttrs)
-  if (!acquireCtx.connectionAttrs.homogeneous) {
-    const user = connection.user
-    if (user !== undefined) acquireCtx.user = user
+function getAcquireUser (connectionAttrs, options) {
+  if (connectionAttrs.homogeneous || typeof options !== 'object' || options === null) {
+    return connectionAttrs.user
   }
+  const { user, username } = /** @type {{ user?: string, username?: string }} */ (options)
+  return user ?? username ?? connectionAttrs.user
 }
 
 function finish (ctx) {
@@ -56,7 +56,9 @@ function wrapPoolGetConnection (getConnection) {
     const poolAttrs = poolAttributes.get(pool)
     const connectionAttrs = poolConnectionAttributes.get(pool)
     const callback = typeof args.at(-1) === 'function' ? args.at(-1) : undefined
-    const acquireCtx = poolAcquireStartChannel.hasSubscribers ? { pool, poolAttrs, connectionAttrs } : undefined
+    const acquireCtx = poolAcquireStartChannel.hasSubscribers
+      ? { pool, connectionAttrs, poolAttrs, user: getAcquireUser(connectionAttrs, args[0]) }
+      : undefined
     const sessionCtx = connectionAttrs.hasSessionCallback && poolSessionStartChannel.hasSubscribers
       ? { poolAttrs }
       : undefined
@@ -64,11 +66,7 @@ function wrapPoolGetConnection (getConnection) {
     if (callback) {
       args[args.length - 1] = shimmer.wrapFunction(callback, callback => function (error, connection) {
         if (connection) {
-          if (acquireCtx === undefined) {
-            connectionAttributes.set(connection, poolAttrs)
-          } else {
-            setAcquiredConnection(acquireCtx, connection)
-          }
+          connectionAttributes.set(connection, poolAttrs)
         }
         if (acquireCtx === undefined) {
           return callPoolCallback(sessionCtx, callback, this, arguments)
@@ -122,7 +120,7 @@ function wrapPoolGetConnection (getConnection) {
 
     return promise.then(
       connection => {
-        setAcquiredConnection(acquireCtx, connection)
+        connectionAttributes.set(connection, poolAttrs)
         poolAcquireFinishChannel.publish(acquireCtx)
         return connection
       },
@@ -143,7 +141,8 @@ function wrapPoolGetConnection (getConnection) {
  *   connectionString?: string,
  *   homogeneous?: boolean,
  *   sessionCallback?: Function,
- *   user?: string
+ *   user?: string,
+ *   username?: string
  * }} poolAttrs
  */
 function storePoolAttributes (pool, poolAttrs) {
@@ -152,7 +151,8 @@ function storePoolAttributes (pool, poolAttrs) {
     connectString: pool.connectString ?? poolAttrs.connectString ?? poolAttrs.connectionString,
     hasSessionCallback: typeof pool.sessionCallback === 'function',
     homogeneous: pool.homogeneous ?? poolAttrs.homogeneous ?? true,
-    user: pool.user ?? poolAttrs.user,
+    // OracleDB 5 accepts the `username` alias but only copies `user`/`userName` to `pool.user`.
+    user: pool.user ?? poolAttrs.user ?? poolAttrs.username,
   })
   if (Object.hasOwn(pool, 'getConnection')) {
     shimmer.wrap(pool, 'getConnection', wrapPoolGetConnection)
