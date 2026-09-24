@@ -50,7 +50,17 @@ The latter two measure capture near the retained-field limit and the cost of
 discarding excess input. Protected-mode size variants and hostile inputs remain
 available on demand, rather than multiplying the end-to-end CI matrix. This keeps
 the current suite within six 24-core groups without reducing retained scenarios'
-iterations, operation counts, privacy checks, or startup-share assertions.
+iterations, privacy checks, or startup-share assertions.
+
+`scale-full` uses 20,000 measured evaluations on Node 20 and 40,000 on newer
+runtimes through the runner's existing `operations_by_node` setting. Node 20
+takes substantially longer per evaluation on both baseline and candidate:
+40,000 made the candidate's 12 repetitions take over 18 minutes, leaving too
+little of the 30-minute CI job for the baseline. At 20,000, Node 20 passed both
+CI sides and measured below 4% setup share in workspace checks. Newer runtimes
+need 40,000 to leave headroom below the unchanged 7% setup-share guard.
+Both sides use the same count for each runtime; 500 warmup evaluations,
+12 repetitions, context dimensions, and all delivery/privacy checks stay unchanged.
 
 Run the additional cases from this directory:
 
