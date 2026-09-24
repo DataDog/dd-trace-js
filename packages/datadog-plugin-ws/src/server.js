@@ -5,6 +5,10 @@ const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
 const { getSegment } = require('../../dd-trace/src/util')
 const {
+  INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const {
   createWebSocketSpanContext,
   hasTraceHeaders,
   initWebSocketMessageCounters,
@@ -48,17 +52,24 @@ class WSServerPlugin extends TracingPlugin {
     const childOf = this.tracer.extract(HTTP_HEADERS, req.headers)
 
     const service = this.serviceName({ pluginConfig: this.config })
+    const meta = {
+      'span.type': 'websocket',
+      'http.upgraded': 'websocket',
+      'http.method': options.method,
+      'http.url': uri,
+      'resource.name': resourceName,
+      'span.kind': 'server',
+    }
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      const httpResource = otelHttpResourceName(options.method)
+      meta['resource.name'] = httpResource
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = httpResource
+    }
+
     const span = this.startSpan(this.operationName(), {
       service,
       childOf,
-      meta: {
-        'span.type': 'websocket',
-        'http.upgraded': 'websocket',
-        'http.method': options.method,
-        'http.url': uri,
-        'resource.name': resourceName,
-        'span.kind': 'server',
-      },
+      meta,
 
     }, ctx)
     ctx.span = span

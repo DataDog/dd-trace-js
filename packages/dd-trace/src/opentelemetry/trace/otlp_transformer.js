@@ -5,6 +5,11 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
+const { SAMPLING_PRIORITY_KEY } = require('../../constants')
+const {
+  INT_VALUED_OTEL_ATTRIBUTES,
+  isCanonicalIntegerAttribute,
+} = require('../../plugins/util/http-otel-semantics')
 
 const { protoSpanKind } = getProtobufTypes()
 const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
@@ -77,6 +82,9 @@ const EXCLUDED_META_KEYS = new Set([
 // DD-only error tags that should not appear as attributes when OTel trace semantics are enabled.
 const DD_ERROR_META_KEYS = new Set(['error.message'])
 
+// Typed as ints by the semantic conventions but carried in `meta`, since the agent protocol is
+// all strings. Promoted back here rather than duplicated into `metrics`, which would emit the
+// attribute twice with two types. Same approach as DataDog/dd-trace-go#4888.
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
@@ -129,6 +137,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #transformScopeSpans (spans) {
     let traceKey
     let traceIdHigh
+    const priority = spans[0]?.metrics?.[SAMPLING_PRIORITY_KEY]
+    const flags = Number.isFinite(priority) && priority > 0 ? 1 : 0
     const otlpSpans = spans.map((span) => {
       // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
       // Reset at each trace boundary for batching of multiple traces.
@@ -137,7 +147,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         traceKey = key
         traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
       }
-      return this.#transformSpan(span, traceIdHigh)
+      return this.#transformSpan(span, traceIdHigh, flags)
     })
     return [{
       scope: {
@@ -156,9 +166,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {DDFormattedSpan} span - DD-formatted span to transform
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
+   * @param {number} flags - Trace-level OTLP sampled flag
    * @returns {object} OTLP Span object
    */
-  #transformSpan (span, traceIdHigh) {
+  #transformSpan (span, traceIdHigh, flags) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
 
@@ -177,6 +188,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       links: links.length ? links : undefined,
       droppedLinksCount: 0,
       status: this.#mapStatus(span),
+      flags,
     }
   }
 
@@ -215,6 +227,12 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
+        if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+          if (isCanonicalIntegerAttribute(value)) {
+            attributes.push({ key, value: { intValue: Number(value) } })
+          }
+          continue
+        }
         attributes.push({ key, value: { stringValue: value } })
       }
     }
@@ -222,6 +240,13 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     // Add metrics as numeric attributes
     if (span.metrics) {
       for (const [key, value] of Object.entries(span.metrics)) {
+        if (
+          this.#otelTraceSemanticsEnabled &&
+          INT_VALUED_OTEL_ATTRIBUTES.has(key) &&
+          !isCanonicalIntegerAttribute(value)
+        ) {
+          continue
+        }
         if (Number.isInteger(value)) {
           attributes.push({ key, value: { intValue: value } })
         } else {

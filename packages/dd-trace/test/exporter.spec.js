@@ -40,6 +40,97 @@ describe('exporter', () => {
     assert.strictEqual(Exporter, LogExporter)
   })
 
+  it('should report the Lambda log transport so OTel semantics cannot replace it', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+
+    // The only route to the backend from there, so the forced OTLP export has to leave it alone.
+    assert.strictEqual(require('../src/exporter').usesLambdaLogExporter(), true)
+  })
+
+  it('should not report the Lambda log transport when an agent is present', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    const stub = sinon.stub(fs, 'existsSync')
+    stub.withArgs(DATADOG_MINI_AGENT_PATH).returns(true)
+
+    assert.strictEqual(require('../src/exporter').usesLambdaLogExporter(), false)
+    stub.restore()
+  })
+
+  it('should not report the Lambda log transport outside Lambda', () => {
+    assert.strictEqual(require('../src/exporter').usesLambdaLogExporter(), false)
+  })
+
+  it('should require the Lambda log transport when no OTLP collector was configured', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+
+    assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true)
+  })
+
+  it('should require the Lambda log transport when configured OTLP endpoints are empty', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+
+    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+      process.env[key] = ''
+
+      assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), true, key)
+      delete process.env[key]
+    }
+  })
+
+  it('should yield to either explicitly configured OTLP endpoint in Lambda', () => {
+    // `createOtlpTraceExporter` reads the trace-specific one, so both have to count.
+    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env[key] = 'http://collector:4318'
+
+      assert.strictEqual(require('../src/exporter').requiresLambdaLogExporter(), false, key)
+      delete process.env[key]
+    }
+  })
+
+  describe('usesOtlpTraceExporter', () => {
+    function config (overrides = {}) {
+      return {
+        OTEL_TRACES_EXPORTER: 'otlp',
+        isCiVisibility: false,
+        experimental: {},
+        getOrigin: () => 'env_var',
+        ...overrides,
+      }
+    }
+
+    it('should select OTLP when requested without a transport exception', () => {
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), true)
+    })
+
+    it('should not select OTLP when it is not requested', () => {
+      assert.strictEqual(
+        require('../src/exporter').usesOtlpTraceExporter(config({ OTEL_TRACES_EXPORTER: 'none' })),
+        false
+      )
+    })
+
+    it('should not select OTLP for Test Optimization', () => {
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config({ isCiVisibility: true })), false)
+    })
+
+    it('should not select OTLP for Electron', () => {
+      const electronConfig = config({ experimental: { exporter: 'electron' } })
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(electronConfig), false)
+    })
+
+    it('should select explicitly configured OTLP in Lambda without an endpoint', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), true)
+    })
+
+    it('should not select OTLP forced by OTel semantics when Lambda requires log export', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      const forcedConfig = config({ getOrigin: () => 'calculated' })
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(forcedConfig), false)
+    })
+  })
+
   it('should create an AgentExporter when in Lambda environment with an extension', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
     const stub = sinon.stub(fs, 'existsSync')

@@ -2,6 +2,7 @@
 
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
+const { INSTRUMENTATION_HTTP_RESOURCE, otelHttpResourceName } = require('./http-otel-semantics')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -66,6 +67,9 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
   }
 
   const proxySpanInfo = supportedProxies[proxyContext.proxySystemName]
+  const resourcePath = proxyContext.resourcePath || proxyContext.path
+  const otelSemantics = config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+  let resourceName = `${proxyContext.method} ${resourcePath}`
 
   log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
@@ -83,6 +87,11 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
   if (proxyContext.accountId) meta.account_id = proxyContext.accountId
   if (proxyContext.apiId) meta.apiid = proxyContext.apiId
   if (proxyContext.awsUser) meta.aws_user = proxyContext.awsUser
+  if (otelSemantics) {
+    resourceName = otelHttpResourceName(proxyContext.method, proxyContext.resourcePath)
+    meta[RESOURCE_NAME] = resourceName
+    meta[INSTRUMENTATION_HTTP_RESOURCE] = resourceName
+  }
 
   const span = startSpanHelper(tracer, proxySpanInfo.spanName, {
     childOf,
@@ -97,14 +106,13 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
 
   log.debug('Successfully created inferred proxy span.')
 
-  setInferredProxySpanTags(span, proxyContext)
+  setInferredProxySpanTags(span, proxyContext, resourceName)
 
   return childOf
 }
 
-function setInferredProxySpanTags (span, proxyContext) {
-  const resourcePath = proxyContext.resourcePath || proxyContext.path
-  span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
+function setInferredProxySpanTags (span, proxyContext, resourceName) {
+  span.setTag(RESOURCE_NAME, resourceName)
   span.setTag('_dd.inferred_span', 1)
 
   // Set dd_resource_key as API Gateway ARN if we have the required components

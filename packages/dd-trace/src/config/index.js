@@ -419,7 +419,41 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+    // Checking if OTel semantics can be enabled, since it requires OTLP exporting.
+
+    // Electron exporter does not support OTLP.
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && this.experimental.exporter === exporters.ELECTRON) {
+      log.warn(
+        'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      )
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+    }
+
+    // Lambda Extension and mini-agent support OTLP, but it's disabled by default;
+    // we'll only enable OTel semantics if an explicit OTLP endpoint is configured.
+    const awsLambdaFuncName = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+    const hasOtlpTraceEndpoint = this.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
+      this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && awsLambdaFuncName !== undefined && !hasOtlpTraceEndpoint) {
+      log.warn(
+        'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      )
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+    }
+
+    // Test Optimization does not support OTLP export.
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && this.isCiVisibility) {
+      log.warn('Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false')
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+    }
+
+    if (!this.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
+        this.OTEL_TRACES_EXPORTER === 'otlp' &&
+        trackedConfigOrigins.has('protocolVersion')) {
       log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
@@ -442,7 +476,18 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
-    if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      if (this.spanAttributeSchema !== 'v0') {
+        log.warn('Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0')
+      }
+      if (this.spanComputePeerService) {
+        log.warn(
+          'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
+        )
+      }
+      setAndTrack(this, 'spanAttributeSchema', 'v0')
+      setAndTrack(this, 'spanComputePeerService', false)
+    } else if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
       setAndTrack(this, 'spanComputePeerService', true)
     }
 
@@ -470,7 +515,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
-    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+    if (awsLambdaFuncName && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       setAndTrack(this, 'flushInterval', 0)
     }
 
@@ -596,7 +641,7 @@ class Config extends ConfigBase {
       if (!this.service) {
         const serverlessName = IS_SERVERLESS
           ? (
-              getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
+              awsLambdaFuncName ||
               getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
               getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
               getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions
@@ -702,8 +747,8 @@ class Config extends ConfigBase {
     const otlpAgentlessOrigin = agentlessTracingEnabled && !this.OTEL_EXPORTER_OTLP_ENDPOINT
       ? createSiteUrl(this.site, 'otlp')?.origin
       : undefined
-    const defaultOtlpBase = otlpAgentlessOrigin ??
-      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+    const defaultOtlpBase = otlpAgentlessOrigin ||
+      this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') || `http://${agentHostname}:4318`
 
     const assignOtlpHeaderApiKey = (configName) => {
       if (otlpAgentlessOrigin) {

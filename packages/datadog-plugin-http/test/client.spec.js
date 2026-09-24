@@ -74,7 +74,7 @@ describe('Plugin', () => {
 
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = express()
-          app.get('/user', (req, res) => {
+          app.all('/user', (req, res) => {
             res.status(200).send()
           })
 
@@ -83,16 +83,16 @@ describe('Plugin', () => {
               // OpenTelemetry attribute names are present...
               assertObjectContains(span, {
                 type: 'http',
-                resource: 'GET',
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
-                },
-                metrics: {
-                  'http.response.status_code': 200,
-                  'server.port': port,
+                  // Every attribute leaves on the agent protocol as a `meta` string.
+                  'http.response.status_code': '200',
+                  'server.port': String(port),
                 },
               })
               // ...and the Datadog ones are absent.
@@ -103,7 +103,7 @@ describe('Plugin', () => {
               assert.ok(!Object.hasOwn(span.meta, 'error.type'))
             }).then(done).catch(done)
 
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, { method: 'PROPFIND' }, res => {
               res.on('data', () => {})
             })
             req.end()
@@ -119,12 +119,36 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
-                meta: { 'error.type': '400' },
-                metrics: { 'http.response.status_code': 400 },
+                meta: { 'error.type': '400', 'http.response.status_code': '400' },
+                error: 1,
               })
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('marks a 5xx client response as an error, unlike the Datadog default', done => {
+          // OTel treats a client 5xx as an error, so the flag widens the default
+          // client error range to 400-599. The decision is made at capture time so
+          // the span, the trace stats and the exported payload all agree.
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'error.type': '503', 'http.response.status_code': '503' },
+                error: 1,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
               res.on('data', () => {})
             })
             req.end()
@@ -145,6 +169,42 @@ describe('Plugin', () => {
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+      })
+
+      describe('with OTel semantics and an explicit default client error range', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '400-499'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+        })
+
+        it('does not mark a 5xx client response as an error', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'http.response.status_code': '503' },
+                error: 0,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
               res.on('data', () => {})
             })
             req.end()

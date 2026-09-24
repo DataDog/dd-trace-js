@@ -12,28 +12,69 @@ async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
     ? agent.assertTelemetryReceived({ fn: onMessage, requestType: 'generate-metrics', timeout })
     : agent.assertMessageReceived(onMessage, timeout)
 
-  const [res] = await Promise.all([
-    messageReceiver,
-    /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('Process timed out'))
-      }, timeout)
-
-      proc
-        .on('error', reject)
-        .on('exit', (code) => {
-          clearTimeout(timer)
-
-          if (code !== 0) {
-            reject(new Error(`Process exited with unexpected status code ${code}.`))
-          } else {
-            resolve()
-          }
-        })
-    })),
-  ])
+  const [res] = await Promise.all([messageReceiver, waitForExit(proc, timeout)])
 
   return res
+}
+
+/**
+ * @param {import('child_process').ChildProcess} proc
+ * @param {number} timeout
+ * @returns {Promise<void>}
+ */
+function waitForExit (proc, timeout) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Process timed out'))
+    }, timeout)
+
+    proc
+      .on('error', reject)
+      .on('exit', (code) => {
+        clearTimeout(timer)
+
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Process exited with unexpected status code ${code}.`))
+        }
+      })
+  })
+}
+
+/**
+ * Collects spans from the fake agent's OTLP receiver until `count` have arrived.
+ *
+ * @param {import('./helpers').FakeAgent} agent
+ * @param {number} count
+ * @param {number} timeout
+ * @returns {Promise<Array<{ name: string, traceId: string, spanId: string, parentSpanId: string }>>}
+ */
+function waitForOtlpSpans (agent, count, timeout) {
+  return new Promise((resolve, reject) => {
+    const spans = []
+
+    const onTraces = ({ payload }) => {
+      for (const resourceSpan of payload.resourceSpans) {
+        for (const scopeSpan of resourceSpan.scopeSpans) {
+          spans.push(...scopeSpan.spans)
+        }
+      }
+
+      if (spans.length >= count) {
+        clearTimeout(timer)
+        agent.off('otlp-traces', onTraces)
+        resolve(spans)
+      }
+    }
+
+    const timer = setTimeout(() => {
+      agent.off('otlp-traces', onTraces)
+      reject(new Error(`Timed out waiting for ${count} OTLP spans, received ${spans.length}`))
+    }, timeout)
+
+    agent.on('otlp-traces', onTraces)
+  })
 }
 
 function allEqual (spans, fn) {
@@ -373,6 +414,9 @@ describe('opentelemetry', function () {
 
   it('should work with otel express & http auto instrumentation', async () => {
     const SERVER_PORT = 6666
+    // The flag moves trace export onto OTLP, so these spans never reach the Datadog endpoint.
+    const spansPromise = waitForOtlpSpans(agent, 9, 10_000)
+
     proc = fork(join(cwd, 'opentelemetry/auto-instrumentation.js'), {
       cwd,
       env: {
@@ -381,44 +425,43 @@ describe('opentelemetry', function () {
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
         DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
       },
     })
-    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
+    // Attached before the request: the child can exit while `getWithRetry` is still resolving, and
+    // `ChildProcess` does not replay an `exit` that already fired.
+    const exitPromise = waitForExit(proc, 10_000)
 
-    await check(agent, proc, 10_000, ({ payload }) => {
-      assert.strictEqual(payload.length, 2)
-      // combine the traces
-      const trace = payload.flat()
-      assert.strictEqual(trace.length, 9)
+    const requestPromise = getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
+    const [spans] = await Promise.all([spansPromise, exitPromise, requestPromise])
 
-      // Should have expected span resource names and ordering
-      assert.ok(eachEqual(trace, [
-        'GET /second-endpoint',
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /second-endpoint',
-        'GET /first-endpoint',
-        'middleware - query',
-        'middleware - expressInit',
-        'request handler - /first-endpoint',
-        'GET',
-      ],
-      (span) => span.resource))
+    assert.strictEqual(spans.length, 9)
 
-      assert.ok(allEqual(trace, (span) => {
-        span.trace_id.toString()
-      }))
+    // The OTLP span name carries what this test read from the Datadog `resource`.
+    assert.ok(eachEqual(spans, [
+      'GET /second-endpoint',
+      'middleware - query',
+      'middleware - expressInit',
+      'request handler - /second-endpoint',
+      'GET /first-endpoint',
+      'middleware - query',
+      'middleware - expressInit',
+      'request handler - /first-endpoint',
+      'GET',
+    ],
+    (span) => span.name))
 
-      const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = trace
-      isChildOf(query1, get1)
-      isChildOf(init1, get1)
-      isChildOf(handler1, get1)
-      isChildOf(get2, get1)
-      isChildOf(get3, get2)
-      isChildOf(query2, get3)
-      isChildOf(init2, get3)
-      isChildOf(handler2, get3)
-    })
+    assert.ok(allEqual(spans, (span) => span.traceId))
+
+    const [get3, query2, init2, handler2, get1, query1, init1, handler1, get2] = spans
+    isChildOfOtlpSpan(query1, get1)
+    isChildOfOtlpSpan(init1, get1)
+    isChildOfOtlpSpan(handler1, get1)
+    isChildOfOtlpSpan(get2, get1)
+    isChildOfOtlpSpan(get3, get2)
+    isChildOfOtlpSpan(query2, get3)
+    isChildOfOtlpSpan(init2, get3)
+    isChildOfOtlpSpan(handler2, get3)
   })
 
   it('should auto-instrument @opentelemetry/sdk-node', async () => {
@@ -452,10 +495,10 @@ describe('opentelemetry', function () {
   })
 })
 
-function isChildOf (childSpan, parentSpan) {
-  assert.strictEqual(childSpan.trace_id.toString(), parentSpan.trace_id.toString())
-  assert.notStrictEqual(childSpan.span_id.toString(), parentSpan.span_id.toString())
-  assert.strictEqual(childSpan.parent_id.toString(), parentSpan.span_id.toString())
+function isChildOfOtlpSpan (childSpan, parentSpan) {
+  assert.strictEqual(childSpan.traceId, parentSpan.traceId)
+  assert.notStrictEqual(childSpan.spanId, parentSpan.spanId)
+  assert.strictEqual(childSpan.parentSpanId, parentSpan.spanId)
 }
 
 function sortMetricTags (metrics) {

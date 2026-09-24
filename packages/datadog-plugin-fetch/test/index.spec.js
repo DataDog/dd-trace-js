@@ -68,9 +68,7 @@ describe('Plugin', function () {
               'span.kind': 'client',
               'http.request.method': 'GET',
               'url.full': `http://localhost:${port}/user?foo=bar`,
-            },
-            metrics: {
-              'http.response.status_code': 200,
+              'http.response.status_code': '200',
             },
           })
             .then(done)
