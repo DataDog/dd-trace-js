@@ -21,18 +21,16 @@ Choose one mode before reading: **add** follows source → hook → plugin → f
 reads the diff and only contracts it invokes; **debug/fix** reproduces → finds the owner → covers siblings; hand a
 cloud-function invocation to `serverless-integrations`.
 
-Run `npm run verify:integration-skills` after checkout, rebase, or skill edits; derive a fresh task map with
-`npm run inspect:integration -- <id> --mode <add|review|debug> [--package <npm-name>] [--traits <list>]`. Name the
-expected base (`database`, `router`, etc.) and mechanisms (`orchestrion`, `callback`, `cjs-esm`) as traits. Traits
-select reading references; they never prove the implementation's base or behavior. Treat the packet as navigation,
-not a semantic summary: package names come from the hook/plugin registries, while missing entries are candidates.
+Run `npm run verify:integration-skills` after checkout, rebase, or skill edits. Package names come from the
+`packages/datadog-instrumentations/src/helpers/hooks.js` and `packages/dd-trace/src/plugins/index.js` registries,
+not from the integration id.
 
 Read the exact upstream source and public call first; record arguments, receiver, return identity, errors, and
-completion. Compare CJS/ESM builds and version boundaries when they differ. Read every `targets.plugins` file and
-`evidence.contractSources`; direct plugin overrides outrank inherited defaults. Read `targets.dependents` before
-changing cross-plugin ownership. `channelAnchors` locate declared and manual subscriptions but are not a complete
-subscriber inventory; search every subscriber when changing a channel or its cardinality. Then read one closest
-reference and expand only for a named unresolved question.
+completion. Compare CJS/ESM builds and version boundaries when they differ. Read every plugin file and the base
+classes it extends; direct plugin overrides outrank inherited defaults. Search other `datadog-plugin-*` packages for
+requires of the plugin before changing cross-plugin ownership, and search every subscriber when changing a channel or
+its cardinality. Then read one closest existing integration with the same base and mechanism, and expand only for a
+named unresolved question.
 
 For a review, return correctness findings only. For a design, return decisions, touched ledgers, tests, and
 unresolved evidence. Omit workflow recaps and consulted-file inventories unless requested.
