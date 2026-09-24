@@ -3,7 +3,8 @@
 const { execFileSync } = require('node:child_process')
 const { setTimeout: sleep } = require('node:timers/promises')
 
-const ATTEMPTS = 19
+// Poll immediately and then every 10 seconds for up to 10 minutes.
+const ATTEMPTS = 61
 const INTERVAL_MS = 10_000
 // The merge_group payload has no pull request object. Fail closed if GitHub changes its generated ref format.
 const mergeGroupHeadPattern = /^refs\/heads\/gh-readonly-queue\/(v[0-9]+\.x)\/pr-([1-9][0-9]*)-[0-9a-f]{40}$/
