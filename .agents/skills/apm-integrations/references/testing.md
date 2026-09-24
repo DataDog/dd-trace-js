@@ -24,14 +24,21 @@ needed.
 
 ## Commands
 
-Unset `OTEL_TRACES_EXPORTER`, `OTEL_LOGS_EXPORTER`, and `OTEL_METRICS_EXPORTER` before span assertions. Then use the
-current workflow's `PLUGINS`, `SPEC`, and `SERVICES` values with:
+Unset `OTEL_TRACES_EXPORTER`, `OTEL_LOGS_EXPORTER`, and `OTEL_METRICS_EXPORTER` before span assertions.
+Use the owning workflow's `PLUGINS` value:
 
 ```bash
-yarn services
-npm run test:plugins
+PLUGINS="<name>" yarn services
+PLUGINS="<name>" npm run test:plugins
 ./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
 ```
 
-Run nyc with `--include` scoped to changed production files and inspect changed lines and branches. Copy service
-startup and readiness from the owning workflow instead of inventing a Docker service name.
+For service-backed tests, use the workflow's Docker service and `SERVICES` values:
+
+```bash
+docker compose up -d <service>
+SERVICES="<service>" PLUGINS="<name>" npm run test:plugins:ci
+```
+
+Add `SPEC="<prefix>"` to the test command when the workflow narrows the spec selection.
+Run nyc with `--include` scoped to changed production files and inspect changed lines and branches.

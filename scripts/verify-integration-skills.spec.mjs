@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, it } from 'mocha'
@@ -213,12 +213,12 @@ function runTool (args = [], mutate) {
 
     const claudeSkills = join(root, '.claude', 'skills')
     mkdirSync(claudeSkills, { recursive: true })
-    symlinkSync('../../.agents/skills/apm-integrations', join(claudeSkills, 'apm-integrations'))
-    symlinkSync('../../.agents/skills/serverless-integrations', join(claudeSkills, 'serverless-integrations'))
+    symlinkSync('../../.agents/skills/apm-integrations', join(claudeSkills, 'apm-integrations'), 'dir')
+    symlinkSync('../../.agents/skills/serverless-integrations', join(claudeSkills, 'serverless-integrations'), 'dir')
     const cursorSkills = join(root, '.cursor', 'skills')
     mkdirSync(cursorSkills, { recursive: true })
-    symlinkSync('../../.agents/skills/apm-integrations', join(cursorSkills, 'apm-integrations'))
-    symlinkSync('../../.agents/skills/serverless-integrations', join(cursorSkills, 'serverless-integrations'))
+    symlinkSync('../../.agents/skills/apm-integrations', join(cursorSkills, 'apm-integrations'), 'dir')
+    symlinkSync('../../.agents/skills/serverless-integrations', join(cursorSkills, 'serverless-integrations'), 'dir')
     mutate?.(root)
 
     const { status, stdout, stderr } = spawnSync(process.execPath, [verifierPath, ...args], {
@@ -265,6 +265,51 @@ describe('verify-integration-skills', () => {
 
     assert.strictEqual(status, 0)
     assert.match(stdout, /Vendored code transformer: fixture/)
+  })
+
+  it('accepts CRLF skill files', () => {
+    const { status, stderr } = runTool([], (root) => {
+      for (const [filename, source] of Object.entries(skillFiles)) {
+        writeFixtureFile(root, filename, source.replaceAll('\n', '\r\n'))
+      }
+    })
+
+    assert.strictEqual(status, 0, stderr)
+  })
+
+  it('accepts equivalent native discovery link targets', () => {
+    const { status, stderr } = runTool([], (root) => {
+      for (const client of ['.claude', '.cursor']) {
+        for (const skill of ['apm-integrations', 'serverless-integrations']) {
+          const link = join(root, client, 'skills', skill)
+          rmSync(link)
+          symlinkSync(['..', '..', '.agents', '.', 'skills', skill].join(sep), link, 'dir')
+        }
+      }
+    })
+
+    assert.strictEqual(status, 0, stderr)
+  })
+
+  it('rejects discovery links to another existing skill', () => {
+    const { status, stderr } = runTool([], (root) => {
+      for (const client of ['.claude', '.cursor']) {
+        for (const skill of ['apm-integrations', 'serverless-integrations']) {
+          const link = join(root, client, 'skills', skill)
+          const other = skill === 'apm-integrations' ? 'serverless-integrations' : 'apm-integrations'
+          rmSync(link)
+          symlinkSync(join('..', '..', '.agents', 'skills', other), link, 'dir')
+        }
+      }
+    })
+
+    assert.strictEqual(status, 1)
+    for (const client of ['.claude', '.cursor']) {
+      for (const skill of ['apm-integrations', 'serverless-integrations']) {
+        const expected = `${client}/skills/${skill}: must point to ../../.agents/skills/${skill}`
+        assert.strictEqual(stderr.includes(expected), true)
+      }
+    }
   })
 
   it('rejects handbook growth outside the reviewed inventory', () => {
