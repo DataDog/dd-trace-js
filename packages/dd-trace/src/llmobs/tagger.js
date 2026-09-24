@@ -418,8 +418,16 @@ class LLMObsTagger {
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      // Copied so a later annotation cannot write into a caller's object shared by an annotation context.
-      this._setTag(span, TAGS, { ...tags })
+      // Copied so a later annotation cannot write into a caller's object shared by an annotation context. The copy
+      // reads caller getters and Proxy traps during span registration, so it must not throw into the application.
+      let copy
+      try {
+        copy = { ...tags }
+      } catch {
+        log.warn('Dropping span tags that could not be read.')
+        return
+      }
+      this._setTag(span, TAGS, copy)
     }
   }
 

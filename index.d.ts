@@ -4687,8 +4687,8 @@ declare namespace tracer {
      * earlier annotation declared in place.
      */
     interface Agent {
-      /** The version of the agent. */
-      version?: string,
+      /** The version of the agent. A number is reported as a string. */
+      version?: string | number,
       /** The agent's name. Defaults to the agent span's name. */
       name?: string,
       /** The system instructions the agent runs with. */

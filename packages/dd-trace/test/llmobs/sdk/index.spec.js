@@ -1800,6 +1800,23 @@ describe('sdk', () => {
         assert.deepStrictEqual(tags, { team: 'ml' })
       })
 
+      it('does not break spans in the block when the context tags cannot be read', () => {
+        const tags = new Proxy({}, { ownKeys () { throw new Error('dynamic') } })
+        const pluginTagger = createPluginTagger()
+
+        const result = llmobs.annotationContext({ tags }, () => {
+          return llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
+            const span = tracer._tracer.startSpan('plugin.agent', { childOf: workflow })
+            pluginTagger.registerLLMObsSpan(span, { kind: 'agent', parent: workflow, integration: 'test' })
+            assert.strictEqual(tagsOf(span)['_ml_obs.tags'], undefined)
+            span.finish()
+            return 'ran'
+          })
+        })
+
+        assert.strictEqual(result, 'ran')
+      })
+
       it('keeps other context options', () => {
         llmobs.annotationContext({ name: 'renamed', tags: { team: 'ml' }, agent: { version: '1.0.0' } }, () => {
           llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
