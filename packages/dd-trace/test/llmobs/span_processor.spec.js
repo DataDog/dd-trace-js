@@ -270,6 +270,75 @@ describe('span processor', () => {
       })
     })
 
+    describe('agent manifest', () => {
+      function makeSpan (tags) {
+        span = {
+          _name: 'travel_desk_span',
+          _startTime: 0,
+          _duration: 1,
+          context () {
+            return {
+              _tags: {},
+              getTags () { return this._tags },
+              getTag (key) { return this._tags[key] },
+              setTag (key, value) { this._tags[key] = value },
+              toTraceId () { return '123' },
+              toSpanId () { return '456' },
+            }
+          },
+        }
+        LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'agent', ...tags })
+        return span
+      }
+
+      it('emits the declared manifest under metadata._dd with the manual framework', () => {
+        processor.process(makeSpan({
+          '_ml_obs.meta.metadata': { foo: 'bar' },
+          '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+          '_ml_obs.meta.metadata._dd.agent_manifest': { name: 'travel_desk', model: 'gpt-4o' },
+        }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.deepStrictEqual(payload.meta.metadata, {
+          foo: 'bar',
+          _dd: {
+            cost_tags: ['team'],
+            agent_manifest: { framework: 'manual', name: 'travel_desk', model: 'gpt-4o' },
+          },
+        })
+      })
+
+      it('names the agent after the span when the manifest declares no name', () => {
+        processor.process(makeSpan({
+          '_ml_obs.meta.metadata._dd.agent_manifest': { instructions: 'Book travel.' },
+        }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.deepStrictEqual(payload.meta.metadata._dd.agent_manifest, {
+          framework: 'manual',
+          instructions: 'Book travel.',
+          name: 'travel_desk_span',
+        })
+      })
+
+      it('prefers the annotated span name over the APM span name', () => {
+        processor.process(makeSpan({
+          '_ml_obs.name': 'annotated_name',
+          '_ml_obs.meta.metadata._dd.agent_manifest': { model: 'gpt-4o' },
+        }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.equal(payload.meta.metadata._dd.agent_manifest.name, 'annotated_name')
+      })
+
+      it('omits metadata when no manifest is declared', () => {
+        processor.process(makeSpan({}))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.equal(payload.meta.metadata, undefined)
+      })
+    })
+
     it('forwards tool definitions to the payload', () => {
       const toolDefinitions = [
         {

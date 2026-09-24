@@ -16,6 +16,8 @@ const {
   OUTPUT_VALUE,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
+  AGENT_VERSION_TAG_KEY,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -58,6 +60,7 @@ const {
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
+const { buildAgentManifest, mergeAgentManifest } = require('./agent-manifest')
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
@@ -72,6 +75,11 @@ const {
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
 const registry = new WeakMap()
+
+// Maps an LLMObs span to the annotation context agent declarations an agent span at or above it
+// already took, so a nested agent span does not report the outer agent over its own.
+/** @type {WeakMap<object, Set<object>>} */
+const agentDeclarationClaims = new WeakMap()
 
 class LLMObsTagger {
   /** @type {import('../config/config-base')} */
@@ -192,6 +200,9 @@ class LLMObsTagger {
       this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
     }
 
+    const agentDeclarations = annotationContext?.agents
+    if (agentDeclarations) this.#applyAgentDeclarations(span, kind, parent, agentDeclarations)
+
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
@@ -207,6 +218,76 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  /**
+   * Applies the agents declared by the enclosing annotation contexts, outermost first. The version
+   * tags every agent span in the block, while each declared manifest goes to the outermost agent
+   * span only, so a nested agent span (a sub-agent or handoff) keeps reporting its own agent.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {string} kind
+   * @param {import('../opentracing/span') | undefined} parent
+   * @param {{ agent?: { version?: unknown }, manifest?: object | null }[]} declarations
+   */
+  #applyAgentDeclarations (span, kind, parent, declarations) {
+    const inherited = parent && agentDeclarationClaims.get(parent)
+    let claimed = inherited
+
+    if (kind === 'agent') {
+      for (const declaration of declarations) {
+        this.#tagAgentVersion(span, declaration.agent?.version)
+        if (inherited?.has(declaration)) continue
+
+        // Validated once per context rather than once per agent span in it.
+        if (declaration.manifest === undefined) {
+          declaration.manifest = buildAgentManifest(declaration.agent) ?? null
+        }
+        if (!declaration.manifest) continue
+
+        this.#tagAgentManifestFields(span, declaration.manifest)
+        claimed = new Set(claimed)
+        claimed.add(declaration)
+      }
+    }
+
+    if (claimed) agentDeclarationClaims.set(span, claimed)
+  }
+
+  /**
+   * Tags the agent a caller declared on an agent span: `version` as an `agent_version` tag and the
+   * rest as the agent's manifest, merged onto what earlier annotations declared.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {Record<string, unknown>} agent validated here, as it is caller-supplied
+   */
+  tagAgent (span, agent) {
+    if (!agent || typeof agent !== 'object' || Array.isArray(agent)) {
+      log.warn('Dropping agent annotation, the agent must be an object.')
+      return
+    }
+    this.#tagAgentVersion(span, agent.version)
+    const manifest = buildAgentManifest(agent)
+    if (manifest) this.#tagAgentManifestFields(span, manifest)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} version
+   */
+  #tagAgentVersion (span, version) {
+    if ((typeof version !== 'string' && typeof version !== 'number') || version === '') return
+    // Copied rather than assigned into, since the current tags object may be shared with an annotation context.
+    const tags = { ...registry.get(span)?.[TAGS], [AGENT_VERSION_TAG_KEY]: String(version) }
+    this._setTag(span, TAGS, tags)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentManifestFields} manifest
+   */
+  #tagAgentManifestFields (span, manifest) {
+    this._setTag(span, AGENT_MANIFEST, mergeAgentManifest(registry.get(span)?.[AGENT_MANIFEST], manifest))
   }
 
   #tagSamplingDecision (span, parent) {

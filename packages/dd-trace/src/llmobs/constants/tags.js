@@ -9,6 +9,8 @@ module.exports = {
   INTEGRATION: '_ml_obs.integration',
   METADATA: '_ml_obs.meta.metadata',
   COST_TAGS: '_ml_obs.meta.metadata._dd.cost_tags',
+  AGENT_MANIFEST: '_ml_obs.meta.metadata._dd.agent_manifest',
+  AGENT_VERSION_TAG_KEY: 'agent_version',
   METRICS: '_ml_obs.metrics',
   TOOL_DEFINITIONS: '_ml_obs.meta.tool_definitions',
   ML_APP: '_ml_obs.meta.ml_app',

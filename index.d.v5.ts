@@ -4821,6 +4821,45 @@ declare namespace tracer {
     }
 
 
+    interface AgentToolParameter {
+      type?: string,
+      required?: boolean
+    }
+
+    interface AgentTool {
+      name: string,
+      description?: string,
+      /**
+       * Parameters as `{ [param]: { type, required } }`, or a JSON Schema object
+       * (`{ type: 'object', properties, required }`), which is flattened to the same shape.
+       */
+      parameters?: { [param: string]: AgentToolParameter } | { [key: string]: any }
+    }
+
+    /**
+     * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag, and the
+     * other fields are reported as the agent's manifest. Only applies to `agent` spans. Unreportable
+     * values are dropped, and unset values leave what an earlier annotation declared in place.
+     */
+    interface Agent {
+      /** The version of the agent. */
+      version?: string,
+      /** The agent's name. Defaults to the agent span's name. */
+      name?: string,
+      /** The system instructions the agent runs with. */
+      instructions?: string,
+      /** The model the agent is configured to call. */
+      model?: string,
+      /**
+       * Inference parameters, merged key by key across annotations. Only these keys are reported, in
+       * snake_case or camelCase: frequency_penalty, logit_bias, logprobs, max_tokens, parallel_tool_calls,
+       * presence_penalty, seed, stop_sequences, temperature, timeout, tool_choice, top_k, top_logprobs, top_p.
+       */
+      modelSettings?: { [key: string]: any },
+      /** The tools the agent can call. Replaces tools declared by an earlier annotation. */
+      tools?: AgentTool[]
+    }
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -4872,7 +4911,12 @@ declare namespace tracer {
        * A list of ToolDefinition object that represents the tools available to the LLM for this span
        * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
        * */
-      toolDefinitions?: ToolDefinition[]
+      toolDefinitions?: ToolDefinition[],
+
+      /**
+       * Declares the agent this span represents. Only used on `agent` spans.
+       */
+      agent?: Agent
     }
 
     interface AnnotationContextOptions {
@@ -4897,6 +4941,12 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * Declares the agent running in this context. The version is tagged on every `agent` span in the
+       * context, and the manifest on the outermost `agent` span, so a nested agent span reports its own agent.
+       */
+      agent?: Agent,
     }
 
     interface RoutingContextOptions {
