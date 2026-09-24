@@ -49,13 +49,12 @@ PLUGINS="<name>" npm run test:plugins:ci
 
 The `:ci` script runs `yarn services` to install versioned dependencies and check services before testing.
 After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
-For service-backed plugins, find the required containers and `SERVICES` filter in
-`.github/workflows/apm-integrations.yml`. Match the containers to service names in `docker-compose.yml`, then run:
-
-```bash
-docker compose up -d <compose-services>
-SERVICES="<workflow-service-filter>" PLUGINS="<name>" npm run test:plugins:ci
-```
+For service-backed tests, find the CI job that runs the target spec under `.github/workflows/`.
+Match its test action or script, `PLUGINS`, and any `SPEC` filter.
+Start the job's services locally, using matching `docker-compose.yml` entries when available.
+Repeat any job-specific setup steps.
+Check `packages/dd-trace/test/setup/services.js` before setting the `SERVICES` filter.
+Run the job's test script with the required environment.
 
 `aerospike`, `couchbase`, `grpc`, and `oracledb` are incompatible with ARM64.
 
