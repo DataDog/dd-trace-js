@@ -2,6 +2,7 @@
 
 const NoopPrompts = require('./prompts/noop')
 const evaluatorTypes = require('./experiments/evaluator')
+const remoteEvaluatorTypes = require('./experiments/remote-evaluator')
 const evaluatorBuiltins = {
   ...require('./experiments/llm-judge'),
   ...require('./experiments/builtins'),
@@ -61,6 +62,14 @@ class NoopLLMObs {
 
   get MultiEvaluatorResult () {
     return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return remoteEvaluatorTypes.RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return remoteEvaluatorTypes.RemoteEvaluatorError
   }
 
   get BaseStructuredOutput () {

@@ -103,6 +103,8 @@ describe('sdk', () => {
         'SummaryEvaluatorContext',
         'EvaluatorResult',
         'MultiEvaluatorResult',
+        'RemoteEvaluator',
+        'RemoteEvaluatorError',
         'BaseStructuredOutput',
         'BooleanStructuredOutput',
         'CategoricalStructuredOutput',

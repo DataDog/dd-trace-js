@@ -12,6 +12,7 @@ const {
   MultiEvaluatorResult,
   SummaryEvaluatorContext,
 } = require('./evaluator')
+const { RemoteEvaluator, RemoteEvaluatorError } = require('./remote-evaluator')
 const { Row, ExperimentResult, ExperimentRun } = require('./result')
 const {
   buildSpanMetadata,
@@ -113,10 +114,12 @@ function toMetric (
     metric.assessment = extras.assessment
   }
   if (extras.metadata !== undefined) metric.metadata = extras.metadata
+  if (extras.status !== undefined) metric.status = extras.status
+  if (extras.evalSourceType !== undefined) metric.eval_source_type = extras.evalSourceType
 
   if (errorMessage !== null) {
     metric.metric_type = 'categorical'
-    metric.error = { message: errorMessage }
+    metric.error = extras.error ?? { message: errorMessage }
     return metric
   }
 
@@ -782,17 +785,24 @@ class Experiment {
       }
     }
 
+    const isRemoteEvaluator = evaluator instanceof RemoteEvaluator
     try {
-      const evaluate = evaluator instanceof BaseEvaluator
-        ? () => evaluator.evaluate(new EvaluatorContext({
-            inputData: record.input,
-            outputData: row.output,
-            expectedOutput: record.expectedOutput,
-            metadata: buildSpanMetadata(record.metadata, this.#config),
-            spanId: row.spanId,
-            traceId: row.traceId,
-          }))
-        : () => evaluator(record.input, row.output, record.expectedOutput)
+      let evaluate
+      if (evaluator instanceof BaseEvaluator) {
+        const context = new EvaluatorContext({
+          inputData: record.input,
+          outputData: row.output,
+          expectedOutput: record.expectedOutput,
+          metadata: buildSpanMetadata(record.metadata, this.#config),
+          spanId: row.spanId,
+          traceId: row.traceId,
+        })
+        evaluate = isRemoteEvaluator
+          ? () => evaluator.evaluate(context, this.#client)
+          : () => evaluator.evaluate(context)
+      } else {
+        evaluate = () => evaluator(record.input, row.output, record.expectedOutput)
+      }
       const result = await limit(() => this.#runWithRetries(evaluate, maxRetries, retryDelay), throwOnErrors)
       const values = []
       for (const evaluatorResult of extractEvaluatorResults(result, label)) {
@@ -818,8 +828,18 @@ class Experiment {
       return { label, values, error: undefined }
     } catch (err) {
       if (throwOnErrors) throw err
-      const msg = err.message ?? String(err)
+      const backendError = err instanceof RemoteEvaluatorError && hasEntries(err.backendError)
+        ? err.backendError
+        : undefined
+      const msg = backendError?.message ?? err.message ?? String(err)
       row.evaluationErrors[label] = msg
+      const extras = isRemoteEvaluator
+        ? {
+            error: backendError,
+            status: err.status ?? 'ERROR',
+            evalSourceType: 'managed',
+          }
+        : {}
       return {
         label,
         values: [{
@@ -835,7 +855,8 @@ class Experiment {
             experimentId,
             this.#tags,
             'custom',
-            { runId, runIteration }
+            { runId, runIteration },
+            extras
           ),
         }],
         error: undefined,

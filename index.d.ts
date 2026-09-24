@@ -3720,6 +3720,8 @@ declare namespace tracer {
       SummaryEvaluatorContext: typeof SummaryEvaluatorContext,
       EvaluatorResult: typeof EvaluatorResult,
       MultiEvaluatorResult: typeof MultiEvaluatorResult,
+      RemoteEvaluator: typeof RemoteEvaluator,
+      RemoteEvaluatorError: typeof RemoteEvaluatorError,
       BaseStructuredOutput: typeof BaseStructuredOutput,
       BooleanStructuredOutput: typeof BooleanStructuredOutput,
       CategoricalStructuredOutput: typeof CategoricalStructuredOutput,
@@ -4083,6 +4085,24 @@ declare namespace tracer {
       constructor (values: Record<string, JSONType | EvaluatorResult>, prefix?: boolean)
       values: Record<string, JSONType | EvaluatorResult>
       prefix: boolean
+    }
+
+    /** Error returned by a managed evaluator configured in Datadog. */
+    class RemoteEvaluatorError extends Error {
+      constructor (message: string, options?: {
+        status?: string
+        backendError?: Record<string, JSONType>
+      })
+      status: string
+      backendError: Record<string, JSONType>
+    }
+
+    /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
+    class RemoteEvaluator extends BaseEvaluator {
+      constructor (options: {
+        evalName: string
+        transformFn?: (context: EvaluatorContext) => Record<string, JSONType>
+      })
     }
 
     /** Base class for reusable record-level evaluators. */
