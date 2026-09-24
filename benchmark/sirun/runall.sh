@@ -163,7 +163,6 @@ function run_variant {
   elif [[ -n "${SKIP_BASELINE_FAILURES}" ]] \
       && grep -Fqx "${D}/${V}" "$CANDIDATE_PASSED_FILE" 2>/dev/null; then
     echo "${D}/${V} skipped: passed on the candidate but failed on the older baseline source." >&2
-    cat "${VARIANT_OUT}" >&2
     # Append-only writes to a single tempfile from parallel subshells are
     # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
     echo "${D}/${V}" >> "$SKIPPED_FILE"
