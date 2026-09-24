@@ -17,6 +17,7 @@
     "verify:electron-package": "node scripts/generate-electron-package.js --check",
     "generate:rewriter:targets": "node scripts/generate-rewriter-targets.js",
     "verify:rewriter:targets": "node scripts/generate-rewriter-targets.js --check",
+    "inspect:integration": "node scripts/verify-integration-skills.js --inspect",
     "verify:integration-skills": "node scripts/verify-integration-skills.js",
     "generate:supported-integrations": "node scripts/generate-supported-integrations.js",
     "verify:supported-integrations": "node scripts/generate-supported-integrations.js --check",
