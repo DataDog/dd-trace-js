@@ -5,8 +5,23 @@
 
 const { Dataset, DatasetRecord } = require('./dataset')
 const { ExperimentResult } = require('./result')
+const { RemoteEvaluatorError } = require('./remote-evaluator')
 
 const API_BASE_PATH = '/api/v2/llm-obs/v1'
+const EVALUATOR_INFERENCE_API_BASE_PATH = '/api/unstable/llm-obs/v1'
+
+class ExperimentsRequestError extends Error {
+  /**
+   * @param {string} message
+   * @param {number} statusCode
+   * @param {object} responseBody
+   */
+  constructor (message, statusCode, responseBody) {
+    super(message)
+    this.statusCode = statusCode
+    this.responseBody = responseBody
+  }
+}
 
 // Control-plane host for a Datadog site, e.g.
 //   datadoghq.com        -> api.datadoghq.com
@@ -151,7 +166,15 @@ class ExperimentsClient {
 
     const text = await response.text()
     if (!response.ok) {
-      throw new Error(`${method} ${path} failed: HTTP ${response.status} ${text}`)
+      let responseBody = {}
+      try {
+        responseBody = text ? JSON.parse(text) : {}
+      } catch {}
+      throw new ExperimentsRequestError(
+        `${method} ${path} failed: HTTP ${response.status} ${text}`,
+        response.status,
+        responseBody
+      )
     }
     return text ? JSON.parse(text) : {}
   }
@@ -247,6 +270,41 @@ class ExperimentsClient {
     return experimentFromResource(this, response?.data ?? null)
   }
 
+  /**
+   * @param {string} evalName
+   * @param {object} context
+   */
+  evaluatorInfer (evalName, context) {
+    const encodedName = encodeURIComponent(evalName)
+    const path = `${EVALUATOR_INFERENCE_API_BASE_PATH}/evaluators/${encodedName}/infer`
+    return this.jsonApiRequest('POST', path, 'evaluator_inference', { context }).then(response => {
+      const attributes = response?.data?.attributes ?? {}
+      return {
+        value: attributes.value,
+        reasoning: attributes.reasoning,
+        assessment: attributes.assessment,
+        status: attributes.status,
+      }
+    }).catch(err => {
+      const attributes = err.responseBody?.data?.attributes ?? {}
+      const backendError = attributes.error
+      if (backendError !== null && typeof backendError === 'object' && !Array.isArray(backendError)) {
+        const fallback = err.statusCode === undefined ? err.message : `HTTP ${err.statusCode}`
+        throw new RemoteEvaluatorError(
+          `Remote evaluator '${evalName}' failed: ${backendError.message ?? fallback}`,
+          { status: attributes.status, backendError }
+        )
+      }
+
+      const apiError = Array.isArray(err.responseBody?.errors) ? err.responseBody.errors[0] : undefined
+      const detail = apiError !== null && typeof apiError === 'object'
+        ? apiError.detail ?? apiError.title
+        : undefined
+      const fallback = err.statusCode === undefined ? err.message : `HTTP ${err.statusCode}`
+      throw new Error(`Failed to call evaluator '${evalName}': ${detail ?? fallback}`)
+    })
+  }
+
   postExperimentEvents (experimentId, attributes) {
     return this.jsonApiRequest(
       'POST',
@@ -278,4 +336,10 @@ class ExperimentsClient {
   }
 }
 
-module.exports = { ExperimentsClient, apiHost, appHost, API_BASE_PATH }
+module.exports = {
+  ExperimentsClient,
+  apiHost,
+  appHost,
+  API_BASE_PATH,
+  EVALUATOR_INFERENCE_API_BASE_PATH,
+}

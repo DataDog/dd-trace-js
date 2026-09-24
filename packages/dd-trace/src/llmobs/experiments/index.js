@@ -5,6 +5,7 @@ const { ExperimentsClient } = require('./client')
 const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
 const evaluatorTypes = require('./evaluator')
+const remoteEvaluatorTypes = require('./remote-evaluator')
 const builtinEvaluators = require('./builtins')
 const llmJudgeTypes = require('./llm-judge')
 const { validateTagsList } = require('./util')
@@ -223,4 +224,11 @@ function createExperiments (config, llmobs) {
   return new Experiments(config, llmobs)
 }
 
-module.exports = { Experiments, createExperiments, ...evaluatorTypes, ...builtinEvaluators, ...llmJudgeTypes }
+module.exports = {
+  Experiments,
+  createExperiments,
+  ...evaluatorTypes,
+  ...remoteEvaluatorTypes,
+  ...builtinEvaluators,
+  ...llmJudgeTypes,
+}

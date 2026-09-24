@@ -761,6 +761,10 @@ const jsonEvaluator = new llmobs.JSONEvaluator({ requiredKeys: ['answer'] })
 const lengthEvaluator = new llmobs.LengthEvaluator({ maxLength: 100 })
 const regexEvaluator = new llmobs.RegexMatchEvaluator({ pattern: '^answer' })
 const similarityEvaluator = new llmobs.SemanticSimilarityEvaluator({ embeddingFn: text => [text.length] })
+const remoteEvaluator = new llmobs.RemoteEvaluator({
+  evalName: 'managed-judge',
+  transformFn: context => ({ span_input: context.inputData, span_output: context.outputData })
+})
 const judgeOutput = new llmobs.BooleanStructuredOutput({ description: 'Whether the output is correct', passWhen: true })
 const judge = new llmobs.LLMJudge({
   userPrompt: 'Evaluate {{output_data}}.',
@@ -777,6 +781,7 @@ jsonEvaluator.name
 lengthEvaluator.name
 regexEvaluator.name
 similarityEvaluator.name
+remoteEvaluator.name
 judge.name
 
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
