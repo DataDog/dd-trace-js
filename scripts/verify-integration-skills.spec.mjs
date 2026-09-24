@@ -811,24 +811,41 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     )
   })
 
-  it('rejects missing and invalid CLI values', () => {
-    const underscore = inspect(runRepositoryTool, 'child_process')
-    const cases = [
-      [['--inspect'], /--inspect requires an integration id/],
-      [['--inspect', 'fixture', '--package'], /--package requires an npm package name/],
-      [['--inspect', 'fixture', '--traits'], /--traits requires a comma-separated value/],
-      [['--inspect', 'fixture', '--traits', 'invent'], /unknown integration trait: invent/],
-      [['--inspect', 'fixture', '--unknown'], /unknown option: --unknown/],
-      [['--inspect', 'fixture', 'extra'], /unexpected argument: extra/],
-      [['--inspect', '../fixture'], /integration id must contain only lowercase letters/],
-    ]
-
-    assert.deepStrictEqual(underscore.registrations.workflows, ['.github/workflows/apm-integrations.yml:232'])
-    for (const [args, expected] of cases) {
+  const invalidArguments = [
+    [['--inspect'], /--inspect requires an integration id/],
+    [['--inspect', 'fixture', '--package'], /--package requires an npm package name/],
+    [['--inspect', 'fixture', '--traits'], /--traits requires a comma-separated value/],
+    [['--inspect', 'fixture', '--traits', 'invent'], /unknown integration trait: invent/],
+    [['--inspect', 'fixture', '--unknown'], /unknown option: --unknown/],
+    [['--inspect', 'fixture', 'extra'], /unexpected argument: extra/],
+    [['--inspect', '../fixture'], /integration id must contain only lowercase letters/],
+  ]
+  for (const [args, expected] of invalidArguments) {
+    it(`rejects the CLI arguments ${args.join(' ')}`, () => {
       const { status, stderr } = spawnSync(process.execPath, [verifierPath, ...args], { encoding: 'utf8' })
+
       assert.strictEqual(status, 1)
       assert.match(stderr, expected)
-    }
+    })
+  }
+
+  it('finds workflow entries for ids containing underscores', () => {
+    const { registrations } = inspect(runRepositoryTool, 'child_process')
+
+    assert.deepStrictEqual(registrations.workflows, [
+      '.github/workflows/apm-integrations.yml:232',
+      '.github/workflows/instrumentation.yml:147',
+    ])
+  })
+
+  it('finds workflow entries and instrumentation tests outside the APM plugin layout', () => {
+    const webdriverio = inspect(runRepositoryTool, 'webdriverio')
+    const crypto = inspect(runRepositoryTool, 'crypto')
+
+    assert.strictEqual(webdriverio.registrations.workflows.some(line => line.includes('test-optimization.yml')), true)
+    const instrumentationTests = 'packages/datadog-instrumentations/test'
+    assert.strictEqual(webdriverio.targets.tests.includes(`${instrumentationTests}/webdriverio.spec.js`), true)
+    assert.strictEqual(crypto.targets.tests.includes(`${instrumentationTests}/crypto.spec.js`), true)
   })
 
   it('does not infer registration from a prefix sibling', () => {

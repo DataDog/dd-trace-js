@@ -50,7 +50,8 @@ constraint. Read [Shimmer](references/shimmer.md) only after choosing it.
 ## Implement and register
 
 1. Add the instrumentation and one entry per npm package name in
-    `packages/datadog-instrumentations/src/helpers/hooks.js`.
+    `packages/datadog-instrumentations/src/helpers/hooks.js`; set `esmFirst: true` when the ESM build must hook
+    internal files (see `hono`).
 2. For Orchestrion, add the rewriter config, register it in the current instrumentation registry, and use `getHooks()`
     from `helpers/instrument.js` in the instrumentation entry.
 3. Add the plugin package and getter in `packages/dd-trace/src/plugins/index.js`.

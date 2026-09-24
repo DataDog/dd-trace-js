@@ -972,10 +972,7 @@ function findRegistrationLedger (ids) {
     docs: findLines('docs/API.md', ids.flatMap(id => [`id="${id}"`, `[${id}]`])),
     docsTest: findLines('docs/test.ts', ids.flatMap(id => [`use('${id}'`, `use("${id}"`])),
     codeowners: findCodeownersCoverage(ids),
-    workflows: [
-      ...findWorkflowLines('.github/workflows/apm-integrations.yml', ids),
-      ...findWorkflowLines('.github/workflows/serverless.yml', ids),
-    ],
+    workflows: listRelativeFiles('.github/workflows', ['.yml']).flatMap(filename => findWorkflowLines(filename, ids)),
   }
 }
 
@@ -1190,7 +1187,11 @@ function inspectIntegration (integration, packageName, mode, traits) {
   const packageRegistrations = findIntegrationRegistrations(integration)
   const plugins = listPluginFiles(packageRegistrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
   const dependents = findPluginDependents(packageRegistrations.pluginDirectories)
-  const tests = listPluginFiles(packageRegistrations.pluginDirectories, 'test', TEST_SUFFIXES)
+  const tests = compactPaths([
+    ...listPluginFiles(packageRegistrations.pluginDirectories, 'test', TEST_SUFFIXES),
+    ...TEST_SUFFIXES.map(suffix => existingPath(`packages/datadog-instrumentations/test/${integration}${suffix}`)),
+    ...listRelativeFiles(`packages/datadog-instrumentations/test/${integration}`, TEST_SUFFIXES),
+  ])
   const { sources: contractSources } = findContractSources(plugins, packageRegistrations.pluginDirectories)
   const { publicIds } = packageRegistrations
   const ledger = findRegistrationLedger(publicIds)
