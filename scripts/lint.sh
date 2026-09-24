@@ -11,7 +11,6 @@ run() {
 }
 
 run node scripts/check_licenses.js
-run node scripts/check-agents-md-size.js
 run node scripts/check-no-coverage-artifacts.js
 run node scripts/check-no-mcr-images.js
 run node scripts/check-docker-image-shas.js

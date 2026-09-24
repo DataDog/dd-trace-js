@@ -1,10 +1,6 @@
 # TODO: Restructure the project by product and clean up this file.
 
 # Shared repository tooling
-/.agents/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.claude/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.cursor/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.gemini/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/actions/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.github/ISSUE_TEMPLATE/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /.gitlab/ @DataDog/dd-trace-js @DataDog/lang-platform-js
@@ -61,9 +57,6 @@
 /packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/dd-trace-js @DataDog/debugger-nodejs
 
 # Serverless
-/.agents/skills/serverless-integrations/ @DataDog/dd-trace-js @DataDog/apm-serverless
-/.claude/skills/serverless-integrations @DataDog/dd-trace-js @DataDog/apm-serverless
-/.cursor/skills/serverless-integrations @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/lambda/ @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/src/azure_metadata.js @DataDog/dd-trace-js @DataDog/apm-serverless
 /packages/dd-trace/src/serverless.js @DataDog/dd-trace-js @DataDog/apm-serverless
@@ -76,10 +69,6 @@
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/dd-trace-js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
-/.agents/skills/apm-integrations/ @DataDog/dd-trace-js @DataDog/apm-idm-js
-/.claude/skills/apm-integrations @DataDog/dd-trace-js @DataDog/apm-idm-js
-/.cursor/skills/apm-integrations @DataDog/dd-trace-js @DataDog/apm-idm-js
-
 /benchmark/sirun/child_process/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/dd-trace-js @DataDog/apm-idm-js
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/dd-trace-js @DataDog/apm-idm-js
@@ -256,12 +245,6 @@
 /benchmark/e2e-test-optimization/ @DataDog/dd-trace-js @DataDog/ci-app-libraries
 
 # LLM Observability
-/.agents/skills/llmobs-integration/ @DataDog/dd-trace-js @DataDog/ml-observability
-/.agents/skills/llmobs-testing/ @DataDog/dd-trace-js @DataDog/ml-observability
-/.claude/skills/llmobs-integration @DataDog/dd-trace-js @DataDog/ml-observability
-/.claude/skills/llmobs-testing @DataDog/dd-trace-js @DataDog/ml-observability
-/.cursor/skills/llmobs-integration @DataDog/dd-trace-js @DataDog/ml-observability
-/.cursor/skills/llmobs-testing @DataDog/dd-trace-js @DataDog/ml-observability
 /benchmark/sirun/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
 /benchmark/sirun/llmobs-evaluations/ @DataDog/dd-trace-js @DataDog/ml-observability
 /benchmark/sirun/llmobs-span-processor/ @DataDog/dd-trace-js @DataDog/ml-observability
@@ -425,14 +408,7 @@
 /packages/dd-trace/test/web-tags-cache.spec.js @DataDog/dd-trace-js @DataDog/profiling-js
 
 # Language Platform
-/.agents/skills/architecture-review/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.claude/skills/architecture-review @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.cursor/skills/architecture-review @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.agents/skills/flaky-test-fixer/ @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.claude/skills/flaky-test-fixer @DataDog/dd-trace-js @DataDog/lang-platform-js
-/.cursor/skills/flaky-test-fixer @DataDog/dd-trace-js @DataDog/lang-platform-js
 /* @DataDog/dd-trace-js @DataDog/lang-platform-js
-/AGENTS.md @DataDog/dd-trace-js @DataDog/lang-platform-js
 /openfeature.d.ts @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /openfeature.js @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 
@@ -552,8 +528,6 @@
 /packages/dd-trace/test/tagger.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/tracer.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/dd-trace-js @DataDog/lang-platform-js
-
-/.llm-validation/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 
 # Multiple teams
 /devdocs/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @DataDog/apm-idm-js

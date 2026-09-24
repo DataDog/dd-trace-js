@@ -19,7 +19,6 @@ const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
 const UNCATEGORIZED_PRODUCT = 'Other'
 const DEPENDENCY_PRODUCT = 'Dependencies'
 const INTERNAL_PATH_PATTERNS = [
-  /^\.agents\//,
   /^\.github\//,
   /^\.gitlab(?:-ci\.yml|\/)/,
   /^benchmark\//,
@@ -28,7 +27,7 @@ const INTERNAL_PATH_PATTERNS = [
   /(^|\/)(?:test|tests|benchmark)(?:\/|$)/,
   /\.(?:spec|test)\.[cm]?[jt]sx?$/,
   /(^|\/)(?:package-lock\.json|yarn\.lock)$/,
-  /^(?:AGENTS\.md|CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
+  /^(?:CONTRIBUTING\.md|eslint\.config\.mjs|tsconfig(?:\.[^.]+)?\.json)$/,
 ]
 // Dependabot tags the commit scope `deps-dev` for development dependencies and
 // `deps` for production ones, but the `deps` manifests under test/benchmark/docs
