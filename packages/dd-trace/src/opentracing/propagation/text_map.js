@@ -115,7 +115,7 @@ function toTraceStateTagKey (key) {
  * @param {TraceTagInjection | undefined} injection
  */
 function isOptionalDatadogTraceStateField (key, injection) {
-  if (!key.startsWith('t.') || key === 't.dm') return false
+  if (!key.startsWith('t.') || key === 't.dm' || key === 't.ts') return false
 
   const traceTagReplacements = injection?.traceTagReplacements
   if (!traceTagReplacements) return true

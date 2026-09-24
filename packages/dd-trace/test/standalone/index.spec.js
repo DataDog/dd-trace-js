@@ -242,6 +242,36 @@ describe('Disabled APM Tracing or Standalone', () => {
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.ts=02')
     })
 
+    it('should keep the standalone trace source when other trace tags exceed the tracestate budget', () => {
+      config.tracePropagationStyle.inject = ['tracecontext']
+      config.tracePropagationStyle.extract = ['tracecontext']
+
+      const span = new DatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'operation',
+      })
+      span._spanContext._sampling = {
+        priority: USER_KEEP,
+        mechanism: SAMPLING_MECHANISM_APPSEC,
+      }
+      span._spanContext._trace.tags['_dd.p.large'] = 'x'.repeat(230)
+      span._spanContext._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
+
+      const propagator = new TextMapPropagator(config)
+      const carrier = propagator.inject(span._spanContext)
+      assert.ok(carrier)
+      assert.strictEqual(carrier['x-datadog-tags'], undefined)
+
+      standalone.configure(config)
+      try {
+        const extracted = propagator.extract(carrier)
+        assert.ok(extracted)
+        assert.strictEqual(extracted._sampling.priority, USER_KEEP)
+        assert.strictEqual(extracted._trace.tags[TRACE_SOURCE_PROPAGATION_KEY], '02')
+      } finally {
+        standalone.configure({ apmTracingEnabled: true })
+      }
+    })
+
     it('should inject trace context when standalone is disabled', () => {
       config.apmTracingEnabled = true
 
