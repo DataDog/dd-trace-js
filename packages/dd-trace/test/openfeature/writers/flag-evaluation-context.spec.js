@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const {
   snapshotEvaluationContext,
-  canonicalContextKey,
+  validatedContextEntries,
   validateContextSnapshot,
 } = require('../../../src/openfeature/writers/flag-evaluation-context')
 
@@ -17,6 +17,35 @@ function attrs (context) {
 }
 
 describe('flag evaluation context snapshot', () => {
+  it('builds sorted scalar identity entries without invoking caller behavior', () => {
+    const snapshot = Object.assign(Object.create(null), {
+      z: null,
+      a: 'quoted"\\text',
+      bool: false,
+      number: 1,
+      malformed: '\uD800',
+      'bad\uD800': 'omit',
+      infinite: Infinity,
+      nested: { secret: 'omit' },
+      toJSON () { assert.fail('caller serialization must not run') },
+    })
+    Object.defineProperty(snapshot, 'getter', {
+      enumerable: true,
+      get () {
+        assert.fail('getter must not run')
+        return undefined
+      },
+    })
+    assert.deepStrictEqual(validatedContextEntries(snapshot), [
+      ['a', 'quoted"\\text'], ['bool', false], ['number', 1], ['z', null],
+    ])
+    for (const value of [undefined, null, {}, [], { skipped: undefined }, new Proxy({}, {
+      ownKeys () { assert.fail('proxy must not be enumerated') },
+    })]) {
+      assert.strictEqual(validatedContextEntries(value), undefined)
+    }
+  })
+
   it('revalidates a scalar snapshot without retaining behavior or malformed text', () => {
     const snapshot = { kept: 'value', number: 1, bool: false, nothing: null, malformed: '\uD800' }
     Object.defineProperty(snapshot, 'getter', {
@@ -284,7 +313,7 @@ describe('flag evaluation context snapshot', () => {
     it('ignores input insertion order when the retained fields match', () => {
       const first = snapshotEvaluationContext({ b: 2, a: 1 }).attrs
       const second = snapshotEvaluationContext({ a: 1, b: 2 }).attrs
-      assert.strictEqual(canonicalContextKey(first), canonicalContextKey(second))
+      assert.deepStrictEqual(validatedContextEntries(first), validatedContextEntries(second))
     })
 
     it('distinguishes scalar types, nulls, and embedded delimiters', () => {
@@ -292,18 +321,19 @@ describe('flag evaluation context snapshot', () => {
         { x: 1 }, { x: '1' }, { x: true }, { x: 'true' }, { x: null }, { x: 'null' },
         { 'x\0y': 'z' }, { x: 'y\0z' }, { x: 'a:b' }, { 'x:a': 'b' }, {},
       ]
-      const identities = fixtures.map(value => canonicalContextKey(snapshotEvaluationContext(value).attrs))
+      const identities = fixtures.map(value =>
+        JSON.stringify(validatedContextEntries(snapshotEvaluationContext(value).attrs)))
       assert.strictEqual(new Set(identities).size, fixtures.length)
     })
 
     it('keys only the emitted fields, including JSON-equivalent zero values', () => {
       assert.strictEqual(
-        canonicalContextKey(snapshotEvaluationContext({ x: -0, skipped: undefined }).attrs),
-        canonicalContextKey(snapshotEvaluationContext({ x: 0 }).attrs)
+        JSON.stringify(validatedContextEntries(snapshotEvaluationContext({ x: -0, skipped: undefined }).attrs)),
+        JSON.stringify(validatedContextEntries(snapshotEvaluationContext({ x: 0 }).attrs))
       )
       assert.strictEqual(
-        canonicalContextKey(snapshotEvaluationContext({ x: 1, secret: 's'.repeat(257) }).attrs),
-        canonicalContextKey(snapshotEvaluationContext({ x: 1 }).attrs)
+        JSON.stringify(validatedContextEntries(snapshotEvaluationContext({ x: 1, secret: 's'.repeat(257) }).attrs)),
+        JSON.stringify(validatedContextEntries(snapshotEvaluationContext({ x: 1 }).attrs))
       )
     })
   })

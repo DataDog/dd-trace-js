@@ -5,7 +5,7 @@ const {
   FLAG_EVALUATION_GLOBAL_CAP,
   FLAG_EVALUATION_PER_FLAG_CAP,
 } = require('../constants/constants')
-const { canonicalContextKey, validateContextSnapshot } = require('./flag-evaluation-context')
+const { validatedContextEntries, snapshotFromEntries } = require('./flag-evaluation-context')
 const { prefixedTargetingKeyDigest, normalizeTargetingKey, protectedErrorCode } = require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
 
@@ -92,8 +92,7 @@ class FlagEvaluationAggregator {
     }
     const consent = event.observeFullEvaluationData === true
     const targetingKey = normalizeTargetingKey(event.targetingKey)
-    const attrs = consent ? validateContextSnapshot(event.attrs) : undefined
-    const contextKey = consent && attrs ? canonicalContextKey(attrs) : ''
+    const contextEntries = consent ? validatedContextEntries(event.attrs) : undefined
     const protectedKey = consent ? targetingKey : prefixedTargetingKeyDigest(targetingKey)
     const error = protectedErrorCode(event.errorCode)
     const variant = optionalKey(event.variant)
@@ -101,7 +100,7 @@ class FlagEvaluationAggregator {
     const rule = optionalKey(event.targetingRuleKey)
     const fullKey = JSON.stringify([
       flagKey, variant, allocation, rule, event.runtimeDefault === true, error,
-      protectedKey, contextKey, consent,
+      protectedKey, contextEntries, consent,
     ])
     const existing = this.#full.get(fullKey)
     if (existing) {
@@ -130,7 +129,8 @@ class FlagEvaluationAggregator {
       runtimeDefault: event.runtimeDefault === true,
       error,
       rawTargetingKey: targetingKey,
-      attrs,
+      // Repeated observations need validation and identity, but no new retained snapshot.
+      attrs: snapshotFromEntries(contextEntries),
       consent,
       count: 1,
       first: event.timestamp,

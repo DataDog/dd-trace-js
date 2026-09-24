@@ -15,6 +15,58 @@ const attrs = Object.freeze({ secret: 'independent-context-canary' })
 const codes = [ErrorCode.FLAG_NOT_FOUND, 'unapproved-error-canary', { message: 'error-object-canary' }, undefined]
 
 describe('flag evaluation independent privacy boundaries', () => {
+  it('merges equivalent contexts while retaining an immutable snapshot of each distinct identity', () => {
+    const aggregator = new FlagEvaluationAggregator()
+    const first = { b: false, a: 1 }
+    const second = { a: 1, b: false }
+    const event = {
+      flagKey: 'flag', targetingKey: target, observeFullEvaluationData: true, runtimeDefault: false, timestamp: 100,
+    }
+    aggregator.add({ ...event, attrs: first })
+    aggregator.add({ ...event, attrs: second, timestamp: 50 })
+    first.a = 2
+    second.b = true
+    aggregator.add({ ...event, attrs: first, timestamp: 200 })
+    first.a = 3
+    const { full, degraded } = aggregator.take()
+    assert.strictEqual(full.size, 2)
+    for (const entry of full.values()) {
+      assert.strictEqual(Object.isFrozen(entry.attrs), true)
+      assert.strictEqual(Object.getPrototypeOf(entry.attrs), null)
+    }
+    const [payload] = buildFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)
+    assert.deepStrictEqual(JSON.parse(payload.encoded).flagEvaluations.map(row => ({
+      context: row.context.evaluation,
+      count: row.evaluation_count,
+      first: row.first_evaluation,
+      last: row.last_evaluation,
+    })), [
+      { context: { a: 1, b: false }, count: 2, first: 50, last: 100 },
+      { context: { a: 2, b: false }, count: 1, first: 200, last: 200 },
+    ])
+  })
+
+  it('groups absent and rejected contexts together without colliding with scalar identities', () => {
+    const aggregator = new FlagEvaluationAggregator()
+    const event = {
+      flagKey: 'flag', targetingKey: target, observeFullEvaluationData: true, runtimeDefault: false, timestamp: 100,
+    }
+    /** @type {Array<import('../../../src/openfeature/writers/flag-evaluation-context').ContextSnapshot | undefined>} */
+    const contexts = [
+      undefined, {}, { rejected: '\uD800' }, { x: 0 }, { x: -0 }, { x: '0' }, { x: false }, { x: null },
+      { x: 'null' }, { 'x\0y': 'z' }, { x: 'y\0z' }, { x: 'a:b' }, { 'x:a': 'b' }, { x: '' },
+    ]
+    for (const context of contexts) aggregator.add({ ...event, attrs: context })
+    const { full, degraded } = aggregator.take()
+    const [payload] = buildFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)
+    const rows = JSON.parse(payload.encoded).flagEvaluations
+    assert.deepStrictEqual(rows.map(row => [row.context?.evaluation, row.evaluation_count]), [
+      [undefined, 3], [{ x: 0 }, 2], [{ x: '0' }, 1], [{ x: false }, 1], [{ x: null }, 1],
+      [{ x: 'null' }, 1], [{ 'x\0y': 'z' }, 1], [{ x: 'y\0z' }, 1], [{ x: 'a:b' }, 1], [{ 'x:a': 'b' }, 1],
+      [{ x: '' }, 1],
+    ])
+  })
+
   for (const consent of [undefined, false, 1, 'true', true]) {
     it(`aggregation independently validates consent ${JSON.stringify(consent)} before retaining context`, () => {
       const aggregator = new FlagEvaluationAggregator()

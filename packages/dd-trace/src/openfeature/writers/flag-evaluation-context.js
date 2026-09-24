@@ -11,9 +11,11 @@ const MAX_LIST_ELEMENTS = 256
 const MAX_STRUCTURE_PROPERTIES = 256
 const MAX_SNAPSHOT_DEPTH = 4
 const MAX_VISITED_NODES = MAX_CONTEXT_FIELDS * (MAX_SNAPSHOT_DEPTH + 1)
+const OMIT_CONTEXT_VALUE = Symbol('omit context value')
 
 /** @typedef {string | number | boolean | null} ContextScalar */
 /** @typedef {Readonly<Record<string, ContextScalar>>} ContextSnapshot */
+/** @typedef {Array<[string, ContextScalar]>} ContextEntries */
 /**
  * @typedef {object} Frame
  * @property {object} container
@@ -50,18 +52,65 @@ function validateContextSnapshot (value) {
   const attrs = Object.create(null)
   let hasAttrs = false
   for (const key of Object.keys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)
-    if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) continue
-    const item = descriptor.value
-    if (normalizeTargetingKey(key) === undefined) continue
-    if (item === null || typeof item === 'boolean' ||
-      (typeof item === 'number' && Number.isFinite(item)) ||
-      (typeof item === 'string' && normalizeTargetingKey(item) !== undefined)) {
-      attrs[key] = item
-      hasAttrs = true
-    }
+    const item = validatedContextValue(value, key)
+    if (item === OMIT_CONTEXT_VALUE) continue
+    attrs[key] = item
+    hasAttrs = true
   }
   return hasAttrs ? Object.freeze(attrs) : undefined
+}
+
+/**
+ * Share the privacy checks without making serialization allocate identity tuples.
+ * The sentinel distinguishes rejected values from a valid null scalar.
+ *
+ * @param {Record<string, unknown>} snapshot
+ * @param {string} key
+ * @returns {ContextScalar | typeof OMIT_CONTEXT_VALUE}
+ */
+function validatedContextValue (snapshot, key) {
+  const descriptor = Object.getOwnPropertyDescriptor(snapshot, key)
+  if (!descriptor?.enumerable || !Object.hasOwn(descriptor, 'value')) return OMIT_CONTEXT_VALUE
+  const item = descriptor.value
+  if (normalizeTargetingKey(key) === undefined) return OMIT_CONTEXT_VALUE
+  if (item === null || typeof item === 'boolean' ||
+    (typeof item === 'number' && Number.isFinite(item)) ||
+    (typeof item === 'string' && normalizeTargetingKey(item) !== undefined)) return item
+  return OMIT_CONTEXT_VALUE
+}
+
+/**
+ * Validate once and order the scalar entries for aggregation identity. Returning
+ * tuples lets the complete key be JSON-encoded once, preserving scalar types and
+ * escaping delimiters without embedding an already-encoded context string.
+ *
+ * @param {unknown} value - Hook-owned snapshot, after queue handoff
+ * @returns {ContextEntries | undefined}
+ */
+function validatedContextEntries (value) {
+  if (!isRecord(value)) return
+  /** @type {ContextEntries} */
+  const entries = []
+  for (const key of Object.keys(value).sort()) {
+    const item = validatedContextValue(value, key)
+    if (item !== OMIT_CONTEXT_VALUE) entries.push([key, item])
+  }
+  return entries.length > 0 ? entries : undefined
+}
+
+/**
+ * Materialize owned, immutable attributes only when they will be retained or sent.
+ * Callers must obtain entries from validatedContextEntries, never caller-owned data.
+ *
+ * @param {ContextEntries | undefined} entries
+ * @returns {ContextSnapshot | undefined}
+ */
+function snapshotFromEntries (entries) {
+  if (entries === undefined) return
+  /** @type {Record<string, ContextScalar>} */
+  const attrs = Object.create(null)
+  for (const [key, value] of entries) attrs[key] = value
+  return Object.freeze(attrs)
 }
 
 /**
@@ -210,16 +259,4 @@ function snapshotEvaluationContext (context) {
   return { attrs: Object.freeze(attrs), reasons }
 }
 
-/**
- * Key only the bounded serialized snapshot, after queue handoff.
- * JSON tuples preserve scalar types and escape delimiters; sorting at most 256
- * keys makes equivalent retained contexts identical regardless of insertion order.
- * JSON-equivalent numbers such as -0 and 0 deliberately share an identity.
- *
- * @param {ContextSnapshot} attrs - Output of snapshotEvaluationContext, never caller-owned context
- */
-function canonicalContextKey (attrs) {
-  return JSON.stringify(Object.keys(attrs).sort().map(key => [key, attrs[key]]))
-}
-
-module.exports = { snapshotEvaluationContext, canonicalContextKey, validateContextSnapshot }
+module.exports = { snapshotEvaluationContext, validatedContextEntries, snapshotFromEntries, validateContextSnapshot }
