@@ -95,8 +95,7 @@ function rewrite (content, filename, format, target) {
     }
 
     // TODO: pass existing sourcemap as input for remapping
-    const transformed = transformer.transform(source, moduleType)
-    let { code, map } = transformed
+    let { code, map } = transformer.transform(source, moduleType)
 
     if (source.startsWith('#!') && !code.startsWith('#!')) {
       // A shebang must be the entire first line, and JavaScript recognizes
@@ -271,7 +270,7 @@ function appendOrchestrionLoad (source, payload, moduleType) {
       `${binding}.channel('dd-trace:instrumentation:load:orchestrion').publish(${message})\n`
   }
 
-  return `${source}\nrequire(${dcModule}).channel('dd-trace:instrumentation:load:orchestrion').publish(${message})\n`
+  return `${source};require(${dcModule}).channel('dd-trace:instrumentation:load:orchestrion').publish(${message});\n`
 }
 
 /**

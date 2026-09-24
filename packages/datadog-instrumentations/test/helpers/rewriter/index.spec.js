@@ -1570,7 +1570,7 @@ describe('check-require-cache', () => {
       const activationIndex = rewritten.indexOf("channel('dd-trace:instrumentation:load:orchestrion')")
       const sourceMapIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
       assert.notStrictEqual(activationIndex, -1)
-      assert.match(rewritten, /module\.exports = work;\s*\nrequire\(/)
+      assert.match(rewritten, /module\.exports = work;\s*;require\(/)
       assert.ok(sourceMapIndex === -1 || activationIndex < sourceMapIndex)
     } finally {
       loadChannel.unsubscribe(subscriber)
