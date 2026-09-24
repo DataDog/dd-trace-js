@@ -266,11 +266,11 @@ function appendOrchestrionLoad (source, payload, moduleType) {
     let suffix = 0
     while (source.includes(binding)) binding = `ddTraceOrchestrionDc${++suffix}`
 
-    return `${source}\nimport ${binding} from ${dcModule}\n` +
-      `${binding}.channel('dd-trace:instrumentation:load:orchestrion').publish(${message})\n`
+    return `${source};import ${binding} from ${dcModule};` +
+      `${binding}.channel('dd-trace:instrumentation:load:orchestrion').publish(${message});`
   }
 
-  return `${source};require(${dcModule}).channel('dd-trace:instrumentation:load:orchestrion').publish(${message});\n`
+  return `${source};require(${dcModule}).channel('dd-trace:instrumentation:load:orchestrion').publish(${message});`
 }
 
 /**
