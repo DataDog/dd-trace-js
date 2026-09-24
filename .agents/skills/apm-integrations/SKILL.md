@@ -51,7 +51,7 @@ constraint. Read [Shimmer](references/shimmer.md) only after choosing it.
 
 1. Add the instrumentation and one entry per npm package name in
     `packages/datadog-instrumentations/src/helpers/hooks.js`.
-2. For Orchestrion, add the rewriter config, register it in the current instrumentation index, and use `getHooks()`
+2. For Orchestrion, add the rewriter config, register it in the current instrumentation registry, and use `getHooks()`
     from `helpers/instrument.js` in the instrumentation entry.
 3. Add the plugin package and getter in `packages/dd-trace/src/plugins/index.js`.
 4. Register every id reached by `operationName()` or `serviceName()` in both naming-schema versions for its type.

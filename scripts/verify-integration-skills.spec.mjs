@@ -85,8 +85,13 @@ module.exports = CachePlugin
 }]
 `,
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fallback.js': 'module.exports = []\n',
-  'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js':
-    "module.exports = [...require('./alpha-no-index'), ...require('./fixture'), ...require('./shared')]\n",
+  'packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js': `const registry = [
+  { instrumentations: require('./instrumentations/alpha-no-index') },
+  { instrumentations: require('./instrumentations/fixture') },
+  { instrumentations: require('./instrumentations/shared') },
+]
+module.exports = { registry }
+`,
   'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/alpha-no-index.js': `module.exports = [{
   module: { name: 'alpha-no-index-package' },
   functionQuery: { kind: 'Async' },
@@ -171,7 +176,6 @@ module.exports = StoragePlugin
  * @param {string} root
  * @param {string} filename
  * @param {string} source
- * @returns {void}
  */
 function writeFixtureFile (root, filename, source) {
   const absoluteFilename = join(root, filename)
@@ -181,7 +185,6 @@ function writeFixtureFile (root, filename, source) {
 
 /**
  * @param {string} root
- * @returns {void}
  */
 function writeControlRegistry (root) {
   const source = String.raw`module.exports = {
@@ -461,7 +464,7 @@ describe('verify-integration-skills', () => {
     ])
     assert.strictEqual(Object.hasOwn(packet, 'contract'), false)
     assert.deepStrictEqual(packet.registrations.rewriter, [
-      'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js:1',
+      'packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js:3',
     ])
     assert.deepStrictEqual(packet.registrations.types, ['index.d.ts:1'])
     assert.deepStrictEqual(packet.registrations.v5Types, ['index.d.v5.ts:1'])
@@ -614,6 +617,17 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.deepStrictEqual(packet.registrations.rewriter, [])
   })
 
+  it('finds registered rewriters and references in the repository registry', () => {
+    const packet = inspect(runRepositoryTool, 'graphql', ['--traits', 'orchestrion'])
+    const registry = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js'
+    const lines = readFileSync(join(repositoryDirectory, registry), 'utf8').split('\n')
+    const line = lines.findIndex(line => line.includes("require('./instrumentations/graphql')")) + 1
+
+    assert.deepStrictEqual(packet.registrations.rewriter, [`${registry}:${line}`])
+    assert.notStrictEqual(packet.reference, undefined)
+    assert.notStrictEqual(packet.reference.integration, 'graphql')
+  })
+
   it('routes a closest reference through its linked plugin directory', () => {
     const packet = inspect(runTool, 'new-plugin', ['--traits', 'callback'])
 
@@ -622,6 +636,32 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
       packet.reference.files.includes('packages/datadog-plugin-link/src/index.js'),
       true
     )
+  })
+
+  it('derives all reference packages from registries instead of source names', () => {
+    const packet = inspect(runTool, 'new-plugin', ['--traits', 'callback'], (root) => {
+      const rewriter = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/shared.js'
+      const hooks = 'packages/datadog-instrumentations/src/helpers/hooks.js'
+      writeFixtureFile(root, rewriter, `const error = { name: 'McpError' }\n${sourceFiles[rewriter]}`)
+      writeFixtureFile(root, hooks, sourceFiles[hooks].replace(
+        "  'shared-package':",
+        "  'shared-alias': () => require('../shared'),\n  'shared-package':"
+      ))
+      writeFixtureFile(root, 'packages/dd-trace/test/plugins/versions/package.json', JSON.stringify({
+        dependencies: { 'shared-package': '1.0.0', 'shared-alias': '2.0.0' },
+      }, undefined, 2))
+    })
+
+    assert.strictEqual(packet.reference.integration, 'shared')
+    for (const location of [
+      'packages/datadog-instrumentations/src/helpers/hooks.js:8',
+      'packages/datadog-instrumentations/src/helpers/hooks.js:9',
+      'packages/dd-trace/src/plugins/index.js:6',
+      'packages/dd-trace/test/plugins/versions/package.json:3',
+      'packages/dd-trace/test/plugins/versions/package.json:4',
+    ]) {
+      assert.strictEqual(packet.reference.registrations.includes(location), true, location)
+    }
   })
 
   it('selects a serverless closest reference from plugin type', () => {
@@ -651,8 +691,8 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     const packet = inspect(runTool, 'new-plugin', ['--traits', 'orchestrion'], (root) => {
       writeFixtureFile(
         root,
-        'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js',
-        "module.exports = [...require('./fixture')]\n"
+        'packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js',
+        "module.exports = { registry: [{ instrumentations: require('./instrumentations/fixture') }] }\n"
       )
     })
 
@@ -695,6 +735,8 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
         'packages/datadog-instrumentations/src/helpers/hooks.js:5',
         'packages/dd-trace/src/plugins/index.js:3',
         'packages/dd-trace/test/plugins/versions/package.json:1',
+        'packages/datadog-instrumentations/src/helpers/hooks.js:6',
+        'packages/dd-trace/src/plugins/index.js:4',
         'index.d.ts:1',
         'index.d.v5.ts:1',
         'docs/API.md:1',
@@ -977,12 +1019,13 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
 
     assert.deepStrictEqual(
       packet.packages.map(({ name }) => name),
-      ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils']
+      ['@wdio/cli', '@wdio/jasmine-framework', '@wdio/local-runner', '@wdio/utils', 'webdriverio']
     )
     assert.strictEqual(packet.packages[0].plugin, undefined)
     assert.match(packet.packages[1].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
     assert.match(packet.packages[2].plugin, /packages\/dd-trace\/src\/plugins\/index\.js:/)
     assert.strictEqual(packet.packages[3].plugin, undefined)
+    assert.strictEqual(packet.packages[4].plugin, undefined)
     assert.deepStrictEqual(packet.targets.plugins, ['packages/datadog-plugin-mocha/src/index.js'])
     assert.strictEqual(
       packet.evidence.contractSources.includes('packages/dd-trace/src/plugins/ci_plugin.js'),
