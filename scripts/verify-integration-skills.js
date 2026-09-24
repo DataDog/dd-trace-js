@@ -273,7 +273,7 @@ function verifyInventory () {
 function verifyFrontmatter (filename, source) {
   if (!filename.endsWith('/SKILL.md')) return
 
-  const match = source.match(/^---\n([\s\S]*?)\n---\n/)
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/)
   check(match !== null, `${filename}: missing YAML frontmatter`)
   if (!match) return
 
@@ -1345,7 +1345,7 @@ function verifySymlink (link, target) {
   check(isSymbolicLink, `${link}: must be a symbolic link`)
   if (!isSymbolicLink) return
 
-  check(readlinkSync(absoluteLink) === target, `${link}: must point to ${target}`)
+  check(path.normalize(readlinkSync(absoluteLink)) === path.normalize(target), `${link}: must point to ${target}`)
 }
 
 /**
