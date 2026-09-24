@@ -158,11 +158,7 @@ function splitNodeOptions (source) {
       }
     }
     const next = source[index + 1]
-    if (character === '\\' && next && (next === quote || /[\s'"\\]/.test(next))) {
-      value += source[++index]
-    } else {
-      value += character
-    }
+    value += character === '\\' && next && (next === quote || /[\s'"\\]/.test(next)) ? source[++index] : character
     started = true
   }
   if (quote) throw new Error('NODE_OPTIONS contains an unterminated quoted value.')
