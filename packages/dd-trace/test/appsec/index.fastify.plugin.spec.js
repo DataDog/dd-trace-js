@@ -17,23 +17,70 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
-// The version matrices below necessarily pair plugin majors with fastify majors they reject. fastify core
-// reports that while booting (during `listen`) as FST_ERR_PLUGIN_VERSION_MISMATCH; older fastify-plugin
-// builds throw a plain Error carrying the same "expected '<range>' fastify version" text instead. Either
-// means "skip this unsupported combo", not a real failure.
-function isFastifyPluginVersionMismatch (error) {
-  return error.code === 'FST_ERR_PLUGIN_VERSION_MISMATCH' || /expected '.+?' fastify version/.test(error.message)
+/**
+ * @param {string} cookieVersion
+ * @param {string} fastifyVersion
+ */
+function isCookieVersionUnsupported (cookieVersion, fastifyVersion) {
+  return (
+    semver.intersects(cookieVersion, '6') &&
+      semver.intersects(fastifyVersion, '<3 || 3.9.2')
+  ) || (
+    semver.intersects(cookieVersion, '>=7 <10') &&
+      semver.intersects(fastifyVersion, '<4 || >=5')
+  ) || (
+    semver.intersects(cookieVersion, '>=10 <12') &&
+      semver.intersects(fastifyVersion, '<5 || >=6')
+  )
 }
+
+/**
+ * @param {string} multipartVersion
+ * @param {string} fastifyVersion
+ */
+function isMultipartVersionUnsupported (multipartVersion, fastifyVersion) {
+  return (
+    semver.intersects(multipartVersion, '6') &&
+      semver.intersects(fastifyVersion, '<3 || >=5')
+  ) || (
+    semver.intersects(multipartVersion, '>=7 <9') &&
+      semver.intersects(fastifyVersion, '<4 || >=5')
+  ) || (
+    semver.intersects(multipartVersion, '>=9 <11') &&
+      semver.intersects(fastifyVersion, '<5 || >=6')
+  )
+}
+
+describe('Fastify plugin version compatibility', () => {
+  it('identifies unsupported cookie pairs without closing future majors', () => {
+    assert.strictEqual(isCookieVersionUnsupported('6.0.0', '2.0.0'), true)
+    assert.strictEqual(isCookieVersionUnsupported('6.0.0', '3.9.2'), true)
+    assert.strictEqual(isCookieVersionUnsupported('6.0.0', '4.0.0'), false)
+    assert.strictEqual(isCookieVersionUnsupported('9.0.0', '5.0.0'), true)
+    assert.strictEqual(isCookieVersionUnsupported('9.0.0', '4.0.0'), false)
+    assert.strictEqual(isCookieVersionUnsupported('11.0.0', '6.0.0'), true)
+    assert.strictEqual(isCookieVersionUnsupported('11.0.0', '5.0.0'), false)
+    assert.strictEqual(isCookieVersionUnsupported('12.0.0', '6.0.0'), false)
+  })
+
+  it('identifies unsupported multipart pairs without closing future majors', () => {
+    assert.strictEqual(isMultipartVersionUnsupported('6.0.0', '2.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('6.0.0', '4.0.0'), false)
+    assert.strictEqual(isMultipartVersionUnsupported('6.0.0', '5.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('8.0.0', '3.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('8.0.0', '4.0.0'), false)
+    assert.strictEqual(isMultipartVersionUnsupported('10.0.0', '6.0.0'), true)
+    assert.strictEqual(isMultipartVersionUnsupported('10.0.0', '5.0.0'), false)
+    assert.strictEqual(isMultipartVersionUnsupported('11.0.0', '6.0.0'), false)
+  })
+})
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
     let app, server, requestBody, axios
 
-    before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false })
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       app = fastify()
@@ -43,12 +90,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ host: '127.0.0.1', port: 0 }, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-        done()
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -95,11 +140,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   describe('Suspicious request blocking - body', () => {
     let app, server, requestBody, axios
 
-    before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false })
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       app = fastify()
@@ -109,12 +151,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ host: '127.0.0.1', port: 0 }, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-        done()
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -196,11 +236,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   describe('Appsec blocking with schema validation', () => {
     let app, server, axios
 
-    before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false })
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       app = fastify()
@@ -219,12 +256,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ host: '127.0.0.1', port: 0 }, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-        done()
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -272,11 +307,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   describe('Suspicious request blocking - path parameters', () => {
     let app, server, preHandlerHookSpy, preValidationHookSpy, axios
 
-    before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false })
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
       app = fastify()
@@ -309,12 +341,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ host: '127.0.0.1', port: 0 }, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-        done()
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {
@@ -447,7 +477,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - cookie', () => {
-    withVersions('fastify', '@fastify/cookie', cookieVersion => {
+    withVersions('fastify', '@fastify/cookie', (cookieVersion, _, cookieLoadedVersion) => {
       const hookConfigurations = [
         'onRequest',
         'preParsing',
@@ -459,21 +489,13 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         describe(`with ${hook} hook`, () => {
           let server, requestCookie, axios
 
-          before(function () {
-            if (semver.intersects(fastifyLoadedVersion, '3.9.2')) {
-              // Fastify 3.9.2 is incompatible with @fastify/cookie >=6
-              this.skip()
-            }
-
-            // Skip preParsing hook for Fastify 2.x - has compatibility issues
-            if (hook === 'preParsing' && semver.intersects(fastifyLoadedVersion, '2')) {
-              this.skip()
-            }
-
-            return agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
-          })
-
           before(async function () {
+            if (isCookieVersionUnsupported(cookieLoadedVersion, fastifyLoadedVersion)) {
+              // @fastify/cookie does not support this Fastify version.
+              this.skip()
+            }
+
+            await agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
             const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
 
@@ -492,14 +514,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               reply.send('DONE')
             })
 
-            try {
-              await app.listen({ host: '127.0.0.1', port: 0 })
-            } catch (error) {
-              if (isFastifyPluginVersionMismatch(error)) {
-                return this.skip()
-              }
-              throw error
-            }
+            await app.listen({ host: '127.0.0.1', port: 0 })
 
             server = app.server
             const { port } = /** @type {import('net').AddressInfo} */ (server.address())
@@ -559,32 +574,13 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     withVersions('fastify', '@fastify/multipart', (multipartVersion, _, multipartLoadedVersion) => {
       let server, uploadSpy, axios
 
-      // The skips in this section are complex because of the incompatibilities between Fastify and @fastify/multipart
-      // We are not testing every major version of those libraries because of the complexity of the tests
-      before(function () {
-        // @fastify/multipart is not compatible with Fastify 2.x
-        if (semver.intersects(fastifyLoadedVersion, '2')) {
-          this.skip()
-        }
-
-        // This Fastify version is working only with @fastify/multipart 6
-        if (semver.intersects(fastifyLoadedVersion, '3.9.2') && semver.intersects(multipartLoadedVersion, '>=7')) {
-          this.skip()
-        }
-
-        // Fastify 5 drop le support pour multipart <7
-        if (semver.intersects(fastifyLoadedVersion, '>=5') && semver.intersects(multipartLoadedVersion, '<7.0.0')) {
-          this.skip()
-        }
-
-        if (semver.intersects(multipartLoadedVersion, '>=9.4.0') && semver.intersects(fastifyLoadedVersion, '<4')) {
-          this.skip()
-        }
-
-        return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
-      })
-
       before(async function () {
+        if (isMultipartVersionUnsupported(multipartLoadedVersion, fastifyLoadedVersion)) {
+          // @fastify/multipart does not support this Fastify version.
+          this.skip()
+        }
+
+        await agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
         const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
 
@@ -597,14 +593,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           reply.send('DONE')
         })
 
-        try {
-          await app.listen({ host: '127.0.0.1', port: 0 })
-        } catch (error) {
-          if (isFastifyPluginVersionMismatch(error)) {
-            return this.skip()
-          }
-          throw error
-        }
+        await app.listen({ host: '127.0.0.1', port: 0 })
 
         server = app.server
         const { port } = /** @type {import('net').AddressInfo} */ (server.address())
@@ -662,11 +651,8 @@ describe('Api Security - Fastify', () => {
   withVersions('fastify', 'fastify', version => {
     let config, app, server, axios
 
-    before(() => {
-      return agent.load(['fastify', 'http'], { client: false }, { appsec: { enabled: true } })
-    })
-
-    before((done) => {
+    before(async () => {
+      await agent.load(['fastify', 'http'], { client: false }, { appsec: { enabled: true } })
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
       app = fastify()
@@ -697,12 +683,10 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      app.listen({ host: '127.0.0.1', port: 0 }, () => {
-        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
-        done()
-      })
+      await app.listen({ host: '127.0.0.1', port: 0 })
       server = app.server
+      const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
     })
 
     after(async () => {

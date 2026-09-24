@@ -4,13 +4,17 @@ const proxyquire = require('proxyquire')
 
 function getConfigFresh (options, stubs = {}) {
   const childCountBefore = module.children.length
-  const helper = proxyquire.noPreserveCache()('../../src/config/helper.js', {})
-  const defaults = proxyquire.noPreserveCache()('../../src/config/defaults.js', {})
-  const config = proxyquire.noPreserveCache()('../../src/config', {
+  const loadHelper = proxyquire.noPreserveCache()
+  const helper = loadHelper('../../src/config/helper.js', {})
+  const loadDefaults = proxyquire.noPreserveCache()
+  const defaults = loadDefaults('../../src/config/defaults.js', {})
+  const loadConfig = proxyquire.noPreserveCache()
+  const createConfig = loadConfig('../../src/config', {
     './defaults': defaults,
     './helper': helper,
     ...stubs,
-  })(options)
+  })
+  const config = createConfig(options)
   // proxyquire links every freshly loaded module into this module's `children`;
   // `noPreserveCache` clears `require.cache` but not that array, so each
   // re-instrumented config graph stays pinned for the process lifetime. Detaching

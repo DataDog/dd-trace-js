@@ -37,7 +37,6 @@ function parseLiteralEnvironmentPrefix (command) {
  * @param {string} command command text
  * @param {string} name environment variable
  * @param {string} [platform] target platform
- * @returns {string} command without empty assignments
  */
 function removeEmptyLiteralEnvironmentAssignments (command, name, platform = process.platform) {
   const source = String(command || '')

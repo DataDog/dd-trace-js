@@ -11,11 +11,19 @@ const { ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const NoopExperiments = require('../../../src/llmobs/experiments/noop')
 
 const EXPERIMENTS_VCR_API_BASE = 'http://127.0.0.1:9126/vcr/datadog-experiments'
+const VCR_PROJECT_NAME = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
+  `dd-trace-js-experiments-${process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr-facade'}`
 
 class VcrExperimentsClient extends ExperimentsClient {
   constructor (options) {
     super(options)
     this.apiBase = EXPERIMENTS_VCR_API_BASE
+  }
+
+  ensureProjectId () {
+    // Keep VCR data isolated while the logical SDK project remains default-project.
+    const projectName = this.projectName === 'default-project' ? VCR_PROJECT_NAME : this.projectName
+    return this.getOrCreateProject(projectName)
   }
 }
 
@@ -27,7 +35,7 @@ const enabledConfig = (overrides = {}) => ({
   site: 'datadoghq.com',
   DD_API_KEY: 'k',
   DD_APP_KEY: 'a',
-  llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-app' },
+  llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app' },
   ...overrides,
 })
 
@@ -46,9 +54,7 @@ describe('LLMObs Experiments facade', () => {
     sinon.restore()
   })
 
-  const backendTestId = process.env.DD_LLMOBS_EXPERIMENTS_TEST_ID ?? 'vcr-facade'
-  const backendProjectName = process.env.DD_LLMOBS_EXPERIMENTS_PROJECT_NAME ??
-    `dd-trace-js-experiments-${backendTestId}`
+  const backendProjectName = VCR_PROJECT_NAME
   const backendExperimentDatasetName = `${backendProjectName}-experiment-dataset`
   const backendExperimentName = `${backendProjectName}-experiment`
   const backendRichExperimentDatasetName = `${backendProjectName}-rich-experiment-dataset`
@@ -77,7 +83,6 @@ describe('LLMObs Experiments facade', () => {
       DD_APP_KEY: options.appKey,
       llmobs: {
         DD_LLMOBS_ENABLED: true,
-        mlApp: options.projectName,
       },
     }))
   }
@@ -135,6 +140,7 @@ describe('LLMObs Experiments facade', () => {
         records: [{ inputData: 'in', expectedOutput: 'out', metadata: { source: 'test' } }],
       })
       assert.equal(typeof dataset.addRecord, 'function')
+      assert.equal(typeof dataset.addRecords, 'function')
       assert.equal(dataset.records()[0].input, 'in')
       const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
       assert.equal(typeof experiment.run, 'function')
@@ -153,7 +159,7 @@ describe('LLMObs Experiments facade', () => {
       })
 
       const exp = createWithProjectCapture(enabledConfig({
-        llmobs: { DD_LLMOBS_ENABLED: true, projectName: 'configured-project' },
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'ml-app', DD_LLMOBS_PROJECT_NAME: 'configured-project' },
       }))
       exp.createDataset('default')
       exp.createDataset('override', { projectName: 'override-project' })
@@ -161,10 +167,76 @@ describe('LLMObs Experiments facade', () => {
       assert.deepEqual(constructedProjects, ['configured-project', 'override-project'])
     })
 
-    it('returns a working facade when service is used as the project name fallback', () => {
-      const exp = createExperiments(enabledConfig({ service: 'my-service', llmobs: { DD_LLMOBS_ENABLED: true } }))
+    it('uses the configured project name for experiments without an operation override', async () => {
+      const projectNames = []
+      const stopBeforeBackend = new Error('stop before backend request')
+      sinon.stub(ExperimentsClient.prototype, 'ensureProjectId').callsFake(function () {
+        projectNames.push(this.projectName)
+        throw stopBeforeBackend
+      })
+      const exp = createExperiments(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_PROJECT_NAME: 'configured-project' },
+      }))
+
+      await assert.rejects(exp.experiment({ name: 'local', dataset: {}, task: String }).run(), stopBeforeBackend)
+      await assert.rejects(exp.startExperiment({ name: 'external' }), stopBeforeBackend)
+
+      assert.deepEqual(projectNames, ['configured-project', 'configured-project'])
+    })
+
+    it('preserves a dataset project and rejects mismatched experiment overrides', () => {
+      const constructedProjects = []
+      class CapturingExperimentsClient extends ExperimentsClient {
+        constructor (options) {
+          super(options)
+          constructedProjects.push(options.projectName)
+        }
+      }
+      const { createExperiments: createWithProjectCapture } = proxyquire('../../../src/llmobs/experiments', {
+        './client': { ExperimentsClient: CapturingExperimentsClient },
+      })
+
+      const exp = createWithProjectCapture(enabledConfig({
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_PROJECT_NAME: 'default-project' },
+      }))
+      const dataset = exp.createDataset('dataset', { projectName: 'dataset-project' })
+      exp.experiment({ name: 'dataset-exp', dataset, task: input => input })
+
+      assert.deepEqual(constructedProjects, ['default-project', 'dataset-project', 'dataset-project'])
+      assert.throws(
+        () => exp.experiment({
+          name: 'mismatched-exp',
+          projectName: 'other-project',
+          dataset,
+          task: input => input,
+        }),
+        /does not match dataset project 'dataset-project'/
+      )
+    })
+
+    it('uses default-project when no project name is configured', () => {
+      const exp = createExperiments(enabledConfig({
+        service: undefined,
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      }))
+      assert.ok(!(exp instanceof NoopExperiments))
+
       const dataset = exp.createDataset('d')
-      assert.equal(typeof dataset.push, 'function')
+      assert.equal(dataset.projectName(), 'default-project')
+    })
+
+    it('does not use mlApp or service as the experiment project fallback', () => {
+      const withMlApp = createExperiments(enabledConfig({
+        service: 'my-service',
+        llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_ML_APP: 'my-app' },
+      }))
+      assert.equal(withMlApp.createDataset('with-ml-app').projectName(), 'default-project')
+
+      const withService = createExperiments(enabledConfig({
+        service: 'my-service',
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      }))
+      assert.equal(withService.createDataset('with-service').projectName(), 'default-project')
     })
 
     it('rejects duplicate custom record ids', () => {
@@ -184,20 +256,6 @@ describe('LLMObs Experiments facade', () => {
         /record id must be a non-empty string/
       )
     })
-
-    it('returns a no-op with actionable steps when neither mlApp nor service is set', () => {
-      const warn = sinon.spy(log, 'warn')
-      const exp = createExperiments(enabledConfig({ service: undefined, llmobs: { DD_LLMOBS_ENABLED: true } }))
-      assert.ok(exp instanceof NoopExperiments)
-
-      exp.createDataset('d')
-
-      sinon.assert.calledWith(
-        warn,
-        'LLMObs experiments unavailable: %s',
-        sinon.match(/DD_LLMOBS_ML_APP.*DD_SERVICE/)
-      )
-    })
   })
 
   describe('no-op (disabled / missing keys)', () => {
@@ -215,7 +273,13 @@ describe('LLMObs Experiments facade', () => {
 
       const experiment = exp.experiment({ name: 'exp' })
       assert.equal(experiment.name(), 'exp')
-      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      assert.deepEqual(await experiment.run(), {
+        experimentId: null,
+        rows: [],
+        summaryEvaluations: {},
+        runs: [],
+        url: null,
+      })
       sinon.assert.calledThrice(warn)
     })
 
@@ -252,6 +316,7 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(dataset.description(), 'desc')
       assert.equal(dataset.id(), null)
       assert.equal(dataset.projectId(), null)
+      assert.equal(dataset.projectName(), null)
       assert.equal(dataset.version(), null)
       assert.equal(dataset.latestVersion(), null)
       assert.deepEqual(dataset.filterTags(), [])
@@ -276,7 +341,13 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(experiment.name(), '')
       assert.equal(experiment.experimentId(), null)
       assert.equal(experiment.url(), null)
-      assert.deepEqual(await experiment.run(), { experimentId: null, rows: [], url: null })
+      assert.deepEqual(await experiment.run(), {
+        experimentId: null,
+        rows: [],
+        summaryEvaluations: {},
+        runs: [],
+        url: null,
+      })
       sinon.assert.callCount(warn, 4)
     })
 
@@ -289,6 +360,38 @@ describe('LLMObs Experiments facade', () => {
       dataset.removeTags(0)
       dataset.replaceTags(0)
       assert.deepEqual(dataset.records()[0].tags, [])
+    })
+
+    it('adds multiple records to a no-op dataset', () => {
+      const dataset = new NoopExperiments().createDataset('d')
+      const returned = dataset.addRecords([
+        {
+          id: 'custom-record',
+          inputData: 'first',
+          expectedOutput: 'one',
+          metadata: { row: 0 },
+          tags: ['tag:first'],
+        },
+        { inputData: 'second' },
+      ])
+
+      assert.equal(returned, dataset)
+      assert.deepEqual(dataset.records(), [
+        {
+          id: 'custom-record',
+          input: 'first',
+          expectedOutput: 'one',
+          metadata: { row: 0 },
+          tags: ['tag:first'],
+        },
+        {
+          id: null,
+          input: 'second',
+          expectedOutput: null,
+          metadata: {},
+          tags: [],
+        },
+      ])
     })
   })
 
@@ -369,7 +472,7 @@ describe('LLMObs Experiments facade', () => {
 
       await assert.rejects(
         () => createExperiments(enabledConfig()).pullDataset('missing-dataset', { maxWaitMs: 0 }),
-        /Failed to list datasets in project 'my-app': list failed/
+        /Failed to list datasets in project 'default-project': list failed/
       )
     })
 
@@ -378,7 +481,7 @@ describe('LLMObs Experiments facade', () => {
 
       await assert.rejects(
         () => createExperiments(enabledConfig()).pullDataset('missing-dataset', { maxWaitMs: 0 }),
-        /Dataset 'missing-dataset' not found in project 'my-app'/
+        /Dataset 'missing-dataset' not found in project 'default-project'/
       )
     })
 
@@ -388,7 +491,7 @@ describe('LLMObs Experiments facade', () => {
 
       await assert.rejects(
         () => createExperiments(enabledConfig()).pullDataset('remote-dataset', { maxWaitMs: 0 }),
-        /Failed to fetch records for dataset 'remote-dataset' in project 'my-app': records failed/
+        /Failed to fetch records for dataset 'remote-dataset' in project 'default-project': records failed/
       )
     })
 
@@ -429,7 +532,16 @@ describe('LLMObs Experiments facade', () => {
   })
 
   describe('experiment run', () => {
+    function stubDynamicExperimentEvents () {
+      // Event payloads include generated span/trace ids; experiment.spec.js covers their shape.
+      // Keep these facade tests focused on control-plane VCR calls and returned result plumbing.
+      return sinon.stub(ExperimentsClient.prototype, 'postExperimentEvents').resolves()
+    }
+
     it('runs a multi-row experiment and returns rows, ids, metric values, and dashboard URLs', async function () {
+      this.timeout(60_000)
+
+      const postExperimentEvents = stubDynamicExperimentEvents()
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendRichExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments rich VCR test',
@@ -469,6 +581,7 @@ describe('LLMObs Experiments facade', () => {
       assert.equal(result.rows.length, 2)
       assert.equal(result.runs.length, 1)
       assert.equal(result.runs[0].rows, result.rows)
+      sinon.assert.calledOnce(postExperimentEvents)
       assert.match(dataset.id(), /\S+/)
       assert.match(dataset.url(), /^https:\/\//)
       assert.equal(dataset.recordIds().length, 2)
@@ -492,6 +605,9 @@ describe('LLMObs Experiments facade', () => {
     })
 
     it('creates an experiment, submits row events, and marks the experiment completed', async function () {
+      this.timeout(60_000)
+
+      const postExperimentEvents = stubDynamicExperimentEvents()
       const exp = backendExperiments()
       const dataset = trackBackendDataset(exp.createDataset(backendExperimentDatasetName, {
         description: 'created by a dd-trace-js experiments VCR test',
@@ -516,6 +632,9 @@ describe('LLMObs Experiments facade', () => {
       assert.match(result.url, /^https:\/\//)
       assert.equal(result.rows.length, 1)
       assert.deepEqual(result.rows[0].evaluations, { exact: true })
+      sinon.assert.calledOnce(postExperimentEvents)
+      // eslint-disable-next-line no-console
+      console.log(`Datadog experiment URL: ${result.url}`)
     })
   })
 
@@ -535,7 +654,7 @@ describe('LLMObs Experiments facade', () => {
       sinon.stub(ExperimentsClient.prototype, 'updateExperiment').resolves()
     }
 
-    it('honors projectName override when no global project is configured', async () => {
+    it('honors a projectName override when no project is configured globally', async () => {
       stubExperimentRecorderClient()
       const warn = sinon.spy(log, 'warn')
 
@@ -712,7 +831,7 @@ describe('LLMObs Experiments facade', () => {
       ExperimentsClient.prototype.postExperimentEvents.resetHistory()
       await recorder.submitEvaluationMetrics(span, [{ label: 'score' }])
       sinon.assert.notCalled(ExperimentsClient.prototype.postExperimentEvents)
-      sinon.assert.calledThrice(warn)
+      sinon.assert.callCount(warn, 3)
       sinon.assert.calledWith(
         warn,
         'LLMObs experiments: skipping external metric %s because it has neither value nor error',

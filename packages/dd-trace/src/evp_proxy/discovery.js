@@ -2,8 +2,7 @@
 
 const { fetchAgentInfo } = require('../agent/info')
 const log = require('../log')
-
-const TRAILING_SLASHES = /\/+$/
+const { joinAgentURLPath, stripTrailingSlashes } = require('./path')
 
 /**
  * Receiver discovery contract
@@ -26,12 +25,13 @@ const TRAILING_SLASHES = /\/+$/
  * serverless-init image or deployment type.
  *
  * This module only discovers a candidate route. A missing or unresponsive
- * `/info` endpoint returns an error through the shared request timeout and
- * retry policy. A valid response without a compatible path returns no route.
+ * `/info` endpoint returns an error after the request's bounded retry policy.
+ * Callers can disable retries to make discovery a single attempt. A valid
+ * response without a compatible path returns no route.
  * Discovery sends no events, so the caller can safely select direct intake
- * after either result. The caller also owns later delivery failures. It can
- * switch future batches after an ambiguous timeout or reset, but it must not
- * replay the current batch because the first receiver might have accepted it.
+ * after either result. The caller also owns later delivery failures. Exposure
+ * delivery decides whether a failed batch can be replayed and which route
+ * future batches use.
  *
  * Reference implementations:
  *
@@ -62,17 +62,17 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
   }
 
   const allowedHeaders = agentInfo.evp_proxy_allowed_headers
-  if (allowedHeaders !== undefined) {
+  if (requiredHeaders.length > 0 || allowedHeaders !== undefined) {
     if (!Array.isArray(allowedHeaders)) return
 
     const normalizedHeaders = new Set()
     for (const header of allowedHeaders) {
       if (typeof header === 'string') {
-        normalizedHeaders.add(header.toLowerCase())
+        normalizedHeaders.add(header.trim().toLowerCase())
       }
     }
 
-    if (requiredHeaders.some(header => !normalizedHeaders.has(header.toLowerCase()))) {
+    if (requiredHeaders.some(header => !normalizedHeaders.has(header.trim().toLowerCase()))) {
       return
     }
   }
@@ -80,14 +80,14 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
   const advertisedPaths = new Set()
   for (const endpoint of agentInfo.endpoints) {
     if (typeof endpoint === 'string') {
-      advertisedPaths.add(endpoint.replace(TRAILING_SLASHES, ''))
+      advertisedPaths.add(stripTrailingSlashes(endpoint))
     }
   }
 
   for (const supportedPath of supportedPaths) {
     if (typeof supportedPath !== 'string') continue
 
-    const normalizedPath = supportedPath.replace(TRAILING_SLASHES, '')
+    const normalizedPath = stripTrailingSlashes(supportedPath)
     if (advertisedPaths.has(normalizedPath)) {
       return normalizedPath
     }
@@ -105,8 +105,8 @@ function selectEVPProxyPath (agentInfo, { supportedPaths, requiredHeaders = [] }
  * @param {string[]} options.supportedPaths - Supported paths in preference order
  * @param {string[]} [options.requiredHeaders] - Headers that the proxy must forward unchanged to intake. Each
  * header must appear in `evp_proxy_allowed_headers`. Do not include routing headers that the Agent consumes.
+ * @param {boolean} [options.retry] - Set false to disable the request's default bounded retries
  * @param {(error: Error|null, route?: {url: URL, basePath: string}) => void} callback - Result callback
- * @returns {void}
  */
 function discoverEVPProxy (url, options, callback) {
   fetchAgentInfo(url, (error, agentInfo) => {
@@ -122,7 +122,10 @@ function discoverEVPProxy (url, options, callback) {
     }
 
     log.debug('EVP proxy route %s discovered through the configured local receiver', basePath)
-    callback(null, { url, basePath })
+    callback(null, { url, basePath: joinAgentURLPath(url, basePath) })
+  }, {
+    path: joinAgentURLPath(url, '/info'),
+    retry: options.retry,
   })
 }
 

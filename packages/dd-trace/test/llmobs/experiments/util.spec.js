@@ -10,6 +10,7 @@ const { BaseEvaluator, BaseSummaryEvaluator } = require('../../../src/llmobs/exp
 const {
   buildTags,
   durationNs,
+  generateRunId,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
@@ -23,6 +24,15 @@ const {
 describe('LLMObs Experiments util', () => {
   afterEach(() => {
     sinon.restore()
+  })
+
+  it('generates UUID run ids', () => {
+    const first = generateRunId()
+    const second = generateRunId()
+
+    assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.match(second, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.notEqual(first, second)
   })
 
   it('validates evaluator names against the backend contract', () => {

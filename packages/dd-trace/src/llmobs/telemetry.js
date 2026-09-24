@@ -84,11 +84,11 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
   const autoEnabled = !!config._env?.['llmobs.enabled']
   const tags = {
     error: 0,
-    agentless: Number(config.llmobs.agentlessEnabled),
+    agentless: Number(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED),
     site: config.site,
     auto: Number(autoEnabled),
-    ml_app: config.llmobs.mlApp,
-    sample_rate: config.llmobs.sampleRate,
+    ml_app: config.llmobs.DD_LLMOBS_ML_APP,
+    sample_rate: config.llmobs.DD_LLMOBS_SAMPLE_RATE,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
@@ -188,7 +188,6 @@ function recordSubmitEvaluation (options, err, value = 1) {
  * @param {string} targetType - The payload key the feedback was attached to, `'other'` if unresolved.
  * @param {string} err - The telemetry error tag, empty when the submission succeeded.
  * @param {number} [value]
- * @returns {void}
  */
 function recordSubmitFeedback (metricType, targetType, err, value = 1) {
   const tags = {
@@ -203,6 +202,36 @@ function recordSubmitFeedback (metricType, targetType, err, value = 1) {
 function recordLLMObsUserProcessorCalled (error, value = 1) {
   const tags = { error: error ? 1 : 0 }
   llmobsMetrics.count('user_processor_called', tags).inc(value)
+}
+
+/**
+ * @param {'hot_cache'|'warm_cache'|'registry'|'resolve'|'fallback'|'ff'} source
+ * @param {number} [value]
+ */
+function recordPromptSource (source, value = 1) {
+  llmobsMetrics.count('prompt.source', { from: source }).inc(value)
+}
+
+/**
+ * @param {'NotFound'|'FetchError'} errorType
+ * @param {number} [value]
+ */
+function recordPromptFetchError (errorType, value = 1) {
+  llmobsMetrics.count('prompt.fetch.error', { error_type: errorType }).inc(value)
+}
+
+/**
+ * @param {'GET'|'POST'|'PATCH'|'DELETE'} method
+ * @param {string} errorType
+ * @param {number} status
+ * @param {number} [value]
+ */
+function recordPromptCrudError (method, errorType, status, value = 1) {
+  llmobsMetrics.count('prompt.crud.error', {
+    method,
+    error_type: errorType,
+    status: String(status),
+  }).inc(value)
 }
 
 module.exports = {
@@ -220,4 +249,7 @@ module.exports = {
   recordSubmitEvaluation,
   recordSubmitFeedback,
   recordLLMObsUserProcessorCalled,
+  recordPromptSource,
+  recordPromptFetchError,
+  recordPromptCrudError,
 }

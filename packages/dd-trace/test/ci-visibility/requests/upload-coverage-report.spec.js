@@ -93,7 +93,8 @@ describe('ci-visibility/requests/upload-coverage-report', () => {
    * @returns {Promise<void>}
    */
   function uploadAndWait (fileStats) {
-    return promisify(uploadCoverageReport)({
+    const uploadCoverageReportAsync = promisify(uploadCoverageReport)
+    return uploadCoverageReportAsync({
       filePath,
       fileDevice: fileStats.dev,
       fileInode: fileStats.ino,
@@ -158,7 +159,8 @@ describe('ci-visibility/requests/upload-coverage-report', () => {
     )
 
     assert.strictEqual(Number(discoveredFileInode), Number(replacementFileInode))
-    await assert.rejects(promisify(upload)({
+    const uploadAsync = promisify(upload)
+    await assert.rejects(uploadAsync({
       filePath,
       fileDevice: 1n,
       fileInode: discoveredFileInode,
@@ -188,7 +190,8 @@ describe('ci-visibility/requests/upload-coverage-report', () => {
     )
     requestStub.yields(null, 'ok', 200)
 
-    await promisify(upload)({
+    const uploadAsync = promisify(upload)
+    await uploadAsync({
       filePath,
       fileDevice: fileStats.dev,
       fileInode: fileStats.ino,

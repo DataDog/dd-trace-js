@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -23,6 +24,7 @@ describe('SpanProcessor', () => {
   let spanFormat
   let config
   let SpanSampler
+  let SpanStatsProcessor
   let sample
 
   before(() => {
@@ -72,12 +74,37 @@ describe('SpanProcessor', () => {
     SpanSampler = sinon.stub().returns({
       sample,
     })
+    SpanStatsProcessor = sinon.stub()
 
     SpanProcessor = proxyquire('../src/span_processor', {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
+      './span_stats': { SpanStatsProcessor },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
+  })
+
+  it('should configure span stats when enabled outside standalone AppSec', () => {
+    const otlpStatsExporter = {}
+    const stats = {}
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = false
+    SpanStatsProcessor.returns(stats)
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config, otlpStatsExporter)
+
+    sinon.assert.calledOnceWithExactly(SpanStatsProcessor, config, otlpStatsExporter)
+    assert.strictEqual(processor._stats, stats)
+  })
+
+  it('should not configure span stats in standalone AppSec', () => {
+    config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED = true
+    config.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED = true
+
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+
+    sinon.assert.notCalled(SpanStatsProcessor)
+    assert.strictEqual(processor._stats, undefined)
   })
 
   it('should generate sampling priority', () => {
@@ -90,6 +117,36 @@ describe('SpanProcessor', () => {
     processor.sample(finishedSpan)
 
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
+  })
+
+  it('should span sample when the trace is not marked for discard', () => {
+    processor.sample(finishedSpan)
+
+    sinon.assert.calledWith(sample, finishedSpan.context())
+  })
+
+  it('should skip span sampling when the priority sampler marks the trace for discard', () => {
+    prioritySampler.sample = sinon.stub().callsFake((context) => {
+      context._sampling.discard = true
+      context._sampling.priority = AUTO_REJECT
+    })
+
+    processor.sample(finishedSpan)
+
+    sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
+    sinon.assert.notCalled(sample)
+  })
+
+  it('should still span sample when discard was set but the priority was later force-kept', () => {
+    // e.g. a product forcing the trace to be kept via PrioritySampler.keepTrace() after a
+    // sampling rule already rejected it and flagged it for discard.
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
+    finishedSpan.context()._sampling.priority = USER_KEEP
+
+    processor.sample(finishedSpan)
+
+    sinon.assert.calledWith(sample, finishedSpan.context())
   })
 
   it('should erase the trace once finished', () => {
@@ -141,6 +198,56 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(trace.started, [activeSpan])
     assert.ok('finished' in trace)
     assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should drop the chunk without exporting or formatting when marked for discard', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    sinon.assert.notCalled(spanFormat)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should not record span stats for a chunk marked for discard', () => {
+    processor._stats = { onSpanFinished: sinon.stub() }
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(processor._stats.onSpanFinished)
+  })
+
+  it('should keep not-yet-finished spans active when a chunk is discarded', () => {
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = AUTO_REJECT
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should still export the chunk when discard was set but the priority was later force-kept', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._sampling.discard = true
+    finishedSpan.context()._sampling.priority = USER_KEEP
+
+    processor.process(finishedSpan)
+
+    sinon.assert.calledWith(exporter.export, [{ formatted: true }])
   })
 
   it('should configure span sampler correctly', () => {

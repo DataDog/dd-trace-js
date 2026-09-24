@@ -5,7 +5,6 @@ const { validateEvaluatorName } = require('./util')
 /**
  * @param {object} evaluator
  * @param {string | undefined} name
- * @returns {string}
  */
 function resolveEvaluatorName (evaluator, name) {
   const evaluatorName = name === undefined
@@ -131,7 +130,24 @@ class BaseSummaryEvaluator {
   }
 }
 
+/**
+ * Base class for reusable asynchronous record-level evaluators.
+ *
+ * JavaScript evaluators may return a Promise directly, so this class is an API-compatible alias of BaseEvaluator.
+ */
+class BaseAsyncEvaluator extends BaseEvaluator {}
+
+/**
+ * Base class for reusable asynchronous summary evaluators.
+ *
+ * JavaScript evaluators may return a Promise directly, so this class is an API-compatible alias of
+ * BaseSummaryEvaluator.
+ */
+class BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
+
 module.exports = {
+  BaseAsyncEvaluator,
+  BaseAsyncSummaryEvaluator,
   BaseEvaluator,
   BaseSummaryEvaluator,
   EvaluatorContext,

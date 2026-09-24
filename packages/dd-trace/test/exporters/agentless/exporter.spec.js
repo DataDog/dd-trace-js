@@ -104,6 +104,7 @@ describe('AgentlessExporter', () => {
       }
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
+        '../common/docker': { containerId: 'container-id' },
         './writer': Writer,
       })
 
@@ -115,10 +116,82 @@ describe('AgentlessExporter', () => {
 
       assert.ok(writerOptions.metadata)
       assertObjectContains(writerOptions.metadata, {
+        containerId: 'container-id',
         env: 'production',
         runtimeID: 'test-uuid',
-        languageName: 'nodejs',
       })
+    })
+
+    it('should omit container metadata when only an entity ID is available', () => {
+      const writerOptions = {}
+      /** @param {object} options */
+      const Writer = function (options) {
+        Object.assign(writerOptions, options)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+        '../common/docker': {
+          containerId: undefined,
+          entityId: 'in-1234',
+        },
+      })
+
+      exporter = new Exporter({
+        site: 'datadoghq.com',
+        tags: { 'runtime-id': 'test-uuid' },
+      })
+
+      assert.strictEqual(Object.hasOwn(writerOptions.metadata, 'containerID'), false)
+    })
+
+    it('should reflect a runtime id updated on config after construction', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = {
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      }
+
+      exporter = new Exporter(config)
+
+      config.tags['runtime-id'] = 'new-uuid'
+
+      assert.strictEqual(writerOptions.metadata.runtimeID, 'new-uuid')
+    })
+
+    it('should reflect an env updated on config after construction', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      const config = {
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      }
+
+      exporter = new Exporter(config)
+
+      config.env = 'staging'
+
+      assert.strictEqual(writerOptions.metadata.env, 'staging')
     })
   })
 

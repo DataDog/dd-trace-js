@@ -1,13 +1,19 @@
 'use strict'
 
+const fs = require('node:fs')
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
 const { isMainThread, parentPort } = require('node:worker_threads')
 
+const { channel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { getEfdRetryCountForDuration } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
+  getEfdRetryCountForDuration,
+  EMPTY_EFD_RETRY_POLICY,
+} = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const {
   DYNAMIC_NAME_RE,
   getTestSuitePath,
@@ -40,10 +46,12 @@ const {
 } = require('./vitest-util')
 
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
 const taskToReportedErrorCount = new WeakMap()
+const runnersWithLogSubmissionCleanup = new WeakSet()
 const attemptToFixTaskToStatuses = new WeakMap()
 const fileToHasConcurrentTests = new WeakMap()
 const fileToEfdSuiteAdmission = new WeakMap()
@@ -59,6 +67,8 @@ const modifiedTasks = new WeakSet()
 const efdRetryTasks = new WeakSet()
 const efdDeterminedRetries = new WeakMap()
 const efdSlowAbortedTasks = new WeakSet()
+// Each native repetition selects its own budget from its first attempt.
+const dynamicAtrStateByTask = new WeakMap()
 const efdExecutionStartByTask = new WeakMap()
 const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
@@ -180,7 +190,6 @@ function getVitestCoverageOptions () {
 /**
  * Check whether the current Vitest worker reuses its module cache across test suites.
  *
- * @returns {boolean}
  */
 function isNonIsolatedRun () {
   const config = globalThis.__vitest_worker__?.config
@@ -241,7 +250,17 @@ function wrapVitestCoverageRpc () {
       if (property !== 'onAfterSuiteRun' || typeof value !== 'function') return value
 
       return function (metadata) {
-        vitestCoverageSnapshot = metadata?.coverage
+        const coverage = metadata?.coverage
+        if (typeof coverage === 'string') {
+          try {
+            vitestCoverageSnapshot = JSON.parse(fs.readFileSync(coverage, 'utf8'))
+          } catch (error) {
+            log.warn('Could not read Vitest V8 coverage: %s', error?.message)
+            vitestCoverageSnapshot = undefined
+          }
+        } else {
+          vitestCoverageSnapshot = coverage
+        }
         return value.apply(this, arguments)
       }
     },
@@ -273,7 +292,6 @@ function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
  * Return the normalized test suite path prepared by the main process for a Vitest task.
  *
  * @param {{ file: { filepath: string } }} task
- * @returns {string}
  */
 function getTaskTestSuite (task) {
   return taskToTestProperties.get(task)?.testSuite || task.file.filepath
@@ -329,7 +347,6 @@ function wrapBeforeEachCleanupResult (task, result) {
  * Returns whether a Vitest task tree includes any concurrent task.
  *
  * @param {Array<{ type?: string, concurrent?: boolean, tasks?: object[] }>|undefined} tasks
- * @returns {boolean}
  */
 function hasConcurrentTask (tasks) {
   if (!tasks) return false
@@ -346,7 +363,6 @@ function hasConcurrentTask (tasks) {
  * Returns whether a Vitest file includes any concurrent test.
  *
  * @param {{ tasks?: object[] }} file
- * @returns {boolean}
  */
 function hasConcurrentTests (file) {
   const cached = fileToHasConcurrentTests.get(file)
@@ -362,7 +378,6 @@ function hasConcurrentTests (file) {
  *
  * @param {{ filepath: string, tasks?: object[] }} file
  * @param {object} providedContext
- * @returns {boolean}
  */
 function hasRunnableNewTest (file, providedContext) {
   for (const task of getTypeTasks(file.tasks)) {
@@ -381,7 +396,6 @@ function hasRunnableNewTest (file, providedContext) {
  *
  * @param {number} requestId
  * @param {boolean} allowed
- * @returns {void}
  */
 function finishEfdSuiteAdmissionRequest (requestId, allowed) {
   const request = pendingEfdSuiteAdmissionRequests.get(requestId)
@@ -396,7 +410,6 @@ function finishEfdSuiteAdmissionRequest (requestId, allowed) {
  * Handles an EFD suite admission response from the Vitest main process.
  *
  * @param {unknown} message
- * @returns {void}
  */
 function handleEfdSuiteAdmissionResponse (message) {
   if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
@@ -577,6 +590,31 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
+    if (
+      providedContext.isDynamicAtrEnabled &&
+      isFlakyTestRetriesEnabledForTask(providedContext, task) &&
+      !attemptToFixTasks.has(task) &&
+      !efdRetryTasks.has(task) &&
+      task.retry?.__ddTestOptAtr && task.retry.count > 0
+    ) {
+      const state = { executionStart: process.uptime(), retryOffset: 0, retryCount: undefined }
+      dynamicAtrStateByTask.set(task, state)
+      // The runner caches count, but evaluates condition after hooks and fixture cleanup.
+      task.retry = {
+        ...task.retry,
+        condition () {
+          if (state.retryCount === undefined) {
+            state.retryCount = getDynamicAtrRetryCount(
+              (process.uptime() - state.executionStart) * 1000,
+              earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY,
+              providedContext.dynamicAtrBuckets
+            )
+          }
+          return task.result.retryCount - state.retryOffset < state.retryCount
+        },
+      }
+    }
+
     return onBeforeRunTask.apply(this, arguments)
   })
 
@@ -639,6 +677,13 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
+    const dynamicAtrState = dynamicAtrStateByTask.get(task)
+    if (dynamicAtrState && numAttempt === 0) {
+      if (numRepetition > 0) dynamicAtrState.executionStart = process.uptime()
+      // Vitest accumulates result.retryCount across native repetitions.
+      dynamicAtrState.retryOffset = task.result.retryCount
+      dynamicAtrState.retryCount = undefined
+    }
     const isFailedTestReplayAllowed = !hasConcurrentTests(task.file)
     const isEfdManagedTask = efdRetryTasks.has(task)
 
@@ -704,7 +749,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
-    const shouldFlipStatus = isEfd || isAtf
+    const shouldResetStatus = isEfd || isAtf
     const statuses = isAtf ? attemptToFixTaskToStatuses.get(task) : taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -724,13 +769,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         if (shouldTrackStatuses && statuses) {
           statuses.push(lastExecutionStatus)
         }
-        if (shouldFlipStatus) {
-          // If we don't "reset" the result.state to "pass", once a repetition fails,
-          // vitest will always consider the test as failed, so we can't read the actual status
-          // This means that we change vitest's behavior:
-          // if the last attempt passes, vitest would consider the test as failed
-          // but after this change, it will consider the test as passed
-          task.result.state = 'pass'
+        if (shouldResetStatus) {
+          // Reset to Vitest's neutral state so a previous failure does not affect the next repetition.
+          // A terminal pass state can leak into reporters before the next repetition determines its status.
+          task.result.state = 'run'
         }
       }
     } else if (numRepetition === task.repeats) {
@@ -745,8 +787,8 @@ function wrapVitestTestRunner (VitestTestRunner) {
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
       }
-      if (shouldFlipStatus) {
-        task.result.state = 'pass'
+      if (shouldResetStatus) {
+        task.result.state = 'run'
       }
     }
 
@@ -825,15 +867,16 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
       const result = await onAfterTryTask.apply(this, arguments)
 
+      const providedContext = getProvidedContext()
       const {
         testManagementAttemptToFixRetries,
         earlyFlakeDetectionRetryPolicy,
-      } = getProvidedContext()
+      } = providedContext
 
       const status = getVitestTestStatus(task, retryInfo.retry)
       const ctx = taskToCtx.get(task)
 
-      const { isDiEnabled } = getProvidedContext()
+      const { isDiEnabled } = providedContext
       const isFailedTestReplayAllowed = !hasConcurrentTests(task.file)
 
       if (efdSkippedRetryResults.has(task)) {
@@ -888,22 +931,36 @@ function wrapVitestTestRunner (VitestTestRunner) {
 }
 
 function captureRunnerFunctions (pkg) {
-  if (vitestGetFn) return
   const getFnExport = findExportByName(pkg, 'getFn')
   const setFnExport = findExportByName(pkg, 'setFn')
-  if (getFnExport && setFnExport) {
+  if (!vitestGetFn && getFnExport) {
     vitestGetFn = getFnExport.value
+  }
+  if (!vitestSetFn && setFnExport) {
     vitestSetFn = setFnExport.value
   }
   const getHooksExport = findExportByName(pkg, 'getHooks')
-  if (getHooksExport) {
+  if (!vitestGetHooks && getHooksExport) {
     vitestGetHooks = getHooksExport.value
+  }
+}
+
+function installTestScopedRunTask (VitestTestRunner) {
+  if (VitestTestRunner.prototype.runTask) return
+
+  VitestTestRunner.prototype.runTask = function (task) {
+    const fn = vitestGetFn?.(task)
+    if (!fn) {
+      throw new Error('Test function is not found. Did you add it using setFn?')
+    }
+    const testFn = wrapTestScopedFn(task, fn)
+    return testFn()
   }
 }
 
 addHook({
   name: 'vitest',
-  versions: ['>=4.0.0'],
+  versions: ['>=4.0.0 <5.0.0'],
   filePattern: 'dist/chunks/test.*',
 }, (testPackage) => {
   const testRunner = getTestRunnerExport(testPackage)
@@ -915,6 +972,30 @@ addHook({
   wrapVitestTestRunner(testRunner.value)
 
   return testPackage
+})
+
+// Vitest 5 bundled the former @vitest/runner implementation into separate index and run chunks.
+addHook({
+  name: 'vitest',
+  versions: ['>=5.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, (testPackage) => {
+  const testRunner = getTestRunnerExport(testPackage)
+  if (testRunner) {
+    wrapVitestTestRunner(testRunner.value)
+    installTestScopedRunTask(testRunner.value)
+  }
+  return testPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=5.0.0'],
+  filePattern: 'dist/chunks/run.*',
+}, (runnerPackage, frameworkVersion) => {
+  captureRunnerFunctions(runnerPackage)
+  wrapStartTests(runnerPackage, frameworkVersion)
+  return runnerPackage
 })
 
 addHook({
@@ -943,16 +1024,19 @@ addHook({
   return vitestPackage
 })
 
-// test suite start and finish
-// only relevant for workers
-addHook({
-  name: '@vitest/runner',
-  versions: ['>=1.6.0'],
-}, (vitestPackage, frameworkVersion) => {
-  shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
+function getStartTestsWrapper (frameworkVersion) {
+  return startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteFinishCh.hasSubscribers) {
       return startTests.apply(this, arguments)
+    }
+    const runner = arguments[1]
+    // Vitest 3+ exposes the only awaited worker-shutdown boundary; older versions keep timer/before-exit behavior.
+    if (logSubmissionFlushCh.hasSubscribers &&
+        typeof runner?.onCleanupWorkerContext === 'function' &&
+        !runnersWithLogSubmissionCleanup.has(runner)) {
+      runnersWithLogSubmissionCleanup.add(runner)
+      runner.onCleanupWorkerContext(() => getChannelPromise(logSubmissionFlushCh))
     }
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
@@ -1061,10 +1145,14 @@ addHook({
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
           const isAtrRetry = isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
-            !newTasks.has(task) && !modifiedTasks.has(task)
+            !efdRetryTasks.has(task)
           if (isAtrRetry) {
-            const maxRetries = providedContext.flakyTestRetriesCount ?? 0
-            if (maxRetries > 0 && task.result?.retryCount === maxRetries) {
+            // Dynamic ATR: use the per-test duration-based count instead of the flat limit.
+            const dynamicAtrState = dynamicAtrStateByTask.get(task)
+            const maxRetries = dynamicAtrState?.retryCount === undefined
+              ? (providedContext.flakyTestRetriesCount ?? 0)
+              : dynamicAtrState.retryOffset + dynamicAtrState.retryCount
+            if (maxRetries > 0 && task.result?.retryCount >= maxRetries) {
               hasFailedAllRetries = true
             }
           }
@@ -1155,7 +1243,20 @@ addHook({
     })
 
     return startTestsResponse
-  })
+  }
+}
 
+function wrapStartTests (vitestPackage, frameworkVersion) {
+  const startTests = findExportByName(vitestPackage, 'startTests')
+  if (startTests) {
+    shimmer.wrap(vitestPackage, startTests.key, getStartTestsWrapper(frameworkVersion))
+  }
   return vitestPackage
-})
+}
+
+// test suite start and finish
+// only relevant for workers
+addHook({
+  name: '@vitest/runner',
+  versions: ['>=1.6.0'],
+}, wrapStartTests)

@@ -222,4 +222,5 @@ function buildProfilingRuntime (config) {
 
 module.exports = {
   buildProfilingRuntime,
+  getProfilingTags,
 }

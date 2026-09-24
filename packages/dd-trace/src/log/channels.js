@@ -9,6 +9,8 @@ const debugChannel = channel('datadog:log:debug')
 const infoChannel = channel('datadog:log:info')
 const warnChannel = channel('datadog:log:warn')
 const errorChannel = channel('datadog:log:error')
+// Telemetry needs the unformatted message, cause and transmission policy, not console output.
+const errorRecordChannel = channel('datadog:log:error:record')
 
 const defaultLevel = Level.debug
 
@@ -67,4 +69,5 @@ module.exports = {
   infoChannel,
   warnChannel,
   errorChannel,
+  errorRecordChannel,
 }

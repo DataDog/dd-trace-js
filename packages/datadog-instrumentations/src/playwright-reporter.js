@@ -2,7 +2,11 @@
 
 const { channel } = require('dc-polyfill')
 
+const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const reporterErrorCh = channel('ci:playwright:reporter:error')
+const reporterRunSummaryCh = channel('ci:playwright:reporter:run-summary')
+const reporterSuiteHookErrorCh = channel('ci:playwright:reporter:suite-hook-error')
+const suitesWithHookErrors = new Set()
 const PLAYWRIGHT_REPORTER_ERROR_MESSAGE = 'Error in reporter'
 const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
   /^\s*at wrapAsync .*?[\\/]playwright[\\/]lib[\\/]runner[\\/]index\.js:\d+:\d+\)?$/
@@ -12,7 +16,6 @@ const PLAYWRIGHT_REPORTER_ERROR_CALLER_RE =
  * interpreting identical user console output as a framework error.
  *
  * @param {unknown} message - First console.error argument
- * @returns {boolean}
  */
 function isPlaywrightReporterError (message) {
   if (message !== PLAYWRIGHT_REPORTER_ERROR_MESSAGE) return false
@@ -27,11 +30,54 @@ function isPlaywrightReporterError (message) {
   }
 }
 
+/**
+ * Returns whether a finalized Playwright result contains a failed suite hook.
+ *
+ * @param {Array<object>} steps
+ */
+function hasFailedSuiteHook (steps) {
+  if (!steps) return false
+
+  for (const step of steps) {
+    if (step.error && (step.title === 'beforeAll hook' || step.title === 'afterAll hook')) return true
+    if (hasFailedSuiteHook(step.steps)) return true
+  }
+  return false
+}
+
 class DatadogPlaywrightReporter {
+  /**
+   * Creates a reporter that observes the finalized Playwright result independently of user reporters.
+   *
+   * @param {object} [options]
+   * @param {boolean} [options.captureReporterErrors]
+   */
+  constructor ({ captureReporterErrors = true } = {}) {
+    this.captureReporterErrors = captureReporterErrors
+    this.fatalErrorCount = 0
+  }
+
+  /**
+   * Identifies this reporter as implementing Playwright's reporter v2 contract.
+   *
+   * @returns {'v2'}
+   */
+  version () {
+    return 'v2'
+  }
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   * @param {object} config
+   */
+  onConfigure (config) {
+    this.failOnFlakyTests = config.failOnFlakyTests
+  }
+
   /**
    * Restores console error after Playwright completes the reporter lifecycle.
    *
-   * @returns {void}
    */
   static restoreConsoleError () {
     // eslint-disable-next-line no-console
@@ -46,11 +92,88 @@ class DatadogPlaywrightReporter {
   }
 
   /**
+   * Records the suite so finalized test outcomes can be counted in onEnd.
+   *
+   * @param {object} configOrSuite
+   * @param {object} [suite]
+   */
+  onBegin (configOrSuite, suite) {
+    this.suite = suite || configOrSuite
+    if (suite) this.failOnFlakyTests = configOrSuite.failOnFlakyTests
+    suitesWithHookErrors.clear()
+  }
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onTestBegin () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onStdOut () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onStdErr () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onTestEnd () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onStepBegin () {}
+
+  /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onStepEnd () {}
+
+  /**
    * Marks the beginning of reporter finalization so later reporter errors can be identified.
    *
-   * @returns {void}
    */
   onEnd () {
+    let failureCount = this.fatalErrorCount
+    let quarantinedFailureCount = 0
+    let hasIncompleteTests = suitesWithHookErrors.size > 0
+    const tests = this.suite?.allTests?.()
+    if (tests) {
+      for (const test of tests) {
+        const outcome = test.outcome()
+        const finalResult = test.results.at(-1)
+        hasIncompleteTests ||= hasFailedSuiteHook(finalResult?.steps)
+        if (outcome === 'unexpected' || (outcome === 'flaky' && this.failOnFlakyTests)) {
+          failureCount += 1
+          const finalResultStatus = finalResult?.status
+          const hasFailed = finalResultStatus === 'failed' || finalResultStatus === 'timedOut'
+          if (outcome === 'unexpected' && hasFailed && test._ddIsQuarantined && !test._ddIsAttemptToFix) {
+            quarantinedFailureCount += 1
+          }
+        } else if (outcome === 'skipped' && !test._ddShouldSkipEfdRetry &&
+          (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
+          const { results } = test
+          hasIncompleteTests ||= results.some(result => result.status === 'interrupted') ||
+            !results.length || test.expectedStatus !== 'skipped'
+        }
+      }
+    }
+    reporterRunSummaryCh.publish({ failureCount, quarantinedFailureCount, hasIncompleteTests })
+    suitesWithHookErrors.clear()
+
+    // A reused config can retain this reporter after the plugin is disabled.
+    if (!this.captureReporterErrors || !libraryConfigurationCh.hasSubscribers) return
+
     this.isFinalizing = true
     // Playwright 1.60 and 1.61 only expose reporter errors through this exact console call.
     // eslint-disable-next-line no-console
@@ -77,23 +200,35 @@ class DatadogPlaywrightReporter {
   }
 
   /**
+   * Implements the reporter v2 lifecycle hook required by older Playwright versions.
+   *
+   */
+  onExit () {}
+
+  /**
    * Reports errors emitted by Playwright while later reporters are finalizing.
    *
    * @param {unknown} error
-   * @returns {void}
    */
   onError (error) {
-    if (this.isFinalizing) reporterErrorCh.publish(error)
+    if (this.isFinalizing) {
+      reporterErrorCh.publish(error)
+    } else {
+      this.fatalErrorCount += 1
+    }
   }
 
   /**
    * Keeps the internal reporter from affecting Playwright's output reporter selection.
    *
-   * @returns {boolean}
    */
   printsToStdio () {
     return false
   }
 }
+
+reporterSuiteHookErrorCh.subscribe((testSuiteAbsolutePath) => {
+  suitesWithHookErrors.add(testSuiteAbsolutePath)
+})
 
 module.exports = DatadogPlaywrightReporter

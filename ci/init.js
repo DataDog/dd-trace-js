@@ -7,7 +7,7 @@ const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/
 const { isFalse, isTrue } = require('../packages/dd-trace/src/util')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
-const DEFAULT_FLUSH_INTERVAL = 5000
+const DEFAULT_FLUSH_INTERVAL = 10_000
 const JEST_FLUSH_INTERVAL = 0
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VALIDATION_MODE_ENV = '_DD_TEST_OPTIMIZATION_VALIDATION_MODE'
@@ -63,7 +63,9 @@ if (isValidationModeRequested && !isValidationMode) {
 let shouldInit = isValidationModeRequested
   ? isValidationMode && !isFalse(getEnvironmentVariable('DD_CIVISIBILITY_ENABLED'))
   : getValueFromEnvSources('DD_CIVISIBILITY_ENABLED', true) !== false
-const isAgentlessEnabled = getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
+const isGlobalAgentlessEnabled = getValueFromEnvSources('DD_AGENTLESS_ENABLED')
+const isAgentlessEnabled = isGlobalAgentlessEnabled ||
+  getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
 
 if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
@@ -85,8 +87,11 @@ if (isTestWorker) {
         exporter: 'datadog',
       }
     } else {
+      const configurationName = isGlobalAgentlessEnabled
+        ? 'DD_AGENTLESS_ENABLED'
+        : 'DD_CIVISIBILITY_AGENTLESS_ENABLED'
       console.error(
-        'DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but neither ' +
+        `${configurationName} is set, but neither ` +
         'DD_API_KEY nor DATADOG_API_KEY are set in your environment, so ' +
         'dd-trace will not be initialized.'
       )

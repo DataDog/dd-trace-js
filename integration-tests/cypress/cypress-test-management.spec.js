@@ -195,8 +195,9 @@ moduleTypes.forEach(({
     })
 
     // cy.origin is not available in old versions of Cypress
-    if (version === 'latest') {
-      it('does not crash for multi origin tests', async () => {
+    {
+      const multiOriginTest = version === 'latest' ? it : it.skip
+      multiOriginTest('does not crash for multi origin tests', async () => {
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/multi-origin.js'
@@ -442,7 +443,7 @@ moduleTypes.forEach(({
               assert.match(stdout, /Attempt to fix passed/)
             } else {
               assert.match(stdout, /Attempt to fix failed/)
-              assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+              assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
             }
             if (isQuarantined || isDisabled) {
               assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)

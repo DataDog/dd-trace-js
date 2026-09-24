@@ -11,6 +11,7 @@ const {
   getCiVisAgentlessConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
 const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_TESTS_SKIPPED,
@@ -36,7 +37,7 @@ const MINIMUM_SUPPORTED_MOCHA_VERSION = '8.0.0'
 const MOCHA_VERSION_CONFIGS = [
   {
     version: 'latest',
-    dependencies: ['mocha', 'nyc'],
+    dependencies: [`mocha@${getLatestMochaSpecifier()}`, 'nyc'],
   },
   {
     version: MINIMUM_SUPPORTED_MOCHA_VERSION,

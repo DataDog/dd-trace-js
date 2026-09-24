@@ -25,7 +25,6 @@ const INTAKE_PATH = '/api/v2/spans'
  * reattach the TLD, e.g. 'us2.ddog-gov.com' -> 'https://browser-intake-us2-ddog-gov.com'.
  *
  * @param {string} [site] - The Datadog site, e.g. 'us3.datadoghq.com'. Defaults to 'datadoghq.com'.
- * @returns {string} The intake origin, without a path.
  */
 function computeIntakeUrl (site = 'datadoghq.com') {
   const normalized = site.toLowerCase()

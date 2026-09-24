@@ -4,10 +4,19 @@ const { readFile } = require('fs')
 const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
+const dc = require('dc-polyfill')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
+const telemetryMetrics = require('../telemetry/metrics')
 const getDebuggerConfig = require('./config')
-const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
+const {
+  DEBUGGER_DIAGNOSTICS_V1,
+  DEBUGGER_INPUT_DIRECT,
+  DEBUGGER_INPUT_V2,
+  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
+  INSPECT_SEGMENT_GLOBAL_PROPERTY,
+} = require('./constants')
+const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -18,12 +27,20 @@ const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler'
  * @typedef {import('../remote_config')} RemoteConfig
  */
 
+// Published by telemetry right before it sends its final metrics on process exit. The flush interval timer is unref'ed
+// and the worker does not keep the process alive, so without this hook everything counted since the last tick would
+// be lost when the application exits on its own.
+const TELEMETRY_APP_CLOSING_CHANNEL = 'datadog:telemetry:app-closing'
+
 let worker = null
 let configChannel = null
 let ackId = 0
 let rcAckCallbacks = null
 let rc = null
 let inputPath = null
+/** @type {GuardrailMetrics | null} */
+let guardrailMetrics = null
+let guardrailMetricsTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -38,7 +55,6 @@ module.exports = {
 /**
  * Check if the Debugger worker is currently running
  *
- * @returns {boolean} True if the worker is started, false otherwise
  */
 function isStarted () {
   return worker !== null
@@ -55,6 +71,10 @@ function isStarted () {
  */
 function start (config, rcInstance) {
   if (worker !== null) return
+  if (config.DD_AGENTLESS_ENABLED && getDebuggerConfig(config) === undefined) {
+    log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
+    return
+  }
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
@@ -64,11 +84,19 @@ function start (config, rcInstance) {
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
-  globalThis[Symbol.for('dd-trace')].utilTypes = types
+  const debuggerGlobals = globalThis[Symbol.for('dd-trace')]
+  debuggerGlobals.utilTypes = types
+  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
 
-  const probeSamplerBuffer = installProbeSampler()
+  const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
+  guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
+  guardrailMetricsTimer = setInterval(flushGuardrailMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
+  guardrailMetricsTimer.unref?.()
+  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
 
-  readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
+  const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
+
+  readProbeFile(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE, (probes) => {
     const action = 'apply'
     for (const probe of probes) {
       probeChannel.port2.postMessage({ action, probe })
@@ -114,6 +142,7 @@ function start (config, rcInstance) {
           logPort: logChannel.port1,
           configPort: configChannel.port1,
           probeSamplerBuffer,
+          guardrailMetricsBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -126,6 +155,11 @@ function start (config, rcInstance) {
       )
     })
 
+    const threadPausedMetric = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+      .distribution('execution.pause.duration')
+    worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
+      if (type === 'thread-paused') threadPausedMetric.track(durationMs)
+    })
     worker.on('error', (err) => log.error('[debugger] worker thread error', err))
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
@@ -154,7 +188,12 @@ function start (config, rcInstance) {
  */
 function configure (config) {
   if (configChannel === null) return
-  configChannel.port2.postMessage(getDebuggerConfig(config, inputPath))
+  const debuggerConfig = getDebuggerConfig(config, inputPath)
+  if (debuggerConfig === undefined) {
+    log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
+    return
+  }
+  configChannel.port2.postMessage(debuggerConfig)
 }
 
 /**
@@ -195,15 +234,41 @@ function cleanup (error) {
   configChannel = null
   inputPath = null
 
+  if (guardrailMetricsTimer !== null) {
+    clearInterval(guardrailMetricsTimer)
+    guardrailMetricsTimer = null
+  }
+  if (guardrailMetrics !== null) {
+    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
+    // Report what the worker counted up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
+    // worker asynchronously, so anything it counts between this drain and its actual termination is lost. That only
+    // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, so it isn't worth
+    // deferring the drain until the worker has exited.
+    flushGuardrailMetrics()
+    guardrailMetrics = null
+  }
+
   // Call any pending ack callbacks
   // Pass error for unexpected exits, or undefined for graceful shutdown
   if (rcAckCallbacks) {
     for (const ackId of rcAckCallbacks.keys()) {
-      rcAckCallbacks.get(ackId)(error)
+      const acknowledge = rcAckCallbacks.get(ackId)
+      acknowledge(error)
       rcAckCallbacks.delete(ackId)
     }
     rcAckCallbacks = null
   }
+}
+
+/**
+ * Convert the guardrail counters accumulated by the probe sampler and the worker into telemetry metrics.
+ */
+function flushGuardrailMetrics () {
+  if (guardrailMetrics === null) return
+  const namespace = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+  guardrailMetrics.drain((metric, tags, count) => {
+    namespace.count(metric, tags).inc(count)
+  })
 }
 
 /**
@@ -213,6 +278,11 @@ function cleanup (error) {
  * @param {(endpointPath: string) => void} cb - Callback with the detected endpoint path
  */
 function detectDebuggerEndpoint (config, cb) {
+  if (config.DD_AGENTLESS_ENABLED) {
+    cb(DEBUGGER_INPUT_DIRECT)
+    return
+  }
+
   log.debug('[debugger] Detecting available debugger endpoints...')
 
   fetchAgentInfo(config.url, (err, agentInfo) => {

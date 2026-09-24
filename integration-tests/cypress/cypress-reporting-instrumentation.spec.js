@@ -7,6 +7,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { format } = require('node:util')
+const { runInNewContext } = require('node:vm')
 
 const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
@@ -24,6 +25,11 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
+  TEST_IS_RETRY,
+  TEST_RETRY_REASON,
+  TEST_RETRY_REASON_TYPES,
+  TEST_HAS_FAILED_ALL_RETRIES,
   TEST_COMMAND,
   TEST_MODULE,
   TEST_FRAMEWORK,
@@ -32,12 +38,21 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_SESSION_NAME,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_SCOPE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const {
+  VIDEO_UPLOAD_RESULT_UPLOADED,
+  VIDEO_UPLOAD_SCOPE_TEST_SUITE,
+} = require('../../packages/dd-trace/src/ci-visibility/test-video')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -106,7 +121,6 @@ function compilePrecompiledTypeScriptSpecs (cwd, env) {
 
 /**
  * @param {string} cwd
- * @returns {void}
  */
 function configureCypressTypeScriptCompilation (cwd) {
   // Cypress's webpack preprocessor resolves TypeScript config from the spec directory.
@@ -131,7 +145,6 @@ function configureCypressTypeScriptCompilation (cwd) {
 /**
  * @param {{ type: string, content: { meta: Record<string, string> } }[]} events
  * @param {string} tag
- * @returns {void}
  */
 function assertRequestErrorTag (events, tag) {
   const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
@@ -206,10 +219,10 @@ moduleTypes.forEach(({
     if (type === 'commonJS' && version === 'latest') {
       // These dependencies are only needed by the component/Vite regression test below.
       sandboxDependencies.push(
-        '@vitejs/plugin-react@4.3.4',
+        '@vitejs/plugin-react@6.1.1',
         'react@18.3.1',
         'react-dom@18.3.1',
-        'vite@6.1.0'
+        'vite@8.2.2'
       )
     }
     useSandbox(sandboxDependencies, true)
@@ -293,7 +306,7 @@ moduleTypes.forEach(({
                 [TEST_FRAMEWORK]: 'cypress',
               },
             })
-          }, { hardTimeout: 20000 })
+          }, { hardTimeout: 60000 })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
@@ -549,13 +562,17 @@ moduleTypes.forEach(({
           ({ url }) => url.endsWith('/api/v2/citestcycle'),
           (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+            for (const eventType of ['test_session_end', 'test_module_end']) {
               const event = events.find(event => event.type === eventType)
               assert.ok(event, `expected ${eventType} event`)
               assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
               assert.strictEqual(event.content.error, 1)
               assert.match(event.content.meta[ERROR_MESSAGE], expectedError)
             }
+            const testSuite = events.find(event => event.type === 'test_suite_end')
+            assert.ok(testSuite, 'expected test_suite_end event')
+            assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSuite.content.error, 0)
           },
           { hardTimeout: 60000 }
         )
@@ -632,11 +649,12 @@ moduleTypes.forEach(({
       assert.notStrictEqual(exitCode, 0)
     })
 
-    for (const { testName, rejectionVariable, expectedError } of [
+    for (const { testName, rejectionVariable, expectedError, enableFailureVideo } of [
       {
         testName: 'reports a failed test session trace when after:spec prevents Cypress after:run',
         rejectionVariable: 'CYPRESS_REJECT_AFTER_SPEC',
         expectedError: /custom after:spec failed/,
+        enableFailureVideo: true,
       },
       {
         testName: 'reports a failed test session trace when after:spec rejects without a reason',
@@ -661,6 +679,8 @@ moduleTypes.forEach(({
               ...envVars,
               CYPRESS_BASE_URL: webAppBaseUrl,
               [rejectionVariable]: '1',
+              CYPRESS_ENABLE_FAILURE_VIDEOS: enableFailureVideo ? 'true' : undefined,
+              DD_TEST_FAILURE_VIDEOS_ENABLED: enableFailureVideo ? 'true' : undefined,
               SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
             },
           }
@@ -685,6 +705,14 @@ moduleTypes.forEach(({
             )
             assert.ok(testEvent, 'expected completed test event')
             assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+            if (enableFailureVideo) {
+              const suiteEvent = events.find(event => event.type === 'test_suite_end')
+              for (const event of [testEvent, suiteEvent]) {
+                assert.strictEqual(event.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], 'true')
+                assert.strictEqual(event.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+                assert.strictEqual(event.content.meta[TEST_FAILURE_VIDEO_SCOPE], VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+              }
+            }
           },
           { hardTimeout: 60000 }
         )
@@ -929,13 +957,17 @@ moduleTypes.forEach(({
         ({ url }) => url.endsWith('/api/v2/citestcycle'),
         (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(event => event.type === eventType)
             assert.ok(event, `expected ${eventType} event`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(event.content.error, 1)
             assert.match(event.content.meta[ERROR_MESSAGE], /manual after:run failed after Datadog/)
           }
+          const testSuite = events.find(event => event.type === 'test_suite_end')
+          assert.ok(testSuite, 'expected test_suite_end event')
+          assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSuite.content.error, 0)
         },
         { hardTimeout: 60000 }
       )
@@ -1130,12 +1162,20 @@ moduleTypes.forEach(({
             ({ url }) => url.endsWith('/api/v2/citestcycle'),
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              for (const eventType of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+              const hierarchyEventTypes = ['test_session_end', 'test_module_end']
+              if (lifecycle === 'afterSpec') hierarchyEventTypes.push('test_suite_end')
+              for (const eventType of hierarchyEventTypes) {
                 const testSessionTraceEvents = events.filter(event => event.type === eventType)
                 assert.strictEqual(testSessionTraceEvents.length, 1, `expected one ${eventType} event`)
                 assert.strictEqual(testSessionTraceEvents[0].content.meta[TEST_STATUS], 'fail')
                 assert.strictEqual(testSessionTraceEvents[0].content.error, 1)
                 assert.match(testSessionTraceEvents[0].content.meta[ERROR_MESSAGE], new RegExp(errorMessage))
+              }
+              if (lifecycle === 'afterRun') {
+                const testSuite = events.find(event => event.type === 'test_suite_end')
+                assert.ok(testSuite, 'expected test_suite_end event')
+                assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(testSuite.content.error, 0)
               }
 
               const testEvent = events.find(event =>
@@ -2080,9 +2120,12 @@ moduleTypes.forEach(({
 
 // These plugin lifecycle and filesystem tests do not depend on a Cypress version. Run them in one existing
 // integration matrix cell instead of repeating them for every supported version and module type.
-if (requestedVersion === 'latest' &&
-  (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')) {
-  describe('Cypress plugin run lifecycle', () => {
+{
+  const matrixSuite = requestedVersion === 'latest' &&
+    (!process.env.CYPRESS_MODULE_TYPE || process.env.CYPRESS_MODULE_TYPE === 'commonJS')
+    ? describe
+    : describe.skip
+  matrixSuite('Cypress plugin run lifecycle', () => {
     const cypressPlugin = require('../../packages/datadog-plugin-cypress/src/cypress-plugin')
     const originalState = {
       cypressConfig: cypressPlugin.cypressConfig,
@@ -2092,9 +2135,16 @@ if (requestedVersion === 'latest' &&
       originalCypressRetries: cypressPlugin.originalCypressRetries,
       tracer: cypressPlugin.tracer,
       finishedTestsByFile: cypressPlugin.finishedTestsByFile,
+      hasTestsReported: cypressPlugin.hasTestsReported,
+      testSuiteStatuses: cypressPlugin.testSuiteStatuses,
       testsToSkip: cypressPlugin.testsToSkip,
+      testSessionSpan: cypressPlugin.testSessionSpan,
+      testModuleSpan: cypressPlugin.testModuleSpan,
       testSuiteSpan: cypressPlugin.testSuiteSpan,
-      finishedTestSuiteSpans: cypressPlugin.finishedTestSuiteSpans,
+      pendingScreenshotUploads: cypressPlugin.pendingScreenshotUploads,
+      pendingVideoUploads: cypressPlugin.pendingVideoUploads,
+      uploadedVideoPaths: cypressPlugin.uploadedVideoPaths,
+      screenshotUploadAbortControllers: cypressPlugin.screenshotUploadAbortControllers,
     }
 
     afterEach(() => {
@@ -2105,11 +2155,56 @@ if (requestedVersion === 'latest' &&
       cypressPlugin.originalCypressRetries = originalState.originalCypressRetries
       cypressPlugin.tracer = originalState.tracer
       cypressPlugin.finishedTestsByFile = originalState.finishedTestsByFile
+      cypressPlugin.hasTestsReported = originalState.hasTestsReported
+      cypressPlugin.testSuiteStatuses = originalState.testSuiteStatuses
       cypressPlugin.testsToSkip = originalState.testsToSkip
+      cypressPlugin.testSessionSpan = originalState.testSessionSpan
+      cypressPlugin.testModuleSpan = originalState.testModuleSpan
       cypressPlugin.testSuiteSpan = originalState.testSuiteSpan
-      cypressPlugin.finishedTestSuiteSpans = originalState.finishedTestSuiteSpans
+      cypressPlugin.pendingScreenshotUploads = originalState.pendingScreenshotUploads
+      cypressPlugin.pendingVideoUploads = originalState.pendingVideoUploads
+      cypressPlugin.uploadedVideoPaths = originalState.uploadedVideoPaths
+      cypressPlugin.screenshotUploadAbortControllers = originalState.screenshotUploadAbortControllers
       sinon.restore()
     })
+
+    function prepareRunFinalization () {
+      const createSpan = () => {
+        const tags = {}
+        return {
+          tags,
+          context: () => ({
+            _trace: { started: [] },
+            toTraceId: () => '123',
+            toSpanId: () => '456',
+            getTag: name => tags[name],
+            getTags: () => tags,
+          }),
+          finish: sinon.stub(),
+          setTag: sinon.stub().callsFake((name, value) => { tags[name] = value }),
+        }
+      }
+      const testSessionSpan = createSpan()
+      const testModuleSpan = createSpan()
+
+      cypressPlugin.resetRunState()
+      cypressPlugin._isInit = true
+      cypressPlugin.testSessionSpan = testSessionSpan
+      cypressPlugin.testModuleSpan = testModuleSpan
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            flush: callback => callback(),
+          },
+        },
+      }
+      sinon.stub(cypressPlugin, 'applySkippedCoverageToTestSessionCoverage').returns(false)
+      sinon.stub(cypressPlugin, 'getTestCodeCoverageLinesTotal').returns(undefined)
+      sinon.stub(cypressPlugin, 'reportTestSessionCoverage')
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+
+      return { testModuleSpan, testSessionSpan, createSpan }
+    }
 
     it('waits for the existing initialization before the first run', async () => {
       const initializationError = new Error('stop after existing initialization')
@@ -2142,26 +2237,129 @@ if (requestedVersion === 'latest' &&
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
 
-    for (const [description, cypressConfig, shouldDefer] of [
-      ['does not retain completed suites without an after:run boundary', {
+    it('preserves a failed Cypress run that reports zero tests', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun({ totalFailed: 1, totalSkipped: 0, totalTests: 0 })
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves a Cypress failed-run result that reports no tests', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun({ status: 'failed', failures: 1, message: 'Cypress failed to run' })
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('marks an interactive Cypress run with no statistics or tests as empty', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'skip')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were executed')
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+      }
+    })
+
+    it('does not mark an interactive Cypress run as empty after receiving a test', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.testsToSkip = [{ name: 'test name', suite: 'test suite' }]
+
+      cypressPlugin.getTasks()['dd:beforeEach']({
+        testId: 'test-id',
+        testName: 'test name',
+        testSuite: 'test suite',
+      })
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'pass')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves a failed interactive Cypress run without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.hasTestsReported = true
+      cypressPlugin.testSuiteStatuses.add('fail')
+
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves an all-skipped interactive Cypress run without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      cypressPlugin.hasTestsReported = true
+      cypressPlugin.testSuiteSpan = { finish: sinon.stub(), setTag: sinon.stub() }
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/skipped-test.js' },
+        { stats: { tests: 1, pending: 1 } }
+      )
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'skip')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    it('preserves a Cypress result error without summary statistics', async () => {
+      const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+      const resultError = new Error('Cypress failed to load the spec')
+      cypressPlugin.testSuiteSpan = { finish: sinon.stub(), setTag: sinon.stub() }
+
+      cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/load-error.js' },
+        { error: resultError }
+      )
+      await cypressPlugin.afterRun()
+
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        assert.strictEqual(span.tags[TEST_STATUS], 'fail')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+      }
+    })
+
+    for (const [description, cypressConfig] of [
+      ['finishes completed suites without an after:run boundary', {
         isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
-      }, false],
-      ['retains completed suites in terminal runs', {
+      }],
+      ['finishes completed suites in terminal runs', {
         isTextTerminal: true,
         // Cypress 12 can leave this true during `cypress run`.
         isInteractive: true,
         experimentalInteractiveRunEvents: false,
-      }, true],
-      ['retains completed suites when interactive run events are enabled', {
+      }],
+      ['finishes completed suites when interactive run events are enabled', {
         isTextTerminal: false,
         isInteractive: true,
         experimentalInteractiveRunEvents: true,
-      }, true],
+      }],
     ]) {
       it(description, () => {
-        const deferTestSuiteSpan = sinon.stub()
         const testSuiteSpan = {
           finish: sinon.stub(),
           setTag: sinon.stub(),
@@ -2170,16 +2368,338 @@ if (requestedVersion === 'latest' &&
         cypressPlugin.finishedTestsByFile = {}
         cypressPlugin.testsToSkip = []
         cypressPlugin.testSuiteSpan = testSuiteSpan
-        cypressPlugin.finishedTestSuiteSpans = []
-        cypressPlugin.tracer = { _tracer: { _exporter: { deferTestSuiteSpan } } }
+        cypressPlugin.tracer = { _tracer: { _exporter: {} } }
         sinon.stub(cypressPlugin, 'ciVisEvent')
 
         cypressPlugin.afterSpec({ relative: 'cypress/e2e/basic-pass.js' }, { stats: { tests: 1 } })
 
         sinon.assert.calledOnce(testSuiteSpan.finish)
-        assert.strictEqual(deferTestSuiteSpan.calledOnceWithExactly(testSuiteSpan), shouldDefer)
-        assert.strictEqual(cypressPlugin.finishedTestSuiteSpans.length, shouldDefer ? 1 : 0)
       })
+    }
+
+    it('starts a suite video upload from after:run after Cypress video processing', async () => {
+      const testSuiteSpan = {
+        context: () => ({ toSpanId: () => '456' }),
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+      cypressPlugin.cypressConfig = { isTextTerminal: true }
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.pendingScreenshotUploads = []
+      cypressPlugin.pendingVideoUploads = []
+      cypressPlugin._isInit = true
+      sinon.stub(cypressPlugin, '_now').returns(789)
+      cypressPlugin.testSessionSpan = { context: () => ({ toTraceId: () => '123' }) }
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      const flush = sinon.stub().callsFake(callback => callback())
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            flush,
+            uploadTestSuiteVideo: sinon.stub(),
+          },
+        },
+      }
+      cypressPlugin.uploadedVideoPaths = new Set()
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+      let finishUpload
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').returns(new Promise(resolve => {
+        finishUpload = resolve
+      }))
+
+      const result = cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/basic-fail.js' },
+        { stats: { failures: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' }
+      )
+
+      assert.strictEqual(result, undefined)
+      sinon.assert.notCalled(upload)
+      sinon.assert.notCalled(testSuiteSpan.finish)
+
+      const afterRunPromise = cypressPlugin.afterRun({})
+
+      sinon.assert.calledOnceWithExactly(upload, {
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      })
+      sinon.assert.calledOnce(flush)
+      sinon.assert.notCalled(testSuiteSpan.finish)
+
+      finishUpload(VIDEO_UPLOAD_RESULT_UPLOADED)
+      await afterRunPromise
+
+      sinon.assert.calledTwice(flush)
+      sinon.assert.calledOnceWithExactly(testSuiteSpan.finish, 789)
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+    })
+
+    it('finalizes a failed suite video when a user after:spec handler prevents after:run', async () => {
+      const userError = new Error('user after:spec failed')
+      const testSuiteSpan = {
+        context: () => ({ toSpanId: () => '456' }),
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+      cypressPlugin.cypressConfig = { isTextTerminal: true }
+      cypressPlugin.finishedTestsByFile = {}
+      cypressPlugin.testsToSkip = []
+      cypressPlugin.pendingScreenshotUploads = []
+      cypressPlugin.pendingVideoUploads = []
+      cypressPlugin._isInit = true
+      cypressPlugin.testSessionSpan = {
+        context: () => ({
+          toTraceId: () => '123',
+          _trace: { started: [testSuiteSpan] },
+        }),
+      }
+      cypressPlugin.testModuleSpan = null
+      cypressPlugin.testSuiteSpan = testSuiteSpan
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo: sinon.stub(),
+          },
+        },
+      }
+      cypressPlugin.uploadedVideoPaths = new Set()
+      sinon.stub(cypressPlugin, 'ciVisEvent')
+      const upload = sinon.stub(cypressPlugin, 'uploadTestSuiteVideo').resolves(VIDEO_UPLOAD_RESULT_UPLOADED)
+
+      await cypressPlugin.afterSpec(
+        { relative: 'cypress/e2e/basic-fail.js' },
+        { stats: { passes: 1, tests: 1 }, video: '/tmp/basic-fail.mp4' },
+        userError
+      )
+
+      sinon.assert.notCalled(upload)
+      assert.deepStrictEqual(cypressPlugin.pendingVideoUploads, [])
+      sinon.assert.calledOnce(testSuiteSpan.finish)
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_UPLOAD_ERROR, 'true')
+      sinon.assert.calledWith(testSuiteSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+    })
+
+    it('keeps suite video uploads out of screenshot cancellation', async () => {
+      const uploadTestSuiteVideo = sinon.stub().callsFake((options, callback) => callback())
+      cypressPlugin.uploadedVideoPaths = new Set()
+      cypressPlugin.screenshotUploadAbortControllers = new Set()
+      cypressPlugin.tracer = {
+        _tracer: {
+          _exporter: {
+            canUploadTestVideos: () => true,
+            uploadTestSuiteVideo,
+          },
+        },
+      }
+
+      const result = cypressPlugin.uploadTestSuiteVideo({
+        filePath: '/tmp/basic-fail.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+      })
+
+      assert.strictEqual(await result, VIDEO_UPLOAD_RESULT_UPLOADED)
+      sinon.assert.calledOnce(uploadTestSuiteVideo)
+      assert.strictEqual(uploadTestSuiteVideo.firstCall.args[0].signal, undefined)
+      assert.strictEqual(typeof uploadTestSuiteVideo.firstCall.args[1], 'function')
+      const screenshotController = new AbortController()
+      cypressPlugin.screenshotUploadAbortControllers.add(screenshotController)
+      const laterSpecError = new Error('later spec failed')
+
+      cypressPlugin.abortPendingScreenshotUploads(laterSpecError)
+
+      assert.strictEqual(screenshotController.signal.reason, laterSpecError)
+      assert.strictEqual(cypressPlugin.screenshotUploadAbortControllers.size, 0)
+    })
+
+    for (const [description, uploadError, expectedTag, unexpectedTag] of [
+      [
+        'tags every test and the suite when a suite video is uploaded',
+        undefined,
+        TEST_FAILURE_VIDEO_UPLOADED,
+        TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+      ],
+      [
+        'tags every test and the suite when a suite video upload fails',
+        new Error('upload failed'),
+        TEST_FAILURE_VIDEO_UPLOAD_ERROR,
+        TEST_FAILURE_VIDEO_UPLOADED,
+      ],
+    ]) {
+      it(description, async () => {
+        const makeSpan = () => ({
+          finish: sinon.stub(),
+          setTag: sinon.stub(),
+        })
+        const firstTestSpan = makeSpan()
+        const secondTestSpan = makeSpan()
+        const testSuiteSpan = makeSpan()
+        const uploadTestSuiteVideo = sinon.stub().callsFake((options, callback) => callback(uploadError))
+        cypressPlugin.uploadedVideoPaths = new Set()
+        cypressPlugin.pendingVideoUploads = [{
+          filePath: '/tmp/basic-fail.mp4',
+          testSessionId: '123',
+          testSuiteId: '456',
+          testSpanFinishes: [{ testSpan: firstTestSpan }, { testSpan: secondTestSpan }],
+          testSuiteSpan,
+        }]
+        cypressPlugin.tracer = {
+          _tracer: {
+            _exporter: {
+              canUploadTestVideos: () => true,
+              uploadTestSuiteVideo,
+            },
+          },
+        }
+        sinon.stub(cypressPlugin, 'ciVisEvent')
+
+        await cypressPlugin.uploadPendingTestSuiteVideos()
+
+        for (const span of [firstTestSpan, secondTestSpan, testSuiteSpan]) {
+          sinon.assert.calledWith(span.setTag, expectedTag, 'true')
+          sinon.assert.calledWith(span.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+          sinon.assert.neverCalledWith(span.setTag, unexpectedTag, 'true')
+          sinon.assert.calledOnce(span.finish)
+        }
+      })
+    }
+
+    it('does not add video tags when no suite video upload is configured', () => {
+      const testSpan = {
+        finish: sinon.stub(),
+        setTag: sinon.stub(),
+      }
+
+      cypressPlugin.finishTestSpans([{ testSpan }])
+
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_UPLOADED, 'true')
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_UPLOAD_ERROR, 'true')
+      sinon.assert.neverCalledWith(testSpan.setTag, TEST_FAILURE_VIDEO_SCOPE, VIDEO_UPLOAD_SCOPE_TEST_SUITE)
+      sinon.assert.calledOnce(testSpan.finish)
+    })
+
+    for (const [isTextTerminal, pluginMode] of [[false, false], [true, true], [false], [true]]) {
+      for (const retries of [0, 2]) {
+        const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, retries=${retries}`
+        it(`only applies dynamic ATR in terminal mode (${configDescription})`, async () => {
+          cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
+          cypressPlugin.testSuiteSpan = {}
+          sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(true)
+          const tasks = cypressPlugin.getTasks()
+          const hooks = {}
+          const events = {}
+          const currentTest = {
+            id: 'test-1',
+            title: 'fails',
+            fullTitle: () => 'fails',
+            state: 'failed',
+            duration: 1,
+            _retries: retries,
+          }
+          const runner = { runTests () {}, suite: { ctx: { currentTest } } }
+          const task = sinon.stub().callsFake((name, args) => {
+            const result = name === 'dd:testSuiteStart'
+              ? tasks[name](args)
+              : name === 'dd:afterEach' ? { dynamicAtrRetryCount: 3 } : {}
+            return Promise.resolve(result)
+          })
+
+          runInNewContext(fs.readFileSync(
+            path.join(__dirname, '../../packages/datadog-plugin-cypress/src/support.js'), 'utf8'
+          ), {
+            Cypress: {
+              config: name => {
+                assert.strictEqual(name, 'isTextTerminal')
+                return isTextTerminal
+              },
+              on: (name, callback) => { events[name] = callback },
+              mocha: {
+                getRunner: () => runner,
+                getRootSuite: () => ({ file: 'test.cy.js', eachTest: callback => callback(currentTest) }),
+              },
+            },
+            cy: { task, on () {} },
+            before: callback => { hooks.before = callback },
+            beforeEach: callback => { hooks.beforeEach = callback },
+            afterEach: callback => { hooks.afterEach = callback },
+            after: callback => { hooks.after = callback },
+          })
+
+          await hooks.before()
+          assert.strictEqual(currentTest._retries, isTextTerminal ? Math.max(1, retries) : retries)
+          const entryPoints = [
+            () => events['test:before:run']({}, currentTest),
+            () => events['test:before:run:async']({}, currentTest),
+            () => hooks.beforeEach.call({ currentTest }),
+          ]
+          for (const startTest of entryPoints) {
+            currentTest._retries = retries
+            await startTest()
+            assert.strictEqual(currentTest._retries, isTextTerminal ? Math.max(1, retries) : retries)
+          }
+
+          await hooks.afterEach()
+          for (const startTest of entryPoints) {
+            currentTest._retries = retries
+            await startTest()
+            assert.strictEqual(currentTest._retries, isTextTerminal ? 3 : retries)
+          }
+          await hooks.after()
+        })
+      }
+
+      for (const isDynamicAtrEnabled of [false, true]) {
+        const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, dynamic=${isDynamicAtrEnabled}`
+        it(`only accounts for ATR in terminal mode (${configDescription})`, () => {
+          const { createSpan } = prepareRunFinalization()
+          cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
+          cypressPlugin.testSuiteSpan = createSpan()
+          sinon.stub(cypressPlugin, 'isFlakyTestRetriesEnabled').value(true)
+          sinon.stub(cypressPlugin, 'flakyTestRetriesCount').value(1)
+          sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(isDynamicAtrEnabled)
+          sinon.stub(cypressPlugin, 'dynamicAtrBuckets').value([1, 1, 1, 1, 1])
+          sinon.stub(cypressPlugin, 'getTestSpan').callsFake(createSpan)
+          sinon.stub(cypressPlugin, '_now').returns(123)
+
+          const testSuite = 'cypress/e2e/retries.js'
+          const tasks = cypressPlugin.getTasks()
+          tasks['dd:testSuiteStart']({ testSuite, isTextTerminal })
+          const records = []
+          const tests = []
+          for (const state of ['failed', 'passed']) {
+            const attempts = [{ state: 'failed' }, { state }]
+            tests.push({ title: [state], state, attempts })
+            for (const [attemptIndex, attempt] of attempts.entries()) {
+              const test = { testSuite, testId: state, testName: state, state: attempt.state, duration: 1 }
+              tasks['dd:beforeEach'](test)
+              const span = cypressPlugin.activeTestSpan
+              const result = tasks['dd:afterEach']({ test })
+              records.push({ span, result, attemptIndex, state: attempt.state, tagsAfterEach: { ...span.tags } })
+            }
+          }
+
+          cypressPlugin.afterSpec({ relative: testSuite }, { tests, stats: { tests: 2, failures: 1, passes: 1 } })
+
+          for (const { span, result, attemptIndex, state, tagsAfterEach } of records) {
+            const isRetry = attemptIndex > 0
+            const hasFailedAllRetries = isTextTerminal && isRetry && state === 'failed' ? 'true' : undefined
+            assert.strictEqual(span.tags[TEST_IS_RETRY], isRetry ? 'true' : undefined)
+            assert.strictEqual(span.tags[TEST_RETRY_REASON], isRetry
+              ? TEST_RETRY_REASON_TYPES[isTextTerminal ? 'atr' : 'ext']
+              : undefined)
+            assert.strictEqual(tagsAfterEach[TEST_HAS_FAILED_ALL_RETRIES], hasFailedAllRetries)
+            assert.strictEqual(span.tags[TEST_HAS_FAILED_ALL_RETRIES], hasFailedAllRetries)
+            const finalStatus = state === 'passed' ? 'pass' : 'fail'
+            assert.strictEqual(span.tags[TEST_FINAL_STATUS], isRetry ? finalStatus : undefined)
+            assert.deepStrictEqual(result, isTextTerminal && isDynamicAtrEnabled ? { dynamicAtrRetryCount: 1 } : null)
+            sinon.assert.calledOnce(span.finish)
+          }
+        })
+      }
     }
 
     it('restores user retries before requesting configuration for a subsequent run', async () => {
@@ -2202,7 +2722,7 @@ if (requestedVersion === 'latest' &&
     })
   })
 
-  describe('cypress config instrumentation', () => {
+  matrixSuite('cypress config instrumentation', () => {
     const temporaryDirectories = []
     let errors
 
@@ -2232,9 +2752,6 @@ if (requestedVersion === 'latest' &&
       })
     }
 
-    /**
-     * @returns {string} temporary Cypress project root
-     */
     function createProjectRoot () {
       const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-config-'))
       temporaryDirectories.push(projectRoot)
@@ -2674,7 +3191,6 @@ if (requestedVersion === 'latest' &&
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('before:run', legacyBeforeRunHandler)
@@ -2723,7 +3239,6 @@ if (requestedVersion === 'latest' &&
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('before:run', sinon.stub())
@@ -2773,7 +3288,6 @@ if (requestedVersion === 'latest' &&
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('after:screenshot', userAfterScreenshotHandler)
@@ -2834,7 +3348,6 @@ if (requestedVersion === 'latest' &&
               e2e: {
                 /**
                  * @param {Function} on Cypress event registration function
-                 * @returns {void}
                  */
                 setupNodeEvents (on) {
                   if (position === 'before') on(event, userHandler)
@@ -2886,7 +3399,6 @@ if (requestedVersion === 'latest' &&
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('before:run', sinon.stub())
@@ -2933,7 +3445,6 @@ if (requestedVersion === 'latest' &&
             e2e: {
               /**
                * @param {Function} on Cypress event registration function
-               * @returns {void}
                */
               setupNodeEvents (on) {
                 on(event, (...args) => legacyHelper(...args))
@@ -2993,7 +3504,6 @@ if (requestedVersion === 'latest' &&
             e2e: {
               /**
                * @param {Function} on Cypress event registration function
-               * @returns {void}
                */
               setupNodeEvents (on) {
                 if (position === 'before') on('after:run', userHandler)
@@ -3044,7 +3554,6 @@ if (requestedVersion === 'latest' &&
             e2e: {
               /**
                * @param {Function} on Cypress event registration function
-               * @returns {void}
                */
               setupNodeEvents (on) {
                 if (position === 'before') on('after:spec', userHandler)
@@ -3094,7 +3603,6 @@ if (requestedVersion === 'latest' &&
           e2e: {
             /**
              * @param {Function} on Cypress event registration function
-             * @returns {void}
              */
             setupNodeEvents (on) {
               on('after:screenshot', userHandler)
@@ -3118,7 +3626,6 @@ if (requestedVersion === 'latest' &&
           /**
            * @param {string} event Cypress event name
            * @param {Function} handler Cypress event handler
-           * @returns {void}
            */
           (event, handler) => {
             handlers[event] = handler

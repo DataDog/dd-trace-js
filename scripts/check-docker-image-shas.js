@@ -9,7 +9,7 @@ const path = require('node:path')
 const CHECKED_EXTENSIONS = new Set(['.yml', '.yaml'])
 
 // Matches `image: <value>` where the value is on the same line (not a bare `image:` key)
-const IMAGE_LINE_RE = /^\s*image:\s+(\S+)\s*(?:#.*)?$/
+const IMAGE_LINE_RE = /^\s*image:\s+([^\s#]+)\s*(?:#.*)?$/
 
 /**
  * @returns {string[]}
