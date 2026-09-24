@@ -2,7 +2,7 @@ name: dd-trace-js-agent
 version: "0.1"
 
 # All inputs are answer-only: the agent may inspect the repository to ground an explanation, but no case asks it
-# to modify files, execute commands, or complete an implementation. Content cases exercise AGENTS.md guidance.
+# to modify files, run tests, or complete an implementation. Content cases exercise AGENTS.md guidance.
 # Prompts bound the response size so omissions remain easy for the judge to identify.
 # Every repository-specific command and path is verified here because the comparative judge has no repository access.
 cases:
@@ -15,7 +15,10 @@ cases:
       Answer in at most 4 bullets.
     expected_criteria:
       - Uses yarn install to install dependencies.
-      - Runs the changed spec with ./node_modules/.bin/mocha path/to/test.spec.js.
+      - >
+        Runs the changed spec with ./node_modules/.bin/mocha path/to/test.spec.js, or
+        node scripts/mocha-run-file.js path/to/test.spec.js when the spec must be the process entrypoint.
+      - Preserves required Node flags from the applicable suite script.
       - Uses npm, not yarn, for any test script it recommends.
       - Does not recommend root npm test because it is intentionally disabled.
     bad_signals:
@@ -28,13 +31,16 @@ cases:
     files: [AGENTS.md]
     input: |
       I changed the amqplib plugin and its tests require the docker compose service named rabbitmq.
+      Dependencies have not been set up, and my shell has SPEC left over from another plugin. I want all amqplib specs.
       Give me only the commands needed to run that plugin's service-backed tests, including the exporter cleanup.
     expected_criteria:
       - Unsets OTEL_TRACES_EXPORTER, OTEL_LOGS_EXPORTER, and OTEL_METRICS_EXPORTER.
+      - Clears the inherited SPEC filter before running the plugin tests.
       - Starts the service with docker compose up -d rabbitmq.
       - Runs SERVICES="rabbitmq" PLUGINS="amqplib" npm run test:plugins:ci.
     bad_signals:
       - Uses yarn to run the plugin test script.
+      - Leaves the inherited SPEC filter active.
       - Omits SERVICES="rabbitmq" from the service-backed test command.
       - Omits PLUGINS="amqplib" from the service-backed test command.
       - Uses PLUGINS="amqplib" npm run test:plugins instead of the service-backed command.
@@ -43,7 +49,7 @@ cases:
   - id: dd-trace-js-test-boundaries-004
     files: [AGENTS.md]
     input: |
-      I fixed a limit that accepts up to 32 entries and rejects additional entries with ERR_LIMIT.
+      I fixed a promise-returning API that accepts up to 32 entries and rejects additional entries with ERR_LIMIT.
       What boundary tests and assertion style should cover it? Answer in at most 4 bullets.
     expected_criteria:
       - Tests 32 as the last accepted value and 33 as the first rejected value.
@@ -60,8 +66,9 @@ cases:
   - id: dd-trace-js-real-path-tests-007
     files: [AGENTS.md]
     input: |
-      A plugin regression test bypasses the normal loader, replaces the tracer with a small stub, invokes a plugin
-      method directly, and only asserts calls to the stub. Is this sufficient, and what should replace it?
+      A regression occurs when an application loads an instrumented library: its spans are missing.
+      The proposed test bypasses the normal loader, replaces the tracer with a stub, invokes a plugin method directly,
+      and only asserts calls to the stub. Is this sufficient coverage for the regression, and what should replace it?
       Answer in at most 4 bullets.
     expected_criteria:
       - States that the existing test is insufficient because it bypasses the real production entry point.
@@ -91,24 +98,29 @@ cases:
       - Assumes a leaked handle without inspecting one.
       - Recommends increasing the timeout without investigating the earlier error.
 
-  # AGENTS.md — Cross-Cutting Configuration Changes: steps 1, 2, 4, 5, and unit suffixes.
+  # AGENTS.md — Cross-Cutting Configuration Changes: registry ownership and unit suffixes.
   - id: dd-trace-js-new-configuration-010
     files: [AGENTS.md]
     input: |
-      I am adding a DD_ environment variable for a byte limit that is also exposed through tracer.init().
-      Which core configuration files must change, when does telemetry change, and how should the option be named?
+      I am adding a DD_ environment variable for a byte limit, also exposed through tracer.init().
+      It uses the existing integer parser and needs no custom transformation or calculated default.
+      Which configuration files and generated artifacts must change, and how should the option be named?
       Answer in at most 5 bullets.
     expected_criteria:
-      - Adds the default in packages/dd-trace/src/config/defaults.js.
-      - Maps the environment variable in packages/dd-trace/src/config/index.js.
-      - Updates packages/dd-trace/src/config/supported-configurations.json.
-      - Adds the telemetry mapping when applicable.
+      - >
+        Defines the environment variable, type, default, and tracer.init() option name through configurationNames in
+        packages/dd-trace/src/config/supported-configurations.json.
+      - Regenerates internal configuration types with npm run generate:config:types.
+      - >
+        Uses the registry machinery for defaults and environment/option mappings without requiring manual edits to
+        packages/dd-trace/src/config/defaults.js or packages/dd-trace/src/config/index.js for this case.
+      - Does not require a manual telemetry mapping for this registry-backed option.
       - Uses a unit suffix, such as maxBytes.
     bad_signals:
-      - Adds the environment variable without a default.
-      - Omits the environment-variable mapping in packages/dd-trace/src/config/index.js.
+      - Duplicates the registry default or option mapping in configuration runtime code without a concrete need.
       - Omits packages/dd-trace/src/config/supported-configurations.json.
-      - Treats telemetry as mandatory even when it is not applicable.
+      - Edits generated configuration types manually instead of regenerating them.
+      - Requires editing packages/dd-trace/src/telemetry/telemetry.js to register this option.
       - Uses a size option name without a unit suffix.
 
   # AGENTS.md — Production Safety and Performance: performance-motivated complexity.
@@ -121,24 +133,27 @@ cases:
     expected_criteria:
       - Requires a focused, reproducible microbenchmark before accepting the complexity.
       - Keeps the readable implementation when results are within roughly ±2%.
-      - Requires commit-body justification for a result around 5%.
-      - Keeps gains of at least 10% only when they are reproducible and reported with numbers.
+      - Accepts reproducible gains of at least 5% with the measured numbers.
+      - >
+        Adds a lasting benchmark only for a stable workload that needs a regression guard; otherwise records the
+        temporary workload, runtime, baseline, candidate, and results.
     bad_signals:
       - Accepts the loop as faster without benchmark evidence.
       - Treats any measured improvement as sufficient to keep the more complex code.
+      - Requires a 10% improvement or a permanent benchmark for every performance change.
 
-  # AGENTS.md — Production Safety and Performance: no async/await in shipped production code.
+  # AGENTS.md — Production Safety and Performance: synchronous and inactive paths.
   - id: dd-trace-js-production-async-012
     files: [AGENTS.md]
     input: |
-      May I add async/await to ordinary shipped tracer production code?
-      Answer in at most 3 bullets and mention every stated exception.
+      May I make a synchronous span-processing hot path async just to simplify its implementation, including when
+      the feature is disabled? Does the same restriction apply to tests and worker threads? Answer in at most 3 bullets.
     expected_criteria:
-      - Rejects adding async/await to ordinary shipped production code.
+      - Rejects adding promise machinery to the synchronous hot path and keeps the inactive path cheap.
       - Notes that async/await is allowed in tests.
       - Notes that async/await is allowed in worker threads.
     bad_signals:
-      - Accepts adding async/await to ordinary shipped production code.
+      - Accepts making the synchronous hot path async or adding promise machinery when the feature is disabled.
       - Claims async/await is forbidden in tests.
       - Claims async/await is forbidden in worker threads.
 
@@ -146,28 +161,28 @@ cases:
   - id: dd-trace-js-public-config-surfaces-013
     files: [AGENTS.md]
     input: |
-      I am adding a public, non-experimental tracer.init() option that is not version-specific.
+      I am adding a public, non-experimental tracer.init() option that is not version-specific and needs no new guide.
       Which type, documentation, and test surfaces must change? Answer in at most 3 bullets.
     expected_criteria:
-      - Updates both supported public TypeScript surfaces.
-      - Documents the option in docs/API.md.
+      - Updates index.d.ts and index.d.v5.ts, the two supported public TypeScript surfaces.
+      - Documents the option in its declaration comments, which supply the generated API reference.
       - Tests the option in packages/dd-trace/test/config/index.spec.js.
     bad_signals:
       - Updates only one public TypeScript surface.
-      - Omits docs/API.md.
+      - Requires a docs/API.md edit even though the declaration comments own this option's API reference.
       - Omits packages/dd-trace/test/config/index.spec.js.
 
-  # AGENTS.md — Production Safety and Performance: no promises in shipped production code.
+  # AGENTS.md — Production Safety and Performance: inherently asynchronous production APIs.
   - id: dd-trace-js-production-promises-014
     files: [AGENTS.md]
     input: |
-      May I add a promise-returning helper without async syntax to ordinary shipped tracer production code?
-      Answer in at most 3 bullets and mention every stated exception.
+      A shipped control-plane API already returns a promise and calls an inherently asynchronous upstream API.
+      May its implementation use async/await or a promise-returning helper? What constraints still apply to
+      synchronous, hot, and inactive paths? Answer in at most 3 bullets.
     expected_criteria:
-      - Rejects adding a promise-returning helper to ordinary shipped production code.
-      - Notes that promises are allowed in tests.
-      - Notes that promises are allowed in worker threads.
+      - Allows async/await or promise helpers when they preserve the existing asynchronous API contract.
+      - Does not add promise machinery to synchronous or hot paths.
+      - Keeps inactive paths cheap instead of paying for the asynchronous work when it is disabled.
     bad_signals:
-      - Accepts adding a promise-returning helper to ordinary shipped production code.
-      - Claims promises are forbidden in tests.
-      - Claims promises are forbidden in worker threads.
+      - Forbids promises or async/await in all shipped production code.
+      - Treats the asynchronous exception as permission to add promise machinery to synchronous or inactive paths.
