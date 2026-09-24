@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { createServer } = require('node:http')
 const { Worker, isMainThread } = require('node:worker_threads')
 
@@ -75,6 +76,8 @@ if (mode === 'nested' && isMainThread) {
               server.close()
               return
             }
+            // Admit the serialization-error probe before the load can fill the queue.
+            assert.strictEqual(writer.enqueue({ flagKey: 'invalid', timestamp: NaN, runtimeDefault: false }), true)
             const deadline = Date.now() + 3000
             const targetCount = mode === 'max-context' ? 16 : mode === 'timeout' ? 8 : 12000
             const attrs = mode === 'max-context'
@@ -93,7 +96,6 @@ if (mode === 'nested' && isMainThread) {
                 runtimeDefault: true,
               })) accepted++
             }
-            writer.enqueue({ flagKey: 'invalid', timestamp: NaN, runtimeDefault: false })
             writer.destroy()
           })
         } else {
