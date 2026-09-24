@@ -69,7 +69,7 @@ llm validation definitions:
   extends: llm validation
   variables:
     LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
-    LLMVAL_LEVEL: "minimum"
+    LLMVAL_LEVEL: "full"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
