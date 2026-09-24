@@ -45,6 +45,7 @@ const plugins = {
   get amqp10 () { return require('../../../datadog-plugin-amqp10/src') },
   get amqplib () { return require('../../../datadog-plugin-amqplib/src') },
   get avsc () { return require('../../../datadog-plugin-avsc/src') },
+  get 'aws-lambda' () { return require('../../../datadog-plugin-aws-lambda/src') },
   get 'aws-sdk' () { return require('../../../datadog-plugin-aws-sdk/src') },
   get bullmq () { return require('../../../datadog-plugin-bullmq/src') },
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },

@@ -67,6 +67,7 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
+  'AWS_REGION',
   'LAMBDA_TASK_ROOT',
   // serverless service-name fallbacks (Config singleton)
   'WEBSITE_SITE_NAME',

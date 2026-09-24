@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { channel } = require('dc-polyfill')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -22,7 +23,9 @@ function setupEnv () {
 
 function loadAgent () {
   require('../../src/lambda')
-  return agent.load([], [], { experimental: { exporter: 'agent' } })
+  // The shared agent harness disables plugins globally; opt the Lambda lifecycle
+  // back in so this suite exercises the same plugin that the Lambda bootstrap enables.
+  return agent.load('aws-lambda', {}, { experimental: { exporter: 'agent' } })
 }
 
 async function closeAgent () {
@@ -82,10 +85,7 @@ describe('lambda', () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
-      let result
-      datadog(app.callbackHandler)(_event, _context, (_error, response) => {
-        result = response
-      })
+      const result = await datadog(app.callbackHandler)(_event, _context, () => {})
 
       assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
 
@@ -138,6 +138,45 @@ describe('lambda', () => {
           assert.strictEqual(trace.error, 0)
         }
       })
+    })
+
+    // AppSec invocation publishing lands with the AppSec port (migration PR 13); this pins only the
+    // generic invocation boundary that the lifecycle owns.
+    it('publishes exactly one generic invocation boundary for HTTP events', async () => {
+      process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+      await loadAgent()
+
+      const starts = []
+      const ends = []
+      const subscriptions = [
+        [channel('datadog:aws-lambda:invocation:start'), message => starts.push(message)],
+        [channel('datadog:aws-lambda:invocation:end'), message => ends.push(message)],
+      ]
+      for (const [invocationChannel, handler] of subscriptions) invocationChannel.subscribe(handler)
+
+      try {
+        const app = require(path.resolve(__dirname, './fixtures/handler.js'))
+        datadog = require('./fixtures/datadog-lambda')
+        const event = {
+          body: JSON.stringify({ hello: 'world' }),
+          headers: { 'Content-Type': 'application/json' },
+          httpMethod: 'POST',
+          path: '/resource',
+          requestContext: { identity: { sourceIp: '127.0.0.1' } },
+        }
+        const context = { getRemainingTimeInMillis: () => 150 }
+
+        await datadog(app.handler)(event, context)
+        await agent.assertSomeTraces(() => {})
+
+        assert.strictEqual(starts.length, 1)
+        assert.strictEqual(ends.length, 1)
+        assert.strictEqual(starts[0], ends[0])
+        assert.strictEqual(starts[0].event, event)
+        assert.strictEqual(starts[0].context, context)
+      } finally {
+        for (const [invocationChannel, handler] of subscriptions) invocationChannel.unsubscribe(handler)
+      }
     })
 
     it('doesnt patch lambda when instrumentation is disabled', async () => {

@@ -33,6 +33,7 @@ describe('lambda', () => {
       process.env = { ...oldEnv }
       delete process.env.DD_LAMBDA_HANDLER
       delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+      delete process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS
       // Drop cached `runtime/patch` so its module-level `addHook` calls run
       // against the test's current env (each test sets its own
       // `DD_LAMBDA_HANDLER`).
@@ -128,6 +129,35 @@ describe('lambda', () => {
       assert.notStrictEqual(fakeModule.datadog, datadogOriginal)
       // Exercise the inner wrapper produced by `patchDatadogLambdaHandler`.
       assert.strictEqual(typeof fakeModule.datadog(() => 'user'), 'function')
+    })
+
+    it('does not dd-wrap the shim handler by default (transition double-wrap gate)', () => {
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      // With the gate off, dd-trace must not add its own wrapper: the released shim
+      // already instruments the handler, and a second wrap is a second `aws.lambda` span.
+      assert.strictEqual(fakeModule.datadog(userHandler), userHandler)
+    })
+
+    it('dd-wraps the shim handler when DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS is set', () => {
+      process.env.LAMBDA_TASK_ROOT = '/var/task'
+      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+
+      const { hookCalls } = loadLambdaWithHookSpy()
+
+      const userHandler = () => 'user'
+      const fakeModule = { datadog: handler => handler }
+      hookCalls[0].onrequire(fakeModule, 'datadog-lambda-js', undefined, '0.0.0')
+
+      const wrapped = fakeModule.datadog(userHandler)
+      assert.notStrictEqual(wrapped, userHandler)
+      assert.strictEqual(typeof wrapped, 'function')
     })
 
     it('logs hook errors without unwinding the loop', () => {
