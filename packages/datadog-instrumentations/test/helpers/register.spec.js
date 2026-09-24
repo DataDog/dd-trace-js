@@ -176,6 +176,43 @@ describe('register', () => {
     sinon.assert.notCalled(telemetryMock)
   })
 
+  it('should not report unsupported jasmine-core versions without WebdriverIO', () => {
+    hooksMock = { 'jasmine-core': hooks['jasmine-core'] }
+    instrumentationsMock = instrumentations
+    loadRegisterWithEnv()
+
+    const hook = HookMock.args[0][2]
+    hook({}, 'jasmine-core/lib/jasmine-core/jasmine.js', '/path/to/jasmine-core', '7.0.2')
+    channel('dd-trace:exporter:first-flush').publish()
+
+    sinon.assert.notCalled(telemetryMock)
+  })
+
+  it('should report unsupported jasmine-core versions when WebdriverIO is loaded', () => {
+    hooksMock = {
+      'jasmine-core': hooks['jasmine-core'],
+      '@wdio/runner': hooks['@wdio/runner'],
+    }
+    instrumentationsMock = instrumentations
+    loadRegisterWithEnv()
+
+    const jasmineHook = HookMock.getCalls().find(({ args }) => args[0][0] === 'jasmine-core').args[2]
+    jasmineHook({}, 'jasmine-core/lib/jasmine-core/jasmine.js', '/path/to/jasmine-core', '7.0.2')
+
+    const runnerHook = HookMock.getCalls().find(({ args }) => args[0][0] === '@wdio/runner').args[2]
+    runnerHook({}, '@wdio/runner/build/index.js', '/path/to/@wdio/runner', '9.31.9', true)
+    channel('dd-trace:exporter:first-flush').publish()
+
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'abort.integration', [
+      'integration:jasmine-core',
+      'integration_version:7.0.2',
+    ], {
+      result: 'abort',
+      result_class: 'incompatible_library',
+      result_reason: 'Incompatible integration version: jasmine-core@7.0.2',
+    })
+  })
+
   it('should only unwrap an IITM default export after its instrumentation matches', () => {
     const patch = sinon.stub()
     hooksMock.mariadb = { esmFirst: true, fn: sinon.stub() }

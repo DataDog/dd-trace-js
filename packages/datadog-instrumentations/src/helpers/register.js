@@ -55,6 +55,7 @@ const instrumentedNodeModules = new Map()
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
+let isWebdriverioLoaded = false
 
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
@@ -71,6 +72,10 @@ for (const name of names) {
   }
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    if (name === 'webdriverio' || name.startsWith('@wdio/')) {
+      isWebdriverioLoaded = true
+    }
+
     // All loaded versions are first expected to fail instrumentation.
     if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
       instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)
@@ -139,6 +144,8 @@ function logAbortedIntegrations () {
       const lastAtPosition = nameVersion.lastIndexOf('@')
       const name = nameVersion.slice(0, lastAtPosition)
       const version = nameVersion.slice(lastAtPosition + 1)
+      if (name === 'jasmine-core' && !isWebdriverioLoaded) continue
+
       telemetry('abort.integration', [
         `integration:${name}`,
         `integration_version:${version}`,
