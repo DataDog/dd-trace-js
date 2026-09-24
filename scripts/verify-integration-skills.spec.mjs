@@ -60,6 +60,7 @@ module.exports = CachePlugin
 `,
   'packages/dd-trace/src/plugins/producer.js': 'startSpan (options, enterOrCtx) {}\n',
   'packages/dd-trace/src/plugins/consumer.js': 'startSpan (options, enterOrCtx) {}\n',
+  'packages/dd-trace/src/plugins/server.js': 'module.exports = class ServerPlugin {}\n',
   'packages/datadog-instrumentations/src/helpers/hooks.js': `module.exports = {
   esmFirst: true,
   serverless: false,
@@ -1046,10 +1047,36 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.strictEqual(reference.files.includes('packages/datadog-instrumentations/src/memcached.js'), true)
   })
 
-  it('accepts storage as a plugin base trait', () => {
-    const packet = inspect(runRepositoryTool, 'couchbase', ['--traits', 'storage'])
+  it('accepts every plugin base in the repository as a trait', () => {
+    const bases = new Map([
+      ['composite', 'packages/dd-trace/src/plugins/composite.js'],
+      ['log', 'packages/dd-trace/src/plugins/log_plugin.js'],
+      ['schema', 'packages/dd-trace/src/plugins/schema.js'],
+      ['storage', 'packages/dd-trace/src/plugins/storage.js'],
+    ])
+    for (const [trait, source] of bases) {
+      const packet = inspect(runRepositoryTool, 'new-plugin', ['--traits', trait])
 
-    assert.strictEqual(packet.references.includes('packages/dd-trace/src/plugins/storage.js'), true)
+      assert.strictEqual(packet.references.includes(source), true, trait)
+    }
+  })
+
+  it('derives plugin base traits from the plugin base directory', () => {
+    const packet = inspect(runTool, 'new-plugin', ['--traits', 'fixture_base'], (root) => {
+      writeFixtureFile(root, 'packages/dd-trace/src/plugins/fixture_base_plugin.js', 'module.exports = class {}\n')
+    })
+    const { status, stderr } = runTool(['--inspect', 'new-plugin', '--traits', 'plugin'])
+
+    assert.strictEqual(packet.references.includes('packages/dd-trace/src/plugins/fixture_base_plugin.js'), true)
+    assert.strictEqual(status, 1)
+    assert.match(stderr, /unknown integration trait: plugin/)
+  })
+
+  it('accepts sync as an Orchestrion trait', () => {
+    const packet = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'sync'])
+
+    assert.strictEqual(packet.references.includes('.agents/skills/apm-integrations/references/orchestrion.md'), true)
+    assert.match(packet.reference.files.join('\n'), /rewriter\/instrumentations/)
   })
 
   it('prefers a direct plugin base when selecting a shimmer reference', () => {

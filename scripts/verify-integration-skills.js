@@ -17,19 +17,11 @@ const { parse: parseYaml } = require('yaml')
 
 const INTEGRATION_PATTERN = /^[a-z0-9]+(?:[-_][a-z0-9]+)*$/
 const MODES = new Set(['add', 'review', 'debug', 'serverless'])
-const ORCHESTRION_TRAITS = new Set(['async', 'auto', 'callback', 'cjs-esm', 'orchestrion'])
+const ORCHESTRION_TRAITS = new Set(['async', 'auto', 'callback', 'cjs-esm', 'orchestrion', 'sync'])
+const MECHANISM_TRAITS = new Set([...ORCHESTRION_TRAITS, 'shimmer'])
 const PLUGIN_BASE_DIRECTORY = 'packages/dd-trace/src/plugins/'
-const PLUGIN_BASE_TRAITS = new Set([
-  'cache',
-  'client',
-  'consumer',
-  'database',
-  'producer',
-  'router',
-  'server',
-  'storage',
-  'tracing',
-])
+const NON_BASE_PLUGIN_FILES = new Set(['index.js', 'plugin.js'])
+const ROUTER_BASE_SOURCE = 'packages/datadog-plugin-router/src/index.js'
 const SOURCE_SUFFIXES = ['.js', '.cjs', '.mjs']
 const TEST_SUFFIXES = ['.spec.js', '.spec.cjs', '.spec.mjs']
 const TERMINAL_CONTROL_PATTERN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
@@ -44,23 +36,7 @@ const TRAIT_KINDS = new Map([
   ['async', 'Async'],
   ['auto', 'Auto'],
   ['callback', 'Callback'],
-])
-const TRAITS = new Set([
-  'async',
-  'auto',
-  'cache',
-  'callback',
-  'cjs-esm',
-  'client',
-  'consumer',
-  'database',
-  'orchestrion',
-  'producer',
-  'router',
-  'server',
-  'shimmer',
-  'storage',
-  'tracing',
+  ['sync', 'Sync'],
 ])
 const DISCOVERY_METADATA = new Map([
   ['.agents/skills/apm-integrations/agents/openai.yaml', 'apm-integrations'],
@@ -197,7 +173,9 @@ function parseArguments (arguments_) {
       if (!value) throw new Error('--traits requires a comma-separated value')
       const parsedTraits = value.split(',')
       for (const trait of parsedTraits) {
-        if (!TRAITS.has(trait)) throw new Error(`unknown integration trait: ${trait}`)
+        if (!MECHANISM_TRAITS.has(trait) && !pluginBaseSources.has(trait)) {
+          throw new Error(`unknown integration trait: ${trait}`)
+        }
       }
       traits = [...new Set(parsedTraits)]
     } else if (argument === '--json') {
@@ -218,6 +196,9 @@ function parseArguments (arguments_) {
   }
 }
 
+const root = process.cwd()
+const pluginBaseSources = findPluginBaseSources()
+
 let options
 try {
   options = parseArguments(process.argv.slice(2))
@@ -226,7 +207,6 @@ try {
   console.error(escapeControlCharacters(error.message))
   process.exit(1)
 }
-const root = process.cwd()
 
 /** @type {Map<string, RegistryRegistration> | undefined} */
 let hookRegistrations
@@ -878,14 +858,22 @@ function findContractSources (sources, pluginDirectories) {
 }
 
 /**
- * @param {string} trait
- * @returns {string | undefined}
+ * Derived from the directory so a new base, such as `log_plugin.js` or `schema.js`, is a trait without an edit here.
+ *
+ * @returns {Map<string, string>}
  */
-function findTraitSource (trait) {
-  const filename = trait === 'router'
-    ? 'packages/datadog-plugin-router/src/index.js'
-    : `packages/dd-trace/src/plugins/${trait}.js`
-  return PLUGIN_BASE_TRAITS.has(trait) ? existingPath(filename) : undefined
+function findPluginBaseSources () {
+  const sources = new Map()
+  const directory = path.join(root, PLUGIN_BASE_DIRECTORY)
+  if (existsSync(directory)) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.js') || NON_BASE_PLUGIN_FILES.has(entry.name)) continue
+
+      sources.set(entry.name.slice(0, -3).replace(/_plugin$/, ''), `${PLUGIN_BASE_DIRECTORY}${entry.name}`)
+    }
+  }
+  if (existsSync(path.join(root, ROUTER_BASE_SOURCE))) sources.set('router', ROUTER_BASE_SOURCE)
+  return sources
 }
 
 /**
@@ -1074,7 +1062,7 @@ function findReferences (mode, traits, hasRewriter) {
     references.push('.agents/skills/apm-integrations/references/shimmer.md')
   }
   for (const trait of traits) {
-    const filename = findTraitSource(trait)
+    const filename = pluginBaseSources.get(trait)
     if (filename) references.push(filename)
   }
   references.push(mode === 'serverless'
@@ -1098,8 +1086,8 @@ function findClosestReference (integration, mode, traits) {
   const directory = isShimmer || isServerless
     ? 'packages/datadog-instrumentations/src'
     : 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
-  const requestedBase = traits.find(trait => PLUGIN_BASE_TRAITS.has(trait))
-  const requestedSource = requestedBase ? findTraitSource(requestedBase) : undefined
+  const requestedBase = traits.find(trait => pluginBaseSources.has(trait))
+  const requestedSource = requestedBase ? pluginBaseSources.get(requestedBase) : undefined
   let closest
   let closestScore = 0
 
