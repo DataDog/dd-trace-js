@@ -12,15 +12,22 @@ const plugins = require('../../../../src/llmobs/plugins/claude-agent-sdk')
 // Drives the diagnostic channels directly: the reduced path needs no agent session to exercise.
 describe('claude-agent-sdk gen_ai APM attributes with LLM Observability disabled', () => {
   const LlmPlugin = plugins.find(plugin => plugin.id === 'claude_agent_sdk_llm_llmobs')
-  const startCh = dc.channel(`${LlmPlugin.prefix}:start`)
-  const endCh = dc.channel(`${LlmPlugin.prefix}:end`)
+
+  // the tracer under test subscribes the real plugin to its own prefix, so this subclass takes a
+  // private one rather than sharing those channels
+  class TestLlmPlugin extends LlmPlugin {
+    static prefix = 'tracing:apm:claude-agent-sdk-gen-ai-test:llm'
+  }
+
+  const startCh = dc.channel(`${TestLlmPlugin.prefix}:start`)
+  const endCh = dc.channel(`${TestLlmPlugin.prefix}:end`)
 
   let plugin
   let apmTags
 
   beforeEach(() => {
     apmTags = {}
-    plugin = new LlmPlugin({}, {
+    plugin = new TestLlmPlugin({}, {
       llmobs: { DD_LLMOBS_ENABLED: false },
       service: 'test-service',
     })
@@ -35,13 +42,18 @@ describe('claude-agent-sdk gen_ai APM attributes with LLM Observability disabled
   // pick it up from the end hook rather than from the register options
   describe('query span', () => {
     const QueryPlugin = plugins.find(plugin => plugin.id === 'llmobs_claude_agent_sdk_query')
-    const queryStartCh = dc.channel(`${QueryPlugin.prefix}:start`)
-    const queryAsyncEndCh = dc.channel(`${QueryPlugin.prefix}:asyncEnd`)
+
+    class TestQueryPlugin extends QueryPlugin {
+      static prefix = 'tracing:orchestrion:claude-agent-sdk-gen-ai-test:query'
+    }
+
+    const queryStartCh = dc.channel(`${TestQueryPlugin.prefix}:start`)
+    const queryAsyncEndCh = dc.channel(`${TestQueryPlugin.prefix}:asyncEnd`)
 
     let queryPlugin
 
     beforeEach(() => {
-      queryPlugin = new QueryPlugin({}, {
+      queryPlugin = new TestQueryPlugin({}, {
         llmobs: { DD_LLMOBS_ENABLED: false },
         service: 'test-service',
       })
