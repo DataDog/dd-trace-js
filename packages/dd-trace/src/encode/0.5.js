@@ -2,7 +2,7 @@
 
 const { MAX_SIZE, OverflowError } = require('../msgpack')
 const { normalizeSpan } = require('./tags-processors')
-const { AgentEncoder: BaseEncoder, stringifySpanEvents } = require('./0.4')
+const { AgentEncoder: BaseEncoder, stringifySpanEvents, withPayloadTags } = require('./0.4')
 
 const ARRAY_OF_TWO = 0x92
 const ARRAY_OF_TWELVE = 0x9C
@@ -56,6 +56,7 @@ class AgentEncoder extends BaseEncoder {
   _encode (bytes, trace) {
     bytes.writeArrayPrefix(trace)
 
+    let payloadTagsPending = this._claimPayloadTags(trace)
     const stringMap = this._stringMap
 
     for (let span of trace) {
@@ -84,7 +85,12 @@ class AgentEncoder extends BaseEncoder {
       bytes.writeIntOrFloat(span.start || 0)
       bytes.writeIntOrFloat(span.duration || 0)
       bytes.writeIntOrFloat(span.error)
-      this._encodeMap(bytes, span.meta || {})
+      if (payloadTagsPending) {
+        payloadTagsPending = false
+        this._encodeMap(bytes, withPayloadTags(span.meta))
+      } else {
+        this._encodeMap(bytes, span.meta || {})
+      }
       this._encodeMap(bytes, span.metrics || {})
       this._encodeString(bytes, span.type)
     }

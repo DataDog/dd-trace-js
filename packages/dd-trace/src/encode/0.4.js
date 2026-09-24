@@ -1,6 +1,7 @@
 'use strict'
 
 const getConfig = require('../config')
+const { SDK_OTLP_EXPORT_KEY } = require('../constants')
 const { MsgpackChunk, MAX_SIZE: MAX_CHUNK_SIZE } = require('../msgpack')
 const log = require('../log')
 const { normalizeSpan, eventTimeNano } = require('./tags-processors')
@@ -224,6 +225,17 @@ function escapeJsonString (value) {
   return '"' + value + '"'
 }
 
+/**
+ * Copies `meta` rather than mutating it so the formatted span stays untouched. Reaching a native
+ * encoder means the payload is not OTLP, so the export marker is always "false" here.
+ *
+ * @param {Record<string, unknown>} [meta]
+ * @returns {Record<string, unknown>}
+ */
+function withPayloadTags (meta) {
+  return { ...meta, [SDK_OTLP_EXPORT_KEY]: 'false' }
+}
+
 function lazyEncodedTraceBufferLogger (bytes, start, end) {
   const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
   return `Adding encoded trace to buffer: ${hex}`
@@ -315,6 +327,7 @@ class AgentEncoder {
   _encode (bytes, trace) {
     bytes.writeArrayPrefix(trace)
 
+    let payloadTagsPending = this._claimPayloadTags(trace)
     const formatSpan = this.#formatSpan
     const stringMap = this._stringMap
     // Snapshot the string buffer so we can detect a mid-encode resize and
@@ -430,7 +443,12 @@ class AgentEncoder {
       }
       bytes.writeIntOrFloat(span.duration)
 
-      this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
+      if (payloadTagsPending) {
+        payloadTagsPending = false
+        this.#encodeMetaEntries(bytes, KEY_META_PREFIX, withPayloadTags(span.meta))
+      } else {
+        this.#encodeMetaEntries(bytes, KEY_META_PREFIX, span.meta)
+      }
       this.#encodeMetaEntries(bytes, KEY_METRICS_PREFIX, span.metrics)
 
       if (span.span_events) {
@@ -467,7 +485,20 @@ class AgentEncoder {
     }
   }
 
+  /**
+   * Claims the payload-scoped tags for this trace when it is the first non-empty trace since the
+   * last reset, so they are written exactly once per payload.
+   *
+   * @param {object[]} trace
+   */
+  _claimPayloadTags (trace) {
+    if (!this._payloadTagsPending || trace.length === 0) return false
+    this._payloadTagsPending = false
+    return true
+  }
+
   _reset () {
+    this._payloadTagsPending = true
     this._traceCount = 0
     this._traceBytes.reset()
     this._stringCount = 0
@@ -976,4 +1007,4 @@ function memoizedLogDebug (key, message, value) {
   }
 }
 
-module.exports = { AgentEncoder, stringifySpanEvents }
+module.exports = { AgentEncoder, stringifySpanEvents, withPayloadTags }

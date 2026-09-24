@@ -122,7 +122,7 @@ describe('encode', () => {
       assert.strictEqual(trace[0].start, 123)
       assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
-      assert.deepStrictEqual(trace[0].meta, { bar: 'baz' })
+      assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.sdk.otlp_export': 'false' })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 
@@ -198,6 +198,50 @@ describe('encode', () => {
       sinon.stub(encoder._traceBytes, 'reserve').throws(new Error('something else'))
 
       assert.throws(() => encoder.encode(data), /something else/)
+    })
+
+    describe('_dd.sdk.otlp_export', () => {
+      const makeTrace = (length) => Array.from({ length }, () => ({ ...data[0], meta: { bar: 'baz' } }))
+      const markers = (payload) => msgpack.decode(payload, { useBigInt64: true })
+        .map(trace => trace.map(span => span.meta['_dd.sdk.otlp_export']))
+
+      it('should be written once per payload, on the first span of the first non-empty trace', () => {
+        encoder.encode([])
+        encoder.encode(makeTrace(3))
+        encoder.encode(makeTrace(2))
+
+        assert.deepStrictEqual(markers(encoder.makePayload()), [
+          [],
+          ['false', undefined, undefined],
+          [undefined, undefined],
+        ])
+      })
+
+      it('should be written again on the first span after a flush', () => {
+        encoder.encode(makeTrace(2))
+        encoder.makePayload()
+        encoder.encode(makeTrace(2))
+
+        assert.deepStrictEqual(markers(encoder.makePayload()), [['false', undefined]])
+      })
+
+      it('should be written again on the first span after a reset', () => {
+        encoder.encode(makeTrace(1))
+        encoder.reset()
+        encoder.encode(makeTrace(1))
+
+        assert.deepStrictEqual(markers(encoder.makePayload()), [['false']])
+      })
+
+      it('should override a user tag with the same key without mutating the span', () => {
+        const trace = makeTrace(1)
+        trace[0].meta['_dd.sdk.otlp_export'] = 'true'
+
+        encoder.encode(trace)
+
+        assert.deepStrictEqual(markers(encoder.makePayload()), [['false']])
+        assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.sdk.otlp_export': 'true' })
+      })
     })
 
     it('should reset after making a payload', () => {
@@ -380,7 +424,7 @@ describe('encode', () => {
 
     it('should relearn after 32 misses with fewer than 32 hits', () => {
       const retained = []
-      for (let index = 0; index < 27; index++) {
+      for (let index = 0; index < 26; index++) {
         retained.push(`insufficient-retained-${index}`)
       }
       const write = sinon.spy(encoder._stringBytes, 'write')
@@ -395,10 +439,10 @@ describe('encode', () => {
       encodePayload()
 
       cacheLowReusePayload(retained, 'second-miss')
-      data[0].meta = metaFromKeys([retained[26]])
+      data[0].meta = metaFromKeys([retained[25]])
       encodePayload()
 
-      assert.strictEqual(write.withArgs(retained[26]).callCount, 3)
+      assert.strictEqual(write.withArgs(retained[25]).callCount, 3)
     })
 
     it('should relearn after a low-cardinality payload stops using the cache', () => {
@@ -420,7 +464,7 @@ describe('encode', () => {
 
     it('should disable cross-payload caching after two low-reuse payloads', () => {
       const retained = []
-      for (let index = 0; index < 27; index++) {
+      for (let index = 0; index < 26; index++) {
         retained.push(`disabled-retained-${index}`)
       }
       const value = 'stable-after-two-low-reuse-payloads'
@@ -476,8 +520,9 @@ describe('encode', () => {
     })
 
     it('should keep cross-payload caching after 32 misses with 32 hits', () => {
+      // 27 retained keys + the 4 span strings + the payload-scoped `_dd.sdk.otlp_export` key = 32 hits
       const retained = []
-      for (let index = 0; index < 28; index++) {
+      for (let index = 0; index < 27; index++) {
         retained.push(`useful-retained-${index}`)
       }
       const write = sinon.spy(encoder._stringBytes, 'write')
@@ -485,15 +530,15 @@ describe('encode', () => {
       cacheStringPayloads(retained, 8)
 
       cacheLowReusePayload(retained, 'useful-miss')
-      data[0].meta = metaFromKeys([retained[27]])
+      data[0].meta = metaFromKeys([retained[26]])
       encodePayload()
 
-      assert.strictEqual(write.withArgs(retained[27]).callCount, 2)
+      assert.strictEqual(write.withArgs(retained[26]).callCount, 2)
     })
 
     it('should clear a low-reuse strike after a useful payload', () => {
       const retained = []
-      for (let index = 0; index < 27; index++) {
+      for (let index = 0; index < 26; index++) {
         retained.push(`recovered-retained-${index}`)
       }
       const value = 'stable-after-low-reuse-recovery'
@@ -572,7 +617,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
       const [decodedPayload] = msgpack.decode(buffer, { useBigInt64: true })
-      decodedPayload.forEach(decodedData => {
+      decodedPayload.forEach((decodedData, index) => {
         assertObjectContains(decodedData, {
           name: 'bigger name than expected',
           resource: 'test-r',
@@ -582,9 +627,10 @@ describe('encode', () => {
         })
         assert.strictEqual(decodedData.start, 123)
         assert.strictEqual(decodedData.duration, 456)
-        assert.deepStrictEqual(decodedData.meta, {
-          bar: 'baz',
-        })
+        assert.deepStrictEqual(
+          decodedData.meta,
+          index === 0 ? { bar: 'baz', '_dd.sdk.otlp_export': 'false' } : { bar: 'baz' }
+        )
         assert.deepStrictEqual(decodedData.metrics, {
           example: 1,
           moreExample: 2,
@@ -735,7 +781,11 @@ describe('encode', () => {
       assert.strictEqual(trace[0].start, 123)
       assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
-      assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
+      assert.deepStrictEqual(trace[0].meta, {
+        bar: 'baz',
+        '_dd.span_links': encodedLink,
+        '_dd.sdk.otlp_export': 'false',
+      })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 
@@ -757,7 +807,11 @@ describe('encode', () => {
       assert.strictEqual(trace[0].start, 123)
       assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
-      assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
+      assert.deepStrictEqual(trace[0].meta, {
+        bar: 'baz',
+        '_dd.span_links': encodedLink,
+        '_dd.sdk.otlp_export': 'false',
+      })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
 

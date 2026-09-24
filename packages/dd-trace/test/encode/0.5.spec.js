@@ -65,7 +65,10 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][6], BigInt(data[0].start))
     assert.strictEqual(trace[0][7], BigInt(data[0].duration))
     assert.strictEqual(trace[0][8], 0)
-    assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    assert.deepStrictEqual(trace[0][9], {
+      [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
+      [stringMap.indexOf('_dd.sdk.otlp_export')]: stringMap.indexOf('false'),
+    })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
   })
@@ -97,6 +100,35 @@ describe('encode 0.5', () => {
     assertObjectContains(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('events')]: stringMap.indexOf(encodedLink),
+    })
+  })
+
+  describe('_dd.sdk.otlp_export', () => {
+    const makeTrace = (length) => Array.from({ length }, () => ({ ...data[0], meta: { bar: 'baz' } }))
+    const markers = (payload) => {
+      const [stringMap, traces] = msgpack.decode(payload, { useBigInt64: true })
+      const key = stringMap.indexOf('_dd.sdk.otlp_export')
+      return traces.map(trace => trace.map(span => (key in span[9] ? stringMap[span[9][key]] : undefined)))
+    }
+
+    it('should be written once per payload, on the first span of the first non-empty trace', () => {
+      encoder.encode([])
+      encoder.encode(makeTrace(3))
+      encoder.encode(makeTrace(2))
+
+      assert.deepStrictEqual(markers(encoder.makePayload()), [
+        [],
+        ['false', undefined, undefined],
+        [undefined, undefined],
+      ])
+    })
+
+    it('should be written again on the first span after a flush', () => {
+      encoder.encode(makeTrace(2))
+      encoder.makePayload()
+      encoder.encode(makeTrace(2))
+
+      assert.deepStrictEqual(markers(encoder.makePayload()), [['false', undefined]])
     })
   })
 
@@ -134,6 +166,7 @@ describe('encode 0.5', () => {
     assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink),
+      [stringMap.indexOf('_dd.sdk.otlp_export')]: stringMap.indexOf('false'),
     })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
@@ -167,6 +200,7 @@ describe('encode 0.5', () => {
     assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink),
+      [stringMap.indexOf('_dd.sdk.otlp_export')]: stringMap.indexOf('false'),
     })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
@@ -294,7 +328,10 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][6], BigInt(data[0].start))
     assert.strictEqual(trace[0][7], BigInt(data[0].duration))
     assert.strictEqual(trace[0][8], 0)
-    assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
+    assert.deepStrictEqual(trace[0][9], {
+      [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
+      [stringMap.indexOf('_dd.sdk.otlp_export')]: stringMap.indexOf('false'),
+    })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
     // Everything works the same as without meta_struct, and nothing else is added
