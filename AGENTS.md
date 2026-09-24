@@ -128,13 +128,13 @@ For new top-level tracer options or environment variables, update these surfaces
 Other settings update only their owning surfaces:
 
 1. Define the environment variable, type, default, and applicable `configurationNames` in
-   `packages/dd-trace/src/config/supported-configurations.json`.
+    `packages/dd-trace/src/config/supported-configurations.json`.
 2. Run `npm run generate:config:types` after registry changes. Do not edit generated configuration types manually.
 3. The registry drives ordinary defaults, environment and option mappings, and configuration telemetry.
-   Change runtime configuration code only when the existing registry machinery cannot express the required behavior.
+    Change runtime configuration code only when the existing registry machinery cannot express the required behavior.
 4. Update both supported public TypeScript surfaces and their documentation comments when applicable.
-   API reference documentation is generated from these declarations.
-   Edit `docs/API.md` only for additional guide content.
+    API reference documentation is generated from these declarations.
+    Edit `docs/API.md` only for additional guide content.
 5. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
