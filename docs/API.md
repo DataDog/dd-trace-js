@@ -30,7 +30,9 @@ Feature Flagging collects aggregated evaluation telemetry by default. Set
 `DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
 flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
 
-The background worker starts with the first evaluation batch. Graceful shutdown attempts to drain pending
+The background worker starts with the first evaluation batch. Partial batches are scheduled after 20 ms
+when the application event loop can run; explicit flush and graceful shutdown bypass that delay.
+Graceful shutdown attempts to drain pending
 evaluations for up to five seconds. Diagnostic counters already recorded by the worker are collected before
 instrumentation telemetry's final send; counters produced during the subsequent drain may miss that send.
 Neither evaluation delivery nor diagnostic telemetry is guaranteed on abrupt termination or a frozen runtime.

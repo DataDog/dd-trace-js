@@ -4,6 +4,10 @@ let metrics
 /** @type {Int32Array | undefined} */
 let workerState
 
+// Namespace resets clear points, not metric instances. Names and reasons are fixed below.
+/** @type {Map<string, { inc: (value: number) => void }>} */
+const countMetrics = new Map()
+
 const DROP_REASONS = new Set([
   'pre_queue_overflow',
   'queue_overflow',
@@ -81,8 +85,16 @@ function count (name, value, reason) {
     return
   }
   try {
-    metrics ??= require('../../telemetry/metrics').manager.namespace('general')
-    metrics.count(name, reason === undefined ? undefined : { reason }).inc(value)
+    const id = name + ':' + reason
+    let metric = countMetrics.get(id)
+    if (metric === undefined) {
+      metrics ??= require('../../telemetry/metrics').manager.namespace('general')
+      metric = /** @type {{ inc: (value: number) => void }} */ (
+        metrics.count(name, reason === undefined ? undefined : { reason })
+      )
+      countMetrics.set(id, metric)
+    }
+    metric.inc(value)
   } catch {}
 }
 

@@ -131,18 +131,6 @@ describe('FlagEvalEVPHook', () => {
     assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'queue_overflow'), 0)
   })
 
-  it('does not construct a writer or select a route when disabled', () => {
-    Writer.resetHistory()
-    selectRoute.resetHistory()
-    const disabled = new Hook({ ...config, featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: false } })
-    const hostile = new Proxy({}, { get () { throw new Error('disabled') } })
-    disabled.finally(hostile, hostile)
-    disabled.destroy()
-    sinon.assert.notCalled(Writer)
-    sinon.assert.notCalled(selectRoute)
-    sinon.assert.notCalled(writer.enqueue)
-  })
-
   it('uses the default-enabled path when the featureFlags group is absent', () => {
     hook.destroy()
     hook = new Hook({ ...config, featureFlags: undefined })

@@ -12,7 +12,6 @@ const constants = require('../../../src/openfeature/constants/constants')
 const aggregationModule = require('../../../src/openfeature/writers/flag-evaluation-aggregation')
 const { FlagEvaluationAggregator } = aggregationModule
 const { iterateFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
-const flagEvaluationTelemetry = require('../../../src/openfeature/writers/flag-evaluation-telemetry')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
 
 const endpoint = '/api/v2/flagevaluation'
@@ -528,6 +527,7 @@ describe('OpenFeature flag evaluations writer', () => {
   })
 
   it('keeps telemetry bounded and swallows repeated sink failures', () => {
+    const flagEvaluationTelemetry = proxyquire('../../../src/openfeature/writers/flag-evaluation-telemetry', {})
     const namespace = telemetryMetrics.manager.namespace('general')
     sinon.stub(namespace, 'count').throws(new Error('sink failed'))
 

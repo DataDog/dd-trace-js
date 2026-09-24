@@ -5,6 +5,8 @@ const { createHash } = require('node:crypto')
 
 const { ErrorCode } = require('@openfeature/server-sdk')
 const { describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const { FlagEvaluationAggregator } = require('../../../src/openfeature/writers/flag-evaluation-aggregation')
 const { iterateFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
@@ -92,13 +94,38 @@ describe('flag evaluation independent privacy boundaries', () => {
       assert.strictEqual(entry.error, 'GENERAL')
       assert.strictEqual(entry.runtimeDefault, true)
       assert.strictEqual(entry.count, 1)
-      assert.strictEqual(identity.includes(consent === true ? target : digest), true)
+      assert.strictEqual(identity.includes(target), true)
       if (consent !== true) {
-        assert.strictEqual(identity.includes(target), false)
         assert.strictEqual(identity.includes('independent-context-canary'), false)
       }
     })
   }
+
+  it('hashes repeated protected observations only at output and never trusts digest-shaped raw keys', () => {
+    const pii = require('../../../src/openfeature/writers/flag-evaluation-pii')
+    const hash = sinon.spy(pii.prefixedTargetingKeyDigest)
+    const overrides = { './flag-evaluation-pii': { ...pii, prefixedTargetingKeyDigest: hash } }
+    const { FlagEvaluationAggregator } = proxyquire('../../../src/openfeature/writers/flag-evaluation-aggregation',
+      overrides)
+    const { iterateFlagEvaluationPayloads } = proxyquire('../../../src/openfeature/writers/flag-evaluation-payload',
+      overrides)
+    const aggregator = new FlagEvaluationAggregator()
+    const lookalike = 'sha256_' + 'a'.repeat(64)
+    for (let i = 0; i < 10; i++) {
+      aggregator.add({ flagKey: 'flag', targetingKey: target, timestamp: 100, observeFullEvaluationData: false })
+    }
+    aggregator.add({ flagKey: 'flag', targetingKey: lookalike, timestamp: 100, observeFullEvaluationData: false })
+    assert.strictEqual(hash.callCount, 0)
+    const { full, degraded } = aggregator.take()
+    const [payload] = [...iterateFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)]
+    const rows = JSON.parse(payload.encoded).flagEvaluations
+    assert.deepStrictEqual(rows.map(row => row.evaluation_count), [10, 1])
+    assert.strictEqual(rows[0].targeting_key, digest)
+    assert.strictEqual(rows[1].targeting_key, 'sha256_' + createHash('sha256').update(lookalike).digest('hex'))
+    assert.strictEqual(payload.encoded.includes(target), false)
+    assert.strictEqual(payload.encoded.includes(lookalike), false)
+    assert.strictEqual(hash.callCount, 2)
+  })
 
   for (const degraded of [false, true]) {
     for (const consent of [false, true]) {

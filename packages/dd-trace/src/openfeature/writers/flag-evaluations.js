@@ -15,6 +15,11 @@ const {
 
 const telemetryAppClosingCh = channel('datadog:telemetry:app-closing')
 
+// Share clone/wakeup costs across event-loop turns without delaying sparse evaluations indefinitely.
+const BATCH_SIZE = 64
+const CONSENT_BATCH_SIZE = 8
+const BATCH_DELAY_MS = 20
+
 /** @typedef {import('./flag-evaluation-consumer').FlagEvaluationRoute} FlagEvaluationRoute */
 /** @typedef {import('./flag-evaluation-aggregation').FlagEvaluationEvent} FlagEvaluationEvent */
 
@@ -37,7 +42,7 @@ class FlagEvaluationsWriter {
   #worker
   #state = createWorkerState()
   #batch = []
-  #immediate
+  #batchTimer
   #periodic
   #deadline
   #destroyer
@@ -47,12 +52,9 @@ class FlagEvaluationsWriter {
   #context
   #failureReason = 'worker_failure'
 
-  /**
-   * @param {import('../../config/config-base')} config
-   * @param {FlagEvaluationRoute} [route]
-   */
-  constructor (config, route) {
-    this.#route = route ?? { url: /** @type {URL} */ (config.url), basePath: EVP_PROXY_PATH_V2 }
+  /** @param {import('../../config/config-base')} config */
+  constructor (config) {
+    this.#route = { url: /** @type {URL} */ (config.url), basePath: EVP_PROXY_PATH_V2 }
     this.#context = {
       service: typeof config.service === 'string' ? config.service : '',
       env: typeof config.env === 'string' ? config.env : undefined,
@@ -126,10 +128,11 @@ class FlagEvaluationsWriter {
     Atomics.add(this.#state, 0, 1)
     Atomics.add(this.#state, 1, 1)
     this.#batch.push(normalized)
-    if (this.#batch.length === 8) this.#sendBatch()
-    else if (this.#immediate === undefined) {
-      this.#immediate = setImmediate(() => this.#sendBatch())
-      this.#immediate.unref?.()
+    // A consented event flushes any batch of 8+, so a mixed batch contains at most 8 context snapshots.
+    if (this.#batch.length >= (consent ? CONSENT_BATCH_SIZE : BATCH_SIZE)) this.#sendBatch()
+    else if (this.#batchTimer === undefined) {
+      this.#batchTimer = setTimeout(() => this.#sendBatch(), BATCH_DELAY_MS)
+      this.#batchTimer.unref?.()
     }
     return true
   }
@@ -160,7 +163,7 @@ class FlagEvaluationsWriter {
   }
 
   #sendBatch () {
-    this.#cancelImmediate()
+    this.#cancelBatchTimer()
     if (this.#batch.length === 0) return
     if (!this.#worker) {
       this.#startWorker()
@@ -184,14 +187,16 @@ class FlagEvaluationsWriter {
         env,
         workerData: { route: this.#serializedRoute, context: this.#context, state: this.#state.buffer },
       })
-      this.#worker.on('error', () => this.#fail())
-      this.#worker.on('messageerror', () => this.#fail())
+      this.#worker.on('error', error => this.#fail(
+        error.code === 'MODULE_NOT_FOUND' || error.code === 'ERR_MODULE_NOT_FOUND' ? 'missing_module' : 'worker_error'
+      ))
+      this.#worker.on('messageerror', () => this.#fail('message_error'))
       this.#worker.once('exit', () => this.#exited())
       this.#worker.unref?.()
       this.#periodic = setInterval(() => collectWorkerTelemetry(this.#state), FLAG_EVALUATION_FLUSH_INTERVAL)
       this.#periodic.unref?.()
     } catch {
-      this.#fail()
+      this.#fail('startup_error')
     }
   }
 
@@ -205,14 +210,14 @@ class FlagEvaluationsWriter {
     }
   }
 
-  #cancelImmediate () {
-    if (this.#immediate !== undefined) clearImmediate(this.#immediate)
-    this.#immediate = undefined
+  #cancelBatchTimer () {
+    if (this.#batchTimer !== undefined) clearTimeout(this.#batchTimer)
+    this.#batchTimer = undefined
   }
 
   /** @param {string} reason */
   #discardPartial (reason) {
-    this.#cancelImmediate()
+    this.#cancelBatchTimer()
     const count = this.#batch.length
     this.#batch = []
     Atomics.sub(this.#state, 0, count)
@@ -227,14 +232,15 @@ class FlagEvaluationsWriter {
     collectWorkerTelemetry(this.#state)
   }
 
-  #fail () {
+  /** @param {string} [reason] - Internal diagnostic only; never include raw error messages or paths. */
+  #fail (reason = 'worker_error') {
     if (this.#failed) return
     this.#failed = true
     this.#enabled = false
-    this.#cancelImmediate()
+    this.#cancelBatchTimer()
     this.#batch = []
     this.#cleanup()
-    log.debug('Flag evaluation worker stopped; disabling this writer')
+    log.warn('Flag evaluation counts disabled after worker failure (%s)', reason)
     if (this.#worker) this.#worker.terminate()
     else this.#exited()
   }
@@ -244,7 +250,7 @@ class FlagEvaluationsWriter {
     this.#failed = true
     this.#enabled = false
     this.#worker = undefined
-    this.#cancelImmediate()
+    this.#cancelBatchTimer()
     this.#batch = []
     this.#cleanup()
     // Only settle ownership once the worker cannot mutate counters anymore.

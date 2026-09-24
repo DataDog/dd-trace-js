@@ -23,11 +23,13 @@ describe('flag evaluation worker producer', () => {
   let workers
   let Writer
   let startupError
+  let log
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     workers = []
     startupError = false
+    log = { warn: sinon.spy(), debug: sinon.spy() }
     class Worker extends EventEmitter {
       constructor (path, options) {
         super()
@@ -42,7 +44,9 @@ describe('flag evaluation worker producer', () => {
       ref () {}
       terminate () { this.emit('exit', 1) }
     }
-    Writer = proxyquire('../../../src/openfeature/writers/flag-evaluations', { 'node:worker_threads': { Worker } })
+    Writer = proxyquire('../../../src/openfeature/writers/flag-evaluations', {
+      'node:worker_threads': { Worker }, '../../log': log,
+    })
     writer = new Writer({ url: new URL('http://localhost:8126'), service: 'test' })
   })
 
@@ -63,12 +67,14 @@ describe('flag evaluation worker producer', () => {
     assert.strictEqual(workers.length, 0)
     writer.setEnabled(true)
     assert.strictEqual(workers.length, 0)
-    enqueue(17)
+    enqueue(129)
     assert.strictEqual(workers.length, 1)
     const batches = () => workers[0].messages.filter(message => message.type === 'batch')
-    assert.deepStrictEqual(batches().map(message => message.events.length), [8, 8])
-    clock.tick(0)
-    assert.deepStrictEqual(batches().map(message => message.events.length), [8, 8, 1])
+    assert.deepStrictEqual(batches().map(message => message.events.length), [64, 64])
+    clock.tick(19)
+    assert.deepStrictEqual(batches().map(message => message.events.length), [64, 64])
+    clock.tick(1)
+    assert.deepStrictEqual(batches().map(message => message.events.length), [64, 64, 1])
     assert.deepStrictEqual(workers[0].options.execArgv, [])
     assert.strictEqual(workers[0].options.env.NODE_OPTIONS, undefined)
   })
@@ -90,12 +96,12 @@ describe('flag evaluation worker producer', () => {
     enqueue(1)
     writer.flush()
     workers[0].postMessage = () => { throw new Error('post failure') }
-    enqueue(8)
+    enqueue(64)
     assert.strictEqual(writer.hasCapacity(), false)
     writer.setEnabled(true)
     assert.strictEqual(workers.length, 1)
     assert.strictEqual(writer.enqueue({ flagKey: 'later', timestamp: 100 }), false)
-    assert.strictEqual(dropped('worker_failure'), 10)
+    assert.strictEqual(dropped('worker_failure'), 66)
     assert.strictEqual(dropped('unavailable'), 0)
   })
 
@@ -131,12 +137,12 @@ describe('flag evaluation worker producer', () => {
 
   it('accounts for aggregated observations even after worker input credits were released', () => {
     writer.setEnabled(true)
-    enqueue(8)
+    enqueue(64)
     const state = new Int32Array(workers[0].options.workerData.state)
-    Atomics.sub(state, 0, 8)
+    Atomics.sub(state, 0, 64)
     workers[0].emit('error', new Error('worker failed after aggregation'))
     assert.strictEqual(writer.getUnavailableReason(), 'worker_failure')
-    assert.strictEqual(dropped('worker_failure'), 8)
+    assert.strictEqual(dropped('worker_failure'), 64)
   })
 
   it('does not start a worker or shutdown deadline without admitted work', () => {
@@ -156,7 +162,7 @@ describe('flag evaluation worker producer', () => {
     assert.strictEqual(dropped('unavailable'), 1)
     writer.setEnabled(true, { url: new URL('http://localhost:8127'), basePath: '/new-route' })
     enqueue(1)
-    clock.tick(0)
+    clock.tick(20)
     assert.strictEqual(workers.length, 1)
     assert.strictEqual(workers[0].options.workerData.route.url, 'http://localhost:8127/')
     assert.strictEqual(workers[0].options.workerData.route.basePath, '/new-route')
@@ -176,7 +182,7 @@ describe('flag evaluation worker producer', () => {
 
   it('collects worker metrics before the app-closing send and does not collect them twice', () => {
     writer.setEnabled(true)
-    enqueue(8)
+    enqueue(64)
     const state = new Int32Array(workers[0].options.workerData.state)
     const telemetry = proxyquire('../../../src/openfeature/writers/flag-evaluation-telemetry', {})
     telemetry.configureWorkerTelemetry(state)
@@ -207,5 +213,43 @@ describe('flag evaluation worker producer', () => {
     assert.strictEqual(event.errorCode, 'GENERAL')
     assert.strictEqual(event.attrs, undefined)
     assert.strictEqual(JSON.stringify(workers[0].messages).includes('raw-error-canary'), false)
+  })
+
+  for (const [code, reason] of [['MODULE_NOT_FOUND', 'missing_module'], ['PII-code-canary', 'worker_error']]) {
+    it(`warns once with bounded ${reason} diagnostics and no raw error details`, () => {
+      writer.setEnabled(true)
+      enqueue(64)
+      const worker = workers[0]
+      worker.emit('error', Object.assign(new Error('PII-message-canary'), { code }))
+      worker.emit('error', new Error('PII-second-canary'))
+      sinon.assert.calledOnceWithExactly(log.warn,
+        'Flag evaluation counts disabled after worker failure (%s)', reason)
+      assert.strictEqual(JSON.stringify(log.warn.args).includes('PII-'), false)
+      assert.strictEqual(writer.hasCapacity(), false)
+      assert.strictEqual(dropped('worker_failure'), 64)
+    })
+  }
+
+  it('bounds consented snapshots in mixed batches and flushes a sparse event after 20 ms', () => {
+    writer.setEnabled(true)
+    const consented = () => writer.enqueue({
+      flagKey: 'flag', timestamp: 100, observeFullEvaluationData: true, attrs: { user: 'consented' },
+    })
+    for (let i = 0; i < 7; i++) assert.strictEqual(consented(), true)
+    enqueue(56)
+    assert.strictEqual(workers.length, 0)
+    assert.strictEqual(consented(), true)
+    const batches = () => workers[0].messages.filter(message => message.type === 'batch')
+    assert.strictEqual(batches()[0].events.length, 64)
+    assert.strictEqual(batches()[0].events.filter(event => event.observeFullEvaluationData).length, 8)
+    for (let i = 0; i < 8; i++) assert.strictEqual(consented(), true)
+    assert.strictEqual(batches()[1].events.length, 8)
+    enqueue(1)
+    clock.tick(19)
+    assert.strictEqual(batches().length, 2)
+    clock.tick(1)
+    assert.strictEqual(batches()[2].events.length, 1)
+    assert.ok(batches().every(batch => batch.events.length <= 64 &&
+      batch.events.filter(event => event.observeFullEvaluationData).length <= 8))
   })
 })

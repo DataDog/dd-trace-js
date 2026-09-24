@@ -6,7 +6,7 @@ const {
   FLAG_EVALUATION_PER_FLAG_CAP,
 } = require('../constants/constants')
 const { validatedContextEntries, snapshotFromEntries } = require('./flag-evaluation-context')
-const { prefixedTargetingKeyDigest, normalizeTargetingKey, optionalKey, protectedErrorCode } =
+const { normalizeTargetingKey, optionalKey, protectedErrorCode } =
   require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
 
@@ -88,14 +88,14 @@ class FlagEvaluationAggregator {
     const consent = event.observeFullEvaluationData === true
     const targetingKey = normalizeTargetingKey(event.targetingKey)
     const contextEntries = consent ? validatedContextEntries(event.attrs) : undefined
-    const protectedKey = consent ? targetingKey : prefixedTargetingKeyDigest(targetingKey)
     const error = protectedErrorCode(event.errorCode)
     const variant = optionalKey(event.variant)
     const allocation = optionalKey(event.allocationKey)
     const rule = optionalKey(event.targetingRuleKey)
+    // Group by the raw key; the serializer independently hashes protected rows once per output bucket.
     const fullKey = JSON.stringify([
       flagKey, variant, allocation, rule, event.runtimeDefault === true, error,
-      protectedKey, contextEntries, consent,
+      targetingKey, contextEntries, consent,
     ])
     const existing = this.#full.get(fullKey)
     if (existing) {

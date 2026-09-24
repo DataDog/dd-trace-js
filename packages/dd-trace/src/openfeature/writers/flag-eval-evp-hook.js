@@ -10,15 +10,17 @@ const { setExposureDeliveryStrategy } = require('./util')
 
 /** Captures terminal SDK results; the writer owns deferred aggregation and delivery. */
 class FlagEvalEVPHook {
-  /** @type {FlagEvaluationsWriter | undefined} */
+  /** @type {FlagEvaluationsWriter} */
   #writer
   #ready = false
   #closed = false
 
-  /** @param {import('../../config/config-base')} config */
+  /**
+   * The provider only constructs this hook when evaluation counts are enabled.
+   *
+   * @param {import('../../config/config-base')} config
+   */
   constructor (config) {
-    if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED === false) return
-
     const writer = new FlagEvaluationsWriter(config)
     this.#writer = writer
     setExposureDeliveryStrategy(config, (enabled, route) => {
@@ -36,7 +38,6 @@ class FlagEvalEVPHook {
    * @param {import('@openfeature/core').EvaluationDetails<import('@openfeature/core').FlagValue>} evaluationDetails
    */
   finally (hookContext, evaluationDetails) {
-    if (!this.#writer) return
     try {
       const unavailableReason = this.#closed ? 'closed' : this.#writer.getUnavailableReason()
       if (unavailableReason !== undefined || !this.#ready) {
@@ -98,7 +99,7 @@ class FlagEvalEVPHook {
     if (this.#closed) return
     this.#closed = true
     this.#ready = false
-    this.#writer?.destroy()
+    this.#writer.destroy()
   }
 }
 
