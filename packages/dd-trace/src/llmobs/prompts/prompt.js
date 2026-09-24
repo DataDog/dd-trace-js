@@ -58,7 +58,9 @@ class ManagedPrompt {
     this.version = version
     this.source = source
     this.template = Array.isArray(template)
-      ? Object.freeze(template.map(item => Object.freeze({ ...item })))
+      ? Object.freeze(template.map(item => Object.freeze(isPlaceholder(item)
+        ? { type: 'placeholder', name: item.name }
+        : { role: item.role, content: item.content })))
       : template
     this.promptUuid = promptUuid
     this.promptVersionUuid = promptVersionUuid
