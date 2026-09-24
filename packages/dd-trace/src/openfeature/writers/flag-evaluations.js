@@ -2,6 +2,8 @@
 
 const { join } = require('node:path')
 
+const { channel } = require('dc-polyfill')
+
 const { FLAG_EVALUATION_FLUSH_INTERVAL, FLAG_EVALUATION_QUEUE_CAP } = require('../constants/constants')
 const { EVP_PROXY_PATH_V2 } = require('../../evp_proxy/constants')
 const { getEnvironmentVariables } = require('../../config/helper')
@@ -10,6 +12,8 @@ const { normalizeTargetingKey, optionalKey, protectedErrorCode } = require('./fl
 const {
   collectWorkerTelemetry, createWorkerState, recordDropped, recordTargetingKeyOmitted,
 } = require('./flag-evaluation-telemetry')
+
+const telemetryAppClosingCh = channel('datadog:telemetry:app-closing')
 
 /** @typedef {import('./flag-evaluation-consumer').FlagEvaluationRoute} FlagEvaluationRoute */
 /** @typedef {import('./flag-evaluation-aggregation').FlagEvaluationEvent} FlagEvaluationEvent */
@@ -37,7 +41,9 @@ class FlagEvaluationsWriter {
   #periodic
   #deadline
   #destroyer
+  #onAppClosing
   #route
+  #serializedRoute
   #context
   #failureReason = 'worker_failure'
 
@@ -53,7 +59,11 @@ class FlagEvaluationsWriter {
       version: typeof config.version === 'string' ? config.version : undefined,
     }
     this.#destroyer = () => this.destroy()
+    // Telemetry registers its shutdown sender before providers. Collect existing worker metrics before that send.
+    // Metrics produced by the later final drain remain best-effort; this does not coordinate telemetry shutdown.
+    this.#onAppClosing = () => collectWorkerTelemetry(this.#state)
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
+    telemetryAppClosingCh.subscribe(this.#onAppClosing)
   }
 
   hasCapacity () {
@@ -82,27 +92,8 @@ class FlagEvaluationsWriter {
       return
     }
     try {
-      const serializedRoute = serializeRoute(this.#route)
-      if (this.#worker) {
-        this.#post({ type: 'enabled', enabled: true, route: serializedRoute })
-      } else {
-        const { Worker } = require('node:worker_threads')
-        // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
-        // Strip preloads so the worker cannot initialize the application tracer recursively.
-        const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
-        this.#worker = new Worker(join(__dirname, 'flag-evaluation-worker.js'), {
-          name: 'dd-flag-evaluation',
-          execArgv: [],
-          env,
-          workerData: { route: serializedRoute, context: this.#context, state: this.#state.buffer },
-        })
-        this.#worker.on('error', () => this.#fail())
-        this.#worker.on('messageerror', () => this.#fail())
-        this.#worker.once('exit', () => this.#exited())
-        this.#worker.unref?.()
-        this.#periodic = setInterval(() => collectWorkerTelemetry(this.#state), FLAG_EVALUATION_FLUSH_INTERVAL)
-        this.#periodic.unref?.()
-      }
+      this.#serializedRoute = serializeRoute(this.#route)
+      this.#post({ type: 'enabled', enabled: true, route: this.#serializedRoute })
       this.#enabled = !this.#failed
     } catch {
       this.#fail()
@@ -171,9 +162,37 @@ class FlagEvaluationsWriter {
   #sendBatch () {
     this.#cancelImmediate()
     if (this.#batch.length === 0) return
+    if (!this.#worker) {
+      this.#startWorker()
+      if (this.#failed) return
+    }
     const events = this.#batch
     this.#batch = []
     this.#post({ type: 'batch', events })
+  }
+
+  // Providers that never evaluate need no worker. A first batch during destroy still uses the bounded drain.
+  #startWorker () {
+    try {
+      const { Worker } = require('node:worker_threads')
+      // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
+      // Strip preloads so the worker cannot initialize the application tracer recursively.
+      const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
+      this.#worker = new Worker(join(__dirname, 'flag-evaluation-worker.js'), {
+        name: 'dd-flag-evaluation',
+        execArgv: [],
+        env,
+        workerData: { route: this.#serializedRoute, context: this.#context, state: this.#state.buffer },
+      })
+      this.#worker.on('error', () => this.#fail())
+      this.#worker.on('messageerror', () => this.#fail())
+      this.#worker.once('exit', () => this.#exited())
+      this.#worker.unref?.()
+      this.#periodic = setInterval(() => collectWorkerTelemetry(this.#state), FLAG_EVALUATION_FLUSH_INTERVAL)
+      this.#periodic.unref?.()
+    } catch {
+      this.#fail()
+    }
   }
 
   /** @param {object} message */
@@ -204,6 +223,7 @@ class FlagEvaluationsWriter {
   #cleanup () {
     clearInterval(this.#periodic)
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+    telemetryAppClosingCh.unsubscribe(this.#onAppClosing)
     collectWorkerTelemetry(this.#state)
   }
 
