@@ -16,6 +16,8 @@ const DROP_REASONS = new Set([
   'degraded_cap',
   'payload_limit',
   'serialization_error',
+  // Discarded after failed delivery; an ambiguous response does not prove the receiver lost the batch.
+  'delivery_failure',
   'worker_failure',
   'shutdown_timeout',
 ])

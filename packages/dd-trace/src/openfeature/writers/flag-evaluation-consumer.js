@@ -52,7 +52,7 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
    * @param {FlagEvaluationRoute} [route]
    * @param {object} [callbacks] - Worker ownership callbacks
    * @param {(count: number) => void} [callbacks.onProcessed] - Release input credit after processing
-   * @param {(count: number) => void} [callbacks.onDelivered] - Release observations after transport completes
+   * @param {(count: number) => void} [callbacks.onDelivered] - Release observations after successful delivery
    * @param {() => void} [callbacks.onIdle] - Called once shutdown has drained delivery
    */
   constructor (config, route, { onProcessed, onDelivered, onIdle } = {}) {
@@ -172,9 +172,10 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
         const payload = next.value
         const bytes = Buffer.byteLength(payload.encoded)
         this.#pendingBytes += bytes
-        this._sendPayload(payload.encoded, payload.rows, () => {
+        this._sendPayload(payload.encoded, payload.rows, delivered => {
           this.#pendingBytes -= bytes
-          this.#onDelivered?.(payload.evaluations)
+          if (delivered) this.#onDelivered?.(payload.evaluations)
+          else recordDropped('delivery_failure', payload.evaluations)
           this.#pump()
         })
       }

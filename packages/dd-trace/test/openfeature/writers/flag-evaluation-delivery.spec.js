@@ -33,6 +33,20 @@ describe('flag evaluation consumer delivery ownership', () => {
     telemetryMetrics.manager.namespace('general').reset()
   })
 
+  for (const result of [202, 400, 500, 'ECONNRESET', 'ERR_DD_REQUEST_BUFFER_FULL']) {
+    it(`reports final delivery outcome ${result} for every aggregated evaluation`, () => {
+      for (let i = 0; i < 3; i++) writer.enqueue({ flagKey: 'flag', timestamp: 100 })
+      writer.flush()
+      assert.strictEqual(JSON.parse(requests[0].payload).flagEvaluations[0].evaluation_count, 3)
+      const error = typeof result === 'string' ? Object.assign(new Error(result), { code: result }) : null
+      requests[0].callback(error, '', typeof result === 'number' ? result : undefined)
+      const series = telemetryMetrics.manager.namespace('general').toJSON().metrics?.series ?? []
+      const drops = series.filter(metric => metric.metric === 'flagevaluation.rows.dropped')
+      assert.deepStrictEqual(drops.map(metric => ({ tags: metric.tags, count: metric.points[0][1] })),
+        result === 202 ? [] : [{ tags: ['reason:delivery_failure'], count: 3 }])
+    })
+  }
+
   it('bounds pending encoded bytes and drains a healthy large flush without losing its tail', () => {
     for (let i = 0; i < 15; i++) {
       writer.enqueue({ flagKey: String(i) + 'x'.repeat(900000), timestamp: 100 })

@@ -219,7 +219,7 @@ class BaseFFEWriter {
    * @protected
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
-   * @param {() => void} [onComplete] - Called once the batch finishes, including any safe fallback attempt
+   * @param {(delivered: boolean) => void} [onComplete] - Final outcome after any safe fallback attempt
    */
   _sendPayload (payload, eventCount, onComplete) {
     const route = this.#createActiveRoute()
@@ -302,7 +302,7 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
-   * @param {() => void} [onComplete] - Final transport completion, whether successful or not
+   * @param {(delivered: boolean) => void} [onComplete] - True only for a successful final response
    */
   #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
     // The request helper mutates headers. Concurrent envelopes must not share them.
@@ -337,7 +337,7 @@ class BaseFFEWriter {
           route.onFallback?.()
         }
         log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
-        onComplete?.()
+        onComplete?.(false)
         return
       }
 
@@ -355,7 +355,7 @@ class BaseFFEWriter {
           route.onFallback?.()
         }
         log.warn('Events request returned status %d', statusCode)
-        onComplete?.()
+        onComplete?.(false)
         return
       }
 
@@ -373,7 +373,7 @@ class BaseFFEWriter {
         } else {
           log.warn('Events request returned status %d', statusCode)
         }
-        onComplete?.()
+        onComplete?.(false)
         return
       }
 
@@ -384,7 +384,7 @@ class BaseFFEWriter {
       } else {
         log.warn('Events request returned status %d', statusCode)
       }
-      onComplete?.()
+      onComplete?.(!error && statusCode >= 200 && statusCode < 300)
     })
   }
 }

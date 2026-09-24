@@ -69,6 +69,15 @@ describe('flag evaluation worker entry point', () => {
     telemetryMetrics.manager.namespace('general').reset()
   })
 
+  /** @param {number} count */
+  function assertDeliveryDrops (count) {
+    collectWorkerTelemetry(state)
+    const series = telemetryMetrics.manager.namespace('general').toJSON().metrics?.series ?? []
+    const drops = series.filter(metric => metric.metric === 'flagevaluation.rows.dropped')
+    assert.deepStrictEqual(drops.map(metric => ({ tags: metric.tags, count: metric.points[0][1] })),
+      count ? [{ tags: ['reason:delivery_failure'], count }] : [])
+  }
+
   function post () {
     Atomics.add(state, 0, 2)
     Atomics.add(state, 1, 2)
@@ -126,9 +135,11 @@ describe('flag evaluation worker entry point', () => {
         assert.strictEqual(requests.length, fallback && replay ? 2 : 1)
         if (fallback && replay) {
           assert.strictEqual(Atomics.load(state, 1), 2)
+          assertDeliveryDrops(0)
           requests[1].callback(null, '', 202)
         }
         assert.deepStrictEqual([Atomics.load(state, 0), Atomics.load(state, 1)], [0, 0])
+        assertDeliveryDrops(result === 202 || (fallback && replay) ? 0 : 2)
         if (switchRoute) {
           sinon.assert.calledOnceWithExactly(port.postMessage, {
             type: 'route', id: 2, status: fallback ? 'fallback' : 'unavailable',
@@ -141,6 +152,31 @@ describe('flag evaluation worker entry point', () => {
       })
     }
   }
+
+  it('counts a failed fallback once using evaluation counts and drains shutdown', () => {
+    port.emit('message', {
+      type: 'enabled',
+      enabled: true,
+      route: {
+        id: 2,
+        url: 'http://localhost:8126/',
+        basePath: '',
+        fallback: { url: 'http://localhost:8127/', basePath: '' },
+      },
+    })
+    post()
+    port.emit('message', { type: 'close' })
+    requests[0].callback(null, '', 405)
+    assert.strictEqual(requests.length, 2)
+    assert.strictEqual(Atomics.load(state, 1), 2)
+    assertDeliveryDrops(0)
+    sinon.assert.notCalled(port.close)
+    requests[1].callback(new Error('failed'), '', 503)
+    assertDeliveryDrops(2)
+    assert.deepStrictEqual([Atomics.load(state, 0), Atomics.load(state, 1)], [0, 0])
+    sinon.assert.calledOnce(port.close)
+    assert.strictEqual(clock.countTimers(), 0)
+  })
 
   it('relays unavailability on the initial route and accepts a recovered route', () => {
     post()
