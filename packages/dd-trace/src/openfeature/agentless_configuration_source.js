@@ -106,8 +106,17 @@ class AgentlessConfigurationSource {
    */
   async #pollOnce (abortController) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      log.debug('Feature Flags: agentless configuration poll attempt %d/%d', attempt, MAX_ATTEMPTS)
       const response = await this.#request(abortController.signal)
       if (this.#abortController !== abortController) return
+
+      if (response.error) {
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d failed: %s',
+          attempt, MAX_ATTEMPTS, errorMessage(response.error))
+      } else {
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP %d',
+          attempt, MAX_ATTEMPTS, response.statusCode)
+      }
 
       const retryable = response.statusCode === undefined || isRetryableStatus(response.statusCode)
       if (!retryable) {
@@ -205,6 +214,9 @@ class AgentlessConfigurationSource {
     const etag = response.headers?.etag
     const value = Array.isArray(etag) ? etag[0] : etag
     this.#etag = value?.trim() || undefined
+
+    log.debug('Feature Flags: agentless configuration applied successfully (%d flag(s))',
+      Object.keys(configuration.flags ?? {}).length)
   }
 
   /**
@@ -270,10 +282,17 @@ function parseConfiguration (body) {
 }
 
 /**
+ * Formats a request error, including the underlying network error code
+ * (e.g. ENOTFOUND, ECONNREFUSED, ETIMEDOUT) when available, since "request
+ * failed" alone does not tell a customer whether the problem is DNS, a
+ * refused connection, a timeout, or something else.
+ *
  * @param {unknown} error
  */
 function errorMessage (error) {
-  return error instanceof Error ? error.message : String(error ?? 'request was not sent')
+  if (!(error instanceof Error)) return String(error ?? 'request was not sent')
+  const code = /** @type {{ code?: string }} */ (error).code
+  return code ? `${error.message} (${code})` : error.message
 }
 
 /**

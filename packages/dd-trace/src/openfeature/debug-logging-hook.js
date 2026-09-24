@@ -1,8 +1,14 @@
 'use strict'
 
+const log = require('../log')
+
 /**
  * OpenFeature hook that logs full evaluation details for every flag
- * evaluation to the console, for troubleshooting during setup.
+ * evaluation, for troubleshooting during setup.
+ *
+ * Uses the tracer's existing log system (visible when DD_TRACE_DEBUG=true,
+ * filterable with DD_TRACE_LOG_LEVEL) rather than a dedicated switch, so
+ * there is nothing new for customers to learn.
  *
  * Implements the `finally` hook interface (not `after`) so it fires for
  * both successful and errored evaluations, matching `EvalMetricsHook`.
@@ -15,8 +21,7 @@ class DebugLoggingHook {
    * @param {object} evaluationDetails - Full evaluation details
    */
   finally (hookContext, evaluationDetails) {
-    // eslint-disable-next-line no-console
-    console.log('[dd-trace] Feature flag evaluated:', hookContext?.flagKey, evaluationDetails)
+    log.debug('Feature Flags: evaluated %s: %o', hookContext?.flagKey, evaluationDetails)
   }
 }
 

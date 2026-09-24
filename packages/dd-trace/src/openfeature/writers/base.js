@@ -291,7 +291,11 @@ class BaseFFEWriter {
       }
 
       if (error) {
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        // Includes the underlying network error code (e.g. ENOTFOUND, ECONNREFUSED, ETIMEDOUT)
+        // when available, since "failed to send" alone does not say whether the problem is
+        // DNS, a refused connection, a timeout, or something else.
+        const detail = error.code ? `${error.message} (${error.code})` : error.message
+        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, detail)
       } else if (statusCode >= 200 && statusCode < 300) {
         log.debug('Successfully sent %d events', eventCount)
       } else {

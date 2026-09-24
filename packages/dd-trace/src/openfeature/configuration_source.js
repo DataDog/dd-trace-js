@@ -22,7 +22,13 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled || source !== 'agentless') {
+  if (!enabled) {
+    log.debug('Feature Flags: disabled')
+    return
+  }
+
+  if (source !== 'agentless') {
+    log.debug('Feature Flags: configuration source is %s, not agentless; skipping agentless setup', source)
     return
   }
 
@@ -34,8 +40,10 @@ function create (config, applyConfiguration) {
     }
 
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
+    const resolvedEndpoint = endpoint(config, baseUrl)
+    log.debug('Feature Flags: starting agentless configuration source at %s', resolvedEndpoint.href)
     return new AgentlessConfigurationSource({
-      endpoint: endpoint(config, baseUrl),
+      endpoint: resolvedEndpoint,
       pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,

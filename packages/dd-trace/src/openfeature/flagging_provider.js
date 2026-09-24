@@ -21,9 +21,6 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
 
-  /** @type {boolean} */
-  #debug
-
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config/config-base')} config - Tracer configuration object
@@ -34,13 +31,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
-    this.#debug = config.experimental.flaggingProvider.debug === true
-
     this.hooks.push(new EvalMetricsHook(config))
-
-    if (this.#debug) {
-      this.hooks.push(new DebugLoggingHook())
-    }
+    this.hooks.push(new DebugLoggingHook())
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
@@ -63,6 +55,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {Promise<void>}
    */
   initialize (context) {
+    log.debug('Feature Flags: waiting for provider initialization...')
+
     const promise = super.initialize(context)
 
     // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
@@ -71,14 +65,13 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
 
-    if (this.#debug) {
-      // Observes the rejection for logging only. Does not alter it: `promise` itself is
-      // returned unmodified below, so the caller still sees the original rejection.
-      promise.catch((error) => {
-        // eslint-disable-next-line no-console
-        console.error('[dd-trace] Feature flag provider failed to initialize:', error)
-      })
-    }
+    // Observes the outcome for logging only, on a separate promise chain. Does not alter
+    // it: `promise` itself is returned unmodified below, so the caller still sees the
+    // original resolution or rejection.
+    promise.then(
+      () => log.debug('Feature Flags: provider initialized successfully'),
+      (error) => log.error('Feature Flags: provider failed to initialize: %s', error.message)
+    )
 
     return promise
   }
