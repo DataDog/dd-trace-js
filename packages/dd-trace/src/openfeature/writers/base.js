@@ -275,7 +275,9 @@ class BaseFFEWriter {
    * @param {() => void} [onComplete] - Final delivery completion
    */
   #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
-    request(payload, route.requestOptions, (error, response, statusCode) => {
+    // The request helper mutates headers and retains them for retries. Never share them between envelopes.
+    const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
+    request(payload, requestOptions, (error, response, statusCode) => {
       if (fallbackRoute && isDefinitiveRejection(error, statusCode)) {
         log.debug(
           '%s switching from %s%s to direct intake after definitive rejection',

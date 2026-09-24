@@ -97,6 +97,36 @@ describe('FlaggingProvider EVP lifecycle', () => {
   }
 
   for (const consent of [false, true]) {
+    it(`preserves the count when a targeting-key accessor throws, consent=${consent}`, async () => {
+      const client = await register()
+      enable()
+      resolve(consent, true)
+      // A before hook can install an accessor after OpenFeature's initial context merge.
+      provider.hooks.push({
+        before (hookContext) {
+          Object.defineProperty(hookContext.context, 'targetingKey', {
+            enumerable: true,
+            get () { throw new Error('targeting-accessor-secret-canary') },
+          })
+        },
+      })
+      assert.strictEqual(await client.getBooleanValue('flag', false, { plan: 'pro' }), true)
+      provider.onClose()
+      assert.strictEqual(request.callCount, 1)
+      const bytes = Buffer.from(request.firstCall.args[0])
+      const [row] = JSON.parse(bytes.toString()).flagEvaluations
+      assert.strictEqual(row.evaluation_count, 1)
+      assert.strictEqual(row.targeting_key, undefined)
+      assert.strictEqual(row.variant.key, 'on')
+      assert.deepStrictEqual(row.context?.evaluation, consent ? { plan: 'pro' } : undefined)
+      assert.strictEqual(bytes.includes('targeting-accessor-secret-canary'), false)
+      const series = telemetryMetrics.manager.namespace('general').toJSON().metrics?.series ?? []
+      const omitted = series.find(metric => metric.metric === 'flagevaluation.targeting_key.omitted')
+      assert.strictEqual(omitted?.points[0][1], 1)
+      assert.strictEqual(series.some(metric => metric.metric === 'flagevaluation.hook.errors'), false)
+      assert.strictEqual(series.some(metric => metric.metric === 'flagevaluation.rows.dropped'), false)
+    })
+
     for (const code of [ErrorCode.FLAG_NOT_FOUND, 'error-code-canary']) {
       it(`preserves default/count and strips raw errors for ${code}, consent=${consent}`, async () => {
         const client = await register()

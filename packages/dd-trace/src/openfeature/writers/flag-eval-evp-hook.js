@@ -2,7 +2,9 @@
 
 const { MAX_EVALUATION_TIMESTAMP_MS } = require('../constants/constants')
 const { snapshotEvaluationContext } = require('./flag-evaluation-context')
-const { recordContextTruncated, recordDropped, recordHookError } = require('./flag-evaluation-telemetry')
+const {
+  recordContextTruncated, recordDropped, recordHookError, recordTargetingKeyOmitted,
+} = require('./flag-evaluation-telemetry')
 const FlagEvaluationsWriter = require('./flag-evaluations')
 const { setExposureDeliveryStrategy } = require('./util')
 
@@ -54,7 +56,13 @@ class FlagEvalEVPHook {
         ? capturedTime
         : Date.now()
       const context = hookContext.context
-      const targetingKey = context?.targetingKey
+      let targetingKey
+      try {
+        targetingKey = context?.targetingKey
+      } catch {
+        // An unreadable identity must not discard an otherwise valid evaluation count.
+        recordTargetingKeyOmitted()
+      }
       let attrs
       if (consent) {
         let snapshot
