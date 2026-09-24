@@ -233,7 +233,7 @@ describe('OpenTelemetry Traces', () => {
 
     it('applies the trace sampling priority to every span', () => {
       const transformer = new OtlpTraceTransformer({})
-      for (const [priority, flags] of [[0, 0], [2, 1]]) {
+      for (const [priority, flags] of [[undefined, 0], [0, 0], [2, 1]]) {
         const root = createMockSpan({
           parent_id: id('0'),
           metrics: { _sampling_priority_v1: priority },
