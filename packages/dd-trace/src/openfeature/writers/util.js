@@ -10,7 +10,6 @@ const {
 } = require('../../evp_proxy/constants')
 const { createDirectEVPRoute } = require('../../evp_proxy/direct')
 const { discoverEVPProxy } = require('../../evp_proxy/discovery')
-const { joinAgentURLPath } = require('../../evp_proxy/path')
 const logger = require('../../log')
 
 const ROUTE_DISCOVERY_COOLDOWN_MS = 60_000
@@ -33,18 +32,28 @@ function warnExposureDeliveryUnavailable () {
 }
 
 /**
- * Preserves Agent exposure delivery for the Remote Configuration source.
+ * Preserves the one-time EVP v2 capability check for the Remote Configuration source.
  *
  * @param {import('../../config')} config - Tracer configuration object
  * @param {Function} setWriterEnabledValue - Callback to set the writer enabled state
  */
 function setAgentStrategy (config, setWriterEnabledValue) {
-  setWriterEnabledValue(true, {
-    url: config.url,
-    basePath: joinAgentURLPath(config.url, EVP_PROXY_PATH_V2),
-    headers: {
-      [EVP_SUBDOMAIN_HEADER_NAME]: EVP_EVENT_PLATFORM_SUBDOMAIN,
-    },
+  discoverEVPProxy(config.url, {
+    supportedPaths: [EVP_PROXY_PATH_V2],
+  }, (error, route) => {
+    if (error) {
+      logger.debug('FFE Writer disabled - error getting agent info: %s', error.message)
+      setWriterEnabledValue(false)
+      return
+    }
+
+    if (route) {
+      logger.debug('FFE Writer enabled - agent has EVP proxy support')
+      setWriterEnabledValue(true, route)
+    } else {
+      logger.debug('FFE Writer disabled - agent does not have EVP proxy support')
+      setWriterEnabledValue(false)
+    }
   })
   return STOP_NOOP
 }

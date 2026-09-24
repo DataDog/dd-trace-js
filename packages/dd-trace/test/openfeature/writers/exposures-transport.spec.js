@@ -26,6 +26,74 @@ describe('OpenFeature Exposures Writer transport', () => {
     nock.cleanAll()
   })
 
+  for (const { name, status, info, enabled } of [
+    {
+      name: 'legacy EVP v2 without identity capability headers',
+      status: 200,
+      info: { endpoints: ['/evp_proxy/v4', '/evp_proxy/v2'] },
+      enabled: true,
+    },
+    { name: 'no EVP support', status: 200, info: { endpoints: [] }, enabled: false },
+    { name: 'only EVP v4', status: 200, info: { endpoints: ['/evp_proxy/v4'] }, enabled: false },
+    { name: 'missing info endpoint', status: 404, info: '', enabled: false },
+  ]) {
+    it(`gates Remote Configuration exposure sends on Agent capability: ${name}`, async () => {
+      const config = {
+        url: new URL('http://localhost:8126/agent-prefix/'),
+        site: 'datadoghq.com',
+        DD_API_KEY: 'test-api-key',
+        service: 'test-service',
+        featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config' },
+      }
+      const infoRequest = nock('http://localhost:8126').get('/agent-prefix/info').reply(status, info)
+      const deliveries = []
+      const local = nock('http://localhost:8126')
+        .post('/agent-prefix/evp_proxy/v2/api/v2/exposures')
+        .twice()
+        .reply(function (path, body) {
+          deliveries.push({ body, headers: this.req.headers })
+          return [202, '']
+        })
+      const direct = nock('https://event-platform-intake.datadoghq.com').post('/api/v2/exposures').reply(202)
+
+      writer = new ExposuresWriter(config)
+      const actualEnabled = await new Promise(resolve => {
+        stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+          writer.setEnabled(enabled, route)
+          resolve(enabled)
+        })
+      })
+      assert.strictEqual(actualEnabled, enabled)
+      infoRequest.done()
+
+      for (const id of ['customer-1', 'customer-2']) {
+        writer.append({
+          timestamp: 1672531200000,
+          allocation: { key: 'allocation' },
+          flag: { key: 'checkout' },
+          variant: { key: 'enabled' },
+          subject: { id },
+        })
+        writer.flush()
+      }
+      if (enabled) {
+        await waitFor(() => deliveries.length === 2)
+        local.done()
+        assert.deepStrictEqual(deliveries.map(({ body }) => body.exposures[0].subject.id), ['customer-1', 'customer-2'])
+        for (const { headers } of deliveries) {
+          assert.strictEqual(headers['dd-api-key'], undefined)
+          assert.strictEqual(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
+          assert.strictEqual(headers['dd-evp-origin'], 'dd-trace-js')
+          assert.strictEqual(headers['dd-evp-origin-version'], tracerVersion)
+        }
+      } else {
+        await new Promise(resolve => setImmediate(resolve))
+        assert.deepStrictEqual(deliveries, [])
+      }
+      assert.strictEqual(direct.isDone(), false)
+    })
+  }
+
   it('should use local EVP when allowed headers omit the Agent-consumed routing header', async () => {
     const config = {
       url: new URL('http://localhost:8126'),

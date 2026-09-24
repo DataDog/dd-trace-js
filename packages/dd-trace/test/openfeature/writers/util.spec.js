@@ -37,25 +37,57 @@ describe('OpenFeature event delivery strategy', () => {
     clock.restore()
   })
 
-  it('keeps Remote Configuration on the historical fixed EVP v2 route', () => {
+  it('checks Remote Configuration capability once and keeps the fixed EVP v2 route', () => {
     const config = {
       url: new URL('http://localhost:8126/agent-prefix/'),
+      DD_API_KEY: 'test-api-key',
       featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config' },
     }
+    const localRoute = { url: config.url, basePath: '/agent-prefix/evp_proxy/v2' }
+    discoverEVPProxy.yields(null, localRoute)
 
     const stop = setEventDeliveryStrategy(config, setWriterEnabledValue)
 
-    sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, {
-      url: config.url,
-      basePath: '/agent-prefix/evp_proxy/v2',
-      headers: {
-        'X-Datadog-EVP-Subdomain': 'event-platform-intake',
-      },
-    })
-    sinon.assert.notCalled(discoverEVPProxy)
+    sinon.assert.calledOnceWithExactly(discoverEVPProxy, config.url, {
+      supportedPaths: ['/evp_proxy/v2'],
+    }, sinon.match.func)
+    sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, localRoute)
     sinon.assert.notCalled(createDirectEVPRoute)
     stop()
   })
+
+  it('waits for the Agent capability result before enabling the default delivery strategy', () => {
+    const config = { url: new URL('http://localhost:8126') }
+    const stop = setEventDeliveryStrategy(config, setWriterEnabledValue)
+
+    sinon.assert.notCalled(setWriterEnabledValue)
+    const localRoute = { url: config.url, basePath: '/evp_proxy/v2' }
+    discoverEVPProxy.firstCall.args[2](null, localRoute)
+
+    sinon.assert.calledOnceWithExactly(setWriterEnabledValue, true, localRoute)
+    sinon.assert.notCalled(createDirectEVPRoute)
+    stop()
+  })
+
+  for (const error of [null, new Error('Agent unavailable')]) {
+    it(`disables Remote Configuration delivery on ${error ? 'discovery error' : 'missing EVP v2'}`, async () => {
+      const config = {
+        url: new URL('http://localhost:8126'),
+        DD_API_KEY: 'test-api-key',
+        featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config' },
+      }
+      discoverEVPProxy.yields(error)
+
+      const stop = setEventDeliveryStrategy(config, setWriterEnabledValue)
+      await clock.tickAsync(120_000)
+
+      sinon.assert.calledOnceWithExactly(setWriterEnabledValue, false)
+      sinon.assert.calledOnce(discoverEVPProxy)
+      sinon.assert.notCalled(createDirectEVPRoute)
+      sinon.assert.calledOnce(log.debug)
+      stop()
+    })
+  }
 
   it('prefers v4 and requires both identity headers from an agentless local route', () => {
     const config = agentlessConfig()
