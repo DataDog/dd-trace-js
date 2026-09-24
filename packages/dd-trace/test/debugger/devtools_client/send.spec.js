@@ -620,7 +620,7 @@ function createConfigMock (overrides = {}) {
     maxTotalPayloadSize: 5 * 1024 * 1024,
     queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
     dynamicInstrumentation: {
-      uploadIntervalSeconds: 1,
+      DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
     },
     ...overrides,
     '@noCallThru': true,

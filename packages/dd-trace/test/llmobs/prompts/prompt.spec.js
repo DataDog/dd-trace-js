@@ -151,7 +151,6 @@ describe('ManagedPrompt', () => {
       })
     }
   })
-
   it('supports string, chat, object, and synchronous callable fallbacks', () => {
     const string = ManagedPrompt.fromFallback('p', 'Hello {name}')
     const chat = ManagedPrompt.fromFallback('p', [{ role: 'user', content: 'Hi {name}' }])
