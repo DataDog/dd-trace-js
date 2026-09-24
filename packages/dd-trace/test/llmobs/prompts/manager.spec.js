@@ -335,7 +335,8 @@ describe('PromptManager', () => {
 
   it('refreshes the environment selector and preserves cache on non-404 failures', async () => {
     fetchStub.onFirstCall().resolves(response(200, promptResponse({ version: 1 })))
-    fetchStub.onSecondCall().resolves(response(200, promptResponse({ version: 2 })))
+    const updated = { version: 2, template: 'Updated {name}', config: { temperature: 0.7 } }
+    fetchStub.onSecondCall().resolves(response(200, promptResponse(updated)))
     fetchStub.onThirdCall().resolves(response(500, { detail: 'temporary' }))
     const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
 
@@ -345,9 +346,13 @@ describe('PromptManager', () => {
     const cached = await manager.getPrompt('greeting')
 
     assert.strictEqual(refreshed.version, '2')
+    assert.strictEqual(refreshed.template, updated.template)
+    assert.deepStrictEqual(refreshed.config, updated.config)
     assert.strictEqual(failed, undefined)
     assert.strictEqual(cached.version, '2')
     assert.strictEqual(cached.source, 'cache')
+    assert.strictEqual(cached.template, updated.template)
+    assert.deepStrictEqual(cached.config, updated.config)
     assert.deepStrictEqual(JSON.parse(fetchStub.secondCall.args[1].body), {
       data: { type: 'prompt_resolve_requests', attributes: { env: 'production' } },
     })

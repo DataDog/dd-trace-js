@@ -22,7 +22,6 @@ function freezeConfig (config) {
   }
   return freeze(copy)
 }
-
 class ManagedPrompt {
   /**
    * @param {object} data

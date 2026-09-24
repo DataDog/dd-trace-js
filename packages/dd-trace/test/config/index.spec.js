@@ -22,6 +22,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const { getDynamicAtrBuckets } = require('../../src/ci-visibility/dynamic-atr-retries')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
 const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
@@ -512,7 +513,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.apmTracingEnabled, false)
-    assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
@@ -527,7 +528,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.apmTracingEnabled, false)
-    assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
 
     delete require.cache[require.resolve('../../src/index')]
     const indexFile = require('../../src/index')
@@ -1174,9 +1175,9 @@ describe('Config', () => {
         port: 8125,
       },
       dynamicInstrumentation: {
-        enabled: false,
-        probeFile: undefined,
-        uploadIntervalSeconds: 1,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
+        DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
       },
       env: undefined,
       aiguard: {
@@ -1188,10 +1189,8 @@ describe('Config', () => {
         DD_AI_GUARD_TIMEOUT: 10_000,
         DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
       },
-      experimental: {
-        exporter: '',
-        enableGetRumData: false,
-      },
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
       flushInterval: 2000,
       flushMinSpans: 1000,
       DD_HEAP_SNAPSHOT_COUNT: 0,
@@ -1251,8 +1250,11 @@ describe('Config', () => {
       traceId128BitLoggingEnabled: true,
       DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'continue',
     })
-    assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, [])
-    assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
+    assert.deepStrictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS, [])
+    assert.deepStrictEqual(
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
+      []
+    )
     assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
@@ -1379,6 +1381,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_MIDDLEWARE_TRACING_ENABLED', value: true, origin: 'default' },
       { name: 'DD_OPENAI_SPAN_CHAR_LIMIT', value: 128, origin: 'default' },
       { name: 'DD_OPENAI_LOGS_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_OPENAI_REALTIME_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_PEER_SERVICE_MAPPING', value: '', origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'DD_TRACE_AGENT_PORT', value: 8126, origin: 'default' },
@@ -1665,11 +1668,11 @@ describe('Config', () => {
         port: 5218,
       },
       dynamicInstrumentation: {
-        enabled: true,
-        probeFile: 'probes.json',
-        redactedIdentifiers: ['foo', 'bar'],
-        redactionExcludedIdentifiers: ['a', 'b', 'c'],
-        uploadIntervalSeconds: 0.1,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo', 'bar'],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a', 'b', 'c'],
+        DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
       env: 'test',
       aiguard: {
@@ -1681,10 +1684,8 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: false,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
-      experimental: {
-        enableGetRumData: true,
-        exporter: 'log',
-      },
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
       hostname: 'agent',
       DD_HEAP_SNAPSHOT_COUNT: 1,
       DD_HEAP_SNAPSHOT_DESTINATION: '/tmp',
@@ -2320,9 +2321,9 @@ describe('Config', () => {
         port: 5218,
       },
       dynamicInstrumentation: {
-        enabled: true,
-        probeFile: 'probes.json',
-        uploadIntervalSeconds: 0.1,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
+        DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
       env: 'test',
       aiguard: {
@@ -2334,10 +2335,8 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
-      experimental: {
-        enableGetRumData: true,
-        exporter: 'log',
-      },
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },
       flushInterval: 5000,
       flushMinSpans: 500,
       hostname: 'agent',
@@ -2390,13 +2389,19 @@ describe('Config', () => {
       traceId128BitLoggingEnabled: true,
       version: '0.1.0',
     })
-    assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, ['foo', 'bar'])
-    assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, ['a', 'b', 'c'])
+    assert.deepStrictEqual(
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS,
+      ['foo', 'bar']
+    )
+    assert.deepStrictEqual(
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS,
+      ['a', 'b', 'c']
+    )
     assert.strictEqual(config.appsec.enabled, undefined)
     assert.strictEqual(config.appsec.extendedHeadersCollection, undefined)
     assert.strictEqual(config.appsec.rasp, undefined)
     assert.strictEqual(config.appsec.stackTrace, undefined)
-    assert.strictEqual(config.experimental.aiguard, undefined)
+    assert.strictEqual(config.experimental?.aiguard, undefined)
     if (DD_MAJOR < 6) {
       assert.strictEqual(
         config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
@@ -2988,11 +2993,11 @@ describe('Config', () => {
         port: 8888,
       },
       dynamicInstrumentation: {
-        enabled: false,
-        probeFile: 'probes2.json',
-        redactedIdentifiers: ['foo2', 'bar2'],
-        redactionExcludedIdentifiers: ['a2', 'b2'],
-        uploadIntervalSeconds: 0.2,
+        DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes2.json',
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo2', 'bar2'],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a2', 'b2'],
+        DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.2,
       },
       env: 'development',
       aiguard: {
@@ -3004,10 +3009,8 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 2000,
       },
-      experimental: {
-        enableGetRumData: false,
-        exporter: 'agent',
-      },
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent' },
       flushMinSpans: 500,
       flushInterval: 500,
       iast: {
@@ -3845,6 +3848,17 @@ describe('Config', () => {
     assert.strictEqual(config.dogstatsd.hostname, 'localhost')
   })
 
+  it('should use domain namespaces for experimental controls internally', () => {
+    const config = getConfig()
+
+    assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, '')
+    assert.strictEqual(config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED, false)
+    assert.strictEqual(Object.hasOwn(config, 'DD_TRACE_EXPERIMENTAL_EXPORTER'), false)
+    assert.strictEqual(Object.hasOwn(config, 'DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED'), false)
+    assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'exporter'), false)
+    assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'enableGetRumData'), false)
+  })
+
   context('auto configuration w/ unix domain sockets', () => {
     context('socket does not exist', () => {
       it('should fall back to an HTTP URL built from hostname and port', () => {
@@ -4089,6 +4103,49 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT, undefined)
       })
+      it('should default dynamic ATR configuration in the testOptimization namespace', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, false)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, undefined)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED'), false)
+        assert.strictEqual(Object.hasOwn(config, 'DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS'), false)
+      })
+      for (const [value, expected] of [['true', true], ['false', false], ['invalid', false]]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=${value}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED = value
+          const config = getConfig(options)
+          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED, expected)
+        })
+      }
+      for (const [value, parsed, expected] of [
+        ['1, 2,3,4,20', ['1', '2', '3', '4', '20'], [1, 2, 3, 4, 20]],
+        ['', [], null],
+        ['1,invalid,3', ['1', 'invalid', '3'], null],
+      ]) {
+        it(`should parse DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS=${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          // Preserve positions until ATR validates the complete list.
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
+          assert.deepStrictEqual(
+            getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), expected
+          )
+        })
+      }
+      for (const [value, parsed] of [
+        ['1,2,,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',1,2,3,4,5', ['', '1', '2', '3', '4', '5']],
+        ['1,2,3,4,5,', ['1', '2', '3', '4', '5', '']],
+        ['1,2, ,3,4,5', ['1', '2', '', '3', '4', '5']],
+        [',,,,,', ['', '', '', '', '', '']],
+      ]) {
+        it(`should reject empty dynamic ATR bucket entries in ${JSON.stringify(value)}`, () => {
+          process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = value
+          const config = getConfig(options)
+          assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
+          assert.strictEqual(getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), null)
+        })
+      }
       it('should enable flaky test retries by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, true)
@@ -4790,7 +4847,7 @@ apm_configuration_default:
         DD_PROFILING_EXPORTERS: ['agent'],
         profiling: {},
         dynamicInstrumentation: {
-          probeFile: '/tmp/probes',
+          DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: '/tmp/probes',
         },
       })
     })
@@ -5293,9 +5350,9 @@ rules:
 
     it('should resolve dynamic instrumentation enablement to a nested property', () => {
       const config = getConfig()
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
       config.setRemoteConfig({ DD_DYNAMIC_INSTRUMENTATION_ENABLED: 'true' })
-      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
     })
 
     it('should resolve code origin for spans enablement to a nested property', () => {
@@ -5523,7 +5580,7 @@ rules:
   context('agentless mode', () => {
     it('should not enable agentless exporter by default', () => {
       const config = getConfig()
-      assert.notStrictEqual(config.experimental.exporter, 'agentless')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
     })
 
     it('should configure all supported features for agentless mode', () => {
@@ -5543,7 +5600,7 @@ rules:
       process.env.OTEL_TRACES_SPAN_METRICS_ENABLED = 'true'
       const config = getConfig()
 
-      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
       assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED, true)
       assert.strictEqual(config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED, true)
@@ -5552,7 +5609,7 @@ rules:
       assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, true)
       assert.strictEqual(config.runtimeMetrics.enabled, false)
       assert.strictEqual(config.dsmEnabled, false)
-      assert.strictEqual(config.dynamicInstrumentation.enabled, true)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, true)
       assert.strictEqual(config.DD_CRASHTRACKING_ENABLED, true)
       assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
       assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
@@ -5660,7 +5717,7 @@ rules:
       process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
       const config = getConfig()
 
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
     })
 
     it('should preserve profiling when it does not use the Agent', () => {
@@ -5692,7 +5749,7 @@ rules:
           experimental: { exporter },
         })
 
-        assert.strictEqual(config.experimental.exporter, exporter)
+        assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, exporter)
         assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, true)
         assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
       })
@@ -5703,13 +5760,13 @@ rules:
 
       const config = getConfig()
 
-      assert.strictEqual(config.dynamicInstrumentation.enabled, false)
+      assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED, false)
     })
 
     it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.strictEqual(config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED, false)
     })
 
@@ -5757,7 +5814,7 @@ rules:
     it('should not affect other config when agentless is disabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
       const config = getConfig()
-      assert.notStrictEqual(config.experimental.exporter, 'agentless')
+      assert.notStrictEqual(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
     })
 
@@ -5926,10 +5983,11 @@ rules:
 
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, false)
       assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'offline')
-      assert.strictEqual(config.experimental.flaggingProvider.enabled, true)
+      assert.strictEqual(config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED, true)
       assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_ENABLED'), 'calculated')
       assert.strictEqual(config.getOrigin('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'), 'env_var')
-      assert.strictEqual(config.getOrigin('experimental.flaggingProvider.enabled'), 'env_var')
+      assert.strictEqual(config.getOrigin('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED'), 'env_var')
+      assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
         { name: 'DD_FEATURE_FLAGS_ENABLED', value: false, origin: 'calculated' },
         {
@@ -5965,12 +6023,16 @@ rules:
 
       assertObjectContains(config, {
         featureFlags: {
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: false,
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: false,
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL: undefined,
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: 30,
           DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: 5,
         },
       })
+      assert.strictEqual(Object.hasOwn(config.experimental ?? {}, 'flaggingProvider'), false)
     })
 
     it('reads the configuration source environment variable', () => {

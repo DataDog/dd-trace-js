@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 const workerThreads = require('node:worker_threads')
 
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -62,9 +62,11 @@ describe('onPause', function () {
   let sampledProbeIndexes
   /** @type {unknown} */
   let log
+  let parentPort
 
   beforeEach(async function () {
     ackEmitting = sinon.spy()
+    parentPort = { postMessage: sinon.spy() }
     refreshBreakpoints = sinon.stub().resolves()
     log = {
       error: sinon.spy(),
@@ -94,8 +96,8 @@ describe('onPause', function () {
       parentThreadId,
       dynamicInstrumentation: {
         captureTimeoutNs: 15_000_000n, // Default value is 15ms
-        redactedIdentifiers: [],
-        redactionExcludedIdentifiers: [],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
       },
       propagateProcessTags: { enabled: false },
       '@noCallThru': true,
@@ -121,6 +123,7 @@ describe('onPause', function () {
     proxyquire('../../../src/debugger/devtools_client', {
       worker_threads: {
         ...workerThreads,
+        parentPort,
         workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer },
       },
       './config': config,
@@ -151,6 +154,87 @@ describe('onPause', function () {
     Atomics.store(sampledProbeIndexes, 0, 1)
     Atomics.store(sampledProbeIndexes, 2, 1 | flags)
   }
+
+  describe('pause duration telemetry', function () {
+    let hrtime
+
+    beforeEach(function () {
+      hrtime = sinon.stub(process.hrtime, 'bigint').returns(1_000_000n)
+      session.post.withArgs('Debugger.resume').callsFake(async () => {
+        sinon.assert.notCalled(parentPort.postMessage)
+        hrtime.returns(3_500_000n)
+      })
+    })
+
+    afterEach(function () {
+      hrtime.restore()
+    })
+
+    for (const kind of ['log', 'snapshot', 'capture expressions', 'condition error', 'removed probe']) {
+      it(`should report milliseconds after resuming a ${kind}`, async function () {
+        const probe = genProcessedProbe('probe-1')
+        if (kind === 'snapshot') {
+          probe.captureSnapshot = true
+          probe.capture = { maxReferenceDepth: 0, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 }
+        } else if (kind === 'capture expressions') {
+          probe.compiledCaptureExpressions = [{
+            name: 'foo',
+            expression: 'foo',
+            limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          }]
+          session.post.withArgs('Debugger.evaluateOnCallFrame', sinon.match({ expression: 'foo' }))
+            .resolves({ result: { type: 'number', value: 42 } })
+        } else if (kind === 'condition error') {
+          probe.when = { dsl: 'foo.bar' }
+        }
+        if (kind !== 'removed probe') sampleProbe(probe, kind === 'condition error' ? CONDITION_ERROR_FLAG : 0)
+
+        await onPaused({
+          params: { ...event.params, callFrames: [{ ...event.params.callFrames[0], scopeChain: [] }] },
+        })
+
+        sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
+        if (kind !== 'removed probe') sinon.assert.callOrder(parentPort.postMessage, send)
+      })
+    }
+
+    it('should include the time waiting for the resume response', async function () {
+      let completeResume
+      session.post.withArgs('Debugger.resume').returns(new Promise((resolve) => { completeResume = resolve }))
+
+      const paused = onPaused(event)
+      sinon.assert.notCalled(parentPort.postMessage)
+      hrtime.returns(6_000_000n)
+      completeResume()
+      await paused
+
+      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 5 })
+    })
+
+    it('should not report a completed pause if resume fails', async function () {
+      const error = new Error('resume failed')
+      session.post.withArgs('Debugger.resume').rejects(error)
+
+      await assert.rejects(onPaused(event), error)
+
+      sinon.assert.notCalled(parentPort.postMessage)
+    })
+
+    it('should report once when several probes share the pause', async function () {
+      const probes = [genProcessedProbe('probe-1'), genProcessedProbe('probe-2')]
+      state.breakpointToProbes.set(breakpointId, new Map(probes.map(probe => [probe.id, probe])))
+      for (const [i, probe] of probes.entries()) {
+        state.samplingIndexToProbe.set(i + 1, probe)
+        Atomics.store(sampledProbeIndexes, i + 2, i + 1)
+      }
+      Atomics.store(sampledProbeIndexes, 0, probes.length)
+
+      await onPaused(event)
+
+      sinon.assert.calledTwice(send)
+      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
+    })
+  })
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)

@@ -557,6 +557,22 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
       {
         "implementation": "B",
@@ -786,6 +802,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.captureTimeoutMs"
         ],
@@ -796,6 +813,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.enabled"
         ],
@@ -806,6 +824,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
         ],
@@ -816,6 +835,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
@@ -826,6 +846,7 @@
       {
         "implementation": "C",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
@@ -836,6 +857,7 @@
       {
         "implementation": "C",
         "type": "decimal",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.uploadIntervalSeconds"
         ],
@@ -874,6 +896,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.initializationTimeoutMs"
         ],
@@ -884,6 +907,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
         ],
@@ -894,6 +918,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.spanEnrichment.enabled"
         ],
@@ -1536,6 +1561,14 @@
         "configurationNames": [
           "openAiLogsEnabled"
         ]
+      }
+    ],
+    "DD_OPENAI_REALTIME_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
       }
     ],
     "DD_OPENAI_SPAN_CHAR_LIMIT": [
@@ -2847,6 +2880,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
+        "namespace": "tracing",
         "default": ""
       }
     ],
@@ -2857,6 +2891,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
+        "namespace": "rum",
         "default": "false"
       }
     ],

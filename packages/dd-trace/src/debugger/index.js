@@ -96,7 +96,7 @@ function start (config, rcInstance) {
 
   const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
 
-  readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
+  readProbeFile(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE, (probes) => {
     const action = 'apply'
     for (const probe of probes) {
       probeChannel.port2.postMessage({ action, probe })
@@ -155,6 +155,11 @@ function start (config, rcInstance) {
       )
     })
 
+    const threadPausedMetric = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
+      .distribution('execution.pause.duration')
+    worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
+      if (type === 'thread-paused') threadPausedMetric.track(durationMs)
+    })
     worker.on('error', (err) => log.error('[debugger] worker thread error', err))
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
