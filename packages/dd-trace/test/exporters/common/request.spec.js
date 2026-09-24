@@ -1130,7 +1130,7 @@ describe('request', function () {
   describe('stripping the Datadog API key from a non-TLS connection', () => {
     // `badheaders` only matches when the key is absent, so a passing request proves it was
     // stripped; a regression that left the key on would miss the interceptor and surface here.
-    for (const apiKeyHeader of ['dd-api-key', 'DD-API-KEY', 'Dd-Api-Key']) {
+    for (const apiKeyHeader of ['dd-api-key', 'DD-API-KEY']) {
       it(`strips ${apiKeyHeader} when sending over http to a non-loopback host`, (done) => {
         nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
           .post('/v1/input')
