@@ -31,9 +31,7 @@ class SpanProcessor {
     this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
       ? processTags.serialized
       : false
-    // Mirrors the OTLP exporter selection in opentracing/tracer.js; OTLP exports carry the marker on the resource.
-    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp' || Boolean(config.isCiVisibility) ||
-      config.tracing?.DD_TRACE_EXPERIMENTAL_EXPORTER === 'electron'
+    this._nativeExport = config.OTEL_TRACES_EXPORTER !== 'otlp'
   }
 
   sample (span) {
