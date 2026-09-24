@@ -53,6 +53,7 @@ describe('AgentlessConfigurationSource', () => {
       apiKey: 'test-api-key',
     }
     log = {
+      debug: sinon.spy(),
       error: sinon.spy(),
       warn: sinon.spy(),
     }

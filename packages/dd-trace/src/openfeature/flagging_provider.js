@@ -6,6 +6,7 @@ const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/
 const log = require('../log')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
+const DebugLoggingHook = require('./debug-logging-hook')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 
@@ -31,6 +32,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     })
 
     this.hooks.push(new EvalMetricsHook(config))
+    this.hooks.push(new DebugLoggingHook())
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
@@ -53,6 +55,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @returns {Promise<void>}
    */
   initialize (context) {
+    log.debug('Feature Flags: waiting for provider initialization...')
+
     const promise = super.initialize(context)
 
     // `DatadogNodeServerProvider#initialize` starts a timer that is never unref'd, which would
@@ -60,6 +64,14 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // `initializationTimeoutMs` while waiting for configuration to arrive.
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
+
+    // Observes the outcome for logging only, on a separate promise chain. Does not alter
+    // it: `promise` itself is returned unmodified below, so the caller still sees the
+    // original resolution or rejection.
+    promise.then(
+      () => log.debug('Feature Flags: provider initialized successfully'),
+      (error) => log.error('Feature Flags: provider failed to initialize: %s', error.message)
+    )
 
     return promise
   }
