@@ -18,6 +18,7 @@ const { createOtlpSpanStatsExporter } = require('../../src/opentelemetry/metrics
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const { createOtlpTraceExporter } = require('../../src/opentelemetry/trace')
 const processTags = require('../../src/process-tags')
+const { SAMPLING_MECHANISM_SPAN, SPAN_SAMPLING_MECHANISM } = require('../../src/constants')
 const { SpanBuckets } = require('../../src/span_stats')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
@@ -858,6 +859,23 @@ describe('OpenTelemetry Traces', () => {
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: -1 } })])
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
+    })
+
+    it('does not let single-span sampling metadata override a rejected trace decision', () => {
+      let exportCalled = false
+      sinon.stub(http, 'request').callsFake(() => {
+        exportCalled = true
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      })
+
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
+      const metrics = {
+        _sampling_priority_v1: 0,
+        [SPAN_SAMPLING_MECHANISM]: SAMPLING_MECHANISM_SPAN,
+      }
+
+      exporter.export([createMockSpan({ metrics })])
+      assert(!exportCalled, 'Single-span sampling is not supported by OTLP trace export')
     })
 
     it('DatadogTracer uses the OTLP exporter when OTEL_TRACES_EXPORTER=otlp', () => {
