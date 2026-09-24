@@ -45,6 +45,7 @@ describe('FlagEvalEVPHook', () => {
   let writer
   let Writer
   let selectRoute
+  let stopDeliveryStrategy
   let snapshotContext
 
   beforeEach(() => {
@@ -57,7 +58,8 @@ describe('FlagEvalEVPHook', () => {
       destroy: sinon.spy(),
     }
     Writer = sinon.stub().returns(writer)
-    selectRoute = sinon.stub()
+    stopDeliveryStrategy = sinon.spy()
+    selectRoute = sinon.stub().returns(stopDeliveryStrategy)
     snapshotContext = sinon.spy(snapshotEvaluationContext)
     Hook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
       './flag-evaluations': Writer,
@@ -155,7 +157,41 @@ describe('FlagEvalEVPHook', () => {
     enable()
     hook.destroy()
     sinon.assert.calledOnce(writer.destroy)
+    sinon.assert.calledOnce(stopDeliveryStrategy)
+    sinon.assert.callOrder(stopDeliveryStrategy, writer.destroy)
     sinon.assert.notCalled(writer.setEnabled)
+  })
+
+  it('recovers agentless delivery without credentials and cancels recovery on close', () => {
+    hook.destroy()
+    writer.setEnabled.resetHistory()
+    const discover = sinon.stub()
+    const util = proxyquire('../../../src/openfeature/writers/util', {
+      '../../evp_proxy/discovery': { discoverEVPProxy: discover },
+      '../../evp_proxy/direct': { createDirectEVPRoute: () => undefined },
+    })
+    const RecoveringHook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
+      './flag-evaluations': Writer,
+      './util': util,
+    })
+    hook = new RecoveringHook({
+      ...config, featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    })
+    discover.firstCall.args[2](null, route)
+    const initialRoute = writer.setEnabled.lastCall.args[1]
+    initialRoute.onUnavailable()
+    sinon.assert.calledWithExactly(writer.setEnabled, false, undefined)
+    clock.tick(59_999)
+    sinon.assert.calledOnce(discover)
+    clock.tick(1)
+    sinon.assert.calledTwice(discover)
+    discover.secondCall.args[2](null, route)
+    assert.strictEqual(writer.setEnabled.lastCall.args[0], true)
+    writer.setEnabled.lastCall.args[1].onUnavailable()
+    hook.destroy()
+    clock.tick(60_000)
+    sinon.assert.calledTwice(discover)
+    assert.strictEqual(clock.countTimers(), 0)
   })
 
   it('reads consent once, ignores DoLog and never reads errorMessage or a guessed rule', () => {

@@ -23,15 +23,32 @@ const BATCH_DELAY_MS = 20
 /** @typedef {import('./flag-evaluation-consumer').FlagEvaluationRoute} FlagEvaluationRoute */
 /** @typedef {import('./flag-evaluation-aggregation').FlagEvaluationEvent} FlagEvaluationEvent */
 
-/** @param {FlagEvaluationRoute} route */
-function serializeRoute (route) {
+/**
+ * @typedef {object} SerializedFlagEvaluationRoute
+ * @property {number} id
+ * @property {string} url
+ * @property {string} basePath
+ * @property {object} [headers]
+ * @property {boolean} onFallback
+ * @property {boolean} onUnavailable
+ * @property {SerializedFlagEvaluationRoute} [fallback]
+ */
+
+/**
+ * @param {FlagEvaluationRoute} route
+ * @param {number} id - Generation used to reject reports from obsolete routes
+ */
+function serializeRoute (route, id) {
   // Live custom agents cannot cross isolates. The common request helper recreates env proxy agents in the worker.
   if (route.agent) throw new Error('Custom EVP route agents are not supported in the flag evaluation worker')
   return {
+    id,
     url: route.url.href,
     basePath: route.basePath,
     headers: route.headers,
-    fallback: route.fallback ? serializeRoute(route.fallback) : undefined,
+    onFallback: typeof route.onFallback === 'function',
+    onUnavailable: typeof route.onUnavailable === 'function',
+    fallback: route.fallback ? serializeRoute(route.fallback, id) : undefined,
   }
 }
 
@@ -48,6 +65,7 @@ class FlagEvaluationsWriter {
   #destroyer
   #onAppClosing
   #route
+  #routeId = 0
   #serializedRoute
   #context
   #failureReason = 'worker_failure'
@@ -86,6 +104,7 @@ class FlagEvaluationsWriter {
    */
   setEnabled (enabled, route) {
     if (this.#closed || this.#failed) return
+    this.#routeId++
     if (route) this.#route = route
     if (!enabled) {
       this.#discardPartial('unavailable')
@@ -94,7 +113,7 @@ class FlagEvaluationsWriter {
       return
     }
     try {
-      this.#serializedRoute = serializeRoute(this.#route)
+      this.#serializedRoute = serializeRoute(this.#route, this.#routeId)
       this.#post({ type: 'enabled', enabled: true, route: this.#serializedRoute })
       this.#enabled = !this.#failed
     } catch {
@@ -191,12 +210,30 @@ class FlagEvaluationsWriter {
         error.code === 'MODULE_NOT_FOUND' || error.code === 'ERR_MODULE_NOT_FOUND' ? 'missing_module' : 'worker_error'
       ))
       this.#worker.on('messageerror', () => this.#fail('message_error'))
+      this.#worker.on('message', message => this.#onRouteMessage(message))
       this.#worker.once('exit', () => this.#exited())
       this.#worker.unref?.()
       this.#periodic = setInterval(() => collectWorkerTelemetry(this.#state), FLAG_EVALUATION_FLUSH_INTERVAL)
       this.#periodic.unref?.()
     } catch {
       this.#fail('startup_error')
+    }
+  }
+
+  /** @param {{ type: 'route', id: number, status: 'fallback' | 'unavailable' }} message */
+  #onRouteMessage (message) {
+    if (this.#closed || this.#failed || !this.#enabled ||
+      message?.type !== 'route' || message.id !== this.#routeId) return
+    const callback = message.status === 'fallback'
+      ? this.#route.onFallback
+      : message.status === 'unavailable' ? this.#route.onUnavailable : undefined
+    if (!callback) return
+    // Consume the transition once. The strategy may synchronously publish a replacement route.
+    this.#routeId++
+    try {
+      callback()
+    } catch {
+      this.#fail('route_error')
     }
   }
 

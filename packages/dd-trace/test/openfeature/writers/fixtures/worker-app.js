@@ -21,6 +21,7 @@ if (mode === 'nested' && isMainThread) {
   let delivered = 0
   const bodies = []
   let fallbackRequests = 0
+  let fallbackTransitions = 0
   let writer
   process.on('exit', () => {
     process.stdout.write(JSON.stringify({
@@ -28,6 +29,7 @@ if (mode === 'nested' && isMainThread) {
       delivered,
       bodies,
       fallbackRequests,
+      fallbackTransitions,
       metrics: telemetry.manager.namespace('general').toJSON().metrics?.series,
     }, (key, value) => {
       // Keep exit-time stdout small while inspecting the actual maximum-context wire values.
@@ -58,6 +60,12 @@ if (mode === 'nested' && isMainThread) {
       req.on('data', chunk => { raw += chunk })
       req.on('end', () => {
         if (warmed && mode === 'timeout') {
+          // Keep the socket active without completing the response. An idle socket can hit its own timeout
+          // before the worker's shutdown deadline now that requests are intentionally not retried.
+          res.writeHead(202)
+          res.write(' ')
+          const heartbeat = setInterval(() => res.write(' '), 100)
+          res.once('close', () => clearInterval(heartbeat))
           server.close()
           return
         }
@@ -109,8 +117,17 @@ if (mode === 'nested' && isMainThread) {
         ? new URL('unix://' + listen)
         : new URL('http://127.0.0.1:' + /** @type {import('node:net').AddressInfo} */ (server.address()).port)
       writer = new Writer(/** @type {Config} */ ({ url, service: 'worker-test', env: 'test' }))
+      const directRoute = { url, basePath: '', headers: { 'DD-API-KEY': 'test-key' } }
       writer.setEnabled(true, mode === 'fallback'
-        ? { url, basePath: '/local', fallback: { url, basePath: '', headers: { 'DD-API-KEY': 'test-key' } } }
+        ? {
+            url,
+            basePath: '/local',
+            fallback: directRoute,
+            onFallback: () => {
+              fallbackTransitions++
+              writer.setEnabled(true, directRoute)
+            },
+          }
         : { url, basePath: '' })
       writer.enqueue({ flagKey: 'warmup', timestamp: 100, runtimeDefault: false })
       writer.flush()

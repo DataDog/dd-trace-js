@@ -55,17 +55,34 @@ describe('flag evaluation consumer delivery ownership', () => {
 
   it('does not let an old in-flight fallback overwrite a newer route', () => {
     const url = new URL('http://localhost:8126')
-    writer.setEnabled(true, { url, basePath: '/old', fallback: { url, basePath: '/fallback' } })
+    const onFallback = sinon.spy()
+    writer.setEnabled(true, { url, basePath: '/old', fallback: { url, basePath: '/fallback' }, onFallback })
     writer.enqueue({ flagKey: 'old', timestamp: 100 })
     writer.flush()
     writer.setEnabled(true, { url, basePath: '/new' })
     requests[0].callback(null, '', 405)
+    sinon.assert.notCalled(onFallback)
     assert.strictEqual(requests[1].options.path, '/fallback/api/v2/flagevaluation')
     requests[1].callback(null, '', 202)
     writer.enqueue({ flagKey: 'new', timestamp: 100 })
     writer.flush()
     assert.strictEqual(requests[2].options.path, '/new/api/v2/flagevaluation')
     requests[2].callback(null, '', 202)
+  })
+
+  it('does not report unavailability from an obsolete route', () => {
+    const url = new URL('http://localhost:8126')
+    const onUnavailable = sinon.spy()
+    writer.setEnabled(true, { url, basePath: '/old', onUnavailable })
+    writer.enqueue({ flagKey: 'old', timestamp: 100 })
+    writer.flush()
+    writer.setEnabled(true, { url, basePath: '/new', onUnavailable })
+    requests[0].callback(null, '', 503)
+    sinon.assert.notCalled(onUnavailable)
+    writer.enqueue({ flagKey: 'new', timestamp: 100 })
+    writer.flush()
+    requests[1].callback(null, '', 503)
+    sinon.assert.calledOnce(onUnavailable)
   })
 
   it('settles unsent snapshot and current aggregate counts when disabled without resending in-flight work', () => {

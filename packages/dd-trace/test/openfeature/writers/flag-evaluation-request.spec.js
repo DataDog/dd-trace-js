@@ -9,7 +9,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-describe('flag evaluation concurrent request retries', () => {
+describe('flag evaluation concurrent requests', () => {
   let clock
   let writer
   let requests
@@ -17,12 +17,12 @@ describe('flag evaluation concurrent request retries', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     requests = []
-    // Keep the real request helper (including its delayed retry); replace only the socket boundary.
+    // Keep the real request helper; replace only the socket boundary.
     const request = proxyquire('../../../src/exporters/common/request', {
       http: {
         request (options, onResponse) {
           const req = new EventEmitter()
-          const attempt = { headers: { ...options.headers }, body: '', req, onResponse }
+          const attempt = { headers: options.headers, body: '', req, onResponse }
           Object.assign(req, {
             setTimeout () {},
             write (chunk) { attempt.body += chunk },
@@ -57,7 +57,7 @@ describe('flag evaluation concurrent request retries', () => {
   }
 
   for (const fallback of [false, true]) {
-    it(`keeps each envelope's byte length on a delayed retry, fallback=${fallback}`, () => {
+    it(`isolates each envelope's headers and does not retry ambiguous failures, fallback=${fallback}`, () => {
       if (fallback) {
         writer.setEnabled(true, {
           url: new URL('http://localhost:8126'),
@@ -82,12 +82,10 @@ describe('flag evaluation concurrent request retries', () => {
       first.req.emit('error', Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }))
       respond(second, 202)
       clock.tick(10)
-      const retry = requests.at(-1)
-      respond(retry, 202)
-      assert.strictEqual(requests.length, fallback ? 5 : 3)
-      assert.strictEqual(retry.body, first.body)
+      assert.strictEqual(requests.length, fallback ? 4 : 2)
       assert.notStrictEqual(Buffer.byteLength(first.body), Buffer.byteLength(second.body))
-      assert.strictEqual(retry.headers['Content-Length'], Buffer.byteLength(first.body))
+      assert.notStrictEqual(first.headers, second.headers)
+      assert.strictEqual(first.headers['Content-Length'], Buffer.byteLength(first.body))
       assert.strictEqual(second.headers['Content-Length'], Buffer.byteLength(second.body))
     })
   }

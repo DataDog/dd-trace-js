@@ -14,6 +14,7 @@ class FlagEvalEVPHook {
   #writer
   #ready = false
   #closed = false
+  #stopDeliveryStrategy
 
   /**
    * The provider only constructs this hook when evaluation counts are enabled.
@@ -23,7 +24,7 @@ class FlagEvalEVPHook {
   constructor (config) {
     const writer = new FlagEvaluationsWriter(config)
     this.#writer = writer
-    setExposureDeliveryStrategy(config, (enabled, route) => {
+    this.#stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
       if (this.#closed) return
       writer.setEnabled(enabled, route)
       this.#ready = enabled
@@ -99,6 +100,7 @@ class FlagEvalEVPHook {
     if (this.#closed) return
     this.#closed = true
     this.#ready = false
+    this.#stopDeliveryStrategy?.()
     this.#writer.destroy()
   }
 }

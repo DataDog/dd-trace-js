@@ -11,9 +11,20 @@ const state = new Int32Array(workerData.state)
 configureWorkerTelemetry(state)
 const FlagEvaluationConsumer = require('./flag-evaluation-consumer')
 
-/** @param {object} route */
+/** @param {import('./flag-evaluations').SerializedFlagEvaluationRoute} route */
 function deserializeRoute (route) {
-  return { ...route, url: new URL(route.url), fallback: route.fallback && deserializeRoute(route.fallback) }
+  return {
+    url: new URL(route.url),
+    basePath: route.basePath,
+    headers: route.headers,
+    fallback: route.fallback && deserializeRoute(route.fallback),
+    onFallback: route.onFallback
+      ? () => port.postMessage({ type: 'route', id: route.id, status: 'fallback' })
+      : undefined,
+    onUnavailable: route.onUnavailable
+      ? () => port.postMessage({ type: 'route', id: route.id, status: 'unavailable' })
+      : undefined,
+  }
 }
 
 const route = deserializeRoute(workerData.route)

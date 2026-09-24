@@ -66,6 +66,31 @@ describe('OpenFeature configuration source', () => {
     )
   })
 
+  it('uses shared site normalization for the managed UFC endpoint', () => {
+    config.site = '  MOCK-INTAKE.INVALID  '
+
+    assert.strictEqual(
+      createSourceConfig().endpoint.toString(),
+      'https://ufc-server.ff-cdn.mock-intake.invalid/api/v2/feature-flagging/config/rules-based/server?dd_env=my+env'
+    )
+  })
+
+  it('rejects an invalid managed site without logging its value', () => {
+    const sensitiveSite = 'sensitive\\invalid.example'
+    config.site = sensitiveSite
+
+    const source = configurationSource.create(config, sinon.spy())
+
+    assert.strictEqual(source, undefined)
+    sinon.assert.notCalled(AgentlessConfigurationSource)
+    sinon.assert.calledOnceWithMatch(
+      log.error,
+      'Unable to configure Feature Flagging configuration source',
+      sinon.match.instanceOf(Error)
+    )
+    assert.ok(!log.error.firstCall.args[1].message.includes(sensitiveSite))
+  })
+
   it('caps the polling interval at one hour', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS = 4 * 60 * 60
 

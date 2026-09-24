@@ -55,8 +55,10 @@ describe('FlaggingProvider EVP lifecycle', () => {
     config = {
       url: new URL('http://localhost:8126'),
       service: 'checkout',
-      featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
-      experimental: { flaggingProvider: { initializationTimeoutMs: 1000 } },
+      featureFlags: {
+        DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
+      },
     }
   })
 

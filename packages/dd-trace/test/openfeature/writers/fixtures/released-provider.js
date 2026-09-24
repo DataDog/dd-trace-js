@@ -67,8 +67,10 @@ async function main () {
   const provider = new Provider({}, /** @type {import('../../../../src/config/config-base')} */ ({
     url,
     service: 'released-provider-test',
-    featureFlags: { DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true },
-    experimental: { flaggingProvider: { initializationTimeoutMs: 1000 } },
+    featureFlags: {
+      DD_FLAGGING_EVALUATION_COUNTS_ENABLED: true,
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 1000,
+    },
   }))
   try {
     const selected = configuration(options.consent, options.doLog)

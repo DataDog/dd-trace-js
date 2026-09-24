@@ -180,6 +180,65 @@ describe('flag evaluation worker producer', () => {
     assert.strictEqual(dropped('worker_failure'), 1)
   })
 
+  it('relays current route transitions once without cloning callbacks into the worker', () => {
+    const fallback = { url: new URL('http://localhost:8127'), basePath: '' }
+    const onFallback = sinon.spy(() => writer.setEnabled(true, fallback))
+    writer.setEnabled(true, {
+      url: new URL('http://localhost:8126'), basePath: '', fallback, onFallback,
+    })
+    enqueue(64)
+    const worker = workers[0]
+    const route = structuredClone(worker.options.workerData.route)
+    assert.strictEqual(route.onFallback, true)
+    worker.emit('message', { type: 'route', id: route.id, status: 'fallback' })
+    worker.emit('message', { type: 'route', id: route.id, status: 'fallback' })
+    sinon.assert.calledOnce(onFallback)
+    assert.strictEqual(worker.messages.at(-1).route.url, fallback.url.href)
+    assert.strictEqual(writer.hasCapacity(), true)
+  })
+
+  it('ignores stale, duplicate, disabled and closed route reports', () => {
+    const onUnavailable = sinon.spy()
+    const route = { url: new URL('http://localhost:8126'), basePath: '', onUnavailable }
+    writer.setEnabled(true, route)
+    enqueue(64)
+    const worker = workers[0]
+    const initial = worker.options.workerData.route.id
+    writer.setEnabled(true, route)
+    const current = worker.messages.at(-1).route.id
+    assert.notStrictEqual(current, initial)
+    worker.emit('message', { type: 'route', id: initial, status: 'unavailable' })
+    worker.emit('message', { type: 'unknown', id: current, status: 'unavailable' })
+    sinon.assert.notCalled(onUnavailable)
+    worker.emit('message', { type: 'route', id: current, status: 'unavailable' })
+    worker.emit('message', { type: 'route', id: current, status: 'unavailable' })
+    sinon.assert.calledOnce(onUnavailable)
+    writer.setEnabled(true, route)
+    const disabled = worker.messages.at(-1).route.id
+    writer.setEnabled(false)
+    worker.emit('message', { type: 'route', id: disabled, status: 'unavailable' })
+    writer.setEnabled(true, route)
+    const closed = worker.messages.at(-1).route.id
+    writer.destroy()
+    worker.emit('message', { type: 'route', id: closed, status: 'unavailable' })
+    sinon.assert.calledOnce(onUnavailable)
+  })
+
+  it('contains a failing route callback and ignores further reports after worker failure', () => {
+    const onUnavailable = sinon.spy(() => { throw new Error('PII-route-error-canary') })
+    writer.setEnabled(true, { url: new URL('http://localhost:8126'), basePath: '', onUnavailable })
+    enqueue(64)
+    const worker = workers[0]
+    const report = { type: 'route', id: worker.options.workerData.route.id, status: 'unavailable' }
+    worker.emit('message', report)
+    worker.emit('message', report)
+    sinon.assert.calledOnce(onUnavailable)
+    assert.strictEqual(writer.getUnavailableReason(), 'worker_failure')
+    sinon.assert.calledOnceWithExactly(log.warn,
+      'Flag evaluation counts disabled after worker failure (%s)', 'route_error')
+    assert.strictEqual(dropped('worker_failure'), 64)
+  })
+
   it('collects worker metrics before the app-closing send and does not collect them twice', () => {
     writer.setEnabled(true)
     enqueue(64)

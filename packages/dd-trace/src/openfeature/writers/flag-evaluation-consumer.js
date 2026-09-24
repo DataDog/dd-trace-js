@@ -26,6 +26,8 @@ const BaseFFEWriter = require('./base')
  * @property {string} basePath
  * @property {object} [headers]
  * @property {import('node:https').Agent} [agent]
+ * @property {() => void} [onFallback]
+ * @property {() => void} [onUnavailable]
  * @property {FlagEvaluationRoute} [fallback]
  */
 
@@ -66,7 +68,7 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
       endpoint: joinEVPProxyPath(route.basePath, FLAG_EVALUATION_ENDPOINT),
       headers,
     })
-    if (route.agent || route.fallback) this.#setRoute({ ...route, headers })
+    this.#setRoute({ ...route, headers })
     this.#onProcessed = onProcessed
     this.#onDelivered = onDelivered
     this.#onIdle = onIdle
@@ -193,12 +195,16 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
       endpoint: joinEVPProxyPath(route.fallback.basePath, FLAG_EVALUATION_ENDPOINT),
       headers: route.fallback.headers ?? {},
       agent: route.fallback.agent,
+      onFallback: route.fallback.onFallback,
+      onUnavailable: route.fallback.onUnavailable,
     }
     this._setRoutes({
       url: route.url,
       endpoint: joinEVPProxyPath(route.basePath, FLAG_EVALUATION_ENDPOINT),
       headers,
       agent: route.agent,
+      onFallback: route.onFallback,
+      onUnavailable: route.onUnavailable,
     }, fallback)
   }
 

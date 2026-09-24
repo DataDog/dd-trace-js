@@ -31,14 +31,14 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   constructor (tracer, config) {
     super({
       exposureChannel: channel(EXPOSURE_CHANNEL),
-      initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
+      initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
     if (config.DD_METRICS_OTEL_ENABLED === true) {
       this.hooks.push(new EvalMetricsHook(config))
     }
 
-    if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
+    if (config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
       // @ts-expect-error The upstream constructor always initializes its optional hooks property.
       this.hooks.push(this.#spanEnrichmentHook)
@@ -48,7 +48,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     }
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
-      config.experimental.flaggingProvider.initializationTimeoutMs)
+      config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
 
     if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false) {
       this.#flagEvalEVPHook = new FlagEvalEVPHook(config)

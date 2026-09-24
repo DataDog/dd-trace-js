@@ -32,11 +32,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
-      experimental: {
-        flaggingProvider: {
-          enabled: true,
-          initializationTimeoutMs: 30_000, // Default timeout
-        },
+      featureFlags: {
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000, // Default timeout
       },
     }
 
@@ -206,11 +204,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
     it('should use custom timeout when specified in config', async () => {
       const customConfig = {
         ...mockConfig,
-        experimental: {
-          flaggingProvider: {
-            enabled: true,
-            initializationTimeoutMs: 5000, // Custom 5-second timeout
-          },
+        featureFlags: {
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true,
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 5000, // Custom 5-second timeout
         },
       }
 
@@ -245,11 +241,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
     it('should call setError with custom timeout value in message', async () => {
       const customConfig = {
         ...mockConfig,
-        experimental: {
-          flaggingProvider: {
-            enabled: true,
-            initializationTimeoutMs: 10_000, // Custom 10-second timeout
-          },
+        featureFlags: {
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true,
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 10_000, // Custom 10-second timeout
         },
       }
 
@@ -340,11 +334,9 @@ describe('FlaggingProvider Initialization Timeout', () => {
       // Config with explicit timeout (should override env var)
       const configWithTimeout = {
         ...mockConfig,
-        experimental: {
-          flaggingProvider: {
-            enabled: true,
-            initializationTimeoutMs: 3000, // This should override env var
-          },
+        featureFlags: {
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true,
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 3000, // This should override env var
         },
       }
 

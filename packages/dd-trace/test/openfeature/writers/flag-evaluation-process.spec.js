@@ -48,6 +48,7 @@ describe('flag evaluation real worker processes', () => {
         metric.tags.includes('reason:serialization_error')).points[0][1], 1)
       if (mode === 'fallback') {
         assert.strictEqual(result.fallbackRequests, 1)
+        assert.strictEqual(result.fallbackTransitions, 1)
         assert.ok(result.bodies.every(body => body.headers['dd-api-key'] === 'test-key'))
       }
     })

@@ -28,13 +28,13 @@ describe('flag evaluation worker entry point', () => {
     requests = []
     descriptor = Object.getOwnPropertyDescriptor(globalThis, ddTrace)
     Object.defineProperty(globalThis, ddTrace, { ...descriptor, writable: true })
-    port = Object.assign(new EventEmitter(), { close: sinon.spy() })
+    port = Object.assign(new EventEmitter(), { close: sinon.spy(), postMessage: sinon.spy() })
     state = createWorkerState()
     // Keep the real consumer and accounting; give the simulated isolate its own telemetry module.
     const telemetry = proxyquire(writers + 'flag-evaluation-telemetry', {})
     const Base = proxyquire(writers + 'base', {
       '../../exporters/common/request': (payload, options, callback) => {
-        requests.push({ payload, callback })
+        requests.push({ payload, options, callback })
       },
     })
     const Consumer = proxyquire(writers + 'flag-evaluation-consumer', {
@@ -52,7 +52,7 @@ describe('flag evaluation worker entry point', () => {
       'node:worker_threads': {
         parentPort: port,
         workerData: {
-          route: { url: 'http://localhost:8126/', basePath: '' },
+          route: { url: 'http://localhost:8126/', basePath: '', id: 1, onUnavailable: true },
           context: { service: 'test' },
           state: state.buffer,
         },
@@ -97,6 +97,68 @@ describe('flag evaluation worker entry point', () => {
     sinon.assert.calledOnce(port.close)
     assert.strictEqual(requests.length, 0)
     assert.strictEqual(clock.countTimers(), 0)
+  })
+
+  for (const fallback of [false, true]) {
+    for (const [result, replay, switchRoute] of [
+      [202, false, false], [400, false, false], [404, true, true], [405, true, true],
+      [403, false, true], [429, false, true], [500, false, true], [599, false, true],
+      ['ECONNREFUSED', true, true], ['ENOTFOUND', true, true], ['EAI_AGAIN', true, true], ['ENOENT', true, true],
+      ['ECONNRESET', false, true], ['ETIMEDOUT', false, true], ['ERR_DD_REQUEST_BUFFER_FULL', false, false],
+    ]) {
+      it(`settles ownership once after ${result}, fallback=${fallback}, without ambiguous replay`, () => {
+        port.emit('message', {
+          type: 'enabled',
+          enabled: true,
+          route: {
+            id: 2,
+            url: 'http://localhost:8126/',
+            basePath: '',
+            onFallback: fallback,
+            onUnavailable: !fallback,
+            fallback: fallback ? { url: 'http://localhost:8127/', basePath: '' } : undefined,
+          },
+        })
+        post()
+        port.emit('message', { type: 'flush' })
+        const error = typeof result === 'string' ? Object.assign(new Error(result), { code: result }) : null
+        requests[0].callback(error, '', typeof result === 'number' ? result : undefined)
+        assert.strictEqual(requests.length, fallback && replay ? 2 : 1)
+        if (fallback && replay) {
+          assert.strictEqual(Atomics.load(state, 1), 2)
+          requests[1].callback(null, '', 202)
+        }
+        assert.deepStrictEqual([Atomics.load(state, 0), Atomics.load(state, 1)], [0, 0])
+        if (switchRoute) {
+          sinon.assert.calledOnceWithExactly(port.postMessage, {
+            type: 'route', id: 2, status: fallback ? 'fallback' : 'unavailable',
+          })
+        } else {
+          sinon.assert.notCalled(port.postMessage)
+        }
+        port.emit('message', { type: 'close' })
+        sinon.assert.calledOnce(port.close)
+      })
+    }
+  }
+
+  it('relays unavailability on the initial route and accepts a recovered route', () => {
+    post()
+    port.emit('message', { type: 'flush' })
+    requests[0].callback(null, '', 404)
+    sinon.assert.calledOnceWithExactly(port.postMessage, { type: 'route', id: 1, status: 'unavailable' })
+    port.emit('message', { type: 'enabled', enabled: false })
+    port.emit('message', {
+      type: 'enabled',
+      enabled: true,
+      route: { id: 3, url: 'http://localhost:8128/', basePath: '/recovered', onUnavailable: true },
+    })
+    post()
+    port.emit('message', { type: 'flush' })
+    assert.strictEqual(requests[1].options.url.href, 'http://localhost:8128/')
+    assert.strictEqual(requests[1].options.path, '/recovered/api/v2/flagevaluation')
+    requests[1].callback(null, '', 202)
+    assert.strictEqual(Atomics.load(state, 1), 0)
   })
 
   it('releases both credits and counts a rejected batch exactly once', () => {
