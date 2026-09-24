@@ -129,7 +129,7 @@ module.exports = class PluginManager {
       plugin.configure(config)
     } catch (error) {
       try {
-        plugin.configure(false)
+        plugin.configure({ enabled: false })
       } catch (disableError) {
         log.error('Error disabling plugin %s after failed activation', name, disableError)
       }
