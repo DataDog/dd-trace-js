@@ -590,6 +590,7 @@ describe('PromptManager', () => {
     assert.deepStrictEqual(JSON.parse(fetchStub.firstCall.args[1].body).template, template)
     assert.deepStrictEqual(JSON.parse(fetchStub.secondCall.args[1].body).template, template)
   })
+
   it('evicts exact prompt-wide hot and warm selectors after successful mutations', async () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-manager-'))
     fetchStub.resolves(response(200, {}))

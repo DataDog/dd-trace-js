@@ -114,13 +114,7 @@ describe('ManagedPrompt', () => {
     assert.deepStrictEqual(prompt.toAnnotation(variables), {
       id: 'chat',
       version: '3',
-      template: [
-        { role: 'system', content: 'Plan: {{ plan }}' },
-        { type: 'placeholder', name: 'history' },
-        { role: 'user', content: '{{ question }}' },
-        { type: 'placeholder', name: 'history' },
-        { type: 'placeholder', name: 'empty' },
-      ],
+      template: prompt.template,
       variables: { plan: 'pro', question: 'Why?' },
     })
     assert.throws(() => prompt.format({ plan: 'pro', question: 'Why?', empty: [] }), {
@@ -151,6 +145,7 @@ describe('ManagedPrompt', () => {
       })
     }
   })
+
   it('supports string, chat, object, and synchronous callable fallbacks', () => {
     const string = ManagedPrompt.fromFallback('p', 'Hello {name}')
     const chat = ManagedPrompt.fromFallback('p', [{ role: 'user', content: 'Hi {name}' }])

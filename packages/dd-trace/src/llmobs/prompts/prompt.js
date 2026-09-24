@@ -35,6 +35,7 @@ function hasValidTools (message) {
           typeof call.function.name === 'string' && typeof call.function.arguments === 'string'))))) &&
     (message.tool_results == null || (Array.isArray(message.tool_results) && message.tool_results.every(isTool)))
 }
+
 function render (template, variables) {
   return template.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {
     const name = doubleName ?? singleName
