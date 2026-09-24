@@ -40,6 +40,7 @@ describe('openai realtime gen_ai APM attributes with LLM Observability disabled'
       llmobs: { DD_LLMOBS_ENABLED: llmobsEnabled },
       service: 'test-service',
     })
+    instance._tagger = { registerLLMObsSpan () {} }
     instance.configure({ enabled: true })
     return instance
   }
@@ -93,7 +94,45 @@ describe('openai realtime gen_ai APM attributes with LLM Observability disabled'
     assert.equal(audioCh.hasSubscribers, false)
   })
 
-  function publish (turn) {
+  // `LLMObs.enable()` and `disable()` flip the flag without reconstructing or reconfiguring
+  // plugins, so the subscription has to catch up rather than stay as it was built
+  it('picks up a runtime enable on the next turn', () => {
+    assert.equal(audioCh.hasSubscribers, false)
+
+    plugin._tracerConfig.llmobs.DD_LLMOBS_ENABLED = true
+    startCh.publish(buildCtx({ basePath: 'https://api.openai.com/v1' }))
+
+    assert.equal(audioCh.hasSubscribers, true)
+  })
+
+  it('drops the subscription on a runtime disable', () => {
+    const enabled = buildPlugin(true)
+
+    try {
+      assert.equal(audioCh.hasSubscribers, true)
+
+      enabled._tracerConfig.llmobs.DD_LLMOBS_ENABLED = false
+      startCh.publish(buildCtx({}))
+
+      assert.equal(audioCh.hasSubscribers, false)
+    } finally {
+      enabled.configure({ enabled: false })
+    }
+  })
+
+  it('does not stack subscriptions across turns', () => {
+    const enabled = buildPlugin(true)
+    const ctx = () => buildCtx({ basePath: 'https://api.openai.com/v1' })
+
+    startCh.publish(ctx())
+    startCh.publish(ctx())
+    enabled.configure({ enabled: false })
+
+    // one unsubscribe is enough, so the subscription was never stacked
+    assert.equal(audioCh.hasSubscribers, false)
+  })
+
+  function buildCtx (turn) {
     const spanContext = {
       _trace: { tags: {} },
       getTags: () => ({}),
@@ -102,8 +141,12 @@ describe('openai realtime gen_ai APM attributes with LLM Observability disabled'
         apmTags[key] = value
       },
     }
-    const ctx = { currentStore: { span: { context: () => spanContext } }, turn }
 
+    return { currentStore: { span: { context: () => spanContext } }, turn }
+  }
+
+  function publish (turn) {
+    const ctx = buildCtx(turn)
     startCh.publish(ctx)
     asyncEndCh.publish(ctx)
   }

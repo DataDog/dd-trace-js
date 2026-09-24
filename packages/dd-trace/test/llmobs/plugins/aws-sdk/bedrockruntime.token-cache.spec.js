@@ -256,6 +256,24 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
     })
 
+    // the frames carrying only generated text are dropped, not held until the response completes
+    it('retains only the frames that can carry a token count', () => {
+      const ctx = buildStreamCtx('req-invoke-stream-retention')
+
+      streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ outputText: 'lots of text' }) })
+      streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ outputText: 'more text' }) })
+      assert.equal(ctx.chunks, undefined)
+
+      streamedChunkCh.publish({
+        ctx,
+        chunk: invokeModelChunk({ 'amazon-bedrock-invocationMetrics': { inputTokenCount: 3, outputTokenCount: 1 } }),
+      })
+      assert.equal(ctx.chunks.length, 1)
+
+      completeCh.publish(ctx)
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 4)
+    })
+
     it('omits usage for a streamed invokeModel whose chunks report no invocation metrics', () => {
       const ctx = buildStreamCtx('req-invoke-stream-none')
 

@@ -1,5 +1,7 @@
 'use strict'
 
+const dc = require('dc-polyfill')
+
 const {
   g711ToPcm16,
   g711Variant,
@@ -18,6 +20,11 @@ const { storage: llmobsStorage } = require('../../storage')
 const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
 const { getModelProviderAndClient } = require('./utils')
+
+// Never published to. The instrumentation retains a turn's audio only while something is
+// subscribed here, so the subscription is the signal, and this handler is never invoked.
+const audioChannel = dc.channel('dd-trace:openai:realtime:audio')
+const retainAudio = () => {}
 
 /**
  * @typedef {import('../../audio-utils').AudioPart} AudioPart
@@ -210,18 +217,47 @@ class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
   static id = 'openai_realtime_response_llmobs'
   static prefix = 'tracing:apm:openai:realtime:response'
 
-  constructor (...args) {
-    super(...args)
+  #audioSubscribed = false
 
-    // The LLMObs payload is the only consumer of a turn's audio bytes, and the instrumentation
-    // keeps them only while something is subscribed here. Nothing is ever published; the
-    // subscription is the signal. Gated on LLMObs itself, not just on the plugin being enabled:
-    // the reduced path emits `gen_ai.*` tags without building a payload, so it never reads the
-    // audio and must not make the instrumentation retain it. Keep this if `buildMessage` stops
-    // reading `side.audio`, and the buffering stops with it.
-    if (this._llmobsEnabled) {
-      this.addSub('dd-trace:openai:realtime:audio', () => {})
+  /**
+   * Tracks the audio capability subscription against LLM Observability rather than against the
+   * plugin being enabled. The two used to be the same thing; now the reduced path leaves the
+   * plugin subscribed while building no payload, and only the payload reads `side.audio`, so
+   * staying subscribed would make the instrumentation buffer megabytes per turn for no consumer.
+   *
+   * Not managed through `addSub`, whose subscriptions follow the plugin: `LLMObs.enable()` and
+   * `disable()` flip `DD_LLMOBS_ENABLED` at runtime without reconfiguring plugins, so this is
+   * re-evaluated on `configure` (before any traffic) and again per turn (to catch those toggles).
+   *
+   * Drop this if `buildMessage` stops reading `side.audio`, and the buffering stops with it.
+   */
+  #syncAudioSubscription () {
+    const shouldRetain = Boolean(this._enabled && this._llmobsEnabled)
+    if (shouldRetain === this.#audioSubscribed) return
+
+    if (shouldRetain) {
+      audioChannel.subscribe(retainAudio)
+    } else {
+      audioChannel.unsubscribe(retainAudio)
     }
+
+    this.#audioSubscribed = shouldRetain
+  }
+
+  /**
+   * @override
+   */
+  configure (config) {
+    super.configure(config)
+    this.#syncAudioSubscription()
+  }
+
+  /**
+   * @override
+   */
+  start (ctx) {
+    this.#syncAudioSubscription()
+    super.start(ctx)
   }
 
   getLLMObsSpanRegisterOptions (ctx) {

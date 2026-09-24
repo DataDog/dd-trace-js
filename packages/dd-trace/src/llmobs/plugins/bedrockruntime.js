@@ -26,6 +26,12 @@ const ENABLED_OPERATIONS = new Set([
 ])
 const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 
+// Byte markers for the fields the stream extractor reads token counts out of: the invocation
+// metrics every provider can send, Amazon's own `*TokenCount` pair, and Anthropic's `message.usage`.
+// Matching is a byte search over the raw frame, so a chunk carrying nothing but generated text is
+// dropped instead of held until the response completes.
+const USAGE_MARKERS = ['invocationMetrics', 'TokenCount', 'usage'].map(marker => Buffer.from(marker))
+
 /**
  * @typedef {{
  *   inputTokensFromHeaders?: number,
@@ -119,11 +125,12 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       if (!this._llmobsEnabled) {
         // Converse reports usage on a metadata event; `invokeModel` streams report it in a chunk
         // body, in a shape that varies by provider, so those are read through the shared
-        // extractor at `:complete:` once the model id names the provider.
+        // extractor at `:complete:` once the model id names the provider. Only the frames that
+        // can carry a count are kept: the rest is generated content this path never reads.
         const usage = chunk?.metadata?.usage
         if (usage) {
           ctx.streamedUsage = usage
-        } else if (chunk) {
+        } else if (carriesUsage(chunk)) {
           ctx.chunks ??= []
           ctx.chunks.push(chunk)
         }
@@ -206,6 +213,21 @@ function consumeTokenHeaders (requestId) {
   const tokens = pendingTokenHeaders.get(requestId)
   pendingTokenHeaders.delete(requestId)
   return tokens
+}
+
+/**
+ * Whether a streamed `invokeModel` frame can carry a token count, decided on the raw bytes so a
+ * text-only frame costs a byte search rather than a decode, a parse and the memory to hold it.
+ *
+ * @param {{ chunk?: { bytes?: Uint8Array } }} [chunk]
+ */
+function carriesUsage (chunk) {
+  const bytes = chunk?.chunk?.bytes
+  if (!ArrayBuffer.isView(bytes)) return false
+
+  // a view, not a copy: this runs on every frame of every streamed response
+  const body = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  return USAGE_MARKERS.some(marker => body.includes(marker))
 }
 
 /**
