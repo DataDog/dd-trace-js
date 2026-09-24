@@ -337,6 +337,29 @@ describe('span processor', () => {
 
         assert.equal(payload.meta.metadata, undefined)
       })
+
+      it('does not emit a manifest or version once the span is no longer an agent', () => {
+        processor.process(makeSpan({
+          '_ml_obs.meta.span.kind': 'workflow',
+          '_ml_obs.agent_version': '1.0.0',
+          '_ml_obs.meta.metadata._dd.agent_manifest': { model: 'gpt-4o' },
+        }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.equal(payload.meta.metadata, undefined)
+        assert.ok(!payload.tags.some(tag => tag.startsWith('agent_version:')))
+      })
+
+      it('emits the declared version over a user tag of the same name', () => {
+        processor.process(makeSpan({
+          '_ml_obs.agent_version': '1.0.0',
+          '_ml_obs.tags': { agent_version: 'from_tags' },
+        }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.ok(payload.tags.includes('agent_version:1.0.0'))
+        assert.ok(!payload.tags.includes('agent_version:from_tags'))
+      })
     })
 
     it('forwards tool definitions to the payload', () => {
