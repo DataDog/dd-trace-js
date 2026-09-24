@@ -776,6 +776,72 @@ describe('Plugin', () => {
           })
         })
 
+        describe('with cached query service function', () => {
+          let firstConnection
+          let firstConfig
+          let secondConnection
+          let secondConfig
+          let serviceCalls
+
+          before(async () => {
+            firstConfig = { ...config }
+            secondConfig = { ...config }
+            serviceCalls = 0
+            tracer = await agent.load('oracledb', {
+              poolAcquire: false,
+              service (connAttrs) {
+                serviceCalls++
+                if (connAttrs === firstConfig) return 'first'
+                if (connAttrs === secondConfig) return 'second'
+                return 'unexpected'
+              },
+            })
+            oracledb = require(`../../../versions/oracledb@${version}`).get()
+            firstConnection = await oracledb.getConnection(firstConfig)
+            secondConnection = await oracledb.getConnection(secondConfig)
+          })
+
+          after(async () => {
+            await Promise.all([
+              firstConnection.close(),
+              secondConnection.close(),
+            ])
+            await agent.close()
+          })
+
+          it('caches each connection service until configuration changes', async () => {
+            for (const [currentConnection, service] of [
+              [firstConnection, 'first'],
+              [firstConnection, 'first'],
+              [secondConnection, 'second'],
+              [secondConnection, 'second'],
+            ]) {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ service }),
+                currentConnection.execute(dbQuery),
+              ])
+            }
+            assert.strictEqual(serviceCalls, 2)
+
+            serviceCalls = 0
+            tracer.use('oracledb', {
+              poolAcquire: false,
+              service () {
+                serviceCalls++
+                return 'updated'
+              },
+            })
+
+            for (let count = 0; count < 2; count++) {
+              await Promise.all([
+                agent.assertFirstTraceSpan({ service: 'updated' }),
+                firstConnection.execute(dbQuery),
+              ])
+            }
+            assert.strictEqual(serviceCalls, 1)
+          })
+        })
+
         describe('with pool used via oracledb.getConnection() with no arguments', () => {
           before(async () => {
             await agent.load('oracledb', {
