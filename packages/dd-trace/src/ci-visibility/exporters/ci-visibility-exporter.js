@@ -894,7 +894,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
-    if (!hasBufferedData) {
+    if (isForceFlush && !hasBufferedData) {
       complete()
       return
     }

@@ -2263,6 +2263,25 @@ describe('CI Visibility Exporter', () => {
       }
     })
 
+    it('waits for a pending media upload in a final flush before initialization', async () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      exporter._isInitialized = false
+      exporter._canUseCiVisProtocolPromise = Promise.resolve()
+      const flushCallback = sinon.spy()
+
+      exporter.uploadTestScreenshot(screenshotOptions, () => {})
+      exporter.flush(flushCallback)
+      await new Promise(resolve => setImmediate(resolve))
+
+      sinon.assert.notCalled(flushCallback)
+
+      uploadTestScreenshotRequest.firstCall.args[1]()
+      await new Promise(resolve => setImmediate(resolve))
+
+      sinon.assert.calledOnce(flushCallback)
+    })
+
     it('flushes writers while waiting for screenshot completion work', async () => {
       uploadTestScreenshotRequest = sinon.stub()
       const exporter = createScreenshotExporter()
