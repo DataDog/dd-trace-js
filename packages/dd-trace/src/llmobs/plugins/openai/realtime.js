@@ -1,7 +1,5 @@
 'use strict'
 
-const dc = require('dc-polyfill')
-
 const {
   g711ToPcm16,
   g711Variant,
@@ -20,11 +18,6 @@ const { storage: llmobsStorage } = require('../../storage')
 const { safeJsonParse } = require('../../util')
 const LLMObsPlugin = require('../base')
 const { getModelProviderAndClient } = require('./utils')
-
-// Never published to. The instrumentation retains a turn's audio only while something is
-// subscribed here, so the subscription is the signal, and this handler is never invoked.
-const audioChannel = dc.channel('dd-trace:openai:realtime:audio')
-const retainAudio = () => {}
 
 /**
  * @typedef {import('../../audio-utils').AudioPart} AudioPart
@@ -162,6 +155,11 @@ class RealtimeLLMObsPlugin extends LLMObsPlugin {
   static integration = 'openai'
   static system = 'openai'
 
+  // The instrumentation retains a turn's audio only while these plugins are subscribed, and only
+  // the LLM Observability payload reads those bytes. Staying subscribed for the `gen_ai.*` tags
+  // alone would buffer megabytes per turn for no consumer, so realtime opts out.
+  static emitsGenAiApmTags = false
+
   /**
    * The instrumentation replays the turn with `traceSync`, which never publishes `asyncEnd`, so tag
    * on `end` instead — before the sibling tracing plugin's `end` finishes the span, since the LLM
@@ -217,47 +215,14 @@ class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
   static id = 'openai_realtime_response_llmobs'
   static prefix = 'tracing:apm:openai:realtime:response'
 
-  #audioSubscribed = false
+  constructor (...args) {
+    super(...args)
 
-  /**
-   * Tracks the audio capability subscription against LLM Observability rather than against the
-   * plugin being enabled. The two used to be the same thing; now the reduced path leaves the
-   * plugin subscribed while building no payload, and only the payload reads `side.audio`, so
-   * staying subscribed would make the instrumentation buffer megabytes per turn for no consumer.
-   *
-   * Not managed through `addSub`, whose subscriptions follow the plugin: `LLMObs.enable()` and
-   * `disable()` flip `DD_LLMOBS_ENABLED` at runtime without reconfiguring plugins, so this is
-   * re-evaluated on `configure` (before any traffic) and again per turn (to catch those toggles).
-   *
-   * Drop this if `buildMessage` stops reading `side.audio`, and the buffering stops with it.
-   */
-  #syncAudioSubscription () {
-    const shouldRetain = Boolean(this._enabled && this._llmobsEnabled)
-    if (shouldRetain === this.#audioSubscribed) return
-
-    if (shouldRetain) {
-      audioChannel.subscribe(retainAudio)
-    } else {
-      audioChannel.unsubscribe(retainAudio)
-    }
-
-    this.#audioSubscribed = shouldRetain
-  }
-
-  /**
-   * @override
-   */
-  configure (config) {
-    super.configure(config)
-    this.#syncAudioSubscription()
-  }
-
-  /**
-   * @override
-   */
-  start (ctx) {
-    this.#syncAudioSubscription()
-    super.start(ctx)
+    // This plugin is the only consumer of a turn's audio bytes, and the instrumentation keeps them
+    // only while something is subscribed here — a disabled plugin unsubscribes, so an APM-only
+    // process never buffers audio it cannot use. Nothing is ever published; the subscription is the
+    // signal. Keep it if `buildMessage` stops reading `side.audio`, and the buffering stops with it.
+    this.addSub('dd-trace:openai:realtime:audio', () => {})
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
@@ -271,14 +236,6 @@ class RealtimeResponseLLMObsPlugin extends RealtimeLLMObsPlugin {
       modelProvider,
       sessionId: turn.sessionId,
     }
-  }
-
-  /**
-   * @override
-   */
-  getGenAiApmEndTags (ctx) {
-    // the turn reports its usage only once the response completes
-    return { metrics: usageMetrics(ctx.turn?.usage) }
   }
 
   setLLMObsTags (ctx) {

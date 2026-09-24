@@ -20,6 +20,13 @@ const LLMObsTagger = require('../tagger')
  */
 
 class LLMObsPlugin extends TracingPlugin {
+  /**
+   * Whether this integration emits the `gen_ai.*` APM attributes while LLM Observability is off.
+   * An integration sets this to `false` when staying subscribed would cost more than the tags are
+   * worth, and then behaves as it did before those attributes existed: disabled outright.
+   */
+  static emitsGenAiApmTags = true
+
   constructor (...args) {
     super(...args)
 
@@ -201,8 +208,12 @@ class LLMObsPlugin extends TracingPlugin {
   configure (config) {
     // an integration opt-out via `tracer.use(<name>, { llmobs: false })` disables the LLMObs layer
     // entirely. When only LLMObs itself is disabled we stay subscribed: the handlers then emit the
-    // `gen_ai.*` APM attributes and skip the LLMObs payload.
-    if (config?.llmobs === false) {
+    // `gen_ai.*` APM attributes and skip the LLMObs payload, unless the integration opted out of
+    // those too.
+    const disabled = config?.llmobs === false ||
+      (!this._llmobsEnabled && !this.constructor.emitsGenAiApmTags)
+
+    if (disabled) {
       config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
     }
     super.configure(config)

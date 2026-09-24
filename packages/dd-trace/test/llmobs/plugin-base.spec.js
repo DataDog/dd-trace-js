@@ -80,6 +80,26 @@ describe('LLMObs plugin with LLM Observability disabled', () => {
     assert.equal(apmTags['gen_ai.conversation.id'], undefined)
   })
 
+  // an integration can decline the reduced path, and then behaves as it did before the tags existed
+  it('stays disabled for an integration that opts out of the gen_ai tags', () => {
+    class OptedOutPlugin extends TestLLMObsPlugin {
+      static id = 'llmobs-base-test-opted-out'
+      static emitsGenAiApmTags = false
+    }
+
+    const optedOut = new OptedOutPlugin({}, {
+      llmobs: { DD_LLMOBS_ENABLED: false },
+      service: 'test-service',
+    })
+    optedOut.configure({ enabled: true })
+
+    try {
+      assert.equal(optedOut._enabled, false)
+    } finally {
+      optedOut.configure({ enabled: false })
+    }
+  })
+
   it('does not tag the ml app, which is an LLM Observability concept', () => {
     publishStart()
 
