@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 
 const { generateRewriterTargets, OUTPUT_PATH } = require('../../../../../scripts/generate-rewriter-targets')
-const { getRewriteTarget } = require('../../../src/helpers/rewriter/targets')
+const { getRewriteActivationName, getRewriteTarget } = require('../../../src/helpers/rewriter/targets')
 const targets = require('../../../src/helpers/rewriter/targets.json')
 const { getUnusedPackageName } = require('../get-unused-package-name')
 
@@ -24,7 +24,17 @@ describe('rewriter targets', () => {
       {
         moduleName: '@langchain/core',
         filePath: 'dist/embeddings.js',
+        activationName: '@langchain/core',
       }
+    )
+  })
+
+  it('distinguishes rewrite-activated integrations from hybrid rewrite targets', () => {
+    assert.equal(getRewriteActivationName('@langchain/core'), '@langchain/core')
+    assert.equal(getRewriteActivationName('@wdio/runner'), undefined)
+    assert.deepStrictEqual(
+      getRewriteTarget('file:///app/node_modules/@wdio/runner/build/index.js'),
+      { moduleName: '@wdio/runner', filePath: 'build/index.js' }
     )
   })
 
