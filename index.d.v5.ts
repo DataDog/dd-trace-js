@@ -3996,7 +3996,8 @@ declare namespace tracer {
 
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
-       * Note that with the exception of tags, this method will override any existing values for the provided fields.
+       * Note that with the exception of tags and agent, this method will override any existing values for the provided fields.
+       * Agent fields are merged into earlier agent annotations field by field.
        *
        * For example:
        * ```javascript
@@ -4012,7 +4013,7 @@ declare namespace tracer {
        * ```
        *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, metrics, and agent to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -4826,20 +4827,62 @@ declare namespace tracer {
       required?: boolean
     }
 
+    /**
+     * A plain JSON Schema object. Schema-library objects (for example Zod schemas) must be converted first, for
+     * example with `z.toJSONSchema()`, or they are dropped.
+     */
+    interface AgentToolJsonSchema {
+      type?: 'object',
+      properties: { [param: string]: { type?: string, [key: string]: unknown } },
+      required?: string[]
+    }
+
     interface AgentTool {
       name: string,
       description?: string,
       /**
-       * Parameters as `{ [param]: { type, required } }`, or a JSON Schema object
-       * (`{ type: 'object', properties, required }`), which is flattened to the same shape.
+       * Parameters as `{ [param]: { type, required } }`, or a JSON Schema object, which is flattened to the
+       * same shape.
        */
-      parameters?: { [param: string]: AgentToolParameter } | { [key: string]: any }
+      parameters?: { [param: string]: AgentToolParameter } | AgentToolJsonSchema
+    }
+
+    /**
+     * Inference parameters reported in an agent manifest. Keys are accepted in snake_case or camelCase and
+     * reported in snake_case. Other keys are dropped, since provider-specific settings can carry secrets.
+     */
+    interface AgentModelSettings {
+      frequency_penalty?: number,
+      frequencyPenalty?: number,
+      logit_bias?: { [token: string]: number },
+      logitBias?: { [token: string]: number },
+      logprobs?: boolean,
+      max_tokens?: number,
+      maxTokens?: number,
+      parallel_tool_calls?: boolean,
+      parallelToolCalls?: boolean,
+      presence_penalty?: number,
+      presencePenalty?: number,
+      seed?: number,
+      stop_sequences?: string[],
+      stopSequences?: string[],
+      temperature?: number,
+      timeout?: number,
+      tool_choice?: string,
+      toolChoice?: string,
+      top_k?: number,
+      topK?: number,
+      top_logprobs?: number,
+      topLogprobs?: number,
+      top_p?: number,
+      topP?: number
     }
 
     /**
      * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag, and the
      * other fields are reported as the agent's manifest. Only applies to `agent` spans. Unreportable
-     * values are dropped, and unset values leave what an earlier annotation declared in place.
+     * values are dropped with a warning, and unset values (`undefined`, `null`, `''`, `[]`) leave what an
+     * earlier annotation declared in place.
      */
     interface Agent {
       /** The version of the agent. */
@@ -4850,12 +4893,8 @@ declare namespace tracer {
       instructions?: string,
       /** The model the agent is configured to call. */
       model?: string,
-      /**
-       * Inference parameters, merged key by key across annotations. Only these keys are reported, in
-       * snake_case or camelCase: frequency_penalty, logit_bias, logprobs, max_tokens, parallel_tool_calls,
-       * presence_penalty, seed, stop_sequences, temperature, timeout, tool_choice, top_k, top_logprobs, top_p.
-       */
-      modelSettings?: { [key: string]: any },
+      /** Inference parameters, merged key by key across annotations. */
+      modelSettings?: AgentModelSettings,
       /** The tools the agent can call. Replaces tools declared by an earlier annotation. */
       tools?: AgentTool[]
     }
@@ -4943,8 +4982,9 @@ declare namespace tracer {
       prompt?: Prompt,
 
       /**
-       * Declares the agent running in this context. The version is tagged on every `agent` span in the
-       * context, and the manifest on the outermost `agent` span, so a nested agent span reports its own agent.
+       * Declares the agent running in this context, read when the context is entered. The version is tagged on
+       * every `agent` span in the context. The manifest goes to the first `agent` span of each trace in the
+       * context, so a nested sub-agent or a handoff target in the same trace keeps reporting its own agent.
        */
       agent?: Agent,
     }

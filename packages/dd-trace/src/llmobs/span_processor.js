@@ -16,6 +16,8 @@ const {
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
+  AGENT_VERSION,
+  AGENT_VERSION_TAG_KEY,
   TOOL_DEFINITIONS,
   INPUT_MESSAGES,
   INPUT_VALUE,
@@ -181,7 +183,7 @@ class LLMObsSpanProcessor {
     }
 
     const name = mlObsTags[NAME] || span._name
-    const agentManifest = mlObsTags[AGENT_MANIFEST]
+    const agentManifest = spanKind === 'agent' ? mlObsTags[AGENT_MANIFEST] : undefined
 
     if (mlObsTags[METADATA] || mlObsTags[COST_TAGS] || agentManifest) {
       /** @type {Record<string, unknown>} */
@@ -194,7 +196,6 @@ class LLMObsSpanProcessor {
         this.#getDdMetadata(metadata).cost_tags = mlObsTags[COST_TAGS]
       }
       if (agentManifest) {
-        // The span name is what the agent is called everywhere else, so it names an agent that declared none.
         this.#getDdMetadata(metadata).agent_manifest = {
           framework: MANUAL_FRAMEWORK_NAME,
           ...agentManifest,
@@ -446,6 +447,13 @@ class LLMObsSpanProcessor {
 
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
+
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+    // Resolved here because a span can become an agent after registration. A declared version wins over a
+    // user tag of the same name, matching dd-trace-py.
+    if (mlObsTags?.[SPAN_KIND] === 'agent' && mlObsTags[AGENT_VERSION]) {
+      tags[AGENT_VERSION_TAG_KEY] = mlObsTags[AGENT_VERSION]
+    }
 
     return tags
   }

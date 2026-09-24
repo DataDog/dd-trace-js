@@ -17,7 +17,7 @@ const {
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
-  AGENT_VERSION_TAG_KEY,
+  AGENT_VERSION,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -60,7 +60,7 @@ const {
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
-const { buildAgentManifest, mergeAgentManifest } = require('./agent-manifest')
+const { buildAgentDeclaration, mergeAgentManifest } = require('./agent-manifest')
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
@@ -76,8 +76,9 @@ const {
 // maps LLMObs spans to their annotations
 const registry = new WeakMap()
 
-// Maps an LLMObs span to the annotation context agent declarations an agent span at or above it
-// already took, so a nested agent span does not report the outer agent over its own.
+// Maps an LLMObs span to the annotation context agent declarations an agent span in its LLMObs trace already
+// took. The set is shared by the spans of a trace, so a declaration reaches only the first agent span in it and a
+// nested sub-agent or a sibling handoff target keeps reporting its own agent.
 /** @type {WeakMap<object, Set<object>>} */
 const agentDeclarationClaims = new WeakMap()
 
@@ -200,7 +201,9 @@ class LLMObsTagger {
       this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
     }
 
-    const agentDeclarations = annotationContext?.agents
+    const agentDeclarations = /** @type {import('./agent-manifest').AgentDeclaration[] | undefined} */ (
+      storage.getStore()?.agentDeclarations
+    )
     if (agentDeclarations) this.#applyAgentDeclarations(span, kind, parent, agentDeclarations)
 
     // apply annotation context name
@@ -221,65 +224,42 @@ class LLMObsTagger {
   }
 
   /**
-   * Applies the agents declared by the enclosing annotation contexts, outermost first. The version
-   * tags every agent span in the block, while each declared manifest goes to the outermost agent
-   * span only, so a nested agent span (a sub-agent or handoff) keeps reporting its own agent.
+   * Applies the agents declared by the enclosing annotation contexts, outermost first. The version is recorded on
+   * every span in the block and emitted if the span is an agent when it finishes, since some integrations promote a
+   * span to an agent after registration. Each manifest goes to the first agent span of the LLMObs trace.
    *
    * @param {import('../opentracing/span')} span
    * @param {string} kind
    * @param {import('../opentracing/span') | undefined} parent
-   * @param {{ agent?: { version?: unknown }, manifest?: object | null }[]} declarations
+   * @param {import('./agent-manifest').AgentDeclaration[]} declarations
    */
   #applyAgentDeclarations (span, kind, parent, declarations) {
-    const inherited = parent && agentDeclarationClaims.get(parent)
-    let claimed = inherited
-
-    if (kind === 'agent') {
-      for (const declaration of declarations) {
-        this.#tagAgentVersion(span, declaration.agent?.version)
-        if (inherited?.has(declaration)) continue
-
-        // Validated once per context rather than once per agent span in it.
-        if (declaration.manifest === undefined) {
-          declaration.manifest = buildAgentManifest(declaration.agent) ?? null
-        }
-        if (!declaration.manifest) continue
-
-        this.#tagAgentManifestFields(span, declaration.manifest)
-        claimed = new Set(claimed)
-        claimed.add(declaration)
-      }
+    let claims = parent && agentDeclarationClaims.get(parent)
+    if (!claims) {
+      claims = new Set()
+      if (parent && registry.has(parent)) agentDeclarationClaims.set(parent, claims)
     }
+    agentDeclarationClaims.set(span, claims)
 
-    if (claimed) agentDeclarationClaims.set(span, claimed)
+    for (const declaration of declarations) {
+      if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+      if (kind !== 'agent' || !declaration.manifest || claims.has(declaration)) continue
+      this.#tagAgentManifestFields(span, declaration.manifest)
+      claims.add(declaration)
+    }
   }
 
   /**
-   * Tags the agent a caller declared on an agent span: `version` as an `agent_version` tag and the
-   * rest as the agent's manifest, merged onto what earlier annotations declared.
+   * Tags the agent a caller declared on an agent span, merged onto what earlier annotations declared.
    *
    * @param {import('../opentracing/span')} span
-   * @param {Record<string, unknown>} agent validated here, as it is caller-supplied
+   * @param {unknown} agent
    */
   tagAgent (span, agent) {
-    if (!agent || typeof agent !== 'object' || Array.isArray(agent)) {
-      log.warn('Dropping agent annotation, the agent must be an object.')
-      return
-    }
-    this.#tagAgentVersion(span, agent.version)
-    const manifest = buildAgentManifest(agent)
-    if (manifest) this.#tagAgentManifestFields(span, manifest)
-  }
-
-  /**
-   * @param {import('../opentracing/span')} span
-   * @param {unknown} version
-   */
-  #tagAgentVersion (span, version) {
-    if ((typeof version !== 'string' && typeof version !== 'number') || version === '') return
-    // Copied rather than assigned into, since the current tags object may be shared with an annotation context.
-    const tags = { ...registry.get(span)?.[TAGS], [AGENT_VERSION_TAG_KEY]: String(version) }
-    this._setTag(span, TAGS, tags)
+    const declaration = buildAgentDeclaration(agent)
+    if (!declaration) return
+    if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+    if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
   }
 
   /**
@@ -438,7 +418,8 @@ class LLMObsTagger {
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      this._setTag(span, TAGS, tags)
+      // Copied so a later annotation cannot write into a caller's object shared by an annotation context.
+      this._setTag(span, TAGS, { ...tags })
     }
   }
 

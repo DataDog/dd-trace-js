@@ -27,6 +27,8 @@ const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
+const { buildAgentDeclaration } = require('./agent-manifest')
+/** @typedef {import('./agent-manifest').AgentDeclaration} AgentDeclaration */
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
@@ -604,17 +606,23 @@ class LLMObs extends NoopLLMObs {
   annotationContext (options, fn) {
     if (!this.enabled) return fn()
 
+    /** @type {{ annotationContext?: object, agentDeclarations?: AgentDeclaration[] } | undefined} */
     const currentStore = storage.getStore()
     const { agent, ...contextOptions } = options ?? {}
-    const annotationContext = { ...currentStore?.annotationContext, ...contextOptions }
-
-    if (agent != null) {
-      // One entry per context, outermost first, so each nested declaration folds onto the outer ones.
-      // The wrapper identifies the context, letting only the outermost agent span in it take the manifest.
-      annotationContext.agents = [...(annotationContext.agents ?? []), { agent }]
+    /** @type {{ annotationContext: object, agentDeclarations?: AgentDeclaration[] }} */
+    const store = {
+      ...currentStore,
+      annotationContext: { ...currentStore?.annotationContext, ...contextOptions },
     }
 
-    return storage.run({ ...currentStore, annotationContext }, fn)
+    if (agent != null) {
+      const declaration = buildAgentDeclaration(agent)
+      // Outside `annotationContext`, whose keys come from the caller. Outermost first, so nested declarations fold
+      // onto the outer ones.
+      if (declaration) store.agentDeclarations = [...(currentStore?.agentDeclarations ?? []), declaration]
+    }
+
+    return storage.run(store, fn)
   }
 
   routingContext (options, fn) {
