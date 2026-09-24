@@ -883,20 +883,18 @@ describe('OpenTelemetry Traces', () => {
     describe('SDK adoption markers', () => {
       /**
        * @param {object} extraEnv
-       * @param {object[]} spans
-       * @returns {{ resource: Record<string, string>, spanKeys: string[] }}
+       * @returns {{ resource: Record<string, string> }}
        */
-      function exportAndCapture (extraEnv, spans = [createMockSpan()]) {
+      function exportAndCapture (extraEnv) {
         let captured
         const verify = mockOtlpExport((decoded) => {
-          const { resource, scopeSpans } = decoded.resourceSpans[0]
+          const { resource } = decoded.resourceSpans[0]
           captured = {
             resource: Object.fromEntries(resource.attributes.map(attr => [attr.key, attr.value.stringValue])),
-            spanKeys: scopeSpans[0].spans.flatMap(span => span.attributes.map(attr => attr.key)),
           }
         })
 
-        buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...extraEnv }).export(spans)
+        buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...extraEnv }).export([createMockSpan()])
         verify()
 
         return captured
