@@ -2,7 +2,8 @@
 
 const assert = require('assert')
 describe('parameterized', () => {
-  test.each(['parameter 1', 'parameter 2'])('test %s', (value) => {
+  const parameterizedTest = test.each(['parameter 1', 'parameter 2'])
+  parameterizedTest('test %s', (value) => {
     assert.deepStrictEqual(value.startsWith('parameter'), true)
   })
 })

@@ -41,6 +41,7 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -113,20 +114,26 @@ class JestPlugin extends CiPlugin {
       hasUnskippableSuites,
       hasForcedToRunSuites,
       error,
-      isTestSessionFinalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isExpectedEmptySession,
       onDone,
     }) => {
       const finishSession = () => {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
+        if (isExpectedEmptySession) {
+          setExpectedEmptyTestSessionTags(
+            this.testSessionSpan,
+            this.testModuleSpan,
+            'No tests were found',
+            'zero_tests'
+          )
+        }
+
         if (error) {
-          if (isTestSessionFinalizationError) {
-            this.tracer._exporter.setDeferredTestSuiteError?.(error)
-          }
           this.testSessionSpan.setTag('error', error)
           this.testModuleSpan.setTag('error', error)
         }
@@ -163,7 +170,6 @@ class JestPlugin extends CiPlugin {
           this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
         }
 
-        this.tracer._exporter.exportDeferredTestSuiteSpans?.()
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
@@ -209,6 +215,8 @@ class JestPlugin extends CiPlugin {
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
+        config._ddIsDynamicAtrEnabled = this.libraryConfig?.isDynamicAtrEnabled ?? false
+        config._ddDynamicAtrBuckets = this.libraryConfig?.dynamicAtrBuckets
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
@@ -334,7 +342,6 @@ class JestPlugin extends CiPlugin {
       this.pendingTestSuiteFinishes.add(pendingFinish)
 
       const finish = () => {
-        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
         // Suites potentially run in a different process than the session,

@@ -69,7 +69,6 @@ class SpanEnrichmentHook {
    * @param {boolean} [evaluationDetails.flagMetadata.__dd_do_log] - Whether to log subject
    * @param {string} [evaluationDetails.variant] - Variant key if flag was found in UFC
    * @param {boolean|string|number|object} [evaluationDetails.value] - Evaluated value
-   * @returns {void}
    */
   finally (hookContext, evaluationDetails) {
     try {

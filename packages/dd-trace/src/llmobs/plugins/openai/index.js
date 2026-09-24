@@ -6,7 +6,8 @@ const {
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
+const { safeJsonParse } = require('../../util')
 const { AUDIO_MIME_TYPES } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
@@ -14,7 +15,7 @@ const {
   extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
-  getOpenAIModelProvider,
+  getModelProviderAndClient,
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -108,10 +109,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   _getModelProviderAndClient (baseUrl = '') {
-    const modelProvider = getOpenAIModelProvider(baseUrl)
-    if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
-    if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
-    return { modelProvider, client: 'OpenAI' }
+    return getModelProviderAndClient(baseUrl)
   }
 
   _extractMetrics (response) {

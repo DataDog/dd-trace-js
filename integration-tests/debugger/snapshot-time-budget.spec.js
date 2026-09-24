@@ -71,11 +71,11 @@ describe('Dynamic Instrumentation', function () {
             }))
 
             // Trigger once; this run is expected to be slow and mark fields with "timeout"
-            const result1 = /** @type {import('axios').AxiosResponse<{ paused: number }>} */
+            const result1 = /** @type {import('./utils').TestResponse<{ paused: number }>} */
               (await breakpoint.triggerBreakpoint())
             assert.ok(
-              result1.data.paused >= 1_000,
-              `expected thread to be paused for at least 1 second, but was paused for ~${result1.data.paused}ms`
+              result1.body.paused >= 1_000,
+              `expected thread to be paused for at least 1 second, but was paused for ~${result1.body.paused}ms`
             )
 
             await firstPayloadReceived
@@ -90,10 +90,10 @@ describe('Dynamic Instrumentation', function () {
             })
 
             // Trigger the same breakpoint again directly
-            const result2 = await t.axios.get(breakpoint.url)
+            const result2 = await t.request(breakpoint.url)
             assert.ok(
-              result2.data.paused <= 50,
-              `expected thread to be paused <=50ms, but was paused for ~${result2.data.paused}ms`
+              result2.body.paused <= 50,
+              `expected thread to be paused <=50ms, but was paused for ~${result2.body.paused}ms`
             )
 
             await secondPayloadReceived
@@ -213,12 +213,12 @@ function test ({ t, maxPausedTime, breakpointIndex, maxReferenceDepth }, assertF
       capture: { maxReferenceDepth },
     }))
 
-    const { data } = await breakpoint.triggerBreakpoint()
+    const { body } = await breakpoint.triggerBreakpoint()
 
     if (maxPausedTime !== undefined) {
       assert.ok(
-        data.paused <= maxPausedTime,
-        `expected thread to be paused <=${maxPausedTime}ms, but was paused for ~${data.paused}ms`
+        body.paused <= maxPausedTime,
+        `expected thread to be paused <=${maxPausedTime}ms, but was paused for ~${body.paused}ms`
       )
     }
 

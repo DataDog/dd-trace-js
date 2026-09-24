@@ -38,11 +38,15 @@ function formatLanguageModelInputMessages (instructions, messages) {
   const inputMessages = []
 
   if (instructions) {
-    const systemPrompt = typeof instructions === 'string'
-      ? instructions
-      : Array.isArray(instructions)
-        ? instructions.map(instruction => instruction.content).join('')
-        : instructions.content
+    let systemPrompt = instructions
+    if (typeof instructions !== 'string') {
+      if (Array.isArray(instructions)) {
+        systemPrompt = ''
+        for (const instruction of instructions) systemPrompt += instruction.content
+      } else {
+        systemPrompt = instructions.content
+      }
+    }
 
     inputMessages.push({ role: 'system', content: systemPrompt })
   }
@@ -53,13 +57,13 @@ function formatLanguageModelInputMessages (instructions, messages) {
     if (role === 'system') {
       inputMessages.push({ role, content })
     } else if (role === 'user') {
-      const userMessageContent =
-      typeof content === 'string'
-        ? content
-        : content
-          .filter(part => part.type === 'text')
-          .map(part => part.text)
-          .join('')
+      let userMessageContent = content
+      if (typeof content !== 'string') {
+        userMessageContent = ''
+        for (const part of content) {
+          if (part.type === 'text') userMessageContent += part.text
+        }
+      }
 
       inputMessages.push({ role, content: userMessageContent })
     } else if (role === 'assistant') {
@@ -292,7 +296,13 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const { event, result } = ctx
 
     const lastUserPrompt = event.messages.findLast(message => message.role === 'user')?.content
-    const input = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
+    let input = lastUserPrompt
+    if (Array.isArray(lastUserPrompt)) {
+      input = ''
+      for (const part of lastUserPrompt) {
+        if (part.type === 'text') input += part.text
+      }
+    }
 
     const output =
       ctx.isStream

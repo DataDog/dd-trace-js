@@ -42,6 +42,7 @@ const {
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const { getCypressDependencies } = require('./dependencies')
 
@@ -140,6 +141,72 @@ moduleTypes.forEach(({
     const over10It = (version !== '6.7.0') ? it : it.skip
 
     context('final status tag', function () {
+      for (const retryKind of ['efd', 'atf']) {
+        it(`keeps ${retryKind} duplicate-title results separate after late hooks`, async () => {
+          const specToRun = 'cypress/e2e/managed-retry-duplicates.js'
+          receiver.setSettings({
+            flaky_test_retries_enabled: false,
+            known_tests_enabled: retryKind === 'efd',
+            early_flake_detection: {
+              enabled: retryKind === 'efd',
+              slow_test_retries: { '5s': 1 },
+              faulty_session_threshold: 100,
+            },
+            test_management: { enabled: retryKind === 'atf', attempt_to_fix_retries: 1 },
+          })
+          receiver.setKnownTests({ cypress: { [specToRun]: [] } })
+          receiver.setTestManagementTests({
+            cypress: {
+              suites: {
+                [specToRun]: {
+                  tests: {
+                    'pass,fail duplicate title': { properties: { attempt_to_fix: true } },
+                    'fail,pass duplicate title': { properties: { attempt_to_fix: true } },
+                  },
+                },
+              },
+            },
+          })
+          childProcess = exec(version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`, {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+            },
+          })
+
+          await receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 8)
+              for (const order of ['pass,fail', 'fail,pass']) {
+                for (const result of ['pass', 'fail']) {
+                  const attempts = tests.filter(test =>
+                    test.meta['fixture.order'] === order && test.meta['fixture.result'] === result
+                  )
+                  assert.strictEqual(attempts.length, 2)
+                  assert.deepStrictEqual(
+                    attempts.map(test => test.meta[TEST_STATUS]), ['pass', result], `${retryKind}: ${order} ${result}`
+                  )
+                  assert.strictEqual(attempts[0].meta[TEST_FINAL_STATUS], undefined)
+                  assert.strictEqual(attempts[1].meta[TEST_FINAL_STATUS], retryKind === 'efd' ? 'pass' : result)
+                  assert.strictEqual(attempts[0].meta[ERROR_MESSAGE], undefined)
+                  if (result === 'pass') {
+                    assert.strictEqual(attempts[1].meta[ERROR_MESSAGE], undefined)
+                  } else {
+                    assert.ok(attempts[1].meta[ERROR_MESSAGE].includes(`late failure for ${order}`))
+                  }
+                }
+              }
+            }, { hardTimeout: 60000 }
+          )
+        })
+      }
+
       over10It('sets final_status tag to test status on regular tests without retry features', async () => {
         receiver.setSettings({
           itr_enabled: false,

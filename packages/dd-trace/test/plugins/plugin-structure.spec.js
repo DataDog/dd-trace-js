@@ -8,6 +8,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
+const plugins = require('../../src/plugins')
 
 const abstractPlugins = [
   'web', // web is an abstract plugin, and will not have an instrumentation file
@@ -61,7 +62,7 @@ function extractPluginsInterfaceKeys (dtsSource) {
   assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
 
   const body = m[1]
-  return extractPluginIds(body, /^\s*"([^"]+)"\s*:\s*/gm, 1)
+  return extractPluginIds(body, /^[ \t]*"([^"]+)"[ \t]*:[ \t]*/gm, 1)
 }
 
 function extractRuntimePluginPackageNames (pluginsIndexSource) {
@@ -173,6 +174,10 @@ describe('Plugin Structure Validation', () => {
     })
 
     assert.deepStrictEqual(missingHooks, missingInstrumentationHooks)
+  })
+
+  it('should map @graphql-tools/executor instrumentation to the graphql plugin', () => {
+    assert.strictEqual(plugins['@graphql-tools/executor'], plugins.graphql)
   })
 
   it('should include all canonical plugin ids used by the runtime plugin registry in index.d.ts', () => {

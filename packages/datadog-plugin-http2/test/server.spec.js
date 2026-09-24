@@ -9,6 +9,7 @@ const { setImmediate } = require('node:timers/promises')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const { channel } = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
@@ -308,6 +309,19 @@ describe('Plugin', () => {
           spanProducerFn,
           rawExpectedSchema.server
         )
+
+        it('publishes a close response event', async () => {
+          const emit = sinon.spy()
+          const emitChannel = channel('apm:http2:server:response:emit')
+          emitChannel.subscribe(emit)
+
+          try {
+            await request(http2, `http://localhost:${port}/user`)
+            sinon.assert.calledWithMatch(emit, { eventName: 'close' })
+          } finally {
+            emitChannel.unsubscribe(emit)
+          }
+        })
 
         it('should do automatic instrumentation', done => {
           agent

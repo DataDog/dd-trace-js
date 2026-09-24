@@ -353,7 +353,6 @@ function getToolResultContent (chunk, toolUseId) {
  * @param {SessionContext | null | undefined} sessionCtx
  * @param {GetLifecycle} getLifecycle
  * @param {ToolLifecycle} lifecycle
- * @returns {number} index in chunks where the next step should start iteration
  */
 function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, lifecycle) {
   let chunkIndex = startIndex
@@ -412,7 +411,6 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
  * @param {StepContext | null | undefined} stepCtx
  * @param {SessionContext | null | undefined} sessionCtx
  * @param {GetLifecycle} getLifecycle
- * @returns {number} index in chunks where the next step should start iteration
  */
 function processStep (
   chunks,
@@ -638,7 +636,7 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
 
 let querySubscribed = false
 
-for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
+for (const hook of getHooks('@anthropic-ai/claude-agent-sdk').values()) {
   hook.file = null
 
   addHook(hook, exports => {

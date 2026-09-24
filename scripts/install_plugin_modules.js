@@ -12,7 +12,7 @@ const semver = require('semver')
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
-const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { dependencies: latests, resolutions } = require('../packages/dd-trace/test/plugins/versions/package.json')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
@@ -288,7 +288,6 @@ async function patchPeerDependencies ({ folder, externalName }) {
  *
  * @param {string} entry
  * @param {string} [parent]
- * @returns {boolean}
  */
 function isGeneratedWorkspace (entry, parent = '') {
   const workspaceName = parent ? join(parent, entry) : entry
@@ -354,6 +353,7 @@ async function assertWorkspaces () {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
+    resolutions,
     workspaces: {
       packages: [...workspaces].sort(),
     },
@@ -399,7 +399,6 @@ function addFolderToWorkspaces (name, version) {
 /**
  * @param {string|null} [name]
  * @param {string|null} [version]
- * @returns {string}
  */
 function folder (name, version) {
   return join(__dirname, '..', 'versions', basename(name, version))
@@ -408,7 +407,6 @@ function folder (name, version) {
 /**
  * @param {string|null} [name]
  * @param {string|null} [version]
- * @returns {string}
  */
 function basename (name, version) {
   return name ? (version ? `${name}@${version}` : name) : ''
@@ -418,7 +416,6 @@ function basename (name, version) {
  * @param {string|null} name
  * @param {string|null} version
  * @param {string} file
- * @returns {string}
  */
 function filename (name, version, file) {
   return join(folder(name, version), file)

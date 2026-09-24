@@ -143,7 +143,6 @@ class PriorityQueue {
    *
    * @param {TreeNode} a - First node to compare
    * @param {TreeNode} b - Second node to compare
-   * @returns {number} - > 0 if a has higher priority, < 0 if b has higher priority, 0 if equal
    */
   #compare (a, b) {
     const keyA = a.priorityKey
@@ -243,7 +242,6 @@ function parseJsonToTree (json) {
  *
  * @param {string} json - The JSON string to skip
  * @param {number} startIndex - The index to start skipping from
- * @returns {number} The index of the closing quote
  */
 function skipString (json, startIndex) {
   let index = startIndex + 1 // Skip opening quote
@@ -353,7 +351,6 @@ function selectNodesToPrune (root, bytesToRemove) {
  *
  * @param {string} json - The JSON string to rebuild
  * @param {Set<TreeNode>} prunedNodes - The set of nodes to replace with {"pruned":true}
- * @returns {string} The rebuilt JSON string
  */
 function rebuildJson (json, prunedNodes) {
   // Convert set to array and sort by start position (descending)

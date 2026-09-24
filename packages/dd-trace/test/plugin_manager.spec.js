@@ -21,6 +21,7 @@ describe('Plugin Manager', () => {
   let Five
   let Six
   let Eight
+  let Nine
   let Graphql
   let pm
   let registeredDefaults
@@ -33,6 +34,7 @@ describe('Plugin Manager', () => {
       // The real tracer Config always carries the testOptimization namespace;
       // #getSharedConfig reads it, so the stand-in must provide it too.
       testOptimization: {},
+      tracing: {},
       ...overrides,
     }
   }
@@ -71,6 +73,9 @@ describe('Plugin Manager', () => {
         static optIn = true
         static id = 'eight'
       },
+      nine: class Nine extends FakePlugin {
+        static id = 'nine'
+      },
       graphql: class Graphql extends FakePlugin {
         static id = 'graphql'
       },
@@ -91,6 +96,8 @@ describe('Plugin Manager', () => {
 
     Eight = plugins.eight
     Eight.prototype.configure = sinon.spy()
+    Nine = plugins.nine
+    Nine.prototype.configure = sinon.spy()
 
     process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
 
@@ -98,7 +105,8 @@ describe('Plugin Manager', () => {
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
     // model a plugin whose default-enabled flag is `false` (e.g. an opt-in plugin).
     registeredDefaults = {}
-    PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
+    const loadPluginManager = proxyquire.noPreserveCache()
+    PluginManager = loadPluginManager('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config/helper': {
@@ -106,10 +114,16 @@ describe('Plugin Manager', () => {
           return process.env[name]
         },
         getValueFromEnvSources (name, skipDefault) {
+          if (name === 'DD_TRACE_NINE_ENABLED') {
+            throw new Error(`${name} is not registered`)
+          }
           if (process.env[name] !== undefined) {
             return process.env[name]
           }
           return skipDefault ? undefined : registeredDefaults[name]
+        },
+        isSupportedConfiguration (name) {
+          return name !== 'DD_TRACE_NINE_ENABLED'
         },
       },
     })
@@ -346,6 +360,12 @@ describe('Plugin Manager', () => {
       assert.deepStrictEqual(instantiated, ['two', 'four'])
     })
 
+    it('enables plugins without a registered per-plugin flag by default', () => {
+      pm.configure(makeTracerConfig())
+      loadChannel.publish({ name: 'nine' })
+      sinon.assert.calledWithMatch(Nine.prototype.configure, { enabled: true })
+    })
+
     describe('service naming schema manager', () => {
       const config = makeTracerConfig({
         foo: { bar: 1 },
@@ -374,11 +394,13 @@ describe('Plugin Manager', () => {
     })
 
     it('observes configuration options', () => {
+      const tracing = { DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker' }
       pm.configure(makeTracerConfig({
         serviceMapping: { two: 'deux' },
         logInjection: true,
         DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
+        tracing,
       }))
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
@@ -388,12 +410,14 @@ describe('Plugin Manager', () => {
         logInjection: true,
         queryStringObfuscation: '.*',
         clientIpEnabled: true,
+        tracing,
       })
       sinon.assert.calledWithMatch(Four.prototype.configure, {
         enabled: true,
         logInjection: true,
         queryStringObfuscation: '.*',
         clientIpEnabled: true,
+        tracing,
       })
     })
 

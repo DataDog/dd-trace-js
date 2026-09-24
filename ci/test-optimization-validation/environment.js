@@ -6,7 +6,6 @@
  * @param {string} left first variable name
  * @param {string} right second variable name
  * @param {string} [platform] target platform
- * @returns {boolean} whether the names are equivalent
  */
 function environmentNamesEqual (left, right, platform = process.platform) {
   return platform === 'win32' ? left.toUpperCase() === right.toUpperCase() : left === right
@@ -45,7 +44,6 @@ function getEnvironmentValue (environment, name, platform = process.platform) {
  * @param {string} name canonical variable name
  * @param {string|undefined} value environment value
  * @param {string} [platform] target platform
- * @returns {void}
  */
 function setEnvironmentValue (environment, name, value, platform = process.platform) {
   for (const candidate of Object.keys(environment)) {
@@ -60,7 +58,6 @@ function setEnvironmentValue (environment, name, value, platform = process.platf
  * @param {Record<string, string|undefined>} target destination environment
  * @param {Record<string, string|undefined>} source overriding entries
  * @param {string} [platform] target platform
- * @returns {void}
  */
 function mergeEnvironment (target, source, platform = process.platform) {
   if (source) {
@@ -75,7 +72,6 @@ function mergeEnvironment (target, source, platform = process.platform) {
  *
  * @param {string} name variable name
  * @param {string} [platform] target platform
- * @returns {boolean} whether this is a Datadog variable
  */
 function isDatadogEnvironmentName (name, platform = process.platform) {
   const normalized = platform === 'win32' ? name.toUpperCase() : name

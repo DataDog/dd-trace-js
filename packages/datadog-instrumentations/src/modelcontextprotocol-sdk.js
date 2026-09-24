@@ -4,7 +4,7 @@ const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('@modelcontextprotocol/sdk')) {
+for (const hook of getHooks('@modelcontextprotocol/sdk').values()) {
   addHook(hook, exports => exports)
 }
 

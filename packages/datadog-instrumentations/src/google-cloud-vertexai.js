@@ -13,7 +13,7 @@ function wrapGenerate (generate) {
     const ctx = {
       request,
       instance: this,
-      resource: [this.constructor.name, generate.name].join('.'),
+      resource: `${this.constructor.name}.${generate.name}`,
     }
 
     return vertexaiTracingChannel.tracePromise(generate, ctx, this, ...arguments)
@@ -29,7 +29,7 @@ function wrapGenerateStream (generateStream) {
     const ctx = {
       request,
       instance: this,
-      resource: [this.constructor.name, generateStream.name].join('.'),
+      resource: `${this.constructor.name}.${generateStream.name}`,
       stream: true,
     }
 

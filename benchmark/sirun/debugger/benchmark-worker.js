@@ -44,7 +44,6 @@ loadDevtoolsClient()
  * Load the production client with its pause handler wrapped so the application
  * can wait for post-resume formatting to finish.
  *
- * @returns {void}
  */
 function loadDevtoolsClient () {
   const session = require('../../../packages/dd-trace/src/debugger/devtools_client/session')
@@ -62,7 +61,6 @@ function loadDevtoolsClient () {
     const paused = /** @type {(event: object) => Promise<void>} */ (listener)
     /**
      * @param {object} event
-     * @returns {void}
      */
     function benchmarkPaused (event) {
       paused.call(this, event).then(markProbeHandled)
@@ -92,15 +90,16 @@ function markProbeHandled () {
  * @param {Record<string, unknown> | undefined} dd
  * @param {DebuggerSnapshot} snapshot
  * @param {string | undefined} processTags
- * @returns {void}
+ * @param {number} eventType
+ * @param {number} incompleteReasons
  */
-function sendAndCount (message, logger, dd, snapshot, processTags) {
+function sendAndCount (message, logger, dd, snapshot, processTags, eventType, incompleteReasons) {
   const captureKind = getCaptureKind(snapshot)
   if (preflightPending) {
     preflightPending = false
     Atomics.store(probeCounts, CAPTURE_KIND_INDEX, captureKind)
   } else {
-    send(message, logger, dd, snapshot, processTags)
+    send(message, logger, dd, snapshot, processTags, eventType, incompleteReasons)
     if (captureKind === EXPECTED_CAPTURE_KIND) Atomics.add(probeCounts, MATCHED_CAPTURE_KIND_INDEX, 1)
   }
 
@@ -112,7 +111,6 @@ function sendAndCount (message, logger, dd, snapshot, processTags) {
  * Classify output by the production capture shape.
  *
  * @param {DebuggerSnapshot} snapshot
- * @returns {number}
  */
 function getCaptureKind (snapshot) {
   if (snapshot.captures === undefined) return CAPTURE_KINDS.none

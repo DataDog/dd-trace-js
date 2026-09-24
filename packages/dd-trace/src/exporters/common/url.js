@@ -1,12 +1,15 @@
 'use strict'
 
 const net = require('node:net')
+const { format } = require('node:url')
 
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 
+const DEFAULT_SITE = 'datadoghq.com'
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
+
 /**
  * @param {string} hostname
- * @returns {boolean}
  */
 function isLoopbackHost (hostname) {
   // Gate the 127/8 prefix on an IPv4 literal so names such as 127.example.com cannot pass.
@@ -14,6 +17,71 @@ function isLoopbackHost (hostname) {
     hostname === '::1' ||
     hostname === '[::1]' ||
     (hostname.startsWith('127.') && net.isIPv4(hostname))
+}
+
+/**
+ * @param {string|undefined} protocol
+ * @param {string|undefined} hostname
+ */
+function canSendApiKey (protocol, hostname) {
+  return protocol === 'https:' || protocol === 'unix:' ||
+    typeof hostname === 'string' && isLoopbackHost(hostname)
+}
+
+/**
+ * @param {string} site
+ * @param {string} [intake]
+ * @returns {URL | undefined}
+ */
+function createSiteUrl (site, intake) {
+  const normalizedSite = normalizeSite(site)
+  if (normalizedSite === undefined) return
+
+  const hostname = `${intake === undefined ? '' : `${intake}.`}${normalizedSite}`
+  if (hostname.length > 253) return
+
+  try {
+    const url = new URL(format({
+      protocol: 'https:',
+      hostname,
+    }))
+    if (
+      url.hostname !== hostname ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      return
+    }
+    return url
+  } catch {}
+}
+
+/**
+ * Normalizes a Datadog site as a DNS suffix.
+ *
+ * @param {string | undefined} site
+ * @returns {string | undefined}
+ */
+function normalizeSite (site) {
+  if (site === undefined) return DEFAULT_SITE
+  if (typeof site !== 'string') return
+  for (let index = 0; index < site.length; index++) {
+    if (site.charCodeAt(index) > 127) return
+  }
+
+  const normalized = site.trim().toLowerCase() || DEFAULT_SITE
+  if (normalized.length > 253) return
+
+  const labels = normalized.split('.')
+  for (const label of labels) {
+    if (!DNS_LABEL.test(label)) return
+  }
+
+  return normalized
 }
 
 /**
@@ -43,4 +111,4 @@ function parseUrl (urlObjOrString) {
   return url
 }
 
-module.exports = { isLoopbackHost, parseUrl }
+module.exports = { canSendApiKey, createSiteUrl, isLoopbackHost, normalizeSite, parseUrl }

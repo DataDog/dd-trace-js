@@ -85,8 +85,9 @@ describe('Plugin', () => {
     })
 
     describe('patching behavior with experimental_telemetry options', () => {
-      if (semifies(realVersion, '>=6.0.0')) {
-        it('preserves the original model error with a dd-trace OTel tracer', async () => {
+      {
+        const v6Test = semifies(realVersion, '>=6.0.0') ? it : it.skip
+        v6Test('preserves the original model error with a dd-trace OTel tracer', async () => {
           const originalError = new Error('original model error')
           const model = {
             specificationVersion: 'v3',
@@ -256,8 +257,9 @@ describe('Plugin', () => {
         assert.ok(result.text, 'Expected result to be truthy')
       })
 
-      if (semifies(realVersion, '>=6.0.0')) {
-        it('delegates the complete span interface to the original span', async () => {
+      {
+        const v6Test = semifies(realVersion, '>=6.0.0') ? it : it.skip
+        v6Test('delegates the complete span interface to the original span', async () => {
           const calls = []
           const context = { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 }
           const originalError = new Error('model error')
@@ -665,8 +667,7 @@ describe('Plugin', () => {
         })
       })
 
-      let tools
-      let maxStepsArg
+      const isLegacy = semifies(realVersion, '<5.0.0')
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -674,32 +675,17 @@ describe('Plugin', () => {
         },
         required: ['location'],
       })
-      if (semifies(realVersion, '>=5.0.0')) {
-        tools = {
-          weather: ai.tool({
-            description: 'Get the weather in a given location',
-            inputSchema: toolSchema,
-            execute: async ({ location }) => ({
-              location,
-              temperature: 72,
-            }),
-          }),
-        }
-
-        maxStepsArg = { stopWhen: ai.stepCountIs(5) }
-      } else {
-        tools = [ai.tool({
-          id: 'weather',
+      const tools = {
+        weather: ai.tool({
           description: 'Get the weather in a given location',
-          parameters: toolSchema,
+          ...(isLegacy ? { parameters: toolSchema } : { inputSchema: toolSchema }),
           execute: async ({ location }) => ({
             location,
             temperature: 72,
           }),
-        })]
-
-        maxStepsArg = { maxSteps: 5 }
+        }),
       }
+      const maxStepsArg = isLegacy ? { maxSteps: 5 } : { stopWhen: ai.stepCountIs(5) }
 
       const result = await ai.generateText({
         model: openai('gpt-4o-mini'),

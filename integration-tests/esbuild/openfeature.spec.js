@@ -30,9 +30,7 @@ esbuildVersions.forEach((version) => {
       agent = await new FakeAgent().start()
     })
 
-    afterEach(() => {
-      agent.stop()
-    })
+    afterEach(() => agent.stop())
 
     it('should not crash build after installing with yarn', () => {
       execSync('node esbuild/build.esm-hono-output-esm.mjs', { cwd })

@@ -1,9 +1,24 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { getOpenAIModelProvider } = require('../../src/llmobs/plugins/openai/utils')
+const { extractContentParts, getOpenAIModelProvider } = require('../../src/llmobs/plugins/openai/utils')
 const OpenAiLLMObsPlugin = require('../../src/llmobs/plugins/openai')
 const { UNKNOWN_MODEL_PROVIDER } = require('../../src/llmobs/constants/tags')
+
+describe('extractContentParts', () => {
+  it('preserves empty text and formats every multimodal fallback', () => {
+    assert.deepStrictEqual(extractContentParts([
+      { type: 'text' },
+      { type: 'image_url' },
+      { type: 'input_audio' },
+      { type: 'input_audio', input_audio: { data: 'aGVsbG8=', format: 'wav' } },
+      null,
+    ]), {
+      content: '\n[image]\n[audio]\n[]',
+      audioParts: [{ content: 'aGVsbG8=', mimeType: 'audio/wav' }],
+    })
+  })
+})
 
 describe('getOpenAIModelProvider', () => {
   it('returns openai for openai.com URLs', () => {

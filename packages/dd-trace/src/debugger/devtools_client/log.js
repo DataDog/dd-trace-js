@@ -13,7 +13,9 @@ const { config: { debug = false, logLevel } = {}, logPort } = workerData ?? {}
 const LEVELS = ['error', 'warn', 'info', 'debug']
 const on = (level, ...args) => {
   if (typeof args[0] === 'function') {
-    args = [args[0]()]
+    // Resolve the message only now that we know it will be logged. Keep the remaining arguments: the main thread
+    // logger reads a trailing error as the cause of the log record.
+    args[0] = args[0]()
   }
   logPort.postMessage({ level, args })
 }

@@ -3,5 +3,5 @@
 const { addHook } = require('./helpers/instrument')
 
 // Empty hook just to make the plugin load.
-// TODO: Add version range when the module is released on npm.
-addHook({ name: 'dd-trace-api' }, api => api)
+// Version 1.0.1 re-publishes tracer initialization after the plugin subscribes.
+addHook({ name: 'dd-trace-api', versions: ['>=1.0.1'] }, api => api)

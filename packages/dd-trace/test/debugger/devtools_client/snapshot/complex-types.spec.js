@@ -8,6 +8,8 @@ const NODE_20_PLUS = require('semver').gte(process.version, '20.0.0')
 
 const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
+
+const { INCOMPLETE_REASON } = require('../../../../src/debugger/guardrail-metrics')
 const {
   session,
   getTargetCodePath,
@@ -23,6 +25,7 @@ const target = getTargetCodePath(__filename)
 describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', function () {
   describe('complex types', function () {
     let state
+    let incomplete
 
     beforeEach(enable(__filename))
 
@@ -35,10 +38,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
       session.once('Debugger.paused', async ({ params }) => {
         assert.strictEqual(params.hitBreakpoints.length, 1)
 
-        resolve((await getLocalStateForCallFrame(
+        const result = await getLocalStateForCallFrame(
           params.callFrames[0],
-          { ...DEFAULT_CAPTURE_LIMITS, maxFieldCount: Number.MAX_SAFE_INTEGER })
-        ).processLocalState())
+          { ...DEFAULT_CAPTURE_LIMITS, maxFieldCount: Number.MAX_SAFE_INTEGER }
+        )
+        incomplete = result.incomplete
+        resolve(result.processLocalState())
       })
 
       await setAndTriggerBreakpoint(target, 10)
@@ -238,6 +243,10 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'string',
         truncated: true,
       })
+    })
+
+    it('should record the string length limit as an incomplete capture reason', function () {
+      assert.strictEqual(incomplete.reasons & INCOMPLETE_REASON.STRING_LENGTH, INCOMPLETE_REASON.STRING_LENGTH)
     })
 
     it('Function', function () {

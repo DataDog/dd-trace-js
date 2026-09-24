@@ -6,6 +6,19 @@ module.exports = [
   {
     module: {
       name: 'playwright',
+      versionRange: '>=1.38.0',
+      filePath: 'lib/index.js',
+    },
+    astQuery: 'CallExpression[callee.object.name="videos"][callee.property.name="map"] > ' +
+      'ArrowFunctionExpression[async]',
+    functionQuery: {
+      kind: 'Async',
+    },
+    channelName: 'saveAutomaticVideo',
+  },
+  {
+    module: {
+      name: 'playwright',
       versionRange: '>=1.38.0 <1.51.0',
       filePath: 'lib/index.js',
     },
@@ -82,15 +95,23 @@ module.exports = [
   },
   {
     module: {
+      name: 'playwright',
+      versionRange: '>=1.60.0',
+      filePath: 'lib/runner/index.js',
+    },
+    functionQuery: {
+      functionName: 'filterForShard',
+      kind: 'Sync',
+    },
+    channelName: 'filterForShard',
+  },
+  {
+    module: {
       name: 'playwright-core',
       versionRange: '>=1.60.0',
       filePath: 'lib/coreBundle.js',
     },
-    astQuery: 'AssignmentExpression[left.name="Page2"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async], ' +
-      'VariableDeclarator[id.name="Page2"] > ClassExpression > ClassBody > ' +
-      'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async], ' +
-      'ClassDeclaration[id.name="Page2"] > ClassBody > ' +
+    astQuery: 'ClassExpression[id.name="_Page"] > ClassBody > ' +
       'MethodDefinition[kind="method"][key.name="goto"] > FunctionExpression[async]',
     functionQuery: {
       methodName: 'goto',

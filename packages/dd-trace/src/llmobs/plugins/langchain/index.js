@@ -46,6 +46,13 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  error (ctx) {
+    // NodeInterrupt or GraphInterrupt "errors" for control flow, do not mark as real errors
+    if (ctx.error?.is_bubble_up) return
+
+    super.error(ctx)
+  }
+
   getLLMObsSpanRegisterOptions (ctx) {
     const span = ctx.currentStore?.span
     const spanContext = span?.context()

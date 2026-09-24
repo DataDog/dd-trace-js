@@ -11,10 +11,12 @@ const {
 const {
   clearPoolWaitTime,
   dispatchesAcquireSynchronously,
+  getPoolAcquireCapture,
   isPoolQueryAcquire,
   runOutsidePoolQueryAcquire,
   runPoolAcquireError,
   runWithPoolWait,
+  setPoolAcquireCaptureWaitTime,
   takePoolWaitTime,
   wrapPoolAcquireCarrier,
   wrapPoolQueryMethod,
@@ -69,6 +71,19 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
      * @returns {unknown}
      */
     const wrappedConnect = function (callback) {
+      const capture = getPoolAcquireCapture()
+      if (capture !== undefined && typeof callback !== 'function') {
+        const start = acquireStart(this)
+        const result = connect.apply(this, arguments)
+        return result.then(client => {
+          setPoolAcquireCaptureWaitTime(capture, acquireWait(start))
+          return client
+        }, error => {
+          setPoolAcquireCaptureWaitTime(capture, acquireWait(start))
+          throw error
+        })
+      }
+
       // Pool.query always supplies a callback, so a missing callback is an explicit acquire.
       if (typeof callback !== 'function') {
         if (!poolAcquireStartCh.hasSubscribers) {

@@ -1,4 +1,5 @@
 /* eslint-disable */
+const { getTestEnvironment } = require('../support/test-environment')
 
 it('tests multiple origins', () => {
   // Visit first site
@@ -7,7 +8,7 @@ it('tests multiple origins', () => {
     .should('have.text', 'Hello World')
 
   // Visit second site
-  cy.origin(Cypress.env('BASE_URL_SECOND'), () => {
+  cy.origin(getTestEnvironment('BASE_URL_SECOND'), () => {
     cy.visit('/')
     cy.get('.hella-world').should('have.text', 'Hella World')
   });

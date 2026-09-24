@@ -24,6 +24,8 @@ fastify.get('/:name', function (request) {
   const emptyArr = []
   const arr = [{ a: 1 }, 2, 3, 4, 5]
   const emptyObj = {}
+  const maxObj = { a: 1, b: 2, c: 3, d: 4, e: 5 }
+  Object.defineProperty(maxObj, 'hidden', { value: 6 })
   const obj = {
     foo: {
       baz: 42,
@@ -35,6 +37,8 @@ fastify.get('/:name', function (request) {
     get baz () {
       return 'This is a getter!'
     },
+    qux: 42,
+    quux: false,
     [inspect.custom] () {
       return 'This is a custom inspect!'
     },
@@ -44,8 +48,31 @@ fastify.get('/:name', function (request) {
       return 'This is a proxy!'
     },
   })
+  const objectWithProxyPrototype = Object.create(new Proxy({}, {
+    getPrototypeOf () {
+      throw new Error('Proxy prototype trap should not run')
+    },
+  }))
+  Object.defineProperties(objectWithProxyPrototype, {
+    a: { value: 1, enumerable: true },
+    b: { value: 2, enumerable: true },
+    c: { value: 3, enumerable: true },
+    d: { value: 4, enumerable: true },
+    e: { value: 5, enumerable: true },
+    f: { value: 6, enumerable: true },
+  })
+  const sideEffectfulObject = {
+    a: 1,
+    b: 2,
+    get [Symbol.toStringTag] () {
+      throw new Error('Symbol.toStringTag getter should not run')
+    },
+    [Symbol('extra')]: 4,
+  }
   const circular = {}
   circular.circular = circular
+  const wideCircular = { circular: undefined, a: 1, b: 2, c: 3, d: 4, e: 5 }
+  wideCircular.circular = wideCircular
   const ins = new CustomClass()
   const p = Promise.resolve(42)
   const arrowFn = () => {}
@@ -80,6 +107,10 @@ class CustomClass {
 
   constructor () {
     this.c = 3
+    this.d = 4
+    this.e = 5
+    this.f = 6
+    this.g = 7
   }
 
   get [Symbol.toStringTag] () {

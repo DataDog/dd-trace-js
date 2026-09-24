@@ -5,7 +5,8 @@ const ddAfterSpec = require('dd-trace/ci/cypress/after-spec')
 
 module.exports = (on, config) => {
   if (process.env.CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN) {
-    require('cypress-fail-fast/plugin')(on, config)
+    const createPlugin = require('cypress-fail-fast/plugin')
+    createPlugin(on, config)
   }
   if (process.env.SPEC_PATTERN) {
     config.testFiles = process.env.SPEC_PATTERN.replace('cypress/e2e/', '')
@@ -24,5 +25,6 @@ module.exports = (on, config) => {
       return ddAfterSpec(...args)
     })
   }
-  return require('dd-trace/ci/cypress/plugin')(on, config)
+  const createPlugin = require('dd-trace/ci/cypress/plugin')
+  return createPlugin(on, config)
 }

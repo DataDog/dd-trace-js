@@ -3,6 +3,7 @@
 const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
 const propagationHash = require('../propagation-hash')
+const { truncateString } = require('../util')
 const StoragePlugin = require('./storage')
 
 // Unreserved RFC 3986 set that `encodeURIComponent` leaves untouched (a conservative subset:
@@ -46,7 +47,6 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} serviceName
    * @param {import('../../../..').Span} span
    * @param {object} peerData
-   * @returns {string}
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
     const spanTags = span.context().getTags()
@@ -70,7 +70,6 @@ class DatabasePlugin extends StoragePlugin {
   /**
    * @param {string} tracerService
    * @param {object} peerData
-   * @returns {string}
    */
   #getDbmServiceName (tracerService, peerData) {
     if (this._tracerConfig.spanComputePeerService) {
@@ -123,7 +122,6 @@ class DatabasePlugin extends StoragePlugin {
    * @param {string} query
    * @param {string} serviceName
    * @param {boolean} disableFullMode
-   * @returns {string}
    */
   injectDbmQuery (span, query, serviceName, disableFullMode = false) {
     const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
@@ -139,7 +137,6 @@ class DatabasePlugin extends StoragePlugin {
 
   /**
    * @param {string} query
-   * @returns {string}
    */
   maybeTruncate (query) {
     const maxLength = typeof this.config.truncate === 'number'
@@ -147,7 +144,7 @@ class DatabasePlugin extends StoragePlugin {
       : 5000 // same as what the agent does
 
     if (this.config.truncate && query && query.length > maxLength) {
-      query = `${query.slice(0, maxLength - 3)}...`
+      query = truncateString(query, maxLength, '...')
     }
 
     return query
@@ -156,7 +153,6 @@ class DatabasePlugin extends StoragePlugin {
 
 /**
  * @param {string | number | undefined | null} value
- * @returns {string}
  */
 function encode (value) {
   if (!value) return ''

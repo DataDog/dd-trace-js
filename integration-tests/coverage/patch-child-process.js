@@ -55,7 +55,6 @@ function patchExecOptions (options) {
  * specified. Inject the coverage directory only in that caller-provided-env case, and only when
  * coverage is active, so a worker spawned with a custom env is still recorded.
  *
- * @returns {void}
  */
 function installWorkerPatch () {
   const OriginalWorker = workerThreads.Worker
@@ -70,9 +69,6 @@ function installWorkerPatch () {
   }
 }
 
-/**
- * @returns {void}
- */
 function installPatch () {
   if (!isCoverageActive() || childProcess[PATCHED]) return
 

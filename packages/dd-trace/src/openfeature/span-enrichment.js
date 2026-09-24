@@ -30,7 +30,6 @@ class SpanEnrichmentState {
    * Add a serial ID from a flag evaluation.
    *
    * @param {number} serialId - The serial ID to add
-   * @returns {boolean} True if added, false if limit reached
    */
   addSerialId (serialId) {
     if (this._serialIds.size >= MAX_SERIAL_IDS) {
@@ -47,7 +46,6 @@ class SpanEnrichmentState {
    *
    * @param {string} targetingKey - The targeting key (will be hashed)
    * @param {number} serialId - The serial ID associated with this evaluation
-   * @returns {boolean} True if added, false if limit reached
    */
   addSubject (targetingKey, serialId) {
     const hashedKey = hashTargetingKey(targetingKey)
@@ -77,7 +75,6 @@ class SpanEnrichmentState {
    *
    * @param {string} flagKey - The flag key
    * @param {boolean|string|number|object} defaultValue - The default value used
-   * @returns {boolean} True if added, false if limit reached
    */
   addDefault (flagKey, defaultValue) {
     if (this._defaults.has(flagKey)) {
@@ -106,7 +103,6 @@ class SpanEnrichmentState {
    * Note: _subjects is not checked because addSubject() is never called without first
    * calling addSerialId(), so _subjects having data necessitates _serialIds having data.
    *
-   * @returns {boolean} True if there is data to add
    */
   hasData () {
     return this._serialIds.size > 0 || this._defaults.size > 0

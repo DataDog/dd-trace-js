@@ -248,7 +248,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * Maps a DD span.kind string to an OTLP SpanKind enum value.
    *
    * @param {string | undefined} kind - DD span kind string
-   * @returns {number} OTLP SpanKind enum value
    */
   #mapSpanKind (kind) {
     if (!kind) return SPAN_KIND_UNSPECIFIED
@@ -340,7 +339,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {Identifier} identifier - DD Identifier
    * @param {number} targetLength - Target byte length (16 for trace ID, 8 for span ID)
-   * @returns {string} Hex-encoded string of the specified length
    */
   #idToBytes (identifier, targetLength) {
     const buffer = identifier.toBuffer()
@@ -363,7 +361,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {string | undefined} hexString - Hex string to normalize
    * @param {number} targetLength - Target byte length
-   * @returns {string} Hex-encoded string of the specified length
    */
   #hexToBytes (hexString, targetLength) {
     if (!hexString) return '0'.repeat(targetLength * 2)

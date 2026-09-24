@@ -1,14 +1,18 @@
 import { createVitest } from 'vitest/node'
+import { getVitestOptions, usesModeArgument } from './options.mjs'
 
 async function runProgrammaticTests () {
   let vitest
   try {
-    vitest = await createVitest('test', {
+    const options = getVitestOptions({
       test: {
         environment: 'node',
       },
       watch: false,
     })
+    vitest = usesModeArgument
+      ? await createVitest('test', options)
+      : await createVitest(options)
 
     await vitest.standalone()
     await vitest.runTestFiles(['./test-programmatic-api-first.mjs'])

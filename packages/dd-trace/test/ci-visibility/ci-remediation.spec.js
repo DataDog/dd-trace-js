@@ -70,6 +70,16 @@ describe('test optimization CI remediation', () => {
     )
   })
 
+  it('formats sparse CI locations without a leading separator', () => {
+    const workflow = buildCiRemediation({ framework: 'jest', ciWiring: { workflow: 'CI' } })
+    const step = buildCiRemediation({ framework: 'jest', ciWiring: { step: 'Run tests' } })
+    const fallback = buildCiRemediation({ framework: 'jest' })
+
+    assert.strictEqual(workflow.location, 'workflow "CI"')
+    assert.strictEqual(step.location, 'step "Run tests"')
+    assert.strictEqual(fallback.location, 'the selected CI test step')
+  })
+
   it('does not recommend agentless variables when CI records Agent transport evidence', () => {
     const remediation = buildCiRemediation({
       framework: 'jest',

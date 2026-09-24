@@ -232,7 +232,7 @@ describe('EventBridge', function () {
         assertObjectContains(putEventsSpanMeta, {
           'pathway.hash': expectedHash,
         })
-      })
+      }, { timeoutMs: 5000 })
     }
 
     function getEventBridgeClient () {

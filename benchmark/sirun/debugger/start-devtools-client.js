@@ -72,17 +72,26 @@ assert.equal(
 
 const breakpoint = { sourceFile, line }
 // WARNING: Keep this fixture aligned with dd-trace's default config, apart from benchmark-specific overrides.
+const captureTimeoutMs = Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000')
+const redactedIdentifiers = []
+const redactionExcludedIdentifiers = []
 const config = {
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
   DD_TRACE_GIT_METADATA_ENABLED: false,
   debug: false,
   dynamicInstrumentation: {
-    captureTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000'),
+    captureTimeoutMs,
+    DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: captureTimeoutMs,
     enabled: true,
+    DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
     probeFile: undefined,
-    redactedIdentifiers: [],
-    redactionExcludedIdentifiers: [],
+    DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
+    redactedIdentifiers,
+    DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: redactedIdentifiers,
+    redactionExcludedIdentifiers,
+    DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: redactionExcludedIdentifiers,
     uploadIntervalSeconds: 1,
+    DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
   },
   env: undefined,
   hostname: 'debugger-benchmark',
@@ -99,7 +108,6 @@ const config = {
  *
  * @param {URL} url
  * @param {(error: Error | null, info: { endpoints: string[] }) => void} callback
- * @returns {void}
  */
 function fetchAgentInfo (url, callback) {
   process.nextTick(callback, null, { endpoints: [DEBUGGER_INPUT_V2] })

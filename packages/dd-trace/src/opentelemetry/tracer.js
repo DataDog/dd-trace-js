@@ -3,16 +3,40 @@
 const api = require('@opentelemetry/api')
 const { sanitizeAttributes } = require('../../../../vendor/dist/@opentelemetry/core')
 
+const { AUTO_KEEP, AUTO_REJECT } = require('../../../../ext/priority')
 const tracer = require('../../')
 
 const id = require('../id')
 const log = require('../log')
-const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
 const { normalizeLinkContext } = require('./span-helpers')
+
+/**
+ * @param {number} traceparentSampled
+ * @param {number | undefined} tracestateSamplingPriority
+ * @param {string | null} origin
+ * @returns {import('../priority_sampler').SamplingPriority}
+ */
+function getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin) {
+  const fromRumWithoutPriority = tracestateSamplingPriority === undefined && origin === 'rum'
+
+  let samplingPriority =
+    /** @type {import('../priority_sampler').SamplingPriority} */ (tracestateSamplingPriority ?? AUTO_KEEP)
+  if (!fromRumWithoutPriority) {
+    if (traceparentSampled === 0 &&
+        (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
+      samplingPriority = AUTO_REJECT
+    } else if (traceparentSampled === 1 &&
+              (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+      samplingPriority = AUTO_KEEP
+    }
+  }
+
+  return samplingPriority
+}
 
 class Tracer {
   constructor (library, config, tracerProvider) {
@@ -76,7 +100,7 @@ class Tracer {
         Object.assign(meta, otherPropagatedTags)
         // Guard against an undefined/empty `s:` field that would result in NaN.
         const tracestateSamplingPriority = samplingPriorityTs ? Math.trunc(samplingPriorityTs) : undefined
-        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
+        samplingPriority = getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
       } else {
         log.debug('No dd list member in tracestate from incoming request:', ts)
       }

@@ -7,6 +7,7 @@ module.exports = {
   ACTION_TAG_KEY: 'ai_guard.action',
   REASON_TAG_KEY: 'ai_guard.reason',
   BLOCKED_TAG_KEY: 'ai_guard.blocked',
+  REDACTED_TAG_KEY: 'ai_guard.redacted',
   EVENT_TAG_KEY: 'ai_guard.event',
   META_STRUCT_KEY: 'ai_guard',
 
@@ -27,4 +28,5 @@ module.exports = {
   ERROR_TYPE_CLIENT: 'client_error',
   ERROR_TYPE_STATUS: 'bad_status',
   ERROR_TYPE_RESPONSE: 'bad_response',
+  ERROR_TYPE_REDACTION: 'redaction_error',
 }

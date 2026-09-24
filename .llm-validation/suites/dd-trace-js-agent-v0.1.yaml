@@ -1,0 +1,173 @@
+name: dd-trace-js-agent
+version: "0.1"
+
+# All inputs are answer-only: the agent may inspect the repository to ground an explanation, but no case asks it
+# to modify files, execute commands, or complete an implementation. Content cases exercise AGENTS.md guidance.
+# Prompts bound the response size so omissions remain easy for the judge to identify.
+# Every repository-specific command and path is verified here because the comparative judge has no repository access.
+cases:
+  # AGENTS.md — Setup and Commands; Development Workflow.
+  - id: dd-trace-js-package-manager-001
+    files: [AGENTS.md]
+    input: |
+      I changed one dd-trace-js unit spec and need to install dependencies and run just that test.
+      Which package manager and commands should I use? Should I run the root test script too?
+      Answer in at most 4 bullets.
+    expected_criteria:
+      - Uses yarn install to install dependencies.
+      - Runs the changed spec with ./node_modules/.bin/mocha path/to/test.spec.js.
+      - Uses npm, not yarn, for any test script it recommends.
+      - Does not recommend root npm test because it is intentionally disabled.
+    bad_signals:
+      - Uses yarn to run a test script.
+      - Recommends root npm test.
+      - Runs a broad suite before the changed spec.
+
+  # AGENTS.md — Testing: plugin and service-backed plugin test commands.
+  - id: dd-trace-js-plugin-tests-002
+    files: [AGENTS.md]
+    input: |
+      I changed the amqplib plugin and its tests require the docker compose service named rabbitmq.
+      Give me only the commands needed to run that plugin's service-backed tests, including the exporter cleanup.
+    expected_criteria:
+      - Unsets OTEL_TRACES_EXPORTER, OTEL_LOGS_EXPORTER, and OTEL_METRICS_EXPORTER.
+      - Starts the service with docker compose up -d rabbitmq.
+      - Runs SERVICES="rabbitmq" PLUGINS="amqplib" npm run test:plugins:ci.
+    bad_signals:
+      - Uses yarn to run the plugin test script.
+      - Omits SERVICES="rabbitmq" from the service-backed test command.
+      - Omits PLUGINS="amqplib" from the service-backed test command.
+      - Uses PLUGINS="amqplib" npm run test:plugins instead of the service-backed command.
+
+  # AGENTS.md — Testing: strict assertions, rejected promises, pinned errors, and boundary values.
+  - id: dd-trace-js-test-boundaries-004
+    files: [AGENTS.md]
+    input: |
+      I fixed a limit that accepts up to 32 entries and rejects additional entries with ERR_LIMIT.
+      What boundary tests and assertion style should cover it? Answer in at most 4 bullets.
+    expected_criteria:
+      - Tests 32 as the last accepted value and 33 as the first rejected value.
+      - Uses node:assert/strict.
+      - Uses assert.rejects for the rejected promise.
+      - Pins the rejected error code to ERR_LIMIT.
+    bad_signals:
+      - Does not test 32 as an accepted value.
+      - Does not test 33 as the first rejected value.
+      - Uses manual try/catch plus assert.fail without explaining why assert.rejects is unsuitable.
+      - Does not assert the error code.
+
+  # AGENTS.md — Development Workflow and Testing: real entry points and observable output.
+  - id: dd-trace-js-real-path-tests-007
+    files: [AGENTS.md]
+    input: |
+      A plugin regression test bypasses the normal loader, replaces the tracer with a small stub, invokes a plugin
+      method directly, and only asserts calls to the stub. Is this sufficient, and what should replace it?
+      Answer in at most 4 bullets.
+    expected_criteria:
+      - States that the existing test is insufficient because it bypasses the real production entry point.
+      - Replaces it with a test that exercises the real production entry point.
+      - Asserts observable output rather than calls made to the tracer stub.
+      - Does not add production exports or hooks solely to make the test possible.
+    bad_signals:
+      - Accepts direct invocation against a stub tracer as sufficient.
+      - Tests only internal calls instead of observable behavior.
+      - Changes the production API solely for the test.
+
+  # AGENTS.md — Debugging Failures.
+  - id: dd-trace-js-hung-ci-009
+    files: [AGENTS.md]
+    input: |
+      After my change, CI prints a TypeError and then hangs until timeout. Can I classify it as flaky and raise the
+      timeout? Answer in at most 4 bullets.
+    expected_criteria:
+      - Investigates the TypeError as the last meaningful error before treating the job as merely slow.
+      - Inspects for leaked handles before treating the job as merely slow.
+      - >
+        Requires evidence before calling the failure flaky, such as a tracked known flake or a passing rerun plus a
+        credible nondeterminism mechanism.
+      - Rejects increasing the timeout to hide the hang and says to fix the underlying cause.
+    bad_signals:
+      - Calls the failure flaky merely because the job timed out.
+      - Assumes a leaked handle without inspecting one.
+      - Recommends increasing the timeout without investigating the earlier error.
+
+  # AGENTS.md — Cross-Cutting Configuration Changes: steps 1, 2, 4, 5, and unit suffixes.
+  - id: dd-trace-js-new-configuration-010
+    files: [AGENTS.md]
+    input: |
+      I am adding a DD_ environment variable for a byte limit that is also exposed through tracer.init().
+      Which core configuration files must change, when does telemetry change, and how should the option be named?
+      Answer in at most 5 bullets.
+    expected_criteria:
+      - Adds the default in packages/dd-trace/src/config/defaults.js.
+      - Maps the environment variable in packages/dd-trace/src/config/index.js.
+      - Updates packages/dd-trace/src/config/supported-configurations.json.
+      - Adds the telemetry mapping when applicable.
+      - Uses a unit suffix, such as maxBytes.
+    bad_signals:
+      - Adds the environment variable without a default.
+      - Omits the environment-variable mapping in packages/dd-trace/src/config/index.js.
+      - Omits packages/dd-trace/src/config/supported-configurations.json.
+      - Treats telemetry as mandatory even when it is not applicable.
+      - Uses a size option name without a unit suffix.
+
+  # AGENTS.md — Production Safety and Performance: performance-motivated complexity.
+  - id: dd-trace-js-hot-path-review-011
+    files: [AGENTS.md]
+    input: |
+      A production hot-path change replaces values.map(format) with a more complex loop solely because it is expected
+      to be faster. What evidence is required, and when should the readable implementation remain? Answer in at most
+      4 bullets.
+    expected_criteria:
+      - Requires a focused, reproducible microbenchmark before accepting the complexity.
+      - Keeps the readable implementation when results are within roughly ±2%.
+      - Requires commit-body justification for a result around 5%.
+      - Keeps gains of at least 10% only when they are reproducible and reported with numbers.
+    bad_signals:
+      - Accepts the loop as faster without benchmark evidence.
+      - Treats any measured improvement as sufficient to keep the more complex code.
+
+  # AGENTS.md — Production Safety and Performance: no async/await in shipped production code.
+  - id: dd-trace-js-production-async-012
+    files: [AGENTS.md]
+    input: |
+      May I add async/await to ordinary shipped tracer production code?
+      Answer in at most 3 bullets and mention every stated exception.
+    expected_criteria:
+      - Rejects adding async/await to ordinary shipped production code.
+      - Notes that async/await is allowed in tests.
+      - Notes that async/await is allowed in worker threads.
+    bad_signals:
+      - Accepts adding async/await to ordinary shipped production code.
+      - Claims async/await is forbidden in tests.
+      - Claims async/await is forbidden in worker threads.
+
+  # AGENTS.md — Backportability and Cross-Cutting Configuration Changes: public surfaces, docs, and tests.
+  - id: dd-trace-js-public-config-surfaces-013
+    files: [AGENTS.md]
+    input: |
+      I am adding a public, non-experimental tracer.init() option that is not version-specific.
+      Which type, documentation, and test surfaces must change? Answer in at most 3 bullets.
+    expected_criteria:
+      - Updates both supported public TypeScript surfaces.
+      - Documents the option in docs/API.md.
+      - Tests the option in packages/dd-trace/test/config/index.spec.js.
+    bad_signals:
+      - Updates only one public TypeScript surface.
+      - Omits docs/API.md.
+      - Omits packages/dd-trace/test/config/index.spec.js.
+
+  # AGENTS.md — Production Safety and Performance: no promises in shipped production code.
+  - id: dd-trace-js-production-promises-014
+    files: [AGENTS.md]
+    input: |
+      May I add a promise-returning helper without async syntax to ordinary shipped tracer production code?
+      Answer in at most 3 bullets and mention every stated exception.
+    expected_criteria:
+      - Rejects adding a promise-returning helper to ordinary shipped production code.
+      - Notes that promises are allowed in tests.
+      - Notes that promises are allowed in worker threads.
+    bad_signals:
+      - Accepts adding a promise-returning helper to ordinary shipped production code.
+      - Claims promises are forbidden in tests.
+      - Claims promises are forbidden in worker threads.

@@ -44,19 +44,21 @@ describe('jest-test-concurrent-hook-http', () => {
 })
 
 describe('jest-test-concurrent-each-http', () => {
-  test.concurrent.each([
+  const parameterizedTest = test.concurrent.each([
     ['first each row', 30],
     ['second each row', 10],
-  ])('%s http is linked to its test span', async (_label, waitMs) => {
+  ])
+  parameterizedTest('%s http is linked to its test span', async (_label, waitMs) => {
     await wait(waitMs)
     const statusCode = await httpRequest('/info')
     expect(statusCode).toBe(200)
   })
 
-  test.concurrent.each([
+  const parameterizedMetadataTest = test.concurrent.each([
     [1, 2, 3],
     [2, 3, 5],
-  ])('parameterized metadata is reported', (a, b, expected) => {
+  ])
+  parameterizedMetadataTest('parameterized metadata is reported', (a, b, expected) => {
     expect(a + b).toBe(expected)
   })
 })

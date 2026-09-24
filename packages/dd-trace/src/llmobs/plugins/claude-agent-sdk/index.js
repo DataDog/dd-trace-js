@@ -18,12 +18,15 @@ function getToolOutputText (raw) {
   if (raw == null) return
 
   if (Array.isArray(raw)) {
-    const output = []
+    let output = ''
+    let separator = ''
     for (const block of raw) {
       const text = getToolOutputText(block)
-      if (text) output.push(text)
+      if (!text) continue
+      output += separator + text
+      separator = '\n'
     }
-    return output.join('\n') || undefined
+    return output
   }
 
   if (raw.type === 'tool_result') return getToolOutputText(raw.content)

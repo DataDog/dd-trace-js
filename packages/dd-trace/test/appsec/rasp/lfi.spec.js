@@ -41,11 +41,9 @@ describe('RASP - lfi.js', () => {
 
     config = {
       appsec: {
-        stackTrace: {
-          enabled: true,
-          maxStackTraces: 2,
-          maxDepth: 42,
-        },
+        DD_APPSEC_STACK_TRACE_ENABLED: true,
+        DD_APPSEC_MAX_STACK_TRACES: 2,
+        DD_APPSEC_MAX_STACK_TRACE_DEPTH: 42,
       },
     }
   })

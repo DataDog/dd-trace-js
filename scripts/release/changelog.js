@@ -12,7 +12,7 @@ const CONVENTIONAL_PATTERN = new RegExp(
   '^(?:(revert)(!)?: )?' +
     String.raw`(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(?:\(([^)]+)\))?(!)?: (.+)$`
 )
-const PULL_REQUEST_PATTERN = /\s+\(#([0-9]+)\)$/
+const PULL_REQUEST_PATTERN = /([ \t])\(#([0-9]+)\)$/
 const REFERENCE_PATTERN = /#([0-9]+)/g
 const GITHUB_URL = 'https://github.com'
 const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
@@ -259,7 +259,6 @@ function parseChange (entry, options = {}) {
 /**
  * @param {string[]} paths
  * @param {ChangedFile[]} changedFiles
- * @returns {void}
  */
 function appendChangedPaths (paths, changedFiles) {
   for (const file of changedFiles) {
@@ -290,7 +289,6 @@ function isInternalOnly (files) {
 /**
  * @param {Map<string, Contributor>} contributors
  * @param {Contributor[]} additions
- * @returns {void}
  */
 function addContributors (contributors, additions) {
   for (const contributor of additions) {
@@ -342,9 +340,12 @@ function parsePullRequest (subject) {
     return { subject, pr: '' }
   }
 
+  let subjectEnd = match.index
+  while (subjectEnd > 0 && (subject[subjectEnd - 1] === ' ' || subject[subjectEnd - 1] === '\t')) subjectEnd--
+
   return {
-    subject: subject.slice(0, match.index),
-    pr: match[1],
+    subject: subject.slice(0, subjectEnd),
+    pr: match[2],
   }
 }
 
@@ -410,17 +411,17 @@ function selectProduct (scopes) {
  */
 function selectLabeledProduct (labels) {
   const labelSet = new Set(labels)
-  const selected = []
+  let selected
   for (const [product, , productLabels = []] of PRODUCTS) {
     for (const label of productLabels) {
       if (labelSet.has(label)) {
-        selected.push(product)
+        selected = selected === undefined ? product : `${selected} / ${product}`
         break
       }
     }
   }
 
-  return selected.length > 0 ? selected.join(' / ') : undefined
+  return selected
 }
 
 /**
@@ -446,25 +447,24 @@ function sentenceCase (subject) {
  * @param {Change[]} breakingChanges
  */
 function renderMarkdown (sections, contributors, breakingChanges) {
-  const lines = []
+  let markdown = ''
 
   if (breakingChanges.length > 0) {
-    lines.push('### Breaking Changes')
+    markdown = '### Breaking Changes\n'
     for (const change of breakingChanges.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   for (const category of CATEGORY_ORDER) {
     const changes = sections.get(category)
     if (!changes?.length) continue
 
-    lines.push(renderHeading(category))
+    if (markdown) markdown += '\n'
+    markdown += `${renderHeading(category)}\n`
     for (const change of changes.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   if (contributors.size > 0) {
@@ -474,13 +474,17 @@ function renderMarkdown (sections, contributors, breakingChanges) {
     }
     if (iconContributors.length > 0) {
       iconContributors.sort(compareContributors)
-      const avatars = []
-      for (const contributor of iconContributors) avatars.push(renderContributor(contributor))
-      lines.push('### Contributors', '', avatars.join(' '), '')
+      let avatars = ''
+      for (const contributor of iconContributors) {
+        if (avatars) avatars += ' '
+        avatars += renderContributor(contributor)
+      }
+      if (markdown) markdown += '\n'
+      markdown += `### Contributors\n\n${avatars}\n`
     }
   }
 
-  return lines.join('\n')
+  return markdown
 }
 
 /**

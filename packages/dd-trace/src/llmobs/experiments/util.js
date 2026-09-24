@@ -1,5 +1,7 @@
 'use strict'
 
+const { randomUUID } = require('node:crypto')
+
 const log = require('../../log')
 
 // Matches the backend and dd-trace-py evaluator metric label contract.
@@ -12,7 +14,6 @@ const EVALUATOR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 
 /**
  * @param {object | null | undefined} value
- * @returns {boolean}
  */
 function hasEntries (value) {
   if (!value) return false
@@ -43,6 +44,19 @@ function tagOperationsAreEmpty (operations) {
 }
 
 /**
+ * @param {unknown} value
+ * @param {string} name
+ */
+function normalizePositiveInteger (value, name) {
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return /** @type {number} */ (value)
+}
+
+function generateRunId () {
+  return randomUUID()
+}
+
+/**
  * @param {string} name
  */
 function validateEvaluatorName (name) {
@@ -58,7 +72,6 @@ function validateEvaluatorName (name) {
 /**
  * @param {(...args: unknown[]) => unknown} fn
  * @param {string} fallback
- * @returns {string}
  */
 function functionName (fn, fallback) {
   return typeof fn.name === 'string' && fn.name.length > 0 ? fn.name : fallback
@@ -134,7 +147,6 @@ function normalizeEvaluators (evaluators, kind) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function inferMetricType (value) {
   if (typeof value === 'boolean') return 'boolean'
@@ -194,7 +206,6 @@ function normalizeJsonMetricValue (value) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function stringify (value) {
   if (value == null) return ''
@@ -280,7 +291,6 @@ function sleep (ms) {
 /**
  * @param {unknown} value
  * @param {number} fallback
- * @returns {number}
  */
 function timestampMs (value, fallback = Date.now()) {
   if (value === null || value === undefined) return fallback
@@ -296,7 +306,6 @@ function timestampMs (value, fallback = Date.now()) {
 /**
  * @param {{ durationMs?: unknown, completedAt?: unknown }} row
  * @param {number} startMs
- * @returns {number}
  */
 function durationNs (row, startMs) {
   if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
@@ -326,11 +335,13 @@ module.exports = {
   buildSpanMetadata,
   buildTags,
   durationNs,
+  generateRunId,
   hasEntries,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  normalizePositiveInteger,
   recordTagsToObject,
   sleep,
   stringify,

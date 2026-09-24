@@ -5,6 +5,10 @@ const { readFileSync } = require('node:fs')
 
 const { generateRewriterTargets, OUTPUT_PATH } = require('../../../../../scripts/generate-rewriter-targets')
 const { getRewriteTarget } = require('../../../src/helpers/rewriter/targets')
+const targets = require('../../../src/helpers/rewriter/targets.json')
+const { getUnusedPackageName } = require('../get-unused-package-name')
+
+const unusedPackageName = getUnusedPackageName(Object.values(targets))
 
 describe('rewriter targets', () => {
   it('stays in sync with the instrumentation descriptors', () => {
@@ -26,7 +30,7 @@ describe('rewriter targets', () => {
 
   it('ignores application files and dependencies without targets', () => {
     assert.strictEqual(getRewriteTarget('file:///app/index.mjs'), undefined)
-    assert.strictEqual(getRewriteTarget('file:///app/node_modules/example/index.mjs'), undefined)
+    assert.strictEqual(getRewriteTarget(`file:///app/node_modules/${unusedPackageName}/index.mjs`), undefined)
     assert.strictEqual(getRewriteTarget('file:///app/not-node_modules/ai/dist/index.mjs'), undefined)
     assert.strictEqual(getRewriteTarget('file:///app/node_modules/toString'), undefined)
   })

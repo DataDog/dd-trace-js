@@ -105,7 +105,6 @@ class CiValidationExporter extends CiVisibilityExporter {
   /**
    * Resolves the inherited git-upload gate without performing an upload.
    *
-   * @returns {void}
    */
   sendGitMetadata () {
     this._resolveGit()
@@ -114,14 +113,12 @@ class CiValidationExporter extends CiVisibilityExporter {
   /**
    * Drops debugger logs in offline validation mode.
    *
-   * @returns {void}
    */
   exportDiLogs () {}
 
   /**
    * Reports that code coverage is outside the offline validator's scope.
    *
-   * @returns {boolean} always false
    */
   canReportCodeCoverage () {
     return false
@@ -140,7 +137,6 @@ class CiValidationExporter extends CiVisibilityExporter {
   /**
    * Reports that screenshot upload is unavailable.
    *
-   * @returns {boolean} always false
    */
   canUploadTestScreenshots () {
     return false

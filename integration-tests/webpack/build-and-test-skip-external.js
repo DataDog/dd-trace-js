@@ -32,6 +32,7 @@ const compiler = webpack({
     '@datadog/native-metrics',
     '@datadog/pprof',
     '@datadog/libdatadog',
+    '@datadog/libdatadog-extras',
   ],
   plugins: [
     new DatadogWebpackPlugin(),

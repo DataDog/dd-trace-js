@@ -21,7 +21,6 @@ class RetryOperation extends BaseRetryOperation {
   /**
    * @this {{ _options: { service?: string } }}
    * @param {Error} error
-   * @returns {boolean}
    */
   retry (error) {
     const shouldRetry = super.retry(error)

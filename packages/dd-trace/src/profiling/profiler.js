@@ -4,7 +4,7 @@ const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
-const { buildProfilingRuntime } = require('./config')
+const { buildProfilingRuntime, getProfilingTags } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
@@ -54,17 +54,21 @@ class Profiler extends EventEmitter {
   #compressionFn
   #compressionFnInitialized = false
   #compressionOptions
+  #config
   #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
   #exporters
   #flushInterval
   #lastStart
+  #pendingStart
   #profileSeq = 0
   #profilers
   #spanFinishListener
+  #startFailed = false
+  #stopping
   #systemInfoReport
-  #tags
+  #currentSnapshotTags
   #timer
   #uploadCompression
 
@@ -95,6 +99,10 @@ class Profiler extends EventEmitter {
     for (const key of keys) {
       this.#customLabelKeys.add(key)
     }
+    this.#applyCustomLabelKeys()
+  }
+
+  #applyCustomLabelKeys () {
     if (this.#profilers) {
       for (const profiler of this.#profilers) {
         profiler.setCustomLabelKeys?.(this.#customLabelKeys)
@@ -152,7 +160,7 @@ class Profiler extends EventEmitter {
                 }
               }
             } else {
-              const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+              const { zstd_compress: zstdCompress } = require('@datadog/libdatadog')
               const level = clevel ?? 0 // 0 is zstd default compression level
               this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
             }
@@ -170,44 +178,72 @@ class Profiler extends EventEmitter {
    */
   start (config) {
     if (this.enabled) return true
-    this.#enabled = true
+    // Initialization failures such as an unavailable native pprof binding are not expected to
+    // recover within the lifetime of this process. Preserve that decision without pretending the
+    // profiler is running or retrying setup on every subsequent config publication.
+    if (this.#startFailed) return false
 
-    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
-      buildProfilingRuntime(config)
-    this.#tags = tags
-    this.#exporters = exporters
-    this.#flushInterval = flushInterval
-    this.#profilers = profilers
-    this.#uploadCompression = uploadCompression
-    this.#systemInfoReport = systemInfoReport
-
-    this._setInterval()
-    // Log errors if the source map finder fails, but don't prevent the rest
-    // of the profiler from running without source maps.
-    let mapper
-    const { setLogger, SourceMapper } = require('@datadog/pprof')
-    setLogger(pprofLogger)
-
-    if (config.DD_PROFILING_SOURCE_MAP) {
-      mapper = new SourceMapper(config.DD_PROFILING_DEBUG_SOURCE_MAPS)
-      mapper.loadDirectory(process.cwd())
-        .then(() => {
-          if (config.DD_PROFILING_DEBUG_SOURCE_MAPS) {
-            const count = mapper.infoMap.size
-            // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-            log.debug(() => {
-              return count === 0
-                ? 'Found no source maps'
-                : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-            })
-          }
-        })
-        .catch((error) => {
-          log.error(error)
-        })
+    // A prior stop()'s shutdown collection may still be encoding/exporting via #tags,
+    // #exporters and #endpointCounts. Wait for it to finish before this start() overwrites
+    // that shared state out from under it. Record the desired config rather than chaining
+    // straight onto #stopping, so a stop() arriving before it settles can cancel this restart.
+    if (this.#stopping) {
+      this.#pendingStart = config
+      return true
     }
 
     try {
+      const { tags: snapshotTags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+        buildProfilingRuntime(config)
+      this.#config = config
+      this.#exporters = exporters
+      this.#flushInterval = flushInterval
+      this.#profilers = profilers
+      this.#currentSnapshotTags = snapshotTags
+      // A restart is installed only after the prior shutdown collection settles, so any endpoint
+      // counts left behind by a collection that produced no encodable profiles belong to the old run.
+      this.#endpointCounts.clear()
+      // Compression is initialized lazily and cached for a profiling run. A restarted profiler
+      // must derive it again from the newly built runtime instead of retaining the prior method
+      // or options.
+      this.#compressionFn = undefined
+      this.#compressionFnInitialized = false
+      this.#compressionOptions = undefined
+      this.#uploadCompression = uploadCompression
+      this.#systemInfoReport = systemInfoReport
+      if (this.#customLabelKeys.size > 0) {
+        this.#applyCustomLabelKeys()
+      }
+
+      this._setInterval()
+      // Log errors if the source map finder fails, but don't prevent the rest
+      // of the profiler from running without source maps.
+      let mapper
+      const { setLogger, SourceMapper } = require('@datadog/pprof')
+      setLogger(pprofLogger)
+
+      if (config.DD_PROFILING_SOURCE_MAP) {
+        mapper = new SourceMapper(config.DD_PROFILING_DEBUG_SOURCE_MAPS)
+        mapper.loadDirectory(process.cwd())
+          .then(() => {
+            if (config.DD_PROFILING_DEBUG_SOURCE_MAPS) {
+              const count = mapper.infoMap.size
+              // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+              log.debug(() => {
+                return count === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
+            }
+          })
+          .catch((error) => {
+            log.error(error)
+          })
+      }
+
+      // Setup above does not start any sampler runtime resources. From this point onward, #stop()
+      // can safely clean up a partial start because #profilers and the rest of the runtime exist.
+      this.#enabled = true
       const start = new Date()
       const nearOOMCallback = this.#nearOOMExport.bind(this)
       for (const profiler of profilers) {
@@ -227,7 +263,17 @@ class Profiler extends EventEmitter {
       this._capture(this._timeoutInterval, start)
     } catch (error) {
       log.error(error)
-      this.#stop()
+      this.#startFailed = true
+      if (this.enabled) {
+        try {
+          this.#stop()
+        } catch (stopError) {
+          // A cleanup failure must not leave the public running state stuck at true or escape into
+          // the customer application.
+          this.#enabled = false
+          log.error(stopError)
+        }
+      }
       return false
     }
 
@@ -241,7 +287,7 @@ class Profiler extends EventEmitter {
     processInfo(infos, info, profileType)
     this.#submit({
       [profileType]: encodedProfile,
-    }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
+    }, infos, start, end, this.#currentSnapshotTags, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
   _setInterval () {
@@ -249,11 +295,34 @@ class Profiler extends EventEmitter {
   }
 
   stop () {
+    // A stop() always reflects the latest desired state, so it cancels any restart queued by a
+    // start() that arrived while a prior shutdown collection was still in flight.
+    this.#pendingStart = undefined
+
     if (!this.enabled) return
 
     // collect and export current profiles
     // once collect returns, profilers can be safely stopped
-    this._collect(snapshotKinds.ON_SHUTDOWN, false)
+    this.#stopping = this._collect(snapshotKinds.ON_SHUTDOWN, false)
+      .catch(error => {
+        // _collect() contains its own failures, but its cleanup can still throw. Nothing awaits
+        // this shutdown chain, so consume and log that failure instead of leaking a rejection.
+        log.error(error)
+      })
+      .finally(() => {
+        this.#stopping = undefined
+        if (this.#pendingStart) {
+          const config = this.#pendingStart
+          this.#pendingStart = undefined
+          // Unlike the synchronous entry point, nothing awaits this promise, so a throw here would
+          // become an unhandled rejection instead of a caught error.
+          try {
+            this.start(config)
+          } catch (error) {
+            log.error(error)
+          }
+        }
+      })
     this.#stop()
   }
 
@@ -325,6 +394,7 @@ class Profiler extends EventEmitter {
 
       const startDate = this.#lastStart
       const endDate = new Date()
+      const snapshotTags = this.#currentSnapshotTags
       const profiles = []
 
       crashtracker.withProfilerSerializing(() => {
@@ -341,6 +411,7 @@ class Profiler extends EventEmitter {
       })
 
       if (restart) {
+        this.#currentSnapshotTags = getProfilingTags(this.#config)
         this._capture(this._timeoutInterval, endDate)
       }
 
@@ -378,7 +449,7 @@ class Profiler extends EventEmitter {
       }))
 
       if (hasEncoded) {
-        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
+        await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotTags, snapshotKind)
         profileSubmittedChannel.publish()
         log.debug('Submitted profiles')
       }
@@ -388,9 +459,15 @@ class Profiler extends EventEmitter {
     }
   }
 
-  #submit (profiles, infos, start, end, snapshotKind) {
-    const tags = this.#tags
-
+  /**
+   * @param {Record<string, Buffer|string>} profiles
+   * @param {Record<string, unknown>} infos
+   * @param {Date} start
+   * @param {Date} end
+   * @param {Record<string, string|number|boolean|undefined>} snapshotTags
+   * @param {string} snapshotKind
+   */
+  #submit (profiles, infos, start, end, snapshotTags, snapshotKind) {
     // Flatten endpoint counts
     const endpointCounts = {}
     for (const [endpoint, { count }] of this.#endpointCounts) {
@@ -398,12 +475,12 @@ class Profiler extends EventEmitter {
     }
     this.#endpointCounts.clear()
 
-    tags.snapshot = snapshotKind
-    tags.profile_seq = this.#profileSeq++
+    snapshotTags.snapshot = snapshotKind
+    snapshotTags.profile_seq = this.#profileSeq++
     const customAttributes = this.#customLabelKeys.size > 0
       ? [...this.#customLabelKeys]
       : undefined
-    const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
+    const exportSpec = { profiles, infos, start, end, tags: snapshotTags, endpointCounts, customAttributes }
     const tasks = this.#exporters.map(exporter =>
       exporter.export(exportSpec).catch(error => {
         log.warn(error)

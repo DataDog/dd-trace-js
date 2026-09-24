@@ -243,7 +243,6 @@ addHook({
 
 /**
  * @param {WebSocketMessageData} data
- * @returns {number}
  */
 function dataLength (data) {
   if (typeof data === 'string') {

@@ -31,5 +31,22 @@ describe('SchemaExtractor', () => {
         type: 'string',
       })
     })
+
+    it('should serialize union fields in the extracted schema', () => {
+      const schema = {
+        name: 'UserWithUnion',
+        fields: [{
+          name: 'email',
+          type: ['null', 'string'],
+        }],
+      }
+
+      const schemaData = SchemaBuilder.getSchemaDefinition(
+        new SchemaBuilder(new SchemaExtractor(schema)).build()
+      )
+      const property = JSON.parse(schemaData.definition).components.schemas.UserWithUnion.properties.email
+
+      assert.deepStrictEqual(property, { type: 'union[null,string]' })
+    })
   })
 })

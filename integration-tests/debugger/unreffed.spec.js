@@ -1,17 +1,21 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   const t = setup()
 
-  it('should not hinder the program from exiting', function (done) {
-    // Expect the instrumented app to exit after receiving an HTTP request. Will time out otherwise.
-    t.proc.on('exit', (code) => {
-      assert.strictEqual(code, 0)
-      done()
-    })
-    t.axios.get(t.breakpoint.url)
+  it('should not hinder the program from exiting', async function () {
+    const [response, [code]] = await Promise.all([
+      t.request(t.breakpoint.url),
+      once(t.proc, 'exit'),
+    ])
+
+    assert.strictEqual(response.status, 200)
+    assert.strictEqual(response.body, 'hello world')
+    assert.strictEqual(code, 0)
   })
 })

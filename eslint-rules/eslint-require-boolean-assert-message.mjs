@@ -173,7 +173,6 @@ function getMatchedAssertName (callee) {
  * header for the full taxonomy.
  *
  * @param {Node} node
- * @returns {boolean}
  */
 function isTrivialExpression (node) {
   if (node.type === 'ChainExpression') {
@@ -222,7 +221,6 @@ function isTrivialExpression (node) {
 
 /**
  * @param {Node} callee
- * @returns {boolean}
  */
 function isBooleanPredicateCall (callee) {
   const target = callee.type === 'ChainExpression' ? callee.expression : callee
@@ -278,7 +276,6 @@ function buildAutofixMessage (firstArg, sourceCode) {
  * `new`, assignments, `++`/`--`, `delete`, `void`, `await`, `yield`, tagged templates — is unsafe.
  *
  * @param {Node | null | undefined} node
- * @returns {boolean}
  */
 function isSideEffectFreeForInterpolation (node) {
   if (!node) return false

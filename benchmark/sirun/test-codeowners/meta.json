@@ -6,11 +6,8 @@
   "iterations": 10,
   "instructions": true,
   "variants": {
-    "small": {
-      "env": { "VARIANT": "small", "COUNT": "1700000" }
-    },
     "large": {
-      "env": { "VARIANT": "large", "COUNT": "100000" }
+      "env": { "COUNT": "100000" }
     }
   }
 }

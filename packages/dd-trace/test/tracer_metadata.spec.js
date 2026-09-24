@@ -10,7 +10,7 @@ describe('tracer_metadata', () => {
   let storeMetadataStub
   let TracerMetadataStub
   let processDiscoveryStub
-  let libdatadogStub
+  let libdatadogExtrasStub
   let dockerStub
   let processTagsStub
   let otelThreadCtxStub
@@ -34,7 +34,7 @@ describe('tracer_metadata', () => {
       storeMetadata: storeMetadataStub,
     }
 
-    libdatadogStub = {
+    libdatadogExtrasStub = {
       maybeLoad: sinon.stub().withArgs('process-discovery').returns(processDiscoveryStub),
     }
 
@@ -51,7 +51,7 @@ describe('tracer_metadata', () => {
     }
 
     storeConfig = proxyquire('../src/tracer_metadata', {
-      '@datadog/libdatadog': libdatadogStub,
+      '@datadog/libdatadog-extras': libdatadogExtrasStub,
       './exporters/common/docker': dockerStub,
       './process-tags': processTagsStub,
       './otel-thread-ctx': otelThreadCtxStub,
@@ -143,7 +143,7 @@ describe('tracer_metadata', () => {
   })
 
   it('returns undefined and does not throw when process-discovery is unavailable', () => {
-    libdatadogStub.maybeLoad.returns(undefined)
+    libdatadogExtrasStub.maybeLoad.returns(undefined)
 
     const result = storeConfig(baseConfig)
     assert.strictEqual(result, undefined)
@@ -151,7 +151,7 @@ describe('tracer_metadata', () => {
 
   it('returns undefined and does not throw when libdatadog throws', () => {
     const storeConfigWithThrow = proxyquire('../src/tracer_metadata', {
-      '@datadog/libdatadog': { maybeLoad: () => { throw new Error('load error') } },
+      '@datadog/libdatadog-extras': { maybeLoad: () => { throw new Error('load error') } },
       './exporters/common/docker': dockerStub,
       './process-tags': processTagsStub,
     })

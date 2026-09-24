@@ -7,7 +7,6 @@ const { parseModelId: parseBedrockModelId } = require('../../datadog-plugin-aws-
  * This is normalized to LLM Observability model provider standards.
  *
  * @param {Record<string, string>} tags
- * @returns {string}
  */
 function getModelProvider (tags) {
   const modelProviderTag = tags['ai.model.provider']
@@ -21,7 +20,6 @@ function getModelProvider (tags) {
  *
  * @param {string} rawProvider
  * @param {string} modelId
- * @returns {string}
  */
 function parseModelProvider (rawProvider, modelId) {
   const providerParts = rawProvider?.split('.')

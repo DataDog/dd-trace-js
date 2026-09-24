@@ -31,7 +31,6 @@ const {
 
 /**
  * @param {string} dbUrl
- * @returns {string}
  */
 function getMongoDbName (dbUrl) {
   try {

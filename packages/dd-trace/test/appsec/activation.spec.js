@@ -16,28 +16,28 @@ describe('Appsec Activation', () => {
   })
 
   it('should return ONECLICK with undefined value', () => {
-    config.appsec.enabled = undefined
+    config.appsec.DD_APPSEC_ENABLED = undefined
     const activation = Activation.fromConfig(config)
 
     assert.strictEqual(activation, Activation.ONECLICK)
   })
 
   it('should return ENABLED with true value', () => {
-    config.appsec.enabled = true
+    config.appsec.DD_APPSEC_ENABLED = true
     const activation = Activation.fromConfig(config)
 
     assert.strictEqual(activation, Activation.ENABLED)
   })
 
   it('should return DISABLED with false value', () => {
-    config.appsec.enabled = false
+    config.appsec.DD_APPSEC_ENABLED = false
     const activation = Activation.fromConfig(config)
 
     assert.strictEqual(activation, Activation.DISABLED)
   })
 
   it('should return DISABLED with invalid value', () => {
-    config.appsec.enabled = 'invalid'
+    config.appsec.DD_APPSEC_ENABLED = 'invalid'
     const activation = Activation.fromConfig(config)
 
     assert.strictEqual(activation, Activation.DISABLED)

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 require('./setup/core')
 
@@ -154,5 +155,76 @@ describe('id', () => {
 
     assert.strictEqual(spanId.toString(16), '000000000000abcd')
     assert.strictEqual(spanId.toString(10), '43981')
+  })
+
+  describe('reseed()', () => {
+    let freshId
+    let randomFillSyncStub
+
+    beforeEach(() => {
+      // Fill with a value that increments per call, so IDs drawn from different
+      // randomFillSync() fills are distinguishable instead of all looking alike.
+      let fillByte = 0
+      randomFillSyncStub = sinon.stub().callsFake(buf => {
+        fillByte++
+        buf.fill(fillByte)
+      })
+
+      freshId = proxyquire('../src/id', {
+        crypto: { randomFillSync: randomFillSyncStub },
+      })
+    })
+
+    it('should generate a different id after reseed', () => {
+      const before = freshId().toString()
+
+      channel('datadog:identity:update').publish({ tags: {} })
+      const after = freshId().toString()
+
+      assert.notStrictEqual(after, before)
+    })
+
+    it('should reset the batch cursor to 0', () => {
+      // Call id() several times to advance the batch counter
+      freshId()
+      freshId()
+      freshId()
+      randomFillSyncStub.resetHistory()
+
+      channel('datadog:identity:update').publish({ tags: {} })
+      // After reseed, batch = 0, so the next call must refill from randomFillSync
+      freshId()
+
+      sinon.assert.called(randomFillSyncStub)
+    })
+
+    it('should force a fresh randomFillSync() call on the very next id() after reseed', () => {
+      channel('datadog:identity:update').publish({ tags: {} })
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+
+    it('should be safe to call repeatedly', () => {
+      channel('datadog:identity:update').publish({ tags: {} })
+      channel('datadog:identity:update').publish({ tags: {} })
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
+
+    it('should reseed when datadog:identity:update is published', () => {
+      freshId()
+      randomFillSyncStub.resetHistory()
+
+      channel('datadog:identity:update').publish({ tags: {} })
+      freshId()
+
+      sinon.assert.calledOnce(randomFillSyncStub)
+    })
   })
 })

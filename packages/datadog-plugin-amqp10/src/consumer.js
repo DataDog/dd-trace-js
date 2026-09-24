@@ -12,9 +12,11 @@ class Amqp10ConsumerPlugin extends ConsumerPlugin {
 
     const source = getShortName(link)
     const address = getAddress(link)
+    let resource = 'receive'
+    if (source) resource += ` ${source}`
 
     this.startSpan({
-      resource: ['receive', source].filter(Boolean).join(' '),
+      resource,
       type: 'worker',
       meta: {
         'amqp.link.source.address': source,

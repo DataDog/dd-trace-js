@@ -20,7 +20,7 @@ module.exports = {
     kafkaContextPlugin.enable(config)
     kafkaConsumerPlugin.enable(config)
 
-    setMaxTransactions(config.maxConcurrentRequests)
+    setMaxTransactions(config.DD_IAST_MAX_CONCURRENT_REQUESTS)
   },
   disableTaintTracking () {
     disableTaintOperations()

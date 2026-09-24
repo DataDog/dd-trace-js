@@ -50,6 +50,6 @@ export default defineConfig({
     },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
   },
-  video: false,
+  video: process.env.CYPRESS_ENABLE_FAILURE_VIDEOS === 'true',
   screenshotOnRunFailure: false,
 })

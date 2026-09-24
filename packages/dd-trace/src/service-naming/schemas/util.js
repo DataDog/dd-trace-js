@@ -5,7 +5,7 @@ function identityService ({ tracerService }) {
 }
 
 function getFormattedHostString ({ host, port }) {
-  return [host, port].filter(Boolean).join(':')
+  return port ? `${host}:${port}` : host
 }
 
 function httpPluginClientService ({ tracerService, pluginConfig, sessionDetails }) {
@@ -37,7 +37,6 @@ function optionServiceSource ({ pluginConfig }) {
  * @param {{ service?: string | ((params?: object) => unknown) }} [pluginConfig]
  * @param {object} [params]
  * @param {string} defaultService
- * @returns {string}
  */
 function configServiceName (pluginConfig, params, defaultService) {
   const service = pluginConfig?.service

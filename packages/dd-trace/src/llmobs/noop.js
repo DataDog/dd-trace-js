@@ -1,14 +1,13 @@
 'use strict'
 
-const NoopExperiments = require('./experiments/noop')
-const {
-  BaseEvaluator,
-  BaseSummaryEvaluator,
-  EvaluatorContext,
-  EvaluatorResult,
-  MultiEvaluatorResult,
-  SummaryEvaluatorContext,
-} = require('./experiments/evaluator')
+const NoopPrompts = require('./prompts/noop')
+const evaluatorTypes = require('./experiments/evaluator')
+const evaluatorBuiltins = {
+  ...require('./experiments/llm-judge'),
+  ...require('./experiments/builtins'),
+}
+
+let NoopExperiments
 
 class NoopLLMObs {
   constructor (noopTracer) {
@@ -20,31 +19,88 @@ class NoopLLMObs {
   }
 
   get experiments () {
+    NoopExperiments ??= require('./experiments/noop')
     return new NoopExperiments('LLM Observability is not enabled')
   }
 
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    return new NoopPrompts()
+  }
+
+  get BaseAsyncEvaluator () {
+    return evaluatorTypes.BaseAsyncEvaluator
+  }
+
+  get BaseAsyncSummaryEvaluator () {
+    return evaluatorTypes.BaseAsyncSummaryEvaluator
+  }
+
   get BaseEvaluator () {
-    return BaseEvaluator
+    return evaluatorTypes.BaseEvaluator
   }
 
   get BaseSummaryEvaluator () {
-    return BaseSummaryEvaluator
+    return evaluatorTypes.BaseSummaryEvaluator
   }
 
   get EvaluatorContext () {
-    return EvaluatorContext
+    return evaluatorTypes.EvaluatorContext
   }
 
   get SummaryEvaluatorContext () {
-    return SummaryEvaluatorContext
+    return evaluatorTypes.SummaryEvaluatorContext
   }
 
   get EvaluatorResult () {
-    return EvaluatorResult
+    return evaluatorTypes.EvaluatorResult
   }
 
   get MultiEvaluatorResult () {
-    return MultiEvaluatorResult
+    return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get BaseStructuredOutput () {
+    return evaluatorBuiltins.BaseStructuredOutput
+  }
+
+  get BooleanStructuredOutput () {
+    return evaluatorBuiltins.BooleanStructuredOutput
+  }
+
+  get CategoricalStructuredOutput () {
+    return evaluatorBuiltins.CategoricalStructuredOutput
+  }
+
+  get LLMJudge () {
+    return evaluatorBuiltins.LLMJudge
+  }
+
+  get ScoreStructuredOutput () {
+    return evaluatorBuiltins.ScoreStructuredOutput
+  }
+
+  get JSONEvaluator () {
+    return evaluatorBuiltins.JSONEvaluator
+  }
+
+  get LengthEvaluator () {
+    return evaluatorBuiltins.LengthEvaluator
+  }
+
+  get RegexMatchEvaluator () {
+    return evaluatorBuiltins.RegexMatchEvaluator
+  }
+
+  get SemanticSimilarityEvaluator () {
+    return evaluatorBuiltins.SemanticSimilarityEvaluator
+  }
+
+  get StringCheckEvaluator () {
+    return evaluatorBuiltins.StringCheckEvaluator
   }
 
   enable (options) {}

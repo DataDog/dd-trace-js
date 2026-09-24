@@ -53,13 +53,13 @@ describe('profiling/oom', () => {
         { getExportUrl: () => new URL('file:///tmp/profile-') },
       ]
 
-      const command = buildExportCommand(exporters, { service: 'svc' })
+      const command = buildExportCommand(exporters, { service: 'svc', env: 'test' })
 
       assert.deepStrictEqual(command, [
         process.execPath,
         exporterCliPath,
         'http://127.0.0.1:8126/,file:///tmp/profile-',
-        'service:svc,snapshot:on_oom',
+        'service:svc,env:test,snapshot:on_oom',
         'space',
       ])
     })

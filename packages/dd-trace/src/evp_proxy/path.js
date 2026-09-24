@@ -1,22 +1,43 @@
 'use strict'
 
 const LEADING_SLASHES = /^\/+/
-const TRAILING_SLASHES = /\/+$/
+
+/**
+ * @param {string} value
+ */
+function stripTrailingSlashes (value) {
+  let end = value.length
+  while (end > 0 && value[end - 1] === '/') end--
+  return end === value.length ? value : value.slice(0, end)
+}
 
 /**
  * Joins a caller-supplied EVP proxy path and product endpoint.
  *
  * This utility does not perform EVP proxy discovery.
  *
- * @param {string} basePath - EVP proxy base path
- * @param {string} endpoint - Product intake endpoint
- * @returns {string} Joined request path
+ * @param {...string} paths - URL path components
  */
-function joinEVPProxyPath (basePath, endpoint) {
-  const normalizedBasePath = basePath.replace(TRAILING_SLASHES, '')
-  const normalizedEndpoint = endpoint.replace(LEADING_SLASHES, '')
+function joinEVPProxyPath (...paths) {
+  let joined = ''
+  for (const path of paths) {
+    const normalized = stripTrailingSlashes(path).replace(LEADING_SLASHES, '')
+    if (normalized) joined += `/${normalized}`
+  }
 
-  return `${normalizedBasePath}/${normalizedEndpoint}`
+  return joined || '/'
 }
 
-module.exports = { joinEVPProxyPath }
+/**
+ * Joins an HTTP Agent URL path prefix with an EVP proxy path.
+ * Unix URL pathnames identify the socket itself and are not HTTP path prefixes.
+ *
+ * @param {URL} url - Configured Agent URL
+ * @param {...string} paths - EVP path components
+ */
+function joinAgentURLPath (url, ...paths) {
+  const prefix = url.protocol === 'http:' || url.protocol === 'https:' ? url.pathname : ''
+  return joinEVPProxyPath(prefix, ...paths)
+}
+
+module.exports = { joinAgentURLPath, joinEVPProxyPath, stripTrailingSlashes }

@@ -30,6 +30,13 @@ describe('NoopTracer', () => {
 
       assert.strictEqual(result, 'test')
     })
+
+    it('should provide recordException as a no-op', () => {
+      tracer.trace('test', {}, span => {
+        assert.strictEqual(typeof span.recordException, 'function')
+        span.recordException(new Error('test'))
+      })
+    })
   })
 
   describe('wrap', () => {

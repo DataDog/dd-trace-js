@@ -121,7 +121,6 @@ function getManifestInputFiles (manifest, { includeLocal = true } = {}) {
  *
  * @param {string} scenarioId generated scenario id
  * @param {string|null} requestedScenario selected validator scenario
- * @returns {boolean} whether to include the command
  */
 function shouldIncludeGeneratedScenario (scenarioId, requestedScenario) {
   if (!requestedScenario) return true
@@ -241,7 +240,6 @@ function getRunnerEnv (framework) {
  *
  * @param {Set<string>} files collected files
  * @param {string|undefined} filename candidate file
- * @returns {void}
  */
 function addExistingFile (files, filename) {
   if (typeof filename !== 'string') return
@@ -254,7 +252,6 @@ function addExistingFile (files, filename) {
  * Formats a framework name for command descriptions.
  *
  * @param {string} framework framework name
- * @returns {string} display name
  */
 function formatFrameworkName (framework) {
   return framework.charAt(0).toUpperCase() + framework.slice(1)

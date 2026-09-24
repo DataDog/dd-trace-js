@@ -20,8 +20,10 @@ const DD_GIT_FOLDER_PATH = path.join(__dirname, 'fixtures', 'config', 'git-folde
 const TMP_DIR = os.tmpdir()
 
 function load () {
-  const getConfig = proxyquire.noPreserveCache()('../src/config', {})
-  const getGitMetadata = proxyquire.noPreserveCache()('../src/git_metadata', {})
+  const loadConfig = proxyquire.noPreserveCache()
+  const getConfig = loadConfig('../src/config', {})
+  const loadGitMetadata = proxyquire.noPreserveCache()
+  const getGitMetadata = loadGitMetadata('../src/git_metadata', {})
   return { config: getConfig({}), getGitMetadata }
 }
 
@@ -188,7 +190,8 @@ describe('git metadata', () => {
   // `DD_TRACE_GIT_METADATA_ENABLED=false`, even when the next caller passed
   // a fresh `Config` with the flag flipped on and the env populated.
   it('caches the disabled-branch result independently from the enabled-branch result', () => {
-    const getGitMetadata = proxyquire.noPreserveCache()('../src/git_metadata', {})
+    const loadGitMetadata = proxyquire.noPreserveCache()
+    const getGitMetadata = loadGitMetadata('../src/git_metadata', {})
 
     const disabledConfig = { DD_TRACE_GIT_METADATA_ENABLED: false, tags: {} }
     const enabledConfig = {

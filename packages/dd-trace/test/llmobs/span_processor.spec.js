@@ -22,6 +22,7 @@ describe('span processor', () => {
 
     log = {
       warn: sinon.stub(),
+      debug: sinon.stub(),
     }
 
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
@@ -776,6 +777,36 @@ describe('span processor', () => {
       processor.process(span)
 
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+
+    it('still submits the LLMObs event when gen_ai APM tagging fails', () => {
+      const apmTags = {}
+      span = {
+        _name: 'test',
+        _startTime: 0,
+        _duration: 1,
+        context () {
+          return {
+            _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) {
+              if (key.startsWith('gen_ai.')) throw new Error('boom')
+              this._tags[key] = value
+            },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['gen_ai.operation.name'], undefined)
+      sinon.assert.called(log.debug)
+      sinon.assert.called(writer.append)
     })
 
     it('does not mark the apm span when writer.append silently drops (buffer full)', () => {

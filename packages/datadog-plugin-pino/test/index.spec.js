@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { Writable } = require('node:stream')
 
+const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -11,6 +12,8 @@ const { NODE_MAJOR } = require('../../../version')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+const logSubmissionCh = channel('ci:log-submission:log')
 
 describe('Plugin', () => {
   let logger
@@ -98,6 +101,35 @@ describe('Plugin', () => {
           }
         })
 
+        describe('with disabled plugin', () => {
+          beforeEach(async () => {
+            tracer = await agent.load('pino', { enabled: false })
+          })
+
+          it('should not submit logs', function () {
+            const submittedLogs = []
+            const onLogSubmission = payload => {
+              submittedLogs.push(payload)
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
+
+            try {
+              setupTest()
+
+              if (!logger) {
+                this.skip()
+              }
+
+              logger.info('message')
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
+
+            assert.strictEqual(submittedLogs.length, 0)
+            sinon.assert.called(stream.write)
+          })
+        })
+
         describe('with configuration', () => {
           beforeEach(() => {
             return agent.load('pino', { logInjection: true })
@@ -112,21 +144,34 @@ describe('Plugin', () => {
           })
 
           it('should add the trace identifiers to logger instances', () => {
-            tracer.scope().activate(span, () => {
-              logger.info('message')
+            let submittedLog
+            const onLogSubmission = payload => {
+              submittedLog = payload
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
 
-              sinon.assert.called(stream.write)
+            try {
+              tracer.scope().activate(span, () => {
+                logger.info('message')
 
-              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+                sinon.assert.called(stream.write)
 
-              assertObjectContains(record.dd, {
-                trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId(),
+                const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+                assertObjectContains(record.dd, {
+                  trace_id: span.context().toTraceId(true),
+                  span_id: span.context().toSpanId(),
+                })
+
+                assert.ok('msg' in record)
+                assert.deepStrictEqual(record.msg, 'message')
+
+                assert.strictEqual(submittedLog.source, 'pino')
+                assert.deepStrictEqual(JSON.parse(submittedLog.message), record)
               })
-
-              assert.ok('msg' in record)
-              assert.deepStrictEqual(record.msg, 'message')
-            })
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
           })
 
           it('should support errors', () => {
@@ -171,15 +216,28 @@ describe('Plugin', () => {
           })
 
           it('should not overwrite a caller-supplied dd field', () => {
-            tracer.scope().activate(span, () => {
-              logger.info({ dd: { custom: 'value' } }, 'message')
+            let submittedLog
+            const onLogSubmission = payload => {
+              submittedLog = payload
+            }
+            logSubmissionCh.subscribe(onLogSubmission)
 
-              sinon.assert.called(stream.write)
+            try {
+              tracer.scope().activate(span, () => {
+                logger.info({ dd: { custom: 'value' } }, 'message')
 
-              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+                sinon.assert.called(stream.write)
 
-              assert.deepStrictEqual(record.dd, { custom: 'value' })
-            })
+                const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+                assert.deepStrictEqual(record.dd, { custom: 'value' })
+
+                assert.strictEqual(submittedLog.source, 'pino')
+                assert.deepStrictEqual(JSON.parse(submittedLog.message).dd, { custom: 'value' })
+              })
+            } finally {
+              logSubmissionCh.unsubscribe(onLogSubmission)
+            }
           })
 
           it('should not inject trace_id or span_id without an active span', () => {

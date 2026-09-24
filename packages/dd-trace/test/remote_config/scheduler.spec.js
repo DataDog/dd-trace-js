@@ -76,5 +76,40 @@ describe('Scheduler', () => {
 
       sinon.assert.calledOnce(stub)
     })
+
+    it('should not restart after an in-flight operation completes', () => {
+      let done
+      stub.callsFake((callback) => { done = callback })
+
+      scheduler.start()
+      clock.tick(1)
+      scheduler.stop()
+      done()
+      clock.tick(INTERVAL)
+
+      sinon.assert.calledOnce(stub)
+    })
+
+    it('should serialize an in-flight operation across restarts', () => {
+      const callbacks = []
+      stub.callsFake((callback) => callbacks.push(callback))
+
+      scheduler.start()
+      clock.tick(1)
+      scheduler.stop()
+      scheduler.start()
+      clock.tick(1)
+      sinon.assert.calledOnce(stub)
+
+      callbacks[0]()
+      clock.tick(1)
+      sinon.assert.calledTwice(stub)
+
+      callbacks[1]()
+      clock.tick(INTERVAL - 1)
+      sinon.assert.calledTwice(stub)
+      clock.tick(1)
+      sinon.assert.calledThrice(stub)
+    })
   })
 })

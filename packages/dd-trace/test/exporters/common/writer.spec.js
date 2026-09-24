@@ -75,6 +75,18 @@ describe('common Writer', () => {
     sinon.assert.calledOnceWithExactly(writer._sendPayload, payload, 2, done)
   })
 
+  it('routes automatic flushes through the configured delivery tracker', () => {
+    const deliveryTracker = { track: sinon.stub().callsFake((flush, done) => flush(done)) }
+    writer = new Writer({ url: 'http://localhost:8126', deliveryTracker })
+    writer._encoder = encoder
+    writer._sendPayload = sinon.stub()
+
+    writer.flush()
+
+    sinon.assert.calledOnce(deliveryTracker.track)
+    sinon.assert.calledOnce(writer._sendPayload)
+  })
+
   it('passes final flush options to the payload sender', () => {
     const done = sinon.stub()
     const options = { deadline: Date.now() + 1000 }
@@ -98,6 +110,19 @@ describe('common Writer', () => {
 
     sinon.assert.calledOnce(encoder.reset)
     sinon.assert.calledOnceWithExactly(done)
+  })
+
+  it('retains a non-final payload under backpressure when configured', () => {
+    request.writable = false
+    writer = new Writer({ url: 'http://localhost:8126', retainOnBackpressure: true })
+    writer._encoder = encoder
+    writer._sendPayload = sinon.stub()
+    const done = sinon.stub()
+
+    writer.flush(done)
+
+    sinon.assert.notCalled(encoder.reset)
+    sinon.assert.calledOnceWithExactly(writer._sendPayload, Buffer.from('payload'), 2, done)
   })
 
   it('sends a bounded final payload when the request buffer is full', () => {
@@ -134,6 +159,24 @@ describe('common Writer', () => {
     const options = { deadline: Date.now() + 1000 }
 
     assert.strictEqual(writer.append(payload, options), true)
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
+
+  it('accepts a non-final append under backpressure when configured', () => {
+    request.writable = false
+    writer = new Writer({ url: 'http://localhost:8126', retainOnBackpressure: true })
+    writer._encoder = encoder
+    const payload = [{ type: 'test' }]
+
+    assert.strictEqual(writer.append(payload), true)
+    sinon.assert.calledOnceWithExactly(encoder.encode, payload)
+  })
+
+  it('reports when the encoder rejects an appended payload', () => {
+    const payload = [{ type: 'test' }]
+    encoder.encode.returns(false)
+
+    assert.strictEqual(writer.append(payload), false)
     sinon.assert.calledOnceWithExactly(encoder.encode, payload)
   })
 })

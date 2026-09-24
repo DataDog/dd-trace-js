@@ -77,7 +77,6 @@ const clientNameCache = new WeakMap()
 
 /**
  * @param {Function} clientCtor
- * @returns {string}
  */
 function getClientName (clientCtor) {
   let name = clientNameCache.get(clientCtor)
@@ -93,7 +92,6 @@ const operationCache = new WeakMap()
 
 /**
  * @param {Function} commandCtor
- * @returns {string}
  */
 function getOperationName (commandCtor) {
   let operation = operationCache.get(commandCtor)

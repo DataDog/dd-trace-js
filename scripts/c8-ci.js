@@ -50,7 +50,6 @@ const coverageEnv = { ...process.env, NODE_OPTIONS: nodeOptions, NODE_V8_COVERAG
 
 /**
  * @param {string[]} command command + args to run with V8 coverage enabled
- * @returns {number} exit status
  */
 function runCovered (command) {
   const { status } = spawnSync(command[0], command.slice(1), { cwd: repoRoot, env: coverageEnv, stdio: 'inherit' })

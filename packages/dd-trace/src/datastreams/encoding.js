@@ -26,7 +26,6 @@ function encodeVarint (v) {
  * @param {Uint8Array | Buffer} target
  * @param {number} offset
  * @param {number} value
- * @returns {number}
  */
 function encodeVarintInto (target, offset, value) {
   const sign = value >= 0 ? 0 : 1

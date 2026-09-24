@@ -1,9 +1,8 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const SpanContext = require('../../dd-trace/src/opentracing/span_context')
-const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
+const reconstructPubSubRequestContext = require('./pubsub-request-context')
 
 // WeakMap to track push receive spans by request
 const pushReceiveSpans = new WeakMap()
@@ -69,7 +68,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     }
 
     const originalContext = this.#extractContext(messageData)
-    const pubsubRequestContext = this.#reconstructPubSubContext(messageData.attrs) || originalContext
+    const pubsubRequestContext = reconstructPubSubRequestContext(messageData.attrs) || originalContext
     const isSameTrace = pubsubRequestContext &&
       originalContext?.toTraceId() === pubsubRequestContext.toTraceId()
 
@@ -107,39 +106,6 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
   #extractContext (messageData) {
     return this.tracer.extract('text_map', messageData.attrs)
-  }
-
-  #reconstructPubSubContext (attrs) {
-    /**
-     * Reconstruct the batch publish span context from message attributes.
-     *
-     * When a batch is published, the producer injects:
-     * - _dd.pubsub_request.trace_id: lower 64 bits of the batch span's trace ID (hex)
-     * - _dd.pubsub_request.span_id: the batch span's span ID (hex)
-     * - _dd.pubsub_request.p.tid: upper 64 bits of trace ID (hex, optional for 128-bit traces)
-     *
-     * This context represents the "pubsub.request" span on the producer side.
-     * We use it to create span links, connecting each pubsub.push.receive span back to the original batch.
-     */
-    const traceIdLower = attrs['_dd.pubsub_request.trace_id']
-    const spanId = attrs['_dd.pubsub_request.span_id']
-    const traceIdUpper = attrs['_dd.pubsub_request.p.tid']
-
-    if (!traceIdLower || !spanId) return null
-
-    // Reconstruct full 128-bit trace ID (or pad 64-bit to 128-bit)
-    const traceId128 = traceIdUpper ? traceIdUpper + traceIdLower : traceIdLower.padStart(32, '0')
-    const traceId = id(traceId128, 16)
-    const parentId = id(spanId, 16)
-
-    const tags = {}
-    if (traceIdUpper) tags['_dd.p.tid'] = traceIdUpper
-
-    return new SpanContext({
-      traceId,
-      spanId: parentId,
-      tags,
-    })
   }
 
   #createPushReceiveSpan (messageData, parentContext, linkContext) {

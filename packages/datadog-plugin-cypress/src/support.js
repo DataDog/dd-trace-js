@@ -16,10 +16,15 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
+let isDynamicAtrEnabled = false
+let isTextTerminal = false
 let hasWarnedMissingBeforeEachTaskResult = false
 let hasWarnedMissingBeforeEachRetryResult = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
+// Dynamic ATR computes the selected budget after the first attempt. Keep that result
+// in browser state and apply it when Cypress starts the retry runnable.
+const dynamicAtrRetryCountByTest = new Map()
 // Track test errors suppressed by test management so we can still report them to Datadog.
 const suppressedTestFailures = new Map()
 
@@ -93,7 +98,6 @@ function getTestProperties (testName) {
 
 /**
  * @param {string} message
- * @returns {void}
  */
 function warnMissingBeforeEachTaskResult (message) {
   // eslint-disable-next-line no-console
@@ -192,7 +196,6 @@ function setRumCorrelationCookie (traceId) {
 
 /**
  * @param {boolean} isCookieSet
- * @returns {void}
  */
 function restartRumSession (isCookieSet) {
   if (!isCookieSet || isTestIsolationEnabled || !originalWindow) {
@@ -362,20 +365,47 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   return oldRunTests.apply(this, [suite, fn])
 }
 
-Cypress.on('test:before:run', (attributes, test) => {
+/**
+ * @param {{ id: string }} test
+ */
+function getDynamicAtrTestKey (test) {
+  // Cypress preserves the runnable ID when cloning a retry, including across browser reloads.
+  return `${Cypress.mocha.getRootSuite().file}\0${test.id}`
+}
+
+/**
+ * @param {{ id: string, _retries: number }} test
+ */
+function configureTestRetries (test) {
   if (shouldDisableFrameworkRetries(test)) {
     disableFrameworkRetries(test)
+    return
   }
+
+  if (!isTextTerminal) return
+
+  const dynamicAtrRetryCount = dynamicAtrRetryCountByTest.get(getDynamicAtrTestKey(test))
+  if (Number.isSafeInteger(dynamicAtrRetryCount)) {
+    test._retries = dynamicAtrRetryCount
+  } else if (isDynamicAtrEnabled) {
+    // Cypress forbids calling retries(count) on the original runnable.
+    // Ensure local retries: 0 overrides still reach the duration-based budget selection.
+    test._retries = Math.max(1, test._retries)
+  }
+}
+
+Cypress.on('test:before:run', (attributes, test) => {
+  configureTestRetries(test)
 })
 
 Cypress.on('test:before:run:async', (attributes, test) => {
-  if (shouldDisableFrameworkRetries(test)) {
-    disableFrameworkRetries(test)
-  }
+  configureTestRetries(test)
 })
 
 beforeEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  // The first test:before:run event can precede the suite configuration task.
+  configureTestRetries(currentTest)
   const testName = currentTest.fullTitle()
 
   const retryMessage = retryReasonsByTestName.get(testName)
@@ -409,6 +439,7 @@ beforeEach(function () {
       rumCookiePromise = setRumCorrelationCookie(traceId)
     }
     if (shouldSkip) {
+      // Test Optimization requested this runtime skip through the Cypress support hook.
       this.skip()
     }
     if (rumCookiePromise) {
@@ -426,6 +457,7 @@ before(function () {
   cy.task('dd:testSuiteStart', {
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
+    isTextTerminal: Cypress.config('isTextTerminal'),
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
@@ -438,6 +470,12 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
+      isTextTerminal = suiteConfig.isTextTerminal
+      if (isDynamicAtrEnabled && isTextTerminal) {
+        // The first test event can precede this task, and an earlier user hook can skip our beforeEach.
+        Cypress.mocha.getRootSuite().eachTest(configureTestRetries)
+      }
       rumTestExecutionIdCookieName = suiteConfig.rumTestExecutionIdCookieName
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
@@ -447,6 +485,7 @@ before(function () {
 })
 
 after(() => {
+  dynamicAtrRetryCountByTest.clear()
   try {
     if (safeGetRum(originalWindow)) {
       originalWindow.dispatchEvent(new Event('beforeunload'))
@@ -474,6 +513,7 @@ afterEach(function () {
     : currentTest.err
 
   const testInfo = {
+    testId: currentTest.id,
     testName,
     testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
@@ -521,5 +561,11 @@ afterEach(function () {
     suppressedTestFailures.delete(testName)
   }
 
-  cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport })
+  cy.task('dd:afterEach', { test: testInfo, coverage, commands: commandsToReport }).then((taskResult) => {
+    // Preserve the first-attempt result until Cypress starts the retry runnable.
+    // Changing the completed test here is too late for Cypress's retry lifecycle.
+    if (taskResult && Number.isSafeInteger(taskResult.dynamicAtrRetryCount)) {
+      dynamicAtrRetryCountByTest.set(getDynamicAtrTestKey(currentTest), taskResult.dynamicAtrRetryCount)
+    }
+  })
 })

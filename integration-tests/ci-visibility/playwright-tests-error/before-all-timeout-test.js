@@ -10,6 +10,9 @@ const waitFor = (ms) => new Promise(resolve => setTimeout(resolve, ms))
 
 test.describe('playwright', () => {
   test.beforeAll(async () => {
+    if (process.env.PLAYWRIGHT_BEFORE_ALL_ERROR === 'throw') {
+      throw new Error('beforeAll failed')
+    }
     // timeout error
     await waitFor(3100)
   })

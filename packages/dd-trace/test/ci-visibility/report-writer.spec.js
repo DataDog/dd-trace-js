@@ -150,6 +150,21 @@ describe('test optimization validation report', () => {
     assert.doesNotMatch(report, /^Coverage:/m)
   })
 
+  it('formats individual and absent CI facts', () => {
+    write([result('ci-wiring', 'error', 'Transport is missing.', {
+      ciFacts: { transport: { status: 'missing' } },
+    })])
+    assert.match(readReport(), /INCOMPLETE — transport not visible/)
+
+    write([result('ci-wiring', 'error', 'The runner path is unresolved.', {
+      ciFacts: { runnerInvocation: { status: 'unresolved' } },
+    })])
+    assert.match(readReport(), /INCOMPLETE — runner path unresolved/)
+
+    write([result('ci-wiring', 'error', 'No static fact is available.')])
+    assert.doesNotMatch(readReport(), /INCOMPLETE —/)
+  })
+
   it('reports a confirmed CI problem when no local check ran', () => {
     write([
       result('ci-wiring', 'fail', 'Test Optimization is not initialized in the selected CI job.', {
@@ -372,7 +387,6 @@ describe('test optimization validation report', () => {
    *
    * @param {object[]} results scenario results
    * @param {object} [runSummary] run summary
-   * @returns {void}
    */
   function write (results, runSummary = {}) {
     writeReport({
@@ -392,7 +406,6 @@ describe('test optimization validation report', () => {
   /**
    * Reads the generated Markdown report.
    *
-   * @returns {string} report source
    */
   function readReport () {
     return fs.readFileSync(path.join(out, 'report.md'), 'utf8')
