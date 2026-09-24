@@ -3923,10 +3923,6 @@ declare namespace tracer {
 
     type PromptTemplateItem = PromptTemplateMessage | PromptMessagePlaceholder
 
-    interface FormattedPromptMessage extends PromptTemplateMessage {
-      [key: string]: unknown
-    }
-
     type PromptFallbackValue =
       | string
       | PromptTemplateItem[]
@@ -3968,14 +3964,15 @@ declare namespace tracer {
       envIds?: string[]
     }
 
+    // Preserve released output types; placeholder entries and null/omitted tool content are not fully described here.
     interface ManagedPrompt {
       readonly id: string,
       readonly version: string,
       readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
-      readonly template: string | ReadonlyArray<Readonly<PromptTemplateItem>>,
+      readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
-      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
+      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
       toAnnotation (variables?: Record<string, unknown>): Prompt
     }
 

@@ -506,9 +506,10 @@ class LLMObsTagger {
 
     if (Array.isArray(template)) {
       for (const item of template) {
-        const message = typeof item?.role === 'string' && typeof item?.content === 'string'
-        const placeholder = item?.type === 'placeholder' && typeof item?.name === 'string'
-        if (!message && !placeholder) {
+        const valid = item?.type === 'placeholder'
+          ? typeof item.name === 'string'
+          : typeof item?.role === 'string' && typeof item?.content === 'string'
+        if (!valid) {
           this.#handleFailure(
             'Prompt chat template must contain messages or message placeholders.', 'invalid_prompt'
           )
