@@ -239,7 +239,6 @@ const sourceCodes = new Map()
 
 /**
  * @param {string} filename
- * @returns {string}
  */
 function read (filename) {
   return readFileSync(path.join(root, filename), 'utf8')
@@ -248,15 +247,11 @@ function read (filename) {
 /**
  * @param {boolean} condition
  * @param {string} message
- * @returns {void}
  */
 function check (condition, message) {
   if (!condition) failures.push(message)
 }
 
-/**
- * @returns {void}
- */
 function verifyInventory () {
   const expected = [...SKILL_TOKEN_BUDGETS.keys()].sort()
   const actual = []
@@ -274,7 +269,6 @@ function verifyInventory () {
 /**
  * @param {string} filename
  * @param {string} source
- * @returns {void}
  */
 function verifyFrontmatter (filename, source) {
   if (!filename.endsWith('/SKILL.md')) return
@@ -302,7 +296,6 @@ function verifyFrontmatter (filename, source) {
 /**
  * @param {string} filename
  * @param {string} source
- * @returns {void}
  */
 function verifyLinks (filename, source) {
   for (const match of source.matchAll(/\]\(([^)]+)\)/g)) {
@@ -317,7 +310,6 @@ function verifyLinks (filename, source) {
 /**
  * @param {string} filename
  * @param {string} source
- * @returns {void}
  */
 function verifyConcretePaths (filename, source) {
   for (const match of source.matchAll(/`([^`\n]+)`/g)) {
@@ -331,7 +323,6 @@ function verifyConcretePaths (filename, source) {
 /**
  * @param {string} filename
  * @param {string} source
- * @returns {void}
  */
 function verifyNpmCommands (filename, source) {
   let scripts
@@ -353,9 +344,6 @@ function verifyNpmCommands (filename, source) {
   }
 }
 
-/**
- * @returns {void}
- */
 function verifyDiscoveryMetadata () {
   for (const [filename, skill] of DISCOVERY_METADATA) {
     const absoluteFilename = path.join(root, filename)
@@ -390,7 +378,6 @@ function verifyDiscoveryMetadata () {
  * @param {string} filename
  * @param {RegExp} pattern
  * @param {string} description
- * @returns {void}
  */
 function verifySourcePattern (filename, pattern, description) {
   const absoluteFilename = path.join(root, filename)
@@ -405,7 +392,6 @@ function verifySourcePattern (filename, pattern, description) {
  * @param {string} pattern
  * @param {string[]} requiredOwners
  * @param {string} description
- * @returns {void}
  */
 function verifyCodeownersRule (pattern, requiredOwners, description) {
   const filename = '.github/CODEOWNERS'
@@ -509,7 +495,6 @@ function findWorkflowLines (filename, integrations) {
 
 /**
  * @param {string} filename
- * @returns {boolean}
  */
 function isFile (filename) {
   const absoluteFilename = path.join(root, filename)
@@ -629,7 +614,6 @@ function findExportedObject (program) {
 /**
  * @param {string} filename
  * @param {import('estree').Property} property
- * @returns {string}
  */
 function findPropertyLocation (filename, property) {
   const location = /** @type {import('estree').SourceLocation} */ (property.loc)
@@ -800,8 +784,8 @@ function findIntegrationRegistrations (integration) {
  * @returns {string[]}
  */
 function findRewriterRegistrations (integration) {
-  const filename = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/index.js'
-  const target = resolveLocalSource(filename, `./${integration}`)
+  const filename = 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js'
+  const target = resolveLocalSource(filename, `./instrumentations/${integration}`)
   const sourceCode = parseJavaScript(filename)
   if (!target || !sourceCode) return []
 
@@ -832,7 +816,7 @@ function findLatestVersion (packageName) {
 /**
  * @param {string} integration
  * @param {IntegrationRegistrations} registrations
- * @param {string | undefined} packageName
+ * @param {string} [packageName]
  * @returns {PackageRegistration[]}
  */
 function findPackages (integration, registrations, packageName) {
@@ -1132,7 +1116,6 @@ function findClosestReference (integration, mode, traits) {
       ? !source.includes('datadog-shimmer') || findHookPackages(candidate).size === 0
       : findRewriterRegistrations(candidate).length === 0) continue
 
-    const moduleName = source.match(/name:\s*['"]([^'"]+)['"]/)?.[1] ?? candidate
     const registrations = findIntegrationRegistrations(candidate)
     const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
     const contracts = findContractSources(pluginSources, registrations.pluginDirectories)
@@ -1163,7 +1146,7 @@ function findClosestReference (integration, mode, traits) {
       score += 8
     }
     if (hasRequestedKind) score += 8
-    if (traits.includes('cjs-esm') && /(?:cjs|commonjs)/i.test(source) && /esm/i.test(source)) score += 4
+    if (traits.includes('cjs-esm') && /cjs|commonjs/i.test(source) && /esm/i.test(source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
       if (traits.includes(trait) && (
         source.includes(`kind: '${kind}'`) || source.includes(`kind: "${kind}"`)
@@ -1187,9 +1170,11 @@ function findClosestReference (integration, mode, traits) {
         integrationTest ?? tests[0],
       ]),
       registrations: compactPaths([
-        registrations.hooks.get(moduleName),
-        registrations.plugins.get(moduleName),
-        findLatestVersion(moduleName)?.source,
+        ...findPackages(candidate, registrations).flatMap(({ hook, plugin, version }) => [
+          hook,
+          plugin,
+          version?.source,
+        ]),
         ...Object.values(ledger).flat(),
       ]),
     }
@@ -1256,7 +1241,6 @@ function inspectIntegration (integration, packageName, mode, traits) {
 
 /**
  * @param {string} character
- * @returns {string}
  */
 function escapeControlCharacter (character) {
   let escaped = ''
@@ -1268,7 +1252,6 @@ function escapeControlCharacter (character) {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function escapeControlCharacters (value) {
   return value.replaceAll(TERMINAL_CONTROL_PATTERN, escapeControlCharacter)
@@ -1276,7 +1259,6 @@ function escapeControlCharacters (value) {
 
 /**
  * @param {string} value
- * @returns {string}
  */
 function escapeJsonControlCharacters (value) {
   return value.replaceAll(TERMINAL_CONTROL_PATTERN, character => {
@@ -1286,7 +1268,6 @@ function escapeJsonControlCharacters (value) {
 
 /**
  * @param {InspectionPacket} packet
- * @returns {string}
  */
 function renderInspection (packet) {
   const lines = [
@@ -1353,7 +1334,6 @@ function renderInspection (packet) {
 /**
  * @param {string} link
  * @param {string} target
- * @returns {void}
  */
 function verifySymlink (link, target) {
   const absoluteLink = path.join(root, link)
