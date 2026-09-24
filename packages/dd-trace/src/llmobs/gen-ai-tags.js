@@ -105,19 +105,15 @@ function setGenAiApmUsageMetrics (span, spanKind, metrics) {
   if (!MODEL_BACKED_SPAN_KINDS.has(spanKind)) return
 
   const spanContext = span.context()
-  let marked = false
+
+  // ahead of the metrics, for the same reason `updateGenAiApmTags` marks before its scalars
+  markArtificialGenAiTags(spanContext)
 
   for (const [key, value] of Object.entries(metrics)) {
     if (typeof value !== 'number') continue
 
     const genAiKey = GEN_AI_USAGE_METRIC_KEYS[METRIC_KEY_ALIASES[key] ?? key]
     if (!genAiKey) continue
-
-    // ahead of the first metric, for the same reason `updateGenAiApmTags` marks before its scalars
-    if (!marked) {
-      markArtificialGenAiTags(spanContext)
-      marked = true
-    }
 
     spanContext.setTag(genAiKey, value)
   }

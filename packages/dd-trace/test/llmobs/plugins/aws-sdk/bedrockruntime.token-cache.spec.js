@@ -189,6 +189,44 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       })
     })
 
+    it('omits token usage for a Converse response whose usage object reports no counts', () => {
+      completeCh.publish({
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'converse', params: { modelId: 'amazon.titan' } },
+          $metadata: { requestId: 'req-converse-empty' },
+          usage: {},
+        },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+    })
+
+    it('writes only the counts a partial Converse usage object reports', () => {
+      completeCh.publish({
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'converse', params: { modelId: 'amazon.titan' } },
+          $metadata: { requestId: 'req-converse-partial' },
+          usage: { outputTokens: 4 },
+        },
+      })
+
+      assert.deepStrictEqual(apmTags, {
+        'gen_ai.operation.name': 'llm',
+        'gen_ai.request.model': 'amazon.titan',
+        'gen_ai.provider.name': 'amazon_bedrock',
+        'gen_ai.usage.output_tokens': 4,
+        'gen_ai.usage.total_tokens': 4,
+        '_dd.llmobs.artificial_gen_ai_tags': 'true',
+      })
+    })
+
     // `invokeModelWithResponseStream` sends no token headers and no Converse metadata event; the
     // counts ride in the body of one chunk
     it('reads invokeModel stream usage off the invocation metrics chunk', () => {
@@ -256,8 +294,8 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
     })
 
-    // the frames carrying only generated text are dropped, not held until the response completes
-    it('retains only the frames that can carry a token count', () => {
+    // the counts are folded in as they arrive, so no frame is held until the response completes
+    it('retains the running totals rather than the frames', () => {
       const ctx = buildStreamCtx('req-invoke-stream-retention')
 
       streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ outputText: 'lots of text' }) })
@@ -268,29 +306,27 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
         ctx,
         chunk: invokeModelChunk({ 'amazon-bedrock-invocationMetrics': { inputTokenCount: 3, outputTokenCount: 1 } }),
       })
-      assert.equal(ctx.chunks.length, 1)
+      assert.equal(ctx.chunks, undefined)
 
       completeCh.publish(ctx)
       assert.equal(apmTags['gen_ai.usage.total_tokens'], 4)
     })
 
-    // the markers are field names, so text about token usage is still only text
-    it('does not retain a frame whose generated text mentions the usage fields', () => {
-      const ctx = buildStreamCtx('req-invoke-stream-prose')
+    // Amazon reports its counts on a frame that also carries text, and more text can follow; the
+    // later frame must not overwrite what the earlier one measured
+    it('keeps the counts a frame reported when a text-only frame follows', () => {
+      const ctx = buildStreamCtx('req-invoke-stream-trailing-text')
 
       streamedChunkCh.publish({
         ctx,
-        chunk: invokeModelChunk({ outputText: 'On "usage": the inputTextTokenCount field reports it.' }),
+        chunk: invokeModelChunk({ outputText: 'hello ', inputTextTokenCount: 6, totalOutputTextTokenCount: 2 }),
       })
-      assert.equal(ctx.chunks, undefined)
-
-      streamedChunkCh.publish({
-        ctx,
-        chunk: invokeModelChunk({ 'amazon-bedrock-invocationMetrics': { inputTokenCount: 3, outputTokenCount: 1 } }),
-      })
+      streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ outputText: 'world' }) })
       completeCh.publish(ctx)
 
-      assert.equal(apmTags['gen_ai.usage.total_tokens'], 4)
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 6)
+      assert.equal(apmTags['gen_ai.usage.output_tokens'], 2)
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
     })
 
     it('omits usage for a streamed invokeModel whose chunks report no invocation metrics', () => {
