@@ -29,6 +29,8 @@ describe('Tracer', () => {
   let exporter
   let agentExporter
   let llmobsExporter
+  let otlpExporter
+  let createOtlpTraceExporter
   let spanContext
   let fields
   let carrier
@@ -64,6 +66,10 @@ describe('Tracer', () => {
     AgentExporter = sinon.stub().returns(agentExporter)
     llmobsExporter = { export: sinon.spy() }
     LLMObsExporter = sinon.stub().returns(llmobsExporter)
+    otlpExporter = {
+      export: sinon.spy(),
+    }
+    createOtlpTraceExporter = sinon.stub().returns(otlpExporter)
 
     processor = {
       process: sinon.spy(),
@@ -91,6 +97,8 @@ describe('Tracer', () => {
       tags: {},
       debug: true,
       experimental: {},
+      rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
+      tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
     }
 
     log = {
@@ -112,6 +120,7 @@ describe('Tracer', () => {
       './propagation/log': LogPropagator,
       '../log': log,
       '../exporter': exporter,
+      '../opentelemetry/trace': { createOtlpTraceExporter },
     })
   })
 
@@ -121,6 +130,26 @@ describe('Tracer', () => {
     sinon.assert.called(AgentExporter)
     sinon.assert.calledWith(AgentExporter, config, prioritySampler)
     sinon.assert.calledWith(SpanProcessor, agentExporter, prioritySampler, config)
+  })
+
+  it('should preserve the Electron exporter when the OTLP exporter is enabled', () => {
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'electron'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWith(exporter, 'electron')
+    sinon.assert.calledWith(SpanProcessor, agentExporter, prioritySampler, config)
+  })
+
+  it('should use the OTLP exporter with a non-Electron trace exporter', () => {
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWith(createOtlpTraceExporter, config)
+    sinon.assert.calledWith(SpanProcessor, otlpExporter, prioritySampler, config)
   })
 
   it('should allow to configure an alternative prioritySampler', () => {
@@ -136,7 +165,7 @@ describe('Tracer', () => {
       DD_LLMOBS_ENABLED: true,
       DD_LLMOBS_AGENTLESS_ENABLED: undefined,
     }
-    config.experimental.exporter = 'llmobs'
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'llmobs'
     exporter.returns(LLMObsExporter)
 
     tracer = new Tracer(config)

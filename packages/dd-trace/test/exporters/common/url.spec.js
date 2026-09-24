@@ -6,7 +6,7 @@ const { describe, it } = require('mocha')
 
 require('../../setup/core')
 
-const { createSiteUrl, parseUrl } = require('../../../src/exporters/common/url')
+const { createSiteUrl, normalizeSite, parseUrl } = require('../../../src/exporters/common/url')
 
 describe('exporters/common/url createSiteUrl', () => {
   it('creates an HTTPS URL from a site and intake', () => {
@@ -14,6 +14,12 @@ describe('exporters/common/url createSiteUrl', () => {
       createSiteUrl('DATADOGHQ.EU', 'debugger-intake').href,
       'https://debugger-intake.datadoghq.eu/'
     )
+  })
+
+  it('normalizes outer whitespace and defaults blank sites', () => {
+    assert.strictEqual(normalizeSite('  DATADOGHQ.EU  '), 'datadoghq.eu')
+    assert.strictEqual(normalizeSite('  '), 'datadoghq.com')
+    assert.strictEqual(normalizeSite(undefined), 'datadoghq.com')
   })
 
   for (const site of [
@@ -24,12 +30,24 @@ describe('exporters/common/url createSiteUrl', () => {
     'datadoghq.com/path',
     'datadoghq.com?query',
     'datadoghq.com#fragment',
+    'datadoghq\\.com',
+    'datadoghq..com',
+    '-datadoghq.com',
+    'datadoghq-.com',
+    'dátadoghq.com',
   ]) {
     it(`rejects a site with URL components: ${site}`, () => {
       assert.strictEqual(createSiteUrl(site, 'debugger-intake'), undefined)
       assert.strictEqual(createSiteUrl(site), undefined)
     })
   }
+
+  it('rejects a valid site suffix when the composed intake hostname is too long', () => {
+    const label = 'a'.repeat(63)
+    const site = `${label}.${label}.${label}.${'a'.repeat(49)}`
+
+    assert.strictEqual(createSiteUrl(site, 'event-platform-intake'), undefined)
+  })
 })
 
 describe('exporters/common/url parseUrl', () => {

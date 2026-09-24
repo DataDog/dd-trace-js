@@ -1,0 +1,40 @@
+name: "[Release Proposal Merge]"
+
+on:
+  workflow_call:
+    inputs:
+      pull-request-number:
+        required: true
+        type: number
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.pull-request-number }}
+  cancel-in-progress: false
+
+jobs:
+  merge-release-proposal:
+    name: Merge release proposal
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'enqueued' &&
+      github.event.pull_request.number == inputs.pull-request-number
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal-merge
+      - name: Check out trusted repository state
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          ref: master
+          token: ${{ steps.octo-sts.outputs.token }}
+      - name: Fast-forward release proposal
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+        run: node scripts/release/merge-proposal.js "$PULL_REQUEST_NUMBER"

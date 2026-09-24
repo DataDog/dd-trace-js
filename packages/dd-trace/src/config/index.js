@@ -370,8 +370,8 @@ class Config extends ConfigBase {
 
     if (this.featureFlags.DD_FEATURE_FLAGS_ENABLED &&
         !trackedConfigOrigins.has('featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE') &&
-        trackedConfigOrigins.has('experimental.flaggingProvider.enabled')) {
-      if (this.experimental.flaggingProvider.enabled) {
+        trackedConfigOrigins.has('featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED')) {
+      if (this.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED) {
         setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'remote_config')
       } else {
         setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_ENABLED', false)
@@ -505,7 +505,8 @@ class Config extends ConfigBase {
     // dd-trace's own sampling policy in that case.
     if (!trackedConfigOrigins.has('sampleRate') &&
         (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          (this.OTEL_TRACES_EXPORTER === 'otlp' && this.experimental.exporter !== 'electron'))) {
+          (this.OTEL_TRACES_EXPORTER === 'otlp' &&
+            this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== 'electron'))) {
       setAndTrack(this, 'sampleRate',
         getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
@@ -643,7 +644,7 @@ class Config extends ConfigBase {
     }
 
     const isTestOptimizationWorker = this.isCiVisibility &&
-      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.experimental.exporter)
+      TEST_OPTIMIZATION_WORKER_EXPORTERS.has(this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
     if (isTestOptimizationWorker) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
@@ -656,7 +657,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'llmobs.DD_LLMOBS_AGENTLESS_ENABLED', true)
       setAndTrack(this, 'featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE', 'agentless')
       if (this.DD_API_KEY === undefined) {
-        setAndTrack(this, 'dynamicInstrumentation.enabled', false)
+        setAndTrack(this, 'dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED', false)
       }
       setAndTrack(this, 'runtimeMetrics.enabled', false)
       setAndTrack(this, 'dsmEnabled', false)
@@ -672,7 +673,7 @@ class Config extends ConfigBase {
     }
 
     if (agentlessTracingEnabled && !this.isCiVisibility) {
-      setAndTrack(this, 'experimental.exporter', 'agentless')
+      setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting

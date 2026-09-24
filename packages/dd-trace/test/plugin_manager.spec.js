@@ -34,6 +34,7 @@ describe('Plugin Manager', () => {
       // The real tracer Config always carries the testOptimization namespace;
       // #getSharedConfig reads it, so the stand-in must provide it too.
       testOptimization: {},
+      tracing: {},
       ...overrides,
     }
   }
@@ -393,11 +394,13 @@ describe('Plugin Manager', () => {
     })
 
     it('observes configuration options', () => {
+      const tracing = { DD_TRACE_EXPERIMENTAL_EXPORTER: 'jest_worker' }
       pm.configure(makeTracerConfig({
         serviceMapping: { two: 'deux' },
         logInjection: true,
         DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
+        tracing,
       }))
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
@@ -407,12 +410,14 @@ describe('Plugin Manager', () => {
         logInjection: true,
         queryStringObfuscation: '.*',
         clientIpEnabled: true,
+        tracing,
       })
       sinon.assert.calledWithMatch(Four.prototype.configure, {
         enabled: true,
         logInjection: true,
         queryStringObfuscation: '.*',
         clientIpEnabled: true,
+        tracing,
       })
     })
 
