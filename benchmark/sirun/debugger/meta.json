@@ -16,6 +16,7 @@
       }
     },
     "line-probe-without-snapshot": {
+      "iterations": 4,
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {
@@ -43,6 +44,7 @@
       }
     },
     "line-probe-with-snapshot-minimal": {
+      "iterations": 4,
       "run": "node app.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node app.js\"",
       "env": {

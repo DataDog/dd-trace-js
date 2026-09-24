@@ -9,7 +9,7 @@
     "amqplib": "1.0.6",
     "body-parser": "2.3.0",
     "bunyan": "1.8.15",
-    "cassandra-driver": "4.8.0",
+    "cassandra-driver": "4.10.0",
     "express": "5.2.1",
     "fastify": "5.12.1",
     "graphql": "16.14.0",

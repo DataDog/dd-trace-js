@@ -1,5 +1,6 @@
 'use strict'
 
+const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
 const DEFAULT_AGENTLESS_PATH = '/api/v2/feature-flagging/config/rules-based/server'
@@ -60,7 +61,9 @@ function endpoint (config, configuredBaseUrl) {
   const configured = configuredBaseUrl?.trim()
 
   if (!configured) {
-    const url = new URL(`https://ufc-server.ff-cdn.${config.site.toLowerCase()}${DEFAULT_AGENTLESS_PATH}`)
+    const url = createSiteUrl(config.site, 'ufc-server.ff-cdn')
+    if (url === undefined) throw new Error('Invalid DD_SITE for Feature Flagging agentless configuration')
+    url.pathname = DEFAULT_AGENTLESS_PATH
     if (config.env) url.searchParams.set('dd_env', config.env)
     return url
   }
