@@ -301,6 +301,7 @@ interface Plugins {
   "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
+  "react-router": tracer.plugins.react_router;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
@@ -3168,6 +3169,16 @@ declare namespace tracer {
      * to collect protobuf message schemas when Datastreams Monitoring is enabled.
      */
     interface protobufjs extends Integration {}
+
+    /**
+     * This plugin automatically instruments
+     * [React Router](https://reactrouter.com/) Framework Mode via the
+     * ServerInstrumentation API (`createRequestHandler`), tagging Express/http
+     * spans with parameterized routes and creating loader/action child spans.
+     *
+     * Requires `react-router` >= 7.9.5 (stable `instrumentations` in >= 7.15).
+     */
+    interface react_router extends HttpServer {}
 
     /**
      * This plugin automatically instruments the
