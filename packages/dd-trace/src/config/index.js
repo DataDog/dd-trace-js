@@ -689,10 +689,10 @@ class Config extends ConfigBase {
     }
 
     if (this.llmobs.DD_LLMOBS_ENABLED) {
-      const exporter = this.experimental.exporter
+      const exporter = this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER
       const supportsLlmobs = !exporter || exporter === exporters.AGENT || exporter === exporters.AGENTLESS
       if (!this.isCiVisibility && this.OTEL_TRACES_EXPORTER !== 'otlp' && supportsLlmobs) {
-        setAndTrack(this, 'experimental.exporter', exporters.LLMOBS)
+        setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', exporters.LLMOBS)
       }
     }
 
