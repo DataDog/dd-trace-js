@@ -24,7 +24,7 @@
       "env": {
         "VARIANT": "scale",
         "CONSENT": "true",
-        "OPERATIONS": "20000",
+        "OPERATIONS": "40000",
         "WARMUP": "500"
       }
     },
