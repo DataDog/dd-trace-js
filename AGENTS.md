@@ -7,11 +7,18 @@ precedence within their scope.
 
 ## Setup and Commands
 
+- Use a Node.js version satisfying `package.json#engines`; service-backed tests require Docker with Docker Compose.
 - Use yarn 1.x only to install dependencies (`yarn add`, `yarn install`) and run `yarn services`.
 - Use npm for scripts, tests, linting, builds, and all other commands: `npm run <script>`.
-- The root `npm test` is intentionally disabled. Run a specific `*.spec.js` file or targeted `test:<area>` script.
+- Never run the root `npm test`; it is intentionally disabled. Use a targeted `test:<area>` script or spec below.
 
-## Design
+## Development Workflow
+
+1. Read the relevant implementation and tests; search for existing utilities before adding another implementation.
+2. Choose the smallest clean solution. Ask before implementing when meaningful architectural trade-offs exist.
+3. Keep changes focused. Justify new dependencies and refactors outside the requested behavior.
+4. Cover behavior changes, failure cases, and relevant edge cases. Run narrow validation first, then broaden as needed.
+5. Report the commands run and their results; do not claim validation that was not performed.
 
 Prefer composition and explicit contracts. Avoid new public APIs unless the use case requires a lasting contract.
 Do not expose internals or bend production code solely to make a test possible. Fix upstream issues upstream rather
@@ -19,7 +26,36 @@ than maintaining a local workaround when practical.
 
 ## Testing
 
-Clear `OTEL_TRACES_EXPORTER`, `OTEL_LOGS_EXPORTER`, and `OTEL_METRICS_EXPORTER` when running plugin tests.
+Run individual specs from the repository root:
+
+```bash
+./node_modules/.bin/mocha path/to/test.spec.js
+./node_modules/.bin/mocha --timeout 60000 path/to/integration-test.spec.js
+```
+
+Use `node scripts/mocha-run-file.js path/to/test.spec.js` when the spec must be the process entrypoint.
+Preserve required Node flags from the suite script, such as `--expose-gc`.
+Use the Mocha CLI `--grep` option to select test names.
+Integration tests may require Docker, network access, and elevated sandbox permissions.
+
+Set `PLUGINS` explicitly. Clear inherited `SPEC` unless intentionally narrowing by filename prefix.
+Unset inherited `SERVICES` when the plugin requires no service.
+Clear exporter variables in the shell running each plugin command:
+
+```bash
+unset OTEL_TRACES_EXPORTER OTEL_LOGS_EXPORTER OTEL_METRICS_EXPORTER
+PLUGINS="<name>" npm run test:plugins:ci
+```
+
+The `:ci` script runs `yarn services` to install versioned dependencies and check services before testing.
+After setup, use `PLUGINS="<name>" npm run test:plugins` to rerun without repeating dependency installation.
+For service-backed plugins, find the required containers and `SERVICES` filter in
+`.github/workflows/apm-integrations.yml`. Match the containers to service names in `docker-compose.yml`, then run:
+
+```bash
+docker compose up -d <compose-services>
+SERVICES="<workflow-service-filter>" PLUGINS="<name>" npm run test:plugins:ci
+```
 
 `aerospike`, `couchbase`, `grpc`, and `oracledb` are incompatible with ARM64.
 
@@ -48,6 +84,9 @@ Every added or modified test must pass or be explicitly skipped under v5.
 - Prefer `#private` fields for class-local state. Avoid accessors and large refactors of existing `_underscore` fields.
 - Never use `for-in`; use `for-of`, `for`, or `while` in production hot paths.
 - Use **Test Optimization** in repository-owned names/prose; preserve external names, ids, and cross-SDK terms.
+
+Group imports with blank lines: Node.js core modules with `node:`, third-party modules, then internal modules.
+Sort within groups, with internal modules ordered furthest path first. Preserve tracer-first loading where required.
 
 For new or changed methods with a non-obvious contract, add TypeScript-compatible JSDoc with specific parameter types.
 Omit inferable return types and do not repeat inherited or interface contracts on conventional overrides. Reuse existing
@@ -85,9 +124,16 @@ Update every supported public TypeScript surface for new public APIs unless the 
 
 ## Cross-Cutting Configuration Changes
 
-For new top-level options or environment variables, keep defaults, parsing, applicable public types, telemetry,
-the supported configuration inventory, and tests consistent. Document non-internal, non-experimental options on their
-owning public surface. Other settings update only their owning surfaces.
+For new top-level tracer options or environment variables, update these surfaces.
+Other settings update only their owning surfaces:
+
+1. Add the default in `packages/dd-trace/src/config/defaults.js`.
+2. Map the environment variable in `packages/dd-trace/src/config/index.js`.
+3. Update both supported public TypeScript surfaces when applicable.
+4. Add the telemetry name mapping in `packages/dd-trace/src/telemetry/telemetry.js` when applicable.
+5. Update `packages/dd-trace/src/config/supported-configurations.json`.
+6. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
+7. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
 
@@ -121,6 +167,8 @@ Load the relevant repository skill when the task matches:
 - [Serverless platform integrations](.agents/skills/serverless-integrations/SKILL.md)
 
 Instrumentations hook libraries and publish diagnostic-channel events; plugins own tracing behavior.
+Validate new plugin registration and structure with
+`./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js`.
 
 Use `dc-polyfill` for production diagnostic-channel imports. Do not import `node:diagnostics_channel` directly.
 
