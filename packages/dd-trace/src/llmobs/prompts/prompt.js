@@ -99,7 +99,8 @@ class ManagedPrompt {
     const promptLike = value && !Array.isArray(value) && typeof value === 'object'
     const template = promptLike ? value.template : value
     const validTemplate = typeof template === 'string' || (
-      Array.isArray(template) && template.every(item => isMessage(item) || isPlaceholder(item))
+      Array.isArray(template) && template.every(item =>
+        isPlaceholder(item) || (isMessage(item) && typeof item.content === 'string'))
     )
     if (!validTemplate) {
       throw new TypeError('Invalid prompt fallback: expected a string, chat message array, or object with a template')

@@ -167,6 +167,8 @@ describe('ManagedPrompt', () => {
     const invalidFallbacks = [
       { version: 'local-v1' },
       [{ role: 'user', content: 42 }],
+      [{ role: 'assistant', content: null, tool_calls: [{ name: 'lookup' }] }],
+      [{ role: 'tool', tool_results: [{ result: 'found' }] }],
     ]
 
     for (const fallback of invalidFallbacks) {
