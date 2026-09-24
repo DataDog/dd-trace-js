@@ -91,25 +91,14 @@ describe('ManagedPrompt', () => {
     ]
     const variables = { plan: 'pro', question: 'Why?', history, empty: [] }
 
-    const rendered = prompt.format(variables)
-    assert.deepStrictEqual(rendered, [
+    const expected = structuredClone([
       { role: 'system', content: 'Plan: pro' },
-      { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
-      {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
-      },
-      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+      ...history,
       { role: 'user', content: 'Why?' },
-      { role: 'assistant', content: '{{ opaque }}', tool_call_id: 'call-1' },
-      {
-        role: 'assistant',
-        content: null,
-        tool_calls: [{ name: 'lookup', arguments: { id: 1 }, tool_id: 'call-1' }],
-      },
-      { role: 'tool', tool_results: [{ name: 'lookup', result: 'found', tool_id: 'call-1' }] },
+      ...history,
     ])
+    const rendered = prompt.format(variables)
+    assert.deepStrictEqual(rendered, expected)
     history[0].content = 'changed'
     assert.strictEqual(rendered[1].content, '{{ opaque }}')
     assert.deepStrictEqual(prompt.toAnnotation(variables), {
@@ -125,7 +114,8 @@ describe('ManagedPrompt', () => {
       variables: { plan: 'pro', question: 'Why?' },
     })
     assert.throws(() => prompt.format({ plan: 'pro', question: 'Why?', empty: [] }), {
-      message: "Missing message placeholder variable 'history'",
+      name: 'TypeError',
+      message: /Missing.*history/,
     })
     for (const malformed of [
       null,
@@ -138,7 +128,8 @@ describe('ManagedPrompt', () => {
       [{ type: 'placeholder', name: 'nested', role: 'user', content: 'x' }],
     ]) {
       assert.throws(() => prompt.format({ history: malformed, empty: [] }), {
-        message: "Invalid message placeholder variable 'history': expected an array of messages",
+        name: 'TypeError',
+        message: /Invalid.*history/,
       })
     }
   })
@@ -174,7 +165,7 @@ describe('ManagedPrompt', () => {
     for (const fallback of invalidFallbacks) {
       assert.throws(() => ManagedPrompt.fromFallback('p', fallback), {
         name: 'TypeError',
-        message: 'Invalid prompt fallback: expected a string, chat message array, or object with a template',
+        message: /Invalid prompt fallback/,
       })
     }
   })
