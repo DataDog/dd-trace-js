@@ -265,8 +265,11 @@ function extractRequestParams (params, provider) {
         for (const message of requestBody.messages) {
           const textBlocks = message.content?.filter(block => block.text) || []
           if (textBlocks.length > 0) {
+            let content = ''
+            for (const block of textBlocks) content += block.text
+
             messages.push({
-              content: textBlocks.map(block => block.text).join(''),
+              content,
               role: message.role,
             })
           }
@@ -288,9 +291,14 @@ function extractRequestParams (params, provider) {
         for (let idx = requestBody.messages.length - 1; idx >= 0; idx--) {
           const message = requestBody.messages[idx]
           if (message.role === 'user') {
-            prompt = message.content?.filter(block => block.type === 'text')
-              .map(block => block.text)
-              .join('')
+            const content = message.content
+            prompt = undefined
+            if (content) {
+              prompt = ''
+              for (const block of content) {
+                if (block.type === 'text') prompt += block.text
+              }
+            }
             break
           }
         }
@@ -492,6 +500,8 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
       if (block == null || typeof block !== 'object') continue
       if (typeof block.text === 'string') {
         content += block.text
+      } else if (typeof block.guardContent?.text?.text === 'string') {
+        content += block.guardContent.text.text
       } else if (block.toolUse) {
         toolCalls.push(buildToolCall(block.toolUse))
       } else if (block.toolResult) {
@@ -518,7 +528,6 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
  * of the `[name, value]` tuple.
  *
  * @param {object} block
- * @returns {string}
  */
 function getContentBlockType (block) {
   const key = Object.keys(block)[0]
@@ -546,7 +555,10 @@ function parseToolInput (inputStr) {
 }
 
 function buildToolResult ({ toolUseId, content }) {
-  const result = (content || []).map(resolveToolResultItem).join('')
+  let result = ''
+  if (content) {
+    for (const item of content) result += resolveToolResultItem(item)
+  }
   return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
 }
 
@@ -600,7 +612,11 @@ function extractRequestParamsConverse (params) {
   const prompt = []
   if (params.system) {
     for (const block of params.system) {
-      if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
+      if (typeof block?.text === 'string') {
+        prompt.push({ content: block.text, role: 'system' })
+      } else if (typeof block?.guardContent?.text?.text === 'string') {
+        prompt.push({ content: block.guardContent.text.text, role: 'system' })
+      }
     }
   }
   if (params.messages) {

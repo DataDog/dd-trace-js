@@ -94,9 +94,22 @@ function wrapSend (send) {
       return send.apply(this, arguments)
     }
 
+    const socket = this._sender?._socket
+    // No socket is attached before the handshake completes or after it is torn down.
+    if (!socket) {
+      return send.apply(this, arguments)
+    }
+
     const [data, options, cb] = arguments
 
-    const ctx = { data, socket: this._sender?._socket }
+    // `ws` stringifies numbers, then spreads `options` over its own inferred default, so an
+    // explicitly passed `binary` wins even when it is nullish and the frame goes out as text.
+    const payload = typeof data === 'number' ? data.toString() : data
+    const binary = options != null && Object.hasOwn(options, 'binary')
+      ? Boolean(options.binary)
+      : typeof payload !== 'string'
+    const byteLength = sentDataLength(payload)
+    const ctx = { data, binary, socket, byteLength }
 
     return typeof cb === 'function'
       ? producerCh.traceCallback(send, undefined, ctx, this, data, options, cb)
@@ -242,8 +255,34 @@ addHook({
 })
 
 /**
+ * Byte length of an outgoing payload, following the coercion `ws` applies in `Sender.send`:
+ * strings and blobs are measured directly and everything else goes through `toBuffer()`, which
+ * yields one byte per element for plain arrays rather than concatenating them. Blob-likes carry
+ * neither a `byteLength` nor an array shape, so they are matched last to keep the common
+ * buffer path first.
+ *
+ * @param {WebSocketMessageData | number | undefined} data
+ */
+function sentDataLength (data) {
+  if (typeof data === 'string') {
+    return Buffer.byteLength(data)
+  }
+  // An array is one byte per element even when it carries an unrelated `byteLength`.
+  if (Array.isArray(data)) {
+    return data.length
+  }
+  // Covers views as well as `ArrayBuffer` and `SharedArrayBuffer`.
+  if (typeof (/** @type {{ byteLength?: unknown }} */ (data)?.byteLength) === 'number') {
+    return /** @type {{ byteLength: number }} */ (data).byteLength
+  }
+  // Blobs and files, detected the way `ws` does: structurally, so shimmed and cross-realm
+  // implementations it accepts are measured instead of silently reported as empty.
+  const { size } = /** @type {{ size?: unknown }} */ (data) ?? {}
+  return typeof size === 'number' ? size : 0
+}
+
+/**
  * @param {WebSocketMessageData} data
- * @returns {number}
  */
 function dataLength (data) {
   if (typeof data === 'string') {

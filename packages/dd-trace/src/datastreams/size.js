@@ -2,6 +2,10 @@
 
 const { types } = require('util')
 
+// Byte cost of the `,"dd-pathway-ctx-base64":"<28 chars>"` field a producer adds to a JSON carrier.
+// A literal so eager `size` consumers don't pull in `./pathway`; `pathway.spec.js` pins it there.
+const PATHWAY_FIELD_BYTES = 55
+
 function getSizeOrZero (obj) {
   if (typeof obj === 'string') {
     return Buffer.byteLength(obj, 'utf8')
@@ -54,4 +58,5 @@ module.exports = {
   getHeadersSize,
   getSizeOrZero,
   getAmqpMessageSize,
+  PATHWAY_FIELD_BYTES,
 }

@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -45,12 +46,17 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  #promptManager
+
+  #getOpenFeatureProvider
+
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -58,6 +64,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
+    this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
 
   get enabled () {
@@ -71,6 +78,15 @@ class LLMObs extends NoopLLMObs {
    */
   get experiments () {
     return createExperiments(this._config, this)
+  }
+
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    this.#promptManager ??= new PromptManager(this._config, this.#getOpenFeatureProvider)
+    return this.#promptManager
   }
 
   enable (options = {}) {
@@ -97,8 +113,8 @@ class LLMObs extends NoopLLMObs {
 
     // TODO: These configs should be passed through directly at construction time instead.
     this._config.llmobs.DD_LLMOBS_ENABLED = true
-    this._config.llmobs.mlApp = options.mlApp
-    this._config.llmobs.agentlessEnabled = options.agentlessEnabled
+    this._config.llmobs.DD_LLMOBS_ML_APP = options.mlApp
+    this._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = options.agentlessEnabled
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -393,7 +409,7 @@ class LLMObs extends NoopLLMObs {
           'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
         )
       }
-      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      const mlApp = options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP
       if (!mlApp) {
         err = 'missing_ml_app'
         throw new Error(
@@ -475,7 +491,6 @@ class LLMObs extends NoopLLMObs {
    * @param {number} [options.timestampMs] - When the feedback was generated. Defaults to now.
    * @param {'pass' | 'fail'} [options.assessment] - Assessment of the feedback.
    * @param {string} [options.reasoning] - Explanation of the feedback.
-   * @returns {void}
    */
   submitFeedback (options = {}) {
     if (!this.enabled) return
@@ -532,7 +547,7 @@ class LLMObs extends NoopLLMObs {
         throw new TypeError('submitter.type must be a string')
       }
 
-      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      const mlApp = options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP
       if (!mlApp) {
         err = 'missing_ml_app'
         throw new Error('ML App name is required for sending feedback. Feedback data will not be sent.')

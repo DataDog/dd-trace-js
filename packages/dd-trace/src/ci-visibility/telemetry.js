@@ -45,10 +45,16 @@ function formatMetricTags (tagsDictionary) {
   return Object.keys(tagsDictionary).reduce((/** @type {string[]} */ acc, tagKey) => {
     if (tagKey === 'statusCode') {
       const statusCode = tagsDictionary[tagKey]
-      if (isStatusCode400(statusCode)) {
-        acc.push(`status_code:${statusCode}`)
+      if (statusCode) {
+        acc.push(`status_code:${statusCode}`, `error_type:${getErrorTypeFromStatusCode(statusCode)}`)
+      } else if (!tagsDictionary.errorType) {
+        acc.push('error_type:network')
       }
-      acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
+      return acc
+    }
+    if (tagKey === 'errorType') {
+      const errorType = tagsDictionary[tagKey]
+      if (errorType) acc.push(`error_type:${errorType}`)
       return acc
     }
     const formattedTagKey = /** @type {string} */(formattedTags[tagKey] || tagKey)
@@ -67,6 +73,16 @@ function incrementCountMetric (name, tags = {}, value = 1) {
 
 function distributionMetric (name, tags, measure) {
   ciVisibilityMetrics.distribution(name, formatMetricTags(tags)).track(measure)
+}
+
+/**
+ * Records that dynamic, duration-based ATR retries are enabled for this session.
+ *
+ * @param {boolean} hasCustomBuckets
+ */
+function recordDynamicAtrRetries (hasCustomBuckets) {
+  const tags = hasCustomBuckets ? { has_custom_buckets: 'true' } : {}
+  incrementCountMetric(TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED, tags)
 }
 
 // CI Visibility telemetry events
@@ -128,12 +144,10 @@ const TELEMETRY_TEST_MANAGEMENT_TESTS_MS = 'test_management_tests.request_ms'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_errors'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
 const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
-
-function isStatusCode400 (statusCode) {
-  return statusCode >= 400 && statusCode < 500
-}
+const TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED = 'dynamic_atr_retries.enabled'
 
 function getErrorTypeFromStatusCode (statusCode) {
+  if (typeof statusCode !== 'number') return 'network'
   if (statusCode >= 400 && statusCode < 500) {
     return 'status_code_4xx_response'
   }
@@ -146,6 +160,7 @@ function getErrorTypeFromStatusCode (statusCode) {
 module.exports = {
   incrementCountMetric,
   distributionMetric,
+  recordDynamicAtrRetries,
   TELEMETRY_TEST_SESSION,
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
@@ -201,4 +216,5 @@ module.exports = {
   TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
+  TELEMETRY_DYNAMIC_ATR_RETRIES_ENABLED,
 }

@@ -26,7 +26,8 @@ class AgentlessCiVisibilityExporter extends AgentlessCiVisibilityExporterBase {
 // the request chain. The stubbed singleton still pulls every other field from the real
 // tracer Config so the rest of the exporter behaves normally.
 function loadAgentlessExporterWithFakeConfig (fakeConfig) {
-  const realConfig = require('../../../../src/config')()
+  const createConfig = require('../../../../src/config')
+  const realConfig = createConfig()
   const getLibraryConfiguration = proxyquire('../../../../src/ci-visibility/requests/get-library-configuration', {
     '../../config': () => ({ ...realConfig, ...fakeConfig }),
   })

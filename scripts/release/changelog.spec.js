@@ -6,19 +6,11 @@ const { appendChangedPaths, createReleaseChangelog, isInternalOnly } = require('
 
 /**
  * @param {number} number
- * @returns {string}
  */
 const prLink = (number) => `[#${number}](https://github.com/DataDog/dd-trace-js/pull/${number})`
 
 /**
  * @param {string} login
- * @returns {string}
- */
-const contributorLink = (login) => `[@${login}](https://github.com/${login})`
-
-/**
- * @param {string} login
- * @returns {string}
  */
 const avatar = (login) => `[<img src="https://github.com/${login}.png?size=48" width="24" height="24" ` +
   `alt="@${login}" title="@${login}" />](https://github.com/${login})`
@@ -181,10 +173,10 @@ describe('release changelog', () => {
     assert.strictEqual(changelog.markdown, [
       '### Breaking Changes',
       `- **Dependencies:** Bump eslint from 9.0.0 to 10.0.0 ${prLink(9003)}`,
-      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)} — by ${contributorLink('bob')}`,
+      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)}`,
       '',
       '### Fixes',
-      `- **General:** Keep existing behavior stable ${prLink(9001)} — by ${contributorLink('alice')}`,
+      `- **General:** Keep existing behavior stable ${prLink(9001)}`,
       '',
       '### Contributors',
       '',
@@ -255,6 +247,18 @@ describe('release changelog', () => {
       '',
       '### Fixes',
       '- **General:** Keep request tagging stable',
+      '',
+    ].join('\n'))
+  })
+
+  it('normalizes repeated whitespace before pull request numbers', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'fix: trim release-note whitespace   (#1234)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Fixes',
+      `- **General:** Trim release-note whitespace ${prLink(1234)}`,
       '',
     ].join('\n'))
   })
@@ -515,12 +519,15 @@ describe('release changelog', () => {
     ))
   })
 
-  it('credits authors and co-authors on each change and in the contributor footer', () => {
+  it('renders only linked contributors and prefers them over name-only duplicates', () => {
     const changelog = createReleaseChangelog([
       {
         sha: 'abc001',
         subject: 'feat(appsec): add thing (#1)',
-        contributors: [{ name: '@Zoe', login: 'Zoe' }],
+        contributors: [
+          { name: 'alice' },
+          { name: '@Zoe', login: 'Zoe' },
+        ],
       },
       {
         sha: 'abc002',
@@ -529,6 +536,7 @@ describe('release changelog', () => {
           { name: '@alice', login: 'alice' },
           { name: '@bob', login: 'bob' },
           { name: '@Zoe', login: 'Zoe' },
+          { name: 'bob' },
           { name: 'Jane Doe' },
         ],
       },
@@ -536,20 +544,19 @@ describe('release changelog', () => {
 
     assert.strictEqual(changelog.markdown, [
       '### Features',
-      `- **AppSec:** Add thing ${prLink(1)} — by ${contributorLink('Zoe')}`,
+      `- **AppSec:** Add thing ${prLink(1)}`,
       '',
       '### Fixes',
-      `- **Profiling:** Fix thing ${prLink(2)} — by ${contributorLink('alice')}, ${contributorLink('bob')}, ` +
-        `${contributorLink('Zoe')}, Jane Doe`,
+      `- **Profiling:** Fix thing ${prLink(2)}`,
       '',
       '### Contributors',
       '',
-      `${avatar('alice')} ${avatar('bob')} ${avatar('Zoe')} Jane Doe`,
+      `${avatar('alice')} ${avatar('bob')} ${avatar('Zoe')}`,
       '',
     ].join('\n'))
   })
 
-  it('escapes Markdown in contributors without GitHub accounts', () => {
+  it('omits the contributor footer without GitHub accounts', () => {
     const changelog = createReleaseChangelog([
       {
         sha: 'abc001',
@@ -558,14 +565,9 @@ describe('release changelog', () => {
       },
     ])
 
-    const contributor = String.raw`\[Jane\]\(https\:\/\/example\.com\)`
     assert.strictEqual(changelog.markdown, [
       '### Fixes',
-      `- **General:** Fix thing ${prLink(1)} — by ${contributor}`,
-      '',
-      '### Contributors',
-      '',
-      contributor,
+      `- **General:** Fix thing ${prLink(1)}`,
       '',
     ].join('\n'))
   })

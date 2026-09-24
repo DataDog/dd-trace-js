@@ -84,20 +84,11 @@ try {
 
   start('Determine version increment')
 
-  // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
-  const MAX_CHERRY_PICKS = 99
-
   // Get all applicable commits from the release branch to main.
-  // Used to derive the capped upper bound before checking out any branch,
-  // avoiding a circular dependency between isMinor and the proposal branch state.
   const allMainShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
     .split('\n').filter(Boolean)
 
-  // The upper bound is the last main SHA that will fit in the proposal across all
-  // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
-  // how many commits are already on the branch (proven by:
-  // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
-  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1) ||
+  const upperBoundSha = allMainShas.at(-1) ||
     (isPreRelease ? capture(`git rev-parse v${releaseLine}.x`) : undefined)
 
   if (!upperBoundSha) {
@@ -109,8 +100,7 @@ try {
   // Abbreviated SHAs like "980e663509" match JS float syntax and become Infinity.
   const upperBoundRef = capture(`git rev-parse ${upperBoundSha}`)
 
-  // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
-  // the capped commits actually included in the proposal, not deferred ones.
+  // notesShas is scoped to upperBoundSha so links use the original commits on main.
   // Excludes changes that are listed in the dedicated breaking changes section.
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n')
@@ -162,22 +152,44 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
-  const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
+  const proposalCommits = capture(
+    `git log --format="%H%x09%s" --reverse v${releaseLine}.x..HEAD`
+  ).split('\n').filter(Boolean).map(line => {
+    const separator = line.indexOf('\t')
+    return {
+      sha: line.slice(0, separator),
+      subject: line.slice(separator + 1),
+    }
+  })
+
+  if (lastCommit === `v${newVersion}`) proposalCommits.pop()
+
+  for (let index = 0; index < proposalCommits.length; index++) {
+    const proposalCommit = proposalCommits[index]
+    const mainSha = allMainShas[index]
+    const mainSubject = mainSha ? capture(`git show -s --format=%s ${mainSha}`) : undefined
+    const proposalPullRequest = proposalCommit.subject.match(pullRequestNumberPattern)
+    const mainPullRequest = mainSubject?.match(pullRequestNumberPattern)
+    const matches = proposalPullRequest && mainPullRequest
+      ? proposalPullRequest[1] === mainPullRequest[1]
+      : proposalCommit.subject === mainSubject
+
+    if (!matches) {
+      fatal(
+        `Release proposal history diverged from ${main} at position ${index + 1}.`,
+        `  proposal: ${proposalCommit.sha.slice(0, 10)} ${proposalCommit.subject}`,
+        `  ${main}: ${mainSha ? `${mainSha.slice(0, 10)} ${mainSubject}` : '(no commit)'}`
+      )
+    }
+  }
+
+  const existingCherryPicked = proposalCommits.length
   const proposalShas = allMainShas.slice(existingCherryPicked)
-  const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
-  const truncated = shasToApply.length < proposalShas.length
-  const totalCommits = existingCherryPicked + shasToApply.length + 1
 
-  if (shasToApply.length > 0) {
-    // Show only commits being applied; upperBoundSha is the last main SHA that fits.
+  if (proposalShas.length > 0) {
     const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundRef}`)
-    const truncationNote = truncated
-      ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
-        ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
-      : ''
 
-    pass(`\n${newChanges}${truncationNote}`)
+    pass(`\n${newChanges}`)
 
     start('Apply changes from the main branch')
 
@@ -186,22 +198,42 @@ try {
       run('git reset --hard HEAD~1')
     }
 
-    // Cherry pick commits up to the GitHub rebase limit.
+    // Preserve empty main commits so the proposal commit count stays aligned with
+    // the ordered main commit list.
     try {
-      run(`git cherry-pick ${shasToApply.join(' ')}`)
+      run(`git cherry-pick --allow-empty ${proposalShas.join(' ')}`)
 
       pass()
-    } catch {
+    } catch (error) {
+      let incomingCommit
+      let proposalHead
+      let conflictedFiles
+
+      try {
+        incomingCommit = capture('git show -s --format="%h %s" CHERRY_PICK_HEAD')
+      } catch {}
+
+      try {
+        proposalHead = capture('git show -s --format="%h %s" HEAD')
+      } catch {}
+
+      try {
+        conflictedFiles = capture('git diff --name-only --diff-filter=U')
+      } catch {}
+
       run('git cherry-pick --abort')
 
-      fatal(
+      const messages = [
         'Cherry-pick failed. This means that the release branch has deviated from the main branch.',
-        'Please make sure the release branch contains all changes from the main branch.'
-      )
+        'Please make sure the release branch contains all changes from the main branch.',
+      ]
+      if (incomingCommit) messages.push(`Incoming from ${main}: ${incomingCommit}`)
+      if (proposalHead) messages.push(`Applying onto v${newVersion}-proposal: ${proposalHead}`)
+      if (conflictedFiles) messages.push(`Conflicted files: ${conflictedFiles.replaceAll('\n', ', ')}`)
+      messages.push(error.stderr?.trim() || error.message)
+
+      fatal(...messages)
     }
-  } else if (proposalShas.length > 0) {
-    pass(`⚠️  Proposal is at the commit limit (${MAX_CHERRY_PICKS}/${MAX_CHERRY_PICKS}).` +
-      ` ${proposalShas.length} new commit(s) require a separate release.`)
   } else {
     pass('none')
   }
@@ -303,7 +335,7 @@ try {
 
   if (process.env.GITHUB_OUTPUT) {
     fs.appendFileSync(process.env.GITHUB_OUTPUT, [
-      `commit_count=${totalCommits}`,
+      `commit_count=${allMainShas.length + 1}`,
       `version=v${newVersion}`,
       `pr_url=${pullRequest.url}`,
     ].join('\n') + '\n')

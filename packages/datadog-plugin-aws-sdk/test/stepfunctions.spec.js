@@ -110,6 +110,8 @@ describe('Sfn', () => {
             stateMachineArn,
             input: JSON.stringify({ moduleName }),
           }
+          const resp = await client.startExecution(startExecInput)
+
           const expectSpanPromise = agent.assertSomeTraces(traces => {
             const span = traces.flat().find(s => s.resource === 'startExecution')
             assert.ok(span, 'expected startExecution span')
@@ -117,9 +119,10 @@ describe('Sfn', () => {
             assert.strictEqual(span.meta.statemachinearn, stateMachineArn)
           }, { spanResourceMatch: /startExecution/ })
 
-          const resp = await client.startExecution(startExecInput)
-
-          const result = await client.describeExecution({ executionArn: resp.executionArn })
+          const [result] = await Promise.all([
+            client.describeExecution({ executionArn: resp.executionArn }),
+            expectSpanPromise,
+          ])
           const sfInput = JSON.parse(result.input)
           assert.ok(Object.hasOwn(sfInput, '_datadog'), `Available keys: ${inspect(Object.keys(sfInput))}`)
           assert.ok(
@@ -130,7 +133,6 @@ describe('Sfn', () => {
             Object.hasOwn(sfInput._datadog, 'x-datadog-parent-id'),
             `Available keys: ${inspect(Object.keys(sfInput._datadog))}`
           )
-          return expectSpanPromise.then(() => {})
         })
       }
     })

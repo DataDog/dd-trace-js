@@ -10,13 +10,13 @@ const { promisifiedHandler } = require('../src/handler-utils')
 describe('Lambda handler utilities', () => {
   it('supports callback, promise, and synchronous handlers', async () => {
     const context = { getRemainingTimeInMillis: () => 100 }
-    const callback = promisifiedHandler((_event, _context, done) => done(undefined, 'callback'))
+    const callbackHandler = promisifiedHandler((_event, _context, done) => done(undefined, 'callback'))
     const promise = promisifiedHandler(() => Promise.resolve('promise'))
     const synchronous = promisifiedHandler(() => 'synchronous')
 
     assert.deepStrictEqual(
       await Promise.all([
-        callback({}, context, () => {}),
+        callbackHandler({}, context, () => {}),
         promise({}, context),
         synchronous({}, context),
       ]),

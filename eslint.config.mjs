@@ -11,6 +11,7 @@ import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
 import eslintPluginPromise from 'eslint-plugin-promise'
+import eslintPluginRegexp from 'eslint-plugin-regexp'
 import eslintPluginSonar from 'eslint-plugin-sonarjs'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
@@ -20,18 +21,27 @@ import eslintCarrierFields from './eslint-rules/eslint-carrier-fields.mjs'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoCallResultInvocation from './eslint-rules/eslint-no-call-result-invocation.mjs'
+import eslintNoConditionalObjectSpread from './eslint-rules/eslint-no-conditional-object-spread.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNoProcessEnvDisable from './eslint-rules/eslint-no-process-env-disable.mjs'
+import eslintNoUnnecessaryArrayJoin from './eslint-rules/eslint-no-unnecessary-array-join.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
 import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireAgentStop from './eslint-rules/eslint-require-agent-stop.mjs'
 import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
+
+const PACKAGE_SRC_FILES = [
+  'packages/*/src/**/*.js',
+  'packages/*/src/**/*.mjs',
+]
 
 const SRC_FILES = [
   '*.js',
@@ -44,8 +54,7 @@ const SRC_FILES = [
   'scripts/**/*.mjs',
   'packages/*/*.js',
   'packages/*/*.mjs',
-  'packages/*/src/**/*.js',
-  'packages/*/src/**/*.mjs',
+  ...PACKAGE_SRC_FILES,
 ]
 
 const PROCESS_ENV_DISABLE_ALLOW_FILES = [
@@ -76,8 +85,16 @@ const TEST_FILES = [
   'packages/*/test/**/*.js',
   'packages/*/test/**/*.mjs',
   'integration-tests/**/*.js',
+  'integration-tests/**/*.jsx',
   'integration-tests/**/*.mjs',
   '**/*.spec.js',
+]
+
+const TRACKED_NODE_MODULE_DIRECTORIES = [
+  'packages/datadog-instrumentations/test/helpers/rewriter/node_modules',
+  'packages/dd-trace/test/appsec/iast/security-controls/resources/node_modules',
+  'packages/dd-trace/test/appsec/iast/security-controls/resources/node_modules/anotherlib/node_modules',
+  'packages/dd-trace/test/node_modules',
 ]
 
 const GLOBAL_RESTRICTED_REQUIRES = [
@@ -107,6 +124,37 @@ const GLOBAL_RESTRICTED_REQUIRES = [
   },
 ]
 
+const SRC_RESTRICTED_SYNTAX = [
+  {
+    // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
+    // `toString()` and run in chromium — coverage counters inside would ReferenceError.
+    selector:
+      "CallExpression[callee.property.name='evaluate']" +
+      ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
+    message:
+      'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
+      '(NYC-excluded in nyc.config.js) and import it here.',
+  },
+  {
+    // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
+    // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
+    selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
+    message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
+  },
+]
+
+// Matches only probe positions; a genuine count (`writeMapPrefix(Object.keys(x).length)`) must stay allowed.
+const OBJECT_KEYS_LENGTH_PROBE = {
+  selector:
+    ':matches(BinaryExpression[right.value=0], BinaryExpression[left.value=0], UnaryExpression[operator="!"],' +
+    ' IfStatement, ConditionalExpression, LogicalExpression, WhileStatement, DoWhileStatement)' +
+    " > MemberExpression[property.name='length']" +
+    " > CallExpression[callee.object.name='Object'][callee.property.name='keys']",
+  message: 'Do not probe emptiness with `Object.keys(obj).length`; the keys array is allocated on every call. ' +
+    'Track presence with a boolean at the assignment site, probe a known key (`obj.field !== undefined`), or ' +
+    'return `undefined` when there is nothing to report instead of an empty object.',
+}
+
 export default [
   {
     name: 'dd-trace/global-ignore',
@@ -116,13 +164,13 @@ export default [
       '!**/integration-tests/coverage', // The integration-test coverage harness lives here, not a report.
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
-      '**/docs', // Any JS here is for presentation only.
+      'docs/test.js', // Generated by the documentation type test
       '**/.next', // Generated Next.js build output
       '**/out', // Generated
-      '**/node_modules', // We don't own these.
-      '**/versions', // This is effectively a node_modules tree.
+      ...TRACKED_NODE_MODULE_DIRECTORIES.map(directory => `!${directory}/`),
+      'versions/', // Generated dependency installations
+      'packages/dd-trace/test/plugins/versions/*/', // Generated dependency installations
       '**/acmeair-nodejs', // We don't own this.
-      '**/vendor', // Generally, we didn't author this code.
       '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
       'integration-tests/ci-visibility/test-management/test-suite-failed-to-run-parse.js', // Intentional syntax error
       'integration-tests/code-origin/typescript.js', // Generated
@@ -320,6 +368,22 @@ export default [
       'jsdoc/no-blank-blocks': 'error',
       // TODO: Enable the rules that we want to use.
       'jsdoc/no-defaults': 'error',
+      'jsdoc/no-restricted-syntax': ['error', {
+        contexts: [{
+          context: 'any',
+          comment:
+            'JsdocBlock:not(*:has(JsdocTag[tag=/^(?:callback|func|function|interface|method|overload|typedef)$/]))' +
+            ':has(JsdocTag[tag=/^returns?$/]:matches(' +
+            '[parsedType.type=/^(?:JsdocTypeNull|JsdocTypeUndefined)$/],' +
+            '[parsedType.type="JsdocTypeName"]' +
+            '[parsedType.value=/^(?:string|number|boolean|bigint|symbol|void)$/]))',
+          message: 'Primitive return types are inferred and should be omitted.',
+        }, {
+          context: 'any',
+          comment: 'JsdocBlock:has(JsdocTag[tag=/^returns?$/]:not([parsedType.type]))',
+          message: 'Return descriptions without a type should be omitted.',
+        }],
+      }],
       'jsdoc/no-undefined-types': 'error',
       'jsdoc/reject-function-type': 'off',
       'jsdoc/require-jsdoc': 'off',
@@ -328,6 +392,7 @@ export default [
       'jsdoc/require-property-description': 'off',
       'jsdoc/require-returns-check': 'error',
       'jsdoc/require-returns-description': 'off',
+      'jsdoc/require-returns-type': 'off',
       'jsdoc/require-returns': 'off',
       'jsdoc/require-template': 'error',
       'jsdoc/require-throws-description': 'error',
@@ -423,6 +488,7 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
+      '**/*.jsx', // Browser code does not use Node.js module semantics.
       '**/*.mjs', // TODO: This shouldn't be required, research why it is
     ],
   },
@@ -437,12 +503,16 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-no-call-result-invocation': eslintNoCallResultInvocation,
           'eslint-no-process-env-disable': eslintNoProcessEnvDisable,
+          'eslint-no-unnecessary-array-join': eslintNoUnnecessaryArrayJoin,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
           'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-conditional-object-spread': eslintNoConditionalObjectSpread,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
+          'eslint-require-agent-stop': eslintRequireAgentStop,
           'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
@@ -480,7 +550,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
-      'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-no-call-result-invocation': 'error',
       'eslint-rules/eslint-no-private-tags-access': ['error', {
         allowFiles: [
           // The span_context implementation defines and reads `_tags` directly.
@@ -511,6 +581,7 @@ export default [
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',
+      'eslint-rules/eslint-safe-typeof-object': 'error',
       'import/no-extraneous-dependencies': 'error',
       // 72 errors. Instrumentation has to publish its finish event after invoking the wrapped
       // callback, so returning the callback call would drop the event.
@@ -626,6 +697,35 @@ export default [
       'sonarjs/todo-tag': 'off', // 434 errors. We use TODO/FIXME as tracked markers by policy.
     },
   },
+  eslintPluginRegexp.configs['flat/recommended'],
+  {
+    name: 'dd-trace/regexp-deviations',
+    rules: {
+      'regexp/optimal-lookaround-quantifier': 'error',
+      'regexp/no-useless-flag': 'error',
+      'regexp/no-super-linear-move': 'error',
+      'regexp/no-unused-capturing-group': 'off',
+      'regexp/negation': 'off',
+      'regexp/prefer-w': 'off',
+      'regexp/use-ignore-case': 'off',
+      'regexp/prefer-d': 'off',
+      'regexp/sort-flags': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/regexp-generated',
+    files: [
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-secret-rules.js',
+      'packages/dd-trace/src/appsec/iast/analyzers/hardcoded-password-rules.js',
+    ],
+    rules: {
+      'regexp/no-dupe-disjunctions': 'off',
+      'regexp/prefer-range': 'off',
+      'regexp/optimal-quantifier-concatenation': 'off',
+      'regexp/prefer-character-class': 'off',
+      'regexp/no-useless-non-capturing-group': 'off',
+    },
+  },
   {
     name: 'dd-trace/src/all',
     files: SRC_FILES,
@@ -640,24 +740,11 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-no-unnecessary-array-join': 'error',
       'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
-      'no-restricted-syntax': ['error', {
-        // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
-        // `toString()` and run in chromium — coverage counters inside would ReferenceError.
-        selector:
-          "CallExpression[callee.property.name='evaluate']" +
-          ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
-        message:
-          'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
-          '(NYC-excluded in nyc.config.js) and import it here.',
-      }, {
-        // Static-analysis bundlers (esbuild, webpack, rollup) only see literals as require
-        // arguments; once any transform (e.g. NYC) wraps them, this shape breaks bundling.
-        selector: "CallExpression[callee.name='require'][arguments.0.type='ConditionalExpression']",
-        message: 'Use `cond ? require(\'a\') : require(\'b\')` instead of `require(cond ? \'a\' : \'b\')`.',
-      }],
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX],
 
       'n/no-restricted-require': ['error', [
         ...GLOBAL_RESTRICTED_REQUIRES,
@@ -782,6 +869,13 @@ export default [
     },
   },
   {
+    name: 'dd-trace/src/conditional-object-spread',
+    files: PACKAGE_SRC_FILES,
+    rules: {
+      'eslint-rules/eslint-no-conditional-object-spread': 'error',
+    },
+  },
+  {
     name: 'dd-trace/unicorn/all',
     // Unicorn is otherwise limited to production code, and `sonarjs/no-ignored-exceptions`
     // reports only a subset of the unused catch bindings in tests and fixtures.
@@ -791,6 +885,16 @@ export default [
     rules: {
       'unicorn/consistent-date-clone': 'error',
       'unicorn/prefer-optional-catch-binding': 'error',
+    },
+  },
+  {
+    name: 'dd-trace/packages/src',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...SRC_RESTRICTED_SYNTAX, OBJECT_KEYS_LENGTH_PROBE],
     },
   },
   {
@@ -954,6 +1058,7 @@ export default [
   {
     ...eslintPluginCypress.configs.recommended,
     files: [
+      'integration-tests/cypress/**/*.jsx',
       'packages/datadog-plugin-cypress/src/support.js',
     ],
   },
@@ -979,14 +1084,18 @@ export default [
     },
     rules: {
       'eslint-rules/eslint-prefer-assert-match': 'error',
+      'eslint-rules/eslint-require-agent-stop': 'error',
       // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
       'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
+      'mocha/consistent-structure': 'off',
+      'mocha/limit-timeout': ['error', { mode: 'disallowDisabled' }],
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
+      'mocha/no-conditional-tests': 'off',
       'mocha/no-mocha-arrows': 'off',
-      'mocha/no-setup-in-describe': 'off',
-      'mocha/no-sibling-hooks': 'off',
-      'mocha/no-top-level-hooks': 'off',
+      'mocha/no-pending-tests': ['error', { allowSkippedWithComment: true }],
+      'mocha/no-root-hooks': 'off',
+      'mocha/no-setup-in-suite': 'off',
       'n/handle-callback-err': 'off',
       'n/no-extraneous-require': ['error', {
         allowModules: [
@@ -1019,6 +1128,55 @@ export default [
     },
   },
   {
+    // Tracked package fixtures can intentionally exercise sloppy-mode input.
+    name: 'dd-trace/tracked-node-module-fixtures',
+    files: TRACKED_NODE_MODULE_DIRECTORIES.map(directory => `${directory}/**/*.js`),
+    rules: {
+      strict: 'off',
+    },
+  },
+  {
+    name: 'dd-trace/instrumentation-rewriter/esm-fixtures',
+    files: ['packages/datadog-instrumentations/test/helpers/rewriter/node_modules/test-esm/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+    },
+  },
+  {
+    name: 'dd-trace/instrumentation-rewriter/var-class-fixture',
+    files: [
+      'packages/datadog-instrumentations/test/helpers/rewriter/node_modules/' +
+      'test-trace-var-class-instance-method/index.js',
+    ],
+    rules: {
+      'no-var': 'off',
+    },
+  },
+  {
+    // The adjacent package manifest describes generated installations, not this controller's development dependencies.
+    name: 'dd-trace/plugin-versions-controller',
+    files: ['packages/dd-trace/test/plugins/versions/index.js'],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/vendor-build',
+    files: ['vendor/*.js'],
+    rules: {
+      'n/no-unpublished-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/vendor-build/cli',
+    files: ['vendor/rspack.js'],
+    rules: {
+      'n/no-process-exit': 'off',
+      'no-console': 'off',
+    },
+  },
+  {
     name: 'dd-trace/test-optimization/relaxed',
     files: [
       'integration-tests/ci-visibility/**/*.js',
@@ -1041,9 +1199,6 @@ export default [
         jest: 'readonly',
       },
     },
-    rules: {
-      'mocha/no-pending-tests': 'off',
-    },
   },
   {
     // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
@@ -1052,6 +1207,29 @@ export default [
     files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
     rules: {
       'jsdoc/valid-types': 'off',
+    },
+  },
+  {
+    // These fixtures must report skipped tests to verify Test Optimization status handling.
+    name: 'dd-trace/test-optimization/pending-test-fixtures',
+    files: [
+      'integration-tests/ci-visibility/jest-plugin-tests/jest-test.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skip-describe.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skipping-with-after-each.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/skipping.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-fail-skip-describe.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-fail-test.js',
+      'integration-tests/ci-visibility/mocha-plugin-tests/suite-level-pass.js',
+      'integration-tests/ci-visibility/mocha-skips/skip-test.js',
+      'integration-tests/ci-visibility/test-early-flake-detection/focused-test.js',
+      'integration-tests/ci-visibility/test-early-flake-detection/skipped-and-todo-test.js',
+      'integration-tests/ci-visibility/test-management/test-attempt-to-fix-skip.js',
+      'integration-tests/webdriverio/fixtures/jasmine-attempt-to-fix-skipped.e2e.js',
+      'integration-tests/webdriverio/fixtures/jasmine-efd-skipped.e2e.js',
+      'integration-tests/webdriverio/fixtures/jasmine-statuses.e2e.js',
+    ],
+    rules: {
+      'mocha/no-pending-tests': 'off',
     },
   },
   {
@@ -1071,6 +1249,22 @@ export default [
     },
     rules: {
       'sonarjs/stable-tests': 'off',
+    },
+  },
+  {
+    // This fixture loads a module after Jest has finished the test to exercise the resulting test-suite error.
+    name: 'dd-trace/tests/jest-off-timing-import-fixture',
+    files: ['integration-tests/ci-visibility/jest-bad-import/jest-bad-import-test.js'],
+    rules: {
+      'mocha/no-async-in-sync-tests': ['error', { allowedAsyncMethods: ['setTimeout'] }],
+    },
+  },
+  {
+    name: 'dd-trace/datadog-esbuild/cyclic-star-fixtures',
+    files: ['packages/datadog-esbuild/test/resources/export-cycle-*.mjs'],
+    rules: {
+      'import/export': 'off',
+      'import/no-cycle': 'off',
     },
   },
   {
@@ -1131,6 +1325,19 @@ export default [
     rules: {
       'import/no-extraneous-dependencies': 'off',
       'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    name: 'dd-trace/package-source',
+    files: [
+      'packages/*/src/**/*.js',
+      'packages/*/src/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-no-unnecessary-array-join': ['error', {
+        reportLiteralArrayJoins: true,
+        reportMapJoinChains: true,
+      }],
     },
   },
 ]

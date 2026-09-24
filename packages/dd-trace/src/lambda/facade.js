@@ -45,8 +45,6 @@ function getTraceHeaders () {
 
 /**
  * Submits a custom Lambda distribution metric.
- *
- * @returns {never}
  */
 function sendDistributionMetric () {
   throw new Error(notImplemented('sendDistributionMetric'))
@@ -54,8 +52,6 @@ function sendDistributionMetric () {
 
 /**
  * Submits a timestamped custom Lambda distribution metric.
- *
- * @returns {never}
  */
 function sendDistributionMetricWithDate () {
   throw new Error(notImplemented('sendDistributionMetricWithDate'))
@@ -66,7 +62,6 @@ function sendDistributionMetricWithDate () {
  * cannot observe: the customer module failed during evaluation, so there is no invocation.
  *
  * @param {{ error: Error, functionName: string, startTime: number }} failure Init failure details.
- * @returns {never}
  */
 function reportInitFailure (failure) {
   throw new Error(notImplemented('reportInitFailure'))
@@ -82,7 +77,6 @@ function reportInitFailure (failure) {
  * shim user.
  *
  * @param {string} name Facade entry point.
- * @returns {string} Error message.
  */
 function notImplemented (name) {
   return `dd-trace/lambda ${name}() is not implemented yet: Lambda metrics land with the metrics ` +

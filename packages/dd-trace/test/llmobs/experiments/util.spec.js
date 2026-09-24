@@ -7,18 +7,31 @@ const sinon = require('sinon')
 const log = require('../../../src/log')
 
 const {
+  buildTags,
   durationNs,
+  generateRunId,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   timestampMs,
   validateEvaluatorName,
+  validateTagsList,
 } = require('../../../src/llmobs/experiments/util')
 
 describe('LLMObs Experiments util', () => {
   afterEach(() => {
     sinon.restore()
+  })
+
+  it('generates UUID run ids', () => {
+    const first = generateRunId()
+    const second = generateRunId()
+
+    assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.match(second, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.notEqual(first, second)
   })
 
   it('validates evaluator names against the backend contract', () => {
@@ -61,6 +74,34 @@ describe('LLMObs Experiments util', () => {
     })
     assert.deepEqual(mergeTags(undefined, { tag: 'value' }), { tag: 'value' })
     assert.deepEqual(mergeTags({ tag: 'value' }, undefined), { tag: 'value' })
+  })
+
+  it('preserves repeated record tag keys in object and wire representations', () => {
+    const recordTags = ['topic:math', 'topic:logic', 'source:test']
+
+    assert.deepEqual(recordTagsToObject(recordTags), {
+      topic: ['math', 'logic'],
+      source: 'test',
+    })
+    assert.deepEqual(buildTags(recordTagsToObject(recordTags), { experiment_id: 'exp' }), [
+      'topic:math',
+      'topic:logic',
+      'source:test',
+      'experiment_id:exp',
+    ])
+  })
+
+  it('preserves record tags that collide with object prototype keys', () => {
+    const tags = recordTagsToObject(['toString:value', '__proto__:prototype', 'constructor:class'])
+
+    assert.equal(tags.toString, 'value')
+    assert.equal(Object.getOwnPropertyDescriptor(tags, '__proto__').value, 'prototype')
+    assert.equal(tags.constructor, 'class')
+    assert.equal(Object.hasOwn(tags, '__proto__'), true)
+  })
+
+  it('rejects record tags without a key', () => {
+    assert.throws(() => validateTagsList([':value']), /malformed/)
   })
 
   it('infers metric types with a normalized JSON fallback', () => {

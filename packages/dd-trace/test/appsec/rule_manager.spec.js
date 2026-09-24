@@ -41,10 +41,10 @@ describe('AppSec Rule Manager', () => {
 
     it('should throw if null/undefined are passed', () => {
       // TODO: fix the exception thrown in the waf or catch it in rule_manager?
-      config.appsec.rules = './not/existing/file.json'
+      config.appsec.DD_APPSEC_RULES = './not/existing/file.json'
       assert.throws(() => { loadRules(config.appsec) })
 
-      config.appsec.rules = './bad-formatted-rules.json'
+      config.appsec.DD_APPSEC_RULES = './bad-formatted-rules.json'
       assert.throws(() => { loadRules(config.appsec) })
     })
 
@@ -52,7 +52,7 @@ describe('AppSec Rule Manager', () => {
       const rulesPath = path.join(__dirname, './blocking-actions-rules.json')
       const testRules = JSON.parse(fs.readFileSync(rulesPath))
 
-      config.appsec.rules = rulesPath
+      config.appsec.DD_APPSEC_RULES = rulesPath
 
       loadRules(config.appsec)
 
@@ -494,6 +494,81 @@ describe('AppSec Rule Manager', () => {
         RuleManager.updateWafFromRC(createTransaction({ toUnapply, toApply: [], toModify: [] }))
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
+      })
+
+      it('should clear blocking actions when a modify drops the actions array', () => {
+        waf.updateConfig.returns({})
+
+        const asmWithActions = {
+          actions: [
+            {
+              id: 'block',
+              parameters: {
+                location: '/redirected',
+                status_code: 302,
+              },
+            },
+          ],
+        }
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: asmWithActions,
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
+
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, asmWithActions.actions)
+        sinon.resetHistory()
+
+        // Same config id, new content that no longer carries an `actions` array
+        const toModify = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: {
+              exclusions: [{ ekey: 'eValue' }],
+            },
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
+
+        sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, [])
+      })
+
+      it('should not touch blocking actions when an actionless config is modified', () => {
+        waf.updateConfig.returns({})
+
+        const toApply = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: {
+              exclusions: [{ ekey: 'eValue' }],
+            },
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
+
+        sinon.assert.notCalled(setDefaultBlockingActionParameters)
+
+        const toModify = [
+          {
+            product: 'ASM',
+            id: '1',
+            file: {
+              exclusions: [{ ekey: 'newValue' }],
+            },
+          },
+        ]
+
+        RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
+
+        sinon.assert.notCalled(setDefaultBlockingActionParameters)
       })
     })
   })

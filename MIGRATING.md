@@ -4,6 +4,16 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 6.0 to 7.0 (unreleased)
+
+### Electron plugin disabled by default
+
+The Electron integration has moved to the standalone
+[Electron SDK](https://github.com/DataDog/electron-sdk). The `electron` plugin
+and its instrumentation remain in dd-trace-js for backward compatibility, but
+are now disabled by default. Set `DD_TRACE_ELECTRON_ENABLED=true` to keep
+using the built-in plugin.
+
 ## 5.0 to 6.0
 
 ### Node 18 and 20 are no longer supported

@@ -57,10 +57,13 @@ describe('aws-lambda instrumentation', () => {
     const context = { getRemainingTimeInMillis: () => 100 }
     const runtimeCallback = () => {}
 
+    const twoArg = wrapHandler((_event, _context) => 'two-arg')
+    const oneArg = wrapHandler((_event) => 'one-arg')
+
     assert.deepStrictEqual(
       await Promise.all([
-        wrapHandler((_event, _context) => 'two-arg')({}, context, runtimeCallback),
-        wrapHandler((_event) => 'one-arg')({}, context, runtimeCallback),
+        twoArg({}, context, runtimeCallback),
+        oneArg({}, context, runtimeCallback),
       ]),
       ['two-arg', 'one-arg']
     )
@@ -81,7 +84,8 @@ describe('aws-lambda instrumentation', () => {
       subscribe(invocationChannel[name], () => events.push(name))
     }
 
-    const result = await wrapHandler(() => 'result')({})
+    const wrapped = wrapHandler(() => 'result')
+    const result = await wrapped({})
 
     assert.strictEqual(result, 'result')
     assert.deepStrictEqual(events, ['start', 'end', 'asyncStart', 'asyncEnd'])
@@ -127,7 +131,8 @@ describe('aws-lambda instrumentation', () => {
 
     // A synchronous throw out of the wrapper would skip asyncStart/asyncEnd, leaving the span
     // unfinished and the impending-timeout timer armed.
-    await assert.rejects(wrapHandler(handler)({}, {}, context), { message: 'streaming failure' })
+    const wrapped = wrapHandler(handler)
+    await assert.rejects(wrapped({}, {}, context), { message: 'streaming failure' })
     assert.deepStrictEqual(events, ['start', 'end', 'error', 'asyncStart', 'asyncEnd'])
   })
 

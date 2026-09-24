@@ -52,7 +52,8 @@ describe('jest-test-suite', () => {
   // only run for jest-circus tests
   if (jest.retryTimes) {
     const parameters = [[1, 2, 3], [2, 3, 5]]
-    it.each(parameters)('can do parameterized test', (a, b, expected) => {
+    const parameterizedTest = it.each(parameters)
+    parameterizedTest('can do parameterized test', (a, b, expected) => {
       assert.deepStrictEqual(a + b, expected)
       // They are not modified by dd-trace reading the parameters
       assert.deepStrictEqual(parameters[0], [1, 2, 3])
@@ -95,7 +96,7 @@ describe('jest-test-suite', () => {
   it('fails', () => {
     assert.deepStrictEqual(true, false)
   })
-  // eslint-disable-next-line mocha/handle-done-callback
+  // The callback keeps the Jest test open until the scheduled error is attributed to it.
   it('does not crash with missing stack', (done) => {
     setTimeout(() => {
       const error = new Error('fail')
@@ -104,6 +105,7 @@ describe('jest-test-suite', () => {
     }, 100)
   })
 
+  // This skipped case is fixture input for Test Optimization status reporting.
   it.skip('skips', () => {
     assert.deepStrictEqual(100, 100)
   })

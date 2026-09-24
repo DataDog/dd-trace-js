@@ -40,6 +40,7 @@ const NON_HUMAN_EMAILS = new Set([
  * @typedef {object} GitHubContributor
  * @property {string} [name]
  * @property {string} [email]
+ * @property {string} [__typename]
  * @property {string} [login]
  * @property {{ login?: string }} [user]
  */
@@ -127,7 +128,7 @@ function readGitHubMetadata (shas, pullRequestNumbers) {
       const pullRequestNumber = pullRequestNumbers[i]
       if (pullRequestNumber !== undefined) {
         fields += `pullRequest${i}: issueOrPullRequest(number: ${pullRequestNumber}) { __typename ` +
-          '... on PullRequest { number title author { login } ' +
+          '... on PullRequest { number title author { __typename login } ' +
           'labels(first: 100) { nodes { name } pageInfo { hasNextPage } } ' +
           'files(first: 100) { nodes { path changeType } pageInfo { hasNextPage } } } } '
       }
@@ -197,6 +198,8 @@ function readFiles (pullRequest) {
  * @param {GitHubContributor} contributor
  */
 function addContributor (contributors, contributor) {
+  if (contributor.__typename === 'Bot') return
+
   const login = contributor.user?.login ?? contributor.login
   const normalizedLogin = login?.toLowerCase()
   if ((normalizedLogin && (normalizedLogin.endsWith('[bot]') || NON_HUMAN_LOGINS.has(normalizedLogin))) ||

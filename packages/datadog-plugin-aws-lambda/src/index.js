@@ -42,7 +42,6 @@ class AwsLambdaPlugin extends TracingPlugin {
    * Tags handler failures on the invocation span.
    *
    * @param {{ error?: unknown, lambdaSpan?: object }} context Invocation channel context.
-   * @returns {void}
    */
   error (context) {
     this.addError(context.error, context.lambdaSpan)
@@ -52,7 +51,6 @@ class AwsLambdaPlugin extends TracingPlugin {
    * Publishes the completed invocation and finishes its span.
    *
    * @param {object} context Invocation channel context.
-   * @returns {void}
    */
   asyncStart (context) {
     invocationEndChannel.publish(context)
@@ -63,7 +61,6 @@ class AwsLambdaPlugin extends TracingPlugin {
    * Clears invocation resources after the result has propagated through the bound trace store.
    *
    * @param {object} context Invocation channel context.
-   * @returns {void}
    */
   asyncEnd (context) {
     if (context.lambdaTimeout) clearTimeout(context.lambdaTimeout)
@@ -73,7 +70,6 @@ class AwsLambdaPlugin extends TracingPlugin {
    * Arms the impending-timeout guard for an invocation with a Lambda context.
    *
    * @param {object} context Invocation channel context.
-   * @returns {void}
    */
   _startTimeout (context) {
     if (typeof context.context?.getRemainingTimeInMillis !== 'function') return
@@ -102,7 +98,6 @@ class AwsLambdaPlugin extends TracingPlugin {
    * finishes twice reports a second, wrong duration to the agent.
    *
    * @param {object} context Invocation channel context.
-   * @returns {void}
    */
   _finishSpan (context) {
     if (context.lambdaSpanFinished) return
@@ -121,7 +116,6 @@ class AwsLambdaPlugin extends TracingPlugin {
  *
  * @param {string} functionName Lambda function name.
  * @param {{ serviceRepresentationEnabled?: boolean }} config Plugin configuration.
- * @returns {string} Span service name.
  */
 function resolveServiceName (functionName, config) {
   const envService = getEnvironmentVariable('DD_SERVICE')

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { before, describe, it } = require('mocha')
+const { channel } = require('dc-polyfill')
 
 require('../src/aws-sdk')
 
@@ -95,5 +96,51 @@ describe('aws-sdk instrumentation: smithy command-deserialize patching', () => {
     assert.notEqual(c1.deserialize, ownC1)
     assert.notEqual(c2.deserialize, ownC2)
     assert.notEqual(c1.deserialize, c2.deserialize)
+  })
+})
+
+describe('aws-sdk instrumentation: channel suffix', () => {
+  /**
+   * Send one command through a smithy client reporting `serviceId` and return the suffix of the
+   * `apm:aws:request:start:*` channel it published on.
+   *
+   * @param {string} serviceId
+   */
+  async function suffixFor (serviceId) {
+    const candidates = ['eventbridge', 'default', 'sns']
+    const seen = []
+    const listeners = candidates.map(suffix => {
+      const listener = () => seen.push(suffix)
+      channel(`apm:aws:request:start:${suffix}`).subscribe(listener)
+      return { suffix, listener }
+    })
+
+    try {
+      const command = { input: {} }
+      command.deserialize = () => ({})
+      await new (makeFakeClientClass(serviceId))().send(command)
+    } finally {
+      for (const { suffix, listener } of listeners) {
+        channel(`apm:aws:request:start:${suffix}`).unsubscribe(listener)
+      }
+    }
+
+    return seen
+  }
+
+  it('routes a known service to its own channel', async () => {
+    assert.deepStrictEqual(await suffixFor('SNS'), ['sns'])
+  })
+
+  it('routes the legacy CloudWatch Events service id to the eventbridge channel', async () => {
+    assert.deepStrictEqual(await suffixFor('CloudWatch Events'), ['eventbridge'])
+  })
+
+  it('routes the events endpoint prefix to the eventbridge channel', async () => {
+    assert.deepStrictEqual(await suffixFor('events'), ['eventbridge'])
+  })
+
+  it('routes an unknown service to the default channel', async () => {
+    assert.deepStrictEqual(await suffixFor('Timestream Write'), ['default'])
   })
 })

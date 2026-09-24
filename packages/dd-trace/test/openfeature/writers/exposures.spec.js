@@ -9,6 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const tracerVersion = require('../../../../../package.json').version
 
 describe('OpenFeature Exposures Writer', () => {
   let ExposuresWriter
@@ -268,6 +269,48 @@ describe('OpenFeature Exposures Writer', () => {
       })
     })
 
+    it('should include serial_id when present', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, serial_id: 340132 }])
+
+      assert.deepStrictEqual(payload.exposures[0], {
+        timestamp: 1672531200000,
+        allocation: { key: 'allocation_123' },
+        flag: { key: 'test_flag' },
+        variant: { key: 'A' },
+        serial_id: 340132,
+        subject: {
+          id: 'user_123',
+          type: 'user',
+          attributes: { plan: 'premium' },
+        },
+      })
+    })
+
+    it('should include a serial_id of zero', () => {
+      const payload = writer.makePayload([{ ...exposureEvent, serial_id: 0 }])
+
+      assert.strictEqual(payload.exposures[0].serial_id, 0)
+    })
+
+    // The intake declares serial_id as an integer and rejects the whole exposure on a type
+    // mismatch, so anything non-numeric has to leave the encoded payload entirely.
+    for (const [label, serialId] of [
+      ['absent', undefined],
+      ['null', null],
+      ['a string', '340132'],
+      ['a boolean', true],
+    ]) {
+      it(`should omit serial_id when it is ${label}`, () => {
+        const event = { ...exposureEvent }
+        if (serialId !== undefined) {
+          event.serial_id = serialId
+        }
+        const encoded = JSON.stringify(writer.makePayload([event]))
+
+        assert.ok(!encoded.includes('serial_id'), `Encoded payload: ${encoded}`)
+      })
+    }
+
     it('should handle optional config values', () => {
       const writerWithoutOptionals = new ExposuresWriter({
         ...config,
@@ -348,9 +391,12 @@ describe('OpenFeature Exposures Writer', () => {
       const [payload, options] = request.getCall(0).args
 
       assert.strictEqual(options.method, 'POST')
+      assert.strictEqual(options.retry, false)
       assert.match(options.path, /\/evp_proxy\/v2\//)
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'dd-trace-js')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN-VERSION'], tracerVersion)
 
       const parsedPayload = JSON.parse(payload)
       assert.ok(
@@ -363,6 +409,228 @@ describe('OpenFeature Exposures Writer', () => {
       assert.ok(parsedPayload.exposures[0].timestamp)
       assert.strictEqual(parsedPayload.context.service, 'test-service')
     })
+
+    it('should log only structural batch metadata', () => {
+      const sensitiveEvent = {
+        ...exposureEvent,
+        subject: {
+          id: 'private-subject-987',
+          attributes: { secret: 'private-attribute-654' },
+        },
+      }
+      writer.append(sensitiveEvent)
+
+      writer.flush()
+
+      const debugMessage = log.debug.firstCall.args[0]()
+      assert.match(debugMessage, /ExposuresWriter flushing 1 events \(\d+ bytes\)/)
+      assert.ok(!debugMessage.includes('private-subject-987'))
+      assert.ok(!debugMessage.includes('private-attribute-654'))
+    })
+
+    it('should keep the fixed Agent EVP v2 route for the next batch after a transport failure', async () => {
+      request.onFirstCall().yieldsAsync(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))
+      writer.append(exposureEvent)
+      writer.flush()
+      await clock.tickAsync(0)
+
+      writer.append(exposureEvent)
+      writer.flush()
+
+      sinon.assert.calledTwice(request)
+      assert.strictEqual(request.firstCall.args[1].path, '/evp_proxy/v2/api/v2/exposures')
+      assert.strictEqual(request.secondCall.args[1].path, '/evp_proxy/v2/api/v2/exposures')
+      assert.strictEqual(request.firstCall.args[1].retry, false)
+      assert.strictEqual(request.secondCall.args[1].retry, false)
+    })
+
+    it('should flush events through the selected EVP v4 proxy path', () => {
+      const url = new URL('http://serverless-init:9126')
+      writer.setEnabled(true, {
+        url,
+        basePath: '/evp_proxy/v4/',
+        headers: {
+          'X-Datadog-EVP-Subdomain': 'event-platform-intake',
+        },
+      })
+      writer.append(exposureEvent)
+
+      writer.flush()
+
+      const [, options] = request.getCall(0).args
+      assert.strictEqual(options.url, url)
+      assert.strictEqual(options.path, '/evp_proxy/v4/api/v2/exposures')
+      assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
+    })
+
+    it('should use a caller-supplied route without performing discovery', () => {
+      const url = new URL('http://custom-agent:9126')
+      writer.setEnabled(true, {
+        url,
+        basePath: '/evp_proxy/v2/',
+      })
+      writer.append(exposureEvent)
+
+      writer.flush()
+
+      const [, options] = request.getCall(0).args
+      assert.strictEqual(options.url, url)
+      assert.strictEqual(options.path, '/evp_proxy/v2/api/v2/exposures')
+    })
+
+    it('should flush events directly to HTTPS intake without the local EVP prefix', () => {
+      const url = new URL('https://event-platform-intake.datadoghq.com')
+      const agent = {}
+      writer.setEnabled(true, {
+        url,
+        basePath: '',
+        agent,
+        headers: {
+          'DD-API-KEY': 'test-api-key',
+        },
+      })
+      writer.append(exposureEvent)
+
+      writer.flush()
+
+      const [, options] = request.getCall(0).args
+      assert.strictEqual(options.url, url)
+      assert.strictEqual(options.path, '/api/v2/exposures')
+      assert.strictEqual(options.retry, false)
+      assert.strictEqual(options.agent, agent)
+      assert.strictEqual(options.headers['DD-API-KEY'], 'test-api-key')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN'], 'dd-trace-js')
+      assert.strictEqual(options.headers['DD-EVP-ORIGIN-VERSION'], tracerVersion)
+      assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], undefined)
+    })
+
+    for (const [name, error, statusCode] of [
+      ['temporary DNS failure', Object.assign(new Error('getaddrinfo EAI_AGAIN'), { code: 'EAI_AGAIN' })],
+      ['connection refusal', Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' })],
+      ['missing Unix socket', Object.assign(
+        new Error('connect ENOENT /var/run/datadog/apm.socket'),
+        { code: 'ENOENT' }
+      )],
+      ['unresolvable hostname', Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' })],
+      ['HTTP 404', Object.assign(new Error('Not Found'), { status: 404 }), 404],
+      ['HTTP 405', Object.assign(new Error('Method Not Allowed'), { status: 405 }), 405],
+    ]) {
+      it(`should switch to direct intake after definitive local ${name}`, async () => {
+        const localUrl = new URL('http://serverless-init:8126')
+        const directUrl = new URL('https://event-platform-intake.datadoghq.com')
+        const directAgent = {}
+        request.onFirstCall().yieldsAsync(error, null, statusCode)
+        writer.setEnabled(true, {
+          url: localUrl,
+          basePath: '/evp_proxy/v4',
+          headers: {
+            'X-Datadog-EVP-Subdomain': 'event-platform-intake',
+          },
+          fallback: {
+            url: directUrl,
+            basePath: '',
+            agent: directAgent,
+            headers: {
+              'DD-API-KEY': 'test-api-key',
+            },
+          },
+        })
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.firstCall.args[1].url, localUrl)
+        assert.strictEqual(request.firstCall.args[1].path, '/evp_proxy/v4/api/v2/exposures')
+        assert.strictEqual(request.secondCall.args[1].url, directUrl)
+        assert.strictEqual(request.secondCall.args[1].path, '/api/v2/exposures')
+        assert.strictEqual(request.secondCall.args[1].agent, directAgent)
+        assert.strictEqual(request.secondCall.args[1].headers['DD-API-KEY'], 'test-api-key')
+
+        writer.append(exposureEvent)
+        writer.flush()
+
+        sinon.assert.calledThrice(request)
+        assert.strictEqual(request.thirdCall.args[1].url, directUrl)
+      })
+    }
+
+    for (const [name, error, statusCode] of [
+      ['connection reset', Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' })],
+      ['broken pipe', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' })],
+      ['timeout', Object.assign(new Error('request timed out'), { code: 'ETIMEDOUT' })],
+    ]) {
+      it(`should not replay ambiguous local ${name} and should switch future batches`, async () => {
+        const localUrl = new URL('http://serverless-init:8126')
+        const directUrl = new URL('https://event-platform-intake.datadoghq.com')
+        request.onFirstCall().yieldsAsync(error, null, statusCode)
+        writer.setEnabled(true, {
+          url: localUrl,
+          basePath: '/evp_proxy/v4',
+          headers: {
+            'X-Datadog-EVP-Subdomain': 'event-platform-intake',
+          },
+          fallback: {
+            url: directUrl,
+            basePath: '',
+            headers: {
+              'DD-API-KEY': 'test-api-key',
+            },
+          },
+        })
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledOnce(request)
+        assert.strictEqual(request.firstCall.args[1].url, localUrl)
+
+        writer.append(exposureEvent)
+        writer.flush()
+
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.secondCall.args[1].url, directUrl)
+      })
+    }
+
+    for (const [name, error, statusCode] of [
+      ['HTTP 403', Object.assign(new Error('Forbidden'), { status: 403 }), 403],
+      ['HTTP 429', Object.assign(new Error('Too Many Requests'), { status: 429 }), 429],
+      ['HTTP 500', Object.assign(new Error('Internal Server Error'), { status: 500 }), 500],
+    ]) {
+      it(`should not replay ${name} but should switch future batches to direct intake`, async () => {
+        const localUrl = new URL('http://serverless-init:8126')
+        request.onFirstCall().yieldsAsync(error, null, statusCode)
+        writer.setEnabled(true, {
+          url: localUrl,
+          basePath: '/evp_proxy/v4',
+          headers: {
+            'X-Datadog-EVP-Subdomain': 'event-platform-intake',
+          },
+          fallback: {
+            url: new URL('https://event-platform-intake.datadoghq.com'),
+            basePath: '',
+            headers: {
+              'DD-API-KEY': 'test-api-key',
+            },
+          },
+        })
+        writer.append(exposureEvent)
+
+        writer.flush()
+        await clock.tickAsync(0)
+
+        sinon.assert.calledOnce(request)
+
+        writer.append(exposureEvent)
+        writer.flush()
+
+        sinon.assert.calledTwice(request)
+        assert.strictEqual(request.secondCall.args[1].url.href, 'https://event-platform-intake.datadoghq.com/')
+      })
+    }
 
     it('should empty buffer after flushing', () => {
       writer.append(exposureEvent)

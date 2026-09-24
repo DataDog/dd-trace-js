@@ -42,11 +42,7 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
   // TODO: Remove this once we drop suppport for v5
-  const contextNewVersions = (...args) => {
-    if (satisfies(version, '>=1.38.0') || version === 'latest') {
-      context(...args)
-    }
-  }
+  const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 
   describe(`playwright@${version}`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
@@ -203,6 +199,7 @@ versions.forEach((version) => {
 
       const runRumTest = async (receiver, { isRedirecting }, extraEnvVars) => {
         const testAssertionsPromise = getTestAssertions(receiver, { isRedirecting })
+        let testOutput = ''
         let proc
         try {
           proc = exec(
@@ -211,16 +208,21 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
+                DD_TRACE_DEBUG: 'true',
+                DD_TRACE_LOG_LEVEL: 'error',
                 PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
                 TEST_DIR: './ci-visibility/playwright-tests-rum',
                 ...extraEnvVars,
               },
             }
           )
+          proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), testAssertionsPromise])
 
           assert.strictEqual(exitCode, isRedirecting ? 1 : 0)
+          assert.doesNotMatch(testOutput, /Failed to find injection points/)
         } finally {
           proc?.kill()
         }
@@ -369,6 +371,7 @@ const RUM_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 describe('playwright instrumentation (unit)', () => {
   let pageHook
+  let pageGotoSubscriber
   let subscriber
   const testPageGotoCh = {
     get hasSubscribers () {
@@ -390,6 +393,16 @@ describe('playwright instrumentation (unit)', () => {
         channel: name => name === 'ci:playwright:test:page-goto'
           ? testPageGotoCh
           : realInstrument.channel(name),
+        tracingChannel: name => {
+          if (name === 'orchestrion:playwright-core:Page_goto') {
+            return {
+              subscribe (handlers) {
+                pageGotoSubscriber = handlers
+              },
+            }
+          }
+          return realInstrument.tracingChannel(name)
+        },
       },
     })
 
@@ -407,6 +420,16 @@ describe('playwright instrumentation (unit)', () => {
   function subscribe (listener) {
     subscriber = listener
   }
+
+  it('does not inspect pages outside Playwright workers', () => {
+    const evaluate = sinon.spy()
+    const ctx = { self: { evaluate } }
+
+    pageGotoSubscriber.asyncEnd(ctx)
+
+    assert.strictEqual(evaluate.callCount, 0)
+    assert.ok(!Object.hasOwn(ctx, 'resolveCallback'))
+  })
 
   function createPage ({
     addCookies = async () => {},

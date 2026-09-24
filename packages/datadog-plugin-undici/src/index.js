@@ -5,7 +5,7 @@ const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
-const log = require('../../dd-trace/src/log')
+const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
@@ -15,6 +15,8 @@ const {
   HTTP_REQUEST_HEADERS,
   HTTP_RESPONSE_HEADERS,
 } = tags
+
+const UPGRADE_CHANNEL = 'apm:undici:request:upgrade'
 
 // WeakMap to store span context for native undici request objects
 const requestContexts = new WeakMap()
@@ -33,6 +35,7 @@ class UndiciPlugin extends HttpClientPlugin {
     this.addSub('undici:request:headers', this.#onNativeRequestHeaders.bind(this))
     this.addSub('undici:request:trailers', this.#onNativeRequestTrailers.bind(this))
     this.addSub('undici:request:error', this.#onNativeRequestError.bind(this))
+    this.addSub(UPGRADE_CHANNEL, this.#onNativeRequestUpgrade.bind(this))
   }
 
   // ===========================================
@@ -112,30 +115,15 @@ class UndiciPlugin extends HttpClientPlugin {
     // Store span context for request for later retrieval
     requestContexts.set(request, {
       span,
-      store,
-      uri,
       method,
     })
-
-    // Enter the span context
-    storage('legacy').enterWith({ ...store, span })
   }
 
   #onNativeRequestBodySent ({ request }) {
     const ctx = requestContexts.get(request)
     if (!ctx || ctx.method !== 'CONNECT') return
 
-    const { span, store } = ctx
-
-    this.config.hooks.request(span, null, null)
-
-    span.finish()
-
-    requestContexts.delete(request)
-
-    if (store) {
-      storage('legacy').enterWith(store)
-    }
+    this.#finishNativeRequest(request)
   }
 
   #onNativeRequestHeaders ({ request, response }) {
@@ -160,50 +148,48 @@ class UndiciPlugin extends HttpClientPlugin {
   }
 
   #onNativeRequestTrailers ({ request }) {
-    const ctx = requestContexts.get(request)
-    if (!ctx) return
-
-    const { span, store } = ctx
-
-    // Call the request hook if configured
-    this.config.hooks.request(span, null, null)
-
-    // Finish the span
-    span.finish()
-
-    // Clean up
-    requestContexts.delete(request)
-
-    // Restore parent store
-    if (store) {
-      storage('legacy').enterWith(store)
-    }
+    this.#finishNativeRequest(request)
   }
 
   #onNativeRequestError ({ request, error }) {
+    this.#finishNativeRequest(request, error)
+  }
+
+  /**
+   * @param {{ error?: Error, headers: unknown, request: object, statusCode: number }} context
+   */
+  #onNativeRequestUpgrade ({ error, headers, request, statusCode }) {
+    this.#onNativeRequestHeaders({ request, response: { headers, statusCode } })
+    this.#finishNativeRequest(request, error)
+  }
+
+  /**
+   * @param {object} request
+   * @param {Error} [error]
+   */
+  #finishNativeRequest (request, error) {
     const ctx = requestContexts.get(request)
     if (!ctx) return
 
-    const { span, store } = ctx
+    const { span } = ctx
 
     // Don't record AbortError as an error - it's user-initiated cancellation
     if (error && error.name !== 'AbortError') {
       span.setTag('error', error)
     }
 
-    // Call the request hook if configured
-    this.config.hooks.request(span, null, null)
+    const requestHook = this.config.hooks.request
+    if (requestHook !== noop) {
+      this.tracer.scope().activate(span, () => {
+        requestHook(span, null, null)
+      })
+    }
 
     // Finish the span
     span.finish()
 
     // Clean up
     requestContexts.delete(request)
-
-    // Restore parent store
-    if (store) {
-      storage('legacy').enterWith(store)
-    }
   }
 
   // ===========================================
@@ -302,7 +288,7 @@ function normalizeHeaders (headers) {
 }
 
 function normalizeConfig (config) {
-  const validateStatus = getStatusValidator(config)
+  const validateStatus = getClientStatusValidator(config)
   const hooks = getHooks(config)
 
   return {
@@ -310,19 +296,6 @@ function normalizeConfig (config) {
     validateStatus,
     hooks,
   }
-}
-
-function getStatusValidator (config) {
-  if (typeof config.validateStatus === 'function') {
-    return config.validateStatus
-  } else if (Object.hasOwn(config, 'validateStatus')) {
-    log.error('Expected `validateStatus` to be a function.')
-  }
-  return defaultValidateStatus
-}
-
-function defaultValidateStatus (code) {
-  return code < 400 || code >= 500
 }
 
 function getHooks (config) {

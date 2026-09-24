@@ -80,12 +80,35 @@ describe('noop', () => {
     llmobs.deregisterProcessor()
   })
 
+  it('exposes the no-op experiments facade', () => {
+    assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+  })
+
   it('using "annotationContext" should not throw', () => {
     const result = llmobs.annotationContext({}, () => {
       return 5
     })
 
     assert.equal(result, 5)
+  })
+
+  it('fails clearly for Prompt Management network operations before initialization', async () => {
+    const operations = [
+      () => llmobs.prompts.getPrompt('p'),
+      () => llmobs.prompts.refreshPrompt('p'),
+      () => llmobs.prompts.createPrompt('p', []),
+      () => llmobs.prompts.createPromptVersion('p', []),
+      () => llmobs.prompts.updatePrompt('p', {}),
+      () => llmobs.prompts.updatePromptVersion('p', 1, {}),
+      () => llmobs.prompts.deletePrompt('p'),
+      () => llmobs.prompts.listPrompts(),
+      () => llmobs.prompts.listPromptVersions('p'),
+    ]
+
+    for (const operation of operations) {
+      await assert.rejects(operation(), /Prompt Management requires tracer\.init\(\)/)
+    }
+    llmobs.prompts.clearPromptCache()
   })
 
   describe('trace', () => {

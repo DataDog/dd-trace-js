@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const { inspect } = require('node:util')
 const Axios = require('axios')
+const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
 describe('WAF Metrics', () => {
   let axios, cwd, appFile
@@ -140,6 +141,59 @@ describe('WAF Metrics', () => {
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
       assert.strictEqual(appsecTelemetryMetricsReceived, true)
+    })
+  })
+
+  describe('WAF duration metrics', () => {
+    let agent, proc
+
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+      proc = await spawnProc(appFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_APPSEC_ENABLED: 'true',
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        },
+      })
+      axios = Axios.create({ baseURL: proc.url })
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+      await agent.stop()
+    })
+
+    it('should report waf.duration and waf.duration_ext once per request as distribution metrics', async () => {
+      let appsecDistributionsReceived = false
+
+      await axios.post('/', { name: 'hey' })
+
+      const checkTelemetryDistributions = agent.assertTelemetryReceived({
+        fn: ({ payload }) => {
+          const namespace = payload.payload.namespace
+
+          if (namespace === 'appsec') {
+            appsecDistributionsReceived = true
+            const series = payload.payload.series
+
+            const wafDuration = series.find(s => s.metric === 'waf.duration')
+            assert.ok(wafDuration, `Got: ${inspect(series)}`)
+            assert.strictEqual(DDSketch.fromProto(Buffer.from(wafDuration.sketch_b64, 'base64')).count, 1)
+
+            const wafDurationExt = series.find(s => s.metric === 'waf.duration_ext')
+            assert.ok(wafDurationExt, `Got: ${inspect(series)}`)
+            assert.strictEqual(DDSketch.fromProto(Buffer.from(wafDurationExt.sketch_b64, 'base64')).count, 1)
+          }
+        },
+        requestType: 'sketches',
+        expectedMessageCount: 1,
+      })
+
+      await checkTelemetryDistributions
+
+      assert.strictEqual(appsecDistributionsReceived, true)
     })
   })
 

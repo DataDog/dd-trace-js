@@ -8,7 +8,7 @@ const sinon = require('sinon')
 const api = require('@opentelemetry/api')
 
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
-const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../ext/priority')
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
@@ -284,18 +284,26 @@ describe('OTel Tracer', () => {
       assert.strictEqual(spanContext._ddContext._trace.origin, 'foo')
     })
 
-    it('falls back to AUTO_REJECT/AUTO_KEEP when tracestate has no s: field', () => {
-      const rejected = convert(0, 'other=bleh,dd=o:foo;t.dm:-4')
-      assert.strictEqual(rejected._ddContext._sampling.priority, AUTO_REJECT)
+    it('reconciles trace flags, Datadog priority, and RUM origin', () => {
+      const cases = [
+        [0, null, AUTO_REJECT],
+        [1, null, AUTO_KEEP],
+        [0, 'other=bleh,dd=o:foo;t.dm:-4', AUTO_REJECT],
+        [1, 'other=bleh,dd=o:foo;t.dm:-4', AUTO_KEEP],
+        [0, 'dd=s:-1', USER_REJECT],
+        [1, 'dd=s:2', USER_KEEP],
+        [0, 'dd=s:2', AUTO_REJECT],
+        [1, 'dd=s:-1', AUTO_KEEP],
+        [0, 'dd=o:rum', AUTO_KEEP],
+        [1, 'dd=o:rum', AUTO_KEEP],
+        [0, 'dd=s:0;o:rum', AUTO_REJECT],
+        [1, 'dd=s:0;o:rum', AUTO_KEEP],
+      ]
 
-      const kept = convert(1, 'other=bleh,dd=o:foo;t.dm:-4')
-      assert.strictEqual(kept._ddContext._sampling.priority, AUTO_KEEP)
-    })
-
-    it('falls back to AUTO_KEEP for RUM traces without a priority', () => {
-      const spanContext = convert(1, 'other=bleh,dd=o:rum')
-      assert.strictEqual(spanContext._ddContext._sampling.priority, AUTO_KEEP)
-      assert.strictEqual(spanContext._ddContext._trace.origin, 'rum')
+      for (const [traceFlag, tracestate, expected] of cases) {
+        const spanContext = convert(traceFlag, tracestate)
+        assert.strictEqual(spanContext._ddContext._sampling.priority, expected)
+      }
     })
   })
 

@@ -240,6 +240,14 @@ function handleOpenAIError (error, res) {
   res.status(500).json({ error: error.message, name: error.name })
 }
 
+function handleOpenAIStreamError (error, res, chunks) {
+  if (error.name === 'AIGuardAbortError') {
+    res.status(403).json({ blocked: true, reason: error.reason, chunks })
+    return
+  }
+  res.status(500).json({ error: error.message, name: error.name, chunks })
+}
+
 app.get('/openai-chat', async (req, res) => {
   const deny = req.query.deny === 'true'
   try {
@@ -495,8 +503,6 @@ app.get('/openai-aiguard-down', async (req, res) => {
 })
 
 app.get('/openai-stream', async (req, res) => {
-  // Streaming requests must skip AI Guard entirely (per openai.js:307); the
-  // stream consumption itself must not be affected by the wrapping.
   try {
     const stream = await openaiClient.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -507,11 +513,89 @@ app.get('/openai-stream', async (req, res) => {
       stream: true,
     })
     let chunks = 0
-    // eslint-disable-next-line no-unused-vars
-    for await (const _chunk of stream) chunks++
-    res.status(200).json({ blocked: false, streamed: true, chunks })
+    let text = ''
+    for await (const chunk of stream) {
+      chunks++
+      text += chunk.choices?.[0]?.delta?.content ?? ''
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks, text })
   } catch (error) {
     handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-stream-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const stream = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'Hello there' }],
+      metadata: { mock_response: 'deny' },
+      stream: true,
+    })
+    for await (const chunk of stream) {
+      if (chunk !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleOpenAIStreamError(error, res, chunks)
+  }
+})
+
+app.get('/openai-stream-tool-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const stream = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: 'Please use tool' }],
+      metadata: { mock_response: 'deny' },
+      stream: true,
+    })
+    for await (const chunk of stream) {
+      if (chunk !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleOpenAIStreamError(error, res, chunks)
+  }
+})
+
+app.get('/openai-responses-stream', async (req, res) => {
+  try {
+    const stream = await openaiClient.responses.create({
+      model: 'gpt-4o-mini',
+      input: 'Hello there',
+      stream: true,
+    })
+    let chunks = 0
+    let text = ''
+    for await (const event of stream) {
+      chunks++
+      if (event.type === 'response.completed') {
+        text = event.response.output[0]?.content[0]?.text ?? ''
+      }
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks, text })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-responses-stream-after-deny', async (req, res) => {
+  let chunks = 0
+  try {
+    const stream = await openaiClient.responses.create({
+      model: 'gpt-4o-mini',
+      input: 'Hello there',
+      metadata: { mock_response: 'deny' },
+      stream: true,
+    })
+    for await (const event of stream) {
+      if (event !== undefined) chunks++
+    }
+    res.status(200).json({ blocked: false, streamed: true, chunks })
+  } catch (error) {
+    handleOpenAIStreamError(error, res, chunks)
   }
 })
 

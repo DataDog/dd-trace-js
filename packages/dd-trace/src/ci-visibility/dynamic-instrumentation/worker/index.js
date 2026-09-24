@@ -52,7 +52,6 @@ const limits = {
 
 /**
  * @param {object} value - Snapshot object or sub-object.
- * @returns {boolean}
  */
 function isCapturedValue (value) {
   return typeof value.type === 'string'
@@ -62,7 +61,6 @@ function isCapturedValue (value) {
  * Remove empty capture containers before sending snapshots through the Test Optimization logs path.
  *
  * @param {object} value - Snapshot object or sub-object.
- * @returns {void}
  */
 function removeEmptyCaptureProperties (value) {
   const stack = [value]
@@ -92,6 +90,7 @@ function removeEmptyCaptureProperties (value) {
       if (current.fields === null || (
         current.fields &&
         typeof current.fields === 'object' &&
+        // eslint-disable-next-line no-restricted-syntax -- snapshot field names are user variables; no key to probe
         Object.keys(current.fields).length === 0
       )) {
         delete current.fields

@@ -26,7 +26,8 @@ function invoke () {
     functionName: process.env.AWS_LAMBDA_FUNCTION_NAME,
     getRemainingTimeInMillis: () => 30_000,
   }
-  return wrapHandler((_event, _context) => ({ statusCode: 200 }))({}, context)
+  const wrapped = wrapHandler((_event, _context) => ({ statusCode: 200 }))
+  return wrapped({}, context)
 }
 
 describe('Plugin', () => {
@@ -115,10 +116,8 @@ describe('Plugin', () => {
         })
 
         const context = { functionName: 'MyMixedCase-Function', getRemainingTimeInMillis: () => 30_000 }
-        await assert.rejects(
-          wrapHandler(() => { throw new Error('handler exploded') })({}, context),
-          { message: 'handler exploded' }
-        )
+        const wrapped = wrapHandler(() => { throw new Error('handler exploded') })
+        await assert.rejects(wrapped({}, context), { message: 'handler exploded' })
         await traces
       })
     })

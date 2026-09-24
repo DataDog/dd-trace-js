@@ -98,7 +98,6 @@ function promisifiedHandler (handler) {
  * Finds a Lambda context object in the supported argument positions.
  *
  * @param {unknown[]} args Handler arguments.
- * @returns {number} Context index, or -1 when absent.
  */
 function findContextIndex (args) {
   for (let index = 0; index < args.length && index < 3; index++) {
@@ -112,7 +111,6 @@ function findContextIndex (args) {
  *
  * @param {unknown[]} args Handler arguments.
  * @param {number} contextIndex Lambda context position.
- * @returns {number} Callback index, or -1 when absent.
  */
 function findCallbackIndex (args, contextIndex) {
   return contextIndex !== 2 && typeof args[2] === 'function' ? 2 : -1
@@ -122,7 +120,6 @@ function findCallbackIndex (args, contextIndex) {
  * Detects common server and emitter artifacts whose real completion arrives through context callbacks.
  *
  * @param {unknown} result Handler return value.
- * @returns {boolean} Whether the value represents a side-effect artifact.
  */
 function looksLikeSideEffectArtifact (result) {
   return result !== null && typeof result === 'object' &&

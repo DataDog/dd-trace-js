@@ -55,7 +55,6 @@ function wrapHandler (handler, config) {
  * Finds an AWS Lambda context object without assuming its argument position.
  *
  * @param {unknown[]} args Handler arguments.
- * @returns {number} Context index, or -1 when no context was supplied.
  */
 function findContextIndex (args) {
   for (let index = 0; index < args.length && index < 3; index++) {
@@ -74,7 +73,6 @@ function findContextIndex (args) {
  *
  * @param {Function} handler Handler to mark.
  * @param {Function} wrappedHandler Wrapper that instruments the handler.
- * @returns {void}
  */
 function markWrapped (handler, wrappedHandler) {
   handler[WRAPPED] = wrappedHandler

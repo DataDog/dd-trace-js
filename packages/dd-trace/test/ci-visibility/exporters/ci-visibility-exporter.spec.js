@@ -16,23 +16,41 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
+const { getDynamicAtrRetryCount } = require('../../../src/ci-visibility/dynamic-atr-retries')
 const { createEfdRetryPolicy } = require('../../../src/ci-visibility/efd-retry-policy')
+const {
+  FINAL_FLUSH_FALLBACK_DELAY,
+  FINAL_FLUSH_TIMEOUT,
+} = require('../../../src/ci-visibility/final-flush')
 const getConfig = require('../../../src/config')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 const ciVisibilityLog = require('../../../src/log')
-const actualSpanFormat = require('../../../src/span_format')
+const { incrementCountMetric: actualIncrementCountMetric } = require('../../../src/ci-visibility/telemetry')
 const { uploadCoverageReport: actualUploadCoverageReportRequest } =
   require('../../../src/ci-visibility/requests/upload-coverage-report')
-const { uploadTestScreenshot: actualUploadTestScreenshotRequest } =
-  require('../../../src/ci-visibility/requests/upload-test-screenshot')
+const {
+  uploadTestScreenshot: actualUploadTestScreenshotRequest,
+  uploadTestSuiteVideo: actualUploadTestSuiteVideoRequest,
+  uploadTestVideo: actualUploadTestVideoRequest,
+} = require('../../../src/ci-visibility/requests/upload-test-screenshot')
+
+const sketchesJsPath = require.resolve('../../../../../vendor/dist/@datadog/sketches-js')
 
 let uploadCoverageReportRequest = actualUploadCoverageReportRequest
 let uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
-let formatSpan = actualSpanFormat
-let incrementCountMetric
-const formatSpanStub = (...args) => formatSpan(...args)
-formatSpanStub.addError = actualSpanFormat.addError
+let uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
+let uploadTestVideoRequest = actualUploadTestVideoRequest
+let incrementCountMetric = actualIncrementCountMetric
+let recordDynamicAtrRetries = () => {}
 const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
+  '../telemetry': {
+    incrementCountMetric (...args) {
+      return incrementCountMetric(...args)
+    },
+    recordDynamicAtrRetries (...args) {
+      return recordDynamicAtrRetries(...args)
+    },
+  },
   '../requests/upload-coverage-report': {
     uploadCoverageReport (...args) {
       return uploadCoverageReportRequest(...args)
@@ -42,14 +60,13 @@ const CiVisibilityExporterBase = proxyquire('../../../src/ci-visibility/exporter
     uploadTestScreenshot (...args) {
       return uploadTestScreenshotRequest(...args)
     },
-  },
-  '../telemetry': {
-    incrementCountMetric (...args) {
-      return incrementCountMetric?.(...args)
+    uploadTestSuiteVideo (...args) {
+      return uploadTestSuiteVideoRequest(...args)
     },
-    TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION: 'events_enqueued_for_serialization',
+    uploadTestVideo (...args) {
+      return uploadTestVideoRequest(...args)
+    },
   },
-  '../../span_format': formatSpanStub,
 })
 
 // The real tracer Config always carries a `testOptimization` namespace object.
@@ -67,15 +84,23 @@ describe('CI Visibility Exporter', () => {
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
-    sinon.stub(fs, 'readFileSync').returns('')
+    const readFileSync = fs.readFileSync
+    sinon.stub(fs, 'readFileSync').callsFake((filename, ...args) => {
+      if (filename === sketchesJsPath) {
+        return readFileSync.call(fs, filename, ...args)
+      }
+      return ''
+    })
     const config = getConfig()
     originalApiKey = config.DD_API_KEY
     config.DD_API_KEY = '1'
     nock.cleanAll()
     uploadCoverageReportRequest = actualUploadCoverageReportRequest
     uploadTestScreenshotRequest = actualUploadTestScreenshotRequest
-    formatSpan = actualSpanFormat
-    incrementCountMetric = sinon.stub()
+    uploadTestSuiteVideoRequest = actualUploadTestSuiteVideoRequest
+    uploadTestVideoRequest = actualUploadTestVideoRequest
+    incrementCountMetric = actualIncrementCountMetric
+    recordDynamicAtrRetries = () => {}
   })
 
   afterEach(() => {
@@ -132,6 +157,8 @@ describe('CI Visibility Exporter', () => {
         earlyFlakeDetectionFaultyThreshold: 0,
         isFlakyTestRetriesEnabled: true,
         flakyTestRetriesCount: 5,
+        isDynamicAtrEnabled: false,
+        dynamicAtrBuckets: undefined,
         isDiEnabled: true,
         isKnownTestsEnabled: true,
         isTestManagementEnabled: true,
@@ -141,6 +168,24 @@ describe('CI Visibility Exporter', () => {
       })
       assert.strictEqual(Object.isFrozen(policy), true)
       assert.strictEqual(Object.isFrozen(policy.earlyFlakeDetectionRetryPolicy), true)
+    })
+
+    it('enables dynamic ATR only when backend ATR is enabled and caches accepted buckets', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        testOptimization: {
+          ...testOptimization,
+          DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+          DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: ['1', '2', '3', '4', '5'],
+        },
+      })
+
+      const disabled = ciVisibilityExporter.filterConfiguration({ isFlakyTestRetriesEnabled: false })
+      const enabled = ciVisibilityExporter.filterConfiguration({ isFlakyTestRetriesEnabled: true })
+
+      assert.strictEqual(disabled.isDynamicAtrEnabled, false)
+      assert.strictEqual(disabled.dynamicAtrBuckets, undefined)
+      assert.strictEqual(enabled.isDynamicAtrEnabled, true)
+      assert.deepStrictEqual(enabled.dynamicAtrBuckets, [1, 2, 3, 4, 5])
     })
 
     it('creates a complete disabled policy when remote settings are unavailable', () => {
@@ -156,6 +201,8 @@ describe('CI Visibility Exporter', () => {
         earlyFlakeDetectionFaultyThreshold: 30,
         isFlakyTestRetriesEnabled: false,
         flakyTestRetriesCount: 5,
+        isDynamicAtrEnabled: false,
+        dynamicAtrBuckets: undefined,
         isDiEnabled: false,
         isKnownTestsEnabled: false,
         isTestManagementEnabled: false,
@@ -164,6 +211,166 @@ describe('CI Visibility Exporter', () => {
         isCoverageReportUploadEnabled: false,
       })
     })
+  })
+
+  describe('dynamic ATR backend budgets', () => {
+    for (const [retryMap, expected] of [
+      [{ '5s': 3 }, [3, 1, 1, 1, 1]],
+      [{ '5s': 0, '10s': 0, '30s': 0, '5m': 0 }, [1, 1, 1, 1, 1]],
+      [{}, [1, 1, 1, 1, 1]],
+      [undefined, [10, 5, 3, 2, 1]],
+      [{ '5s': -1 }, [10, 5, 3, 2, 1]],
+    ]) {
+      it(`retains backend budgets with EFD disabled: ${JSON.stringify(retryMap)}`, async () => {
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+            DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: true,
+            DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: 17,
+          },
+        })
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, {
+            data: {
+              attributes: {
+                known_tests_enabled: true,
+                flaky_test_retries_enabled: true,
+                early_flake_detection: { enabled: false, slow_test_retries: retryMap },
+              },
+            },
+          })
+        exporter._resolveCanUseCiVisProtocol(true)
+        const config = await new Promise((resolve, reject) => {
+          exporter.getLibraryConfiguration({}, (err, config) => err ? reject(err) : resolve(config))
+        })
+        assert.strictEqual(scope.isDone(), true)
+        assert.strictEqual(config.isEarlyFlakeDetectionEnabled, false)
+        assert.deepStrictEqual(config.dynamicAtrBuckets, expected)
+        assert.strictEqual(config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, 17)
+      })
+    }
+
+    for (const localRetryCount of [undefined, 0, 17]) {
+      for (const buckets of [undefined, ['invalid'], ['1', '2', '3', '4', '5']]) {
+        it(`keeps backend budgets separate from EFD override ${localRetryCount}, buckets ${buckets}`, () => {
+          const exporter = new CiVisibilityExporter({
+            testOptimization: {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: buckets,
+              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+              DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT: localRetryCount,
+            },
+          })
+          const remotePolicy = createEfdRetryPolicy({ '5s': 10, '10s': 5, '30s': 3, '5m': 0 })
+          const config = exporter.filterConfiguration({
+            isFlakyTestRetriesEnabled: true,
+            earlyFlakeDetectionRetryPolicy: remotePolicy,
+          })
+          const expected = buckets?.length === 5 ? [1, 2, 3, 4, 5] : [10, 5, 3, 1, 1]
+          assert.deepStrictEqual(config.dynamicAtrBuckets, expected)
+          assert.strictEqual(Object.isFrozen(config.dynamicAtrBuckets), true)
+          for (const [index, duration] of [5000, 10000, 30000, 300000, 300001].entries()) {
+            assert.strictEqual(
+              getDynamicAtrRetryCount(duration, config.earlyFlakeDetectionRetryPolicy, config.dynamicAtrBuckets),
+              expected[index]
+            )
+          }
+          assert.strictEqual(config.earlyFlakeDetectionRetryPolicy.schedulingRetryCount, localRetryCount ?? 10)
+        })
+      }
+    }
+  })
+
+  describe('dynamic ATR telemetry', () => {
+    for (const [localEnabled, remoteEnabled] of [[true, true], [false, true], [true, false]]) {
+      it(`handles single-phase settings with local=${localEnabled}, backend=${remoteEnabled}`, async () => {
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: localEnabled,
+            DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+          },
+        })
+        recordDynamicAtrRetries = sinon.spy()
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, { data: { attributes: { require_git: false, flaky_test_retries_enabled: remoteEnabled } } })
+        exporter._resolveCanUseCiVisProtocol(true)
+        await new Promise((resolve, reject) => {
+          exporter.getLibraryConfiguration({}, err => err ? reject(err) : resolve())
+        })
+        assert.strictEqual(scope.isDone(), true)
+        if (localEnabled && remoteEnabled) {
+          sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, false)
+        } else {
+          sinon.assert.notCalled(recordDynamicAtrRetries)
+        }
+      })
+    }
+
+    for (const customBuckets of [undefined, ['invalid'], ['1', '2', '3', '4', '5']]) {
+      for (const outcome of ['enabled', 'disabled', 'settings error', 'git error']) {
+        it(`records only final enabled settings: ${outcome}, buckets ${customBuckets}`, async () => {
+          const exporter = new CiVisibilityExporter({
+            url,
+            testOptimization: {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: true,
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: customBuckets,
+              DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+            },
+          })
+          recordDynamicAtrRetries = sinon.spy()
+          const uploadError = new Error('git upload failed')
+          sinon.stub(exporter, 'sendGitMetadata')
+          const scope = nock(url)
+            .post('/api/v2/libraries/tests/services/setting')
+            .reply(200, () => {
+              exporter._resolveGit(outcome === 'git error' ? uploadError : undefined)
+              return { data: { attributes: { require_git: true, flaky_test_retries_enabled: true } } }
+            })
+          if (outcome !== 'git error') {
+            scope.post('/api/v2/libraries/tests/services/setting')
+              .reply(outcome === 'settings error' ? 400 : 200, () => {
+                sinon.assert.notCalled(recordDynamicAtrRetries)
+                return {
+                  data: {
+                    attributes: {
+                      require_git: false,
+                      flaky_test_retries_enabled: outcome === 'enabled',
+                    },
+                  },
+                }
+              })
+          }
+          exporter._resolveCanUseCiVisProtocol(true)
+          const { err, config } = await new Promise(resolve => {
+            exporter.getLibraryConfiguration({}, (err, config) => resolve({ err, config }))
+          })
+          assert.strictEqual(scope.isDone(), true)
+          if (outcome.endsWith('error')) {
+            assert.ok(err)
+          } else {
+            assert.strictEqual(err, null)
+            assert.strictEqual(config.isDynamicAtrEnabled, outcome === 'enabled')
+          }
+          if (outcome === 'enabled') {
+            sinon.stub(exporter._testOptimizationHttpCache, 'readSettings').returns({
+              isFlakyTestRetriesEnabled: true,
+            })
+            const cachedConfig = await new Promise((resolve, reject) => {
+              exporter.getLibraryConfiguration({}, (err, config) => err ? reject(err) : resolve(config))
+            })
+            assert.strictEqual(cachedConfig.isDynamicAtrEnabled, true)
+            sinon.assert.calledOnceWithExactly(recordDynamicAtrRetries, customBuckets?.length === 5)
+          } else {
+            sinon.assert.notCalled(recordDynamicAtrRetries)
+          }
+        })
+      }
+    }
   })
 
   describe('sendGitMetadata', () => {
@@ -188,6 +395,24 @@ describe('CI Visibility Exporter', () => {
       sinon.assert.calledOnceWithExactly(onGitUploadReady, undefined)
       assert.strictEqual(clock.now, 0)
       assert.strictEqual(scope.isDone(), false)
+    })
+
+    it('should start the git upload timeout when an upload is requested', async () => {
+      const clock = sinon.useFakeTimers()
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
+
+      try {
+        ciVisibilityExporter.sendGitMetadata()
+        await clock.tickAsync(60_000)
+
+        const err = await ciVisibilityExporter._gitUploadPromise
+        assert.match(err.message, /Timeout while uploading git metadata/)
+      } finally {
+        clock.restore()
+      }
     })
 
     it('should resolve _gitUploadPromise when git metadata is fetched', (done) => {
@@ -408,6 +633,52 @@ describe('CI Visibility Exporter', () => {
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       })
+      it('does not request skippable suites when git metadata upload fails with require_git false', (done) => {
+        // Regression: the live settings path starts `sendGitMetadata` even when the
+        // backend returns `require_git: false`. `getSkippableSuites` awaits
+        // `_gitUploadPromise`, so a failed upload must resolve that promise with the
+        // error and suppress the skippable request. The settings fs-cache apply path
+        // must NOT call `_resolveGit()` on the live path, or it races the in-flight
+        // upload and masks its error.
+        nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                itr_enabled: true,
+                require_git: false,
+                code_coverage: true,
+                tests_skipping: true,
+              },
+            },
+          }))
+
+        const skippableScope = nock(url)
+          .post('/api/v2/ci/tests/skippable')
+          .reply(200, JSON.stringify({ data: [] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
+        // Simulate a failed git metadata upload: resolve the git promise with an error,
+        // as the real `sendGitMetadata` would on a non-2xx response.
+        ciVisibilityExporter.sendGitMetadata = function () {
+          setImmediate(() => this._resolveGit(new Error('git metadata upload failed')))
+        }
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+
+        ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+          assert.strictEqual(settingsErr, null)
+          assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), true)
+          ciVisibilityExporter.getSkippableSuites({}, (skippableErr, skippableSuites) => {
+            assert.ok(skippableErr instanceof Error, 'skippable should surface the git upload error')
+            assert.deepStrictEqual(skippableSuites, [])
+            assert.strictEqual(skippableScope.isDone(), false, 'should NOT request skippable when git upload fails')
+            done()
+          })
+        })
+      })
       it('will retry ITR configuration request if require_git is true', (done) => {
         const TIME_TO_UPLOAD_GIT = 50
         let hasUploadedGit = false
@@ -491,6 +762,49 @@ describe('CI Visibility Exporter', () => {
           done()
         })
         ciVisibilityExporter._resolveGit()
+      })
+      it('clears phase-one settings when the post-upload settings request fails', (done) => {
+        // Regression: when the backend returns require_git:true and the second (post-upload)
+        // settings request fails, _libraryConfig must be reset to empty settings so stale
+        // phase-one feature flags don't stay installed (shouldRequestSkippableSuites etc.).
+        const scope = nock(url)
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                require_git: true,
+                code_coverage: true,
+                tests_skipping: true,
+                itr_enabled: true,
+              },
+            },
+          }))
+          .post('/api/v2/libraries/tests/services/setting')
+          .reply(400, JSON.stringify({ errors: [{ detail: 'backend error' }] }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
+        })
+        sinon.stub(ciVisibilityExporter, 'sendGitMetadata')
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+          assert.strictEqual(scope.isDone(), true, 'both phases should have hit the API')
+          assert.ok(err, 'should surface the second-request error')
+          // Phase-1 had tests_skipping:true and itr_enabled:true; after the failure these
+          // must NOT remain installed on _libraryConfig.
+          assert.strictEqual(
+            ciVisibilityExporter.shouldRequestSkippableSuites(),
+            false,
+            'stale phase-1 flags must not enable skippable after a failed negotiation'
+          )
+          done()
+        })
+        // Simulate the git upload finishing so the phase-2 request can proceed.
+        setImmediate(() => ciVisibilityExporter._resolveGit())
       })
     })
   })
@@ -866,6 +1180,24 @@ describe('CI Visibility Exporter', () => {
         )
         sinon.assert.notCalled(ciVisibilityExporter._writer.append)
       })
+
+      for (const sessionEventType of ['test_suite_end', 'test_module_end', 'test_session_end']) {
+        it(`should export test events from a trace containing ${sessionEventType}`, () => {
+          const writer = {
+            append: sinon.spy(),
+            flush: sinon.spy(),
+            setUrl: sinon.spy(),
+          }
+          const testEvent = { type: 'test' }
+          const ciVisibilityExporter = new CiVisibilityExporter({ url })
+          ciVisibilityExporter._isInitialized = true
+          ciVisibilityExporter._writer = writer
+
+          ciVisibilityExporter.export([testEvent, { type: sessionEventType }])
+
+          sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
+        })
+      }
     })
     context('is initialized and can use CI Vis protocol', () => {
       it('should export session traces', () => {
@@ -908,7 +1240,7 @@ describe('CI Visibility Exporter', () => {
         assert.strictEqual(typeof writer.flush.firstCall.args[1].deadline, 'number')
       })
 
-      it('retains a completed suite until final flush and applies later span tags', () => {
+      it('exports a suite trace without retaining it', () => {
         const writer = {
           append: sinon.spy(),
           flush: sinon.spy(done => done?.()),
@@ -918,237 +1250,18 @@ describe('CI Visibility Exporter', () => {
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._writer = writer
         ciVisibilityExporter._canUseCiVisProtocol = true
-        const spanId = { toString: () => 'suite-span-id' }
-        const testSuiteSpan = {
-          context: () => ({ _spanId: spanId }),
-        }
         const testEvent = { type: 'test' }
         const suiteEvent = {
           type: 'test_suite_end',
-          span_id: spanId,
+          span_id: 'suite-span-id',
           error: 0,
           meta: { 'test.status': 'pass' },
           metrics: {},
         }
-        formatSpan = sinon.stub().returns({
-          error: 1,
-          meta: {
-            'error.message': 'late reporter error',
-            'test.status': 'fail',
-          },
-          metrics: {},
-        })
 
-        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
         ciVisibilityExporter.export([testEvent, suiteEvent])
 
-        sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
-        ciVisibilityExporter.flush()
-        sinon.assert.calledOnce(writer.append)
-
-        const done = sinon.spy()
-        ciVisibilityExporter.flush(done)
-
-        sinon.assert.calledTwice(writer.append)
-        assert.deepStrictEqual(writer.append.secondCall.args[0], [{
-          ...suiteEvent,
-          error: 1,
-          meta: {
-            'error.message': 'late reporter error',
-            'test.status': 'fail',
-          },
-        }])
-        sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
-        sinon.assert.calledOnceWithExactly(done, undefined)
-      })
-
-      it('retains a formatted worker suite and applies a later reporter error', () => {
-        const writer = {
-          append: sinon.spy(),
-          flush: sinon.spy(done => done?.()),
-          setUrl: sinon.spy(),
-        }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
-        ciVisibilityExporter._isInitialized = true
-        ciVisibilityExporter._writer = writer
-        ciVisibilityExporter._canUseCiVisProtocol = true
-        const spanId = { toString: () => 'suite-span-id' }
-        const testEvent = { type: 'test' }
-        const suiteEvent = {
-          type: 'test_suite_end',
-          span_id: spanId,
-          error: 0,
-          meta: { 'test.status': 'pass' },
-          metrics: {},
-        }
-        const error = new Error('late reporter error')
-
-        ciVisibilityExporter.exportTraceWithDeferredTestSuite([testEvent, suiteEvent])
-        ciVisibilityExporter.setDeferredTestSuiteError(error)
-
-        sinon.assert.calledOnceWithExactly(writer.append, [testEvent])
-        const done = sinon.spy()
-        ciVisibilityExporter.flush(done)
-
-        sinon.assert.calledTwice(writer.append)
-        assert.strictEqual(writer.append.secondCall.args[0][0], suiteEvent)
-        assert.strictEqual(suiteEvent.error, 1)
-        assert.strictEqual(suiteEvent.meta['test.status'], 'fail')
-        assert.strictEqual(suiteEvent.meta['error.message'], error.message)
-        assert.strictEqual(suiteEvent.meta['error.type'], error.name)
-        assert.strictEqual(suiteEvent.meta['error.stack'], error.stack)
-        sinon.assert.calledOnceWithExactly(done, undefined)
-      })
-
-      it('serializes a completed suite at final flush before SpanProcessor exports it', () => {
-        const writer = {
-          append: sinon.spy(),
-          flush: sinon.spy(done => done?.()),
-          setUrl: sinon.spy(),
-        }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0, isCiVisibility: true })
-        ciVisibilityExporter._isInitialized = true
-        ciVisibilityExporter._writer = writer
-        ciVisibilityExporter._canUseCiVisProtocol = true
-        const spanId = { toString: () => 'suite-span-id' }
-        const testSuiteSpan = {
-          context: () => ({ _spanId: spanId }),
-        }
-        const suiteEvent = {
-          type: 'test_suite_end',
-          span_id: spanId,
-          error: 1,
-          meta: {
-            'error.message': 'late reporter error',
-            'test.status': 'fail',
-          },
-          metrics: {},
-        }
-        const moduleEvent = { type: 'test_module_end' }
-        const sessionEvent = { type: 'test_session_end' }
-        formatSpan = sinon.stub().returns(suiteEvent)
-        const firstDone = sinon.spy()
-
-        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
-        ciVisibilityExporter.flush(firstDone)
-
-        sinon.assert.calledOnceWithExactly(
-          writer.append,
-          [suiteEvent],
-          sinon.match({ deadline: sinon.match.number })
-        )
-        sinon.assert.calledOnceWithExactly(
-          incrementCountMetric,
-          'events_enqueued_for_serialization'
-        )
-        sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
-        sinon.assert.calledOnceWithExactly(firstDone, undefined)
-
-        ciVisibilityExporter.export([suiteEvent, moduleEvent, sessionEvent])
-        const secondDone = sinon.spy()
-        ciVisibilityExporter.flush(secondDone)
-
-        sinon.assert.calledTwice(writer.append)
-        sinon.assert.calledWithExactly(writer.append.secondCall, [moduleEvent, sessionEvent])
-        sinon.assert.calledOnceWithExactly(formatSpan, testSuiteSpan)
-        sinon.assert.calledOnceWithExactly(secondDone, undefined)
-      })
-
-      it('retains a deferred suite until a bounded final append is accepted', () => {
-        const writer = {
-          append: sinon.stub().onFirstCall().returns(false).onSecondCall().returns(true),
-          flush: sinon.spy(done => done?.()),
-          setUrl: sinon.spy(),
-        }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0, isCiVisibility: true })
-        ciVisibilityExporter._isInitialized = true
-        ciVisibilityExporter._writer = writer
-        ciVisibilityExporter._canUseCiVisProtocol = true
-        const spanId = { toString: () => 'suite-span-id' }
-        const testSuiteSpan = {
-          context: () => ({ _spanId: spanId }),
-        }
-        const suiteEvent = {
-          type: 'test_suite_end',
-          span_id: spanId,
-          error: 0,
-          meta: { 'test.status': 'pass' },
-          metrics: {},
-        }
-        formatSpan = sinon.stub().returns(suiteEvent)
-
-        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
-        ciVisibilityExporter.export([suiteEvent])
-        ciVisibilityExporter.exportDeferredTestSuiteSpans()
-
-        sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent])
-        sinon.assert.notCalled(incrementCountMetric)
-        const done = sinon.spy()
-        ciVisibilityExporter.flush(done)
-
-        sinon.assert.calledTwice(writer.append)
-        assert.strictEqual(writer.append.secondCall.args[0][0], suiteEvent)
-        assert.strictEqual(typeof writer.append.secondCall.args[1].deadline, 'number')
-        sinon.assert.calledOnceWithExactly(
-          incrementCountMetric,
-          'events_enqueued_for_serialization'
-        )
-        sinon.assert.calledOnceWithExactly(done, undefined)
-
-        ciVisibilityExporter.exportDeferredTestSuiteSpans()
-        sinon.assert.calledTwice(writer.append)
-      })
-
-      it('retains module and session events until bounded final appends are accepted', () => {
-        const writer = {
-          append: sinon.stub()
-            .onFirstCall().returns(false)
-            .onSecondCall().returns(true)
-            .onThirdCall().returns(true),
-          flush: sinon.spy(done => done?.()),
-          setUrl: sinon.spy(),
-        }
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
-        ciVisibilityExporter._isInitialized = true
-        ciVisibilityExporter._writer = writer
-        ciVisibilityExporter._canUseCiVisProtocol = true
-        const spanId = { toString: () => 'suite-span-id' }
-        const testSuiteSpan = {
-          context: () => ({ _spanId: spanId }),
-        }
-        const suiteEvent = {
-          type: 'test_suite_end',
-          span_id: spanId,
-          error: 0,
-          meta: { 'test.status': 'pass' },
-          metrics: {},
-        }
-        const moduleEvent = { type: 'test_module_end' }
-        const sessionEvent = { type: 'test_session_end' }
-        const moduleAndSessionEvents = [moduleEvent, sessionEvent]
-        formatSpan = sinon.stub().returns(suiteEvent)
-
-        ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
-        ciVisibilityExporter.export([suiteEvent, ...moduleAndSessionEvents])
-
-        sinon.assert.calledOnceWithExactly(writer.append, moduleAndSessionEvents)
-
-        const done = sinon.spy()
-        ciVisibilityExporter.flush(done)
-
-        sinon.assert.calledThrice(writer.append)
-        sinon.assert.calledWithExactly(
-          writer.append.secondCall,
-          [suiteEvent],
-          sinon.match({ deadline: sinon.match.number })
-        )
-        sinon.assert.calledWithExactly(
-          writer.append.thirdCall,
-          moduleAndSessionEvents,
-          writer.append.secondCall.args[1]
-        )
-        sinon.assert.calledOnceWithExactly(writer.flush, sinon.match.func, writer.append.secondCall.args[1])
-        sinon.assert.calledOnceWithExactly(done, undefined)
+        sinon.assert.calledOnceWithExactly(writer.append, [testEvent, suiteEvent])
       })
     })
   })
@@ -1168,46 +1281,6 @@ describe('CI Visibility Exporter', () => {
       } finally {
         clock.restore()
       }
-    })
-
-    it('waits for initialization when a completed suite is deferred', async () => {
-      const writer = {
-        append: sinon.spy(),
-        flush: sinon.spy(done => done()),
-        setUrl: sinon.spy(),
-      }
-      const ciVisibilityExporter = new CiVisibilityExporter({ url })
-      const spanId = { toString: () => 'suite-span-id' }
-      const testSuiteSpan = {
-        context: () => ({ _spanId: spanId }),
-      }
-      const suiteEvent = {
-        type: 'test_suite_end',
-        span_id: spanId,
-        error: 0,
-        meta: {},
-        metrics: {},
-      }
-      formatSpan = sinon.stub().returns(suiteEvent)
-      const done = sinon.spy()
-
-      ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
-      ciVisibilityExporter.export([suiteEvent])
-      ciVisibilityExporter.flush(done)
-      sinon.assert.notCalled(done)
-
-      ciVisibilityExporter._writer = writer
-      ciVisibilityExporter._isInitialized = true
-      ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-      await Promise.resolve()
-
-      sinon.assert.calledOnceWithExactly(
-        writer.append,
-        [suiteEvent],
-        sinon.match({ deadline: sinon.match.number })
-      )
-      sinon.assert.calledOnce(writer.flush)
-      sinon.assert.calledOnceWithExactly(done, undefined)
     })
 
     for (const [payloadType, writerProperty, exportPayload] of [
@@ -1254,39 +1327,6 @@ describe('CI Visibility Exporter', () => {
       ciVisibilityExporter.flush(() => {})
 
       sinon.assert.calledTwice(writer.flush)
-    })
-
-    it('starts a new final flush after a suite is deferred', () => {
-      const writer = {
-        append: sinon.spy(),
-        flush: sinon.spy(done => done?.()),
-        setUrl: sinon.spy(),
-      }
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, flushInterval: 0 })
-      ciVisibilityExporter._isInitialized = true
-      ciVisibilityExporter._canUseCiVisProtocol = true
-      ciVisibilityExporter._writer = writer
-      const testSuiteSpan = {
-        context: () => ({ _spanId: { toString: () => 'suite-span-id' } }),
-      }
-      const suiteEvent = {
-        type: 'test_suite_end',
-        error: 0,
-        meta: { 'test.status': 'pass' },
-        metrics: {},
-      }
-      formatSpan = sinon.stub().returns(suiteEvent)
-
-      const firstDone = sinon.spy()
-      ciVisibilityExporter.flush(firstDone)
-      ciVisibilityExporter.deferTestSuiteSpan(testSuiteSpan)
-      const secondDone = sinon.spy()
-      ciVisibilityExporter.flush(secondDone)
-
-      sinon.assert.calledTwice(writer.flush)
-      sinon.assert.calledOnceWithExactly(writer.append, [suiteEvent], sinon.match({ deadline: sinon.match.number }))
-      sinon.assert.calledOnceWithExactly(firstDone, undefined)
-      sinon.assert.calledOnceWithExactly(secondDone, undefined)
     })
 
     it('does not coalesce new test data into an active final flush', () => {
@@ -1357,7 +1397,7 @@ describe('CI Visibility Exporter', () => {
 
         ciVisibilityExporter.export([{ type: 'test' }])
         ciVisibilityExporter.flush(done)
-        clock.tick(10_100)
+        clock.tick(FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY)
 
         sinon.assert.calledOnce(done)
         const timeoutError = done.firstCall.args[0]
@@ -1884,6 +1924,56 @@ describe('CI Visibility Exporter', () => {
           },
         }))
       })
+
+      it('preserves string log tags and starts generated tags without a separator', () => {
+        const writer = {
+          append: sinon.spy(),
+          flush: sinon.spy(),
+          setUrl: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+
+        ciVisibilityExporter.exportDiLogs({}, { message: 'with tags', ddtags: 'custom:value' })
+        ciVisibilityExporter.exportDiLogs({}, { message: 'without tags' })
+
+        assert.strictEqual(
+          writer.append.firstCall.args[0].ddtags,
+          `custom:value,debugger_version:${tracerVersion},host_name:${getHostname()}`
+        )
+        assert.strictEqual(
+          writer.append.secondCall.args[0].ddtags,
+          `debugger_version:${tracerVersion},host_name:${getHostname()}`
+        )
+      })
+
+      it('reports logs rejected by the encoder limit as dropped', () => {
+        incrementCountMetric = sinon.spy()
+        const writer = {
+          append: sinon.stub().returns(false),
+          flush: sinon.spy(),
+        }
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          flushInterval: 0,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
+        })
+        ciVisibilityExporter._isInitialized = true
+        ciVisibilityExporter._logsWriter = writer
+        ciVisibilityExporter._canForwardLogs = true
+
+        ciVisibilityExporter.exportDiLogs({}, { message: 'rejected log' })
+
+        sinon.assert.calledOnceWithExactly(
+          incrementCountMetric,
+          'endpoint_payload.dropped',
+          { endpoint: 'di_logs', statusCode: undefined, errorType: 'encoder_limit' }
+        )
+      })
     })
   })
 
@@ -2024,6 +2114,105 @@ describe('CI Visibility Exporter', () => {
     })
   })
 
+  describe('canUploadTestVideos', () => {
+    it('is default off and controlled independently from screenshots', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: {
+          DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true,
+          DD_TEST_FAILURE_VIDEOS_ENABLED: false,
+        },
+      })
+      exporter._testScreenshotUploadUrl = url
+
+      assert.strictEqual(exporter.canUploadTestScreenshots(), true)
+      assert.strictEqual(exporter.canUploadTestVideos(), false)
+    })
+
+    it('returns true when the upload URL is set and videos are enabled', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+
+      assert.strictEqual(exporter.canUploadTestVideos(), true)
+    })
+
+    it('returns true when videos are sent through the Agent EVP proxy', () => {
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      exporter._isUsingEvpProxy = true
+
+      assert.strictEqual(exporter.canUploadTestVideos(), true)
+    })
+  })
+
+  describe('uploadTestSuiteVideo', () => {
+    it('forwards the suite identity to the media request', () => {
+      uploadTestSuiteVideoRequest = sinon.stub().yields(null)
+      const exporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+      })
+      exporter._testScreenshotUploadUrl = url
+      const callback = sinon.spy()
+
+      exporter.uploadTestSuiteVideo({
+        filePath: '/tmp/spec.mp4',
+        testSessionId: '123',
+        testSuiteId: '456',
+        idempotencyKey: '123:456:spec.mp4',
+        capturedAtMs: 1,
+      }, callback)
+
+      const options = uploadTestSuiteVideoRequest.firstCall.args[0]
+      assert.strictEqual(options.testSessionId, '123')
+      assert.strictEqual(options.testSuiteId, '456')
+      assert.strictEqual(options.url, url)
+      sinon.assert.calledOnceWithExactly(callback, null)
+    })
+
+    it('allows a background video upload beyond the final flush timeout', () => {
+      const clock = sinon.useFakeTimers()
+      try {
+        uploadTestSuiteVideoRequest = sinon.stub().callsFake((options, callback) => {
+          options.signal.addEventListener('abort', () => callback(options.signal.reason), { once: true })
+        })
+        const exporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+        })
+        exporter._testScreenshotUploadUrl = url
+        const callback = sinon.spy()
+        const startedAt = Date.now()
+
+        exporter.uploadTestSuiteVideo({
+          filePath: '/tmp/spec.mp4',
+          testSessionId: '123',
+          testSuiteId: '456',
+          idempotencyKey: '123:456:spec.mp4',
+          capturedAtMs: 1,
+        }, callback)
+
+        const requestOptions = uploadTestSuiteVideoRequest.firstCall.args[0]
+        assert.strictEqual(requestOptions.deadline, startedAt + (5 * FINAL_FLUSH_TIMEOUT))
+        clock.tick(FINAL_FLUSH_TIMEOUT)
+        assert.strictEqual(requestOptions.signal.aborted, false)
+        sinon.assert.notCalled(callback)
+
+        clock.tick(4 * FINAL_FLUSH_TIMEOUT)
+        assert.strictEqual(requestOptions.signal.aborted, true)
+        sinon.assert.calledOnce(callback)
+      } finally {
+        clock.restore()
+      }
+    })
+  })
+
   describe('uploadTestScreenshot', () => {
     const screenshotOptions = {
       filePath: '/tmp/test-failed-1.png',
@@ -2044,42 +2233,37 @@ describe('CI Visibility Exporter', () => {
       return exporter
     }
 
-    it('bounds a pending screenshot and lets final flush complete', () => {
+    it('bounds a pending media upload from its start', () => {
       const clock = sinon.useFakeTimers()
       try {
-        uploadTestScreenshotRequest = sinon.stub()
+        uploadTestScreenshotRequest = sinon.stub().callsFake((options, callback) => {
+          options.signal.addEventListener('abort', () => callback(options.signal.reason), { once: true })
+        })
         const exporter = createScreenshotExporter()
         const screenshotCallback = sinon.spy()
-        const flushCallback = sinon.spy()
+        const startedAt = Date.now()
 
         exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
-        exporter.flush(flushCallback)
         const requestOptions = uploadTestScreenshotRequest.firstCall.args[0]
-        assert.strictEqual(requestOptions.deadline, 10_000)
+        assert.strictEqual(requestOptions.deadline, startedAt + FINAL_FLUSH_TIMEOUT)
         assert.strictEqual(requestOptions.signal.aborted, false)
-        sinon.assert.notCalled(exporter._writer.flush)
-        sinon.assert.notCalled(flushCallback)
-
-        clock.tick(9_999)
+        clock.tick(FINAL_FLUSH_TIMEOUT - 1)
         sinon.assert.notCalled(screenshotCallback)
-        sinon.assert.notCalled(flushCallback)
 
         clock.tick(1)
         assert.strictEqual(requestOptions.signal.aborted, true)
         sinon.assert.calledOnce(screenshotCallback)
         assert.strictEqual(screenshotCallback.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
-        sinon.assert.calledOnce(exporter._writer.flush)
-        sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+        sinon.assert.notCalled(exporter._writer.flush)
 
         uploadTestScreenshotRequest.firstCall.args[1]()
         sinon.assert.calledOnce(screenshotCallback)
-        sinon.assert.calledOnce(flushCallback)
       } finally {
         clock.restore()
       }
     })
 
-    it('waits for screenshot completion work before flushing writers', async () => {
+    it('flushes writers while waiting for screenshot completion work', async () => {
       uploadTestScreenshotRequest = sinon.stub()
       const exporter = createScreenshotExporter()
       const completed = []
@@ -2091,15 +2275,25 @@ describe('CI Visibility Exporter', () => {
       exporter.uploadTestScreenshot(screenshotOptions, screenshotCallback)
       exporter.flush(flushCallback)
 
-      sinon.assert.notCalled(exporter._writer.flush)
+      sinon.assert.calledOnce(exporter._writer.flush)
       sinon.assert.notCalled(flushCallback)
 
       uploadTestScreenshotRequest.firstCall.args[1](null)
       await new Promise(resolve => queueMicrotask(resolve))
 
       assert.deepStrictEqual(completed, ['screenshot'])
-      sinon.assert.calledOnce(exporter._writer.flush)
       sinon.assert.calledOnceWithExactly(flushCallback, undefined)
+    })
+
+    it('forwards in-memory screenshot content', () => {
+      uploadTestScreenshotRequest = sinon.stub()
+      const exporter = createScreenshotExporter()
+      const content = Buffer.from('webdriverio screenshot')
+
+      exporter.uploadTestScreenshot({ ...screenshotOptions, filePath: undefined, content }, sinon.spy())
+
+      assert.strictEqual(uploadTestScreenshotRequest.firstCall.args[0].content, content)
+      assert.strictEqual(uploadTestScreenshotRequest.firstCall.args[0].filePath, undefined)
     })
 
     it('forwards caller cancellation and completes once', () => {

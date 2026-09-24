@@ -128,6 +128,8 @@ describe('end to end sdk integration tests', () => {
     })
 
     it('submits evaluations', async () => {
+      const evaluationMetricsPromise = getEvaluationMetrics()
+
       llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world' })
         const spanCtx = llmobs.exportSpan()
@@ -141,8 +143,10 @@ describe('end to end sdk integration tests', () => {
         })
       })
 
-      const { apmSpans, llmobsSpans } = await getEvents()
-      const llmobsEvaluationMetrics = await getEvaluationMetrics()
+      const [{ apmSpans, llmobsSpans }, llmobsEvaluationMetrics] = await Promise.all([
+        getEvents(),
+        evaluationMetricsPromise,
+      ])
 
       assert.equal(apmSpans.length, 1)
       assert.equal(llmobsSpans.length, 1)
@@ -324,12 +328,12 @@ describe('end to end sdk integration tests', () => {
     let originalMlApp
 
     before(() => {
-      originalMlApp = tracer._tracer._config.llmobs.mlApp
-      tracer._tracer._config.llmobs.mlApp = null
+      originalMlApp = tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
+      tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = undefined
     })
 
     after(() => {
-      tracer._tracer._config.llmobs.mlApp = originalMlApp
+      tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = originalMlApp
     })
 
     it('defaults to the service name', async () => {

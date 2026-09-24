@@ -14,6 +14,8 @@ let encoder
 let url
 let log
 let incrementCountMetric
+let agent
+let getAgent
 
 describe('CI Visibility Coverage Writer', () => {
   beforeEach(() => {
@@ -38,12 +40,15 @@ describe('CI Visibility Coverage Writer', () => {
       error: sinon.spy(),
     }
     incrementCountMetric = sinon.stub()
+    agent = {}
+    getAgent = sinon.stub().returns(agent)
 
     const CoverageCIVisibilityEncoder = function () {
       return encoder
     }
 
     CoverageWriter = proxyquire('../../../../src/ci-visibility/exporters/agentless/coverage-writer.js', {
+      '../agents': { getAgent },
       '../request': request,
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../ci-visibility/telemetry': { incrementCountMetric },
@@ -94,13 +99,14 @@ describe('CI Visibility Coverage Writer', () => {
           url,
           path: '/api/v2/citestcov',
           method: 'POST',
+          agent,
         })
         done()
       })
     })
 
     it('should log request errors', done => {
-      const error = new Error('boom')
+      const error = Object.assign(new Error('boom'), { code: 'ETIMEDOUT' })
 
       request.yields(error)
 
@@ -117,8 +123,13 @@ describe('CI Visibility Coverage Writer', () => {
         sinon.assert.calledWith(log.error, 'Error sending CI coverage payload', error)
         sinon.assert.calledWithExactly(
           incrementCountMetric,
+          'endpoint_payload.requests_errors',
+          { endpoint: 'code_coverage', statusCode: undefined, errorType: 'ETIMEDOUT' }
+        )
+        sinon.assert.calledWithExactly(
+          incrementCountMetric,
           'endpoint_payload.dropped',
-          { endpoint: 'code_coverage' }
+          { endpoint: 'code_coverage', statusCode: undefined, errorType: 'ETIMEDOUT' }
         )
         done()
       })

@@ -26,6 +26,7 @@ import {
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
+import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
 import * as lambda from '../lambda';
 
@@ -73,7 +74,8 @@ tracer.init({
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
     { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
     { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
-    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } },
+    { sampleRate: 0, resource: '/health', discard: true }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -295,10 +297,13 @@ const openSearchOptions: plugins.opensearch = {
 };
 
 tracer.use('ai', true)
+tracer.use('ai', { llmobs: false })
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
+tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
 tracer.use('aws-lambda');
 const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.value, {
@@ -315,11 +320,13 @@ const initFailureReported: Promise<void> = lambda.reportInitFailure({
   startTime: Date.now(),
 });
 tracer.use('aws-sdk');
+tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('browser-bunyan');
 tracer.use('bullmq');
 tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
@@ -345,7 +352,9 @@ tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-cloud-vertexai', { llmobs: false });
 tracer.use('google-genai');
+tracer.use('google-genai', { llmobs: false });
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -390,6 +399,7 @@ tracer.use('langchain');
 tracer.use('langchain', { llmobs: false });
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
 tracer.use('langgraph');
+tracer.use('langgraph', { llmobs: false });
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -409,6 +419,8 @@ tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
 tracer.use('openai-agents');
+tracer.use('openai-agents', { llmobs: false });
+tracer.use('openai', { llmobs: false });
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
@@ -420,6 +432,13 @@ tracer.use('pg', { appendComment: true });
 tracer.use('pg', { truncate: true });
 tracer.use('pg', { truncate: 5000 });
 tracer.use('pino');
+tracer.use('postgres');
+tracer.use('postgres', { service: 'postgres-service' });
+tracer.use('postgres', { appendComment: true, dbmPropagationMode: 'full' });
+// @ts-expect-error Postgres DBM propagation accepts only the configured modes.
+tracer.use('postgres', { dbmPropagationMode: 'invalid' });
+tracer.use('postgres', { truncate: true });
+tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
@@ -432,6 +451,7 @@ tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
+tracer.use('supabase');
 tracer.use('tedious');
 tracer.use('undici');
 tracer.use('vitest');
@@ -464,6 +484,13 @@ span = tracer.startSpan('test', {
 });
 span = tracer.startSpan('test', { childOf: null })
 span = tracer.startSpan('test', { integrationName: 'testIntegration' })
+span.recordException(new Error('payment declined'), {
+  handled: true,
+  attempt: 1,
+  stages: ['authorize', 'capture']
+})
+// @ts-expect-error Span event attribute arrays must be homogeneous.
+span.recordException(new Error('payment declined'), { stages: ['authorize', 1] })
 
 tracer.trace('test', () => { })
 tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
@@ -564,6 +591,9 @@ const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
 provider.register();
 
 const otelTracer: opentelemetry.Tracer = provider.getTracer("name", "version")
+const otelMeterProvider = metrics.getMeterProvider() as ReturnType<typeof metrics.getMeterProvider> &
+  opentelemetry.MeterProvider
+const otelShutdown: (callback?: (error: Error | null) => void) => void = otelMeterProvider.shutdown
 
 // OTel supports several time input formats
 otelTracer.startSpan("name", { startTime: new Date() })
@@ -638,6 +668,32 @@ tracer.init({
 })
 const llmobs = tracer.llmobs
 const enabled = llmobs.enabled
+
+async function promptManagement () {
+  const prompts = llmobs.prompts
+  const prompt = await prompts.getPrompt('greeting', {
+    version: 2,
+    fallback: () => ({ template: 'Hello {name}', version: 'local' }),
+    targetingKey: 'user-1',
+    attributes: { tier: 'premium', enabled: true, score: 1 }
+  })
+  const messages = prompt.format({ name: 'Ada', count: 2 })
+  const annotation = prompt.toAnnotation({ name: 'Ada', count: 2 })
+  if (typeof prompt.template !== 'string') {
+    // @ts-expect-error Managed prompt templates are immutable.
+    prompt.template[0].content = 'Changed'
+  }
+  llmobs.annotationContext({ prompt: annotation }, () => messages)
+  await prompts.refreshPrompt('greeting')
+  prompts.clearPromptCache({ hot: true, warm: false })
+  await prompts.createPrompt('greeting', 'Hello {name}', { title: 'Greeting', envIds: [] })
+  await prompts.createPromptVersion('greeting', 'Hello again {name}', { userVersion: '2', envIds: [] })
+  await prompts.updatePrompt('greeting', { title: '', description: '' })
+  await prompts.updatePromptVersion('greeting', 2, { description: '', envIds: [] })
+  await prompts.deletePrompt('greeting')
+  await prompts.listPrompts()
+  await prompts.listPromptVersions('greeting')
+}
 
 // manually enable
 llmobs.enable({
@@ -797,6 +853,7 @@ tracer.init({
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,
+      redactionEnabled: true,
       timeout: 1000
     }
   }
@@ -810,6 +867,14 @@ aiguard.evaluate([
   result.action && result.reason && result.tags
 })
 
+aiguard.evaluate([{
+  role: 'user',
+  content: [
+    { type: 'input_text', text: 'Describe this image' },
+    { type: 'input_image', image_url: { url: 'https://example.com/image.png' } },
+  ],
+}])
+
 aiguard.evaluate([
   {
     role: 'assistant',
@@ -821,11 +886,18 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds && result.messages
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
   result.action && result.reason && result.tags && result.tagProbabilities && result.sds
+})
+
+aiguard.evaluate([
+  { role: 'user', content: 'My SSN is 123-45-6789' },
+]).then(result => {
+  const replacements: ddTrace.aiguard.RedactionReplacement[] = result.redactionReplacements
+  replacements.map(({ path, replacement }) => `${path}=${replacement}`)
 })

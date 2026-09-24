@@ -149,4 +149,37 @@ describe('Ritm', () => {
       }
     }
   })
+
+  describe('unhook', () => {
+    /** @param {Record<string, unknown>} exports */
+    function markPatched (exports) {
+      exports.patched = true
+      return exports
+    }
+
+    it('removes the hook and leaves unrelated registrations intact', () => {
+      Hook(['./ritm-tests/module-sibling'], markPatched)
+      const hook = Hook(['./ritm-tests/module-unhooked'], markPatched)
+
+      hook.unhook()
+      hook.unhook()
+
+      assert.equal(require('./ritm-tests/module-unhooked').patched, undefined)
+      assert.equal(require('./ritm-tests/module-sibling').patched, true)
+    })
+
+    it('keeps the hooks a module still has registered', () => {
+      const hook = Hook(['./ritm-tests/module-partially-unhooked'], markPatched)
+      Hook(['./ritm-tests/module-partially-unhooked'], (exports) => {
+        exports.kept = true
+        return exports
+      })
+
+      hook.unhook()
+
+      const patchedModule = require('./ritm-tests/module-partially-unhooked')
+      assert.equal(patchedModule.patched, undefined)
+      assert.equal(patchedModule.kept, true)
+    })
+  })
 })

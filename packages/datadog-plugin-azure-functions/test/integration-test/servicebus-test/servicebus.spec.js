@@ -275,11 +275,12 @@ describe('esm', () => {
       })
 
       it('should not create a tryAdd span or add span links to arrays when batch links are disabled', async () => {
+        const isServiceBusQueueTest2Group = azureInvokeGroup('ServiceBus queueTest2')
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/send-messages-2'),
-          predicate: (group) => azureInvokeGroup('ServiceBus queueTest2')(group) || azureCreateGroup(group),
+          predicate: (group) => isServiceBusQueueTest2Group(group) || azureCreateGroup(group),
         })
-        const sbGroups = groups.filter(azureInvokeGroup('ServiceBus queueTest2'))
+        const sbGroups = groups.filter(isServiceBusQueueTest2Group)
         const createGroups = groups.filter(azureCreateGroup)
         assert.ok(sbGroups.length >= 1, `Expected ${sbGroups.length} >= 1`)
         assert.strictEqual(createGroups.length, 0)
@@ -287,11 +288,12 @@ describe('esm', () => {
       }).timeout(60000)
 
       it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
+        const isServiceBusQueueTest2Group = azureInvokeGroup('ServiceBus queueTest2')
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/send-message-batch-2'),
-          predicate: (group) => azureInvokeGroup('ServiceBus queueTest2')(group) || azureCreateGroup(group),
+          predicate: (group) => isServiceBusQueueTest2Group(group) || azureCreateGroup(group),
         })
-        const sbGroups = groups.filter(azureInvokeGroup('ServiceBus queueTest2'))
+        const sbGroups = groups.filter(isServiceBusQueueTest2Group)
         const createGroups = groups.filter(azureCreateGroup)
         assert.ok(sbGroups.length >= 1, `Expected ${sbGroups.length} >= 1`)
         assert.strictEqual(createGroups.length, 0)

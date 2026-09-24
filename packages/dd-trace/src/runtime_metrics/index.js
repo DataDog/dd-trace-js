@@ -13,6 +13,7 @@ const noop = runtimeMetrics = {
   gauge () {},
   increment () {},
   decrement () {},
+  flush (done) { done?.() },
 }
 
 module.exports = {
@@ -41,6 +42,10 @@ module.exports = {
     runtimeMetrics.stop()
     runtimeMetrics = noop
     Object.setPrototypeOf(module.exports, noop)
+  },
+
+  flush (done) {
+    runtimeMetrics.flush(done)
   },
 }
 

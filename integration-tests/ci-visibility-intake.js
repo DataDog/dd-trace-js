@@ -46,6 +46,7 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
+  #settingsResponses = []
   #settingsResponseDelayMs = 0
   #settingsResponseStatusCode = 200
   #settingsResponseStatusCodes = []
@@ -62,6 +63,7 @@ class FakeCiVisIntake extends FakeAgent {
   #waitingTime = 0
   #knownTestsPageIndex = 0
   #testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+  #testManagementResponses = []
   #testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
   #skippableSuitesResponseStatusCode = 200
 
@@ -106,10 +108,18 @@ class FakeCiVisIntake extends FakeAgent {
   }
 
   /**
+   * Sets library configuration responses to return in order.
+   *
+   * @param {object[]} responses
+   */
+  setSettingsResponses (responses) {
+    this.#settingsResponses = responses.slice()
+  }
+
+  /**
    * Delays settings responses to exercise initialization ordering.
    *
    * @param {number} delayMs
-   * @returns {void}
    */
   setSettingsResponseDelay (delayMs) {
     this.#settingsResponseDelayMs = delayMs
@@ -134,7 +144,6 @@ class FakeCiVisIntake extends FakeAgent {
 
   /**
    * @param {number} delayMs - Delay before responding to screenshot uploads
-   * @returns {void}
    */
   setMediaResponseDelay (delayMs) {
     this.#mediaResponseDelayMs = delayMs
@@ -143,7 +152,6 @@ class FakeCiVisIntake extends FakeAgent {
   /**
    * Leaves media requests open until the client cancels them.
    *
-   * @returns {void}
    */
   setMediaResponsesPending () {
     this.#mediaResponsesPending = true
@@ -155,6 +163,15 @@ class FakeCiVisIntake extends FakeAgent {
 
   setTestManagementTests (newTestManagementTests) {
     this.#testManagementResponse = newTestManagementTests
+  }
+
+  /**
+   * Sets Test Management responses to return in order.
+   *
+   * @param {object[]} responses
+   */
+  setTestManagementTestResponses (responses) {
+    this.#testManagementResponses = responses.slice()
   }
 
   setTestManagementTestsResponseCode (newStatusCode) {
@@ -270,7 +287,10 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+    app.post([
+      '/api/v2/ci/test-runs/:traceId/media',
+      '/api/v2/ci/test-suites/:testSessionId/:testSuiteId/media',
+    ], express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
       const receivedAtMs = Date.now()
       const respond = () => {
         res.status(this.#mediaResponseStatusCode).send()
@@ -278,6 +298,8 @@ class FakeCiVisIntake extends FakeAgent {
           headers: req.headers,
           media: {
             traceId: req.params.traceId,
+            testSessionId: req.params.testSessionId,
+            testSuiteId: req.params.testSuiteId,
             contentType: req.headers['content-type'],
             // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
             // evp_proxy, which forwards only an allow-listed header set.
@@ -307,11 +329,14 @@ class FakeCiVisIntake extends FakeAgent {
       const respond = () => {
         const settingsResponseStatusCode = this.#settingsResponseStatusCodes.shift() ??
           this.#settingsResponseStatusCode
+        const settings = this.#settingsResponses.length
+          ? this.#settingsResponses.shift()
+          : this.#settings
         res.status(settingsResponseStatusCode)
         if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
           res.send(JSON.stringify({
             data: {
-              attributes: this.#settings,
+              attributes: settings,
             },
           }))
         } else {
@@ -405,10 +430,13 @@ class FakeCiVisIntake extends FakeAgent {
       '/evp_proxy/:version/api/v2/test/libraries/test-management/tests',
     ], (req, res) => {
       res.setHeader('content-type', 'application/json')
+      const testManagementResponse = this.#testManagementResponses.length
+        ? this.#testManagementResponses.shift()
+        : this.#testManagementResponse
       const data = JSON.stringify({
         data: {
           attributes: {
-            modules: this.#testManagementResponse,
+            modules: testManagementResponse,
           },
         },
       })
@@ -449,6 +477,7 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     this.#settings = DEFAULT_SETTINGS
+    this.#settingsResponses = []
     this.#settingsResponseDelayMs = 0
     this.#settingsResponseStatusCode = 200
     this.#settingsResponseStatusCodes = []
@@ -462,6 +491,7 @@ class FakeCiVisIntake extends FakeAgent {
     this.#mediaResponsesPending = false
     this.#testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     this.#testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
+    this.#testManagementResponses = []
     this.#skippableSuitesResponseStatusCode = 200
     this.removeAllListeners()
     if (this.waitingTimeoutId) {
