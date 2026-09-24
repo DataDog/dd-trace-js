@@ -20,7 +20,8 @@ Agentless crash tracking requires this key and sends crash data directly to Data
 <p>Agentless mode uses the Datadog trace intake and ignores <code>OTEL_TRACES_EXPORTER</code>.
 Explicit <code>DD_TRACE_SAMPLE_RATE</code>, <code>OTEL_TRACES_SAMPLER</code>, <code>OTEL_TRACES_SPAN_METRICS_ENABLED</code>, and
 <code>DD_METRICS_OTEL_ENABLED</code> settings still apply.</p>
-<p>Agentless mode submits Bunyan, Pino, and Winston logs directly by default. Set
+<p>Agentless mode submits Bunyan, Pino, and Winston logs directly by default. During Test Optimization, it also submits
+best-effort formatted <code>console.warn</code> and <code>console.error</code> calls made with an active test, suite, or session span. Set
 <code>DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false</code> to disable this behavior. Set <code>DD_LOGS_OTEL_ENABLED=true</code> to use the
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 <code>DD_AGENTLESS_LOG_SUBMISSION_URL</code> overrides the Datadog logs intake URL.</p>
@@ -113,6 +114,7 @@ OpenTelemetry log exporter instead. Direct log submission takes precedence if bo
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -121,6 +123,7 @@ OpenTelemetry log exporter instead. Direct log submission takes precedence if bo
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -199,6 +202,7 @@ OpenTelemetry log exporter instead. Direct log submission takes precedence if bo
 <li><a href="./interfaces/export_.plugins.pg.html">pg</a></li>
 <li><a href="./interfaces/export_.plugins.pino.html">pino</a></li>
 <li><a href="./interfaces/export_.plugins.playwright.html">playwright</a></li>
+<li><a href="./interfaces/export_.plugins.postgres.html">postgres</a></li>
 <li><a href="./interfaces/export_.plugins.prisma.html">prisma</a></li>
 <li><a href="./interfaces/export_.plugins.protobufjs.html">protobufjs</a></li>
 <li><a href="./interfaces/export_.plugins.redis.html">redis</a></li>
@@ -207,6 +211,7 @@ OpenTelemetry log exporter instead. Direct log submission takes precedence if bo
 <li><a href="./interfaces/export_.plugins.router.html">router</a></li>
 <li><a href="./interfaces/export_.plugins.selenium.html">selenium</a></li>
 <li><a href="./interfaces/export_.plugins.sharedb.html">sharedb</a></li>
+<li><a href="./interfaces/export_.plugins.supabase.html">supabase</a></li>
 <li><a href="./interfaces/export_.plugins.tedious.html">tedious</a></li>
 <li><a href="./interfaces/export_.plugins.undici.html">undici</a></li>
 <li><a href="./interfaces/export_.plugins.vitest.html">vitest</a></li>
@@ -359,6 +364,16 @@ accepted; if more are provided, the report is uploaded without flags.</p>
 Early Flake Detection retries in every supported test-duration bucket. A value of <code>0</code> disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.</p>
+<p>Set <code>DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=true</code> to enable dynamic Auto Test Retries budgets based on test
+duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
+determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
+and 5m, followed by a &gt;5m bucket. EFD retains its exclusive upper bounds.
+Requires Auto Test Retries to be enabled by the backend.</p>
+<p>Set <code>DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS</code> to a comma-separated list of five positive integers in <code>[1, 20]</code>
+overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and &gt;5m buckets
+respectively). When unset, empty, or invalid, the Early Flake Detection retry settings from the backend are
+used with a minimum of one ATR retry. Local EFD retry-count overrides do not affect dynamic ATR.
+Only takes effect when <code>DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED</code> is enabled.</p>
 <p>Set <code>DD_TEST_MANAGEMENT_REPORT_ENABLED=false</code> to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests
 are disabled, quarantined, or run in Attempt to Fix mode.</p>
