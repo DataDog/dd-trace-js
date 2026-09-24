@@ -131,16 +131,15 @@ Update every supported public TypeScript surface for new public APIs unless the 
 For new top-level tracer options or environment variables, update these surfaces.
 Other settings update only their owning surfaces:
 
-1. Register the option in `packages/dd-trace/src/config/supported-configurations.json`, including its default,
-    type, and `configurationNames` when exposed through `tracer.init()`.
-2. Defaults, environment/programmatic parsing, and canonical configuration telemetry are derived from the registry
-    at runtime by `config/defaults.js` and `config/index.js`. Edit these or `telemetry/telemetry.js` only for behavior
-    the registry cannot express; ordinary options do not need a separate telemetry name mapping.
-3. Run `npm run generate:config:types` and commit the generated configuration types. Update both supported public
-    TypeScript surfaces when applicable.
-4. Document non-internal, non-experimental options in `docs/API.md` when it owns the public surface.
-5. Test the option in `packages/dd-trace/test/config/index.spec.js`. Add telemetry tests when adding or changing
-    a configuration source.
+1. Define the environment variable, type, default, and applicable `configurationNames` in
+   `packages/dd-trace/src/config/supported-configurations.json`.
+2. Run `npm run generate:config:types` after registry changes. Do not edit generated configuration types manually.
+3. The registry drives ordinary defaults, environment and option mappings, and configuration telemetry.
+   Change runtime configuration code only when the existing registry machinery cannot express the required behavior.
+4. Update both supported public TypeScript surfaces and their documentation comments when applicable.
+   API reference documentation is generated from these declarations.
+   Edit `docs/API.md` only for additional guide content.
+5. Test the option in `packages/dd-trace/test/config/index.spec.js`.
 
 Use unit suffixes for size and time options, such as `timeoutMs`, `maxBytes`, and `intervalSeconds`.
 
