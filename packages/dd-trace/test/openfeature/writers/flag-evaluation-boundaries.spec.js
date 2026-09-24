@@ -14,7 +14,13 @@ const { iterateFlagEvaluationPayloads } = require('../../../src/openfeature/writ
 const target = 'independent-target-canary'
 const digest = 'sha256_' + createHash('sha256').update(target).digest('hex')
 const attrs = Object.freeze({ secret: 'independent-context-canary' })
-const codes = [ErrorCode.FLAG_NOT_FOUND, 'unapproved-error-canary', { message: 'error-object-canary' }, undefined]
+const cases = [
+  { code: ErrorCode.FLAG_NOT_FOUND, runtimeDefault: true },
+  { code: 'unapproved-error-canary', runtimeDefault: true },
+  { code: { message: 'error-object-canary' }, runtimeDefault: true },
+  { code: undefined, runtimeDefault: true },
+  { code: undefined, runtimeDefault: false },
+]
 
 describe('flag evaluation independent privacy boundaries', () => {
   it('merges equivalent contexts while retaining an immutable snapshot of each distinct identity', () => {
@@ -128,8 +134,8 @@ describe('flag evaluation independent privacy boundaries', () => {
   })
 
   for (const degraded of [false, true]) {
-    for (const consent of [false, true]) {
-      for (const [index, code] of codes.entries()) {
+    for (const consent of [false, true, 1]) {
+      for (const [index, { code, runtimeDefault }] of cases.entries()) {
         it(`serializer alone protects tier=${degraded ? 'degraded' : 'full'} consent=${consent} error=${index}`, () => {
           // These entries bypass both capture and aggregation, including their error guards.
           const entry = {
@@ -139,7 +145,7 @@ describe('flag evaluation independent privacy boundaries', () => {
             consent,
             error: code,
             errorMessage: 'error-message-only-canary',
-            runtimeDefault: true,
+            runtimeDefault,
             count: 7,
             first: 100,
             last: 200,
@@ -151,19 +157,20 @@ describe('flag evaluation independent privacy boundaries', () => {
           const bytes = Buffer.from(payload.encoded)
           const [row] = JSON.parse(bytes).flagEvaluations
           assert.strictEqual(row.evaluation_count, 7)
-          assert.strictEqual(row.runtime_default_used, true)
+          assert.strictEqual(row.runtime_default_used, runtimeDefault ? true : undefined)
+          assert.strictEqual(Object.hasOwn(row, 'runtime_default_used'), runtimeDefault)
           assert.strictEqual(row.first_evaluation, 100)
           assert.strictEqual(row.last_evaluation, 200)
           const expectedCode = code === undefined
             ? undefined
             : Object.values(ErrorCode).includes(code) ? code : 'GENERAL'
           assert.deepStrictEqual(row.error, expectedCode === undefined ? undefined : { message: expectedCode })
-          assert.strictEqual(row.targeting_key, degraded ? undefined : consent ? target : digest)
-          assert.deepStrictEqual(row.context, !degraded && consent ? { evaluation: attrs } : undefined)
+          assert.strictEqual(row.targeting_key, degraded ? undefined : consent === true ? target : digest)
+          assert.deepStrictEqual(row.context, !degraded && consent === true ? { evaluation: attrs } : undefined)
           for (const canary of ['unapproved-error-canary', 'error-object-canary', 'error-message-only-canary']) {
             assert.strictEqual(bytes.includes(Buffer.from(canary)), false)
           }
-          if (degraded || !consent) {
+          if (degraded || consent !== true) {
             assert.strictEqual(bytes.includes(Buffer.from(target)), false)
             assert.strictEqual(bytes.includes(Buffer.from('independent-context-canary')), false)
           }

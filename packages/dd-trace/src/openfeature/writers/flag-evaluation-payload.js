@@ -25,7 +25,6 @@ const { recordDegraded, recordDropped, recordPayloadSplit } = require('./flag-ev
  * @property {{ evaluation: ContextSnapshot }} [context]
  * @property {{ key: string }} [variant]
  * @property {{ key: string }} [allocation]
- * @property {{ key: string }} [targeting_rule]
  * @property {{ message: string }} [error]
  */
 /** @typedef {{ encoded: string, rows: number, evaluations: number }} EncodedFlagEvaluationPayload */
@@ -51,10 +50,8 @@ function makeRow (entry, timestamp, degraded) {
   if (entry.runtimeDefault === true) row.runtime_default_used = true
   const variant = normalizeTargetingKey(entry.variant)
   const allocation = normalizeTargetingKey(entry.allocation)
-  const rule = normalizeTargetingKey(entry.rule)
   if (variant) row.variant = { key: variant }
   if (allocation) row.allocation = { key: allocation }
-  if (rule) row.targeting_rule = { key: rule }
   const error = protectedErrorCode(entry.error)
   if (error !== undefined) row.error = { message: error }
   if (!degraded) {

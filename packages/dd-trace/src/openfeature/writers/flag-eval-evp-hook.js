@@ -12,7 +12,6 @@ const { setExposureDeliveryStrategy } = require('./util')
 class FlagEvalEVPHook {
   /** @type {FlagEvaluationsWriter} */
   #writer
-  #ready = false
   #closed = false
   #stopDeliveryStrategy
 
@@ -27,7 +26,6 @@ class FlagEvalEVPHook {
     this.#stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
       if (this.#closed) return
       writer.setEnabled(enabled, route)
-      this.#ready = enabled
     })
   }
 
@@ -41,8 +39,8 @@ class FlagEvalEVPHook {
   finally (hookContext, evaluationDetails) {
     try {
       const unavailableReason = this.#closed ? 'closed' : this.#writer.getUnavailableReason()
-      if (unavailableReason !== undefined || !this.#ready) {
-        recordDropped(unavailableReason ?? 'unavailable')
+      if (unavailableReason !== undefined) {
+        recordDropped(unavailableReason)
         return
       }
       if (!this.#writer.hasCapacity()) {
@@ -99,7 +97,6 @@ class FlagEvalEVPHook {
   destroy () {
     if (this.#closed) return
     this.#closed = true
-    this.#ready = false
     this.#stopDeliveryStrategy?.()
     this.#writer.destroy()
   }

@@ -8,7 +8,7 @@ const { FLAG_EVALUATION_FLUSH_INTERVAL, FLAG_EVALUATION_QUEUE_CAP } = require('.
 const { EVP_PROXY_PATH_V2 } = require('../../evp_proxy/constants')
 const { getEnvironmentVariables } = require('../../config/helper')
 const log = require('../../log')
-const { normalizeTargetingKey, optionalKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { normalizeFlagEvaluationEvent, normalizeTargetingKey } = require('./flag-evaluation-pii')
 const {
   collectWorkerTelemetry, createWorkerState, recordDropped, recordTargetingKeyOmitted,
 } = require('./flag-evaluation-telemetry')
@@ -131,19 +131,8 @@ class FlagEvaluationsWriter {
     if (targetingKey === undefined && event.targetingKey !== undefined && event.targetingKey !== null) {
       recordTargetingKeyOmitted()
     }
-    const consent = event.observeFullEvaluationData === true
-    const normalized = {
-      flagKey: normalizeTargetingKey(event.flagKey),
-      variant: optionalKey(event.variant),
-      allocationKey: optionalKey(event.allocationKey),
-      targetingRuleKey: optionalKey(event.targetingRuleKey),
-      runtimeDefault: event.runtimeDefault === true,
-      errorCode: protectedErrorCode(event.errorCode),
-      targetingKey,
-      attrs: consent ? event.attrs : undefined,
-      observeFullEvaluationData: consent,
-      timestamp: typeof event.timestamp === 'number' ? event.timestamp : NaN,
-    }
+    const normalized = normalizeFlagEvaluationEvent(event, targetingKey)
+    const consent = normalized.observeFullEvaluationData
     Atomics.add(this.#state, 0, 1)
     Atomics.add(this.#state, 1, 1)
     this.#batch.push(normalized)

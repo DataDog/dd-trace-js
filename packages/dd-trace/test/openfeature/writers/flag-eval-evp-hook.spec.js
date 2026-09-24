@@ -51,10 +51,10 @@ describe('FlagEvalEVPHook', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
     writer = {
-      getUnavailableReason: sinon.stub().returns(undefined),
+      getUnavailableReason: sinon.stub().returns('unavailable'),
       hasCapacity: sinon.stub().returns(true),
       enqueue: sinon.spy(),
-      setEnabled: sinon.spy(),
+      setEnabled: sinon.spy(enabled => writer.getUnavailableReason.returns(enabled ? undefined : 'unavailable')),
       destroy: sinon.spy(),
     }
     Writer = sinon.stub().returns(writer)

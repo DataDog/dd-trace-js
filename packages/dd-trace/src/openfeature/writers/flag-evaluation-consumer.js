@@ -14,7 +14,7 @@ const {
 const { joinEVPProxyPath } = require('../../evp_proxy/path')
 const { FlagEvaluationAggregator } = require('./flag-evaluation-aggregation')
 const { iterateFlagEvaluationPayloads } = require('./flag-evaluation-payload')
-const { normalizeTargetingKey, optionalKey, protectedErrorCode } = require('./flag-evaluation-pii')
+const { normalizeFlagEvaluationEvent, normalizeTargetingKey } = require('./flag-evaluation-pii')
 const { recordDropped, recordTargetingKeyOmitted } = require('./flag-evaluation-telemetry')
 const BaseFFEWriter = require('./base')
 
@@ -107,23 +107,11 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
       return false
     }
 
-    const consent = event.observeFullEvaluationData === true
     const targetingKey = normalizeTargetingKey(event.targetingKey)
     if (targetingKey === undefined && event.targetingKey !== undefined && event.targetingKey !== null) {
       recordTargetingKeyOmitted()
     }
-    this.#queue.push({
-      flagKey: normalizeTargetingKey(event.flagKey),
-      variant: optionalKey(event.variant),
-      allocationKey: optionalKey(event.allocationKey),
-      targetingRuleKey: optionalKey(event.targetingRuleKey),
-      runtimeDefault: event.runtimeDefault === true,
-      errorCode: protectedErrorCode(event.errorCode),
-      targetingKey,
-      attrs: consent ? event.attrs : undefined,
-      observeFullEvaluationData: consent,
-      timestamp: typeof event.timestamp === 'number' ? event.timestamp : NaN,
-    })
+    this.#queue.push(normalizeFlagEvaluationEvent(event, targetingKey))
     if (this.#immediate === undefined) {
       this.#immediate = setImmediate(() => this.#drain())
       this.#immediate.unref?.()

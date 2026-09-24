@@ -16,7 +16,6 @@ const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
  * @property {string} flagKey
  * @property {string} [variant]
  * @property {string} [allocationKey]
- * @property {string} [targetingRuleKey]
  * @property {boolean} runtimeDefault
  * @property {unknown} [errorCode]
  * @property {unknown} [targetingKey]
@@ -29,7 +28,6 @@ const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
  * @property {string} flagKey
  * @property {string} [variant]
  * @property {string} [allocation]
- * @property {string} [rule]
  * @property {string} [error]
  */
 /**
@@ -91,10 +89,9 @@ class FlagEvaluationAggregator {
     const error = protectedErrorCode(event.errorCode)
     const variant = optionalKey(event.variant)
     const allocation = optionalKey(event.allocationKey)
-    const rule = optionalKey(event.targetingRuleKey)
     // Group by the raw key; the serializer independently hashes protected rows once per output bucket.
     const fullKey = JSON.stringify([
-      flagKey, variant, allocation, rule, event.runtimeDefault === true, error,
+      flagKey, variant, allocation, event.runtimeDefault === true, error,
       targetingKey, contextEntries, consent,
     ])
     const existing = this.#full.get(fullKey)
@@ -105,11 +102,11 @@ class FlagEvaluationAggregator {
 
     const perFlag = this.#perFlag.get(flagKey) ?? 0
     if (perFlag >= FLAG_EVALUATION_PER_FLAG_CAP) {
-      this.#addDegraded(event, { flagKey, variant, allocation, rule, error })
+      this.#addDegraded(event, { flagKey, variant, allocation, error })
       return
     }
     if (this.#full.size >= FLAG_EVALUATION_GLOBAL_CAP) {
-      this.#addDegraded(event, { flagKey, variant, allocation, rule, error })
+      this.#addDegraded(event, { flagKey, variant, allocation, error })
       return
     }
 
@@ -118,7 +115,6 @@ class FlagEvaluationAggregator {
       flagKey,
       variant,
       allocation,
-      rule,
       runtimeDefault: event.runtimeDefault === true,
       error,
       rawTargetingKey: targetingKey,
@@ -159,7 +155,7 @@ class FlagEvaluationAggregator {
   #addDegraded (event, dimensions) {
     recordDegraded('cardinality_cap')
     const key = JSON.stringify([
-      dimensions.flagKey, dimensions.variant, dimensions.allocation, dimensions.rule,
+      dimensions.flagKey, dimensions.variant, dimensions.allocation,
       event.runtimeDefault === true, dimensions.error,
     ])
     const existing = this.#degraded.get(key)

@@ -78,7 +78,29 @@ function optionalKey (value) {
   return key === undefined || key.length === 0 ? undefined : key
 }
 
+/**
+ * Shape observations at both admission boundaries; each caller counts omitted targeting keys.
+ *
+ * @param {import('./flag-evaluation-aggregation').FlagEvaluationEvent} event
+ * @param {string | undefined} targetingKey - Targeting key already validated by the caller
+ */
+function normalizeFlagEvaluationEvent (event, targetingKey) {
+  const consent = event.observeFullEvaluationData === true
+  return {
+    flagKey: normalizeTargetingKey(event.flagKey),
+    variant: optionalKey(event.variant),
+    allocationKey: optionalKey(event.allocationKey),
+    runtimeDefault: event.runtimeDefault === true,
+    errorCode: protectedErrorCode(event.errorCode),
+    targetingKey,
+    attrs: consent ? event.attrs : undefined,
+    observeFullEvaluationData: consent,
+    timestamp: typeof event.timestamp === 'number' ? event.timestamp : NaN,
+  }
+}
+
 module.exports = {
+  normalizeFlagEvaluationEvent,
   normalizeTargetingKey,
   optionalKey,
   prefixedTargetingKeyDigest,

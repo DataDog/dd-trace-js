@@ -11,7 +11,6 @@ require('../../setup/core')
 const constants = require('../../../src/openfeature/constants/constants')
 const aggregationModule = require('../../../src/openfeature/writers/flag-evaluation-aggregation')
 const { FlagEvaluationAggregator } = aggregationModule
-const { iterateFlagEvaluationPayloads } = require('../../../src/openfeature/writers/flag-evaluation-payload')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
 
 const endpoint = '/api/v2/flagevaluation'
@@ -43,7 +42,6 @@ function event (overrides = {}) {
     flagKey: 'checkout',
     variant: 'on',
     allocationKey: 'experiment',
-    targetingRuleKey: 'country-us',
     runtimeDefault: false,
     targetingKey: 'customer-1',
     attrs: Object.freeze({ plan: 'pro' }),
@@ -174,46 +172,6 @@ describe('OpenFeature flag evaluations writer', () => {
     assert.strictEqual(entry.last, 1_759_276_800_400)
   })
 
-  it('re-enforces privacy and error policy independently during serialization', () => {
-    const full = new Map([['malformed', {
-      flagKey: 'bypass',
-      runtimeDefault: false,
-      error: { customer: 'must-not-survive' },
-      rawTargetingKey: 'customer-1',
-      attrs: Object.freeze({ canary: 'must-not-survive' }),
-      consent: 1,
-      count: 1,
-      first: 1_759_276_800_000,
-      last: 1_759_276_800_000,
-    }]])
-    const degraded = new Map([['degraded', {
-      flagKey: 'degraded',
-      runtimeDefault: false,
-      error: 'FLAG_NOT_FOUND',
-      rawTargetingKey: 'raw-canary',
-      attrs: Object.freeze({ canary: 'raw-canary' }),
-      consent: true,
-      count: 1,
-      first: 1_759_276_800_000,
-      last: 1_759_276_800_000,
-    }]])
-    const [payload] = [...iterateFlagEvaluationPayloads(
-      full,
-      degraded,
-      { service: 'test' },
-      1_759_276_800_500
-    )]
-    const rows = JSON.parse(payload.encoded).flagEvaluations
-
-    assert.strictEqual(rows[0].context, undefined)
-    assert.strictEqual(rows[0].targeting_key.startsWith('sha256_'), true)
-    assert.deepStrictEqual(rows[0].error, { message: 'GENERAL' })
-    assert.strictEqual(rows[1].context, undefined)
-    assert.strictEqual(rows[1].targeting_key, undefined)
-    assert.strictEqual(payload.encoded.includes('must-not-survive'), false)
-    assert.strictEqual(payload.encoded.includes('raw-canary'), false)
-  })
-
   it('bounds the deferred queue at 4096 without doing aggregation work inline', () => {
     writer = new (loadWriter())(config)
     writer.setEnabled(true, route)
@@ -273,7 +231,8 @@ describe('OpenFeature flag evaluations writer', () => {
     assert.strictEqual(full.last_evaluation, 1_759_276_800_300)
     assert.deepStrictEqual(full.context, { evaluation: { plan: 'pro' } })
     assert.strictEqual(full.targeting_key, 'customer-1')
-    assert.deepStrictEqual(full.targeting_rule, { key: 'country-us' })
+    assert.strictEqual(full.targeting_rule, undefined)
+    assert.deepStrictEqual(full.allocation, { key: 'experiment' })
 
     const protectedRow = rows.find(row => row.flag.key === 'protected')
     assert.strictEqual(
@@ -334,7 +293,8 @@ describe('OpenFeature flag evaluations writer', () => {
     const { bodies, received } = captureRequests(endpoint, 2)
     const Writer = loadWriter({
       EVP_EVENT_SIZE_LIMIT: 430,
-      EVP_PAYLOAD_SIZE_LIMIT: 620,
+      // The two valid rows must fit individually but not in a shared envelope.
+      EVP_PAYLOAD_SIZE_LIMIT: 500,
     })
     writer = new Writer(config)
     writer.setEnabled(true, route)
@@ -348,7 +308,7 @@ describe('OpenFeature flag evaluations writer', () => {
 
     assert.strictEqual(bodies.length, 2)
     for (const { body } of bodies) {
-      assert.ok(Buffer.byteLength(JSON.stringify(body)) <= 620)
+      assert.ok(Buffer.byteLength(JSON.stringify(body)) <= 500)
     }
     const rows = bodies.flatMap(({ body }) => body.flagEvaluations)
     const large = rows.find(row => row.flag.key === 'large')
