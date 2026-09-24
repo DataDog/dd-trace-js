@@ -62,12 +62,17 @@ const { getBabelDependencies } = require('./babel-dependencies')
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
+const runTestsWithConfigCommand = 'node ./node_modules/jest/bin/jest --config config-jest.js --runInBand'
+const unsupportedTestRunnerWarning =
+  'dd-trace Test Optimization supports jest-circus; another test runner was detected; ' +
+  'suite and test events may be incomplete.'
 
 const requestedJestVersion = process.env.JEST_VERSION || 'latest'
 const oldestJestVersion = DD_MAJOR >= 6 ? '28.0.0' : '24.8.0'
 const JEST_VERSION = requestedJestVersion === 'oldest' ? oldestJestVersion : requestedJestVersion
 const onlyLatestIt = JEST_VERSION === 'latest' ? it : it.skip
 const isJest28OrNewer = JEST_VERSION === 'latest' || Number(JEST_VERSION.split('.')[0]) >= 28
+const defaultCircusIt = isJest28OrNewer ? it : it.skip
 const esmIt = isJest28OrNewer ? it : it.skip
 const shouldInstallJestEnvironmentJsdom = isJest28OrNewer
 
@@ -118,6 +123,44 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     fs.cpSync(packagePath, isolatedPackagePath, { dereference: true, recursive: true })
 
     return isolatedPackagePath
+  }
+
+  /**
+   * @param {Record<string, string>} [env] additional environment variables
+   * @param {string} [command] command that starts Jest
+   * @returns {Promise<string>}
+   */
+  async function runJestAndCaptureOutput (env = {}, command = runTestsCommand) {
+    childProcess = exec(command, {
+      cwd,
+      env: {
+        ...getCiVisAgentlessConfig(receiver.port),
+        DD_TRACE_DEBUG: '1',
+        DD_TRACE_LOG_LEVEL: 'warn',
+        ...env,
+      },
+    })
+
+    let output = ''
+    const outputStreams = [childProcess.stdout, childProcess.stderr].filter(Boolean)
+    for (const stream of outputStreams) {
+      stream.on('data', chunk => { output += chunk.toString() })
+    }
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      ...outputStreams.map(stream => once(stream, 'end')),
+    ])
+    assert.strictEqual(exitCode, 0, output)
+
+    return output
+  }
+
+  /**
+   * @param {string} output combined process output
+   */
+  function countUnsupportedTestRunnerWarnings (output) {
+    return output.split(unsupportedTestRunnerWarning).length - 1
   }
 
   afterEach(async () => {
@@ -1211,6 +1254,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     childProcess.on('message', () => {
       assert.doesNotMatch(testOutput, /TypeError/)
       done()
+    })
+  })
+
+  context('test runner support warning', () => {
+    defaultCircusIt('does not warn for Jest defaulting to jest-circus', async () => {
+      const output = await runJestAndCaptureOutput(
+        { USE_DEFAULT_TEST_RUNNER: '1' },
+        runTestsWithConfigCommand
+      )
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 0)
+    })
+
+    it('does not warn for the resolved jest-circus path', async () => {
+      const output = await runJestAndCaptureOutput()
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 0)
+    })
+
+    it('warns for a non-Circus testRunner', async () => {
+      const output = await runJestAndCaptureOutput({ OLD_RUNNER: '1' })
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 1)
+    })
+
+    it('warns once for multiple projects', async () => {
+      const projects = ['first', 'second'].map(displayName => ({
+        displayName,
+        rootDir: 'ci-visibility/test',
+        testPathIgnorePatterns: ['/node_modules/'],
+        cache: false,
+        testMatch: ['**/ci-visibility-test*'],
+        testRunner: 'jest-jasmine2',
+        testEnvironment: 'node',
+      }))
+      const output = await runJestAndCaptureOutput(
+        { PROJECTS: JSON.stringify(projects) },
+        runTestsWithConfigCommand
+      )
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 1)
+    })
+
+    it('warns once across repeated config reads', async () => {
+      const output = await runJestAndCaptureOutput({
+        OLD_RUNNER: '1',
+        RUN_JEST_TWICE: '1',
+      })
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 1)
+    })
+
+    it('warns when JEST_JASMINE=1 overrides the resolved testRunner', async () => {
+      const output = await runJestAndCaptureOutput({ JEST_JASMINE: '1' })
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 1)
     })
   })
 
