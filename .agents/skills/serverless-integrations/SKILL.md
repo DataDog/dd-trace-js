@@ -12,10 +12,9 @@ Use the APM skill for shared instrumentation/plugin mechanics. Keep only the ser
 ownership, runtime lifecycle, trigger context, and flush behavior. A library called inside a function is ordinary
 APM.
 
-Run `npm run verify:integration-skills` after checkout, rebase, or skill edits. For a plugin-backed runtime, run
-`npm run inspect:integration -- <id> --mode serverless [--package <npm-name>] [--traits <list>]`.
-Traits only select references. Before ownership, read reported plugins, contract sources, dependents, and channel
-anchors; registry package names are authoritative.
+Run `npm run verify:integration-skills` after checkout, rebase, or skill edits. For a plugin-backed runtime, read
+its plugins, the base classes they extend, cross-plugin requires, and every channel subscriber before deciding
+ownership; registry package names are authoritative.
 
 ## Classify the owner
 
