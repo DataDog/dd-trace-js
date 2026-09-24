@@ -21,8 +21,8 @@ abstraction that adds complexity without improving the baseline.
 2. Describe the smallest viable proposal and at most one meaningful alternative.
 3. Identify affected public APIs, package boundaries, consumers, and per-call production paths.
 4. Score the baseline and proposal from 1–10 on each dimension below using `baseline → proposal`.
-5. Use the scores to expose trade-offs, not as a pass/fail threshold. Reject a proposal only when the evidence shows a
-    worse contract, boundary, or production cost than a viable design.
+5. Use the scores to expose trade-offs, not as a pass/fail threshold. Reject a proposal when evidence shows that it is
+   worse than a viable design, or adds complexity without improving the baseline.
 6. Ask the user before implementation when two viable designs have meaningful trade-offs.
 7. Record the selected design's contracts and cover boundaries with observable tests.
 
