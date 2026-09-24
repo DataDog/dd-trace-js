@@ -8,6 +8,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
+const { snapshotEvaluationContext } = require('../../../src/openfeature/writers/flag-evaluation-context')
 const telemetryMetrics = require('../../../src/telemetry/metrics')
 
 const config = {
@@ -44,6 +45,7 @@ describe('FlagEvalEVPHook', () => {
   let writer
   let Writer
   let selectRoute
+  let snapshotContext
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
@@ -56,8 +58,10 @@ describe('FlagEvalEVPHook', () => {
     }
     Writer = sinon.stub().returns(writer)
     selectRoute = sinon.stub()
+    snapshotContext = sinon.spy(snapshotEvaluationContext)
     Hook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
       './flag-evaluations': Writer,
+      './flag-evaluation-context': { snapshotEvaluationContext: snapshotContext },
       './util': { setExposureDeliveryStrategy: selectRoute },
     })
     hook = new Hook(config)
@@ -100,12 +104,11 @@ describe('FlagEvalEVPHook', () => {
   for (const consent of [false, undefined, null, 'true', 1]) {
     it(`never traverses context without strict consent (${consent})`, () => {
       enable()
-      const ownKeys = sinon.spy(() => { throw new Error('must not enumerate') })
-      const context = new Proxy({ targetingKey: 'customer' }, { ownKeys })
+      const context = { targetingKey: 'customer', nested: { plan: 'pro' } }
       const result = details()
       result.flagMetadata.__dd_observe_full_evaluation_data = consent
       hook.finally({ flagKey: 'flag', context }, result)
-      sinon.assert.notCalled(ownKeys)
+      sinon.assert.notCalled(snapshotContext)
       assert.strictEqual(writer.enqueue.firstCall.args[0].attrs, undefined)
       assert.strictEqual(writer.enqueue.firstCall.args[0].observeFullEvaluationData, false)
     })

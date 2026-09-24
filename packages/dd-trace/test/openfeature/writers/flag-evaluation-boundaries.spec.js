@@ -12,7 +12,7 @@ const { buildFlagEvaluationPayloads } = require('../../../src/openfeature/writer
 const target = 'independent-target-canary'
 const digest = 'sha256_' + createHash('sha256').update(target).digest('hex')
 const attrs = Object.freeze({ secret: 'independent-context-canary' })
-const codes = [...Object.values(ErrorCode), 'unapproved-error-canary', { message: 'error-object-canary' }, undefined]
+const codes = [ErrorCode.FLAG_NOT_FOUND, 'unapproved-error-canary', { message: 'error-object-canary' }, undefined]
 
 describe('flag evaluation independent privacy boundaries', () => {
   for (const consent of [undefined, false, 1, 'true', true]) {

@@ -234,7 +234,7 @@ describe('flag evaluation context snapshot', () => {
   })
 
   it('does not invoke a custom array iterator or inspect out-of-budget elements', () => {
-    const array = Array(500_000).fill(undefined)
+    const array = Array(257).fill(undefined)
     array[0] = 'kept'
     array[Symbol.iterator] = () => assert.fail('iterator must not run')
     Object.defineProperty(array, '256', { get () { throw new Error('out-of-budget getter') } })

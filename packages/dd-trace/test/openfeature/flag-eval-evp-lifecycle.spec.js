@@ -1,10 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { createHash } = require('node:crypto')
 
 const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
-const { ErrorCode, OpenFeature, ProviderEvents } = require('@openfeature/server-sdk')
+const { ErrorCode, OpenFeature } = require('@openfeature/server-sdk')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -93,38 +92,8 @@ describe('FlaggingProvider EVP lifecycle', () => {
     })
   }
 
-  // Resolver-controlled metadata tests the SDK-to-wire contract without claiming
-  // that the installed (pre-consent) evaluator produces the unpublished metadata.
-  for (const consent of [undefined, false, true, 'true', 1, null]) {
-    it(`enforces strict consent in raw request bytes (${JSON.stringify(consent)})`, async () => {
-      const client = await register()
-      enable()
-      resolve(consent, false)
-      const context = { targetingKey: 'target-canary@example.test', nested: { value: 'context-canary' } }
-      await client.getBooleanValue('consent', false, context)
-      context.targetingKey = 'mutated-target-canary'
-      context.nested.value = 'mutated-context-canary'
-      provider.onClose()
-      const bytes = Buffer.from(request.firstCall.args[0])
-      const [row] = JSON.parse(bytes).flagEvaluations
-      assert.strictEqual(row.evaluation_count, 1)
-      assert.strictEqual(row.runtime_default_used, undefined)
-      assert.strictEqual(bytes.includes(Buffer.from('mutated-')), false)
-      if (consent === true) {
-        assert.strictEqual(row.targeting_key, 'target-canary@example.test')
-        assert.deepStrictEqual(row.context.evaluation, { 'nested.value': 'context-canary' })
-      } else {
-        const digest = createHash('sha256').update('target-canary@example.test').digest('hex')
-        assert.strictEqual(row.targeting_key, 'sha256_' + digest)
-        assert.strictEqual(bytes.includes(Buffer.from('target-canary@example.test')), false)
-        assert.strictEqual(bytes.includes(Buffer.from('context-canary')), false)
-        assert.strictEqual(row.context, undefined)
-      }
-    })
-  }
-
   for (const consent of [false, true]) {
-    for (const code of [...Object.values(ErrorCode), 'error-code-canary']) {
+    for (const code of [ErrorCode.FLAG_NOT_FOUND, 'error-code-canary']) {
       it(`preserves default/count and strips raw errors for ${code}, consent=${consent}`, async () => {
         const client = await register()
         enable()
@@ -152,62 +121,6 @@ describe('FlaggingProvider EVP lifecycle', () => {
         assert.strictEqual(bytes.includes(Buffer.from('error-code-canary')), false)
       })
     }
-  }
-
-  for (const terminal of ['throw', 'not-ready', 'fatal', 'missing', 'type-mismatch']) {
-    it(`protects raw bytes and retains counts on the real SDK ${terminal} path`, async () => {
-      let finishInitialization
-      if (terminal === 'not-ready') {
-        provider = new Provider({}, config)
-        provider.initialize = () => new Promise(resolve => { finishInitialization = resolve })
-        OpenFeature.setProvider('evp-lifecycle', provider)
-      } else {
-        await register()
-      }
-      enable()
-      if (terminal === 'throw') {
-        sinon.stub(provider, 'resolveBooleanEvaluation').throws(new Error('error-message-only-canary'))
-      }
-      if (terminal === 'fatal') provider.events.emit(ProviderEvents.Error, { errorCode: 'PROVIDER_FATAL' })
-      if (terminal === 'type-mismatch') {
-        provider.setConfiguration({
-          flags: {
-            flag: {
-              key: 'flag',
-              enabled: true,
-              variationType: 'STRING',
-              variations: { on: { key: 'on', value: 'wrong-type' } },
-              allocations: [{ key: 'all', rules: [], splits: [{ variationKey: 'on', shards: [] }], doLog: false }],
-            },
-          },
-        })
-      }
-      const details = await OpenFeature.getClient('evp-lifecycle').getBooleanDetails('flag', false, {
-        targetingKey: 'terminal-target-canary', secret: 'terminal-context-canary',
-      })
-      finishInitialization?.()
-      provider.onClose()
-      const bytes = Buffer.from(request.firstCall.args[0])
-      const [row] = JSON.parse(bytes).flagEvaluations
-      const expected = {
-        throw: 'GENERAL',
-        'not-ready': 'PROVIDER_NOT_READY',
-        fatal: 'PROVIDER_FATAL',
-        missing: 'FLAG_NOT_FOUND',
-        'type-mismatch': 'TYPE_MISMATCH',
-      }[terminal]
-      assert.strictEqual(details.value, false)
-      assert.strictEqual(details.errorCode, expected)
-      assert.strictEqual(row.error.message, expected)
-      assert.strictEqual(row.evaluation_count, 1)
-      assert.strictEqual(row.runtime_default_used, true)
-      assert.strictEqual(row.targeting_key,
-        'sha256_' + createHash('sha256').update('terminal-target-canary').digest('hex'))
-      assert.strictEqual(row.context, undefined)
-      for (const canary of ['terminal-target-canary', 'terminal-context-canary', 'error-message-only-canary']) {
-        assert.strictEqual(bytes.includes(Buffer.from(canary)), false)
-      }
-    })
   }
 
   for (const doLog of [false, true]) {

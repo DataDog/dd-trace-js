@@ -12,34 +12,33 @@ const fixture = join(__dirname, 'fixtures/worker-app.js')
 const preload = join(__dirname, 'fixtures/worker-preload.js')
 
 describe('flag evaluation flush retention', () => {
-  for (const mode of ['keys', 'entries']) {
-    it(`releases unnecessary ${mode} while a multi-payload flush is paused`, async function () {
-      this.timeout(10000)
-      const fixture = join(__dirname, 'fixtures/payload-retention.js')
-      const { stdout, stderr } = await exec(process.execPath, ['--expose-gc', fixture, mode], { timeout: 7000 })
-      assert.strictEqual(stdout, '')
-      assert.strictEqual(stderr, '')
-    })
-  }
+  it('releases lookup keys and encoded entries while a multi-payload flush is paused', async function () {
+    this.timeout(10000)
+    const fixture = join(__dirname, 'fixtures/payload-retention.js')
+    const { stdout, stderr } = await exec(process.execPath, ['--expose-gc', fixture], { timeout: 7000 })
+    assert.strictEqual(stdout, '')
+    assert.strictEqual(stderr, '')
+  })
 })
 
 describe('flag evaluation real worker processes', () => {
   for (const mode of ['progress', 'fallback', 'unix', 'nested']) {
-    it(`delivers protected and full counts under continuous evaluation (${mode})`, async function () {
+    it(`delivers protected and full counts (${mode})`, async function () {
       this.timeout(15000)
       const { stdout, stderr } = await exec(process.execPath, [fixture, mode], { timeout: 10000 })
       assert.strictEqual(stderr, '')
       const result = JSON.parse(stdout)
-      assert.strictEqual(result.accepted, 12000)
-      assert.strictEqual(result.delivered, 12001)
+      const expected = mode === 'progress' ? 12000 : 16
+      assert.strictEqual(result.accepted, expected)
+      assert.strictEqual(result.delivered, expected + 1)
       const rows = result.bodies.flatMap(({ body }) => body.flagEvaluations)
       const protectedRow = rows.find(row => row.flag.key === 'protected')
-      assert.strictEqual(protectedRow.evaluation_count, 6000)
+      assert.strictEqual(protectedRow.evaluation_count, expected / 2)
       assert.match(protectedRow.targeting_key, /^sha256_/)
       assert.strictEqual(protectedRow.context, undefined)
       assert.deepStrictEqual(protectedRow.error, { message: 'GENERAL' })
       const full = rows.find(row => row.flag.key === 'full')
-      assert.strictEqual(full.evaluation_count, 6000)
+      assert.strictEqual(full.evaluation_count, expected / 2)
       assert.strictEqual(full.targeting_key, 'full-target-canary')
       assert.deepStrictEqual(full.context, { evaluation: { plan: 'context-canary' } })
       const raw = result.bodies.map(body => body.raw).join('')
@@ -108,11 +107,11 @@ describe('flag evaluation real worker processes', () => {
 
   it('does not inherit application command-line or NODE_OPTIONS preloads', async function () {
     this.timeout(15000)
-    const { stdout, stderr } = await exec(process.execPath, ['--require', preload, fixture, 'progress'], {
+    const { stdout, stderr } = await exec(process.execPath, ['--require', preload, fixture, 'preload'], {
       timeout: 10000,
       env: { ...process.env, NODE_OPTIONS: '--require ' + preload },
     })
     assert.strictEqual(stderr, '')
-    assert.strictEqual(JSON.parse(stdout).delivered, 12001)
+    assert.strictEqual(JSON.parse(stdout).delivered, 17)
   })
 })

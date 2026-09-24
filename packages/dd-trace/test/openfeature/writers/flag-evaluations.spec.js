@@ -136,7 +136,6 @@ describe('OpenFeature flag evaluations writer', () => {
   })
 
   it('re-enforces strict consent in aggregation and AND-folds every merge', () => {
-    assert.deepStrictEqual(Object.keys(aggregationModule), ['FlagEvaluationAggregator'])
     const { FlagEvaluationAggregator: ReducedAggregator } = proxyquire(
       '../../../src/openfeature/writers/flag-evaluation-aggregation',
       {

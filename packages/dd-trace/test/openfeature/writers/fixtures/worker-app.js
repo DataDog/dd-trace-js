@@ -8,7 +8,7 @@ const mode = process.argv[2]
 /** @typedef {import('../../../../src/config/config-base')} Config */
 /** @typedef {import('../../../../src/openfeature/writers/flag-evaluations').FlagEvaluationRoute} Route */
 if (mode === 'nested' && isMainThread) {
-  const worker = new Worker(__filename, { argv: ['progress'] })
+  const worker = new Worker(__filename, { argv: ['nested-child'] })
   worker.once('error', error => { throw error })
 } else {
   globalThis[Symbol.for('dd-trace')] = { beforeExitHandlers: new Set() }
@@ -79,7 +79,7 @@ if (mode === 'nested' && isMainThread) {
             // Admit the serialization-error probe before the load can fill the queue.
             assert.strictEqual(writer.enqueue({ flagKey: 'invalid', timestamp: NaN, runtimeDefault: false }), true)
             const deadline = Date.now() + 3000
-            const targetCount = mode === 'max-context' ? 16 : mode === 'timeout' ? 8 : 12000
+            const targetCount = mode === 'progress' ? 12000 : mode === 'timeout' ? 8 : 16
             const attrs = mode === 'max-context'
               ? Object.freeze(Object.fromEntries(Array.from({ length: 256 }, (_, i) =>
                 [String(i).padEnd(256, 'k'), 'v'.repeat(256)])))

@@ -36,18 +36,15 @@ async function main () {
   assert.ok(first, 'the flush must yield its first payload')
   assert.strictEqual(first.rows, 5)
   assert.strictEqual(state.consumed(), 15)
-  if (process.argv[2] === 'keys') {
-    assert.strictEqual(state.full.size, 0, 'flush must release full-tier lookup keys')
-    assert.strictEqual(state.degraded.size, 0, 'flush must release degraded-tier lookup keys')
-  } else {
-    // Leave the WeakRef creation job before forcing GC; keep the paused iterator alive.
-    await setImmediate()
-    assert.ok(global.gc, 'run the fixture with --expose-gc')
-    global.gc()
-    assert.strictEqual(state.references[0].entry.deref(), undefined, 'encoded entry must be collectible')
-    assert.strictEqual(state.references[0].attrs.deref(), undefined, 'encoded context must be collectible')
-    assert.notStrictEqual(state.references[11].entry.deref(), undefined, 'pending entry must remain available')
-  }
+  assert.strictEqual(state.full.size, 0, 'flush must release full-tier lookup keys')
+  assert.strictEqual(state.degraded.size, 0, 'flush must release degraded-tier lookup keys')
+  // Leave the WeakRef creation job before forcing GC; keep the paused iterator alive.
+  await setImmediate()
+  assert.ok(global.gc, 'run the fixture with --expose-gc')
+  global.gc()
+  assert.strictEqual(state.references[0].entry.deref(), undefined, 'encoded entry must be collectible')
+  assert.strictEqual(state.references[0].attrs.deref(), undefined, 'encoded context must be collectible')
+  assert.notStrictEqual(state.references[11].entry.deref(), undefined, 'pending entry must remain available')
 
   const payloads = [first, ...state.iterator]
   assert.deepStrictEqual(payloads.map(payload => payload.rows), [5, 5, 3])

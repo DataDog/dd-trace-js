@@ -111,6 +111,7 @@ describe('flag evaluation worker producer', () => {
     startupError = true
     writer.setEnabled(true)
     assert.strictEqual(writer.isAvailable(), false)
+    startupError = false
     writer.setEnabled(true)
     assert.strictEqual(workers.length, 0)
     writer.destroy()
