@@ -49,14 +49,14 @@ function prepareRequestOptions (options, contentLength) {
   if (options.url) {
     const url = parseUrl(options.url)
     if (url.protocol === 'unix:') {
-      if (options.protocol !== undefined) delete connectionOptions.protocol
-      if (options.hostname !== undefined) delete connectionOptions.hostname
-      if (options.host !== undefined) delete connectionOptions.host
-      if (options.port !== undefined) delete connectionOptions.port
+      if (options.protocol !== undefined) connectionOptions.protocol = undefined
+      if (options.hostname !== undefined) connectionOptions.hostname = undefined
+      if (options.host !== undefined) connectionOptions.host = undefined
+      if (options.port !== undefined) connectionOptions.port = undefined
       connectionOptions.socketPath = url.pathname
     } else {
-      if (options.socketPath !== undefined) delete connectionOptions.socketPath
-      if (options.host !== undefined) delete connectionOptions.host
+      if (options.socketPath !== undefined) connectionOptions.socketPath = undefined
+      if (options.host !== undefined) connectionOptions.host = undefined
       connectionOptions.protocol = url.protocol
       connectionOptions.hostname = url.hostname
       connectionOptions.port = url.port

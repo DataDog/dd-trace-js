@@ -226,6 +226,8 @@ describe('request', function () {
   it('does not mutate caller options or headers', (done) => {
     const options = {
       url: new URL('http://test:123/path'),
+      host: 'stale.example:444',
+      socketPath: '/tmp/stale.sock',
       method: 'PUT',
       headers: {
         'Content-Type': 'application/octet-stream',
@@ -236,6 +238,8 @@ describe('request', function () {
     request(Buffer.from('data'), options, (error) => {
       assert.deepStrictEqual(options, {
         url: new URL('http://test:123/path'),
+        host: 'stale.example:444',
+        socketPath: '/tmp/stale.sock',
         method: 'PUT',
         headers: {
           'Content-Type': 'application/octet-stream',
@@ -245,7 +249,7 @@ describe('request', function () {
     })
   })
 
-  it('does not retain target fields when callers reuse options', () => {
+  it('uses the URL target instead of stale fields when callers reuse options', () => {
     const callOptions = []
     const requestMessages = []
 
@@ -842,12 +846,20 @@ describe('request', function () {
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
+        protocol: 'https:',
+        hostname: 'stale.example',
+        host: 'stale.example:444',
+        port: 444,
         method: 'PUT',
       },
       () => {
         const callOptions = http.request.getCall(0).args[0]
         sandbox.restore()
         assert.strictEqual(callOptions.socketPath, sock)
+        assert.strictEqual(callOptions.protocol, undefined)
+        assert.strictEqual(callOptions.hostname, undefined)
+        assert.strictEqual(callOptions.host, undefined)
+        assert.strictEqual(callOptions.port, undefined)
         done()
       })
   })
