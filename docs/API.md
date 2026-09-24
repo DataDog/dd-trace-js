@@ -139,6 +139,7 @@ tracer.use('openai', {
 <h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
+<h5 id="react-router"></h5>
 <h5 id="redis"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
@@ -227,6 +228,7 @@ tracer.use('openai', {
 * [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
+* [react-router](./interfaces/export_.plugins.react_router.html)
 * [redis](./interfaces/export_.plugins.redis.html)
 * [restify](./interfaces/export_.plugins.restify.html)
 * [rhea](./interfaces/export_.plugins.rhea.html)

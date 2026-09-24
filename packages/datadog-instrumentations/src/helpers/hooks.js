@@ -154,6 +154,7 @@ module.exports = {
   protobufjs: () => require('../protobufjs'),
   pug: () => require('../pug'),
   q: () => require('../q'),
+  'react-router': { esmFirst: true, fn: () => require('../react-router') },
   redis: () => require('../redis'),
   restify: () => require('../restify'),
   rhea: () => require('../rhea'),
