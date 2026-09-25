@@ -1223,16 +1223,18 @@ function getFinishWrapper (exitOrClose) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
+    // pathsSet contains candidates before sharding, including files that never run.
     const hasNoTestFiles = this.state.pathsSet.size === 0
+    const hasNoTests = this.state.getFiles().every(file => getTypeTasks(file.tasks).length === 0)
     const hasUnexpectedEmptySession = hasNoTestFiles && !areAllSuitesSkipped && !this.config.passWithNoTests
     if (!error && hasUnexpectedEmptySession) {
       error = new Error('No test files were found.')
     }
-    const status = runError || hasUnexpectedEmptySession
+    const hasFailedEmptySession = hasNoTests && (error || this.state.getUnhandledErrors().length > 0)
+    const status = runError || hasUnexpectedEmptySession || hasFailedEmptySession
       ? 'fail'
       : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state))
-    const isExpectedEmptySession = !runError && !hasUnexpectedEmptySession &&
-      (areAllSuitesSkipped || hasNoTestFiles)
+    const isExpectedEmptySession = status !== 'fail' && (areAllSuitesSkipped || hasNoTests)
     const flushPromise = getChannelPromise(testSessionFinishCh, {
       status,
       isExpectedEmptySession,
