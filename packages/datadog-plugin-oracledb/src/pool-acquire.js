@@ -7,6 +7,21 @@ let parser
 
 /**
  * @typedef {{
+ *   user: string,
+ *   currentStore?: { span: import('../../dd-trace/src/opentracing/span') }
+ * }} ResolvedUserContext
+ */
+
+/**
+ * @param {unknown} message
+ */
+function setResolvedUser (message) {
+  const ctx = /** @type {ResolvedUserContext} */ (message)
+  ctx.currentStore?.span.setTag('db.user', ctx.user)
+}
+
+/**
+ * @typedef {{
  *   dbInfo: { dbInstance?: string, hostname?: string, port?: string },
  *   naming?: {
  *     config: object,
@@ -26,6 +41,15 @@ class OracledbPoolAcquirePlugin extends StoragePlugin {
 
   /** @type {WeakMap<object, PoolMetadata>} */
   #poolMetadata = new WeakMap()
+
+  /**
+   * @param {object} tracer
+   * @param {import('../../dd-trace/src/config/config-base')} tracerConfig
+   */
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
+    this.addSub('apm:oracledb:pool:acquire:user', setResolvedUser)
+  }
 
   /**
    * @param {{

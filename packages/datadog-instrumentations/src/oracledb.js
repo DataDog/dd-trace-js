@@ -1,5 +1,7 @@
 'use strict'
 
+const { types: { isProxy } } = require('node:util')
+
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
@@ -7,10 +9,20 @@ const {
 } = require('./helpers/instrument')
 
 /** @typedef {{ length: number, [index: number]: unknown } & Iterable<unknown>} ArgumentsLike */
+/** @typedef {{ connectionAttrs: { homogeneous: boolean }, user?: string, currentStore?: object }} PoolAcquireContext */
+/** @typedef {{ poolAttrs: object, parentStore?: object }} PoolSessionContext */
+/**
+ * @typedef {{
+ *   acquireCtx?: PoolAcquireContext,
+ *   sessionCtx?: PoolSessionContext,
+ *   sessionStore?: object
+ * }} PoolRequestContext
+ */
 
 const connectionAttributes = new WeakMap()
 const poolAttributes = new WeakMap()
 const poolConnectionAttributes = new WeakMap()
+const poolRequestStates = new WeakMap()
 
 const startChannel = channel('apm:oracledb:query:start')
 const errorChannel = channel('apm:oracledb:query:error')
@@ -18,12 +30,13 @@ const finishChannel = channel('apm:oracledb:query:finish')
 const poolAcquireStartChannel = channel('apm:oracledb:pool:acquire:start')
 const poolAcquireErrorChannel = channel('apm:oracledb:pool:acquire:error')
 const poolAcquireFinishChannel = channel('apm:oracledb:pool:acquire:finish')
+const poolAcquireUserChannel = channel('apm:oracledb:pool:acquire:user')
 const poolSessionStartChannel = channel('apm:oracledb:pool:session:start')
 const poolSessionFinishChannel = channel('apm:oracledb:pool:session:finish')
 
 /**
  * OracleDB only sets `Connection#user` for standalone connections, and Thick mode leaves the
- * schema fallback empty, so a heterogeneous pool's user comes from the acquisition options.
+ * schema fallback empty. Inspect data properties only: OracleDB must evaluate accessors itself.
  *
  * @param {{ homogeneous: boolean, user?: string }} connectionAttrs
  * @param {unknown} options
@@ -33,8 +46,68 @@ function getAcquireUser (connectionAttrs, options) {
   if (connectionAttrs.homogeneous || typeof options !== 'object' || options === null) {
     return connectionAttrs.user
   }
-  const { user, username } = /** @type {{ user?: string, username?: string }} */ (options)
+  if (isProxy(options)) return connectionAttrs.user
+  const user = Object.getOwnPropertyDescriptor(options, 'user')?.value
+  const username = Object.getOwnPropertyDescriptor(options, 'username')?.value
   return user ?? username ?? connectionAttrs.user
+}
+
+/**
+ * @param {{ _pendingRequestQueue?: Set<object>, _processRequest?: Function }} pool
+ */
+function getPoolRequestState (pool) {
+  const existing = poolRequestStates.get(pool)
+  if (existing !== undefined) return existing || undefined
+
+  const queue = pool._pendingRequestQueue
+  if (!(queue instanceof Set) || typeof pool._processRequest !== 'function') {
+    poolRequestStates.set(pool, false)
+    return
+  }
+
+  /** @type {{ current: PoolRequestContext | undefined, queued: WeakMap<object, PoolRequestContext> }} */
+  const state = { current: undefined, queued: new WeakMap() }
+  poolRequestStates.set(pool, state)
+
+  shimmer.wrap(/** @type {Set<object> & Record<string | symbol, unknown>} */ (queue), 'add', add => {
+    /** @param {object} request */
+    return function wrappedAdd (request) {
+      const ctx = state.current
+      if (ctx !== undefined) {
+        ctx.sessionStore = ctx.acquireCtx?.currentStore ?? ctx.sessionCtx?.parentStore
+        state.queued.set(request, ctx)
+      }
+      return add.call(this, request)
+    }
+  })
+  shimmer.wrap(pool, '_processRequest', processRequest => {
+    /** @param {unknown} request */
+    return function wrappedProcessRequest (request) {
+      const poolRequest = /** @type {{ options: { user?: string } }} */ (request)
+      const queuedCtx = state.queued.get(poolRequest)
+      if (queuedCtx !== undefined) state.queued.delete(poolRequest)
+      const acquireCtx = (queuedCtx ?? state.current)?.acquireCtx
+      if (acquireCtx !== undefined && !acquireCtx.connectionAttrs.homogeneous) {
+        const user = poolRequest.options.user
+        if (user !== undefined && user !== acquireCtx.user) {
+          acquireCtx.user = user
+          poolAcquireUserChannel.publish(acquireCtx)
+        }
+      }
+      if (queuedCtx?.sessionCtx !== undefined) {
+        const sessionCtx = { poolAttrs: queuedCtx.sessionCtx.poolAttrs, store: queuedCtx.sessionStore }
+        return poolSessionStartChannel.runStores(
+          sessionCtx,
+          /** @type {(...args: unknown[]) => unknown} */ (processRequest),
+          this,
+          request
+        )
+      }
+      return processRequest.call(this, request)
+    }
+  })
+
+  return state
 }
 
 function finish (ctx) {
@@ -49,19 +122,25 @@ function finish (ctx) {
  */
 function wrapPoolGetConnection (getConnection) {
   /**
-   * @param {...unknown} args
+   * @param {unknown[]} args
    */
   return function wrappedGetConnection (...args) {
     const pool = this
     const poolAttrs = poolAttributes.get(pool)
     const connectionAttrs = poolConnectionAttributes.get(pool)
-    const callback = typeof args.at(-1) === 'function' ? args.at(-1) : undefined
+    const lastArg = args.at(-1)
+    const callback = typeof lastArg === 'function' ? lastArg : undefined
     const acquireCtx = poolAcquireStartChannel.hasSubscribers
       ? { pool, connectionAttrs, poolAttrs, user: getAcquireUser(connectionAttrs, args[0]) }
       : undefined
     const sessionCtx = connectionAttrs.hasSessionCallback && poolSessionStartChannel.hasSubscribers
       ? { poolAttrs }
       : undefined
+    const requestState = sessionCtx !== undefined || (acquireCtx !== undefined && !connectionAttrs.homogeneous)
+      ? getPoolRequestState(pool)
+      : undefined
+    const requestCtx = requestState === undefined ? undefined : { acquireCtx, sessionCtx }
+    const callGetConnection = requestState === undefined ? callPoolGetConnection : callPoolGetConnectionWithRequest
 
     if (callback) {
       args[args.length - 1] = shimmer.wrapFunction(callback, callback => function (error, connection) {
@@ -87,28 +166,32 @@ function wrapPoolGetConnection (getConnection) {
       })
 
       return sessionCtx === undefined
-        ? callPoolGetConnection(acquireCtx, getConnection, pool, args)
+        ? callGetConnection(acquireCtx, getConnection, pool, args, requestState, requestCtx)
         : poolSessionStartChannel.runStores(
           sessionCtx,
-          callPoolGetConnection,
+          callGetConnection,
           undefined,
           acquireCtx,
           getConnection,
           pool,
-          args
+          args,
+          requestState,
+          requestCtx
         )
     }
 
     const promise = sessionCtx === undefined
-      ? callPoolGetConnection(acquireCtx, getConnection, pool, args)
+      ? callGetConnection(acquireCtx, getConnection, pool, args, requestState, requestCtx)
       : poolSessionStartChannel.runStores(
         sessionCtx,
-        callPoolGetConnection,
+        callGetConnection,
         undefined,
         acquireCtx,
         getConnection,
         pool,
-        args
+        args,
+        requestState,
+        requestCtx
       )
 
     if (acquireCtx === undefined) {
@@ -169,6 +252,24 @@ function callPoolGetConnection (acquireCtx, getConnection, pool, args) {
   return acquireCtx === undefined
     ? getConnection.apply(pool, args)
     : poolAcquireStartChannel.runStores(acquireCtx, getConnection, pool, ...args)
+}
+
+/**
+ * @param {object | undefined} acquireCtx
+ * @param {Function} getConnection
+ * @param {object} pool
+ * @param {unknown[]} args
+ * @param {{ current: PoolRequestContext | undefined }} requestState
+ * @param {PoolRequestContext | undefined} requestCtx
+ */
+function callPoolGetConnectionWithRequest (acquireCtx, getConnection, pool, args, requestState, requestCtx) {
+  const previous = requestState.current
+  requestState.current = /** @type {PoolRequestContext} */ (requestCtx)
+  try {
+    return callPoolGetConnection(acquireCtx, getConnection, pool, args)
+  } finally {
+    requestState.current = previous
+  }
 }
 
 /**

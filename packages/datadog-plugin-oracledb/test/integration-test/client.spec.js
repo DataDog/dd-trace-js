@@ -57,6 +57,9 @@ describe('esm', () => {
             assert.strictEqual(checkSpansForServiceName(payload, 'oracle.query'), true)
             assert.strictEqual(checkSpansForServiceName(payload, 'oracle.pool.acquire'), true)
 
+            const querySpans = payload.flat().filter(span => span.name === 'oracle.query')
+            assert.strictEqual(querySpans.length, mode === 'thick' ? 3 : 2)
+
             if (mode === 'thick') {
               const acquireSpans = payload.flat().filter(span => span.name === 'oracle.pool.acquire')
               assert.strictEqual(acquireSpans.length, 2)

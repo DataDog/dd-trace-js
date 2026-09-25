@@ -25,6 +25,7 @@ const connections = []
 
 try {
   await tracer.trace('oracledb.esm', async () => {
+    connections.push(await oracledb.getConnection(config))
     connections.push(isThickMode
       ? await pool.getConnection({ user: config.user, password: config.password })
       : await pool.getConnection())
