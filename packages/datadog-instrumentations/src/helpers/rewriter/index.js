@@ -19,7 +19,8 @@ const { getRewriteTarget } = require('./targets')
  *   { code: string, map?: string|object }} transform
  *
  * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
- *   target?: { moduleName: string, filePath: string, activationName?: string }, sourceMap?: string|object) =>
+ *   target?: { moduleName: string, filePath: string, activationName?: string, sourceMatch?: string },
+ *   sourceMap?: string|object) =>
  *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
@@ -62,7 +63,7 @@ function normalizeFilename (filename) {
  * @param {string|Buffer|ArrayBuffer|Uint8Array} content
  * @param {string} filename
  * @param {string} [format]
- * @param {{ moduleName: string, filePath: string, activationName?: string }} [target]
+ * @param {{ moduleName: string, filePath: string, activationName?: string, sourceMatch?: string }} [target]
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
@@ -74,17 +75,20 @@ function rewrite (content, filename, format, target) {
     if (!target) return content
 
     const moduleType = format === 'module' ? 'esm' : 'cjs'
-    const { moduleName, filePath, activationName } = target
+    const { moduleName, filePath, activationName, sourceMatch } = target
     if (disabled.has(moduleName)) return content
 
     const version = getVersion(filename, filePath)
     if (!version) return content
 
+    const matchedSource = sourceMatch && getSourceText(content)
+    if (sourceMatch && !matchedSource?.includes(sourceMatch)) return content
+
     const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
 
     if (!transformer && !activationName) return content
 
-    const source = getSourceText(content)
+    const source = matchedSource ?? getSourceText(content)
 
     if (!transformer) {
       return appendOrchestrionLoad(
@@ -139,14 +143,17 @@ function createBundlerRewriter (dcModule) {
       if (!target) return { code: content, map: sourceMap }
 
       const moduleType = format === 'module' ? 'esm' : 'cjs'
-      const { moduleName, filePath } = target
+      const { moduleName, filePath, sourceMatch } = target
       const version = getVersion(filename, filePath)
       if (!version) return { code: content, map: sourceMap }
+
+      const source = getSourceText(content)
+      if (sourceMatch && !source.includes(sourceMatch)) return { code: content, map: sourceMap }
 
       const transformer = matcher.getTransformer(moduleName, version, filePath)
       if (!transformer) return { code: content, map: sourceMap }
 
-      return transformer.transform(getSourceText(content), moduleType, sourceMap)
+      return transformer.transform(source, moduleType, sourceMap)
     } catch (error) {
       log.error(error)
       return { code: content, map: sourceMap }
