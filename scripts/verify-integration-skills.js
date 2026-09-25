@@ -60,7 +60,7 @@ const SKILL_TOKEN_BUDGETS = new Map([
   ['.agents/skills/apm-integrations/SKILL.md', 1400],
   ['.agents/skills/apm-integrations/references/orchestrion.md', 600],
   ['.agents/skills/apm-integrations/references/shimmer.md', 250],
-  ['.agents/skills/apm-integrations/references/testing.md', 500],
+  ['.agents/skills/apm-integrations/references/testing.md', 560],
   ['.agents/skills/serverless-integrations/SKILL.md', 800],
   ['.agents/skills/serverless-integrations/references/testing-guide.md', 350],
 ])

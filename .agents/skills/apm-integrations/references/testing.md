@@ -15,9 +15,13 @@ assertion before the operation; await both together when both are asynchronous. 
 
 ## Cases
 
-Cover success/error, each completion form upstream exposes, enabled/disabled tracing, parenting, version boundaries,
-and sibling operations sharing changed instrumentation. Assert observable spans, propagated values, or channel
-effects rather than plugin internals.
+First find the closest integration in the same category (database, queue, cache, web, client, log), plus the specs of
+shared helpers it uses (e.g. `packages/datadog-instrumentations/test/helpers/pool-acquire.spec.js` for pools). They
+are the minimum contract: list every case they pin as `ported` or `skipped: <upstream difference>`, and port each
+with its exact assertions. Then cover
+success/error, each completion form upstream exposes, enabled/disabled tracing, parenting, version boundaries, and
+sibling operations sharing changed instrumentation. Assert observable spans, propagated values, or channel effects
+rather than plugin internals.
 
 Sandbox processes do not contribute to nyc coverage. Keep a same-process path for changed production branches when
 needed.
