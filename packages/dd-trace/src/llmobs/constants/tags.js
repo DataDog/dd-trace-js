@@ -60,6 +60,8 @@ module.exports = {
   CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY: 'ephemeral_5m_input_tokens',
   CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY: 'ephemeral_1h_input_tokens',
   REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
+  WEB_SEARCH_COUNT_METRIC_KEY: 'web_search_count',
+  STORAGE_SEARCH_COUNT_METRIC_KEY: 'storage_search_count',
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',
 
