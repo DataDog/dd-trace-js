@@ -3347,8 +3347,9 @@ declare namespace tracer {
      * spans with parameterized routes and creating loader/action child spans.
      *
      * Requires `react-router` >= 7.9.5 (stable `instrumentations` in >= 7.15).
+     * Configure request span options on `http` or the host framework integration.
      */
-    interface react_router extends HttpServer {}
+    interface react_router extends Pick<Instrumentation, 'enabled' | 'measured'> {}
 
     /**
      * This plugin automatically instruments the

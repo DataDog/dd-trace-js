@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execFile } = require('node:child_process')
+const { execFile, fork } = require('node:child_process')
 const { once } = require('node:events')
 const { copyFile, mkdir, mkdtemp, rm, symlink } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
@@ -33,9 +33,11 @@ async function runCjsMutation (versionKey, instrumented) {
 /**
  * @param {string} versionKey
  * @param {number} agentPort
+ * @param {'http' | 'express' | 'http2'} [host]
  */
-async function runEsmRequest (versionKey, agentPort) {
+async function prepareEsmRequest (versionKey, agentPort, host = 'http') {
   const directory = await mkdtemp(path.join(tmpdir(), 'dd-react-router-esm-'))
+  let child
   try {
     const nodeModules = path.join(directory, 'node_modules')
     await mkdir(nodeModules)
@@ -44,17 +46,44 @@ async function runEsmRequest (versionKey, agentPort) {
       path.join(nodeModules, 'react-router'),
       'dir'
     )
+    if (host === 'express') {
+      await symlink(path.dirname(require.resolve('express/package.json')), path.join(nodeModules, 'express'), 'dir')
+    }
     const fixture = path.join(directory, 'request.mjs')
     await copyFile(path.join(__dirname, 'fixtures/esm-request.mjs'), fixture)
-    const { stdout } = await execFileAsync(process.execPath, [
-      fixture,
+    child = fork(fixture, [
       require.resolve('../../../'),
       require.resolve('../../../register'),
       String(agentPort),
-    ], { env: { ...process.env, DD_INJECT_FORCE: '1', NODE_OPTIONS: '' } })
-    return JSON.parse(stdout)
-  } finally {
+      host,
+    ], { env: { ...process.env, DD_INJECT_FORCE: '1', NODE_OPTIONS: '' }, silent: true, execArgv: [] })
+    /** @type {Buffer[]} */
+    const stdout = []
+    /** @type {Buffer[]} */
+    const stderr = []
+    child.stdout.on('data', stdout.push.bind(stdout))
+    child.stderr.on('data', stderr.push.bind(stderr))
+    const closed = once(child, 'close')
+    const [message] = await Promise.race([
+      once(child, 'message'),
+      closed.then(([code]) => { throw new Error(`Request child exited before ready: ${code}`) }),
+    ])
+    assert.equal(message, 'ready')
+    return async () => {
+      try {
+        child.send('request')
+        const [code] = await closed
+        assert.equal(code, 0, Buffer.concat(stderr).toString())
+        return JSON.parse(Buffer.concat(stdout).toString())
+      } finally {
+        child.kill()
+        await rm(directory, { recursive: true, force: true })
+      }
+    }
+  } catch (error) {
+    child?.kill()
     await rm(directory, { recursive: true, force: true })
+    throw error
   }
 }
 
@@ -170,6 +199,35 @@ describe('Plugin', () => {
         await assertHttpRoute(handleRequest)
       })
 
+      it('sets the request route through Express middleware', async () => {
+        const sendRequest = await prepareEsmRequest(version, agent.port, 'express')
+        const trace = agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          const request = spans.find(span => span.type === 'web')
+          const middleware = spans.find(span => span.name === 'express.middleware' || span.name === 'router.middleware')
+          assert.ok(request)
+          assert.ok(middleware)
+          assert.equal(request.meta['http.route'], '/users/:id')
+          assert.equal(request.resource, 'GET /users/:id')
+        })
+        const [, result] = await Promise.all([trace, sendRequest()])
+        assert.deepEqual(result, { status: 200, body: 'ok' })
+      })
+
+      it('sets the request route through a child span on HTTP/2', async () => {
+        const sendRequest = await prepareEsmRequest(version, agent.port, 'http2')
+        const trace = agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          const request = spans.find(span => span.type === 'web')
+          const middleware = spans.find(span => span.name === 'application.middleware')
+          assert.ok(request)
+          assert.ok(middleware)
+          assert.equal(request.meta['http.route'], '/users/:id')
+        })
+        const [, result] = await Promise.all([trace, sendRequest()])
+        assert.deepEqual(result, { status: 200, body: 'ok' })
+      })
+
       it('sets the root route when the matched route has no path', async () => {
         tracer.use('react-router', {})
         const build = createBuild()
@@ -271,6 +329,7 @@ describe('Plugin', () => {
       })
 
       it('traces a request loaded through the ESM package entry', async () => {
+        const sendRequest = await prepareEsmRequest(version, agent.port)
         const trace = agent.assertSomeTraces(traces => {
           const spans = traces[0]
           const request = spans.find(span => span.type === 'web')
@@ -280,8 +339,7 @@ describe('Plugin', () => {
           assert.equal(request.meta['http.route'], '/users/:id')
           assert.equal(loader.parent_id.toString(), request.span_id.toString())
         })
-        const request = runEsmRequest(version, agent.port)
-        const [, result] = await Promise.all([trace, request])
+        const [, result] = await Promise.all([trace, sendRequest()])
         assert.deepEqual(result, { status: 200, body: 'ok' })
       }).timeout(20000)
 
