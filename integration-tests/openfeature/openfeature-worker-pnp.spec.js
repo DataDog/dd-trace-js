@@ -4,11 +4,8 @@ const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
 const { existsSync } = require('node:fs')
 const { join } = require('node:path')
-const { promisify } = require('node:util')
 
 const { sandboxCwd, useSandbox } = require('../helpers')
-
-const exec = promisify(execFile)
 
 describe('OpenFeature worker with Yarn Plug\'n\'Play', () => {
   useSandbox([], false, ['./integration-tests/openfeature/app'],
@@ -22,12 +19,22 @@ describe('OpenFeature worker with Yarn Plug\'n\'Play', () => {
     const resolver = join(cwd, '.pnp.cjs')
     assert.strictEqual(existsSync(resolver), true)
     const preload = join(cwd, 'app/worker-preload.js')
-    const { stdout, stderr } = await exec(process.execPath, [
-      '--require', preload, join(cwd, 'app/worker-pnp.js'),
-    ], {
-      cwd,
-      timeout: 10000,
-      env: { ...process.env, NODE_OPTIONS: `--require "${resolver}" --require "${preload}"` },
+    // The coverage harness wraps execFile without preserving its custom promisify result shape.
+    const { stdout, stderr } = await new Promise((resolve, reject) => {
+      execFile(process.execPath, [
+        '--require', preload, join(cwd, 'app/worker-pnp.js'),
+      ], {
+        cwd,
+        timeout: 10000,
+        // NODE_OPTIONS also parses backslashes as escapes, including Windows path separators.
+        env: {
+          ...process.env,
+          NODE_OPTIONS: `--require ${JSON.stringify(resolver)} --require ${JSON.stringify(preload)}`,
+        },
+      }, (error, stdout, stderr) => {
+        if (error) reject(error)
+        else resolve({ stdout, stderr })
+      })
     })
     assert.strictEqual(stderr, '')
     const result = JSON.parse(stdout)
