@@ -17,6 +17,7 @@ run node scripts/check-no-mcr-images.js
 run node scripts/check-docker-image-shas.js
 run node scripts/verify-carrier-fields.mjs
 run node scripts/verify-integration-skills.js
+run node scripts/install_plugin_modules.js --check
 run codeowners-audit --no-report --fail-on-unowned
 run node scripts/verify-exercised-tests.js
 

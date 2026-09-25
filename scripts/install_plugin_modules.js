@@ -46,6 +46,24 @@ for (const external of Object.keys(externals)) {
 run()
 
 async function run () {
+  // Resolving every declared range throws for a hooked package without a pinned latest version, so lint can catch
+  // the missing pin before CI reaches the install step.
+  if (process.argv.includes('--check')) {
+    const failures = []
+    for (const moduleName of await findModuleNames()) {
+      try {
+        for (const { name, range } of collectPackages([moduleName])) getCappedRange(name, range)
+      } catch (error) {
+        failures.push(`${moduleName}: ${error.message}`)
+      }
+    }
+    if (failures.length) {
+      // eslint-disable-next-line no-console
+      console.error(failures.join('\n'))
+      process.exitCode = 1
+    }
+    return
+  }
   await assertPrerequisites()
   install()
   const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
@@ -54,15 +72,17 @@ async function run () {
   if (changed) install()
 }
 
-async function assertPrerequisites () {
+async function findModuleNames () {
   const filter = process.env.PLUGINS?.split('|')
 
   const instrumentationFiles = await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
-  const moduleNames = instrumentationFiles.filter(file => file.endsWith('.js'))
+  return instrumentationFiles.filter(file => file.endsWith('.js'))
     .map(file => file.slice(0, -3))
     .filter(file => !filter || filter.includes(file))
+}
 
-  const packages = collectPackages(moduleNames)
+async function assertPrerequisites () {
+  const packages = collectPackages(await findModuleNames())
 
   await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
     assertPackage(name, version, range, external))
