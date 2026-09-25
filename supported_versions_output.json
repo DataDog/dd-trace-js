@@ -287,13 +287,6 @@
     "auto-instrumented": "True"
   },
   {
-    "dependency": "@supabase/supabase-js",
-    "integration": "supabase",
-    "minimum_tracer_supported": "2.112.2",
-    "max_tracer_supported": "2.112.4",
-    "auto-instrumented": "True"
-  },
-  {
     "dependency": "@wdio/local-runner",
     "integration": "mocha",
     "minimum_tracer_supported": "9.0.0",
