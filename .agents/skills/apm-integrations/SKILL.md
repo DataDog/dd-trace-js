@@ -57,7 +57,8 @@ constraint. Read [Shimmer](references/shimmer.md) only after choosing it.
 3. Add the plugin package and getter in `packages/dd-trace/src/plugins/index.js`.
 4. Register every id reached by `operationName()` or `serviceName()` in both naming-schema versions for its type.
 5. Update `index.d.ts` and `index.d.v5.ts` unless the API is v6-only; update `docs/test.ts`, both `docs/API.md`
-    plugin locations, `.github/CODEOWNERS`, and the owning workflow.
+    plugin locations, `.github/CODEOWNERS`, and the owning workflow. Check its selected Node version, including the
+    composite action's default, against each tested upstream release's `engines.node`.
 6. Pin the latest tested library in `packages/dd-trace/test/plugins/versions/package.json`; keep supported ranges in
     instrumentation declarations.
 

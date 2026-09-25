@@ -1096,6 +1096,23 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(packet.reference.files.join('\n'), /rewriter\/instrumentations/)
   })
 
+  for (const lifecycle of ['auto', 'async', 'callback', 'cjs-esm', 'sync']) {
+    it(`keeps ${lifecycle} guidance on the selected shimmer mechanism`, () => {
+      const packet = inspect(runRepositoryTool, 'new-plugin', ['--traits', `shimmer,${lifecycle},cache`])
+
+      assert.strictEqual(packet.references.includes('.agents/skills/apm-integrations/references/shimmer.md'), true)
+      assert.strictEqual(packet.references.includes('.agents/skills/apm-integrations/references/orchestrion.md'), false)
+      if (lifecycle === 'callback') assert.strictEqual(packet.reference.integration, 'memcached')
+    })
+  }
+
+  it('includes both mechanisms when both are selected', () => {
+    const packet = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'shimmer,orchestrion,callback'])
+
+    assert.strictEqual(packet.references.includes('.agents/skills/apm-integrations/references/shimmer.md'), true)
+    assert.strictEqual(packet.references.includes('.agents/skills/apm-integrations/references/orchestrion.md'), true)
+  })
+
   for (const [traits, category] of [
     ['database', 'database'],
     ['database,callback', 'database'],

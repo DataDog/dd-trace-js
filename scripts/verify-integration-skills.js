@@ -1062,7 +1062,7 @@ function findSchemaRegistrations (filenames, publicIds) {
 function findReferences (mode, traits, hasRewriter) {
   const references = []
 
-  if (hasRewriter || traits.some(trait => ORCHESTRION_TRAITS.has(trait))) {
+  if (hasRewriter || selectsOrchestrion(traits)) {
     references.push('.agents/skills/apm-integrations/references/orchestrion.md')
   }
   if (traits.includes('shimmer')) {
@@ -1077,6 +1077,14 @@ function findReferences (mode, traits, hasRewriter) {
     : '.agents/skills/apm-integrations/references/testing.md')
 
   return references
+}
+
+/**
+ * @param {string[]} traits
+ */
+function selectsOrchestrion (traits) {
+  return traits.includes('orchestrion') ||
+    (!traits.includes('shimmer') && traits.some(trait => ORCHESTRION_TRAITS.has(trait)))
 }
 
 /**
@@ -1103,7 +1111,7 @@ function findClosestReference (integration, mode, traits) {
 
   const isServerless = mode === 'serverless'
   const isShimmer = traits.includes('shimmer')
-  const isOrchestrion = traits.some(trait => ORCHESTRION_TRAITS.has(trait))
+  const isOrchestrion = selectsOrchestrion(traits)
   const requestedBase = traits.find(trait => pluginBaseSources.has(trait))
   const requestedSource = requestedBase ? pluginBaseSources.get(requestedBase) : undefined
   // Serverless runtimes are their own category; their base class only describes the invocation role.
@@ -1179,10 +1187,12 @@ function findClosestReference (integration, mode, traits) {
     if (hasRequestedKind) score += 8
     const formatSource = rewriterSource || source
     if (traits.includes('cjs-esm') && /cjs|commonjs/i.test(formatSource) && /esm/i.test(formatSource)) score += 4
-    for (const [trait, kind] of TRAIT_KINDS) {
-      if (traits.includes(trait) && (
-        rewriterSource.includes(`kind: '${kind}'`) || rewriterSource.includes(`kind: "${kind}"`)
-      )) score += 2
+    if (isOrchestrion) {
+      for (const [trait, kind] of TRAIT_KINDS) {
+        if (traits.includes(trait) && (
+          rewriterSource.includes(`kind: '${kind}'`) || rewriterSource.includes(`kind: "${kind}"`)
+        )) score += 2
+      }
     }
     if (score <= closestScore) continue
 
