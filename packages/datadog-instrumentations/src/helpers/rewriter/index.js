@@ -89,7 +89,7 @@ function rewrite (content, filename, format, target) {
     if (!transformer) {
       return appendOrchestrionLoad(
         source,
-        { moduleName, activationName, version, result: 'unsupported' },
+        { moduleName, activationName: /** @type {string} */ (activationName), version, result: 'unsupported' },
         moduleType
       )
     }
@@ -185,6 +185,7 @@ function createMatcher (dcModule) {
     configureGraphqlJitRuntime,
     configureMercuriusRequest,
     publishDurableOrchestrationFailure,
+    publishTrpcRequestInfo,
     waitForAsyncEnd,
   } = require('./transforms')
   const {
@@ -204,6 +205,7 @@ function createMatcher (dcModule) {
   matcher.addTransform('configureGraphqlJitRuntime', configureGraphqlJitRuntime)
   matcher.addTransform('configureMercuriusRequest', configureMercuriusRequest)
   matcher.addTransform('publishDurableOrchestrationFailure', publishDurableOrchestrationFailure)
+  matcher.addTransform('publishTrpcRequestInfo', publishTrpcRequestInfo)
   matcher.addTransform('postgresQueryHandlers', postgresQueryHandlers)
   matcher.addTransform('postgresQueryLifecycle', postgresQueryLifecycle)
   matcher.addTransform('postgresQueryPreparation', postgresQueryPreparation)

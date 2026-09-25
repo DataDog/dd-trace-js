@@ -97,6 +97,7 @@
     "@supabase/realtime-js": "2.116.0",
     "@supabase/storage-js": "2.116.0",
     "@supabase/supabase-js": "2.116.0",
+    "@trpc/server": "11.19.0",
     "@types/node": "26.6.1",
     "@vitest/browser-webdriverio": "5.0.0",
     "@vitest/coverage-istanbul": "5.0.1",

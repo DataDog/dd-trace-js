@@ -139,7 +139,7 @@ dc.subscribe(CHANNEL, (message) => {
   }
 
   for (const entry of instrumentation) {
-    if (!matchesInstrumentation(name, payload.version, payload.path, entry)) continue
+    if (!payload.path || !matchesInstrumentation(name, payload.version, payload.path, entry)) continue
 
     try {
       loadChannel.publish({ name })

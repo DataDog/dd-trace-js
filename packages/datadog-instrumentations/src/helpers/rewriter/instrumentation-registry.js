@@ -19,6 +19,7 @@ const registry = [
   { instrumentations: require('./instrumentations/webdriverio') },
   { instrumentations: require('./instrumentations/aws-durable-execution-sdk-js') },
   { instrumentations: require('./instrumentations/supabase') },
+  { activationName: '@trpc/server', instrumentations: require('./instrumentations/trpc') },
 ]
 
 const activationNames = new Map()

@@ -103,6 +103,30 @@ describe('bundler register', () => {
     assert.equal(Object.hasOwn(payload, 'module'), false)
   })
 
+  it('does not activate an exact source rewrite from another file', () => {
+    const integrationHook = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      hooks: {},
+      instrumentations: {
+        'test-rewritten-integration': [{
+          hook: integrationHook,
+          sourceRewrite: 'dist/index.js',
+          versions: ['>=1'],
+        }],
+      },
+    })
+
+    publish({
+      activate: true,
+      package: 'test-rewritten-integration',
+      path: 'test-rewritten-integration/dist/other.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.notCalled(loadChannel.publish)
+    sinon.assert.notCalled(integrationHook)
+  })
+
   it('activates a hookless source-rewritten integration without loading a hook', () => {
     const { loadChannel, log, publish } = loadBundlerRegister({
       activationNames: new Map([['test-hookless', 'test-plugin']]),
