@@ -106,6 +106,28 @@ describe('TextMapPropagator', () => {
       }
     })
 
+    /**
+     * @param {SpanContext} spanContext
+     * @param {Record<string, string>} carrier
+     * @param {Array<string | undefined>} traceTagReplacements
+     * @param {number} [optionalTraceTagCount]
+     */
+    function injectTraceTagReplacements (spanContext, carrier, traceTagReplacements, optionalTraceTagCount) {
+      /** @param {TraceTagInjection} injection */
+      function onSpanInject (injection) {
+        injection.traceTagReplacements = traceTagReplacements
+        if (optionalTraceTagCount !== undefined) {
+          injection.optionalTraceTagCount = optionalTraceTagCount
+        }
+      }
+      injectCh.subscribe(onSpanInject)
+      try {
+        propagator.inject(spanContext, carrier)
+      } finally {
+        injectCh.unsubscribe(onSpanInject)
+      }
+    }
+
     it('should not crash without spanContext', () => {
       const carrier = {}
       propagator.inject(null, carrier)
@@ -450,6 +472,37 @@ describe('TextMapPropagator', () => {
       )
     })
 
+    it('should remove optional Datadog fields that exceed the tracestate member limit', () => {
+      const carrier = {}
+      const spanContext = createContext({
+        traceId: id('1111aaaa2222bbbb3333cccc4444dddd', 16),
+        spanId: id('5555eeee6666ffff', 16),
+        sampling: {
+          priority: USER_KEEP,
+          mechanism: SAMPLING_MECHANISM_MANUAL,
+        },
+        trace: {
+          tags: {
+            '_dd.p.keep': 'ok',
+            '_dd.p.large': 'x'.repeat(220),
+          },
+        },
+        isRemote: false,
+      })
+      config.tracePropagationStyle.inject = ['tracecontext']
+
+      propagator.inject(spanContext, carrier)
+
+      const tracestate = TraceState.fromString(carrier.tracestate)
+      tracestate.forVendor('dd', state => {
+        assert.strictEqual(state.get('p'), '5555eeee6666ffff')
+        assert.strictEqual(state.get('s'), '2')
+        assert.strictEqual(state.get('t.dm'), '-4')
+        assert.strictEqual(state.get('t.keep'), 'ok')
+        assert.strictEqual(state.get('t.large'), undefined)
+      })
+    })
+
     it('should skip injection of B3 headers without the feature flag', () => {
       const carrier = {}
       const spanContext = createContext({
@@ -661,21 +714,11 @@ describe('TextMapPropagator', () => {
         trace: { tags: { '_dd.p.test': 'original' } },
       })
 
-      /** @param {TraceTagInjection} injection */
-      function onSpanInject (injection) {
-        injection.traceTagReplacements = ['_dd.p.other', '_dd.p.test']
-      }
-      injectCh.subscribe(onSpanInject)
+      injectTraceTagReplacements(spanContext, carrier, ['_dd.p.other', '_dd.p.test'])
 
-      try {
-        propagator.inject(spanContext, carrier)
-
-        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.test=original,_dd.p.other=_dd.p.test')
-        assert.ok(carrier.tracestate.includes('t.test:original'))
-        assert.ok(carrier.tracestate.includes('t.other:_dd.p.test'))
-      } finally {
-        injectCh.unsubscribe(onSpanInject)
-      }
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.test=original,_dd.p.other=_dd.p.test')
+      assert.ok(carrier.tracestate.includes('t.test:original'))
+      assert.ok(carrier.tracestate.includes('t.other:_dd.p.test'))
     })
 
     it('should serialize injection-local trace tags to tracestate', () => {
@@ -683,21 +726,11 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = createContext({ isRemote: false })
 
-      /** @param {TraceTagInjection} injection */
-      function onSpanInject (injection) {
-        injection.traceTagReplacements = ['_dd.p.test', 'value']
-      }
-      injectCh.subscribe(onSpanInject)
+      injectTraceTagReplacements(spanContext, carrier, ['_dd.p.test', 'value'])
 
-      try {
-        propagator.inject(spanContext, carrier)
-
-        assert.strictEqual(carrier['x-datadog-tags'], undefined)
-        assert.ok(carrier.tracestate.includes('t.test:value'))
-        assert.strictEqual(spanContext._trace.tags['_dd.p.test'], undefined)
-      } finally {
-        injectCh.unsubscribe(onSpanInject)
-      }
+      assert.strictEqual(carrier['x-datadog-tags'], undefined)
+      assert.ok(carrier.tracestate.includes('t.test:value'))
+      assert.strictEqual(spanContext._trace.tags['_dd.p.test'], undefined)
     })
 
     it('should remove injection-local trace tags from each configured format', () => {
@@ -708,68 +741,69 @@ describe('TextMapPropagator', () => {
         tracestate: TraceState.fromString('dd=t.remove:value'),
       })
 
-      /** @param {TraceTagInjection} injection */
-      function onSpanInject (injection) {
-        injection.traceTagReplacements = [
-          '_dd.p.remove', undefined,
-          'not.propagated', 'value',
-        ]
-      }
-      injectCh.subscribe(onSpanInject)
+      injectTraceTagReplacements(spanContext, carrier, [
+        '_dd.p.remove', undefined,
+        'not.propagated', 'value',
+      ])
 
-      try {
-        propagator.inject(spanContext, carrier)
-
-        assert.strictEqual(carrier['x-datadog-tags'], undefined)
-        assert.ok(!carrier.tracestate.includes('t.remove:'))
-        assert.ok(!carrier.tracestate.includes('not.propagated'))
-        assert.strictEqual(spanContext._tracestate.toString(), 'dd=t.remove:value')
-      } finally {
-        injectCh.unsubscribe(onSpanInject)
-      }
+      assert.strictEqual(carrier['x-datadog-tags'], undefined)
+      assert.ok(!carrier.tracestate.includes('t.remove:'))
+      assert.ok(!carrier.tracestate.includes('not.propagated'))
+      assert.strictEqual(spanContext._tracestate.toString(), 'dd=t.remove:value')
     })
 
     it('should reject an invalid injection-local trace tag', () => {
       const carrier = {}
 
-      /** @param {TraceTagInjection} injection */
-      function onSpanInject (injection) {
-        injection.traceTagReplacements = ['_dd.p.test', 'hélicoptère']
-      }
-      injectCh.subscribe(onSpanInject)
+      injectTraceTagReplacements(createContext(), carrier, ['_dd.p.test', 'hélicoptère'])
 
-      try {
-        propagator.inject(createContext(), carrier)
-
-        assert.strictEqual(carrier['x-datadog-tags'], undefined)
-      } finally {
-        injectCh.unsubscribe(onSpanInject)
-      }
+      assert.strictEqual(carrier['x-datadog-tags'], undefined)
     })
 
     it('should include only optional trace tags that fit the length limit', () => {
       config.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = 40
       const carrier = {}
 
-      /** @param {TraceTagInjection} injection */
-      function onSpanInject (injection) {
-        injection.traceTagReplacements = [
-          '_dd.p.required', 'replacement',
-          '_dd.p.first', '1',
-          '_dd.p.second', '2',
-        ]
-        injection.optionalTraceTagCount = 2
-      }
-      injectCh.subscribe(onSpanInject)
+      const spanContext = createContext({ trace: { tags: { '_dd.p.required': 'original' } } })
+      injectTraceTagReplacements(spanContext, carrier, [
+        '_dd.p.required', 'replacement',
+        '_dd.p.first', '1',
+        '_dd.p.second', '2',
+      ], 2)
 
-      try {
-        const spanContext = createContext({ trace: { tags: { '_dd.p.required': 'original' } } })
-        propagator.inject(spanContext, carrier)
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.required=replacement,_dd.p.first=1')
+    })
 
-        assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.required=replacement,_dd.p.first=1')
-      } finally {
-        injectCh.unsubscribe(onSpanInject)
-      }
+    it('should keep required injection-local trace tags when pruning tracestate', () => {
+      config.tracePropagationStyle.inject = ['tracecontext']
+      const carrier = {}
+      const spanContext = createContext({
+        isRemote: false,
+        trace: { tags: { '_dd.p.ordinary': 'o'.repeat(150) } },
+      })
+
+      injectTraceTagReplacements(spanContext, carrier, [
+        '_dd.p.required', 'r'.repeat(80),
+        '_dd.p.optional', 'x'.repeat(20),
+      ], 1)
+
+      assert.ok(!carrier.tracestate.includes('t.ordinary:'))
+      assert.ok(!carrier.tracestate.includes('t.optional:'))
+      assert.ok(carrier.tracestate.includes(`t.required:${'r'.repeat(80)}`))
+    })
+
+    it('should remove stale Datadog state when required injection-local trace tags exceed the member limit', () => {
+      config.tracePropagationStyle.inject = ['tracecontext']
+      const carrier = {}
+      const spanContext = createContext({
+        isRemote: false,
+        tracestate: TraceState.fromString('dd=p:0123456789abcdef;s:1;t.dm:-3;t.old:value,other=ok'),
+      })
+
+      injectTraceTagReplacements(spanContext, carrier, ['_dd.p.required', 'r'.repeat(240)])
+
+      assert.ok(!carrier.tracestate.includes('t.required:'))
+      assert.strictEqual(carrier.tracestate, 'other=ok')
     })
 
     it('should not publish when nothing was injected', () => {

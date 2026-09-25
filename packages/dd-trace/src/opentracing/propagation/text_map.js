@@ -88,6 +88,13 @@ let otelSampling
  */
 
 /**
+ * @typedef {object} TraceTagInjection
+ * @property {DatadogSpanContext} spanContext
+ * @property {Array<string | undefined>} [traceTagReplacements]
+ * @property {number} [optionalTraceTagCount]
+ */
+
+/**
  * @param {Array<string | undefined>} traceTagReplacements
  * @param {string} key
  */
@@ -96,6 +103,28 @@ function hasTraceTagReplacement (traceTagReplacements, key) {
     if (traceTagReplacements[index] === key) return true
   }
   return false
+}
+
+/** @param {string} key */
+function toTraceStateTagKey (key) {
+  return 't.' + key.slice(6).replaceAll(tracestateTagKeyFilter, '_')
+}
+
+/**
+ * @param {string} key
+ * @param {TraceTagInjection | undefined} injection
+ */
+function isOptionalDatadogTraceStateField (key, injection) {
+  if (!key.startsWith('t.') || key === 't.dm' || key === 't.ts') return false
+
+  const traceTagReplacements = injection?.traceTagReplacements
+  if (!traceTagReplacements) return true
+  const firstOptionalTraceTagIndex = traceTagReplacements.length - (injection.optionalTraceTagCount ?? 0) * 2
+  for (let index = 0; index < firstOptionalTraceTagIndex; index += 2) {
+    const traceTagKey = traceTagReplacements[index]
+    if (traceTagKey.startsWith('_dd.p.') && toTraceStateTagKey(traceTagKey) === key) return false
+  }
+  return true
 }
 
 /**
@@ -331,13 +360,15 @@ class TextMapPropagator {
       hasTraceSourcePropagationTag(spanContext._trace.tags)
     let traceTagReplacements
     let optionalTraceTagCount = 0
+    /** @type {TraceTagInjection | undefined} */
+    let traceTagInjection
     if (injectTraceContext && injectCh.hasSubscribers && (
       this.#hasPropagationStyle('inject', 'datadog') || this.#hasPropagationStyle('inject', 'tracecontext')
     )) {
-      const injection = { spanContext }
-      injectCh.publish(injection)
-      traceTagReplacements = injection.traceTagReplacements
-      optionalTraceTagCount = injection.optionalTraceTagCount ?? 0
+      traceTagInjection = { spanContext }
+      injectCh.publish(traceTagInjection)
+      traceTagReplacements = traceTagInjection.traceTagReplacements
+      optionalTraceTagCount = traceTagInjection.optionalTraceTagCount ?? 0
     }
     if (injectTraceContext) {
       injectedCarrier = this.#injectDatadog(
@@ -348,7 +379,7 @@ class TextMapPropagator {
     }
     injectedCarrier = this
       .#injectTraceparent(
-        spanContext, injectedCarrier ?? carrier, injectTraceContext, traceTagReplacements
+        spanContext, injectedCarrier ?? carrier, injectTraceContext, traceTagReplacements, traceTagInjection
       ) ?? injectedCarrier
 
     if (injectedCarrier === undefined) return
@@ -514,7 +545,7 @@ class TextMapPropagator {
     }
 
     if (traceTagReplacements) {
-      const requiredEntryCount = traceTagReplacements.length - optionalTraceTagCount * 2
+      const firstOptionalTraceTagIndex = traceTagReplacements.length - optionalTraceTagCount * 2
       for (let index = 0; index < traceTagReplacements.length; index += 2) {
         const key = traceTagReplacements[index]
         const value = traceTagReplacements[index + 1]
@@ -525,7 +556,7 @@ class TextMapPropagator {
         }
 
         const entry = `${header ? ',' : ''}${key}=${value}`
-        if (index >= requiredEntryCount && header.length + entry.length > maxLength) break
+        if (index >= firstOptionalTraceTagIndex && header.length + entry.length > maxLength) break
         header += entry
       }
     }
@@ -594,9 +625,10 @@ class TextMapPropagator {
    * @param {Record<string, string> | undefined} carrier
    * @param {boolean} injectTraceContext
    * @param {Array<string | undefined>} [traceTagReplacements]
+   * @param {TraceTagInjection} [traceTagInjection]
    * @returns {Record<string, string> | undefined}
    */
-  #injectTraceparent (spanContext, carrier, injectTraceContext, traceTagReplacements) {
+  #injectTraceparent (spanContext, carrier, injectTraceContext, traceTagReplacements, traceTagInjection) {
     if (!this.#hasPropagationStyle('inject', 'tracecontext')) return
 
     if (!injectTraceContext) {
@@ -651,8 +683,7 @@ class TextMapPropagator {
         const tagValueRaw = spanContext._trace.tags[key]
         if (!tagValueRaw || !key.startsWith('_dd.p.')) continue
 
-        const tagKey = 't.' + key.slice(6)
-          .replaceAll(tracestateTagKeyFilter, '_')
+        const tagKey = toTraceStateTagKey(key)
 
         const tagValue = tagValueRaw
           .toString()
@@ -667,8 +698,7 @@ class TextMapPropagator {
           const key = traceTagReplacements[index]
           if (!key.startsWith('_dd.p.')) continue
 
-          const tagKey = 't.' + key.slice(6)
-            .replaceAll(tracestateTagKeyFilter, '_')
+          const tagKey = toTraceStateTagKey(key)
           const tagValueRaw = traceTagReplacements[index + 1]
           if (!tagValueRaw) {
             state.delete(tagKey)
@@ -683,7 +713,7 @@ class TextMapPropagator {
           state.set(tagKey, tagValue)
         }
       }
-    })
+    }, isOptionalDatadogTraceStateField, traceTagInjection)
 
     writeTracestate(carrier, ts.toString())
 

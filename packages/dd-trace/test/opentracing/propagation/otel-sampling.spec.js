@@ -251,33 +251,28 @@ describe('OpenTelemetry consistent probability sampling propagation', () => {
       assert.ok(!members.includes('v30=x'))
     })
 
-    it('keeps complete OTel sub-fields within the 256-byte value cap', () => {
+    it('preserves OTel sub-fields when sampling fields exceed the 256-character value limit', () => {
       const oversized = 'future:' + 'x'.repeat(220)
       const { span, prioritySampler } = startSpan({ traceId: '1', sampleRate: 0.1 })
       span.context()._tracestate = TraceState.fromString(`ot=${oversized};next:value`)
 
       const value = parseTracestate(inject(span, prioritySampler).tracestate).ot
 
-      assert.ok(Buffer.byteLength(value) <= 256)
-      assert.deepStrictEqual(parseOtelValue(value), {
-        rv: 'f0948a54d43b8e',
-        th: 'e6666666666668',
-        next: 'value',
-      })
+      assert.strictEqual(value, `${oversized};next:value`)
     })
 
-    it('does not parse OTel sub-fields beyond the 256-byte value cap', () => {
+    it('drops an OTel member that exceeds the 256-character value limit', () => {
       const prefix = `rv:1234567890abcd;th:8;unknown:${'x'.repeat(225)}`
       const parent = extractParent({
         sampled: true,
         tracestate: `ot=${prefix};outside:value`,
       })
 
-      assert.strictEqual(parent._tracestate.get('ot'), prefix)
+      assert.strictEqual(parent._tracestate.get('ot'), undefined)
       const { span, prioritySampler } = startSpan({ parent, sampleRate: 0.1 })
       const carrier = inject(span, prioritySampler)
 
-      assert.strictEqual(parseTracestate(carrier.tracestate).ot, prefix)
+      assert.strictEqual(parseTracestate(carrier.tracestate).ot, undefined)
     })
 
     for (const randomValue of ['123456789abcd', '1234567890abcde', '1234567890abcD', 'g234567890abcd']) {
