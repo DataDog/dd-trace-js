@@ -161,7 +161,7 @@ describe('TraceState', () => {
 
     ts.forVendor('dd', state => state.delete('missing'))
 
-    assert.strictEqual(ts.toString(), 'other=bleh,dd=s:2')
+    assert.strictEqual(ts.toString(), 'dd=s:2,other=bleh')
   })
 
   it('should remove value from tracestate when clearing values', () => {
@@ -186,7 +186,7 @@ describe('TraceState', () => {
     clone.delete('other')
     clone.set('dd', 's:1')
 
-    assert.strictEqual(original.toString(), 'other=bleh,dd=s:2')
+    assert.strictEqual(original.toString(), 'dd=s:2,other=bleh')
     assert.strictEqual(clone.toString(), 'dd=s:1')
   })
 
@@ -228,6 +228,70 @@ describe('TraceState', () => {
     const ts = TraceState.fromString(`a=${value},b=${value},c=${value}`)
 
     assert.strictEqual(ts.toString().length, 518)
+  })
+
+  it('should put dd first without changing the order of other members', () => {
+    const ts = TraceState.fromString('a=1,dd=s:2,b=2')
+
+    assert.strictEqual(ts.toString(), 'dd=s:2,a=1,b=2')
+  })
+
+  it('should keep dd beyond the first 32 members in place of the last other member', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k32=v32`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should keep all 31 other members when dd is the 32nd member', () => {
+    const other = Array.from({ length: 31 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k31=v31`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.join(',')}`)
+  })
+
+  it('should ignore invalid dd after the limit and keep the first 32 other members', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue`)
+
+    assert.strictEqual(ts.toString(), other.join(','))
+  })
+
+  it('should accept the first valid dd after an invalid one beyond the limit', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue,dd=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  for (const otherCount of [0, 32]) {
+    it(`should enforce the dd value length limit after ${otherCount} other members`, () => {
+      const other = Array.from({ length: otherCount }, (_, index) => `k${index}=v${index}`)
+      const prefix = other.length ? `${other.join(',')},` : ''
+      const accepted = 'x'.repeat(256)
+      const oversized = 'x'.repeat(257)
+
+      assert.strictEqual(TraceState.fromString(`${prefix}dd=${oversized}`).get('dd'), undefined)
+      assert.strictEqual(TraceState.fromString(`${prefix}dd=${accepted}`).get('dd'), accepted)
+      assert.strictEqual(TraceState.fromString(`${prefix}dd=${oversized},dd=${accepted}`).get('dd'), accepted)
+    })
+  }
+
+  it('should skip dd text inside other members and accept surrounding whitespace', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},vendor=prefixdd=s:1,ddx=s:1, \tdd \t=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should not prioritize dd inside vendor data', () => {
+    const ts = TraceState.fromString('other=a:1;dd:2;b:3')
+
+    ts.forVendor('other', state => state.set('c', '4'))
+
+    assert.strictEqual(ts.toString(), 'other=c:4;a:1;dd:2;b:3')
   })
 
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
