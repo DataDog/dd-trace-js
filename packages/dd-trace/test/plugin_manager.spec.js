@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setImmediate } = require('node:timers/promises')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -11,7 +12,10 @@ require('./setup/core')
 const Plugin = require('../src/plugins/plugin')
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const partialChannel = channel('dd-trace:test:partial-plugin-activation')
 const nomenclature = require('../../dd-trace/src/service-naming')
+const log = require('../src/log')
+const CompositePlugin = require('../src/plugins/composite')
 
 describe('Plugin Manager', () => {
   let tracer
@@ -27,6 +31,11 @@ describe('Plugin Manager', () => {
   let pm
   let registeredDefaults
   let subscriptionCalls
+  let constructorError
+  let pluginModuleError
+  let partialError
+  let disableError
+  let serviceRunning
 
   function makeTracerConfig (overrides = {}) {
     return {
@@ -42,6 +51,11 @@ describe('Plugin Manager', () => {
   }
 
   beforeEach(() => {
+    constructorError = undefined
+    pluginModuleError = undefined
+    partialError = undefined
+    disableError = undefined
+    serviceRunning = false
     tracer = {
       _nomenclature: nomenclature,
     }
@@ -83,6 +97,52 @@ describe('Plugin Manager', () => {
       nine: class Nine extends FakePlugin {
         static id = 'nine'
       },
+      ten: class Ten extends FakePlugin {
+        static id = 'ten'
+
+        constructor () {
+          super(tracer)
+          throw constructorError
+        }
+      },
+      partial: class Partial extends Plugin {
+        static id = 'partial'
+
+        constructor () {
+          super(tracer)
+          this.addSub(partialChannel.name, () => {})
+        }
+
+        /** @param {boolean | { enabled: boolean }} config */
+        configure (config) {
+          super.configure(config)
+          if (config.enabled) throw partialError
+          if (disableError) throw disableError
+        }
+      },
+      composite: class PartialComposite extends CompositePlugin {
+        static id = 'composite'
+        static plugins = {
+          tracing: class Tracing extends Plugin {
+            constructor (...args) {
+              super(...args)
+              serviceRunning = true
+            }
+
+            /** @param {boolean | { enabled: boolean }} config */
+            configure (config) {
+              if (config.enabled === false) serviceRunning = false
+              super.configure(config)
+            }
+          },
+        }
+
+        /** @param {boolean | { enabled: boolean }} config */
+        configure (config) {
+          super.configure(config)
+          if (config.enabled) throw partialError
+        }
+      },
       graphql: class Graphql extends FakePlugin {
         static id = 'graphql'
       },
@@ -112,9 +172,16 @@ describe('Plugin Manager', () => {
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
     // model a plugin whose default-enabled flag is `false` (e.g. an opt-in plugin).
     registeredDefaults = {}
+    const pluginModules = { ...plugins, '@noCallThru': true }
+    Object.defineProperty(pluginModules, 'broken', {
+      get () {
+        if (pluginModuleError) throw pluginModuleError
+        return undefined
+      },
+    })
     const loadPluginManager = proxyquire.noPreserveCache()
     PluginManager = loadPluginManager('../src/plugin_manager', {
-      './plugins': { ...plugins, '@noCallThru': true },
+      './plugins': pluginModules,
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
@@ -375,6 +442,101 @@ describe('Plugin Manager', () => {
 
       assert.deepStrictEqual(instantiated, ['two'])
       assert.equal(subscriptionCalls, 1)
+    })
+
+    it('ignores load events without a plugin class', () => {
+      pm.configure(makeTracerConfig())
+      loadChannel.publish({ name: 'one' })
+      loadChannel.publish({ name: 'missing' })
+      assert.deepStrictEqual(instantiated, [])
+    })
+
+    it('contains constructor errors during load activation', async () => {
+      constructorError = new Error('constructor failed')
+      const errorLog = sinon.stub(log, 'error')
+      try {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'ten' })
+        await setImmediate()
+        sinon.assert.calledWithExactly(errorLog, 'Error activating plugin %s', 'ten', constructorError)
+      } finally {
+        errorLog.restore()
+      }
+    })
+
+    it('contains plugin module load errors during activation', async () => {
+      pluginModuleError = new Error('plugin module failed')
+      const errorLog = sinon.stub(log, 'error')
+      try {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'broken' })
+        await setImmediate()
+        sinon.assert.calledWithExactly(errorLog, 'Error activating plugin %s', 'broken', pluginModuleError)
+      } finally {
+        errorLog.restore()
+      }
+    })
+
+    it('contains configuration errors during load activation', async () => {
+      const error = new Error('configuration failed')
+      const errorLog = sinon.stub(log, 'error')
+      Two.prototype.configure = sinon.stub()
+      Two.prototype.configure.onFirstCall().throws(error)
+      try {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'two' })
+        await setImmediate()
+        sinon.assert.calledWithExactly(errorLog, 'Error activating plugin %s', 'two', error)
+      } finally {
+        errorLog.restore()
+      }
+    })
+
+    it('disables subscriptions after partial activation fails', async () => {
+      partialError = new Error('partial activation failed')
+      const errorLog = sinon.stub(log, 'error')
+      try {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'partial' })
+        await setImmediate()
+        assert.strictEqual(partialChannel.hasSubscribers, false)
+        sinon.assert.calledWithExactly(errorLog, 'Error activating plugin %s', 'partial', partialError)
+      } finally {
+        errorLog.restore()
+      }
+    })
+
+    it('shuts down composite child services after partial activation fails', async () => {
+      partialError = new Error('composite activation failed')
+      const errorLog = sinon.stub(log, 'error')
+      try {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'composite' })
+        await setImmediate()
+        assert.strictEqual(serviceRunning, false)
+        sinon.assert.calledWithExactly(errorLog, 'Error activating plugin %s', 'composite', partialError)
+      } finally {
+        errorLog.restore()
+      }
+    })
+
+    it('reports a failure while disabling a partially activated plugin', async () => {
+      partialError = new Error('partial activation failed')
+      disableError = new Error('disable failed')
+      const errorLog = sinon.stub(log, 'error')
+      try {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'partial' })
+        await setImmediate()
+        assert.strictEqual(partialChannel.hasSubscribers, false)
+        sinon.assert.calledWithExactly(
+          errorLog, 'Error disabling plugin %s after failed activation', 'partial', disableError
+        )
+        sinon.assert.calledWithExactly(errorLog, 'Error activating plugin %s', 'partial', partialError)
+      } finally {
+        disableError = undefined
+        errorLog.restore()
+      }
     })
 
     it('enables plugins without a registered per-plugin flag by default', () => {
