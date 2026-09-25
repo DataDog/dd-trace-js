@@ -6,8 +6,17 @@ class LangChainLLMObsHandler {
     this._tagger = tagger
   }
 
+  /**
+   * @param {{
+   *   span?: import('../../../../opentracing/span'),
+   *   instance?: Record<string, unknown>,
+   *   options?: { metadata?: { langgraph_node?: string } }
+   * }} params
+   * @returns {string | undefined}
+   */
   getName ({ span }) {
-    return span?.context()?.getTag('resource.name')
+    const name = span?.context()?.getTag('resource.name')
+    return typeof name === 'string' ? name : undefined
   }
 
   setMetaTags () {}
@@ -20,12 +29,16 @@ class LangChainLLMObsHandler {
       totalTokens: 0,
     }
     if (!llmOutput) return tokens
-    const tokenUsage = llmOutput.tokenUsage || llmOutput.usageMetadata || llmOutput.usage || {}
+    const tokenUsage = llmOutput.tokenUsage || llmOutput.token_usage || llmOutput.usageMetadata ||
+      llmOutput.usage_metadata || llmOutput.usage
     if (!tokenUsage) return tokens
 
-    tokens.inputTokens = tokenUsage.promptTokens || tokenUsage.inputTokens || 0
-    tokens.outputTokens = tokenUsage.completionTokens || tokenUsage.outputTokens || 0
-    tokens.totalTokens = tokenUsage.totalTokens || tokens.inputTokens + tokens.outputTokens
+    tokens.inputTokens = tokenUsage.promptTokens || tokenUsage.inputTokens ||
+      tokenUsage.prompt_tokens || tokenUsage.input_tokens || 0
+    tokens.outputTokens = tokenUsage.completionTokens || tokenUsage.outputTokens ||
+      tokenUsage.completion_tokens || tokenUsage.output_tokens || 0
+    tokens.totalTokens = tokenUsage.totalTokens || tokenUsage.total_tokens ||
+      tokens.inputTokens + tokens.outputTokens
 
     return tokens
   }
@@ -41,7 +54,7 @@ class LangChainLLMObsHandler {
     const inputTokens = usage.promptTokens || usage.inputTokens || usage.prompt_tokens || usage.input_tokens || 0
     const outputTokens =
       usage.completionTokens || usage.outputTokens || usage.completion_tokens || usage.output_tokens || 0
-    const totalTokens = usage.totalTokens || inputTokens + outputTokens
+    const totalTokens = usage.totalTokens || usage.total_tokens || inputTokens + outputTokens
 
     return {
       tokens: {
