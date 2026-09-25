@@ -1,7 +1,5 @@
 'use strict'
 
-const { promisify } = require('node:util')
-
 const tracerVersion = require('../../../../package.json').version
 const { createAgents } = require('../exporters/common/agents')
 const request = require('../exporters/common/request')
@@ -26,50 +24,43 @@ function aiGuardHost (site) {
  *
  * @param {object} body
  * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number }} opts
- * @param {(error: Error|null, response?: { status: number, body: unknown }) => void} callback
+ * @returns {Promise<{ status: number, body: unknown }>}
  */
-function requestEvaluation (body, opts, callback) {
-  const postData = JSON.stringify(body)
-  const url = new URL(opts.url)
-  request(postData, {
-    url: url.href,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...opts.headers,
-    },
-    agent: url.protocol === 'https:' ? httpsAgent : httpAgent,
-    timeout: opts.timeout,
-    signal: AbortSignal.timeout(opts.timeout),
-    retry: false,
-    includeErrorResponseBody: true,
-  }, (error, result, status) => {
-    if (status === undefined) {
-      callback(error || new Error('AI Guard request completed without a status'))
-      return
-    }
+function executeRequest (body, opts) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify(body)
+    const url = new URL(opts.url)
+    request(postData, {
+      url: url.href,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...opts.headers,
+      },
+      agent: url.protocol === 'https:' ? httpsAgent : httpAgent,
+      timeout: opts.timeout,
+      signal: AbortSignal.timeout(opts.timeout),
+      retry: false,
+      includeErrorResponseBody: true,
+    }, (error, result, status) => {
+      if (status === undefined) {
+        reject(error || new Error('AI Guard request completed without a status'))
+        return
+      }
 
-    let responseBody
-    try {
-      const responseText = error ? /** @type {Error & { responseBody?: string }} */ (error).responseBody : result
-      if (typeof responseText !== 'string') throw new TypeError('AI Guard response body is missing')
-      responseBody = JSON.parse(responseText)
-    } catch (cause) {
-      callback(cause)
-      return
-    }
-    callback(null, { status, body: responseBody })
+      let responseBody
+      try {
+        const responseText = error ? /** @type {Error & { responseBody?: string }} */ (error).responseBody : result
+        if (typeof responseText !== 'string') throw new TypeError('AI Guard response body is missing')
+        responseBody = JSON.parse(responseText)
+      } catch (cause) {
+        reject(cause)
+        return
+      }
+      resolve({ status, body: responseBody })
+    })
   })
 }
-
-/**
- * @typedef {(body: object, opts: {
- *   url: string,
- *   headers: Record<string, string|undefined>,
- *   timeout: number
- * }) => Promise<{ status: number, body: unknown }>} ExecuteRequest
- */
-const executeRequest = /** @type {ExecuteRequest} */ (promisify(requestEvaluation))
 
 class AIGuardClient {
   #headers
