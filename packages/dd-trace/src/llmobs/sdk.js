@@ -27,6 +27,8 @@ const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
+const { buildAgentDeclaration } = require('./agent-manifest')
+/** @typedef {import('./agent-manifest').AgentDeclaration} AgentDeclaration */
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
@@ -298,7 +300,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions, agent } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -330,6 +332,15 @@ class LLMObs extends NoopLLMObs {
       }
       if (toolDefinitions != null) {
         this._tagger.tagToolDefinitions(span, toolDefinitions)
+      }
+      if (agent != null) {
+        if (spanKind === 'agent') {
+          this._tagger.tagAgent(span, agent)
+        } else {
+          logger.warn(
+            'Dropping agent annotation on non-agent span kind, annotating agents is only supported for agent spans.'
+          )
+        }
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -595,14 +606,20 @@ class LLMObs extends NoopLLMObs {
   annotationContext (options, fn) {
     if (!this.enabled) return fn()
 
+    /** @type {{ annotationContext?: object, agentDeclarations?: AgentDeclaration[] } | undefined} */
     const currentStore = storage.getStore()
-
+    const { agent, ...contextOptions } = options ?? {}
+    /** @type {{ annotationContext: object, agentDeclarations?: AgentDeclaration[] }} */
     const store = {
       ...currentStore,
-      annotationContext: {
-        ...currentStore?.annotationContext,
-        ...options,
-      },
+      annotationContext: { ...currentStore?.annotationContext, ...contextOptions },
+    }
+
+    if (agent != null) {
+      const declaration = buildAgentDeclaration(agent)
+      // Outside `annotationContext`, whose keys come from the caller. Outermost first, so nested declarations fold
+      // onto the outer ones.
+      if (declaration) store.agentDeclarations = [...(currentStore?.agentDeclarations ?? []), declaration]
     }
 
     return storage.run(store, fn)

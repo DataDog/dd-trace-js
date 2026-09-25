@@ -822,6 +822,22 @@ llmobs.annotate(span, {
   costTags: ['team']
 })
 
+// declare an agent
+const agentDeclaration: import('..').llmobs.Agent = {
+  version: '2.1.0',
+  name: 'travel_desk',
+  instructions: 'Book travel.',
+  model: 'gpt-4o',
+  modelSettings: { temperature: 0.1, max_tokens: 1024 },
+  tools: [
+    { name: 'get_weather', description: 'Look up the weather.', parameters: { city: { type: 'string', required: true } } },
+    { name: 'get_time', parameters: { type: 'object', properties: { tz: { type: 'string' } }, required: ['tz'] } },
+  ]
+}
+llmobs.annotate({ agent: agentDeclaration })
+llmobs.annotationContext({ agent: agentDeclaration }, () => {})
+llmobs.annotate({ agent: { version: 2 } })
+
 
 
 // flush

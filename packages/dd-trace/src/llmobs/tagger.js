@@ -16,6 +16,8 @@ const {
   OUTPUT_VALUE,
   METADATA,
   COST_TAGS,
+  AGENT_MANIFEST,
+  AGENT_VERSION,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -58,6 +60,7 @@ const {
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
+const { buildAgentDeclaration } = require('./agent-manifest')
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
@@ -192,6 +195,11 @@ class LLMObsTagger {
       this.tagCostTags(span, annotationContext.costTags, 'annotation_context')
     }
 
+    const agentDeclarations = /** @type {import('./agent-manifest').AgentDeclaration[] | undefined} */ (
+      storage.getStore()?.agentDeclarations
+    )
+    if (agentDeclarations) this.#applyAgentDeclarations(span, agentDeclarations)
+
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
@@ -207,6 +215,46 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  /**
+   * Applies the agents declared by the enclosing annotation contexts, outermost first, to every span in the block.
+   * Both are emitted only if the span is an agent when it finishes, since some integrations promote a span to an
+   * agent after registration.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentDeclaration[]} declarations
+   */
+  #applyAgentDeclarations (span, declarations) {
+    for (const declaration of declarations) {
+      if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+      if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
+    }
+  }
+
+  /**
+   * Tags the agent a caller declared on an agent span, merged onto what earlier annotations declared.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} agent
+   */
+  tagAgent (span, agent) {
+    const declaration = buildAgentDeclaration(agent)
+    if (!declaration) return
+    if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+    if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {import('./agent-manifest').AgentManifestFields} manifest
+   */
+  #tagAgentManifestFields (span, manifest) {
+    // A shallow update, matching dd-trace-py: each declaration is already validated, so a later field replaces an
+    // earlier one whole (`model_settings` included) and an unset or invalid one leaves it in place. Declarations are
+    // never mutated, so the first one is stored without a copy.
+    const existing = registry.get(span)?.[AGENT_MANIFEST]
+    this._setTag(span, AGENT_MANIFEST, existing ? { ...existing, ...manifest } : manifest)
   }
 
   #tagSamplingDecision (span, parent) {
@@ -357,7 +405,16 @@ class LLMObsTagger {
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      this._setTag(span, TAGS, tags)
+      // Copied so a later annotation cannot write into a caller's object shared by an annotation context. The copy
+      // reads caller getters and Proxy traps during span registration, so it must not throw into the application.
+      let copy
+      try {
+        copy = { ...tags }
+      } catch {
+        log.warn('Dropping span tags that could not be read.')
+        return
+      }
+      this._setTag(span, TAGS, copy)
     }
   }
 
