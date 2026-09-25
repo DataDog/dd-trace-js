@@ -198,6 +198,22 @@ describe('bedrockruntime utils', () => {
       assert.strictEqual(usage.outputTokens, 2)
     })
 
+    // `message_start` opens with a provisional output count, and the closing `message_delta`
+    // reports the final one at the top level rather than under `message`
+    it('takes the final Anthropic output count off the message delta', () => {
+      const started = mergeStreamedUsage(undefined, {
+        type: 'message_start',
+        message: { usage: { input_tokens: 7, output_tokens: 4 } },
+      }, PROVIDER.ANTHROPIC)
+      const usage = mergeStreamedUsage(started, {
+        type: 'message_delta',
+        usage: { output_tokens: 10 },
+      }, PROVIDER.ANTHROPIC)
+
+      assert.strictEqual(usage.inputTokens, 7)
+      assert.strictEqual(usage.outputTokens, 10)
+    })
+
     // Amazon reports its counts on a frame that also carries text, and more text can follow
     it('keeps the counts an earlier frame reported when aggregating a stream', () => {
       const generation = extractTextAndResponseReasonFromStream([

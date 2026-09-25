@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const telemetry = require('../telemetry')
 const { safeJsonParse } = require('../util')
 const {
@@ -69,11 +70,17 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
       if (!this._llmobsEnabled) {
         // no LLMObs payload to build, so the usage comes from the response headers and, where
-        // those are absent, from whatever reported it: a non-streamed Converse puts it on the
-        // response, and every streamed operation folded it into `ctx.streamedUsage` as it arrived
-        const usage = CONVERSE_OPERATIONS.has(operation)
-          ? buildUsage(response.usage) ?? ctx.streamedUsage
-          : ctx.streamedUsage
+        // those are absent, from whatever reported it
+        let usage
+        if (CONVERSE_OPERATIONS.has(operation)) {
+          // a non-streamed Converse puts it on the response, a streamed one on a metadata event
+          usage = buildUsage(response.usage) ?? ctx.streamedUsage
+        } else if (operation.toLowerCase().includes('stream')) {
+          // every streamed frame was folded into the running totals as it arrived
+          usage = ctx.streamedUsage
+        } else if (!tokensFromHeaders) {
+          usage = responseBodyUsage(response, modelProvider, modelName)
+        }
 
         this._setGenAiApmTags(span, {
           spanKind: 'llm',
@@ -221,6 +228,28 @@ function mergeChunkUsage (ctx, chunk) {
   if (typeof body !== 'object' || body === null) return ctx.streamedUsage
 
   return mergeStreamedUsage(ctx.streamedUsage, body, streamModelProvider(ctx))
+}
+
+/**
+ * Token usage a non-streamed `invokeModel` reports in its own response body, which several
+ * providers carry and the headers do not always correlate. Read through the same extractor the
+ * LLMObs path uses, and only when the headers reported nothing: parsing a body to recover counts
+ * already in hand is work this path does not need.
+ *
+ * @param {{ body?: Uint8Array }} response
+ * @param {string} modelProvider
+ * @param {string} modelName
+ * @returns {Record<string, number | undefined> | undefined}
+ */
+function responseBodyUsage (response, modelProvider, modelName) {
+  if (!response?.body) return
+
+  try {
+    return extractTextAndResponseReason(response, modelProvider, modelName).usage
+  } catch (e) {
+    // the extractor parses the body itself; a malformed one must not disable the plugin
+    log.debug('Failed to read Bedrock response usage: %s', e.message)
+  }
 }
 
 /**

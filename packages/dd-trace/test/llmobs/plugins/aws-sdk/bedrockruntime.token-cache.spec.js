@@ -20,9 +20,11 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
   let BedrockRuntimePlugin
   let plugin
   let tagMetricsSpy
+  let extractTextAndResponseReasonStub
 
   beforeEach(() => {
     tagMetricsSpy = sinon.spy()
+    extractTextAndResponseReasonStub = sinon.stub().returns({ message: '', role: '', usage: {} })
 
     // `usage: {}` keeps the response body free of tokens, so the only source
     // of token counts is the header cache. That makes the assertions sensitive
@@ -35,7 +37,7 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
           return { modelProvider, modelName }
         },
         extractRequestParams: () => ({ temperature: 0, maxTokens: 0, prompt: '' }),
-        extractTextAndResponseReason: () => ({ message: '', role: '', usage: {} }),
+        extractTextAndResponseReason: extractTextAndResponseReasonStub,
         // the real one: the reduced path reads streamed token counts through it, and the shapes
         // it understands are the point of those tests
       },
@@ -275,23 +277,58 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
     })
 
-    // Anthropic reports its counts on the `message_start` body
-    it('reads invokeModel stream usage off the Anthropic message usage', () => {
+    // `message_start` opens with the input count and a provisional output count; the closing
+    // `message_delta` reports the final one at the top level rather than under `message`
+    it('reads invokeModel stream usage off the Anthropic message events', () => {
       const ctx = buildStreamCtx('req-invoke-stream-anthropic', 'anthropic.claude')
 
       streamedChunkCh.publish({
         ctx,
-        chunk: invokeModelChunk({ type: 'message_start', message: { usage: { input_tokens: 5, output_tokens: 0 } } }),
+        chunk: invokeModelChunk({ type: 'message_start', message: { usage: { input_tokens: 5, output_tokens: 4 } } }),
       })
+      streamedChunkCh.publish({ ctx, chunk: invokeModelChunk({ type: 'content_block_delta', delta: { text: 'hi' } }) })
       streamedChunkCh.publish({
         ctx,
-        chunk: invokeModelChunk({ type: 'message_delta', message: { usage: { input_tokens: 5, output_tokens: 3 } } }),
+        chunk: invokeModelChunk({ type: 'message_delta', usage: { output_tokens: 10 } }),
       })
       completeCh.publish(ctx)
 
       assert.equal(apmTags['gen_ai.usage.input_tokens'], 5)
+      assert.equal(apmTags['gen_ai.usage.output_tokens'], 10)
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 15)
+    })
+
+    // Bedrock does not always return correlatable token-count headers, and several providers
+    // report the counts in the response body the same extractor already reads
+    it('falls back to the response body of a non-streamed invokeModel without headers', () => {
+      extractTextAndResponseReasonStub.returns({ usage: { inputTokens: 7, outputTokens: 3 } })
+
+      completeCh.publish(buildInvokeModelComplete('req-body-usage'))
+
+      sinon.assert.calledOnce(extractTextAndResponseReasonStub)
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 7)
       assert.equal(apmTags['gen_ai.usage.output_tokens'], 3)
-      assert.equal(apmTags['gen_ai.usage.total_tokens'], 8)
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], 10)
+    })
+
+    it('leaves the body unread when the token-count headers reported the counts', () => {
+      extractTextAndResponseReasonStub.returns({ usage: { inputTokens: 7, outputTokens: 3 } })
+      publishDeserialize('req-body-and-headers', { input: 20, output: 5 })
+
+      completeCh.publish(buildInvokeModelComplete('req-body-and-headers'))
+
+      sinon.assert.notCalled(extractTextAndResponseReasonStub)
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 20)
+      assert.equal(apmTags['gen_ai.usage.output_tokens'], 5)
+    })
+
+    it('survives a non-streamed response body the extractor cannot parse', () => {
+      extractTextAndResponseReasonStub.throws(new SyntaxError('Unexpected token'))
+
+      completeCh.publish(buildInvokeModelComplete('req-body-bad'))
+
+      assert.equal(apmTags['gen_ai.operation.name'], 'llm')
+      assert.equal(apmTags['gen_ai.usage.total_tokens'], undefined)
     })
 
     // the counts are folded in as they arrive, so no frame is held until the response completes
@@ -425,6 +462,17 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
 
       assert.deepStrictEqual(apmTags, {})
     })
+
+    function buildInvokeModelComplete (requestId, modelId = 'amazon.titan') {
+      return {
+        currentStore: { span: buildSpan() },
+        response: {
+          request: { operation: 'invokeModel', params: { modelId } },
+          $metadata: { requestId },
+          body: new TextEncoder().encode('{}'),
+        },
+      }
+    }
 
     function buildStreamCtx (requestId, modelId = 'amazon.titan') {
       return {

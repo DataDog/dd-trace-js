@@ -143,7 +143,9 @@ function mergeStreamedUsage (usage, body, modelProviderUpper) {
       }
     }
     case PROVIDER.ANTHROPIC: {
-      const chunkUsage = body.message?.usage
+      // `message_start` reports the initial counts under `message.usage`; the closing
+      // `message_delta` reports the final output count at the top level
+      const chunkUsage = body.message?.usage ?? body.usage
       if (!chunkUsage) return usage
 
       return {
