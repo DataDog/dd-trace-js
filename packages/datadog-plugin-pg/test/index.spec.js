@@ -256,6 +256,86 @@ describe('Plugin', () => {
             })
           }
 
+          {
+            const getterTest = semver.intersects(version, '>=8.0.3') ? it : it.skip
+            getterTest('reads a query getter once and preserves it for reuse', async () => {
+              let reads = 0
+              const query = { get text () { return `SELECT ${++reads} AS value` } }
+
+              try {
+                tracer.use('pg', false)
+                const native = await client.query(query)
+                assert.strictEqual(reads, 1)
+
+                reads = 0
+                tracer.use('pg', true)
+                const firstAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS value' }, {
+                  spanResourceMatch: /^SELECT 1 AS value$/,
+                })
+                const [first] = await Promise.all([client.query(query), firstAssertion])
+                assert.strictEqual(reads, 1)
+                assert.deepStrictEqual(first.rows, native.rows)
+
+                const secondAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 2 AS value' }, {
+                  spanResourceMatch: /^SELECT 2 AS value$/,
+                })
+                const [second] = await Promise.all([client.query(query), secondAssertion])
+                assert.strictEqual(reads, 2)
+                assert.deepStrictEqual(second.rows, [{ value: 2 }])
+
+                const callbackAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 3 AS value' }, {
+                  spanResourceMatch: /^SELECT 3 AS value$/,
+                })
+                const callbackResult = new Promise((resolve, reject) => {
+                  client.query(query, (error, result) => {
+                    if (error) reject(error)
+                    else resolve(result)
+                  })
+                })
+                const [third] = await Promise.all([callbackResult, callbackAssertion])
+                assert.strictEqual(reads, 3)
+                assert.deepStrictEqual(third.rows, [{ value: 3 }])
+              } finally {
+                tracer.use('pg', true)
+                await client.end()
+              }
+            })
+
+            getterTest('restores an inherited query getter after execution', async () => {
+              let reads = 0
+              class QueryConfig {
+                get text () { return `SELECT ${++reads} AS value` }
+              }
+              const query = new QueryConfig()
+
+              try {
+                tracer.use('pg', false)
+                const native = await client.query(query)
+                assert.strictEqual(reads, 1)
+
+                reads = 0
+                tracer.use('pg', true)
+                const firstAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS value' }, {
+                  spanResourceMatch: /^SELECT 1 AS value$/,
+                })
+                const [first] = await Promise.all([client.query(query), firstAssertion])
+                assert.strictEqual(reads, 1)
+                assert.deepStrictEqual(first.rows, native.rows)
+                assert.strictEqual(Object.hasOwn(query, 'text'), false)
+
+                const secondAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 2 AS value' }, {
+                  spanResourceMatch: /^SELECT 2 AS value$/,
+                })
+                const [second] = await Promise.all([client.query(query), secondAssertion])
+                assert.strictEqual(reads, 2)
+                assert.deepStrictEqual(second.rows, [{ value: 2 }])
+              } finally {
+                tracer.use('pg', true)
+                await client.end()
+              }
+            })
+          }
+
           it('should handle callback errors', done => {
             let error
 
@@ -1839,6 +1919,34 @@ describe('Plugin', () => {
       const sql = 'START TRANSACTION; SELECT 1 AS value; COMMIT'
       const results = await traceTransaction(() => client.query(sql), [sql])
       assert.deepStrictEqual(results.map(result => result.command), ['START', 'SELECT', 'COMMIT'])
+    })
+
+    it('keeps a span for statements after a carriage-return-terminated PostgreSQL comment', async () => {
+      const sql = 'BEGIN;-- note\rSELECT 1 AS value;COMMIT'
+      tracer.use('pg', false)
+      const native = await client.query(sql)
+      assert.deepStrictEqual(native.map(result => result.command), ['BEGIN', 'SELECT', 'COMMIT'])
+      tracer.use('pg', true)
+
+      const results = await traceTransaction(() => client.query(sql), [sql])
+      assert.deepStrictEqual(results.map(result => result.command), ['BEGIN', 'SELECT', 'COMMIT'])
+      assert.strictEqual(results[1].rows[0].value, 1)
+    })
+
+    it('uses one getter value for transaction filtering and SQL execution', async () => {
+      let reads = 0
+      const query = { get text () { return ++reads === 1 ? 'COMMIT' : 'SELECT 1 AS value' } }
+
+      tracer.use('pg', false)
+      const native = await client.query(query)
+      assert.strictEqual(native.command, 'COMMIT')
+      assert.strictEqual(reads, 1)
+
+      reads = 0
+      tracer.use('pg', true)
+      const instrumented = await traceTransaction(() => client.query(query), [])
+      assert.strictEqual(instrumented.command, native.command)
+      assert.strictEqual(reads, 1)
     })
 
     it('ignores transaction commands after PostgreSQL line and nested block comments', async () => {

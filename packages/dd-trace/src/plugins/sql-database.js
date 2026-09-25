@@ -119,7 +119,11 @@ function skipTrivia (query, offset, postgres) {
     } else if (code === 45 && query.charCodeAt(offset + 1) === 45 &&
       (postgres || query.charCodeAt(offset + 2) <= 32)) {
       offset += 2
-      while (offset < query.length && query.charCodeAt(offset) !== 10) offset++
+      while (offset < query.length) {
+        const next = query.charCodeAt(offset)
+        if (next === 10 || (postgres && next === 13)) break
+        offset++
+      }
     } else if (!postgres && code === 35) {
       offset++
       while (offset < query.length && query.charCodeAt(offset) !== 10) offset++
