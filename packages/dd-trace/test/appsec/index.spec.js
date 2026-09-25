@@ -3,8 +3,6 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 
-const axios = require('axios')
-
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -37,6 +35,7 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
+const httpRequest = require('../setup/helpers/http-client')
 const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 
 const blockedTemplate = {
@@ -1737,7 +1736,7 @@ describe('IP blocking', function () {
 
   describe('do not block the request', () => {
     it('should not block the request by default', async () => {
-      await axios.get(`http://localhost:${port}/`).then((res) => {
+      await httpRequest.get(`http://localhost:${port}/`).then((res) => {
         assert.strictEqual(res.status, 200)
       })
     })
@@ -1756,7 +1755,7 @@ describe('IP blocking', function () {
   ipHeaderList.forEach(ipHeader => {
     describe(`not block - ip in header ${ipHeader}`, () => {
       it('should not block the request with valid X-Forwarded-For ip', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: validIp,
           },
@@ -1768,7 +1767,7 @@ describe('IP blocking', function () {
 
     describe(`block - ip in header ${ipHeader}`, () => {
       it('should block the request with JSON content if no headers', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
           },
@@ -1779,7 +1778,7 @@ describe('IP blocking', function () {
       })
 
       it('should block the request with JSON content if accept */*', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
             Accept: '*/*',
@@ -1791,7 +1790,7 @@ describe('IP blocking', function () {
       })
 
       it('should block the request with html content if accept text/html', async () => {
-        await axios.get(`http://localhost:${port}/`, {
+        await httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
             Accept: 'text/html',
@@ -1837,7 +1836,7 @@ describe('IP blocking', function () {
       })
 
       it('Should block with custom status code and JSON content', () => {
-        return axios.get(`http://localhost:${port}/`, {
+        return httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
           },
@@ -1851,7 +1850,7 @@ describe('IP blocking', function () {
       })
 
       it('Should block with custom status code and HTML content', () => {
-        return axios.get(`http://localhost:${port}/`, {
+        return httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
             Accept: 'text/html',
@@ -1898,7 +1897,7 @@ describe('IP blocking', function () {
       })
 
       it('Should block with redirect', () => {
-        return axios.get(`http://localhost:${port}/`, {
+        return httpRequest.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
           },

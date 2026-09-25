@@ -4,11 +4,11 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
+const HttpRequest = require('../../setup/helpers/http-client')
 
 describe('IAST - overhead-controller - integration', () => {
-  let axios, cwd, agent, proc
+  let httpRequest, cwd, agent, proc
 
   useSandbox(
     ['express'],
@@ -43,7 +43,7 @@ describe('IAST - overhead-controller - integration', () => {
           NODE_OPTIONS: '--require ./resources/init.js',
         },
       })
-      axios = Axios.create({ baseURL: proc.url })
+      httpRequest = HttpRequest.create({ baseURL: proc.url })
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
@@ -71,7 +71,7 @@ describe('IAST - overhead-controller - integration', () => {
       }, 1000, 1, true)
 
       await Promise.all([
-        axios.request(path, { method }),
+        httpRequest.request(path, { method }),
         assertPromise,
       ])
     }
@@ -84,7 +84,7 @@ describe('IAST - overhead-controller - integration', () => {
       }, 1000, 1, true)
 
       await Promise.all([
-        axios.request(path, { method }),
+        httpRequest.request(path, { method }),
         assertPromise,
       ])
     }
