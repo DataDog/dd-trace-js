@@ -794,7 +794,7 @@
     "dependency": "react-router",
     "integration": "react-router",
     "minimum_tracer_supported": "7.9.5",
-    "max_tracer_supported": "7.16.0",
+    "max_tracer_supported": "8.4.0",
     "auto-instrumented": "True"
   },
   {

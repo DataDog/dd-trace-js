@@ -34,6 +34,26 @@ describe('helpers/instrument', () => {
     }
   })
 
+  it('registers source-rewrite hooks for hashed files', () => {
+    const hook = [...getHooks('react-router').values()].find(({ filePattern }) => filePattern)
+    const original = instrumentations['react-router']
+    const originalLength = original?.length ?? 0
+
+    assert.ok(hook)
+    assert.match('react-router/dist/development/chunk-JG3XND5A.mjs', new RegExp(`react-router/${hook.filePattern}`))
+
+    try {
+      addHook(hook, () => {})
+      assert.ok(instrumentations['react-router'].at(-1).sourceRewrite instanceof RegExp)
+    } finally {
+      if (original) {
+        original.length = originalLength
+      } else {
+        delete instrumentations['react-router']
+      }
+    }
+  })
+
   describe('getHooks', () => {
     it('returns one hook per distinct module, not per rewriter transform', () => {
       // mercurius is instrumented by three transforms that all share one
