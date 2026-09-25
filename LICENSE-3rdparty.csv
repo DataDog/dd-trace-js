@@ -1,5 +1,6 @@
 "component","origin","license","copyright"
 "@apm-js-collab/code-transformer","https://github.com/nodejs/orchestrion-js","['Apache-2.0']","['nodejs']"
+"@bufbuild/protobuf","https://github.com/bufbuild/protobuf-es","['(Apache-2.0 AND BSD-3-Clause)']","['bufbuild']"
 "@datadog/flagging-core","https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['DataDog']"
 "@datadog/libdatadog","https://github.com/DataDog/libdatadog-nodejs","['Apache-2.0']","['DataDog']"
 "@datadog/libdatadog-extras","https://github.com/DataDog/libdatadog-nodejs","['Apache-2.0']","['Datadog Inc.']"

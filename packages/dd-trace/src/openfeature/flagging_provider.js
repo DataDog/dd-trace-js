@@ -8,6 +8,7 @@ const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
+const FlagEvalEVPHook = require('./writers/flag-eval-evp-hook')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
@@ -16,6 +17,9 @@ const SpanEnrichmentHook = require('./span-enrichment-hook')
 class FlaggingProvider extends DatadogNodeServerProvider {
   /** @type {SpanEnrichmentHook | undefined} */
   #spanEnrichmentHook
+
+  /** @type {FlagEvalEVPHook | undefined} */
+  #flagEvalEVPHook
 
   /** @type {{ start: Function, stop: Function } | undefined} */
   #configurationSource
@@ -30,7 +34,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
     })
 
-    this.hooks.push(new EvalMetricsHook(config))
+    if (config.DD_METRICS_OTEL_ENABLED === true) {
+      this.hooks.push(new EvalMetricsHook(config))
+    }
 
     if (config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
@@ -43,6 +49,11 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.featureFlags.DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
+
+    if (config.featureFlags?.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== false) {
+      this.#flagEvalEVPHook = new FlagEvalEVPHook(config)
+      this.hooks.push(this.#flagEvalEVPHook)
+    }
 
     this.#configurationSource = configurationSource.create(config, this.setConfiguration.bind(this))
     this.#configurationSource?.start()
@@ -73,6 +84,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.#configurationSource = undefined
     this.#spanEnrichmentHook?.destroy()
     this.#spanEnrichmentHook = undefined
+    this.#flagEvalEVPHook?.destroy()
+    this.#flagEvalEVPHook = undefined
   }
 }
 

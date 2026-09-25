@@ -452,6 +452,7 @@
 /benchmark/sirun/exporting-pipeline/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/sirun/id/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/sirun/log/ @DataDog/dd-trace-js @DataDog/lang-platform-js
+/benchmark/sirun/openfeature/ @DataDog/dd-trace-js @DataDog/lang-platform-js @DataDog/feature-flagging-and-experimentation-sdk
 /benchmark/sirun/runtime-metrics/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/sirun/scope/ @DataDog/dd-trace-js @DataDog/lang-platform-js
 /benchmark/sirun/shimmer-runtime/ @DataDog/dd-trace-js @DataDog/lang-platform-js

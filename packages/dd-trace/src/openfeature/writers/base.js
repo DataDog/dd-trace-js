@@ -219,10 +219,11 @@ class BaseFFEWriter {
    * @protected
    * @param {string} payload - Encoded event batch
    * @param {number} eventCount - Event count
+   * @param {(delivered: boolean) => void} [onComplete] - Final outcome after any safe fallback attempt
    */
-  _sendPayload (payload, eventCount) {
+  _sendPayload (payload, eventCount, onComplete) {
     const route = this.#createActiveRoute()
-    this.#sendRequest(payload, eventCount, route, this._fallbackRoute)
+    this.#sendRequest(payload, eventCount, route, this._fallbackRoute, onComplete)
   }
 
   /**
@@ -301,9 +302,12 @@ class BaseFFEWriter {
    * @param {number} eventCount - Event count
    * @param {ActiveWriterRoute} route - Selected route
    * @param {ActiveWriterRoute} [fallbackRoute] - Direct fallback route
+   * @param {(delivered: boolean) => void} [onComplete] - True only for a successful final response
    */
-  #sendRequest (payload, eventCount, route, fallbackRoute) {
-    request(payload, route.requestOptions, (error, response, statusCode) => {
+  #sendRequest (payload, eventCount, route, fallbackRoute, onComplete) {
+    // The request helper mutates headers. Concurrent envelopes must not share them.
+    const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
+    request(payload, requestOptions, (error, response, statusCode) => {
       if (fallbackRoute && isSafeToReplay(error, statusCode)) {
         log.debug(
           '%s switching from %s%s to direct intake after definitive rejection',
@@ -311,10 +315,12 @@ class BaseFFEWriter {
           route.url.href,
           route.endpoint
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        route.onFallback?.()
-        this.#sendRequest(payload, eventCount, fallbackRoute)
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
+        this.#sendRequest(payload, eventCount, fallbackRoute, undefined, onComplete)
         return
       }
 
@@ -325,10 +331,13 @@ class BaseFFEWriter {
           route.url.href,
           route.endpoint
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        route.onFallback?.()
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
         log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        onComplete?.(false)
         return
       }
 
@@ -340,15 +349,19 @@ class BaseFFEWriter {
           route.endpoint,
           statusCode
         )
-        this.#activateRoute(fallbackRoute)
-        this._fallbackRoute = undefined
-        route.onFallback?.()
+        if (this._requestOptions === route.requestOptions) {
+          this.#activateRoute(fallbackRoute)
+          this._fallbackRoute = undefined
+          route.onFallback?.()
+        }
         log.warn('Events request returned status %d', statusCode)
+        onComplete?.(false)
         return
       }
 
       if (
         !fallbackRoute &&
+        this._requestOptions === route.requestOptions &&
         route.onUnavailable &&
         (isSafeToReplay(error, statusCode) ||
           isTransportFailure(error, statusCode) ||
@@ -360,6 +373,7 @@ class BaseFFEWriter {
         } else {
           log.warn('Events request returned status %d', statusCode)
         }
+        onComplete?.(false)
         return
       }
 
@@ -370,6 +384,7 @@ class BaseFFEWriter {
       } else {
         log.warn('Events request returned status %d', statusCode)
       }
+      onComplete?.(!error && statusCode >= 200 && statusCode < 300)
     })
   }
 }
