@@ -309,6 +309,9 @@ For Amazon Bedrock LLM Observability integrations, see the
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="trpc"></h5>
+
+tRPC server queries and mutations create `trpc.procedure` spans. An Express request for one resolved procedure uses its route as the HTTP resource. A batch keeps the Express mount route. Direct server callers receive procedure spans without an HTTP request. Other Node adapters receive procedure spans when they use the shared procedure path; Express owns the HTTP resource naming described here.
 <h5 id="typesafe"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -399,6 +402,7 @@ For Amazon Bedrock LLM Observability integrations, see the
 * [sharedb](./interfaces/plugins.sharedb.html)
 * [supabase](./interfaces/plugins.supabase.html)
 * [tedious](./interfaces/plugins.tedious.html)
+* [trpc](./interfaces/plugins.trpc.html)
 * [typesafe](./interfaces/plugins.typesafe.html)
 * [undici](./interfaces/plugins.undici.html)
 * [vitest](./interfaces/plugins.vitest.html)

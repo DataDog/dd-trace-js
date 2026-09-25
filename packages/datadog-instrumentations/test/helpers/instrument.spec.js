@@ -34,6 +34,29 @@ describe('helpers/instrument', () => {
     }
   })
 
+  it('keeps a package-scoped rewrite pattern when registering a source hook', () => {
+    const hook = [...getHooks('@trpc/server').values()].find(({ filePattern }) =>
+      filePattern?.test('dist/initTRPC-AbC012_x.cjs'))
+    const original = instrumentations['@trpc/server']
+    const originalLength = original?.length ?? 0
+
+    assert.ok(hook)
+    assert.strictEqual(hook.file, undefined)
+
+    try {
+      addHook(hook, () => {})
+      const registered = instrumentations['@trpc/server'].at(-1)
+      assert.strictEqual(registered.filePattern, hook.filePattern)
+      assert.strictEqual(registered.sourceRewrite, hook.filePattern)
+    } finally {
+      if (original) {
+        original.length = originalLength
+      } else {
+        delete instrumentations['@trpc/server']
+      }
+    }
+  })
+
   describe('getHooks', () => {
     it('returns one hook per distinct module, not per rewriter transform', () => {
       // mercurius is instrumented by three transforms that all share one
@@ -51,8 +74,8 @@ describe('helpers/instrument', () => {
 
       for (const name of moduleNames) {
         const seen = new Set()
-        for (const { versions, file } of getHooks(name).values()) {
-          const key = `${file}|${versions.join(',')}`
+        for (const { versions, file, filePattern } of getHooks(name).values()) {
+          const key = `${file ?? filePattern?.source}|${versions.join(',')}`
           assert.ok(!seen.has(key), `duplicate hook for ${name}: ${key}`)
           seen.add(key)
         }
