@@ -219,6 +219,7 @@ describe('OTel TracerProvider', () => {
   describe('forceFlush with an initialized tracer', () => {
     let agent
     let originalRemoteConfigEnabled
+    let providerBeforeInit
 
     before(async () => {
       originalRemoteConfigEnabled = process.env.DD_REMOTE_CONFIGURATION_ENABLED
@@ -229,7 +230,9 @@ describe('OTel TracerProvider', () => {
       await once(agent, 'listening')
 
       const { port } = agent.address()
-      require('../../index').init({
+      const tracer = require('../../index')
+      providerBeforeInit = new tracer.TracerProvider()
+      tracer.init({
         flushInterval: 0,
         plugins: false,
         startupLogs: false,
@@ -248,6 +251,23 @@ describe('OTel TracerProvider', () => {
       agent.close()
       agent.closeAllConnections?.()
       await closed
+    })
+
+    it('waits for delivery when the provider was created before tracer.init()', async () => {
+      const events = []
+      const requestReceived = waitForTraceRequest(events)
+      providerBeforeInit.getTracer().startSpan('otel.force_flush.before_init').end()
+
+      const forceFlush = providerBeforeInit.forceFlush().then(() => events.push('forceFlush-resolved'))
+      const response = await requestReceived
+
+      try {
+        assert.deepStrictEqual(events, ['agent-received'])
+      } finally {
+        response.end(agentResponse)
+      }
+      await forceFlush
+      assert.deepStrictEqual(events, ['agent-received', 'forceFlush-resolved'])
     })
 
     it('waits for Datadog delivery to complete', async () => {

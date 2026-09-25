@@ -156,9 +156,7 @@ class AgentlessExporter {
     waiting = true
     if (!done) return
 
-    this.#deliveryTracker.waitForIdle(() => {
-      done(options?.reportErrors ? boundaryError : undefined)
-    })
+    this.#deliveryTracker.waitForIdle(done, options, boundaryError)
   }
 }
 

@@ -302,6 +302,27 @@ describe('AgentlessExporter', () => {
       exporter = new Exporter({ flushInterval: 1000 })
     })
 
+    /**
+     * @param {(error?: Error) => void} done
+     * @param {{ reportErrors?: boolean }} [options]
+     */
+    function startPendingDelivery (done, options) {
+      let completeDelivery
+      exporter.enableDeliveryTracking()
+      const deliveryTracker = writer.enableDeliveryTracking.firstCall.firstArg
+      /** @param {(error?: Error) => void} callback */
+      function hold (callback) {
+        completeDelivery = callback
+      }
+      /** @param {(error?: Error) => void} callback */
+      function flush (callback) {
+        deliveryTracker.track(hold, callback)
+      }
+      writer.flush.callsFake(flush)
+      exporter.flush(done, options)
+      return completeDelivery
+    }
+
     it('should flush writer immediately', () => {
       exporter.flush()
 
@@ -335,10 +356,33 @@ describe('AgentlessExporter', () => {
       sinon.assert.calledOnceWithExactly(done, error)
     })
 
-    it('waits for an active delivery before reporting a boundary failure', () => {
+    it('reports a delivery failure after an explicit flush boundary', () => {
+      const error = new Error('intake unavailable')
+      const done = sinon.spy()
+
+      const completeDelivery = startPendingDelivery(done, { reportErrors: true })
+      sinon.assert.notCalled(done)
+
+      completeDelivery(error)
+      sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('suppresses a delivery failure for an ordinary flush callback', () => {
+      const error = new Error('intake unavailable')
+      const done = sinon.spy()
+
+      const completeDelivery = startPendingDelivery(done)
+      sinon.assert.notCalled(done)
+
+      completeDelivery(error)
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    })
+
+    it('aggregates an active delivery failure with a boundary failure', () => {
       let completeDelivery
       let failPayload = false
       const boundaryError = new Error('boundary failed')
+      const deliveryError = new Error('delivery failed')
       class ControlledWriter extends BaseWriter {
         /** @param {object} options */
         constructor (options) {
@@ -380,8 +424,11 @@ describe('AgentlessExporter', () => {
 
       sinon.assert.notCalled(done)
       assert.strictEqual(typeof completeDelivery, 'function')
-      completeDelivery()
-      sinon.assert.calledOnceWithExactly(done, boundaryError)
+      completeDelivery(deliveryError)
+      sinon.assert.calledOnce(done)
+      const error = done.firstCall.firstArg
+      assert.ok(error instanceof AggregateError)
+      assert.deepStrictEqual(error.errors, [boundaryError, deliveryError])
     })
 
     it('reports synchronous writer failures when requested', () => {

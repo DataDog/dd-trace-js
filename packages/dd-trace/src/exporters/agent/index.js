@@ -1,7 +1,6 @@
 'use strict'
 
 const { URL } = require('url')
-const getFlushError = require('../../flush-error')
 const log = require('../../log')
 const { createServerlessDeliveryTracker } = require('../../serverless')
 const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
@@ -100,10 +99,7 @@ class AgentExporter {
     waiting = true
     if (!done) return
 
-    this.#deliveryTracker.waitForIdle(error => {
-      if (!options?.reportErrors || !boundaryError) return done(error)
-      done(getFlushError(error ? [boundaryError, error] : [boundaryError]))
-    }, options)
+    this.#deliveryTracker.waitForIdle(done, options, boundaryError)
   }
 }
 

@@ -39,11 +39,12 @@ class TelemetryDeliveryTracker {
    * Calls back after every delivery active at this boundary has completed.
    * @param {((error?: Error) => void)|undefined} done
    * @param {{ reportErrors?: boolean }} [options]
+   * @param {Error} [boundaryError]
    */
-  waitForIdle (done, options) {
+  waitForIdle (done, options, boundaryError) {
     if (!done) return
 
-    const errors = []
+    const errors = boundaryError ? [boundaryError] : []
     let pending = this.#deliveries.size
     const finish = () => {
       done(options?.reportErrors ? getFlushError(errors) : undefined)

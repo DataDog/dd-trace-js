@@ -6,6 +6,7 @@ const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
+const { createServerlessDeliveryTracker } = require('../../serverless')
 const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { version: tracerVersion } = require('../../../../../package.json')
@@ -22,7 +23,7 @@ const legacyStorage = storage('legacy')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
-  #deliveryTracker = new TelemetryDeliveryTracker()
+  #deliveryTracker
   #transport = https
 
   /**
@@ -34,8 +35,12 @@ class OtlpHttpExporterBase {
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
+   * @param {boolean} [trackDeliveryInNormalProcesses] - Whether explicit flushes wait for active requests
    */
-  constructor (url, headers, timeout, protocol, signalType) {
+  constructor (url, headers, timeout, protocol, signalType, trackDeliveryInNormalProcesses = true) {
+    this.#deliveryTracker = trackDeliveryInNormalProcesses
+      ? new TelemetryDeliveryTracker()
+      : createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
@@ -81,7 +86,11 @@ class OtlpHttpExporterBase {
    * @protected
    */
   sendPayload (payload, resultCallback) {
-    this.#deliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
+    if (this.#deliveryTracker) {
+      this.#deliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
+    } else {
+      this.#sendPayload(payload, resultCallback)
+    }
   }
 
   #sendPayload (payload, resultCallback, done) {
@@ -151,7 +160,11 @@ class OtlpHttpExporterBase {
    * @param {{ reportErrors?: boolean }} [options]
    */
   flush (done, options) {
-    this.#deliveryTracker.waitForIdle(done, options)
+    if (this.#deliveryTracker) {
+      this.#deliveryTracker.waitForIdle(done, options)
+    } else {
+      done?.()
+    }
   }
 
   /**

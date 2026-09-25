@@ -24,6 +24,18 @@ describe('AgentlessWriter', () => {
   let proxyAgent
   let writer
 
+  /** @param {Error} error */
+  function createFailingSend (error) {
+    /**
+     * @param {Uint8Array} payload
+     * @param {(error?: Error) => void} done
+     */
+    function send (payload, done) {
+      queueMicrotask(() => done(error))
+    }
+    return send
+  }
+
   beforeEach(() => {
     apiKey = 'test-api-key'
     encoder = {
@@ -211,6 +223,28 @@ describe('AgentlessWriter', () => {
       1,
       'send failed'
     )
+  })
+
+  it('reports asynchronous data-pipeline send failures when requested', async () => {
+    const error = new Error('intake unavailable')
+    exporter.sendV04.resetBehavior()
+    exporter.sendV04.callsFake(createFailingSend(error))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    const flushError = await new Promise(resolve => writer.flush(resolve, { reportErrors: true }))
+
+    assert.strictEqual(flushError, error)
+  })
+
+  it('suppresses asynchronous data-pipeline send failures by default', async () => {
+    const error = new Error('intake unavailable')
+    exporter.sendV04.resetBehavior()
+    exporter.sendV04.callsFake(createFailingSend(error))
+    writer = new AgentlessWriter({ url: new URL('https://intake.example') })
+
+    const flushError = await new Promise(resolve => writer.flush(resolve))
+
+    assert.strictEqual(flushError, undefined)
   })
 
   it('does not give the API key to a non-loopback HTTP receiver', async () => {

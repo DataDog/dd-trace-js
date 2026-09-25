@@ -6,6 +6,7 @@ const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentele
 const tracer = require('../../')
 
 const ContextManager = require('./context_manager')
+const { markTracerProviderCreated } = require('./provider-state')
 const { MultiSpanProcessor, NoopSpanProcessor, settleAllFlushes } = require('./span_processor')
 const Tracer = require('./tracer')
 
@@ -54,6 +55,7 @@ class TracerProvider {
   #tracers = new Map()
 
   constructor (config = {}) {
+    markTracerProviderCreated()
     tracer._tracer?._exporter?.enableDeliveryTracking?.()
     this.config = config
     this.resource = config.resource
