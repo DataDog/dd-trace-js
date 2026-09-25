@@ -45,7 +45,7 @@ describe('Plugin', () => {
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
       const hasNativeDiagnostics = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')
-      const hasNativeUpgradeCompletion = satisfies(resolvedVersion, '>=7.30.0 <8.0.0 || >=8.11.0')
+      const hasNativeUpgradeCompletion = satisfies(resolvedVersion, '>=6.29.0 <7.0.0 || >=7.30.0 <8.0.0 || >=8.11.0')
 
       /**
        * @param {import('express').Application} app
