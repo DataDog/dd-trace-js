@@ -92,6 +92,25 @@ describe('noop', () => {
     assert.equal(result, 5)
   })
 
+  it('fails clearly for Prompt Management network operations before initialization', async () => {
+    const operations = [
+      () => llmobs.prompts.getPrompt('p'),
+      () => llmobs.prompts.refreshPrompt('p'),
+      () => llmobs.prompts.createPrompt('p', []),
+      () => llmobs.prompts.createPromptVersion('p', []),
+      () => llmobs.prompts.updatePrompt('p', {}),
+      () => llmobs.prompts.updatePromptVersion('p', 1, {}),
+      () => llmobs.prompts.deletePrompt('p'),
+      () => llmobs.prompts.listPrompts(),
+      () => llmobs.prompts.listPromptVersions('p'),
+    ]
+
+    for (const operation of operations) {
+      await assert.rejects(operation(), /Prompt Management requires tracer\.init\(\)/)
+    }
+    llmobs.prompts.clearPromptCache()
+  })
+
   describe('trace', () => {
     it('should not throw with just a span', () => {
       const res = llmobs.trace({}, (span) => {

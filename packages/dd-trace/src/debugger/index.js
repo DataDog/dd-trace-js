@@ -96,7 +96,7 @@ function start (config, rcInstance) {
 
   const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
 
-  readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
+  readProbeFile(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE, (probes) => {
     const action = 'apply'
     for (const probe of probes) {
       probeChannel.port2.postMessage({ action, probe })

@@ -71,6 +71,8 @@ const runErrorsByContext = new WeakMap()
 const typecheckPoolWorkerRequests = new WeakMap()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
+let isDynamicAtrEnabled = false
+let dynamicAtrBuckets
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let earlyFlakeDetectionFaultyThreshold = 0
@@ -645,6 +647,8 @@ function wrapSessionFinish (ctx) {
 function resetLibraryConfig () {
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
+  isDynamicAtrEnabled = false
+  dynamicAtrBuckets = undefined
   isEarlyFlakeDetectionEnabled = false
   earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
   earlyFlakeDetectionFaultyThreshold = 0
@@ -661,6 +665,8 @@ function resetLibraryConfig () {
 function applyLibraryConfig (libraryConfig) {
   isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
   flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+  isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
+  dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
   isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
   earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
   earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold ?? 0
@@ -682,6 +688,8 @@ function resetMainProcessProvidedContext (ctx) {
     _ddIsEfdSuiteAdmissionEnabled: false,
     _ddIsFlakyTestRetriesEnabled: false,
     _ddFlakyTestRetriesCount: 0,
+    _ddIsDynamicAtrEnabled: false,
+    _ddDynamicAtrBuckets: undefined,
     _ddFlakyTestRetriesIncludesUnnamedProject: false,
     _ddFlakyTestRetriesProjectNames: undefined,
     _ddIsImpactedTestsEnabled: false,
@@ -760,6 +768,8 @@ async function runMainProcessSetup (
       resetLibraryConfig()
     } else {
       applyLibraryConfig(libraryConfig)
+      // Older runners cache a numeric ceiling and cannot stop retries before the next lifecycle starts.
+      isDynamicAtrEnabled &&= satisfies(frameworkVersion, '>=4.1.0')
     }
   } catch {
     requestErrorTags = {}
@@ -826,6 +836,8 @@ async function runMainProcessSetup (
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
+      _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, 'Could not send library configuration to workers.')
@@ -966,6 +978,8 @@ function getNoWorkerInitState () {
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,
+    isDynamicAtrEnabled,
+    dynamicAtrBuckets,
     isKnownTestsEnabled,
     newTestsWithDynamicNames,
     requestErrorTags,
@@ -1033,14 +1047,21 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
-  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return
+  if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
+  const maximumDynamicAtrRetries = dynamicAtrBuckets
+    ? Math.max(...dynamicAtrBuckets)
+    : earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+  const retryCount = isDynamicAtrEnabled
+    ? Math.max(1, maximumDynamicAtrRetries)
+    : flakyTestRetriesCount
   let configured = false
   let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
-    if (!config.retry) {
-      config.retry = flakyTestRetriesCount
+    if (!config.retry || config.retry.__ddTestOptAtr) {
+      // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
+      config.retry = isDynamicAtrEnabled ? { count: retryCount, __ddTestOptAtr: true } : retryCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)

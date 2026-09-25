@@ -94,6 +94,50 @@ describe('Plugin', () => {
           await messagePromise
         })
 
+        it('should not crash when sending while the connection is still being established', async () => {
+          regressionServer = new WebSocket.Server({ port: 0 })
+          await once(regressionServer, 'listening')
+          const { port } = regressionServer.address()
+
+          regressionSocket = new WebSocket(`ws://localhost:${port}`)
+          assert.strictEqual(regressionSocket.readyState, WebSocket.CONNECTING)
+          assert.ok(!regressionSocket._sender?._socket, 'no socket should be attached yet')
+
+          // `ws` rejects the send itself; the tracer must not turn that into a crash.
+          assert.throws(() => regressionSocket.send('too early'), {
+            name: 'Error',
+            message: /^WebSocket is not open: readyState 0/,
+          })
+
+          await once(regressionSocket, 'open')
+
+          return agent.assertSomeTraces(traces => {
+            assert.ok(
+              findSpan(traces, s => s.type === 'websocket'),
+              'Should have a websocket span for the handshake'
+            )
+            assert.strictEqual(
+              findSpan(traces, s => s.name === 'websocket.send'),
+              undefined,
+              'Should not have a websocket.send span for a socket-less send'
+            )
+          })
+        })
+
+        it('should not crash when sending after the socket is gone', async () => {
+          // Nothing is listening on port 1, so no socket is ever attached to the sender.
+          regressionSocket = new WebSocket('ws://localhost:1/never')
+          await once(regressionSocket, 'error')
+
+          assert.ok(!regressionSocket._sender?._socket, 'no socket should be attached')
+
+          const sendError = await new Promise(resolve => {
+            regressionSocket.send('after close', resolve)
+          })
+
+          assert.match(sendError.message, /^WebSocket is not open: readyState /)
+        })
+
         it('should emit original error in case close is called before connection is established', async () => {
           regressionSocket = new WebSocket('wss://localhost:12345')
 
@@ -435,6 +479,98 @@ describe('Plugin', () => {
             assert.ok(receiveSpan, 'Should have a websocket.receive span')
             assert.strictEqual(receiveSpan.meta['websocket.message.type'], 'binary')
             assert.strictEqual(receiveSpan.metrics['websocket.message.length'], payload.length)
+          }))
+        })
+
+        it('should trace sent text message length and type', () => {
+          const payload = 'sent payload'
+
+          /** @type {Promise<void>} */
+          const sendComplete = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.on('error', reject)
+              ws.send(payload, err => err ? reject(err) : resolve())
+            })
+            connectClient()
+            client.on('error', reject)
+          })
+
+          return sendComplete.then(() => agent.assertSomeTraces(traces => {
+            const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(sendSpan, 'Should have a websocket.send span')
+            assert.strictEqual(sendSpan.meta['websocket.message.type'], 'text')
+            assert.strictEqual(sendSpan.metrics['websocket.message.length'], Buffer.byteLength(payload))
+          }))
+        })
+
+        it('should trace sent binary message length and type', () => {
+          const payload = Buffer.from('binary sent payload')
+
+          /** @type {Promise<void>} */
+          const sendComplete = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.on('error', reject)
+              ws.send(payload, err => err ? reject(err) : resolve())
+            })
+            connectClient()
+            client.on('error', reject)
+          })
+
+          return sendComplete.then(() => agent.assertSomeTraces(traces => {
+            const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(sendSpan, 'Should have a websocket.send span')
+            assert.strictEqual(sendSpan.meta['websocket.message.type'], 'binary')
+            assert.strictEqual(sendSpan.metrics['websocket.message.length'], payload.length)
+          }))
+        })
+
+        it('should follow ws when an explicit binary option overrides the inferred one', () => {
+          const payload = Buffer.from('explicitly text')
+
+          // `ws` spreads the caller's options over its own default, so an explicit nullish
+          // `binary` wins and the frame goes out with the text opcode.
+          /** @type {Promise<boolean>} */
+          const frameReceived = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.on('error', reject)
+              ws.send(payload, { binary: undefined })
+            })
+            connectClient()
+            client.on('message', (data, isBinary) => resolve(isBinary))
+            client.on('error', reject)
+          })
+
+          return frameReceived.then(isBinary => {
+            assert.strictEqual(isBinary, false, 'ws should have sent a text frame')
+
+            return agent.assertSomeTraces(traces => {
+              const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+              assert.ok(sendSpan, 'Should have a websocket.send span')
+              assert.strictEqual(sendSpan.meta['websocket.message.type'], 'text')
+              assert.strictEqual(sendSpan.metrics['websocket.message.length'], payload.length)
+            })
+          })
+        })
+
+        it('should trace the length of a sent array of octets', () => {
+          // `ws` runs plain arrays through `Buffer.from()`, which yields one byte per element.
+          const payload = [1, 2, 3]
+
+          /** @type {Promise<void>} */
+          const sendComplete = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.on('error', reject)
+              ws.send(payload, err => err ? reject(err) : resolve())
+            })
+            connectClient()
+            client.on('error', reject)
+          })
+
+          return sendComplete.then(() => agent.assertSomeTraces(traces => {
+            const sendSpan = findSpan(traces, s => s.name === 'websocket.send')
+            assert.ok(sendSpan, 'Should have a websocket.send span')
+            assert.strictEqual(sendSpan.meta['websocket.message.type'], 'binary')
+            assert.strictEqual(sendSpan.metrics['websocket.message.length'], Buffer.from(payload).length)
           }))
         })
 

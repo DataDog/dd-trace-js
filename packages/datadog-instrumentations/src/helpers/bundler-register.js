@@ -13,6 +13,7 @@ const {
 } = require('./instrumentation-utils')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
+const { getRewriteActivationName } = require('./rewriter/targets')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 // register.js has now set up ritm (require-in-the-middle). In bundled
@@ -93,6 +94,12 @@ dc.subscribe(CHANNEL, (message) => {
   const payload = /** @type {Payload} */ (message)
   const name = payload.package
   if (disabledInstrumentations.has(name)) return
+
+  const activationName = payload.activate && getRewriteActivationName(name)
+  if (activationName) {
+    loadChannel.publish({ name: activationName })
+    return
+  }
 
   const isPrefixedWithNode = name.startsWith('node:')
   const isNodeModule = isPrefixedWithNode || !hooks[name]
