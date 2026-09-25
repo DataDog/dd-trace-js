@@ -138,7 +138,8 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
     }
     for (const [name, args, exitCode] of listingCases) {
       it(name, async (receiver, run) => {
-        let output = ''
+        let stdout = ''
+        let stderr = ''
         const events = []
         receiver.on('message', ({ url, payload }) => {
           if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
@@ -150,9 +151,10 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
             TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
           },
         })
-        proc.stdout?.on('data', chunk => { output += chunk.toString() })
-        proc.stderr?.on('data', chunk => { output += chunk.toString() })
+        proc.stdout?.on('data', chunk => { stdout += chunk.toString() })
+        proc.stderr?.on('data', chunk => { stderr += chunk.toString() })
         const [actualExitCode] = await once(proc, 'close')
+        const output = stdout + stderr
         const isListing = args.startsWith('--list')
         const isSuccessfulListing = isListing && exitCode === 0
         const expectedTypes = isListing
@@ -175,12 +177,12 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
         assert.strictEqual(actualExitCode, exitCode, output)
         if (args.startsWith('--list')) {
           if (exitCode === 0) {
-            const report = JSON.parse(output)
+            const report = JSON.parse(stdout)
             assert.strictEqual(report.suites[0].specs[0].title, 'should report request error tags')
             assert.deepStrictEqual(report.suites[0].specs[0].tests[0].results, [])
           } else if (version === '1.18.0') {
             // Playwright 1.18 returns before finalizing its list-mode reporter when no tests match.
-            assert.strictEqual(output, '')
+            assert.strictEqual(stdout, '')
           } else if (version === '1.30.0') {
             assert.match(output, /no tests found\./)
           } else {
