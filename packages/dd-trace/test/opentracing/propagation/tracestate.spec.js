@@ -75,12 +75,20 @@ describe('TraceState', () => {
     assert.strictEqual(ts.get('a'), accepted)
   })
 
-  it('should remove a vendor member when required fields exceed the value limit', () => {
-    const ts = TraceState.fromString('dd=required:original')
+  it('should keep Datadog sampling when required fields exceed the value limit', () => {
+    const ts = TraceState.fromString('dd=s:2;required:original')
 
     ts.forVendor('dd', state => state.set('required', 'x'.repeat(250)), () => false)
 
-    assert.strictEqual(ts.get('dd'), undefined)
+    assert.strictEqual(ts.get('dd'), 's:2')
+  })
+
+  it('should remove another vendor when required fields exceed the value limit', () => {
+    const ts = TraceState.fromString('other=required:original')
+
+    ts.forVendor('other', state => state.set('required', 'x'.repeat(250)), () => false)
+
+    assert.strictEqual(ts.get('other'), undefined)
   })
 
   it('should not inspect optional fields when an update fits the value limit', () => {
@@ -96,12 +104,12 @@ describe('TraceState', () => {
     assert.strictEqual(ts.get('dd'), 'required:updated')
   })
 
-  it('should remove a vendor member when its only field is optional and exceeds the value limit', () => {
-    const ts = TraceState.fromString('dd=optional:original')
+  it('should remove another vendor when its only field is optional and exceeds the value limit', () => {
+    const ts = TraceState.fromString('other=optional:original')
 
-    ts.forVendor('dd', state => state.set('optional', 'x'.repeat(250)), () => true)
+    ts.forVendor('other', state => state.set('optional', 'x'.repeat(250)), () => true)
 
-    assert.strictEqual(ts.get('dd'), undefined)
+    assert.strictEqual(ts.get('other'), undefined)
   })
 
   for (const valueLength of [226, 227]) {
@@ -194,6 +202,38 @@ describe('TraceState', () => {
     const header = Array.from({ length: 33 }, (_, index) => `k${index}=v${index}`).join(',')
     const ts = TraceState.fromString(header)
     assert.strictEqual(ts.size, 32)
+  })
+
+  it('should retain dd beyond the first 32 list-members', () => {
+    const otherMembers = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`).join(',')
+    for (const [trailingWhitespace, tail] of [['', ''], [' '.repeat(300), ',tail=ignored']]) {
+      const ts = TraceState.fromString(`${otherMembers},dd=s:2${trailingWhitespace}${tail}`)
+
+      assert.strictEqual(ts.size, 32)
+      assert.strictEqual(ts.get('dd'), 's:2')
+      assert.strictEqual(ts.get('k31'), undefined)
+      assert.strictEqual(ts.toString().split(',')[0], 'dd=s:2')
+    }
+  })
+
+  it('should reject an oversized dd beyond the first 32 list-members', () => {
+    const otherMembers = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`).join(',')
+    const ts = TraceState.fromString(`${otherMembers},dd=${'x'.repeat(257)}`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.get('dd'), undefined)
+  })
+
+  it('should retain dd when another vendor fills the final slot', () => {
+    const entries = [['dd', 's:2']]
+    for (let index = 0; index < 31; index++) entries.push([`k${index}`, `v${index}`])
+    const ts = new TraceState(entries)
+
+    ts.set('other', 'value')
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.get('dd'), 's:2')
+    assert.strictEqual(ts.get('k0'), undefined)
   })
 
   it('should cap constructor entries at 32 list-members', () => {

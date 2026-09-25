@@ -792,18 +792,36 @@ describe('TextMapPropagator', () => {
       assert.ok(carrier.tracestate.includes(`t.required:${'r'.repeat(80)}`))
     })
 
-    it('should remove stale Datadog state when required injection-local trace tags exceed the member limit', () => {
+    it('should keep Datadog state when injected trace tags exceed the member value limit', () => {
       config.tracePropagationStyle.inject = ['tracecontext']
       const carrier = {}
       const spanContext = createContext({
         isRemote: false,
+        sampling: { priority: USER_KEEP },
         tracestate: TraceState.fromString('dd=p:0123456789abcdef;s:1;t.dm:-3;t.old:value,other=ok'),
       })
 
       injectTraceTagReplacements(spanContext, carrier, ['_dd.p.required', 'r'.repeat(240)])
 
       assert.ok(!carrier.tracestate.includes('t.required:'))
-      assert.strictEqual(carrier.tracestate, 'other=ok')
+      assert.strictEqual(carrier.tracestate, 'dd=p:00000000000001c8;s:2;t.dm:-3,other=ok')
+    })
+
+    it('should keep Datadog sampling when an origin exceeds the member value limit', () => {
+      config.tracePropagationStyle.inject = ['tracecontext']
+      const accepted = {}
+      propagator.inject(createContext({
+        sampling: { priority: USER_KEEP },
+        trace: { origin: 'o'.repeat(250) },
+      }), accepted)
+      assert.match(accepted.tracestate, /^dd=o:/)
+
+      const overflow = {}
+      propagator.inject(createContext({
+        sampling: { priority: USER_KEEP },
+        trace: { origin: 'o'.repeat(251) },
+      }), overflow)
+      assert.strictEqual(overflow.tracestate, 'dd=s:2')
     })
 
     it('should not publish when nothing was injected', () => {
@@ -1290,16 +1308,21 @@ describe('TextMapPropagator', () => {
       ['-9', 9],
       ['-10', 10],
       ['5', 5],
-      ['+5', 5],
-      [' -5', 5],
-      ['-1suffix', 1],
+      ['+5', undefined],
+      [' -5', undefined],
+      ['-1suffix', undefined],
+      ['-5junk', undefined],
+      ['5e1', undefined],
+      ['0x5', undefined],
+      ['5.0', undefined],
+      ['9'.repeat(310), undefined],
       ['-/', undefined],
       ['-:', undefined],
       ['-x', undefined],
       ['-', undefined],
       ['', undefined],
     ]) {
-      it(`preserves decision-maker parsing for ${JSON.stringify(value)}`, () => {
+      it(`accepts only numeric decision makers for ${JSON.stringify(value)}`, () => {
         textMap['x-datadog-tags'] = `_dd.p.dm=${value}`
 
         const spanContext = propagator.extract(textMap)
@@ -2701,6 +2724,17 @@ describe('TextMapPropagator', () => {
 
         assert.match(carrier['x-datadog-tags'], /_dd.p.dm=-4/)
         assert.deepStrictEqual(spanContext._trace.tags['_dd.p.dm'], '-4')
+      })
+
+      it('should reject a malformed decision maker from tracestate', () => {
+        textMap.traceparent = '00-1111aaaa2222bbbb3333cccc4444dddd-5555eeee6666ffff-01'
+        textMap.tracestate = 'dd=s:2;t.dm:-5junk'
+        config.tracePropagationStyle.extract = ['tracecontext']
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.strictEqual(spanContext._sampling.mechanism, undefined)
+        assert.strictEqual(spanContext._trace.tags['_dd.p.dm'], undefined)
       })
 
       it('should maintain hyphen prefix when a default mechanism of 0 is received', () => {

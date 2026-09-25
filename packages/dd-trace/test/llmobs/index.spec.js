@@ -70,6 +70,7 @@ describe('module', () => {
     const inboundCarrier = {
       'x-datadog-trace-id': '1234567890',
       'x-datadog-parent-id': '9876543210',
+      'x-datadog-sampling-priority': '2',
     }
     if (propagatedTags !== undefined) inboundCarrier['x-datadog-tags'] = propagatedTags
 
@@ -262,14 +263,15 @@ describe('module', () => {
       )
     })
 
-    it('does not propagate partial LLMObs attribution when the tracestate budget is exceeded', () => {
+    it('keeps dd without partial LLMObs attribution when the tracestate budget is exceeded', () => {
       const sessionId = 's'.repeat(200)
-      llmobsModule.enable({ llmobs: { mlApp: 'upstream-app', agentlessEnabled: false } })
+      llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'upstream-app', DD_LLMOBS_AGENTLESS_ENABLED: false } })
       store.span = {
         context () {
           return { toSpanId () { return 'parent-id' } }
         },
       }
+
       LLMObsTagger.tagMap.set(store.span, { [SESSION_ID]: sessionId })
 
       const config = getConfigFresh()
@@ -277,7 +279,7 @@ describe('module', () => {
       const carrier = {}
       inject(carrier, undefined, config)
 
-      assert.doesNotMatch(carrier.tracestate ?? '', /(?:^|,)dd=/)
+      assert.strictEqual(carrier.tracestate, 'dd=s:2')
       assert.strictEqual(
         carrier['x-datadog-tags'],
         `_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=upstream-app,_dd.p.llmobs_sid=${sessionId}`

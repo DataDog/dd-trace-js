@@ -121,10 +121,34 @@ function isOptionalDatadogTraceStateField (key, injection) {
   if (!traceTagReplacements) return true
   const firstOptionalTraceTagIndex = traceTagReplacements.length - (injection.optionalTraceTagCount ?? 0) * 2
   for (let index = 0; index < firstOptionalTraceTagIndex; index += 2) {
-    const traceTagKey = traceTagReplacements[index]
+    const traceTagKey = /** @type {string} */ (traceTagReplacements[index])
     if (traceTagKey.startsWith('_dd.p.') && toTraceStateTagKey(traceTagKey) === key) return false
   }
   return true
+}
+
+/**
+ * @param {Parameters<Parameters<TraceState['forVendor']>[1]>[0]} state
+ * @param {TraceTagInjection | undefined} injection
+ */
+function dropInjectedTraceTags (state, injection) {
+  const traceTagReplacements = /** @type {Array<string | undefined>} */ (injection?.traceTagReplacements)
+
+  for (let index = 0; index < traceTagReplacements.length; index += 2) {
+    const key = /** @type {string} */ (traceTagReplacements[index])
+    if (key.startsWith('_dd.p.')) state.delete(toTraceStateTagKey(key))
+  }
+}
+
+const decisionMakerPattern = /^-?[0-9]+$/
+
+/** @param {string} value */
+function parseDecisionMaker (value) {
+  const digit = value.length === 2 && value[0] === '-' ? value.charCodeAt(1) - 48 : -1
+  if (digit >= 0 && digit <= 9) return digit
+
+  const mechanism = decisionMakerPattern.test(value) ? Math.abs(Number(value)) : undefined
+  return Number.isInteger(mechanism) ? mechanism : undefined
 }
 
 /**
@@ -713,7 +737,7 @@ class TextMapPropagator {
           state.set(tagKey, tagValue)
         }
       }
-    }, isOptionalDatadogTraceStateField, traceTagInjection)
+    }, isOptionalDatadogTraceStateField, traceTagInjection, traceTagReplacements ? dropInjectedTraceTags : undefined)
 
     writeTracestate(carrier, ts.toString())
 
@@ -914,12 +938,8 @@ class TextMapPropagator {
       spanContext._trace.tags = traceTags
       const decisionMaker = traceTags['_dd.p.dm']
       if (decisionMaker !== undefined) {
-        // Avoid general integer parsing for the common single-digit mechanisms.
-        const digit = decisionMaker.length === 2 && decisionMaker[0] === '-'
-          ? decisionMaker.charCodeAt(1) - 48
-          : -1
-        const mechanism = digit >= 0 && digit <= 9 ? digit : Math.abs(Number.parseInt(decisionMaker, 10))
-        if (Number.isInteger(mechanism)) spanContext._sampling.mechanism = mechanism
+        const mechanism = parseDecisionMaker(decisionMaker)
+        if (mechanism !== undefined) spanContext._sampling.mechanism = mechanism
       }
     }
 
@@ -1022,8 +1042,8 @@ class TextMapPropagator {
               spanContext._trace.origin = value.replaceAll('~', '=')
               break
             case 't.dm': {
-              const mechanism = Math.abs(Number.parseInt(value, 10))
-              if (Number.isInteger(mechanism)) {
+              const mechanism = parseDecisionMaker(value)
+              if (mechanism !== undefined) {
                 spanContext._sampling.mechanism = mechanism
                 spanContext._trace.tags['_dd.p.dm'] = `-${mechanism}`
               }

@@ -5,6 +5,7 @@
 const MAX_LIST_MEMBERS = 32
 const MAX_VALUE_LENGTH = 256
 const WHITESPACE = /[ \t]/
+const DATADOG_MEMBER = /(?:^|,)\s*dd\s*=/g
 
 /**
  * Parse a separator-delimited string into key/value entries.
@@ -18,24 +19,28 @@ const WHITESPACE = /[ \t]/
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
 function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength) {
-  const segments = value.split(fieldSeparator, maxEntries)
-
-  // TODO: We should extract dd no matter at what position and move it to the front of the list.
-  // Extract up 31 additional entries.
+  /** @type {[string, string][]} */
   const entries = []
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index]
+  let start = 0
+  const entryLimit = maxEntries ?? Infinity
+  for (let index = 0; index < entryLimit; index++) {
+    const separatorIndex = value.indexOf(fieldSeparator, start)
+    const end = separatorIndex === -1 ? value.length : separatorIndex
+    const segment = value.slice(start, end)
     const splitIndex = segment.indexOf(pairSeparator)
-    if (splitIndex === -1) continue
-    const key = segment.slice(0, splitIndex).trim()
-    if (!key || WHITESPACE.test(key)) continue
-    // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
-    // Leading 0x20 is part of value; trailing whitespace is OWS.
-    const entryValue = segment.slice(splitIndex + 1).trimEnd()
-    if (!entryValue ||
-      maxValueLength !== undefined && entryValue.length > maxValueLength ||
-      rejectValueTabs && entryValue.includes('\t')) continue
-    entries.push([key, entryValue])
+    if (splitIndex !== -1) {
+      const key = segment.slice(0, splitIndex).trim()
+      if (key && !WHITESPACE.test(key)) {
+        // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
+        // Leading 0x20 is part of value; trailing whitespace is OWS.
+        const entryValue = segment.slice(splitIndex + pairSeparator.length).trimEnd()
+        if (entryValue &&
+          (maxValueLength === undefined || entryValue.length <= maxValueLength) &&
+          (!rejectValueTabs || !entryValue.includes('\t'))) entries.push([key, entryValue])
+      }
+    }
+    if (separatorIndex === -1) break
+    start = separatorIndex + fieldSeparator.length
   }
   // Reverse so the Map's insertion order is reverse of wire order. `toString`
   // prepends as it iterates, which yields the original wire order back.
@@ -43,21 +48,23 @@ function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs, ma
   return entries
 }
 
-/**
- * @param {typeof TraceState | typeof TraceStateData} Type
- * @param {string | undefined} value
- * @param {string} fieldSeparator
- * @param {string} pairSeparator
- * @param {boolean} rejectValueTabs
- * @param {number} [maxEntries]
- * @param {number} [maxValueLength]
- * @returns {TraceState | TraceStateData}
- */
-function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength) {
-  if (typeof value !== 'string' || !value.length) {
-    return new Type()
+/** @param {string} value */
+function findDatadogMember (value) {
+  DATADOG_MEMBER.lastIndex = 0
+  let datadogMember
+  while (DATADOG_MEMBER.test(value)) {
+    const nextSeparator = value.indexOf(',', DATADOG_MEMBER.lastIndex)
+    let end = nextSeparator === -1 ? value.length : nextSeparator
+    while (end > DATADOG_MEMBER.lastIndex && WHITESPACE.test(value[end - 1])) end--
+    if (end - DATADOG_MEMBER.lastIndex > MAX_VALUE_LENGTH) continue
+
+    const memberValue = value.slice(DATADOG_MEMBER.lastIndex, end)
+    if (memberValue && !memberValue.includes('\t')) {
+      datadogMember = memberValue
+      break
+    }
   }
-  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs, maxEntries, maxValueLength))
+  return datadogMember
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -116,8 +123,8 @@ class TraceStateData {
   /**
    * @template Context
    * @param {number} valueLength
-   * @param {(key: string, context: Context) => boolean} isOptional
-   * @param {Context} context
+   * @param {(key: string, context: Context | undefined) => boolean} isOptional
+   * @param {Context | undefined} context
    */
   trimOptionalFields (valueLength, isOptional, context) {
     const fields = [...this.#map]
@@ -132,7 +139,8 @@ class TraceStateData {
 
   /** @param {string | undefined} value */
   static fromString (value) {
-    return fromString(TraceStateData, value, ';', ':', false)
+    if (typeof value !== 'string' || !value.length) return new TraceStateData()
+    return new TraceStateData(parseEntries(value, ';', ':', false))
   }
 
   toString () {
@@ -150,8 +158,15 @@ class TraceState {
   constructor (entries) {
     this.#map = entries ? new Map(entries) : new Map()
     while (this.#map.size > MAX_LIST_MEMBERS) {
-      this.#map.delete(this.#map.keys().next().value)
+      this.#evictOldest()
     }
+  }
+
+  #evictOldest () {
+    const keys = this.#map.keys()
+    let key = keys.next().value
+    if (key === 'dd') key = keys.next().value
+    this.#map.delete(key)
   }
 
   // Delete entries on update to ensure they're moved to the end of the list
@@ -163,7 +178,7 @@ class TraceState {
     if (value.length > MAX_VALUE_LENGTH) return this
     const updated = this.#map.delete(key)
     if (!updated && this.#map.size === MAX_LIST_MEMBERS) {
-      this.#map.delete(this.#map.keys().next().value)
+      this.#evictOldest()
     }
     this.#map.set(key, value)
     return this
@@ -194,11 +209,12 @@ class TraceState {
    * @template Context
    * @param {string} vendor
    * @param {(state: TraceStateData) => unknown} handle
-   * @param {(key: string, context: Context) => boolean} [isOptional]
+   * @param {(key: string, context: Context | undefined) => boolean} [isOptional]
    * @param {Context} [context]
+   * @param {(state: TraceStateData, context: Context | undefined) => unknown} [onOverflow]
    * @returns {unknown}
    */
-  forVendor (vendor, handle, isOptional, context) {
+  forVendor (vendor, handle, isOptional, context, onOverflow) {
     const data = this.#map.get(vendor)
     const state = TraceStateData.fromString(data)
     const result = handle(state)
@@ -210,9 +226,17 @@ class TraceState {
       state.trimOptionalFields(value.length, isOptional, context)
       value = state.toString()
     }
+    if (value.length > MAX_VALUE_LENGTH && onOverflow) {
+      onOverflow(state, context)
+      value = state.toString()
+    }
     if (value.length > MAX_VALUE_LENGTH) {
-      if (isOptional) this.delete(vendor)
-      return result
+      if (vendor === 'dd') {
+        value = `s:${state.get('s')}`
+      } else {
+        if (isOptional) this.delete(vendor)
+        return result
+      }
     }
     if (value === data) return result
     if (value) this.set(vendor, value)
@@ -222,7 +246,15 @@ class TraceState {
   }
 
   static fromString (value) {
-    return fromString(TraceState, value, ',', '=', true, MAX_LIST_MEMBERS, MAX_VALUE_LENGTH)
+    if (typeof value !== 'string' || !value.length) return new TraceState()
+
+    const state = new TraceState(parseEntries(value, ',', '=', true, MAX_LIST_MEMBERS, MAX_VALUE_LENGTH))
+    if (state.get('dd') !== undefined || !value.includes('dd')) return state
+
+    // The bounded parse can miss dd after 32 members; recover it without retaining the other tail members.
+    const datadogMember = findDatadogMember(value)
+    if (datadogMember !== undefined) state.set('dd', datadogMember)
+    return state
   }
 
   toString () {
