@@ -88,4 +88,8 @@ describe('storage', () => {
 
     assert.strictEqual(testStorage.getStore(), undefined)
   })
+
+  it('should ignore propagation without a trigger resource', () => {
+    testStorage._propagate({}, undefined, 'PROMISE')
+  })
 })
