@@ -137,10 +137,42 @@ function createFixedCurrentRequest () {
   }
 }
 
+function createFixedBackportRequest () {
+  return class Request {
+    /** @param {object} handler */
+    constructor (handler) {
+      this.handler = handler
+    }
+
+    /**
+     * @param {number} statusCode
+     * @param {unknown} headers
+     * @param {unknown} socket
+     */
+    onUpgrade (statusCode, headers, socket) {
+      channels.headers.publish({ request: this, response: { statusCode, headers } })
+      const result = this.handler.onUpgrade(statusCode, headers, socket)
+      this.completed = true
+      this.#publishUpgradeTrailers()
+      return result
+    }
+
+    #publishUpgradeTrailers () {
+      channels.trailers.publish({ request: this, trailers: [] })
+    }
+  }
+}
+
 const upgradeChannel = channel('apm:undici:request:upgrade')
 const cases = [
   { version: '4.7.0', methodName: 'onUpgrade', createRequest: createLegacyRequest },
   { version: '5.0.0', methodName: 'onUpgrade', createRequest: createLegacyRequest },
+  {
+    version: '6.29.0',
+    methodName: 'onUpgrade',
+    createRequest: createLegacyRequest,
+    createFixedRequest: createFixedBackportRequest,
+  },
   { version: '7.29.0', methodName: 'onUpgrade', createRequest: createLegacyRequest },
   { version: '8.0.0', methodName: 'onRequestUpgrade', createRequest: createCurrentRequest },
   { version: '8.10.0', methodName: 'onRequestUpgrade', createRequest: createCurrentRequest },
@@ -269,9 +301,10 @@ describe('undici instrumentation', () => {
     }
   }
 
-  for (const { version, methodName } of cases) {
+  for (const { version, methodName, createFixedRequest } of cases) {
     for (const subscriberFirst of [true, false]) {
-      const createRequest = methodName === 'onRequestUpgrade' ? createFixedCurrentRequest : createFixedLegacyRequest
+      const createRequest = createFixedRequest ??
+        (methodName === 'onRequestUpgrade' ? createFixedCurrentRequest : createFixedLegacyRequest)
       const loadOrder = subscriberFirst ? 'subscriber first' : 'hook first'
 
       it(`does not wrap fixed ${version} ${methodName} implementations with the ${loadOrder}`, () => {

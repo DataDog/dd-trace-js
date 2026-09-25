@@ -18,6 +18,8 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 
 const SERVICE_NAME = 'test'
 const upgradeChannel = channel('apm:undici:request:upgrade')
+const trailersChannel = channel('undici:request:trailers')
+const errorChannel = channel('undici:request:error')
 
 // Helper to find an error with a specific type in the caught error's cause chain
 // Different undici versions wrap errors differently, so we need to walk the chain
@@ -234,11 +236,14 @@ describe('Plugin', () => {
           const client = new fetch.Client(`http://localhost:${port}`)
           const fallbackMessages = []
           const fallbackSubscriber = message => fallbackMessages.push(message)
+          const nativeMessages = []
+          const nativeSubscriber = message => nativeMessages.push(message)
           const tracePromise = agent.assertFirstTraceSpan(span => {
             assert.strictEqual(span.resource, 'GET')
             assert.strictEqual(span.meta['http.status_code'], '101')
           })
           upgradeChannel.subscribe(fallbackSubscriber)
+          trailersChannel.subscribe(nativeSubscriber)
 
           try {
             const { headers, socket } = await client.upgrade({ path: '/', protocol: 'test' })
@@ -246,11 +251,17 @@ describe('Plugin', () => {
             socket.destroy()
             await Promise.all([tracePromise, client.close()])
 
-            assert.strictEqual(fallbackMessages.length, 1)
-            assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            // Fixed upstream versions finish through native diagnostics instead of the fallback.
+            assert.strictEqual(fallbackMessages.length + nativeMessages.length, 1)
+            if (fallbackMessages.length) {
+              assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            } else {
+              assert.deepStrictEqual(nativeMessages[0].trailers, [])
+            }
             assert.strictEqual(requestHookCalls, 1)
           } finally {
             upgradeChannel.unsubscribe(fallbackSubscriber)
+            trailersChannel.unsubscribe(nativeSubscriber)
           }
         })
 
@@ -287,6 +298,16 @@ describe('Plugin', () => {
             return
           }
 
+          let requestHookCalls = 0
+          agent.reload('undici', {
+            hooks: {
+              request () {
+                requestHookCalls++
+              },
+            },
+            service: 'test',
+          })
+
           appListener = require('node:http').createServer()
           appListener.once('upgrade', (_request, socket) => {
             socket.write(
@@ -301,8 +322,8 @@ describe('Plugin', () => {
           const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
           const client = new fetch.Client(`http://localhost:${port}`)
           const expectedError = new Error('upgrade handler failed')
-          const fallbackMessages = []
-          const fallbackSubscriber = message => fallbackMessages.push(message)
+          const errorMessages = []
+          const errorSubscriber = message => errorMessages.push(message)
           const throwExpectedError = () => { throw expectedError }
           const tracePromise = agent.assertFirstTraceSpan(span => {
             assert.strictEqual(span.resource, 'GET')
@@ -310,7 +331,8 @@ describe('Plugin', () => {
             assert.strictEqual(span.meta[ERROR_TYPE], expectedError.name)
             assert.strictEqual(span.meta[ERROR_MESSAGE], expectedError.message)
           })
-          upgradeChannel.subscribe(fallbackSubscriber)
+          upgradeChannel.subscribe(errorSubscriber)
+          errorChannel.subscribe(errorSubscriber)
 
           try {
             client.dispatch({ method: 'GET', path: '/', upgrade: 'test' }, {
@@ -323,10 +345,12 @@ describe('Plugin', () => {
             })
             await Promise.all([tracePromise, client.close()])
 
-            assert.strictEqual(fallbackMessages.length, 1)
-            assert.strictEqual(fallbackMessages[0].error, expectedError)
+            assert.strictEqual(errorMessages.length, 1)
+            assert.strictEqual(errorMessages[0].error, expectedError)
+            assert.strictEqual(requestHookCalls, 1)
           } finally {
-            upgradeChannel.unsubscribe(fallbackSubscriber)
+            upgradeChannel.unsubscribe(errorSubscriber)
+            errorChannel.unsubscribe(errorSubscriber)
           }
         })
 
