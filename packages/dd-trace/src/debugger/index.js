@@ -13,10 +13,11 @@ const {
   DEBUGGER_DIAGNOSTICS_V1,
   DEBUGGER_INPUT_DIRECT,
   DEBUGGER_INPUT_V2,
-  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
+  SHARED_TELEMETRY_FLUSH_INTERVAL_MS,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
+const { PauseDurationHistogram } = require('./pause-duration')
 const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
@@ -40,7 +41,9 @@ let rc = null
 let inputPath = null
 /** @type {GuardrailMetrics | null} */
 let guardrailMetrics = null
-let guardrailMetricsTimer = null
+/** @type {PauseDurationHistogram | null} */
+let pauseDurations = null
+let sharedTelemetryTimer = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
@@ -90,9 +93,11 @@ function start (config, rcInstance) {
 
   const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
   guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
-  guardrailMetricsTimer = setInterval(flushGuardrailMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
-  guardrailMetricsTimer.unref?.()
-  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
+  const pauseDurationBuffer = PauseDurationHistogram.createBuffer()
+  pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
+  sharedTelemetryTimer = setInterval(flushSharedTelemetry, SHARED_TELEMETRY_FLUSH_INTERVAL_MS)
+  sharedTelemetryTimer.unref?.()
+  dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushSharedTelemetry)
 
   const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
 
@@ -143,6 +148,7 @@ function start (config, rcInstance) {
           configPort: configChannel.port1,
           probeSamplerBuffer,
           guardrailMetricsBuffer,
+          pauseDurationBuffer,
         },
         transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
       }
@@ -155,11 +161,6 @@ function start (config, rcInstance) {
       )
     })
 
-    const threadPausedMetric = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
-      .distribution('execution.pause.duration')
-    worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
-      if (type === 'thread-paused') threadPausedMetric.track(durationMs)
-    })
     worker.on('error', (err) => log.error('[debugger] worker thread error', err))
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
@@ -234,18 +235,19 @@ function cleanup (error) {
   configChannel = null
   inputPath = null
 
-  if (guardrailMetricsTimer !== null) {
-    clearInterval(guardrailMetricsTimer)
-    guardrailMetricsTimer = null
+  if (sharedTelemetryTimer !== null) {
+    clearInterval(sharedTelemetryTimer)
+    sharedTelemetryTimer = null
   }
   if (guardrailMetrics !== null) {
-    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
-    // Report what the worker counted up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
-    // worker asynchronously, so anything it counts between this drain and its actual termination is lost. That only
+    dc.unsubscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushSharedTelemetry)
+    // Report what the worker recorded up until it was stopped. Known limitation: `Worker#terminate()` interrupts the
+    // worker asynchronously, so anything it records between this drain and its actual termination is lost. That only
     // concerns events still sitting in the worker's upload buffer, which die with the worker anyway, so it isn't worth
     // deferring the drain until the worker has exited.
-    flushGuardrailMetrics()
+    flushSharedTelemetry()
     guardrailMetrics = null
+    pauseDurations = null
   }
 
   // Call any pending ack callbacks
@@ -261,13 +263,18 @@ function cleanup (error) {
 }
 
 /**
- * Convert the guardrail counters accumulated by the probe sampler and the worker into telemetry metrics.
+ * Convert the counters and pause durations that the probe sampler and the worker accumulate in shared memory into
+ * telemetry metrics.
  */
-function flushGuardrailMetrics () {
-  if (guardrailMetrics === null) return
+function flushSharedTelemetry () {
+  if (guardrailMetrics === null || pauseDurations === null) return
   const namespace = telemetryMetrics.manager.namespace(TELEMETRY_NAMESPACE)
   guardrailMetrics.drain((metric, tags, count) => {
     namespace.count(metric, tags).inc(count)
+  })
+  const pauseDuration = namespace.distribution('execution.pause.duration')
+  pauseDurations.drain((durationMs, count) => {
+    pauseDuration.track(durationMs, count)
   })
 }
 

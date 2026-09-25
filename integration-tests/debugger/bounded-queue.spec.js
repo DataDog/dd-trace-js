@@ -5,7 +5,7 @@ const { inspect } = require('node:util')
 
 const {
   DEFAULT_QUEUE_MAX_BYTES,
-  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
+  SHARED_TELEMETRY_FLUSH_INTERVAL_MS,
 } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
 
@@ -20,7 +20,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('bounded upload queue', function () {
-    this.timeout(GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 3)
+    this.timeout(SHARED_TELEMETRY_FLUSH_INTERVAL_MS * 3)
 
     it('should drop probe results instead of queueing them without bound when the intake stalls', async function () {
       const rcConfig = t.generateRemoteConfig({
@@ -54,7 +54,7 @@ describe('Dynamic Instrumentation', function () {
           assert.ok(dropped.points[0][1] >= 1, `Expected ${dropped.points[0][1]} >= 1`)
         },
         requestType: 'generate-metrics',
-        timeout: GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 2,
+        timeout: SHARED_TELEMETRY_FLUSH_INTERVAL_MS * 2,
         resolveAtFirstSuccess: true,
         namespace: 'live_debugger',
       })
