@@ -159,7 +159,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
@@ -189,7 +189,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     const llmobs = this
 
@@ -298,7 +298,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions, agent } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -330,6 +330,9 @@ class LLMObs extends NoopLLMObs {
       }
       if (toolDefinitions != null) {
         this._tagger.tagToolDefinitions(span, toolDefinitions)
+      }
+      if (agent?.version != null) {
+        this._tagger.tagAgentVersion(span, agent.version)
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -686,21 +689,28 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  #extractOptions (options) {
+  #extractOptions (options, kind) {
     const {
       modelName,
       modelProvider,
       sessionId,
       mlApp,
+      version,
       _decorator,
       ...spanOptions
     } = options
+
+    if (version != null && kind !== 'agent') {
+      logger.warn(`[LLM Observability] The "version" option is only supported on agent spans. Ignoring it for "${
+        kind}" spans.`)
+    }
 
     return {
       mlApp,
       modelName,
       modelProvider,
       sessionId,
+      version,
       _decorator,
       spanOptions,
     }

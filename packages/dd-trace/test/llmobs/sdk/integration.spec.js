@@ -651,4 +651,50 @@ describe('end to end sdk integration tests', () => {
       assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), true)
     })
   })
+
+  describe('agent versioning', () => {
+    it('tags an agent span from the span options', async () => {
+      llmobs.trace({ kind: 'agent', name: 'myAgent', version: 'v3' }, () => {})
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(getTag(llmobsSpans[0], 'agent_version'), 'v3')
+    })
+
+    it('tags an agent span via annotate', async () => {
+      llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
+        llmobs.annotate({ agent: { version: 'v3' } })
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(getTag(llmobsSpans[0], 'agent_version'), 'v3')
+    })
+
+    it('tags only the agent span within an annotation context, not its children', async () => {
+      llmobs.annotationContext({ agent: { version: 'v3' } }, () => {
+        llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
+          llmobs.trace({ kind: 'tool', name: 'myTool' }, () => {})
+        })
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      assert.equal(llmobsSpans.length, 2)
+
+      const agentSpan = llmobsSpans.find(span => span.meta['span.kind'] === 'agent')
+      const toolSpan = llmobsSpans.find(span => span.meta['span.kind'] === 'tool')
+      assert.equal(getTag(agentSpan, 'agent_version'), 'v3')
+      assert.equal(getTag(toolSpan, 'agent_version'), undefined)
+    })
+
+    it('does not tag a non-agent span', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow', version: 'v3' }, () => {
+        llmobs.annotate({ agent: { version: 'v3' } })
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(getTag(llmobsSpans[0], 'agent_version'), undefined)
+    })
+  })
 })
