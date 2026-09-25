@@ -43,6 +43,24 @@ function assertNoConnectionSpanLeak () {
 }
 
 /**
+ * @param {string} traceId
+ * @param {string[]} expectedResources
+ */
+function assertTraceResources (traceId, expectedResources) {
+  const spans = []
+  const sortedResources = expectedResources.slice().sort()
+  const trace = agent.assertSomeTraces(traces => {
+    for (const batch of traces) {
+      for (const span of batch) {
+        if (span.trace_id.toString() === traceId) spans.push(span)
+      }
+    }
+    assert.deepStrictEqual(spans.map(span => span.resource).sort(), sortedResources)
+  })
+  return { trace, spans }
+}
+
+/**
  * @returns {Promise<number>}
  */
 async function getClosedPort () {
@@ -1232,117 +1250,106 @@ describe('Plugin', () => {
           })
         })
       }
-    })
-  })
 
-  describe('with ignored transaction operations', () => {
-    let tracer
-    let connection
+      describe('with ignored transaction operations', () => {
+        let tracer
+        let connection
 
-    beforeEach(async () => {
-      tracer = await agent.load('mariadb', undefined, { ignoredTransactionOperations: ['BEGIN', 'Commit'] })
-      const mariadb = require('../../../versions/mariadb@3').get('mariadb')
-      connection = await mariadb.createConnection({ host: '127.0.0.1', user: 'root', database: 'db' })
-    })
-
-    afterEach(async () => {
-      await connection.end()
-      await agent.close()
-    })
-
-    it('keeps the parent and ordinary query but omits transaction helper spans', async () => {
-      async function runTransaction () {
-        await connection.beginTransaction()
-        const rows = await connection.query('SELECT 1 AS value')
-        await connection.commit()
-        return rows[0].value
-      }
-
-      tracer.use('mariadb', false)
-      const untraced = await runTransaction()
-      tracer.use('mariadb', true)
-
-      const parent = tracer.startSpan('transaction-parent')
-      const spans = []
-      const trace = agent.assertSomeTraces(traces => {
-        for (const batch of traces) spans.push(...batch)
-        assert.ok(spans.some(span => span.resource === 'transaction-parent'))
-        assert.deepStrictEqual(spans.map(span => span.resource).sort(), ['SELECT 1 AS value', 'transaction-parent'])
-        assert.strictEqual(spans.find(span => span.resource === 'SELECT 1 AS value').parent_id.toString(),
-          parent.context().toSpanId())
-      })
-
-      const instrumented = await tracer.scope().activate(parent, runTransaction)
-      assert.strictEqual(instrumented, untraced)
-      parent.finish()
-      await trace
-    })
-
-    it('omits both callback begin publications without changing the callback result', async () => {
-      const mariadb = require('../../../versions/mariadb@3').get('mariadb/callback')
-      const callbackConnection = mariadb.createConnection({ host: '127.0.0.1', user: 'root', database: 'db' })
-      await new Promise((resolve, reject) => {
-        callbackConnection.connect(error => error ? reject(error) : resolve())
-      })
-
-      try {
-        const parent = tracer.startSpan('transaction-parent')
-        const spans = []
-        const trace = agent.assertSomeTraces(traces => {
-          for (const batch of traces) spans.push(...batch)
-          assert.ok(spans.some(span => span.resource === 'transaction-parent'))
-          assert.deepStrictEqual(spans.map(span => span.resource).sort(), ['SELECT 2 AS value', 'transaction-parent'])
+        beforeEach(async () => {
+          tracer = await agent.load('mariadb', undefined, { ignoredTransactionOperations: ['BEGIN', 'Commit'] })
+          const mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+          connection = await mariadb.createConnection({ host: '127.0.0.1', user: 'root', database: 'db' })
         })
 
-        const value = await tracer.scope().activate(parent, async () => {
-          await new Promise((resolve, reject) => {
-            callbackConnection.beginTransaction(error => error ? reject(error) : resolve())
-          })
-          const rows = await new Promise((resolve, reject) => {
-            callbackConnection.query('SELECT 2 AS value', (error, result) => error ? reject(error) : resolve(result))
-          })
-          await new Promise((resolve, reject) => {
-            callbackConnection.commit(error => error ? reject(error) : resolve())
-          })
-          return rows[0].value
+        afterEach(async () => {
+          await connection.end()
+          await agent.close()
         })
-        assert.strictEqual(value, 2)
-        parent.finish()
-        await trace
-      } finally {
-        await new Promise(resolve => callbackConnection.end(resolve))
-      }
-    })
 
-    it('filters hash-commented commands but traces invalid syntax and executable modifiers', async () => {
-      const hashComment = '# note\nCOMMIT'
-      const invalidBegin = 'BEGIN TRANSACTION'
-      const modifiedCommit = 'COMMIT /*M! AND CHAIN */'
-      tracer.use('mariadb', false)
-      await connection.query(hashComment)
-      await assert.rejects(connection.query(invalidBegin), { errno: 1064 })
-      await connection.query(modifiedCommit)
-      await connection.query('ROLLBACK')
-      tracer.use('mariadb', true)
+        it('keeps the parent and ordinary query but omits transaction helper spans', async () => {
+          async function runTransaction () {
+            await connection.beginTransaction()
+            const rows = await connection.query('SELECT 1 AS value')
+            await connection.commit()
+            return rows[0].value
+          }
 
-      const parent = tracer.startSpan('transaction-parent')
-      const spans = []
-      const trace = agent.assertSomeTraces(traces => {
-        for (const batch of traces) spans.push(...batch)
-        assert.deepStrictEqual(spans.map(span => span.resource).sort(),
-          [invalidBegin, modifiedCommit, 'ROLLBACK', 'transaction-parent'].sort())
-      })
-      const operation = tracer.scope().activate(parent, async () => {
-        try {
+          tracer.use('mariadb', false)
+          const untraced = await runTransaction()
+          tracer.use('mariadb', true)
+
+          const parent = tracer.startSpan('transaction-parent')
+          const { trace, spans } = assertTraceResources(parent.context().toTraceId(),
+            ['SELECT 1 AS value', 'transaction-parent'])
+
+          const instrumented = await tracer.scope().activate(parent, runTransaction)
+          assert.strictEqual(instrumented, untraced)
+          parent.finish()
+          await trace
+          assert.strictEqual(spans.find(span => span.resource === 'SELECT 1 AS value').parent_id.toString(),
+            parent.context().toSpanId())
+        })
+
+        it('omits callback transaction spans without changing the callback result', async () => {
+          const mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb/callback')
+          const callbackConnection = mariadb.createConnection({ host: '127.0.0.1', user: 'root', database: 'db' })
+          await new Promise((resolve, reject) => {
+            callbackConnection.connect(error => error ? reject(error) : resolve())
+          })
+
+          try {
+            const parent = tracer.startSpan('transaction-parent')
+            const { trace } = assertTraceResources(parent.context().toTraceId(),
+              ['SELECT 2 AS value', 'transaction-parent'])
+
+            const value = await tracer.scope().activate(parent, async () => {
+              await new Promise((resolve, reject) => {
+                callbackConnection.beginTransaction(error => error ? reject(error) : resolve())
+              })
+              const rows = await new Promise((resolve, reject) => {
+                callbackConnection.query('SELECT 2 AS value',
+                  (error, result) => error ? reject(error) : resolve(result))
+              })
+              await new Promise((resolve, reject) => {
+                callbackConnection.commit(error => error ? reject(error) : resolve())
+              })
+              return rows[0].value
+            })
+            assert.strictEqual(value, 2)
+            parent.finish()
+            await trace
+          } finally {
+            await new Promise(resolve => callbackConnection.end(resolve))
+          }
+        })
+
+        it('filters hash-commented commands but traces invalid syntax and executable modifiers', async () => {
+          const hashComment = '# note\nCOMMIT'
+          const invalidBegin = 'BEGIN TRANSACTION'
+          const modifiedCommit = 'COMMIT /*M! AND CHAIN */'
+          tracer.use('mariadb', false)
           await connection.query(hashComment)
           await assert.rejects(connection.query(invalidBegin), { errno: 1064 })
           await connection.query(modifiedCommit)
           await connection.query('ROLLBACK')
-        } finally {
-          parent.finish()
-        }
+          tracer.use('mariadb', true)
+
+          const parent = tracer.startSpan('transaction-parent')
+          const { trace } = assertTraceResources(parent.context().toTraceId(),
+            [invalidBegin, modifiedCommit, 'ROLLBACK', 'transaction-parent'])
+          const operation = tracer.scope().activate(parent, async () => {
+            try {
+              await connection.query(hashComment)
+              await assert.rejects(connection.query(invalidBegin), { errno: 1064 })
+              await connection.query(modifiedCommit)
+              await connection.query('ROLLBACK')
+            } finally {
+              parent.finish()
+            }
+          })
+          await Promise.all([operation, trace])
+        })
       })
-      await Promise.all([operation, trace])
     })
   })
 })
