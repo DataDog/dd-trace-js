@@ -14,19 +14,19 @@ function generateRewriterTargets () {
   const targets = {}
   const activatedModules = new Set()
 
-  for (const { activationName, instrumentations } of registry) {
+  for (const { activate, instrumentations } of registry) {
     let activatedModuleName
     for (const { module: { name, filePath } } of instrumentations) {
       targets[`${name}/${filePath}`] = name
 
-      if (!activationName) continue
+      if (!activate) continue
       if (activatedModuleName && activatedModuleName !== name) {
-        throw new Error(`Rewrite activation group ${activationName} contains multiple modules`)
+        throw new Error(`Rewrite activation group ${activatedModuleName} contains multiple modules`)
       }
       activatedModuleName = name
     }
-    if (activationName && !activatedModuleName) {
-      throw new Error(`Rewrite activation group ${activationName} has no instrumentations`)
+    if (activate && !activatedModuleName) {
+      throw new Error('Rewrite activation group has no instrumentations')
     }
     if (activatedModuleName) {
       if (activatedModules.has(activatedModuleName)) {

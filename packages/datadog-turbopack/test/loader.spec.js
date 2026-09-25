@@ -366,7 +366,7 @@ describe('Turbopack loader', () => {
     const resourcePath = write(packageDir, 'index.js', source)
     const rewrite = sinon.stub().returns({ code: `${source}// rewritten\n`, map: undefined })
     const rewriteTarget = {
-      activationName: 'rewrite-only-package',
+      activate: true,
       filePath: 'index.js',
       moduleName: 'rewrite-only-package',
     }
