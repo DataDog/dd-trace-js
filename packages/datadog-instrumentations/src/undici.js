@@ -45,9 +45,13 @@ function wrapRequestUpgrade (Request) {
   const method = Request.prototype[methodName]
 
   // Orchestrion cannot leave fixed source byte-for-byte untouched after a conditional AST match.
-  if (typeof method !== 'function' ||
-      !requestSource.includes('channels.trailers.publish') ||
-      Function.prototype.toString.call(method).includes('channels.trailers.publish')) {
+  if (typeof method !== 'function' || !requestSource.includes('channels.trailers.publish')) {
+    return Request
+  }
+
+  const methodSource = Function.prototype.toString.call(method)
+  // Undici 6.29 delegates native upgrade completion to a private helper.
+  if (methodSource.includes('channels.trailers.publish') || methodSource.includes('#publishUpgradeTrailers')) {
     return Request
   }
 
