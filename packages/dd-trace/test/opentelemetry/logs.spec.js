@@ -17,6 +17,7 @@ const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_load
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const BatchLogRecordProcessor = require('../../src/opentelemetry/logs/batch_log_processor')
+const TelemetryDeliveryTracker = require('../../src/serverless/telemetry-delivery-tracker')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
 
@@ -353,6 +354,17 @@ describe('OpenTelemetry Logs', () => {
 
       const { logs } = setupLogs()
       logs.getLogger({ name: 'test' }).emit({ severityText: 'INFO', body: 'Protobuf format' })
+    })
+
+    it('exports ordinary logs without tracking their delivery', () => {
+      const verifyExport = mockOtlpExport(() => {})
+      const track = sinon.spy(TelemetryDeliveryTracker.prototype, 'track')
+      const { logs } = setupLogs()
+
+      logs.getLogger('test').emit({ body: 'Untracked log' })
+
+      verifyExport()
+      sinon.assert.notCalled(track)
     })
 
     it('timestamps logs with UNIX-epoch nanoseconds', () => {

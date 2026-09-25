@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('assert')
+const { once } = require('node:events')
 const http = require('node:http')
 const https = require('node:https')
 
@@ -651,6 +652,38 @@ describe('OpenTelemetry Traces', () => {
 
       const span = createMockSpan({ name: 'http.request' })
       exporter.export([span])
+    })
+
+    it('waits for an OTLP HTTP response and reports its failure', async () => {
+      let resolveRequest
+      const requestReceived = new Promise(resolve => { resolveRequest = resolve })
+      const receiver = http.createServer((request, response) => {
+        request.resume()
+        resolveRequest(response)
+      })
+      receiver.listen(0, '127.0.0.1')
+      await once(receiver, 'listening')
+
+      try {
+        const { port } = receiver.address()
+        const exporter = new OtlpHttpTraceExporter(`http://127.0.0.1:${port}/v1/traces`, {}, 1000, {})
+        exporter.export([createMockSpan()])
+        let settled = false
+        const flush = new Promise((resolve, reject) => {
+          exporter.flush(error => error ? reject(error) : resolve(), { reportErrors: true })
+        }).finally(() => { settled = true })
+        const response = await requestReceived
+
+        assert.strictEqual(settled, false)
+        response.statusCode = 500
+        response.end('collector failed')
+
+        await assert.rejects(flush, /HTTP 500: collector failed/)
+        assert.strictEqual(settled, true)
+      } finally {
+        receiver.close()
+        await once(receiver, 'close')
+      }
     })
 
     it('sends JSON content-type header', () => {

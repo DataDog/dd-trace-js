@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const BaseWriter = require('../../../src/exporters/common/writer')
 
 require('../../setup/core')
 
@@ -24,6 +25,7 @@ describe('AgentlessExporter', () => {
 
     writer = {
       append: sinon.stub(),
+      enableDeliveryTracking: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
     }
@@ -47,6 +49,47 @@ describe('AgentlessExporter', () => {
   })
 
   describe('constructor', () => {
+    it('does not enable delivery tracking without an OTel TracerProvider', () => {
+      const writerOptions = {}
+      /** @param {object} options */
+      const Writer = function (options) {
+        Object.assign(writerOptions, options)
+        return writer
+      }
+      Exporter = proxyquire('../../../src/exporters/agentless', { './writer': Writer })
+
+      exporter = new Exporter({})
+
+      assert.strictEqual(writerOptions.deliveryTracker, undefined)
+    })
+
+    it('enables delivery tracking after construction', () => {
+      exporter = new Exporter({})
+
+      exporter.enableDeliveryTracking()
+      exporter.enableDeliveryTracking()
+
+      sinon.assert.calledOnceWithExactly(writer.enableDeliveryTracking, sinon.match.object)
+    })
+
+    it('keeps serverless delivery tracking without an OTel TracerProvider', () => {
+      const deliveryTracker = {}
+      const writerOptions = {}
+      /** @param {object} options */
+      const Writer = function (options) {
+        Object.assign(writerOptions, options)
+        return writer
+      }
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        '../../serverless': { createServerlessDeliveryTracker: () => deliveryTracker },
+        './writer': Writer,
+      })
+
+      exporter = new Exporter({})
+
+      assert.strictEqual(writerOptions.deliveryTracker, deliveryTracker)
+    })
+
     it('should construct intake URL from site', () => {
       exporter = new Exporter({ site: 'datadoghq.eu' })
 
@@ -259,6 +302,27 @@ describe('AgentlessExporter', () => {
       exporter = new Exporter({ flushInterval: 1000 })
     })
 
+    /**
+     * @param {(error?: Error) => void} done
+     * @param {{ reportErrors?: boolean }} [options]
+     */
+    function startPendingDelivery (done, options) {
+      let completeDelivery
+      exporter.enableDeliveryTracking()
+      const deliveryTracker = writer.enableDeliveryTracking.firstCall.firstArg
+      /** @param {(error?: Error) => void} callback */
+      function hold (callback) {
+        completeDelivery = callback
+      }
+      /** @param {(error?: Error) => void} callback */
+      function flush (callback) {
+        deliveryTracker.track(hold, callback)
+      }
+      writer.flush.callsFake(flush)
+      exporter.flush(done, options)
+      return completeDelivery
+    }
+
     it('should flush writer immediately', () => {
       exporter.flush()
 
@@ -279,6 +343,145 @@ describe('AgentlessExporter', () => {
 
     it('should call callback when done', (done) => {
       exporter.flush(done)
+    })
+
+    it('reports writer failures when requested', () => {
+      const error = new Error('writer failed')
+      writer.flush.callsFake(done => done(error))
+      const done = sinon.spy()
+
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.calledOnceWithExactly(writer.flush, sinon.match.func, { reportErrors: true })
+      sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('reports a delivery failure after an explicit flush boundary', () => {
+      const error = new Error('intake unavailable')
+      const done = sinon.spy()
+
+      const completeDelivery = startPendingDelivery(done, { reportErrors: true })
+      sinon.assert.notCalled(done)
+
+      completeDelivery(error)
+      sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('suppresses a delivery failure for an ordinary flush callback', () => {
+      const error = new Error('intake unavailable')
+      const done = sinon.spy()
+
+      const completeDelivery = startPendingDelivery(done)
+      sinon.assert.notCalled(done)
+
+      completeDelivery(error)
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    })
+
+    it('aggregates an active delivery failure with a boundary failure', () => {
+      let completeDelivery
+      let failPayload = false
+      const boundaryError = new Error('boundary failed')
+      const deliveryError = new Error('delivery failed')
+      class ControlledWriter extends BaseWriter {
+        /** @param {object} options */
+        constructor (options) {
+          super(options)
+          let count = 0
+          this._encoder = {
+            count: () => count,
+            encode: () => { count++ },
+            makePayload: () => {
+              if (failPayload) throw boundaryError
+              count = 0
+              return Buffer.from('payload')
+            },
+            reset: () => { count = 0 },
+          }
+        }
+
+        /**
+         * @param {Buffer} data
+         * @param {number} count
+         * @param {(error?: Error) => void} done
+         */
+        _sendPayload (data, count, done) {
+          completeDelivery = done
+        }
+      }
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': ControlledWriter,
+      })
+      exporter = new Exporter({ flushInterval: 1 })
+      exporter.enableDeliveryTracking()
+      const done = sinon.spy()
+
+      exporter.export([{ name: 'active' }])
+      clock.tick(1)
+      exporter.export([{ name: 'boundary' }])
+      failPayload = true
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.notCalled(done)
+      assert.strictEqual(typeof completeDelivery, 'function')
+      completeDelivery(deliveryError)
+      sinon.assert.calledOnce(done)
+      const error = done.firstCall.firstArg
+      assert.ok(error instanceof AggregateError)
+      assert.deepStrictEqual(error.errors, [boundaryError, deliveryError])
+    })
+
+    it('reports synchronous writer failures when requested', () => {
+      const error = new Error('writer failed')
+      writer.flush.throws(error)
+      const done = sinon.spy()
+
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.calledOnceWithExactly(done, error)
+    })
+
+    it('suppresses synchronous writer failures by default', () => {
+      writer.flush.throws(new Error('writer failed'))
+      const done = sinon.spy()
+
+      exporter.flush(done)
+
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    })
+
+    it('normalizes non-error flush failures when requested', () => {
+      const error = { toString: () => 'writer failed' }
+      writer.flush.callsFake(() => { throw error })
+      const done = sinon.spy()
+
+      exporter.flush(done, { reportErrors: true })
+
+      sinon.assert.calledOnce(done)
+      assert.ok(done.firstCall.firstArg instanceof Error)
+      assert.strictEqual(done.firstCall.firstArg.message, 'writer failed')
+    })
+
+    it('supports a tracked flush without a completion callback after a non-error failure', () => {
+      const error = { toString: () => 'writer failed' }
+      writer.flush.callsFake(() => { throw error })
+      exporter = new Exporter({ flushInterval: 1000 })
+      exporter.enableDeliveryTracking()
+
+      exporter.flush()
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('suppresses tracked synchronous writer failures by default', () => {
+      writer.flush.throws(new Error('writer failed'))
+      exporter = new Exporter({ flushInterval: 1000 })
+      exporter.enableDeliveryTracking()
+      const done = sinon.spy()
+
+      exporter.flush(done)
+
+      sinon.assert.calledOnceWithExactly(done, undefined)
     })
   })
 
