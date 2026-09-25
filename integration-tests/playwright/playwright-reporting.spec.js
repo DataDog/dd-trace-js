@@ -114,6 +114,66 @@ unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound 
   })
 })
 
+for (const version of [oldest, '1.55.1', '1.60.0', latest]) {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) continue
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) continue
+
+  describe(`playwright@${version} test listing`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    this.timeout(60000)
+    useSandbox([`@playwright/test@${version}`])
+
+    for (const [name, args, exitCode] of [
+      ['lists matching tests', '--list --reporter=json --grep-invert @excluded', 0],
+      ['preserves listing errors', '--list --reporter=line --grep nonexistent-test-name', 1],
+      ['runs tests with the list reporter', '--reporter=list', 0],
+    ]) {
+      it(name, async (receiver, run) => {
+        let output = ''
+        const events = []
+        receiver.on('message', ({ url, payload }) => {
+          if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+        })
+        const proc = run(`./node_modules/.bin/playwright test -c playwright.config.js ${args}`, {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        })
+        proc.stdout?.on('data', chunk => { output += chunk.toString() })
+        proc.stderr?.on('data', chunk => { output += chunk.toString() })
+        const [actualExitCode] = await once(proc, 'close')
+        assert.deepStrictEqual(
+          events.filter(event => event.type.startsWith('test')).map(event => ({
+            type: event.type,
+            status: event.content.meta[TEST_STATUS],
+          })).sort((a, b) => a.type.localeCompare(b.type)),
+          args.startsWith('--list')
+            ? []
+            : ['test', 'test_module_end', 'test_session_end', 'test_suite_end'].map(type => ({ type, status: 'pass' }))
+        )
+        assert.strictEqual(actualExitCode, exitCode, output)
+        if (args.startsWith('--list')) {
+          if (exitCode === 0) {
+            const report = JSON.parse(output)
+            assert.strictEqual(report.suites[0].specs[0].title, 'should report request error tags')
+            assert.deepStrictEqual(report.suites[0].specs[0].tests[0].results, [])
+          } else if (version === '1.18.0') {
+            // Playwright 1.18 returns before finalizing its list-mode reporter when no tests match.
+            assert.strictEqual(output, '')
+          } else {
+            assert.match(output, /No tests found/)
+          }
+        } else {
+          assert.match(output, /1 passed/)
+        }
+      })
+    }
+  })
+}
+
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return

@@ -1434,7 +1434,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   return async function (config, options) {
     const runnerConfig = config || getPlaywrightConfig(this)
     // Listing discovers tests without executing them, so it must not create a test session.
-    if (runnerConfig.cliListOnly || options?.listMode) {
+    if (runnerConfig.listOnly || runnerConfig.cliListOnly || options?.listMode) {
       return runAllTests.apply(this, arguments)
     }
 
