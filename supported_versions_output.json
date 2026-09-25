@@ -843,7 +843,7 @@
     "dependency": "undici",
     "integration": "undici",
     "minimum_tracer_supported": "4.4.1",
-    "max_tracer_supported": "8.10.2",
+    "max_tracer_supported": "8.11.0",
     "auto-instrumented": "True"
   },
   {
