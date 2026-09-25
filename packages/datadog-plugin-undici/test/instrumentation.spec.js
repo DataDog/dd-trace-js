@@ -195,6 +195,23 @@ describe('undici instrumentation', () => {
     assert.strictEqual(Request.prototype.onUpgrade, original)
   })
 
+  it('does not wrap Undici 6.29 upgrades completed through a private helper', () => {
+    const Request = class Request {
+      onUpgrade () {
+        this.#publishUpgradeTrailers()
+      }
+
+      #publishUpgradeTrailers () {
+        channels.trailers.publish({ request: this, trailers: [] })
+      }
+    }
+    const original = Request.prototype.onUpgrade
+
+    applyRequestHooks('6.29.0', Request)
+
+    assert.strictEqual(Request.prototype.onUpgrade, original)
+  })
+
   for (const { version, methodName, createRequest } of cases) {
     for (const subscriberFirst of [true, false]) {
       const loadOrder = subscriberFirst ? 'subscriber first' : 'hook first'

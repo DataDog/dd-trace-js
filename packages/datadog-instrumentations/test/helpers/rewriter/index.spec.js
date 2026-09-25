@@ -11,7 +11,7 @@ const vm = require('node:vm')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { tracingChannel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const { SourceMapConsumer } = require('../../../../../vendor/node_modules/@datadog/source-map')
 const { parse, query } = require('../../../src/helpers/rewriter/compiler')
 
@@ -683,6 +683,30 @@ describe('check-require-cache', () => {
             name: 'bullmq',
             versionRange: '>=0.1',
             filePath: 'mapped.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: '@azure/cosmos',
+            versionRange: '>=1',
+            filePath: 'unsupported.js',
+          },
+          functionQuery: {
+            functionName: 'work',
+            kind: 'Sync',
+          },
+          channelName: 'work',
+        },
+        {
+          module: {
+            name: 'hybrid-test',
+            versionRange: '>=0.1',
+            filePath: 'hybrid.js',
           },
           functionQuery: {
             functionName: 'work',
@@ -1516,6 +1540,43 @@ describe('check-require-cache', () => {
     assert.strictEqual(subs.start.callCount, 0)
   })
 
+  it('reports a successfully rewritten pure CommonJS module at evaluation', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+    const source = "#!/usr/bin/env node\n'use strict'\nfunction work () { return true }\nmodule.exports = work\n"
+    const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+      activationName: 'bullmq',
+    })
+    const loads = []
+    const loadChannel = channel('dd-trace:instrumentation:load:orchestrion')
+    const subscriber = message => loads.push(message)
+    loadChannel.subscribe(subscriber)
+
+    try {
+      const mod = new Module(filename, module.parent)
+      mod.filename = filename
+      mod.paths = Module._nodeModulePaths(dirname(filename))
+      mod._compile(rewritten, filename)
+
+      assert.equal(mod.exports(), true)
+      assert.deepStrictEqual(loads, [{
+        activationName: 'bullmq',
+        moduleName: 'bullmq',
+        result: 'rewritten',
+        version: '0.1',
+      }])
+      assert.match(rewritten, /^#!\/usr\/bin\/env node\n['"]use strict['"]/)
+      const activationIndex = rewritten.indexOf("channel('dd-trace:instrumentation:load:orchestrion')")
+      const sourceMapIndex = rewritten.indexOf(SOURCE_MAP_MARKER)
+      assert.notStrictEqual(activationIndex, -1)
+      assert.match(rewritten, /module\.exports = work;\s*;require\(/)
+      assert.ok(sourceMapIndex === -1 || activationIndex < sourceMapIndex)
+    } finally {
+      loadChannel.unsubscribe(subscriber)
+    }
+  })
+
   it('resolves module versions from file URLs with encoded characters', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dd-rewriter url-'))
     const packageDirectory = join(dir, 'node_modules', 'bullmq')
@@ -1528,9 +1589,11 @@ describe('check-require-cache', () => {
       const rewritten = rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', {
         moduleName: 'bullmq',
         filePath: 'activation.js',
+        activationName: 'bullmq',
       })
 
       assert.notStrictEqual(rewritten, source)
+      assert.match(rewritten, /dd-trace:instrumentation:load/)
     } finally {
       rmSync(dir, { force: true, recursive: true })
     }
@@ -1567,6 +1630,47 @@ describe('check-require-cache', () => {
       const result = rewriteBundled(source, url, 'commonjs', target, sourceMap)
       assert.strictEqual(result.code, source)
       assert.strictEqual(result.map, sourceMap)
+    }
+  })
+
+  it('reports a successfully rewritten pure ESM module without CommonJS syntax', async () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+    const source = "'use strict'\nexport const ddTraceOrchestrionDc = 'application binding'\n" +
+      "export const ddTraceOrchestrionDc1 = 'application binding 1'\n" +
+      'export function work () { return true }\n'
+    const rewritten = rewriter.rewrite(source, filename, 'module', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+      activationName: 'bullmq',
+    })
+    const loads = []
+    const loadChannel = channel('dd-trace:instrumentation:load:orchestrion')
+    const subscriber = message => loads.push(message)
+    loadChannel.subscribe(subscriber)
+
+    let dir
+    try {
+      assert.doesNotMatch(rewritten, /\brequire\s*\(/)
+      assert.match(rewritten, /import ddTraceOrchestrionDc2 from "file:\/\//)
+      assert.equal(parse(rewritten, { isModule: true }).body[0].directive, 'use strict')
+
+      dir = mkdtempSync(join(tmpdir(), 'dd-rewriter-activation-'))
+      const outFile = join(dir, 'activation.mjs')
+      writeFileSync(outFile, rewritten)
+      const namespace = await import(pathToFileURL(outFile).href)
+
+      assert.equal(namespace.work(), true)
+      assert.equal(namespace.ddTraceOrchestrionDc, 'application binding')
+      assert.equal(namespace.ddTraceOrchestrionDc1, 'application binding 1')
+      assert.deepStrictEqual(loads, [{
+        activationName: 'bullmq',
+        moduleName: 'bullmq',
+        result: 'rewritten',
+        version: '0.1',
+      }])
+    } finally {
+      loadChannel.unsubscribe(subscriber)
+      if (dir) rmSync(dir, { force: true, recursive: true })
     }
   })
 
@@ -1657,6 +1761,103 @@ describe('check-require-cache', () => {
       }
     })
   }
+
+  it('reports matched source without activation and ignores transformation failures', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'activation.js')
+    const noMatch = "#!/usr/bin/env node\n'use strict'\nfunction other () {}\n"
+    const invalid = '#!/usr/bin/env node\nfunction work ('
+    const unchangedRewriter = proxyquire('../../../src/helpers/rewriter', {
+      '../../../../../vendor/dist/@apm-js-collab/code-transformer': {
+        create: () => ({
+          addTransform () {},
+          getTransformer: () => ({ transform: source => ({ code: source }) }),
+        }),
+      },
+      './instrumentations': [],
+    })
+
+    const rewritten = unchangedRewriter.rewrite(noMatch, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+      activationName: 'bullmq',
+    })
+    const loads = []
+    const activations = []
+    const loadChannel = channel('dd-trace:instrumentation:load:orchestrion')
+    const activationChannel = channel('dd-trace:instrumentation:load')
+    const loadSubscriber = message => loads.push(message)
+    const activationSubscriber = message => activations.push(message)
+    loadChannel.subscribe(loadSubscriber)
+    activationChannel.subscribe(activationSubscriber)
+
+    try {
+      const mod = new Module(filename, module.parent)
+      mod.filename = filename
+      mod.paths = Module._nodeModulePaths(dirname(filename))
+      mod._compile(rewritten, filename)
+
+      assert.deepStrictEqual(loads, [{
+        activationName: 'bullmq',
+        moduleName: 'bullmq',
+        result: 'matched',
+        version: '0.1',
+      }])
+      assert.deepStrictEqual(activations, [])
+    } finally {
+      loadChannel.unsubscribe(loadSubscriber)
+      activationChannel.unsubscribe(activationSubscriber)
+    }
+    assert.strictEqual(rewriter.rewrite(invalid, filename, 'commonjs', {
+      moduleName: 'bullmq',
+      filePath: 'activation.js',
+      activationName: 'bullmq',
+    }), invalid)
+  })
+
+  it('reports unsupported pure targets but not disabled or hybrid rewrites', () => {
+    const source = 'function work () { return true }\n'
+    const unsupported = rewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'unsupported.js'),
+      'commonjs',
+      { moduleName: '@azure/cosmos', filePath: 'unsupported.js', activationName: '@azure/cosmos' }
+    )
+    const hybrid = rewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'hybrid.js'),
+      'commonjs',
+      { moduleName: 'hybrid-test', filePath: 'hybrid.js' }
+    )
+
+    rewriter.disable('bullmq')
+    const disabled = rewriter.rewrite(
+      source,
+      resolve(__dirname, 'node_modules', 'test', 'activation.js'),
+      'commonjs',
+      { moduleName: 'bullmq', filePath: 'activation.js', activationName: 'bullmq' }
+    )
+
+    assert.match(unsupported, /dd-trace:instrumentation:load:orchestrion/)
+    assert.match(unsupported, /"result":"unsupported"/)
+    assert.doesNotMatch(hybrid, /dd-trace:instrumentation:load/)
+    assert.strictEqual(disabled, source)
+  })
+
+  it('does not report pure targets whose version cannot be resolved', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'dd-rewriter-missing-version-'))
+    const filename = join(directory, 'activation.js')
+    const source = 'function work () { return true }\n'
+
+    try {
+      assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', {
+        moduleName: 'bullmq',
+        filePath: 'activation.js',
+        activationName: 'bullmq',
+      }), source)
+    } finally {
+      rmSync(directory, { force: true, recursive: true })
+    }
+  })
 })
 
 describe('rewriter source-map trailer', () => {
