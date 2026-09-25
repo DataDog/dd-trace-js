@@ -90,6 +90,34 @@ describe('Plugin', () => {
           connectionTests()
         })
 
+        describe('with connection and Easy Connect protocol', () => {
+          before(async () => {
+            connection = await oracledb.getConnection({
+              ...config,
+              connectString: `tcp://${config.connectString}`,
+            })
+          })
+
+          after(async () => {
+            await connection.close()
+          })
+
+          it('should use the parsed connection tags', async () => {
+            await Promise.all([
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.instance': dbInstance,
+                  'db.name': dbInstance,
+                  'db.hostname': hostname,
+                  'out.host': hostname,
+                  'network.destination.port': port,
+                },
+              }),
+              connection.execute(dbQuery),
+            ])
+          })
+        })
+
         function connectionTests () {
           it('should be instrumented for promise API', async () => {
             connection.execute(dbQuery)
