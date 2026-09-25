@@ -11,6 +11,17 @@ const handlers = ['src/index.js', 'cjs/src/index.js'].map(filePath => ({
   channelName: 'query',
 }))
 
+const acquisitions = ['src/connection.js', 'cjs/src/connection.js'].map(filePath => ({
+  module: {
+    name: 'postgres',
+    versionRange: '>=3.0.0',
+    filePath,
+  },
+  astQuery: 'Program',
+  transform: 'postgresQueryAcquire',
+  channelName: 'query:acquire',
+}))
+
 const preparations = ['src/connection.js', 'cjs/src/connection.js'].map(filePath => ({
   module: {
     name: 'postgres',
@@ -33,4 +44,4 @@ const lifecycles = ['src/query.js', 'cjs/src/query.js'].map(filePath => ({
   channelName: 'query',
 }))
 
-module.exports = [...handlers, ...preparations, ...lifecycles]
+module.exports = [...handlers, ...acquisitions, ...preparations, ...lifecycles]
