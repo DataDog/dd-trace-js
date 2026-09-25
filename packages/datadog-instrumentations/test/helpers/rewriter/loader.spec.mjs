@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 import { before, describe, it } from 'mocha'
+import dc from 'dc-polyfill'
 
 const require = createRequire(import.meta.url)
 const source = 'export function getTracer () { return "tracer" }\n'
@@ -87,6 +88,41 @@ describe('rewriter loader', () => {
     const result = await load(url, { format: 'module' }, () => ({ format: 'module', source }))
 
     assertRewritten(result.source)
+  })
+
+  it('activates a pure ESM target from the async loader without IITM wrapping', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-hookless-'))
+    const packageDirectory = join(root, 'node_modules', 'bullmq')
+    const filename = join(packageDirectory, 'dist', 'esm', 'classes', 'queue.js')
+    const moduleSource = 'export class Queue { async add () { return "added" } }\n'
+
+    mkdirSync(dirname(filename), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"5.66.0","type":"module"}')
+    const activationChannel = dc.channel('dd-trace:instrumentation:load:orchestrion')
+    const activations = []
+    const subscriber = message => activations.push(message)
+    activationChannel.subscribe(subscriber)
+
+    try {
+      const result = await load(pathToFileURL(filename).href, { format: 'module' }, () => ({
+        format: 'module',
+        source: moduleSource,
+      }))
+      const output = join(packageDirectory, 'output.mjs')
+      writeFileSync(output, result.source)
+      const { Queue } = await import(pathToFileURL(output).href)
+
+      assert.equal(await new Queue().add(), 'added')
+      assert.deepStrictEqual(activations, [{
+        activationName: 'bullmq',
+        moduleName: 'bullmq',
+        result: 'rewritten',
+        version: '5.66.0',
+      }])
+      assert.doesNotMatch(result.source, /import-in-the-middle/)
+    } finally {
+      activationChannel.unsubscribe(subscriber)
+    }
   })
 
   it('rewrites sync loader results', () => {

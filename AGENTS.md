@@ -102,9 +102,10 @@ Group imports with blank lines and sort within each group:
 2. Third-party modules.
 3. Internal modules, furthest path first.
 
-For new methods, add TypeScript-compatible JSDoc with specific parameter types. Omit return types that TypeScript can
-infer. Reuse existing typedefs, never use `any`, and do not add runtime work solely to satisfy static typing. Do not
-rewrite unrelated code only to improve its types.
+New methods require specific TypeScript-compatible JSDoc parameter types; modifying an existing method does not
+require adding JSDoc. Never use `@return`/`@returns` for primitive or `void` return types, and remove any such tag
+made obsolete by a code change. Reuse existing typedefs, never use `any`, and do not add runtime work solely to
+satisfy static typing. Do not rewrite unrelated code only to improve its types.
 
 ## Production Safety and Performance
 

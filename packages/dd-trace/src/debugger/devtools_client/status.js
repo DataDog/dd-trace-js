@@ -35,7 +35,7 @@ const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
   maxQueueBytes: DIAGNOSTICS_QUEUE_MAX_BYTES,
-  timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
+  timeout: config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS * 1000,
   onFlush,
 })
 
