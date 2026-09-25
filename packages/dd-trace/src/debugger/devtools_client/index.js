@@ -4,7 +4,7 @@ const { randomUUID } = require('crypto')
 const { parentPort, workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
-const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
+const { INSPECT_SEGMENT_GLOBAL_PROPERTY, WORKER_ERROR_REASON } = require('../constants')
 const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const {
   CONDITION_ERROR_FLAG,
@@ -49,7 +49,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
   if (params.reason !== 'other') {
     // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
-    throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
+    throw Object.assign(new Error(`Unexpected Debugger.paused reason: ${params.reason}`), {
+      reason: WORKER_ERROR_REASON.UNEXPECTED_PAUSE_REASON,
+    })
   }
 
   let maxReferenceDepth = 0

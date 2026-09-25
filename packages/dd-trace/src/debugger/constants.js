@@ -1,5 +1,13 @@
 'use strict'
 
+const WORKER_ERROR_REASON = Object.freeze({
+  UNEXPECTED_PAUSE_REASON: 'unexpected_pause_reason',
+  UNSUPPORTED_PROBE_TYPE: 'unsupported_probe_type',
+  UNSUPPORTED_INSERTION_POINT: 'unsupported_insertion_point',
+  CONFLICTING_CAPTURE_OPTIONS: 'conflicting_capture_options',
+  UNKNOWN_REMOTE_CONFIG_ACTION: 'unknown_remote_config_action',
+})
+
 module.exports = {
   DEFAULT_QUEUE_MAX_BYTES: 10 * 1024 * 1024,
   DIAGNOSTICS_QUEUE_MAX_BYTES: 1024 * 1024,
@@ -16,4 +24,5 @@ module.exports = {
   GUARDRAIL_METRICS_FLUSH_INTERVAL_MS: 10_000,
 
   INSPECT_SEGMENT_GLOBAL_PROPERTY: 'debuggerInspectSegment',
+  WORKER_ERROR_REASON,
 }
