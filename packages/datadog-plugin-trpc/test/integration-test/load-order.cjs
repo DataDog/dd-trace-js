@@ -11,7 +11,7 @@ async function main (order) {
     ? ['trpc', 'http', 'express', 'router']
     : ['http', 'express', 'router', 'trpc']
   await agent.load(plugins, plugins.map(name => name === 'router' ? { middleware: false } : {}))
-  const express = require('express')
+  const express = require('../../../../versions/express@5').get()
   const trpcVersion = require('../../../../versions/@trpc/server@11')
   const { initTRPC } = trpcVersion.get()
   const trpc = initTRPC.create()
@@ -42,6 +42,7 @@ async function main (order) {
   } finally {
     const closed = once(server, 'close')
     server.close()
+    server.closeIdleConnections?.()
     await closed
     await agent.close()
   }

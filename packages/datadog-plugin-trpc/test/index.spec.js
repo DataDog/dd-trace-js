@@ -39,7 +39,7 @@ describe('trpc server tracing', () => {
         },
       },
     }, { middleware: false }, {}])
-    const express = require('express')
+    const express = require('../../../versions/express@5').get()
     const trpcVersion = require('../../../versions/@trpc/server@11')
     const { initTRPC, lazy } = trpcVersion.get()
     const trpc = initTRPC.create()
