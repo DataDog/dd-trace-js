@@ -1,6 +1,42 @@
 'use strict'
 
+/** @typedef {import('../../../../../index').llmobs.FormattedPromptMessage} FormattedPromptMessage */
+
 const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
+
+function isMessage (value) {
+  return typeof value?.role === 'string' &&
+    value?.type !== 'placeholder' &&
+    (value?.content == null || typeof value.content === 'string') &&
+    (typeof value?.content === 'string' ||
+      (Array.isArray(value?.tool_calls) && value.tool_calls.length > 0) ||
+      (Array.isArray(value?.tool_results) && value.tool_results.length > 0))
+}
+
+function isPlaceholder (value) {
+  return value?.type === 'placeholder' && typeof value?.name === 'string'
+}
+
+function isObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isTool (value) {
+  return isObject(value) &&
+    (value.id == null || typeof value.id === 'string') &&
+    (value.type == null || typeof value.type === 'string') &&
+    (value.tool_id == null || typeof value.tool_id === 'string') &&
+    (value.name == null || typeof value.name === 'string')
+}
+
+function hasValidTools (message) {
+  return (message.tool_call_id == null || typeof message.tool_call_id === 'string') &&
+    (message.tool_calls == null || (Array.isArray(message.tool_calls) && message.tool_calls.every(call =>
+      isTool(call) && (call.function == null ||
+        (isObject(call.function) &&
+          typeof call.function.name === 'string' && typeof call.function.arguments === 'string'))))) &&
+    (message.tool_results == null || (Array.isArray(message.tool_results) && message.tool_results.every(isTool)))
+}
 
 function render (template, variables) {
   return template.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {
@@ -15,7 +51,7 @@ class ManagedPrompt {
    * @param {string} data.id
    * @param {string} data.version
    * @param {'registry'|'cache'|'fallback'|'ff'|'resolve'} data.source
-   * @param {string | Array<{role: string, content: string}>} data.template
+   * @param {string | Array<{role: string, content: string} | {type: 'placeholder', name: string}>} data.template
    * @param {string} [data.promptUuid]
    * @param {string} [data.promptVersionUuid]
    */
@@ -24,7 +60,9 @@ class ManagedPrompt {
     this.version = version
     this.source = source
     this.template = Array.isArray(template)
-      ? Object.freeze(template.map(message => Object.freeze({ role: message.role, content: message.content })))
+      ? Object.freeze(template.map(item => Object.freeze(isPlaceholder(item)
+        ? { type: 'placeholder', name: item.name }
+        : { role: item.role, content: item.content })))
       : template
     this.promptUuid = promptUuid
     this.promptVersionUuid = promptVersionUuid
@@ -34,11 +72,21 @@ class ManagedPrompt {
   /**
    * Render the prompt without changing its stored template.
    * @param {Record<string, unknown>} [variables]
-   * @returns {string | Array<{role: string, content: string}>}
+   * @returns {string | FormattedPromptMessage[]}
    */
   format (variables = {}) {
     if (typeof this.template === 'string') return render(this.template, variables)
-    return this.template.map(message => ({ role: message.role, content: render(message.content, variables) }))
+    return this.template.flatMap(item => {
+      if (!isPlaceholder(item)) return [{ ...item, content: render(item.content, variables) }]
+      if (!Object.hasOwn(variables, item.name)) {
+        throw new TypeError(`Missing message placeholder variable '${item.name}'`)
+      }
+      const messages = variables[item.name]
+      if (!Array.isArray(messages) || !messages.every(message => isMessage(message) && hasValidTools(message))) {
+        throw new TypeError(`Invalid message placeholder variable '${item.name}': expected an array of messages`)
+      }
+      return messages.map(message => ({ ...message }))
+    })
   }
 
   /**
@@ -52,7 +100,10 @@ class ManagedPrompt {
       version: this.version,
       template: typeof this.template === 'string' ? this.template : this.template.map(message => ({ ...message })),
     }
-    const entries = Object.entries(variables ?? {})
+    const placeholderNames = new Set(Array.isArray(this.template)
+      ? this.template.filter(isPlaceholder).map(item => item.name)
+      : [])
+    const entries = Object.entries(variables ?? {}).filter(([name]) => !placeholderNames.has(name))
     if (entries.length) {
       annotation.variables = Object.fromEntries(entries.map(([name, value]) => [name, String(value)]))
     }
@@ -64,8 +115,8 @@ class ManagedPrompt {
   /**
    * Convert a caller fallback to a managed prompt.
    * @param {string} promptId
-   * @param {string | object | Array<{role: string, content: string}> |
-   *   (() => string | object | Array<{role: string, content: string}>)} fallback
+   * @param {string | object | Array<{role: string, content: string} | {type: 'placeholder', name: string}> |
+   *   (() => string | object | Array<{role: string, content: string} | {type: 'placeholder', name: string}>)} fallback
    * @returns {ManagedPrompt}
    */
   static fromFallback (promptId, fallback) {
@@ -73,9 +124,8 @@ class ManagedPrompt {
     const promptLike = value && !Array.isArray(value) && typeof value === 'object'
     const template = promptLike ? value.template : value
     const validTemplate = typeof template === 'string' || (
-      Array.isArray(template) && template.every(message => {
-        return message && typeof message.role === 'string' && typeof message.content === 'string'
-      })
+      Array.isArray(template) && template.every(item =>
+        isPlaceholder(item) || (isMessage(item) && typeof item.content === 'string'))
     )
     if (!validTemplate) {
       throw new TypeError('Invalid prompt fallback: expected a string, chat message array, or object with a template')

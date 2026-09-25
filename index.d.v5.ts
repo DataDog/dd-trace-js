@@ -4083,13 +4083,13 @@ declare namespace tracer {
       /** Create a text or chat prompt and its first version. */
       createPrompt (
         promptId: string,
-        template: string | PromptTemplateMessage[],
+        template: string | PromptTemplateItem[],
         options?: CreatePromptOptions
       ): Promise<PromptResponse>
       /** Add a text or chat version to an existing prompt. */
       createPromptVersion (
         promptId: string,
-        template: string | PromptTemplateMessage[],
+        template: string | PromptTemplateItem[],
         options?: CreatePromptVersionOptions
       ): Promise<PromptVersionResponse>
       /** Update prompt metadata. */
@@ -4113,10 +4113,45 @@ declare namespace tracer {
       content: string
     }
 
+    /** Provider fields on expanded messages; authored templates remain text-only. */
+    interface FormattedPromptMessage extends PromptTemplateMessage {
+      // The inherited content type stays string for compatibility; tool-only payloads can omit it or contain null.
+      tool_calls?: PromptToolCall[] | null,
+      tool_results?: PromptToolResult[] | null,
+      tool_call_id?: string | null
+    }
+
+    interface PromptToolCall {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      arguments?: unknown,
+      function?: {
+        name: string,
+        arguments: string
+      } | null
+    }
+
+    interface PromptToolResult {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      result?: unknown
+    }
+
+    interface PromptMessagePlaceholder {
+      type: 'placeholder',
+      name: string
+    }
+
+    type PromptTemplateItem = PromptTemplateMessage | PromptMessagePlaceholder
+
     type PromptFallbackValue =
       | string
-      | PromptTemplateMessage[]
-      | { template: string | PromptTemplateMessage[], version?: string }
+      | PromptTemplateItem[]
+      | { template: string | PromptTemplateItem[], version?: string }
     type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
 
     interface GetPromptOptions {
@@ -4154,6 +4189,7 @@ declare namespace tracer {
       envIds?: string[]
     }
 
+    // Preserve released output types; placeholder entries and null/omitted tool content are not fully described here.
     interface ManagedPrompt {
       readonly id: string,
       readonly version: string,
@@ -4161,7 +4197,7 @@ declare namespace tracer {
       readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
-      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
       toAnnotation (variables?: Record<string, unknown>): Prompt
     }
 

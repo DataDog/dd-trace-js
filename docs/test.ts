@@ -673,6 +673,12 @@ async function promptManagement () {
   prompts.clearPromptCache({ hot: true, warm: false })
   await prompts.createPrompt('greeting', 'Hello {name}', { title: 'Greeting', envIds: [] })
   await prompts.createPromptVersion('greeting', 'Hello again {name}', { userVersion: '2', envIds: [] })
+  const placeholderTemplate = [
+    { role: 'system', content: 'Be concise' },
+    { type: 'placeholder' as const, name: 'history' }
+  ]
+  await prompts.createPrompt('chat', placeholderTemplate)
+  await prompts.createPromptVersion('chat', placeholderTemplate)
   await prompts.updatePrompt('greeting', { title: '', description: '' })
   await prompts.updatePromptVersion('greeting', 2, { description: '', envIds: [] })
   await prompts.deletePrompt('greeting')
