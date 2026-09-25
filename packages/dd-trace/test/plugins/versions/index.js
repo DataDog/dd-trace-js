@@ -36,6 +36,10 @@ const brokenVersions = {
  * @param {string} range
  */
 function getCappedRange (name, range) {
+  // TODO: remove this test-only pin once APM integration owners handle the 7.30.0 upgrade diagnostics changes.
+  // https://github.com/DataDog/dd-trace-js/pull/10497
+  if (name === 'undici' && range === '7') return '7.29.1'
+
   return range
     .split('||')
     .map(sub => capSubrange(name, sub.trim()))

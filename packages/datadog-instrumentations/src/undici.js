@@ -51,11 +51,6 @@ function wrapRequestUpgrade (Request) {
     return Request
   }
 
-  // Undici 6.x backports publish upgrade trailers through a private helper.
-  if (Function.prototype.toString.call(method).includes('this.#publishUpgradeTrailers()')) {
-    return Request
-  }
-
   shimmer.wrap(Request.prototype, methodName, createWrapUpgrade)
   return Request
 }
