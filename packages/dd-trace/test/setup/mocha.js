@@ -17,6 +17,7 @@ const { engines, nodeMaxMajor } = require('../../../../package.json')
 
 const externals = require('../plugins/externals')
 const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
+const { isTrue } = require('../../src/guardrails/util')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
@@ -316,7 +317,7 @@ function withVersions (plugin, modules, range, cb) {
       "Use '*' to match every installed version.")
   }
 
-  if (!process.env.DD_INJECT_FORCE &&
+  if (!isTrue(process.env.DD_INJECT_FORCE) &&
       !semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
 
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
