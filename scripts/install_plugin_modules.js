@@ -49,19 +49,7 @@ async function run () {
   // Resolving every declared range throws for a hooked package without a pinned latest version, so lint can catch
   // the missing pin before CI reaches the install step.
   if (process.argv.includes('--check')) {
-    const failures = []
-    for (const moduleName of await findModuleNames()) {
-      try {
-        for (const { name, range } of collectPackages([moduleName])) getCappedRange(name, range)
-      } catch (error) {
-        failures.push(`${moduleName}: ${error.message}`)
-      }
-    }
-    if (failures.length) {
-      // eslint-disable-next-line no-console
-      console.error(failures.join('\n'))
-      process.exitCode = 1
-    }
+    for (const { name, range } of collectPackages(await findModuleNames())) getCappedRange(name, range)
     return
   }
   await assertPrerequisites()

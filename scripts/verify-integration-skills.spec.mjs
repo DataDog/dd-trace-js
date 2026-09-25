@@ -1111,6 +1111,12 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     })
   }
 
+  it('scores module formats from the instrumentation when a shimmer sibling has no rewriter', () => {
+    const { reference } = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'shimmer,cjs-esm,cache'])
+
+    assert.strictEqual(reference?.category, 'cache')
+  })
+
   it('falls back to a common reference only when no integration shares the category', () => {
     const common = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'tracing,shimmer'])
     const none = inspect(runTool, 'new-plugin', ['--traits', 'server'])

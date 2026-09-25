@@ -472,10 +472,7 @@ function findLines (filename, values) {
  * @returns {string[]}
  */
 function findWorkflowLines (filename, integrations) {
-  const absoluteFilename = path.join(root, filename)
-  if (!existsSync(absoluteFilename)) return []
-
-  const lines = readFileSync(absoluteFilename, 'utf8').split('\n')
+  const lines = read(filename).split('\n')
   const locations = []
   for (let i = 0; i < lines.length; i++) {
     const plugins = lines[i].match(/\bPLUGINS:\s*['"]?([a-z0-9_|-]+)/)?.[1]
@@ -1180,8 +1177,8 @@ function findClosestReference (integration, mode, traits) {
       score += 8
     }
     if (hasRequestedKind) score += 8
-    if (traits.includes('cjs-esm') && /cjs|commonjs/i.test(rewriterSource || source) &&
-        /esm/i.test(rewriterSource || source)) score += 4
+    const formatSource = rewriterSource || source
+    if (traits.includes('cjs-esm') && /cjs|commonjs/i.test(formatSource) && /esm/i.test(formatSource)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
       if (traits.includes(trait) && (
         rewriterSource.includes(`kind: '${kind}'`) || rewriterSource.includes(`kind: "${kind}"`)
