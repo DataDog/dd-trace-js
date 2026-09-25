@@ -1,6 +1,8 @@
 'use strict'
 
 // Activated rewrites publish their module name to the plugin manager after evaluation.
+// Only pure Orchestrion integrations that need this activation set activate: true.
+// Other entries use hooks or another activation path, or do not need activation from a rewrite.
 const registry = [
   { instrumentations: require('./instrumentations/ai') },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
