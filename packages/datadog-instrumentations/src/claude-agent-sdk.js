@@ -572,6 +572,8 @@ function finishStream (chunks, ctx, error) {
   if (chunks.length > 0) {
     const lastChunk = chunks.at(-1)
     if (lastChunk?.type === 'result') ctx.output = lastChunk.result
+    ctx.initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init')
+    ctx.resultChunk = lastChunk?.type === 'result' ? lastChunk : undefined
 
     try {
       processChunks(chunks, ctx)

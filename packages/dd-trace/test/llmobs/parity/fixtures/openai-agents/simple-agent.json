@@ -1,0 +1,30 @@
+{
+  "responses": [
+    {
+      "match": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "status": 200,
+      "headers": {
+        "CF-RAY": "92370d40a9fc1fe5-IAD",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Date": "Thu, 20 Mar 2025 17:50:26 GMT",
+        "Server": "cloudflare",
+        "Set-Cookie": "__cf_bm=6N2Sw2JA2rGv60f1cuiXraUNUdJN4.dMqybfSxsPX7c-1742493026-1.0.1.1-Xxt3OaYRBD1OpGQaDiC_xV8sGpxd.y11GGd2oXfFPdmUOPSbIE7Amu0GvoY4IEVVmvyU8OAE.QTxcUamf1rAGyg7.4lHN9E8MzmmVG71sdc; path=/; expires=Thu, 20-Mar-25 18:20:26 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+        "Transfer-Encoding": "chunked",
+        "X-Content-Type-Options": "nosniff",
+        "alt-svc": "h3=\":443\"; ma=86400",
+        "cf-cache-status": "DYNAMIC",
+        "openai-organization": "datadog-staging",
+        "openai-processing-ms": "388",
+        "openai-version": "2020-10-01",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-request-id": "req_0c4e571ce27287a2e4c1b8b8bbec4148"
+      },
+      "body": "{\n  \"id\": \"resp_67dc556204f881919479272c4193d7150bd3231a158837cc\",\n  \"object\": \"response\",\n  \"created_at\": 1742493026,\n  \"status\": \"completed\",\n  \"error\": null,\n  \"incomplete_details\": null,\n  \"instructions\": \"You are a helpful assistant who answers questions concisely and accurately.\",\n  \"max_output_tokens\": null,\n  \"model\": \"gpt-4o-2024-08-06\",\n  \"output\": [\n    {\n      \"type\": \"message\",\n      \"id\": \"msg_67dc556255cc81919991d038aea100d40bd3231a158837cc\",\n      \"status\": \"completed\",\n      \"role\": \"assistant\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"text\": \"The capital of France is Paris.\",\n          \"annotations\": []\n        }\n      ]\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"previous_response_id\": null,\n  \"reasoning\": {\n    \"effort\": null,\n    \"generate_summary\": null\n  },\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    }\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [],\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 50,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 8,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 58\n  },\n  \"user\": null,\n  \"metadata\": {}\n}",
+      "stream": false
+    }
+  ]
+}
