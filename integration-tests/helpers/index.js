@@ -3,6 +3,7 @@
 const assert = require('assert')
 const childProcess = require('child_process')
 const { exec, execSync, fork, spawn } = childProcess
+const { once } = require('node:events')
 const { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
@@ -1380,7 +1381,7 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 
 /**
  * Wraps a test body with FakeCiVisIntake lifecycle management. Starts a
- * receiver before the test, passes it (and an optional `run` exec helper that
+ * receiver before the test, passes it (and an optional `run` shell helper that
  * auto-kills on cleanup) to `fn`, then stops the receiver in a finally block.
  *
  * @param {(
@@ -1392,17 +1393,52 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 function withReceiver (fn) {
   return async () => {
     const receiver = await new FakeCiVisIntake().start()
-    let lastProc
+    const useProcessGroup = process.platform !== 'win32'
+    let lastProc, closed
     const run = (cmd, opts) => {
-      // Replace the POSIX shell so cleanup signals the test runner itself.
-      lastProc = exec(process.platform === 'win32' ? cmd : `exec ${cmd}`, opts)
+      // Keep shell operators intact and isolate descendants for cleanup on POSIX.
+      lastProc = useProcessGroup
+        ? spawn(cmd, { ...opts, shell: opts?.shell || true, detached: true })
+        : exec(cmd, opts)
+      closed = once(lastProc, 'close')
+      closed.catch(() => {})
+      // Like exec(), drain output even when the caller does not consume it.
+      lastProc.stdout.resume()
+      lastProc.stderr.resume()
       return lastProc
     }
+
+    /** @param {keyof import('node:os').SignalConstants} signal */
+    function killProcessGroup (signal) {
+      try {
+        process.kill(-lastProc.pid, signal)
+      } catch (error) {
+        if (error.code !== 'ESRCH') throw error
+      }
+    }
+
     try {
       await fn(receiver, run)
     } finally {
       try {
-        await stopProc(lastProc)
+        if (useProcessGroup && lastProc?.pid) {
+          let timeout
+          try {
+            killProcessGroup('SIGTERM')
+            // The shell can exit before its children; close waits for their inherited pipes too.
+            await Promise.race([
+              closed,
+              new Promise(resolve => { timeout = setTimeout(resolve, defaultStopProcTimeoutMs) }),
+            ])
+          } finally {
+            clearTimeout(timeout)
+            // Also stop descendants that ignore SIGTERM or close their pipes before exiting.
+            killProcessGroup('SIGKILL')
+          }
+          await closed
+        } else {
+          await stopProc(lastProc)
+        }
       } finally {
         await receiver.stop()
       }

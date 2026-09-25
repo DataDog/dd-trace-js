@@ -114,28 +114,76 @@ describe('spawnProcAndExpectExit', () => {
 })
 
 describe('withReceiver', () => {
-  // These cases verify POSIX exec shell replacement; Windows uses cmd.exe.
-  const posixIt = process.platform === 'win32' ? it.skip : it
-  for (const fails of [false, true]) {
-    posixIt(`waits for its child to stop when the body ${fails ? 'fails' : 'passes'}`, async () => {
-      let proc
-      const error = new Error('test body failed')
+  for (const exitCode of [0, 1]) {
+    it(`preserves compound commands when the first command exits with ${exitCode}`, async () => {
       const runTest = withReceiver(async (receiver, run) => {
-        proc = run('node -e "process.stdout.write(String(process.pid)); setInterval(() => {}, 1000)"')
-        const [pid] = await once(proc.stdout, 'data')
-        assert.strictEqual(Number(pid), proc.pid)
-        if (fails) throw error
+        let output = ''
+        const proc = run(
+          `node -e "process.exit(${exitCode})" && node -e "process.stdout.write('second command')"`
+        )
+        proc.stdout.on('data', chunk => { output += chunk })
+        const [code] = await once(proc, 'close')
+        assert.strictEqual(code, exitCode)
+        assert.strictEqual(output, exitCode === 0 ? 'second command' : '')
       })
-
-      try {
-        if (fails) await assert.rejects(runTest(), error)
-        else await runTest()
-        assert.ok(proc.exitCode !== null || proc.signalCode !== null, 'child must exit before cleanup resolves')
-      } finally {
-        await stopProc(proc)
-      }
+      await runTest()
     })
   }
+
+  // POSIX process groups are unavailable on Windows.
+  const posixIt = process.platform === 'win32' ? it.skip : it
+  for (const compound of [false, true]) {
+    for (const fails of [false, true]) {
+      posixIt(`stops ${compound ? 'compound' : 'simple'} command children when the body ${fails ? 'fails' : 'passes'}`,
+        async () => {
+          let proc
+          let output = ''
+          const error = new Error('test body failed')
+          const runTest = withReceiver(async (receiver, run) => {
+            const prefix = compound ? 'node -e "process.exit(0)" && ' : ''
+            proc = run(prefix + 'node -e "' +
+              "process.on('SIGTERM', () => { process.stdout.write('stopped'); process.exit(0) }); " +
+              "process.stdout.write('ready'); setInterval(() => {}, 1000)" + '"')
+            proc.stdout.on('data', chunk => { output += chunk })
+            await once(proc.stdout, 'data')
+            if (fails) throw error
+          })
+
+          try {
+            if (fails) await assert.rejects(runTest(), error)
+            else await runTest()
+            assert.strictEqual(output, 'readystopped')
+            assert.ok(proc.stdout.destroyed, 'child pipes must close before cleanup resolves')
+            assert.ok(proc.exitCode !== null || proc.signalCode !== null, 'shell must exit before cleanup resolves')
+          } finally {
+            await stopProc(proc)
+          }
+        })
+    }
+  }
+
+  posixIt('stops a child that ignores SIGTERM after its shell exits', async () => {
+    const clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let proc
+    let ready
+    const started = new Promise(resolve => { ready = resolve })
+    const runTest = withReceiver(async (receiver, run) => {
+      proc = run('node -e "process.exit(0)" && node -e "' +
+        "process.on('SIGTERM', () => {}); process.stdout.write('ready'); setInterval(() => {}, 1000)" + '"')
+      await once(proc.stdout, 'data')
+      ready()
+    })
+    const stopped = runTest()
+
+    try {
+      await Promise.all([stopped, started.then(() => clock.tickAsync(2_000))])
+      assert.ok(proc.stdout.destroyed, 'surviving child must close its pipes before cleanup resolves')
+      assert.strictEqual(clock.countTimers(), 0)
+    } finally {
+      clock.restore()
+      await stopProc(proc)
+    }
+  })
 
   it('preserves a failure and starts a fresh retry after closing a pending request', async () => {
     const mocha = new Mocha({ reporter: class {} })
