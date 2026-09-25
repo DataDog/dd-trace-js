@@ -92,6 +92,31 @@ describe('sdk', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
     })
+
+    it('exposes class-based evaluator primitives and built-ins', () => {
+      for (const name of [
+        'BaseAsyncEvaluator',
+        'BaseAsyncSummaryEvaluator',
+        'BaseEvaluator',
+        'BaseSummaryEvaluator',
+        'EvaluatorContext',
+        'SummaryEvaluatorContext',
+        'EvaluatorResult',
+        'MultiEvaluatorResult',
+        'BaseStructuredOutput',
+        'BooleanStructuredOutput',
+        'CategoricalStructuredOutput',
+        'LLMJudge',
+        'ScoreStructuredOutput',
+        'JSONEvaluator',
+        'LengthEvaluator',
+        'RegexMatchEvaluator',
+        'SemanticSimilarityEvaluator',
+        'StringCheckEvaluator',
+      ]) {
+        assert.strictEqual(typeof llmobs[name], 'function')
+      }
+    })
   })
 
   describe('enable', () => {

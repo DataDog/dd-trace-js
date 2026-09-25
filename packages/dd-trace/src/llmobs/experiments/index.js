@@ -4,6 +4,9 @@ const log = require('../../log')
 const { ExperimentsClient } = require('./client')
 const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
+const evaluatorTypes = require('./evaluator')
+const builtinEvaluators = require('./builtins')
+const llmJudgeTypes = require('./llm-judge')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
@@ -220,4 +223,4 @@ function createExperiments (config, llmobs) {
   return new Experiments(config, llmobs)
 }
 
-module.exports = { Experiments, createExperiments }
+module.exports = { Experiments, createExperiments, ...evaluatorTypes, ...builtinEvaluators, ...llmJudgeTypes }

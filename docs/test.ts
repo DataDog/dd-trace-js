@@ -749,7 +749,36 @@ llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
 
 // export a span
-llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
+llmobs.enable({ mlApp: 'myApp', projectName: 'my-project', agentlessEnabled: false })
+
+class ExampleEvaluator extends llmobs.BaseEvaluator {
+  evaluate (context: llmobs.EvaluatorContext) {
+    return context.outputData
+  }
+}
+
+const jsonEvaluator = new llmobs.JSONEvaluator({ requiredKeys: ['answer'] })
+const lengthEvaluator = new llmobs.LengthEvaluator({ maxLength: 100 })
+const regexEvaluator = new llmobs.RegexMatchEvaluator({ pattern: '^answer' })
+const similarityEvaluator = new llmobs.SemanticSimilarityEvaluator({ embeddingFn: text => [text.length] })
+const judgeOutput = new llmobs.BooleanStructuredOutput({ description: 'Whether the output is correct', passWhen: true })
+const judge = new llmobs.LLMJudge({
+  userPrompt: 'Evaluate {{output_data}}.',
+  model: 'judge-model',
+  structuredOutput: judgeOutput,
+  client: (_provider, _messages, _schema, _model) => '{"boolean_eval":true}'
+})
+class AsyncExampleEvaluator extends llmobs.BaseAsyncEvaluator {
+  async evaluate (context: llmobs.EvaluatorContext) {
+    return context.outputData
+  }
+}
+jsonEvaluator.name
+lengthEvaluator.name
+regexEvaluator.name
+similarityEvaluator.name
+judge.name
+
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;

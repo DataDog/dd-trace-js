@@ -61,6 +61,8 @@ async function runExperiment (experiments) {
     },
     evaluators: {
       exact_match: (_input, output, expected) => output.response === expected, // boolean
+      response_shape: new tracer.llmobs.JSONEvaluator({ requiredKeys: ['response'] }),
+      response_length: new tracer.llmobs.LengthEvaluator({ minLength: 1, maxLength: 100 }),
       confidence_score: (_input, output) => Number(output.confidence), // score
       verdict_category: (_input, output) => (output.response === 'true' ? 'in-topic' : 'off-topic'), // categorical
     },
