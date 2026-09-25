@@ -1,14 +1,21 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFile } = require('node:child_process')
+const { once } = require('node:events')
+const http = require('node:http')
+const { promisify } = require('node:util')
 
 const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
+const { setup, sort, withAwsSdkV2Versions, withAwsSdkV3Versions, withAwsSdkVersions } = require('./spec_helpers')
+
+const execFileAsync = promisify(execFile)
 
 describe('Plugin', () => {
   // The config singleton is built lazily on the first `agent.load(...)` and is
@@ -521,6 +528,206 @@ describe('Plugin', () => {
           assert.strictEqual(sns.config.batchPropagationEnabled, true)
           assert.strictEqual(sqs.config.batchPropagationEnabled, true)
         })
+      })
+    })
+  })
+
+  describe('default service', () => {
+    setup()
+
+    withAwsSdkV2Versions('>=2.3.0', version => {
+      let server
+      let sts
+
+      before(async () => {
+        await agent.load('aws-sdk', { aws: { service: 'test-aws-fallback' } })
+
+        const responseBody = [
+          '<GetSessionTokenResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">',
+          '<GetSessionTokenResult><Credentials><AccessKeyId>new-key</AccessKeyId>',
+          '<SecretAccessKey>new-secret</SecretAccessKey><SessionToken>new-token</SessionToken>',
+          '<Expiration>2030-01-01T00:00:00Z</Expiration></Credentials></GetSessionTokenResult>',
+          '<ResponseMetadata><RequestId>abc</RequestId></ResponseMetadata></GetSessionTokenResponse>',
+        ].join('')
+        server = http.createServer((request, response) => {
+          response.writeHead(200, { 'content-type': 'text/xml' })
+          response.end(responseBody)
+        })
+        server.listen(0, '127.0.0.1')
+        await once(server, 'listening')
+
+        const AWS = require(`../../../versions/aws-sdk@${version}`).get()
+        sts = new AWS.STS({
+          region: 'us-east-1',
+          endpoint: `http://127.0.0.1:${server.address().port}`,
+          credentials: { accessKeyId: 'x', secretAccessKey: 'y' },
+          maxRetries: 0,
+        })
+      })
+
+      after(() => Promise.all([agent.close(), new Promise(resolve => server.close(resolve))]))
+
+      it('traces promise requests with the aws service configuration', async () => {
+        const tracePromise = agent.assertSomeTraces(traces => {
+          const span = traces.flat().find(span => span.name === 'aws.request')
+          assert.ok(span)
+          assert.strictEqual(span.service, 'test-aws-fallback')
+          assert.strictEqual(span.meta['aws.service'], 'STS')
+        })
+        const [response] = await Promise.all([sts.getSessionToken({}).promise(), tracePromise])
+
+        assert.strictEqual(response.Credentials.AccessKeyId, 'new-key')
+      })
+
+      it('traces callback requests with the aws service configuration', async () => {
+        const tracePromise = agent.assertSomeTraces(traces => {
+          const span = traces.flat().find(span => span.name === 'aws.request')
+          assert.ok(span)
+          assert.strictEqual(span.service, 'test-aws-fallback')
+          assert.strictEqual(span.meta['aws.service'], 'STS')
+        })
+        const responsePromise = new Promise((resolve, reject) => {
+          sts.getSessionToken({}).send((error, response) => error ? reject(error) : resolve(response))
+        })
+        const [response] = await Promise.all([responsePromise, tracePromise])
+
+        assert.strictEqual(response.Credentials.AccessKeyId, 'new-key')
+      })
+    })
+
+    class GetCallerIdentityCommand {
+      constructor () {
+        this.input = {}
+      }
+
+      resolveMiddleware () {
+        return () => Promise.resolve({ output: { Account: '123456789012' } })
+      }
+    }
+
+    const testDefaultService = (version, moduleName) => {
+      let client
+
+      before(async () => {
+        await agent.load('aws-sdk', { aws: { service: 'test-aws-fallback' } })
+
+        const Client = require(`../../../versions/${moduleName}@${version}`).get().Client
+        class STSClient extends Client {}
+
+        client = new STSClient({
+          region: () => Promise.resolve('us-east-1'),
+          requestHandler: {},
+          serviceId: 'STS',
+        })
+      })
+
+      after(() => agent.close())
+
+      it('traces services without a dedicated plugin', async () => {
+        const tracePromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.strictEqual(span.name, 'aws.request')
+          assert.strictEqual(span.resource, 'getCallerIdentity')
+          assert.strictEqual(span.service, 'test-aws-fallback')
+          assert.strictEqual(span.meta['aws.service'], 'STS')
+        })
+
+        const response = await client.send(new GetCallerIdentityCommand())
+
+        assert.deepStrictEqual(response, { Account: '123456789012' })
+        await tracePromise
+      })
+
+      it('traces callback requests without a dedicated plugin', async () => {
+        const tracePromise = agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+
+          assert.strictEqual(span.name, 'aws.request')
+          assert.strictEqual(span.service, 'test-aws-fallback')
+          assert.strictEqual(span.meta['aws.service'], 'STS')
+        })
+        const responsePromise = new Promise((resolve, reject) => {
+          client.send(new GetCallerIdentityCommand(), (error, response) => error ? reject(error) : resolve(response))
+        })
+        const [response] = await Promise.all([responsePromise, tracePromise])
+
+        assert.deepStrictEqual(response, { Account: '123456789012' })
+      })
+
+      it('honors the aws service configuration when disabled', async () => {
+        const tracer = require('../../dd-trace')
+        tracer.use('aws-sdk', { aws: false })
+
+        const noTraces = agent.assertNoTraces(traces => {
+          assert.strictEqual(traces.flat().some(span => span.name === 'aws.request'), false)
+        })
+        const [response] = await Promise.all([client.send(new GetCallerIdentityCommand()), noTraces])
+
+        assert.deepStrictEqual(response, { Account: '123456789012' })
+      })
+    }
+
+    withAwsSdkV3Versions(testDefaultService)
+    withVersions('aws-sdk', ['@smithy/smithy-client'], '>=1.0.3', testDefaultService)
+
+    withAwsSdkV3Versions((version, moduleName) => {
+      describe('disabled fallback service', () => {
+        let client
+        let tracer
+        let originalEnabled
+
+        before(async () => {
+          originalEnabled = process.env.DD_TRACE_AWS_SDK_AWS_ENABLED
+          process.env.DD_TRACE_AWS_SDK_AWS_ENABLED = 'false'
+          tracer = await agent.load('aws-sdk')
+
+          const Client = require(`../../../versions/${moduleName}@${version}`).get().Client
+          class STSClient extends Client {}
+          client = new STSClient({
+            region: () => Promise.resolve('us-east-1'),
+            requestHandler: {},
+            serviceId: 'STS',
+          })
+        })
+
+        after(async () => {
+          if (originalEnabled === undefined) delete process.env.DD_TRACE_AWS_SDK_AWS_ENABLED
+          else process.env.DD_TRACE_AWS_SDK_AWS_ENABLED = originalEnabled
+          await agent.close()
+        })
+
+        it('does not tag an active parent span', async () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat()
+            assert.strictEqual(spans.some(span => span.name === 'aws.request'), false)
+
+            const parent = spans.find(span => span.name === 'parent')
+            assert.ok(parent)
+            assert.strictEqual(parent.meta['aws.region'], undefined)
+            assert.strictEqual(parent.meta.region, undefined)
+            assert.strictEqual(parent.meta['aws.partition'], undefined)
+          })
+          const [response] = await Promise.all([
+            tracer.trace('parent', () => client.send(new GetCallerIdentityCommand())),
+            tracePromise,
+          ])
+
+          assert.deepStrictEqual(response, { Account: '123456789012' })
+        })
+      })
+    })
+
+    it('does not raise a plugin error when disabled in a serverless process', async function () {
+      this.timeout(15000)
+      await execFileAsync(process.execPath, [require.resolve('./fixtures/disabled-default-serverless')], {
+        env: {
+          ...process.env,
+          AWS_LAMBDA_FUNCTION_NAME: 'test',
+          DD_TRACE_AWS_SDK_AWS_ENABLED: 'false',
+          DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent',
+        },
+        timeout: 10000,
       })
     })
   })

@@ -125,7 +125,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
-      if (!IS_SERVERLESS) return
+      if (!IS_SERVERLESS || !ctx.currentStore?.span) return
 
       const { awsRegion, awsService, currentStore, request } = ctx
       const peerServerlessStorage = storage('peerServerless')
@@ -145,10 +145,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       }
     })
 
-    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, ({ region }) => {
-      const store = storage('legacy').getStore()
-      if (!store) return
-      const { span } = store
+    this.addSub(`apm:aws:request:region:${this.serviceIdentifier}`, ({ region, currentStore }) => {
+      const span = currentStore?.span
       if (!span) return
       span.setTag('aws.region', region)
       span.setTag('region', region)
@@ -160,7 +158,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       if (!IS_SERVERLESS) return
 
-      const hostname = getHostname(store, region)
+      const hostname = getHostname(currentStore, region)
       if (!hostname) return
 
       span.setTag('peer.service', hostname)
