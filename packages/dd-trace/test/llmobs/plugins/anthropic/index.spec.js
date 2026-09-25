@@ -430,6 +430,83 @@ describe('Plugin', () => {
       })
     })
 
+    describe('web search', () => {
+      const tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 1 }]
+
+      /**
+       * @param {object[]} apmSpans
+       * @param {object[]} llmobsSpans
+       * @param {{ content: string, webSearchCount?: number }} options
+       */
+      function assertWebSearchSpan (apmSpans, llmobsSpans, { content, webSearchCount }) {
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'anthropic.request',
+          modelName: 'claude-haiku-4-5-20251001',
+          modelProvider: 'anthropic',
+          inputMessages: [{ role: 'user', content }],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: { max_tokens: 1024 },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            ephemeral_5m_input_tokens: MOCK_NUMBER,
+            ephemeral_1h_input_tokens: MOCK_NUMBER,
+            ...(webSearchCount === undefined ? {} : { web_search_count: webSearchCount }),
+          },
+          tags: { ml_app: 'test', integration: 'anthropic' },
+        })
+      }
+
+      it('tags web_search_count from usage (non-streaming)', async () => {
+        const content = 'Search the web for the latest Node.js LTS release. Answer in one sentence.'
+        await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content }],
+          max_tokens: 1024,
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertWebSearchSpan(apmSpans, llmobsSpans, { content, webSearchCount: 1 })
+      })
+
+      it('tags web_search_count from the final message_delta (streaming)', async () => {
+        const content = 'Search the web for the latest Node.js LTS release. Answer in one sentence, streamed.'
+        const stream = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content }],
+          max_tokens: 1024,
+          tools,
+          stream: true,
+        })
+
+        for await (const chunk of stream) {
+          assert.ok(chunk)
+        }
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertWebSearchSpan(apmSpans, llmobsSpans, { content, webSearchCount: 1 })
+      })
+
+      it('omits web_search_count when no search runs', async () => {
+        const content = 'What is 2 + 2? Do not search the web.'
+        await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content }],
+          max_tokens: 1024,
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertWebSearchSpan(apmSpans, llmobsSpans, { content })
+      })
+    })
+
     describe('beta.messages.create', () => {
       before(function () {
         if (!isBetaSupported) this.skip()
