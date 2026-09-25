@@ -23,7 +23,8 @@ const ARGUMENTS_BINDING = 1
 const MODULE_BINDING = 2
 const REQUIRE_BINDING = 4
 const COMMONJS_BINDINGS = MODULE_BINDING | REQUIRE_BINDING
-const targetPackages = new Set([...Object.keys(hooks), ...getRewriteTargetNames()])
+const targetPackages = new Set(Object.keys(hooks))
+for (const name of getRewriteTargetNames()) targetPackages.add(name)
 const entrypoints = new Map()
 const loadedHooks = new Set()
 const packageCache = new Map()

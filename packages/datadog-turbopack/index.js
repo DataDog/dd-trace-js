@@ -159,7 +159,9 @@ function hasDatadogLoader (value) {
  */
 function createPackagePathPattern () {
   const names = []
-  for (const name of new Set([...Object.keys(hooks), ...getRewriteTargetNames()])) {
+  const targetPackages = new Set(Object.keys(hooks))
+  for (const name of getRewriteTargetNames()) targetPackages.add(name)
+  for (const name of targetPackages) {
     if (!name.startsWith('.') && !BUILTIN_MODULES.has(name)) names.push(escapeRegExp(name))
   }
   names.sort()
