@@ -160,29 +160,37 @@ describe('Disabled APM Tracing or Standalone', () => {
       assert.strictEqual(spanContext._trace.tags[DECISION_MAKER_KEY], '-5')
     })
 
-    it('should replace an extracted probability drop with a non-probability keep', () => {
-      standalone.configure(config)
+    for (const style of ['datadog', 'tracecontext']) {
+      for (const priority of [-1, 0, 1, USER_KEEP]) {
+        it(`marks an inherited ${style} priority ${priority} with a trace source as non-probabilistic`, () => {
+          config.tracePropagationStyle.extract = style === 'datadog' ? ['datadog', 'tracecontext'] : ['tracecontext']
+          config.tracePropagationStyle.inject = ['tracecontext']
+          standalone.configure(config)
 
-      const carrier = {
-        'x-datadog-trace-id': '123',
-        'x-datadog-parent-id': '456',
-        'x-datadog-sampling-priority': '-1',
-        'x-datadog-tags': '_dd.p.ts=02',
-        traceparent: '00-0000000000000000000000000000007b-00000000000001c8-00',
-        tracestate: 'ot=rv:123456789abcde;th:8',
+          try {
+            const carrier = {
+              'x-datadog-trace-id': '123',
+              'x-datadog-parent-id': '456',
+              'x-datadog-sampling-priority': String(priority),
+              'x-datadog-tags': '_dd.p.ts=02,_dd.p.dm=-5',
+              traceparent: `00-0000000000000000000000000000007b-00000000000001c8-${priority > 0 ? '01' : '00'}`,
+              tracestate: `dd=s:${priority};t.ts:02;t.dm:-5,ot=rv:123456789abcde;th:8;extra:value`,
+            }
+            const propagator = new TextMapPropagator(config)
+            const spanContext = propagator.extract(carrier)
+
+            assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+            assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
+
+            const injected = propagator.inject(spanContext, {})
+            assert.match(injected.traceparent, /-01$/)
+            assert.strictEqual(TraceState.fromString(injected.tracestate).get('ot'), 'rv:123456789abcde;extra:value')
+          } finally {
+            standalone.configure({ apmTracingEnabled: true })
+          }
+        })
       }
-
-      const propagator = new TextMapPropagator(config)
-      const spanContext = propagator.extract(carrier)
-
-      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
-      assert.strictEqual(spanContext._sampling.probabilityRate, undefined)
-      assert.strictEqual(spanContext._sampling.isProbabilityDecision, false)
-
-      const injected = propagator.inject(spanContext, {})
-      assert.match(injected.traceparent, /-01$/)
-      assert.match(injected.tracestate, /(?:^|,)ot=rv:123456789abcde(?:,|$)/)
-    })
+    }
 
     it('should keep priority if apm tracing is enabled', () => {
       config.apmTracingEnabled = true

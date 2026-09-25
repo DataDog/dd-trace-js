@@ -23,12 +23,12 @@ function configure (config) {
 function onSpanExtract ({ spanContext = {} }) {
   if (!spanContext._trace?.tags || !spanContext._sampling) return
 
-  // reset upstream priority if _dd.p.ts is not found
-  if (!hasTraceSourcePropagationTag(spanContext._trace.tags)) {
-    spanContext._sampling.priority = undefined
-  } else if (spanContext._sampling.priority !== USER_KEEP) {
+  if (hasTraceSourcePropagationTag(spanContext._trace.tags)) {
     spanContext._sampling.priority = USER_KEEP
     spanContext._sampling.isProbabilityDecision = false
+  } else {
+    // Reset upstream priority if _dd.p.ts is not found.
+    spanContext._sampling.priority = undefined
   }
 }
 
