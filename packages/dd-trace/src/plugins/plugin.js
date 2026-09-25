@@ -109,8 +109,9 @@ module.exports = class Plugin {
   /**
    * Subscribe to a diagnostic channel with automatic error handling and enable/disable lifecycle.
    *
+   * @template T
    * @param {string} channelName Diagnostic channel name.
-   * @param {(message: unknown, name: string) => unknown} handler Handler invoked on messages.
+   * @param {(message: T, name: string) => unknown} handler Handler invoked on messages.
    */
   addSub (channelName, handler) {
     const wrappedHandler = (message, name) => {
@@ -128,8 +129,9 @@ module.exports = class Plugin {
   /**
    * Bind the tracer store to a diagnostic channel with a transform function.
    *
+   * @template T
    * @param {string} channelName Diagnostic channel name.
-   * @param {(data: unknown) => object} transform Transform to compute the bound store.
+   * @param {(data: T) => object} transform Transform to compute the bound store.
    */
   addBind (channelName, transform) {
     this._bindings.push(new StoreBinding(channelName, transform))

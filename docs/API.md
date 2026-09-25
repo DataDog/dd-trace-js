@@ -147,6 +147,9 @@ tracer.use('openai', {
 <h5 id="sharedb"></h5>
 <h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
+<h5 id="trpc"></h5>
+
+tRPC server queries and mutations create `trpc.procedure` spans. An Express request for one resolved procedure uses its route as the HTTP resource. A batch keeps the Express mount route. Direct server callers receive procedure spans without an HTTP request. Other Node adapters receive procedure spans when they use the shared procedure path; Express owns the HTTP resource naming described here.
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
 <h5 id="web"></h5>
@@ -235,6 +238,7 @@ tracer.use('openai', {
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
 * [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
+* [trpc](./interfaces/export_.plugins.trpc.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
 * [web](./interfaces/export_.plugins.web.html)

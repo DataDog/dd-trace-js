@@ -438,6 +438,7 @@ tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('supabase');
 tracer.use('tedious');
+tracer.use('trpc');
 tracer.use('undici');
 tracer.use('vitest');
 tracer.use('vitest', { service: 'vitest-service' });

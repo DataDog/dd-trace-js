@@ -26,13 +26,15 @@ function filename (name, file) {
  * @param {string} name
  * @param {string|undefined} version
  * @param {string} moduleName
- * @param {{ file?: string, filePattern?: string, versions?: string[] }} instrumentation
+ * @param {{ file?: string, filePattern?: string|RegExp, versions?: string[] }} instrumentation
  */
 function matchesInstrumentation (name, version, moduleName, instrumentation) {
   const { file, filePattern, versions } = instrumentation
   let matchesFile = moduleName === filename(name, file)
   if (!matchesFile && isRelativeRequire(name)) matchesFile = true
-  if (!matchesFile && filePattern) {
+  if (!matchesFile && filePattern instanceof RegExp) {
+    matchesFile = moduleName.startsWith(`${name}/`) && filePattern.test(moduleName.slice(name.length + 1))
+  } else if (!matchesFile && typeof filePattern === 'string') {
     matchesFile = new RegExp(filename(name, filePattern)).test(moduleName)
   }
   return matchesFile && matchVersion(version, versions)

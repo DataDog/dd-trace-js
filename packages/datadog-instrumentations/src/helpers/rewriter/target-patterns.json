@@ -1,0 +1,14 @@
+{
+  "@trpc/server": [
+    "^dist\\/initTRPC-[A-Za-z0-9_-]+\\.cjs$",
+    "^dist\\/initTRPC-[A-Za-z0-9_-]+\\.mjs$",
+    "^dist\\/node-http-[A-Za-z0-9_-]+\\.cjs$",
+    "^dist\\/node-http-[A-Za-z0-9_-]+\\.mjs$",
+    "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.js$",
+    "^dist\\/nodeHTTPRequestHandler-[A-Za-z0-9_-]+\\.mjs$",
+    "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.js$",
+    "^dist\\/resolveHTTPResponse-[A-Za-z0-9_-]+\\.mjs$",
+    "^dist\\/resolveResponse-[A-Za-z0-9_-]+\\.cjs$",
+    "^dist\\/resolveResponse-[A-Za-z0-9_-]+\\.mjs$"
+  ]
+}

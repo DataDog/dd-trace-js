@@ -8,6 +8,7 @@ module.exports = {
   '@supabase/realtime-js': { esmFirst: true, fn: () => require('../supabase') },
   '@supabase/storage-js': { esmFirst: true, fn: () => require('../supabase') },
   '@supabase/supabase-js': { esmFirst: true, fn: () => require('../supabase') },
+  '@trpc/server': { esmFirst: true, fn: () => require('../trpc') },
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
