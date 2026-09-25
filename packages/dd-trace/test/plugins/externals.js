@@ -726,6 +726,12 @@ module.exports = {
       versions: ['2'],
     },
   ],
+  'react-router': [
+    {
+      name: 'react',
+      dep: true,
+    },
+  ],
   redis: [
     {
       name: 'redis',

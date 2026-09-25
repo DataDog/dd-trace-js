@@ -3,139 +3,114 @@
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT } = require('../../dd-trace/src/constants')
-const web = require('../../dd-trace/src/plugins/util/web')
+const log = require('../../dd-trace/src/log')
 const WebPlugin = require('../../datadog-plugin-web/src')
-const { RESOURCE_NAME, HTTP_ROUTE } = require('../../../ext/tags')
+const { HTTP_ROUTE, HTTP_URL, RESOURCE_NAME } = require('../../../ext/tags')
 
 /**
- * React Router Framework Mode plugin.
- *
- * Enrich the active Express/http request span with parameterized route patterns
- * from React Router's ServerInstrumentation API, and create child spans for
- * loaders and actions.
- *
- * @see https://github.com/DataDog/dd-trace-js/issues/5486
+ * @typedef {{ arguments: unknown[], result: Array<{ route?: { path?: string } }> | null }} RouteMatchContext
+ * @typedef {object} HandlerContext
+ * @property {string} routeId
+ * @property {string} [pattern]
+ * @property {(result: unknown, rejected: boolean) => void} [complete]
  */
+
 class ReactRouterPlugin extends WebPlugin {
   static id = 'react-router'
 
-  /** @type {{ span: import('../../dd-trace/src/opentracing/span'), parentStore: object }[]} */
-  #handlerStack = []
+  /**
+   * @param {object} tracer
+   * @param {import('../../dd-trace/src/config/config-base')} tracerConfig
+   */
+  constructor (tracer, tracerConfig) {
+    super(tracer, tracerConfig)
 
-  constructor (...args) {
-    super(...args)
-
-    this.addSub('apm:react-router:request:route', ({ route, method }) => {
-      this.#setRoute(route, method)
+    this.addSub('tracing:orchestrion:react-router:matchServerRoutes:end', ctx => {
+      this.#setRouteFromMatches(/** @type {RouteMatchContext} */ (ctx))
     })
-
-    this.addSub('apm:react-router:request:error', ({ error }) => {
-      this.#tagError(error)
+    this.addBind('apm:react-router:loader:start', ctx => {
+      return this.#startHandlerSpan('loader', /** @type {HandlerContext} */ (ctx))
     })
-
-    this.addSub('apm:react-router:loader:start', message => {
-      this.#startHandlerSpan('loader', message)
-    })
-    this.addSub('apm:react-router:loader:finish', () => {
-      this.#finishHandlerSpan()
-    })
-    this.addSub('apm:react-router:loader:error', ({ error }) => {
-      this.#tagHandlerError(error)
-    })
-
-    this.addSub('apm:react-router:action:start', message => {
-      this.#startHandlerSpan('action', message)
-    })
-    this.addSub('apm:react-router:action:finish', () => {
-      this.#finishHandlerSpan()
-    })
-    this.addSub('apm:react-router:action:error', ({ error }) => {
-      this.#tagHandlerError(error)
+    this.addBind('apm:react-router:action:start', ctx => {
+      return this.#startHandlerSpan('action', /** @type {HandlerContext} */ (ctx))
     })
   }
 
-  /**
-   * @param {string} route
-   * @param {string | undefined} method
-   */
-  #setRoute (route, method) {
-    if (!route) return
+  /** @param {RouteMatchContext} ctx */
+  #setRouteFromMatches (ctx) {
+    const matches = ctx.result
+    if (!matches?.length) return
 
-    const store = storage('legacy').getStore()
-    const req = store?.req
-
-    if (req) {
-      web.patch(req)
-      web.setRoute(req, route)
-    }
-
-    const span = (req && web.root(req)) || store?.span
+    const span = /** @type {import('../../dd-trace/src/opentracing/span') | undefined} */ (
+      storage('legacy').getStore()?.span
+    )
     if (!span) return
+    const httpUrl = span.context().getTag(HTTP_URL)
+    if (typeof httpUrl !== 'string') return
+
+    let pathname = new URL(httpUrl, 'http://localhost').pathname
+    if (pathname.endsWith('/_root.data')) {
+      pathname = pathname.slice(0, -'/_root.data'.length) || '/'
+    } else if (pathname.endsWith('.data')) {
+      pathname = pathname.slice(0, -'.data'.length)
+    }
+    if (pathname.length > 1 && pathname.endsWith('/')) pathname = pathname.slice(0, -1)
+
+    const args = ctx.arguments
+    const matchedPathname = typeof args[1] === 'string' ? args[1] : args[3] ?? args[2]
+    if (pathname !== matchedPathname && pathname + '/' !== matchedPathname &&
+      !(pathname.endsWith('/_') && pathname.slice(0, -1) === matchedPathname)) return
+
+    let route = ''
+    for (const match of matches) {
+      const path = match.route?.path
+      if (path) route += '/' + path
+    }
+    route = route.replaceAll(/\/+/g, '/') || '/'
 
     span.setTag(HTTP_ROUTE, route)
-    if (method) {
-      span.setTag(RESOURCE_NAME, `${method} ${route}`)
-    }
   }
 
   /**
    * @param {'loader' | 'action'} kind
-   * @param {{ routeId?: string, pattern?: string }} message
+   * @param {HandlerContext} ctx
    */
-  #startHandlerSpan (kind, message) {
+  #startHandlerSpan (kind, ctx) {
     const store = storage('legacy').getStore()
     const childOf = store?.span
-    if (!childOf) return
+    if (!childOf) return store
 
-    const pattern = message.pattern || message.routeId || kind
-    const span = this.tracer.startSpan(`react-router.${kind}`, {
+    const span = this.tracer.startSpan('react-router.' + kind, {
       childOf,
-      integrationName: this.constructor.id,
+      integrationName: ReactRouterPlugin.id,
       tags: {
-        [COMPONENT]: this.constructor.id,
-        [RESOURCE_NAME]: pattern,
-        'react-router.route_id': message.routeId,
+        [COMPONENT]: ReactRouterPlugin.id,
+        [RESOURCE_NAME]: ctx.pattern || ctx.routeId || kind,
+        'react-router.route_id': ctx.routeId,
       },
     })
-
     analyticsSampler.sample(span, this.config.measured, true)
 
-    this.#handlerStack.push({ span, parentStore: store })
-    this.enter(span, store)
-  }
-
-  #finishHandlerSpan () {
-    const active = this.#handlerStack.pop()
-    if (!active) return
-
-    active.span.finish()
-    storage('legacy').enterWith(active.parentStore)
-  }
-
-  /**
-   * @param {unknown} error
-   */
-  #tagHandlerError (error) {
-    const active = this.#handlerStack.at(-1)
-    if (active) {
-      this.addError(error, active.span)
+    ctx.complete = (result, rejected) => {
+      const outcome = /** @type {{ status?: string, error?: Error }} */ (result)
+      const error = rejected ? result : outcome?.status === 'error' ? outcome.error : undefined
+      try {
+        if (error !== undefined && !span.context().getTag('error')) {
+          span.setTag('error', error || 1)
+        }
+      } catch (failure) {
+        log.error('Error in react-router completion: %s', failure)
+        this.configure(false)
+      } finally {
+        try {
+          span.finish()
+        } catch (failure) {
+          log.error('Error finishing react-router span: %s', failure)
+          this.configure(false)
+        }
+      }
     }
-    this.#tagError(error)
-  }
-
-  /**
-   * @param {unknown} error
-   */
-  #tagError (error) {
-    const store = storage('legacy').getStore()
-    const req = store?.req
-    if (req) {
-      web.addError(req, error)
-      return
-    }
-    if (store?.span) {
-      this.addError(error, store.span)
-    }
+    return { ...store, span }
   }
 }
 

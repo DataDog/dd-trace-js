@@ -8,7 +8,7 @@ const path = require('node:path')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const { createBundlerRewriter } = require('../../../src/helpers/rewriter')
+const { createBundlerRewriter, rewrite } = require('../../../src/helpers/rewriter')
 
 describe('bundler rewriter', () => {
   let directory
@@ -75,6 +75,24 @@ describe('bundler rewriter', () => {
       rewrite(source, filename, 'commonjs', { filePath: 'index.js', moduleName: 'unsupported' }, sourceMap),
       { code: source, map: sourceMap }
     )
+  })
+
+  it('skips transformation when a hashed target lacks its source marker', () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-rewriter-'))
+    const packageDirectory = path.join(directory, 'node_modules', 'ai')
+    const filename = path.join(packageDirectory, 'dist', 'index.js')
+    const source = 'function getTracer () { return {} }\nmodule.exports = { getTracer }\n'
+    const sourceMap = { mappings: '', version: 3 }
+    const target = { moduleName: 'ai', filePath: 'dist/index.js', sourceMatch: 'function derive(' }
+    fs.mkdirSync(path.dirname(filename), { recursive: true })
+    fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({ version: '5.0.0' }))
+
+    const rewriteBundled = createBundlerRewriter('/absolute/dc-polyfill.js')
+    assert.strictEqual(rewrite(source, filename, 'commonjs', target), source)
+    assert.deepStrictEqual(rewriteBundled(source, filename, 'commonjs', target, sourceMap), {
+      code: source,
+      map: sourceMap,
+    })
   })
 
   it('skips rewriting without a resolved version rather than failing in the matcher', () => {
