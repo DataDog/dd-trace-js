@@ -244,6 +244,12 @@ describe('vitest main instrumentation', () => {
         return []
       },
       state: {
+        getFiles () {
+          return []
+        },
+        getUnhandledErrors () {
+          return []
+        },
         getFailedFilepaths () {
           return []
         },
