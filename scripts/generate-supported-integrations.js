@@ -16,6 +16,12 @@ const ROOT_PACKAGE = path.join(ROOT, 'package.json')
 const VERSIONS_PACKAGE = path.join(ROOT, 'packages/dd-trace/test/plugins/versions/package.json')
 const INSTRUMENTATION_HOOKS = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/hooks.js')
 const INSTRUMENTATION_REGISTRY = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/instrumentations.js')
+const {
+  isRewriteActivationEnabled,
+  instrumentations: rewriterInstrumentations,
+} = require(
+  '../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry'
+)
 
 const JSON_OUTPUT_PATH = path.join(ROOT, 'supported_versions_output.json')
 const CSV_OUTPUT_PATH = path.join(ROOT, 'supported_versions_table.csv')
@@ -97,6 +103,13 @@ function readInstrumentationRanges (engines) {
         }
       }
       if (set.size > 0) ranges.set(name, set)
+    }
+
+    for (const { module } of rewriterInstrumentations) {
+      if (!module?.versionRange || !isRewriteActivationEnabled(module.name)) continue
+      const set = ranges.get(module.name) ?? new Set()
+      set.add(module.versionRange)
+      ranges.set(module.name, set)
     }
   }
   return ranges
