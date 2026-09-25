@@ -72,6 +72,7 @@ await once(server, 'listening')
 process.send('ready')
 await once(process, 'message')
 let client
+let result
 try {
   const address = /** @type {import('node:net').AddressInfo} */ (server.address())
   if (host === 'http2') {
@@ -82,10 +83,10 @@ try {
     const [headers] = await once(stream, 'response')
     let body = ''
     for await (const chunk of stream) body += chunk
-    process.stdout.write(JSON.stringify({ status: headers[':status'], body }))
+    result = { status: headers[':status'], body }
   } else {
     const response = await fetch(`http://127.0.0.1:${address.port}/users/123`)
-    process.stdout.write(JSON.stringify({ status: response.status, body: await response.text() }))
+    result = { status: response.status, body: await response.text() }
   }
 } finally {
   client?.close()
@@ -93,3 +94,4 @@ try {
   server.close()
   await closed
 }
+process.send(result)

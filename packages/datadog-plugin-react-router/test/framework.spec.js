@@ -58,10 +58,7 @@ async function prepareEsmRequest (versionKey, agentPort, host = 'http') {
       host,
     ], { env: { ...process.env, DD_INJECT_FORCE: '1', NODE_OPTIONS: '' }, silent: true, execArgv: [] })
     /** @type {Buffer[]} */
-    const stdout = []
-    /** @type {Buffer[]} */
     const stderr = []
-    child.stdout.on('data', stdout.push.bind(stdout))
     child.stderr.on('data', stderr.push.bind(stderr))
     const closed = once(child, 'close')
     const [message] = await Promise.race([
@@ -69,14 +66,23 @@ async function prepareEsmRequest (versionKey, agentPort, host = 'http') {
       closed.then(([code]) => { throw new Error(`Request child exited before ready: ${code}`) }),
     ])
     assert.equal(message, 'ready')
-    return async () => {
+    /** @param {Promise<void>} trace */
+    return async trace => {
       try {
         child.send('request')
-        const [code] = await closed
-        assert.equal(code, 0, Buffer.concat(stderr).toString())
-        return JSON.parse(Buffer.concat(stdout).toString())
+        const [, [result]] = await Promise.all([
+          trace,
+          Promise.race([
+            once(child, 'message'),
+            closed.then(([code]) => {
+              throw new Error(`Request child exited before completion: ${code}: ${Buffer.concat(stderr)}`)
+            }),
+          ]),
+        ])
+        return result
       } finally {
         child.kill()
+        await closed
         await rm(directory, { recursive: true, force: true })
       }
     }
@@ -125,6 +131,7 @@ async function assertHttpRoute (
       if (checkLoaderError) {
         const loader = traces[0].find(span => span.name === 'react-router.loader')
         assert.ok(loader)
+        assert.equal(loader.resource, route)
         assert.equal(loader.error, 1)
         assert.equal(loader.meta['error.message'], 'loader failure')
       }
@@ -210,7 +217,7 @@ describe('Plugin', () => {
           assert.equal(request.meta['http.route'], '/users/:id')
           assert.equal(request.resource, 'GET /users/:id')
         })
-        const [, result] = await Promise.all([trace, sendRequest()])
+        const result = await sendRequest(trace)
         assert.deepEqual(result, { status: 200, body: 'ok' })
       })
 
@@ -224,7 +231,7 @@ describe('Plugin', () => {
           assert.ok(middleware)
           assert.equal(request.meta['http.route'], '/users/:id')
         })
-        const [, result] = await Promise.all([trace, sendRequest()])
+        const result = await sendRequest(trace)
         assert.deepEqual(result, { status: 200, body: 'ok' })
       })
 
@@ -253,10 +260,21 @@ describe('Plugin', () => {
       it('sets the root route for root data under a basename', async () => {
         tracer.use('react-router', {})
         const build = createBuild({}, { loader () { return 'root' } })
-        build.basename = '/app'
+        build.basename = semver.gte(resolvedVersion, '8.0.0') ? '/app' : '/App'
         const handleRequest = createRequestHandler(build, 'test')
         const path = semver.gte(resolvedVersion, '8.0.0') ? '/app/_.data' : '/app/_root.data'
         await assertHttpRoute(handleRequest, true, path, 200, false, '/')
+      })
+
+      it('keeps a route named _root for data requests', async () => {
+        tracer.use('react-router', {})
+        const paths = semver.gte(resolvedVersion, '8.0.0') ? ['_root', 'foo/_root'] : ['foo/_root']
+        for (const route of paths) {
+          const build = createBuild({ loader () { return 'user' } })
+          build.routes.users.path = route
+          const handleRequest = createRequestHandler(build, 'test')
+          await assertHttpRoute(handleRequest, true, `/${route}.data`, 200, false, `/${route}`)
+        }
       })
 
       it('sets the route for a trailing slash request', async () => {
@@ -285,6 +303,72 @@ describe('Plugin', () => {
         const handleRequest = createRequestHandler(build, 'test')
         await assertHttpRoute(handleRequest, true, '/users/123', 500, false, '/users/:id', true)
       })
+
+      it('finishes a loader span when React Router rejects its handler call', async () => {
+        tracer.use('react-router', {})
+        const failure = new Proxy(new Error('loader failure'), {
+          getPrototypeOf () { throw new Error('invalid error prototype') },
+        })
+        const handleRequest = createRequestHandler(createBuild({ loader () { throw failure } }), 'test')
+        const trace = agent.assertSomeTraces(traces => {
+          const loader = traces[0].find(span => span.name === 'react-router.loader')
+          assert.ok(loader)
+          assert.equal(loader.error, 1)
+          assert.equal(loader.meta['error.message'], 'invalid error prototype')
+        })
+        const response = tracer.trace('test.request', () => {
+          return handleRequest(new Request('http://localhost/users/123'))
+        })
+        const [, result] = await Promise.all([trace, response])
+        assert.equal(result.status, 500)
+      })
+
+      it('preserves React Router validation for invalid entry modules', async () => {
+        tracer.use('react-router', {})
+        for (const entryModule of [undefined, 'invalid']) {
+          const build = createBuild()
+          build.entry.module = entryModule
+          const handleRequest = createRequestHandler(build, 'test')
+          const request = new Request('http://localhost/users/123')
+          if (entryModule === undefined) {
+            await assert.rejects(() => handleRequest(request), TypeError)
+          } else {
+            const response = await handleRequest(request)
+            assert.equal(response.status, 500)
+          }
+        }
+      })
+
+      for (const [failure, method] of [
+        ['tagging', 'setTag'],
+        ['finishing', 'finish'],
+      ]) {
+        it(`preserves the response when ${failure} a loader span fails`, async () => {
+          tracer.use('react-router', {})
+          const Span = require('../../dd-trace/src/opentracing/span')
+          const original = Span.prototype[method]
+          let failed = false
+          /** @param {...unknown} args */
+          Span.prototype[method] = function (...args) {
+            const result = original.apply(this, args)
+            if (this.context().getTag('component') === 'react-router' &&
+              (method === 'finish' || args[0] === 'error') && !failed) {
+              failed = true
+              throw new Error(`${failure} failure`)
+            }
+            return result
+          }
+          try {
+            const handleRequest = createRequestHandler(createBuild({ loader () { throw new Error('loader failure') } }),
+              'test')
+            await assertHttpRoute(handleRequest, true, '/users/123', 500, false, '/users/:id', failure === 'tagging')
+            assert.equal(failed, true)
+            await assertHttpRoute(handleRequest, false, '/users/123', 500, false)
+          } finally {
+            Span.prototype[method] = original
+          }
+        })
+      }
 
       it('leaves a manifest request without a route', async () => {
         tracer.use('react-router', {})
@@ -317,6 +401,7 @@ describe('Plugin', () => {
         const trace = agent.assertSomeTraces(traces => {
           const action = traces[0].find(span => span.name === 'react-router.action')
           assert.ok(action)
+          assert.equal(action.resource, '/users/:id')
           assert.equal(action.meta['react-router.route_id'], 'users')
           assert.equal(action.error, 0)
         })
@@ -339,7 +424,7 @@ describe('Plugin', () => {
           assert.equal(request.meta['http.route'], '/users/:id')
           assert.equal(loader.parent_id.toString(), request.span_id.toString())
         })
-        const [, result] = await Promise.all([trace, sendRequest()])
+        const result = await sendRequest(trace)
         assert.deepEqual(result, { status: 200, body: 'ok' })
       }).timeout(20000)
 
