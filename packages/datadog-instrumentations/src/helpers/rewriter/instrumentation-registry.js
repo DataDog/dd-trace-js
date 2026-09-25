@@ -20,7 +20,7 @@ const registry = [
   { instrumentations: require('./instrumentations/postgres') },
   { instrumentations: require('./instrumentations/webdriverio') },
   { instrumentations: require('./instrumentations/aws-durable-execution-sdk-js') },
-  { instrumentations: require('./instrumentations/supabase') },
+  { activate: true, instrumentations: require('./instrumentations/supabase') },
 ]
 
 const activatedModules = new Set()

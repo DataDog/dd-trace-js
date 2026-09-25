@@ -40,7 +40,6 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @supabase/postgrest-js,supabase,2.112.2,2.112.4,True
 @supabase/realtime-js,supabase,2.112.2,2.112.4,True
 @supabase/storage-js,supabase,2.112.2,2.112.4,True
-@supabase/supabase-js,supabase,2.112.2,2.112.4,True
 @wdio/local-runner,mocha,9.0.0,9.31.7,True
 aerospike,aerospike,4.0.0,6.7.1,True
 ai,ai,4.0.0,7.0.93,True
