@@ -9,6 +9,8 @@ const {
   extractRequestParamsConverse,
   extractMessagesFromConverseContent,
   extractTextAndResponseReasonConverseFromStream,
+  extractTextAndResponseReasonFromStream,
+  mergeStreamedUsage,
   PROVIDER,
 } = require('../src/services/bedrockruntime/utils')
 
@@ -147,6 +149,81 @@ describe('bedrockruntime utils', () => {
         role: 'assistant',
         toolCalls: [{ name: 'get_weather', arguments: {}, toolId: 't-1', type: 'toolUse' }],
       }])
+    })
+  })
+  describe('streamed usage', () => {
+    const chunk = body => ({ chunk: { bytes: new TextEncoder().encode(JSON.stringify(body)) } })
+
+    it('reads the invocation metrics any provider can send', () => {
+      const usage = mergeStreamedUsage(undefined, {
+        'amazon-bedrock-invocationMetrics': {
+          inputTokenCount: 3,
+          outputTokenCount: 1,
+          cacheReadInputTokenCount: 2,
+          cacheWriteInputTokenCount: 4,
+        },
+      }, PROVIDER.META)
+
+      assert.deepStrictEqual(usage, {
+        inputTokens: 3,
+        outputTokens: 1,
+        cacheReadTokens: 2,
+        cacheWriteTokens: 4,
+      })
+    })
+
+    it('lets the invocation metrics supersede what the frames reported', () => {
+      const reported = mergeStreamedUsage(undefined, { inputTextTokenCount: 9 }, PROVIDER.AMAZON)
+      const usage = mergeStreamedUsage(reported, {
+        'amazon-bedrock-invocationMetrics': { inputTokenCount: 3, outputTokenCount: 1 },
+      }, PROVIDER.AMAZON)
+
+      assert.strictEqual(usage.inputTokens, 3)
+    })
+
+    it('leaves the totals alone for a frame that reports no counts', () => {
+      const reported = mergeStreamedUsage(undefined, { inputTextTokenCount: 6 }, PROVIDER.AMAZON)
+
+      assert.strictEqual(mergeStreamedUsage(reported, { outputText: 'more text' }, PROVIDER.AMAZON), reported)
+      assert.strictEqual(mergeStreamedUsage(undefined, { generation: 'text' }, PROVIDER.META), undefined)
+    })
+
+    it('reads the Anthropic message usage', () => {
+      const usage = mergeStreamedUsage(undefined, {
+        type: 'message_start',
+        message: { usage: { input_tokens: 7, output_tokens: 2 } },
+      }, PROVIDER.ANTHROPIC)
+
+      assert.strictEqual(usage.inputTokens, 7)
+      assert.strictEqual(usage.outputTokens, 2)
+    })
+
+    // `message_start` opens with a provisional output count, and the closing `message_delta`
+    // reports the final one at the top level rather than under `message`
+    it('takes the final Anthropic output count off the message delta', () => {
+      const started = mergeStreamedUsage(undefined, {
+        type: 'message_start',
+        message: { usage: { input_tokens: 7, output_tokens: 4 } },
+      }, PROVIDER.ANTHROPIC)
+      const usage = mergeStreamedUsage(started, {
+        type: 'message_delta',
+        usage: { output_tokens: 10 },
+      }, PROVIDER.ANTHROPIC)
+
+      assert.strictEqual(usage.inputTokens, 7)
+      assert.strictEqual(usage.outputTokens, 10)
+    })
+
+    // Amazon reports its counts on a frame that also carries text, and more text can follow
+    it('keeps the counts an earlier frame reported when aggregating a stream', () => {
+      const generation = extractTextAndResponseReasonFromStream([
+        chunk({ outputText: 'hello ', inputTextTokenCount: 10, totalOutputTextTokenCount: 5 }),
+        chunk({ outputText: 'world' }),
+      ], 'amazon', 'titan')
+
+      assert.strictEqual(generation.message, 'hello world')
+      assert.strictEqual(generation.usage.inputTokens, 10)
+      assert.strictEqual(generation.usage.outputTokens, 5)
     })
   })
 })

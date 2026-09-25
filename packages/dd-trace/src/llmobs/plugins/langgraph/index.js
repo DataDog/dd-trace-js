@@ -14,15 +14,16 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const name = ctx.self.name || 'LangGraph'
 
-    const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
-    if (!enabled) return
-
     const span = ctx.currentStore?.span
     if (!span) return
-    streamDataMap.set(span, {
-      streamInputs: ctx.arguments?.[0],
-      chunks: [],
-    })
+
+    // only the LLMObs payload consumes the accumulated stream
+    if (this._llmobsEnabledFor(ctx)) {
+      streamDataMap.set(span, {
+        streamInputs: ctx.arguments?.[0],
+        chunks: [],
+      })
+    }
 
     return {
       kind: 'workflow',
