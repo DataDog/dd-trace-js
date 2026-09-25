@@ -34,7 +34,7 @@ function matchesInstrumentation (name, version, moduleName, instrumentation) {
   if (!matchesFile && isRelativeRequire(name)) matchesFile = true
   if (!matchesFile && filePattern instanceof RegExp) {
     matchesFile = moduleName.startsWith(`${name}/`) && filePattern.test(moduleName.slice(name.length + 1))
-  } else if (!matchesFile && typeof filePattern === 'string') {
+  } else if (!matchesFile && filePattern) {
     matchesFile = new RegExp(filename(name, filePattern)).test(moduleName)
   }
   return matchesFile && matchVersion(version, versions)
