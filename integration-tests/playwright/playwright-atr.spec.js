@@ -48,8 +48,8 @@ versions.forEach((version) => {
     let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
-    // Exact event counts are meaningful only after Playwright finishes, within the suite's execution budget.
-    const collectionOptions = { hardTimeout: this.timeout() }
+    // Leave time for post-exit drain and process/intake cleanup before Mocha starts a retry.
+    const collectionOptions = { hardTimeout: this.timeout() - 10_000 }
 
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
