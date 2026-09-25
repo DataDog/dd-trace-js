@@ -42,6 +42,20 @@ class LLMObsPlugin extends TracingPlugin {
     return this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
   }
 
+  /**
+   * The mode one operation runs in, latched on first read. `llmobs.enable()` and `llmobs.disable()`
+   * flip the flag while operations are in flight, and an operation that switches track halfway
+   * reports neither: the tagger rejects a span the start never registered, and the reduced path
+   * has no start tags for its end hook to update. Every hook for a given operation reads it here
+   * so they all take the branch its start took.
+   *
+   * @param {object} ctx
+   */
+  _llmobsEnabledFor (ctx) {
+    ctx.llmobsEnabled ??= this._llmobsEnabled
+    return ctx.llmobsEnabled
+  }
+
   setLLMObsTags (ctx) {
     throw new Error('setLLMObsTags must be implemented by the subclass')
   }
@@ -66,7 +80,7 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   start (ctx) {
-    if (!this._llmobsEnabled) {
+    if (!this._llmobsEnabledFor(ctx)) {
       this.#setGenAiApmTagsFromRegisterOptions(ctx)
       return
     }
@@ -95,7 +109,7 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    if (!this._llmobsEnabled) return
+    if (!this._llmobsEnabledFor(ctx)) return
 
     // only attempt to restore the context if the current span was an LLMObs span
     const apmStore = ctx.currentStore
@@ -107,7 +121,7 @@ class LLMObsPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    if (!this._llmobsEnabled) {
+    if (!this._llmobsEnabledFor(ctx)) {
       this.#setGenAiApmEndTags(ctx)
       return
     }

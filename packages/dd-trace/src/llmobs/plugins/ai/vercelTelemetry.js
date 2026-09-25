@@ -166,7 +166,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     super(...arguments)
 
     this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
-      if (!this._llmobsEnabled) {
+      if (!this._llmobsEnabledFor(ctx)) {
         // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies and
         // `ctx.result` are left to the LLMObs path
         if (chunk?.type === 'finish') ctx.streamedUsage = chunk.usage

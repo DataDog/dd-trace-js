@@ -146,6 +146,42 @@ describe('LLMObs plugin with LLM Observability disabled', () => {
     assert.equal(apmTags['gen_ai.operation.name'], 'agent')
   })
 
+  // `llmobs.enable()` flips the config flag while operations are in flight; one that switched
+  // track halfway would ask the tagger to tag a span its start never registered, and lose the
+  // response-derived tags the reduced path resolves at the end
+  describe('when LLM Observability is toggled mid-operation', () => {
+    it('keeps an operation started while disabled on the reduced path', () => {
+      const ctx = publishStart()
+
+      plugin._tracerConfig.llmobs.DD_LLMOBS_ENABLED = true
+      plugin.setLLMObsTags = () => assert.fail('setLLMObsTags must not run for a reduced-path span')
+
+      endTags = { metrics: { inputTokens: 10, outputTokens: 20 } }
+      asyncEndCh.publish(ctx)
+
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 10)
+      assert.equal(apmTags['gen_ai.usage.output_tokens'], 20)
+    })
+
+    it('keeps an operation started while enabled on the LLMObs path', () => {
+      plugin._tracerConfig.llmobs.DD_LLMOBS_ENABLED = true
+
+      let tagged = 0
+      plugin.setLLMObsTags = () => { tagged++ }
+      plugin._tagger = { registerLLMObsSpan () {} }
+
+      const ctx = publishStart()
+      plugin._tracerConfig.llmobs.DD_LLMOBS_ENABLED = false
+
+      endTags = { metrics: { inputTokens: 10 } }
+      asyncEndCh.publish(ctx)
+
+      assert.equal(tagged, 1)
+      // the reduced path never ran, so it wrote no attributes of its own
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], undefined)
+    })
+  })
+
   function publishStart () {
     const spanContext = {
       _trace: { tags: traceTags },

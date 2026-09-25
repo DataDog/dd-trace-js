@@ -22,7 +22,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     super(...arguments)
 
     this.addSub('apm:anthropic:request:chunk', ({ ctx, chunk, done }) => {
-      if (!this._llmobsEnabled) {
+      if (!this._llmobsEnabledFor(ctx)) {
         // only the token usage is needed, for the `gen_ai.usage.*` metrics; the message bodies
         // and the aggregated response are left to the LLMObs path
         if (chunk) ctx.streamedUsage = mergeChunkUsage(ctx.streamedUsage, chunk)

@@ -68,7 +68,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       const span = ctx.currentStore?.span
       if (!span) return
 
-      if (!this._llmobsEnabled) {
+      if (!this._llmobsEnabledFor(ctx)) {
         // no LLMObs payload to build, so the usage comes from the response headers and, where
         // those are absent, from whatever reported it
         let usage
@@ -119,7 +119,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     })
 
     this.addSub('apm:aws:response:streamed-chunk:bedrockruntime', ({ ctx, chunk }) => {
-      if (!this._llmobsEnabled) {
+      if (!this._llmobsEnabledFor(ctx)) {
         // only the token counts are needed, for the `gen_ai.usage.*` metrics; the generated
         // content is left to the LLMObs path, so nothing is retained past the running totals
         ctx.streamedUsage = mergeChunkUsage(ctx, chunk)

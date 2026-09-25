@@ -18,7 +18,7 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
     if (!span) return
 
     // only the LLMObs payload consumes the accumulated stream
-    if (this._llmobsEnabled) {
+    if (this._llmobsEnabledFor(ctx)) {
       streamDataMap.set(span, {
         streamInputs: ctx.arguments?.[0],
         chunks: [],
