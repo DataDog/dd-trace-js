@@ -1770,4 +1770,187 @@ describe('Plugin', () => {
       })
     })
   })
+
+  describe('with ignored transaction operations', () => {
+    /**
+     * @template T
+     * @param {() => Promise<T>} run
+     * @param {string[]} resources
+     */
+    async function traceTransaction (run, resources) {
+      const parent = tracer.startSpan('transaction-parent')
+      const spans = []
+      const trace = agent.assertSomeTraces(traces => {
+        for (const batch of traces) spans.push(...batch)
+        assert.ok(spans.some(span => span.resource === 'transaction-parent'))
+        assert.deepStrictEqual(spans.map(span => span.resource).sort(), [...resources, 'transaction-parent'].sort())
+        assert.strictEqual(spans.find(span => span.resource === 'transaction-parent').meta.error, undefined)
+        for (const span of spans) {
+          if (span.resource !== 'transaction-parent') {
+            assert.strictEqual(span.parent_id.toString(), parent.context().toSpanId())
+          }
+        }
+      })
+      const operation = tracer.scope().activate(parent, async () => {
+        try {
+          return await run()
+        } finally {
+          parent.finish()
+        }
+      })
+      const [result] = await Promise.all([operation, trace])
+      return result
+    }
+
+    before(async () => {
+      tracer = await agent.load('pg', undefined, { ignoredTransactionOperations: ['begin', 'commit'] })
+      pg = require('../../../versions/pg').get()
+    })
+
+    after(() => agent.close())
+
+    beforeEach(async () => {
+      tracer.use('pg', true)
+      client = new pg.Client(POSTGRES_TARGET)
+      await client.connect()
+    })
+
+    afterEach(async () => {
+      await client.end()
+    })
+
+    it('keeps the parent and ordinary query but omits mixed-case transaction spans', async () => {
+      async function runTransaction () {
+        const begin = await client.query('sTaRt TrAnSaCtIoN')
+        const result = await client.query('SELECT 1 AS value')
+        const commit = await client.query('cOmMiT')
+        return { begin: begin.command, rows: result.rows, commit: commit.command }
+      }
+
+      tracer.use('pg', false)
+      const untraced = await runTransaction()
+      tracer.use('pg', true)
+
+      const instrumented = await traceTransaction(runTransaction, ['SELECT 1 AS value'])
+      assert.deepStrictEqual(instrumented, untraced)
+    })
+
+    it('keeps a span for a query that starts a transaction and also executes another statement', async () => {
+      const sql = 'START TRANSACTION; SELECT 1 AS value; COMMIT'
+      const results = await traceTransaction(() => client.query(sql), [sql])
+      assert.deepStrictEqual(results.map(result => result.command), ['START', 'SELECT', 'COMMIT'])
+    })
+
+    it('ignores transaction commands after PostgreSQL line and nested block comments', async () => {
+      const begin = '/* outer /* inner */ outer */ BEGIN'
+      const commit = '--note\nCOMMIT'
+      await traceTransaction(async () => {
+        assert.strictEqual((await client.query(begin)).command, 'BEGIN')
+        assert.strictEqual((await client.query(commit)).command, 'COMMIT')
+      }, [])
+    })
+
+    it('keeps a span for a keyword prefix that is not a transaction command', async () => {
+      const sql = 'COMMITMENT'
+      await traceTransaction(async () => {
+        await assert.rejects(client.query(sql), { code: '42601' })
+      }, [sql])
+    })
+
+    it('keeps nontransaction and malformed SQL spans', async () => {
+      const create = 'CREATE TEMP TABLE traced_command (id integer)'
+      const leadingComment = '/* unclosed'
+      const trailingComment = 'COMMIT /* unclosed'
+      await traceTransaction(async () => {
+        await client.query(create)
+        await assert.rejects(client.query(leadingComment), { code: '42601' })
+        await assert.rejects(client.query(trailingComment), { code: '42601' })
+      }, [create, leadingComment, trailingComment])
+    })
+
+    it('ignores valid operations when the plugin option also contains an unsupported value', async () => {
+      tracer.use('pg', { ignoredTransactionOperations: ['begin', 42] })
+      await traceTransaction(async () => {
+        await client.query('BEGIN')
+        await client.query('ROLLBACK')
+      }, ['ROLLBACK'])
+    })
+
+    it('keeps savepoint rollback spans and does not inject DBM comments into filtered SQL', async () => {
+      tracer.use('pg', {
+        ignoredTransactionOperations: ['BeGiN', 'COMMIT', 'rollback'],
+        dbmPropagationMode: 'service',
+      })
+      const begin = { text: ' /* leading */ BeGiN WORK; -- trailing' }
+      const rollback = { text: 'rOlLbAcK; /* trailing */' }
+      await traceTransaction(async () => {
+        await client.query(begin)
+        assert.strictEqual(begin.text, ' /* leading */ BeGiN WORK; -- trailing')
+        await client.query('SAVEPOINT test_point')
+        await client.query('ROLLBACK TO SAVEPOINT test_point')
+        await client.query(rollback)
+        assert.strictEqual(rollback.text, 'rOlLbAcK; /* trailing */')
+      }, ['SAVEPOINT test_point', 'ROLLBACK TO SAVEPOINT test_point'])
+    })
+
+    it('restores reused query text when COMMIT becomes filtered after DBM injection', async () => {
+      const queries = [
+        { text: 'COMMIT' },
+        { get text () { return 'COMMIT' } },
+      ]
+
+      await traceTransaction(async () => {
+        for (const query of queries) {
+          tracer.use('pg', { dbmPropagationMode: 'full', ignoredTransactionOperations: [] })
+          assert.strictEqual((await client.query(query)).command, 'COMMIT')
+          assert.match(query.text, /traceparent=/)
+
+          tracer.use('pg', { dbmPropagationMode: 'full', ignoredTransactionOperations: ['commit'] })
+          assert.strictEqual((await client.query(query)).command, 'COMMIT')
+          assert.strictEqual(query.text, 'COMMIT')
+        }
+      }, ['COMMIT', 'COMMIT'])
+    })
+
+    it('keeps fresh query getters live after a filtered COMMIT', async () => {
+      let currentSql = 'COMMIT'
+      const query = { get text () { return currentSql } }
+
+      await traceTransaction(async () => {
+        assert.strictEqual((await client.query(query)).command, 'COMMIT')
+        currentSql = 'SELECT 1 AS value'
+        const result = await client.query(query)
+        assert.strictEqual(result.command, 'SELECT')
+        assert.strictEqual(result.rows[0].value, 1)
+      }, ['SELECT 1 AS value'])
+    })
+
+    it('traces a reused query object after its filtered SQL changes', async () => {
+      const query = { text: 'COMMIT' }
+
+      await traceTransaction(async () => {
+        assert.strictEqual((await client.query(query)).command, 'COMMIT')
+        query.text = 'SELECT 1 AS value'
+        const result = await client.query(query)
+        assert.strictEqual(result.command, 'SELECT')
+        assert.strictEqual(result.rows[0].value, 1)
+      }, ['SELECT 1 AS value'])
+    })
+
+    it('does not finish or mark the parent when a filtered COMMIT fails', async () => {
+      tracer.use('pg', false)
+      await client.query('CREATE TEMP TABLE deferred_unique (value integer UNIQUE DEFERRABLE INITIALLY DEFERRED)')
+      tracer.use('pg', { ignoredTransactionOperations: ['commit'] })
+
+      const insert = 'INSERT INTO deferred_unique (value) VALUES (1)'
+      await traceTransaction(async () => {
+        await client.query('BEGIN')
+        await client.query(insert)
+        await client.query(insert)
+        await assert.rejects(client.query('COMMIT'), { code: '23505' })
+        const result = await client.query('SELECT 42 AS value')
+        assert.strictEqual(result.rows[0].value, 42)
+      }, ['BEGIN', insert, insert, 'SELECT 42 AS value'])
+    })
+  })
 })

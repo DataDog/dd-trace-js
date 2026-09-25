@@ -5,7 +5,7 @@ const dc = require('node:diagnostics_channel')
 const net = require('node:net')
 const { inspect } = require('node:util')
 
-const { afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
@@ -992,6 +992,152 @@ describe('Plugin', () => {
           })
         })
       })
+    })
+  })
+
+  describe('with ignored transaction operations', () => {
+    let connection
+
+    before(async () => {
+      tracer = await agent.load('mysql', undefined, { ignoredTransactionOperations: ['BEGIN', 'Commit'] })
+      mysql = require('../../../versions/mysql').get()
+      connection = mysql.createConnection({ host: 'localhost', user: 'root', database: 'db' })
+      await new Promise((resolve, reject) => connection.connect(error => error ? reject(error) : resolve()))
+    })
+
+    after(async () => {
+      await new Promise(resolve => connection.end(resolve))
+      await agent.close()
+    })
+
+    it('keeps the parent and ordinary query but omits transaction helper spans', async () => {
+      async function runTransaction () {
+        await new Promise((resolve, reject) => connection.beginTransaction(error => error ? reject(error) : resolve()))
+        const rows = await new Promise((resolve, reject) => {
+          connection.query('SELECT 1 AS value', (error, result) => error ? reject(error) : resolve(result))
+        })
+        await new Promise((resolve, reject) => connection.commit(error => error ? reject(error) : resolve()))
+        return rows[0].value
+      }
+
+      tracer.use('mysql', false)
+      const untraced = await runTransaction()
+      tracer.use('mysql', true)
+
+      const parent = tracer.startSpan('transaction-parent')
+      const spans = []
+      const trace = agent.assertSomeTraces(traces => {
+        for (const batch of traces) spans.push(...batch)
+        assert.ok(spans.some(span => span.resource === 'transaction-parent'))
+        assert.deepStrictEqual(spans.map(span => span.resource).sort(), ['SELECT 1 AS value', 'transaction-parent'])
+        assert.strictEqual(spans.find(span => span.resource === 'SELECT 1 AS value').parent_id.toString(),
+          parent.context().toSpanId())
+        assert.strictEqual(spans.find(span => span.resource === 'transaction-parent').meta.error, undefined)
+      })
+
+      const instrumented = await tracer.scope().activate(parent, runTransaction)
+      assert.strictEqual(instrumented, untraced)
+      parent.finish()
+      await trace
+    })
+
+    it('leaves helper options at their native value when DBM is enabled', async () => {
+      tracer.use('mysql', {
+        dbmPropagationMode: 'service',
+        ignoredTransactionOperations: ['begin', 'commit'],
+      })
+      const options = { sql: 'SELECT 1', values: [9] }
+      const parent = tracer.startSpan('transaction-parent')
+      const spans = []
+      const trace = agent.assertSomeTraces(traces => {
+        for (const batch of traces) spans.push(...batch)
+        assert.ok(spans.some(span => span.resource === 'transaction-parent'))
+        assert.deepStrictEqual(spans.map(span => span.resource).sort(), ['ROLLBACK', 'transaction-parent'])
+      })
+
+      await tracer.scope().activate(parent, async () => {
+        await new Promise((resolve, reject) => {
+          connection.beginTransaction(options, error => error ? reject(error) : resolve())
+        })
+        assert.deepStrictEqual(options, { sql: 'START TRANSACTION', values: null })
+        await new Promise((resolve, reject) => {
+          connection.rollback(error => error ? reject(error) : resolve())
+        })
+      })
+      parent.finish()
+      await trace
+    })
+
+    it('keeps a span when two hyphens do not start a MySQL comment', async () => {
+      const sql = '--notacomment\nCOMMIT'
+      const runQuery = () => new Promise((resolve, reject) => {
+        connection.query(sql, error => error ? reject(error) : resolve())
+      })
+
+      tracer.use('mysql', false)
+      await assert.rejects(runQuery(), { code: 'ER_PARSE_ERROR' })
+      tracer.use('mysql', true)
+
+      const parent = tracer.startSpan('transaction-parent')
+      const spans = []
+      const trace = agent.assertSomeTraces(traces => {
+        for (const batch of traces) spans.push(...batch)
+        assert.ok(spans.some(span => span.resource === sql))
+        assert.ok(spans.some(span => span.resource === 'transaction-parent'))
+      })
+
+      const operation = tracer.scope().activate(parent, async () => {
+        try {
+          await assert.rejects(runQuery(), { code: 'ER_PARSE_ERROR' })
+        } finally {
+          parent.finish()
+        }
+      })
+      await Promise.all([operation, trace])
+    })
+
+    it('filters hash-commented commands but traces invalid syntax and executable modifiers', async () => {
+      const hashComment = '# note\nCOMMIT'
+      const invalidBegin = 'BEGIN TRANSACTION'
+      const modifiedCommit = 'COMMIT /*! AND CHAIN */'
+      const hintedCommit = 'COMMIT /*+ MAX_EXECUTION_TIME(1) */'
+      const nestedComment = 'COMMIT /* outer /* inner */ outer */'
+      const terminalDashes = 'COMMIT--'
+      const runQuery = sql => new Promise((resolve, reject) => {
+        connection.query(sql, (error, result) => error ? reject(error) : resolve(result))
+      })
+
+      tracer.use('mysql', false)
+      await runQuery(hashComment)
+      await assert.rejects(runQuery(invalidBegin), { code: 'ER_PARSE_ERROR' })
+      await runQuery(modifiedCommit)
+      await runQuery(hintedCommit)
+      await assert.rejects(runQuery(nestedComment), { code: 'ER_PARSE_ERROR' })
+      await runQuery(terminalDashes)
+      await runQuery('ROLLBACK WORK')
+      tracer.use('mysql', { ignoredTransactionOperations: ['begin', 'commit', 'rollback'] })
+
+      const parent = tracer.startSpan('transaction-parent')
+      const spans = []
+      const trace = agent.assertSomeTraces(traces => {
+        for (const batch of traces) spans.push(...batch)
+        assert.deepStrictEqual(spans.map(span => span.resource).sort(),
+          [invalidBegin, modifiedCommit, hintedCommit, nestedComment, terminalDashes, 'transaction-parent'].sort())
+      })
+      const operation = tracer.scope().activate(parent, async () => {
+        try {
+          await runQuery(hashComment)
+          await assert.rejects(runQuery(invalidBegin), { code: 'ER_PARSE_ERROR' })
+          await runQuery(modifiedCommit)
+          await runQuery(hintedCommit)
+          await assert.rejects(runQuery(nestedComment), { code: 'ER_PARSE_ERROR' })
+          await runQuery(terminalDashes)
+          await runQuery('ROLLBACK WORK')
+        } finally {
+          parent.finish()
+        }
+      })
+      await Promise.all([operation, trace])
     })
   })
 })

@@ -40,8 +40,8 @@ const poolAcquireChannels = {
   acquireFinishCh: poolAcquireFinishCh,
 }
 
-// Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
-// the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
+// Drivers like pg-promise reuse prepared-statement query objects. Cache the original text only
+// while a DBM comment is installed, so later changes to an untouched query remain visible.
 const originalTextCache = new WeakMap()
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
@@ -198,11 +198,8 @@ function wrapQuery (query) {
     const textPropObj = pgQuery.cursor ?? pgQuery
     const stream = typeof textPropObj.read === 'function'
 
-    let originalText = originalTextCache.get(textPropObj)
-    if (originalText === undefined) {
-      originalText = textPropObj.text
-      originalTextCache.set(textPropObj, originalText)
-    }
+    const cachedText = originalTextCache.get(textPropObj)
+    const originalText = cachedText === undefined ? textPropObj.text : cachedText
 
     const abortController = new AbortController()
     const ctx = {
@@ -263,18 +260,28 @@ function wrapQuery (query) {
       }
 
       const injected = ctx.injected
-      if (injected !== undefined) {
+      if (injected !== undefined && (injected !== originalText || cachedText !== undefined)) {
         // Skip the per-read getter trampoline when `text` is a configurable, writable data
         // property (the pg / pg-cursor common shape). Accessor descriptors and read-only data
         // still go through `defineProperty(get)` so `get text ()` query objects keep working.
         const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+        let replaced = false
         if (textProp?.configurable === true && textProp.writable === true) {
           textPropObj.text = injected
+          replaced = true
         } else if (textProp === undefined || textProp.configurable === true) {
           Object.defineProperty(textPropObj, 'text', {
             configurable: true,
             get () { return injected },
           })
+          replaced = true
+        }
+        if (replaced) {
+          if (injected === originalText) {
+            originalTextCache.delete(textPropObj)
+          } else {
+            originalTextCache.set(textPropObj, originalText)
+          }
         }
       }
 

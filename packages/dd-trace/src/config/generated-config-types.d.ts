@@ -453,6 +453,7 @@ export interface GeneratedConfig {
     DD_IAST_STACK_TRACE_ENABLED: boolean;
     DD_IAST_TELEMETRY_VERBOSITY: string;
   };
+  ignoredTransactionOperations: string[];
   inferredProxyServicesEnabled: boolean;
   langchain: {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
@@ -934,6 +935,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_CUCUMBER_CUCUMBER_ENABLED: boolean;
   DD_TRACE_CUCUMBER_ENABLED: boolean;
   DD_TRACE_CYPRESS_ENABLED: boolean;
+  DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS: string[];
   DD_TRACE_DEBUG: boolean;
   DD_TRACE_DISABLED_INSTRUMENTATIONS: string;
   DD_TRACE_DISABLED_PLUGINS: string | undefined;
