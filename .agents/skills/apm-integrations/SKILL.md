@@ -166,7 +166,8 @@ Follow these steps when creating or modifying an integration:
 2. **Implement instrumentation** — Create the instrumentation in `packages/datadog-instrumentations/src/`. Use orchestrion for instrumentation.
 3. **Implement plugin** — Create the plugin in `packages/datadog-plugin-<name>/src/`. Extend the correct base class.
 4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, every supported public TypeScript surface,
-    `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`.
+    `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`. Resolve the CI job's `node-floor` in
+    `.github/actions/node/setup/action.yml` and confirm every registered upstream version supports it in `engines.node`.
 5. **Write tests** — Add unit tests and ESM integration tests. See [Testing](references/testing.md) for templates.
 6. **Run tests** — Validate with:
 
