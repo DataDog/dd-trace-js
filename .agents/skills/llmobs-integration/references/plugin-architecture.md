@@ -18,7 +18,7 @@ Defines span metadata for registration with LLMObs. Called at span start.
 
 **Returns** an object with:
 - `kind` (string) — span type. `SPAN_KINDS` lists `'llm'`, `'agent'`, `'workflow'`, `'task'`, `'tool'`, `'embedding'`,
-  and `'retrieval'`; plugin extensions such as `'step'` also exist
+  `'retrieval'`, and `'experiment'`; plugin extensions such as `'step'` also exist
 - `name` (string, optional) — operation name (e.g. `'openai.chat.completions'`); the event falls back to the APM
   span name when omitted
 - `modelProvider` (string, optional) — provider name (e.g. `'openai'`, `'anthropic'`, `'google'`)
