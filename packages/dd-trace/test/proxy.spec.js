@@ -166,6 +166,9 @@ describe('TracerProxy', () => {
       DD_TRACE_ENABLED: true,
       testOptimization: {},
       featureFlags: {
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: false,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: false,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
         DD_FEATURE_FLAGS_ENABLED: false,
       },
@@ -453,7 +456,7 @@ describe('TracerProxy', () => {
       })
 
       it('starts and configures Dynamic Instrumentation when enabled', () => {
-        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
 
         proxy.init()
 
@@ -515,7 +518,8 @@ describe('TracerProxy', () => {
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
+            conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
@@ -532,7 +536,8 @@ describe('TracerProxy', () => {
 
       it('loads Dynamic Instrumentation when remote config enables it', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
+            conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
