@@ -3,7 +3,9 @@
 const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
-const { registry } = require('../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry')
+const {
+  instrumentations,
+} = require('../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry')
 
 const CHECK_FLAG = '--check'
 const OUTPUT_PATH_IN_REPOSITORY = 'packages/datadog-instrumentations/src/helpers/rewriter/targets.json'
@@ -12,28 +14,9 @@ const OUTPUT_PATH = path.join(__dirname, '..', OUTPUT_PATH_IN_REPOSITORY)
 function generateRewriterTargets () {
   /** @type {Record<string, string>} */
   const targets = {}
-  const activatedModules = new Set()
 
-  for (const { activate, instrumentations } of registry) {
-    let activatedModuleName
-    for (const { module: { name, filePath } } of instrumentations) {
-      targets[`${name}/${filePath}`] = name
-
-      if (!activate) continue
-      if (activatedModuleName && activatedModuleName !== name) {
-        throw new Error(`Rewrite activation group ${activatedModuleName} contains multiple modules`)
-      }
-      activatedModuleName = name
-    }
-    if (activate && !activatedModuleName) {
-      throw new Error('Rewrite activation group has no instrumentations')
-    }
-    if (activatedModuleName) {
-      if (activatedModules.has(activatedModuleName)) {
-        throw new Error(`Rewrite target ${activatedModuleName} has multiple activation groups`)
-      }
-      activatedModules.add(activatedModuleName)
-    }
+  for (const { module: { name, filePath } } of instrumentations) {
+    targets[`${name}/${filePath}`] = name
   }
 
   return `${JSON.stringify(targets, Object.keys(targets).sort(), 2)}\n`
