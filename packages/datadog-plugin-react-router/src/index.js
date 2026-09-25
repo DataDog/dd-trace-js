@@ -48,7 +48,13 @@ class ReactRouterPlugin extends WebPlugin {
     const httpUrl = span.context().getTag(HTTP_URL)
     if (typeof httpUrl !== 'string') return
 
-    let pathname = new URL(httpUrl, 'http://localhost').pathname
+    let pathname
+    try {
+      pathname = new URL(httpUrl, 'http://localhost').pathname
+    } catch (error) {
+      log.debug('Skipping React Router route for invalid HTTP URL: %s', error)
+      return
+    }
     if (pathname.endsWith('/_root.data')) {
       pathname = pathname.slice(0, -'/_root.data'.length) || '/'
     } else if (pathname.endsWith('.data')) {
