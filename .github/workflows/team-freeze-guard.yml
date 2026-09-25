@@ -56,6 +56,4 @@ jobs:
           # subset of pattern defined here:
           # .github/workflows/pr-title.yml#L22C85-L23C128
           bypass-title-pattern: '^(revert(!)?: .+|(fix|test|ci)(\(([^)]+)\))?(!)?: .+)'
-          frozen-teams: |
-            @DataDog/apm-idm-js
-            @DataDog/ml-observability
+          frozen-teams: ""
