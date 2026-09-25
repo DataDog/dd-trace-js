@@ -91,6 +91,33 @@ describe('flag evaluation worker producer', () => {
     assert.strictEqual(writer.hasCapacity(), false)
   })
 
+  it('flushes a partial batch and an existing worker through the shared FFE signal', () => {
+    writer.setEnabled(true)
+    enqueue(1)
+    channel('ffe:writers:flush').publish()
+    assert.strictEqual(workers.length, 1)
+    assert.deepStrictEqual(workers[0].messages.map(message => message.type), ['batch', 'flush'])
+    assert.strictEqual(workers[0].messages[0].events.length, 1)
+    clock.tick(20)
+    channel('ffe:writers:flush').publish()
+    assert.deepStrictEqual(workers[0].messages.map(message => message.type), ['batch', 'flush', 'flush'])
+  })
+
+  for (const terminalState of ['destroy', 'worker failure']) {
+    it(`removes the shared FFE flush subscription after ${terminalState}`, () => {
+      const flushCh = channel('ffe:writers:flush')
+      assert.strictEqual(flushCh.hasSubscribers, true)
+      writer.setEnabled(true)
+      enqueue(64)
+      if (terminalState === 'destroy') writer.destroy()
+      else workers[0].emit('error', new Error('worker failed'))
+      assert.strictEqual(flushCh.hasSubscribers, false)
+      const messages = workers[0].messages.slice()
+      flushCh.publish()
+      assert.deepStrictEqual(workers[0].messages, messages)
+    })
+  }
+
   it('contains post failures and never restarts a failed writer', () => {
     writer.setEnabled(true)
     enqueue(1)
@@ -146,8 +173,9 @@ describe('flag evaluation worker producer', () => {
   })
 
   it('does not start a worker or shutdown deadline without admitted work', () => {
+    channel('ffe:writers:flush').publish()
     writer.setEnabled(true)
-    writer.flush()
+    channel('ffe:writers:flush').publish()
     writer.destroy()
     assert.strictEqual(workers.length, 0)
     assert.strictEqual(clock.countTimers(), 0)

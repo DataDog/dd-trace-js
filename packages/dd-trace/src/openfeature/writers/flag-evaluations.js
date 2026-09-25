@@ -14,6 +14,7 @@ const {
 } = require('./flag-evaluation-telemetry')
 
 const telemetryAppClosingCh = channel('datadog:telemetry:app-closing')
+const flushCh = channel('ffe:writers:flush')
 
 // Share clone/wakeup costs across event-loop turns without delaying sparse evaluations indefinitely.
 const BATCH_SIZE = 64
@@ -64,6 +65,7 @@ class FlagEvaluationsWriter {
   #deadline
   #destroyer
   #onAppClosing
+  #onFlush
   #route
   #routeId = 0
   #serializedRoute
@@ -82,8 +84,10 @@ class FlagEvaluationsWriter {
     // Telemetry registers its shutdown sender before providers. Collect existing worker metrics before that send.
     // Metrics produced by the later final drain remain best-effort; this does not coordinate telemetry shutdown.
     this.#onAppClosing = () => collectWorkerTelemetry(this.#state)
+    this.#onFlush = () => this.flush()
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
     telemetryAppClosingCh.subscribe(this.#onAppClosing)
+    flushCh.subscribe(this.#onFlush)
   }
 
   hasCapacity () {
@@ -255,6 +259,7 @@ class FlagEvaluationsWriter {
     clearInterval(this.#periodic)
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
     telemetryAppClosingCh.unsubscribe(this.#onAppClosing)
+    flushCh.unsubscribe(this.#onFlush)
     collectWorkerTelemetry(this.#state)
   }
 
