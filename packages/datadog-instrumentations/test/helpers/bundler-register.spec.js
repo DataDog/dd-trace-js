@@ -103,6 +103,36 @@ describe('bundler register', () => {
     assert.equal(Object.hasOwn(payload, 'module'), false)
   })
 
+  it('activates a source-rewritten hashed chunk', () => {
+    const hook = sinon.stub()
+    const { loadChannel, publish } = loadBundlerRegister({
+      hooks: { 'test-pattern-rewrite': sinon.stub() },
+      instrumentations: {
+        'test-pattern-rewrite': [{
+          hook,
+          sourceRewrite: /^dist\/chunk-[A-Z0-9]+\.mjs$/,
+          versions: ['>=1'],
+        }],
+      },
+    })
+
+    publish({
+      activate: true,
+      package: 'test-pattern-rewrite',
+      path: 'test-pattern-rewrite/dist/chunk-ABC123.mjs',
+      version: '1.0.0',
+    })
+    publish({
+      activate: true,
+      package: 'test-pattern-rewrite',
+      path: 'other/dist/chunk-ABC123.mjs',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(hook, undefined, '1.0.0')
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-pattern-rewrite' })
+  })
+
   it('activates a hookless source-rewritten integration without loading a hook', () => {
     const { loadChannel, log, publish } = loadBundlerRegister({
       activationNames: new Map([['test-hookless', 'test-plugin']]),
@@ -211,6 +241,11 @@ describe('bundler register', () => {
       package: 'test-stale-plan',
       path: 'test-stale-plan/index.js',
       version: '1.0.0',
+    })
+    publish({
+      module: {},
+      package: 'test-stale-plan',
+      version: '2.0.0',
     })
 
     sinon.assert.notCalled(integrationHook)

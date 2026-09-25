@@ -426,6 +426,8 @@ tracer.use('postgres', { truncate: true });
 tracer.use('postgres', { truncate: 5000 });
 tracer.use('prisma');
 tracer.use('protobufjs');
+tracer.use('react-router');
+tracer.use('react-router', httpServerOptions);
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');

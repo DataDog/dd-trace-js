@@ -129,6 +129,7 @@ const plugins = {
   get playwright () { return require('../../../datadog-plugin-playwright/src') },
   get postgres () { return require('../../../datadog-plugin-postgres/src') },
   get protobufjs () { return require('../../../datadog-plugin-protobufjs/src') },
+  get 'react-router' () { return require('../../../datadog-plugin-react-router/src') },
   get redis () { return require('../../../datadog-plugin-redis/src') },
   get restify () { return require('../../../datadog-plugin-restify/src') },
   get rhea () { return require('../../../datadog-plugin-rhea/src') },

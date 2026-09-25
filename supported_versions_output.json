@@ -784,6 +784,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "react-router",
+    "integration": "react-router",
+    "minimum_tracer_supported": "7.9.5",
+    "max_tracer_supported": "8.4.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "redis",
     "integration": "redis",
     "minimum_tracer_supported": "0.12.0",

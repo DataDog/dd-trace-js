@@ -3,7 +3,12 @@
 const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 
-const { generateRewriterTargets, OUTPUT_PATH } = require('../../../../../scripts/generate-rewriter-targets')
+const {
+  generateRewriterTargets,
+  generateRewriterTargetPatterns,
+  OUTPUT_PATH,
+  PATTERN_OUTPUT_PATH,
+} = require('../../../../../scripts/generate-rewriter-targets')
 const { getRewriteActivationName, getRewriteTarget } = require('../../../src/helpers/rewriter/targets')
 const targets = require('../../../src/helpers/rewriter/targets.json')
 const { getUnusedPackageName } = require('../get-unused-package-name')
@@ -15,6 +20,25 @@ describe('rewriter targets', () => {
     assert.strictEqual(
       readFileSync(OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n'),
       generateRewriterTargets()
+    )
+    assert.strictEqual(
+      readFileSync(PATTERN_OUTPUT_PATH, 'utf8').replaceAll('\r\n', '\n'),
+      generateRewriterTargetPatterns()
+    )
+  })
+
+  it('finds hashed source targets without accepting unrelated chunks', () => {
+    assert.deepStrictEqual(
+      getRewriteTarget('file:///app/node_modules/react-router/dist/development/chunk-JG3XND5A.mjs'),
+      {
+        moduleName: 'react-router',
+        filePath: 'dist/development/chunk-JG3XND5A.mjs',
+        sourceMatch: 'function derive(',
+      }
+    )
+    assert.strictEqual(
+      getRewriteTarget('file:///app/node_modules/react-router/dist/development/chunk-invalid.mjs'),
+      undefined
     )
   })
 
