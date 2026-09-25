@@ -278,6 +278,16 @@ describe('verify-integration-skills', () => {
     assert.strictEqual(status, 0, stderr)
   })
 
+  it('counts CRLF skill files against the same token budget', () => {
+    const filename = '.agents/skills/apm-integrations/SKILL.md'
+    const source = skillFiles[filename] + 'Use `code`.\n'.repeat(300)
+    const lf = runTool([], (root) => writeFixtureFile(root, filename, source))
+    const crlf = runTool([], (root) => writeFixtureFile(root, filename, source.replaceAll('\n', '\r\n')))
+
+    assert.strictEqual(lf.status, 0, lf.stderr)
+    assert.strictEqual(crlf.status, 0, crlf.stderr)
+  })
+
   it('accepts equivalent native discovery link targets', () => {
     const { status, stderr } = runTool([], (root) => {
       for (const client of ['.claude', '.cursor']) {

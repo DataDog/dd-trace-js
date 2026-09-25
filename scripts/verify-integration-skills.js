@@ -1489,7 +1489,7 @@ function verifySkillDocuments () {
       }
 
       const source = read(filename)
-      const tokens = encoding.encode(source).length
+      const tokens = encoding.encode(source.replaceAll('\r\n', '\n')).length
       total += tokens
       results.push({ filename, tokens, budget })
 
