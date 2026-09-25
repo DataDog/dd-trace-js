@@ -135,8 +135,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       cwd,
       env: {
         ...getCiVisAgentlessConfig(receiver.port),
-        DD_TRACE_DEBUG: '1',
-        DD_TRACE_LOG_LEVEL: 'warn',
         ...env,
       },
     })
@@ -1273,10 +1271,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 0)
     })
 
-    it('warns for a non-Circus testRunner', async () => {
+    it('warns by default for a non-Circus testRunner', async () => {
       const output = await runJestAndCaptureOutput({ OLD_RUNNER: '1' })
 
       assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 1)
+    })
+
+    it('does not warn when Test Optimization is not active', async () => {
+      const output = await runJestAndCaptureOutput({
+        DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
+        DD_TRACE_DEBUG: '1',
+        DD_TRACE_LOG_LEVEL: 'warn',
+        NODE_OPTIONS: '-r dd-trace/init',
+        OLD_RUNNER: '1',
+      })
+
+      assert.strictEqual(countUnsupportedTestRunnerWarnings(output), 0)
     })
 
     it('warns once for multiple projects', async () => {

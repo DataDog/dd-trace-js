@@ -329,14 +329,15 @@ function warnDeprecatedJestVersion (frameworkVersion) {
 
 /** @param {object[]} configs resolved Jest project configurations */
 function warnIfUnsupportedJestTestRunner (configs) {
-  if (hasWarnedUnsupportedJestTestRunner) return
+  if (hasWarnedUnsupportedJestTestRunner || !testSessionConfigurationCh.hasSubscribers) return
 
   const usesUnsupportedTestRunner = getEnvironmentVariable('JEST_JASMINE') === '1' ||
     configs.some(config => !JEST_CIRCUS_TEST_RUNNER_PATH.test(config.testRunner))
 
   if (usesUnsupportedTestRunner) {
     hasWarnedUnsupportedJestTestRunner = true
-    log.warn(UNSUPPORTED_JEST_TEST_RUNNER_WARNING)
+    // eslint-disable-next-line no-console
+    console.warn(UNSUPPORTED_JEST_TEST_RUNNER_WARNING)
   }
 }
 
