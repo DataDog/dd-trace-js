@@ -1,0 +1,4 @@
+interface:
+  display_name: "dd-trace APM integrations"
+  short_description: "Build and review dd-trace-js integrations"
+  default_prompt: "Use $apm-integrations to inspect this dd-trace-js integration change."
