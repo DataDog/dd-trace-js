@@ -60,7 +60,7 @@ const {
   TRACE_ID,
   PROPAGATED_TRACE_ID_KEY,
 } = require('./constants/tags')
-const { buildAgentDeclaration, mergeAgentManifest } = require('./agent-manifest')
+const { buildAgentDeclaration } = require('./agent-manifest')
 const { storage } = require('./storage')
 const {
   findGenAIAncestorSpanId,
@@ -75,12 +75,6 @@ const {
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
 const registry = new WeakMap()
-
-// Maps an LLMObs span to the annotation context agent declarations an agent span in its LLMObs trace already
-// took. The set is shared by the spans of a trace, so a declaration reaches only the first agent span in it and a
-// nested sub-agent or a sibling handoff target keeps reporting its own agent.
-/** @type {WeakMap<object, Set<object>>} */
-const agentDeclarationClaims = new WeakMap()
 
 class LLMObsTagger {
   /** @type {import('../config/config-base')} */
@@ -204,7 +198,7 @@ class LLMObsTagger {
     const agentDeclarations = /** @type {import('./agent-manifest').AgentDeclaration[] | undefined} */ (
       storage.getStore()?.agentDeclarations
     )
-    if (agentDeclarations) this.#applyAgentDeclarations(span, kind, parent, agentDeclarations)
+    if (agentDeclarations) this.#applyAgentDeclarations(span, agentDeclarations)
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
@@ -224,28 +218,17 @@ class LLMObsTagger {
   }
 
   /**
-   * Applies the agents declared by the enclosing annotation contexts, outermost first. The version is recorded on
-   * every span in the block and emitted if the span is an agent when it finishes, since some integrations promote a
-   * span to an agent after registration. Each manifest goes to the first agent span of the LLMObs trace.
+   * Applies the agents declared by the enclosing annotation contexts, outermost first, to every span in the block.
+   * Both are emitted only if the span is an agent when it finishes, since some integrations promote a span to an
+   * agent after registration.
    *
    * @param {import('../opentracing/span')} span
-   * @param {string} kind
-   * @param {import('../opentracing/span') | undefined} parent
    * @param {import('./agent-manifest').AgentDeclaration[]} declarations
    */
-  #applyAgentDeclarations (span, kind, parent, declarations) {
-    let claims = parent && agentDeclarationClaims.get(parent)
-    if (!claims) {
-      claims = new Set()
-      if (parent && registry.has(parent)) agentDeclarationClaims.set(parent, claims)
-    }
-    agentDeclarationClaims.set(span, claims)
-
+  #applyAgentDeclarations (span, declarations) {
     for (const declaration of declarations) {
       if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
-      if (kind !== 'agent' || !declaration.manifest || claims.has(declaration)) continue
-      this.#tagAgentManifestFields(span, declaration.manifest)
-      claims.add(declaration)
+      if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
     }
   }
 
@@ -267,7 +250,11 @@ class LLMObsTagger {
    * @param {import('./agent-manifest').AgentManifestFields} manifest
    */
   #tagAgentManifestFields (span, manifest) {
-    this._setTag(span, AGENT_MANIFEST, mergeAgentManifest(registry.get(span)?.[AGENT_MANIFEST], manifest))
+    // A shallow update, matching dd-trace-py: each declaration is already validated, so a later field replaces an
+    // earlier one whole (`model_settings` included) and an unset or invalid one leaves it in place. Declarations are
+    // never mutated, so the first one is stored without a copy.
+    const existing = registry.get(span)?.[AGENT_MANIFEST]
+    this._setTag(span, AGENT_MANIFEST, existing ? { ...existing, ...manifest } : manifest)
   }
 
   #tagSamplingDecision (span, parent) {

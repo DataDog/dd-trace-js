@@ -108,21 +108,6 @@ function buildAgentManifest (agent) {
 }
 
 /**
- * `model_settings` merges key by key; every other field is replaced. Returns a new object.
- *
- * @param {AgentManifestFields | undefined} base
- * @param {AgentManifestFields} incoming
- * @returns {AgentManifestFields}
- */
-function mergeAgentManifest (base, incoming) {
-  const merged = { ...base, ...incoming }
-  if (base?.model_settings && incoming.model_settings) {
-    merged.model_settings = { ...base.model_settings, ...incoming.model_settings }
-  }
-  return merged
-}
-
-/**
  * Matches the Python SDK, which tags any truthy version, so `0` and `''` declare none.
  *
  * @param {unknown} version
@@ -320,5 +305,4 @@ function isScalar (value) {
 module.exports = {
   MANUAL_FRAMEWORK_NAME,
   buildAgentDeclaration,
-  mergeAgentManifest,
 }

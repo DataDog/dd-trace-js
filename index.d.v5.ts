@@ -3997,7 +3997,7 @@ declare namespace tracer {
       /**
        * Sets inputs, outputs, tags, metadata, and metrics as provided for a given LLM Observability span.
        * Note that with the exception of tags and agent, this method will override any existing values for the provided fields.
-       * Agent fields are merged into earlier agent annotations field by field.
+       * Agent fields update earlier agent annotations one top-level field at a time.
        *
        * For example:
        * ```javascript
@@ -4893,7 +4893,7 @@ declare namespace tracer {
       instructions?: string,
       /** The model the agent is configured to call. */
       model?: string,
-      /** Inference parameters, merged key by key across annotations. */
+      /** Inference parameters. Replaces the settings an earlier annotation declared as a whole. */
       modelSettings?: AgentModelSettings,
       /** The tools the agent can call. Replaces tools declared by an earlier annotation. */
       tools?: AgentTool[]
@@ -4982,9 +4982,9 @@ declare namespace tracer {
       prompt?: Prompt,
 
       /**
-       * Declares the agent running in this context, read when the context is entered. The version is tagged on
-       * every `agent` span in the context. The manifest goes to the first `agent` span of each trace in the
-       * context, so a nested sub-agent or a handoff target in the same trace keeps reporting its own agent.
+       * Declares the agent running in this context, read when the context is entered. The version and manifest
+       * are reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
+       * span to declare its own agent.
        */
       agent?: Agent,
     }
