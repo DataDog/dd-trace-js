@@ -879,6 +879,50 @@ describe('OpenTelemetry Traces', () => {
 
       exporter.export([createMockSpan()])
     })
+
+    describe('SDK adoption markers', () => {
+      /**
+       * @param {object} extraEnv
+       * @returns {{ resource: Record<string, string> }}
+       */
+      function exportAndCapture (extraEnv) {
+        let captured
+        const verify = mockOtlpExport((decoded) => {
+          const { resource } = decoded.resourceSpans[0]
+          captured = {
+            resource: Object.fromEntries(resource.attributes.map(attr => [attr.key, attr.value.stringValue])),
+          }
+        })
+
+        buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...extraEnv }).export([createMockSpan()])
+        verify()
+
+        return captured
+      }
+
+      it('declares OTLP export and Datadog semantics on the resource by default', () => {
+        const { resource } = exportAndCapture({})
+
+        assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
+        assert.strictEqual(resource['datadog.sdk.semantics'], 'datadog')
+      })
+
+      it('declares OTel semantics on the resource when DD_TRACE_OTEL_SEMANTICS_ENABLED is set', () => {
+        const { resource } = exportAndCapture({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true' })
+
+        assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
+        assert.strictEqual(resource['datadog.sdk.semantics'], 'otel')
+      })
+
+      it('does not let global tags with the same keys override the resource', () => {
+        const { resource } = exportAndCapture({
+          DD_TAGS: '_dd.sdk.otlp_export:false,datadog.sdk.semantics:otel',
+        })
+
+        assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
+        assert.strictEqual(resource['datadog.sdk.semantics'], 'datadog')
+      })
+    })
   })
 
   describe('Telemetry Metrics', () => {
