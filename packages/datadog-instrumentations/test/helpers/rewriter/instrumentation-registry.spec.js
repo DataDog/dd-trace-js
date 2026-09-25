@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const {
-  getRewriteActivationName,
+  isRewriteActivationEnabled,
   instrumentations,
   registry,
 } = require('../../../src/helpers/rewriter/instrumentation-registry')
@@ -18,7 +18,7 @@ describe('instrumentation registry', () => {
       if (!activate) continue
 
       for (const { module } of entryInstrumentations) {
-        assert.strictEqual(getRewriteActivationName(module.name), module.name)
+        assert.strictEqual(isRewriteActivationEnabled(module.name), true)
       }
     }
   })
@@ -28,12 +28,12 @@ describe('instrumentation registry', () => {
       if (activate) continue
 
       for (const { module } of entryInstrumentations) {
-        assert.strictEqual(getRewriteActivationName(module.name), undefined)
+        assert.strictEqual(isRewriteActivationEnabled(module.name), false)
       }
     }
   })
 
-  it('returns undefined for unknown module names', () => {
-    assert.strictEqual(getRewriteActivationName('not-a-registered-module'), undefined)
+  it('returns false for unknown module names', () => {
+    assert.strictEqual(isRewriteActivationEnabled('not-a-registered-module'), false)
   })
 })

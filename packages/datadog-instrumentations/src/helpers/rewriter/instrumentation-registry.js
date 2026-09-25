@@ -34,8 +34,8 @@ const instrumentations = registry.flatMap(entry => entry.instrumentations)
 /**
  * @param {string} moduleName
  */
-function getRewriteActivationName (moduleName) {
-  return activatedModules.has(moduleName) ? moduleName : undefined
+function isRewriteActivationEnabled (moduleName) {
+  return activatedModules.has(moduleName)
 }
 
-module.exports = { getRewriteActivationName, instrumentations, registry }
+module.exports = { isRewriteActivationEnabled, instrumentations, registry }
