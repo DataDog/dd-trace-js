@@ -16,6 +16,8 @@ const {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
+  formatProviderToolResult,
+  formatToolApprovalResponse,
   getLlmObsSpanName,
   getTelemetryMetadata,
 } = require('./util')
@@ -226,14 +228,16 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
   setLLMOperationTags (span, tags) {
     const inputMessages = getJsonStringValue(tags['ai.prompt.messages'], [])
     const parsedInputMessages = []
+    /** @type {Map<string, string>} */
+    const toolCallIdsByApprovalId = new Map()
     for (const message of inputMessages) {
-      const formattedMessages = this.formatMessage(message)
+      const formattedMessages = this.formatMessage(message, toolCallIdsByApprovalId)
       parsedInputMessages.push(...formattedMessages)
     }
 
-    const outputMessage = this.formatOutputMessage(tags)
+    const outputMessages = this.formatOutputMessages(tags)
 
-    this._tagger.tagLLMIO(span, parsedInputMessages, outputMessage)
+    this._tagger.tagLLMIO(span, parsedInputMessages, outputMessages)
 
     const metadata = getModelMetadata(tags)
     this._tagger.tagMetadata(span, metadata)
@@ -253,7 +257,19 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
     this._tagger.tagTextIO(span, input, output)
   }
 
-  formatOutputMessage (tags) {
+  /**
+   * @param {SpanTags} tags
+   * @returns {Array<{role: string, content?: string,
+   *   toolCalls?: Array<{arguments: unknown, name: string, toolId: string, type: string}>}>}
+   */
+  formatOutputMessages (tags) {
+    const outputMessages = []
+
+    const reasoning = tags['ai.response.reasoning']
+    if (typeof reasoning === 'string' && reasoning) {
+      outputMessages.push({ role: 'reasoning', content: reasoning })
+    }
+
     const outputMessageText = tags['ai.response.text'] ?? tags['ai.response.object']
     const outputMessageToolCalls = getJsonStringValue(tags['ai.response.toolCalls'], [])
 
@@ -269,11 +285,13 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
       })
     }
 
-    return {
+    outputMessages.push({
       role: 'assistant',
       content: outputMessageText,
       toolCalls: formattedToolCalls,
-    }
+    })
+
+    return outputMessages
   }
 
   /**
@@ -283,10 +301,13 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
    * need to split into multiple messages.
    *
    * @param {AiSdkMessage} message
-   * @returns {Array<{role: string, content: string, toolId?: string,
-   *   toolCalls?: Array<{arguments: string, name: string, toolId: string, type: string}>}>}
+   * @param {Map<string, string>} toolCallIdsByApprovalId approval IDs seen on prior assistant messages,
+   *   used to link tool approval responses back to their tool call
+   * @returns {Array<{role: string, content?: string, toolId?: string,
+   *   toolCalls?: Array<{arguments: unknown, name: string, toolId: string, type: string}>,
+   *   toolResults?: Array<{result: string, name: string, toolId: string, type: string}>}>}
    */
-  formatMessage (message) {
+  formatMessage (message, toolCallIdsByApprovalId = new Map()) {
     const { role, content } = message
 
     if (role === 'system') {
@@ -302,14 +323,21 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
 
       return [{ role, content: finalContent }]
     } else if (role === 'assistant') {
+      if (typeof content === 'string') {
+        return [{ role, content }]
+      }
+
       const toolCalls = []
+      const toolResults = []
       let finalContent = ''
+      let reasoningContent = ''
 
       for (const part of content) {
         const { type } = part
-        // TODO(sabrenner): do we want to include reasoning?
-        if (['text', 'reasoning', 'redacted-reasoning'].includes(type)) {
-          finalContent += part.text ?? part.data
+        if (type === 'text') {
+          finalContent += part.text
+        } else if (type === 'reasoning' || type === 'redacted-reasoning') {
+          reasoningContent += part.text ?? part.data ?? ''
         } else if (type === 'tool-call') {
           toolCalls.push({
             arguments: part.args ?? part.input,
@@ -317,7 +345,18 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
             toolId: part.toolCallId,
             type: 'function',
           })
+        } else if (type === 'tool-result') {
+          // provider-executed tool results are returned inline with the assistant content
+          toolResults.push(formatProviderToolResult(part))
+        } else if (type === 'tool-approval-request' && part.approvalId && part.toolCallId) {
+          toolCallIdsByApprovalId.set(part.approvalId, part.toolCallId)
         }
+      }
+
+      const finalMessages = []
+
+      if (reasoningContent) {
+        finalMessages.push({ role: 'reasoning', content: reasoningContent })
       }
 
       const finalMessage = {
@@ -326,10 +365,16 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
       }
 
       if (toolCalls.length) {
-        finalMessage.toolCalls = toolCalls.length ? toolCalls : undefined
+        finalMessage.toolCalls = toolCalls
       }
 
-      return [finalMessage]
+      if (toolResults.length) {
+        finalMessage.toolResults = toolResults
+      }
+
+      finalMessages.push(finalMessage)
+
+      return finalMessages
     } else if (role === 'tool') {
       const finalMessages = []
       for (const part of content) {
@@ -341,6 +386,8 @@ class DdTelemetryPlugin extends BaseLLMObsPlugin {
             content: safeResult,
             toolId: part.toolCallId,
           })
+        } else if (part.type === 'tool-approval-response') {
+          finalMessages.push(formatToolApprovalResponse(part, toolCallIdsByApprovalId))
         }
       }
 
