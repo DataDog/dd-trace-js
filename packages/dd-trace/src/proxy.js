@@ -246,7 +246,7 @@ class Tracer extends NoopProxy {
           appsecRemoteConfig.enable(rc, config, this._modules.appsec)
         }
 
-        if (config.dynamicInstrumentation.enabled) {
+        if (config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED) {
           getDynamicInstrumentation().start(config, rc)
         }
 
@@ -420,7 +420,8 @@ class Tracer extends NoopProxy {
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config,
+          () => this.openfeature)
 
         if (config.aiguard.DD_AI_GUARD_ENABLED) {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
@@ -462,7 +463,7 @@ class Tracer extends NoopProxy {
    * @param {object} rc - The RemoteConfig instance
    */
   #updateDebugger (config, rc) {
-    const shouldBeEnabled = config.dynamicInstrumentation.enabled
+    const shouldBeEnabled = config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED
     if (!shouldBeEnabled && dynamicInstrumentation === undefined) return
 
     const DynamicInstrumentation = getDynamicInstrumentation()
