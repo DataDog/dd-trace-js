@@ -114,7 +114,6 @@ describe('rewriter loader', () => {
 
       assert.equal(await new Queue().add(), 'added')
       assert.deepStrictEqual(activations, [{
-        activationName: 'bullmq',
         moduleName: 'bullmq',
         result: 'rewritten',
         version: '5.66.0',

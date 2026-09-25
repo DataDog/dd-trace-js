@@ -1546,7 +1546,7 @@ describe('check-require-cache', () => {
     const rewritten = rewriter.rewrite(source, filename, 'commonjs', {
       moduleName: 'bullmq',
       filePath: 'activation.js',
-      activationName: 'bullmq',
+      activate: true,
     })
     const loads = []
     const loadChannel = channel('dd-trace:instrumentation:load:orchestrion')
@@ -1561,7 +1561,6 @@ describe('check-require-cache', () => {
 
       assert.equal(mod.exports(), true)
       assert.deepStrictEqual(loads, [{
-        activationName: 'bullmq',
         moduleName: 'bullmq',
         result: 'rewritten',
         version: '0.1',
@@ -1589,7 +1588,7 @@ describe('check-require-cache', () => {
       const rewritten = rewriter.rewrite(source, pathToFileURL(filename).href, 'commonjs', {
         moduleName: 'bullmq',
         filePath: 'activation.js',
-        activationName: 'bullmq',
+        activate: true,
       })
 
       assert.notStrictEqual(rewritten, source)
@@ -1641,7 +1640,7 @@ describe('check-require-cache', () => {
     const rewritten = rewriter.rewrite(source, filename, 'module', {
       moduleName: 'bullmq',
       filePath: 'activation.js',
-      activationName: 'bullmq',
+      activate: true,
     })
     const loads = []
     const loadChannel = channel('dd-trace:instrumentation:load:orchestrion')
@@ -1663,7 +1662,6 @@ describe('check-require-cache', () => {
       assert.equal(namespace.ddTraceOrchestrionDc, 'application binding')
       assert.equal(namespace.ddTraceOrchestrionDc1, 'application binding 1')
       assert.deepStrictEqual(loads, [{
-        activationName: 'bullmq',
         moduleName: 'bullmq',
         result: 'rewritten',
         version: '0.1',
@@ -1779,7 +1777,7 @@ describe('check-require-cache', () => {
     const rewritten = unchangedRewriter.rewrite(noMatch, filename, 'commonjs', {
       moduleName: 'bullmq',
       filePath: 'activation.js',
-      activationName: 'bullmq',
+      activate: true,
     })
     const loads = []
     const activations = []
@@ -1797,7 +1795,6 @@ describe('check-require-cache', () => {
       mod._compile(rewritten, filename)
 
       assert.deepStrictEqual(loads, [{
-        activationName: 'bullmq',
         moduleName: 'bullmq',
         result: 'matched',
         version: '0.1',
@@ -1810,7 +1807,7 @@ describe('check-require-cache', () => {
     assert.strictEqual(rewriter.rewrite(invalid, filename, 'commonjs', {
       moduleName: 'bullmq',
       filePath: 'activation.js',
-      activationName: 'bullmq',
+      activate: true,
     }), invalid)
   })
 
@@ -1820,7 +1817,7 @@ describe('check-require-cache', () => {
       source,
       resolve(__dirname, 'node_modules', 'test', 'unsupported.js'),
       'commonjs',
-      { moduleName: '@azure/cosmos', filePath: 'unsupported.js', activationName: '@azure/cosmos' }
+      { moduleName: '@azure/cosmos', filePath: 'unsupported.js', activate: true }
     )
     const hybrid = rewriter.rewrite(
       source,
@@ -1834,7 +1831,7 @@ describe('check-require-cache', () => {
       source,
       resolve(__dirname, 'node_modules', 'test', 'activation.js'),
       'commonjs',
-      { moduleName: 'bullmq', filePath: 'activation.js', activationName: 'bullmq' }
+      { moduleName: 'bullmq', filePath: 'activation.js', activate: true }
     )
 
     assert.match(unsupported, /dd-trace:instrumentation:load:orchestrion/)
@@ -1852,7 +1849,7 @@ describe('check-require-cache', () => {
       assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', {
         moduleName: 'bullmq',
         filePath: 'activation.js',
-        activationName: 'bullmq',
+        activate: true,
       }), source)
     } finally {
       rmSync(directory, { force: true, recursive: true })
