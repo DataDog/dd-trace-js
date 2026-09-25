@@ -1394,14 +1394,18 @@ function withReceiver (fn) {
     const receiver = await new FakeCiVisIntake().start()
     let lastProc
     const run = (cmd, opts) => {
-      lastProc = exec(cmd, opts)
+      // Replace the POSIX shell so cleanup signals the test runner itself.
+      lastProc = exec(process.platform === 'win32' ? cmd : `exec ${cmd}`, opts)
       return lastProc
     }
     try {
       await fn(receiver, run)
     } finally {
-      lastProc?.kill()
-      await receiver.stop()
+      try {
+        await stopProc(lastProc)
+      } finally {
+        await receiver.stop()
+      }
     }
   }
 }

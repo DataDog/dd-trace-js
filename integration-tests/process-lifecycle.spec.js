@@ -2,15 +2,19 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const http = require('node:http')
 const path = require('node:path')
 
-const { afterEach, describe, it } = require('mocha')
+const Mocha = require('mocha')
+const { afterEach, describe, it } = Mocha
 const sinon = require('sinon')
 
 const {
+  createParallelIt,
   spawnPluginIntegrationTestProcAndExpectExit,
   spawnProcAndExpectExit,
   stopProc,
+  withReceiver,
 } = require('./helpers')
 
 describe('spawnProcAndExpectExit', () => {
@@ -106,5 +110,70 @@ describe('spawnProcAndExpectExit', () => {
 
     await rejected
     assert.strictEqual(kill.callCount, 2)
+  })
+})
+
+describe('withReceiver', () => {
+  // These cases verify POSIX exec shell replacement; Windows uses cmd.exe.
+  const posixIt = process.platform === 'win32' ? it.skip : it
+  for (const fails of [false, true]) {
+    posixIt(`waits for its child to stop when the body ${fails ? 'fails' : 'passes'}`, async () => {
+      let proc
+      const error = new Error('test body failed')
+      const runTest = withReceiver(async (receiver, run) => {
+        proc = run('node -e "process.stdout.write(String(process.pid)); setInterval(() => {}, 1000)"')
+        const [pid] = await once(proc.stdout, 'data')
+        assert.strictEqual(Number(pid), proc.pid)
+        if (fails) throw error
+      })
+
+      try {
+        if (fails) await assert.rejects(runTest(), error)
+        else await runTest()
+        assert.ok(proc.exitCode !== null || proc.signalCode !== null, 'child must exit before cleanup resolves')
+      } finally {
+        await stopProc(proc)
+      }
+    })
+  }
+
+  it('preserves a failure and starts a fresh retry after closing a pending request', async () => {
+    const mocha = new Mocha({ reporter: class {} })
+    const parallelIt = createParallelIt((name, fn) => mocha.suite.addTest(new Mocha.Test(name, fn)), {
+      withReceiver: true,
+    })
+    const error = new Error('original assertion')
+    const requests = []
+    const retryErrors = []
+    let attempts = 0
+
+    parallelIt('pending request', async (receiver) => {
+      attempts++
+      if (attempts === 2) return
+      receiver.setMediaResponsesPending()
+      const received = once(receiver.server, 'request')
+      const request = http.request({
+        port: receiver.port,
+        method: 'POST',
+        path: '/api/v2/ci/test-runs/123/media',
+        headers: { 'content-length': 0 },
+      })
+      requests.push(request)
+      request.on('error', () => {})
+      request.end()
+      await received
+      throw error
+    }, { retries: 1 })
+
+    try {
+      const failures = await new Promise(resolve => {
+        mocha.run(resolve).on('retry', (test, error) => retryErrors.push(error))
+      })
+      assert.strictEqual(failures, 0)
+      assert.strictEqual(attempts, 2)
+      assert.deepStrictEqual(retryErrors, [error])
+    } finally {
+      for (const request of requests) request.destroy()
+    }
   })
 })
