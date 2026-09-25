@@ -62,15 +62,18 @@ class ReactRouterPlugin extends WebPlugin {
       log.debug('Skipping React Router route for invalid HTTP URL: %s', error)
       return
     }
-    if (pathname.endsWith('/_root.data')) {
-      pathname = pathname.slice(0, -'/_root.data'.length) || '/'
+    const args = ctx.arguments
+    const matchedPathname = typeof args[1] === 'string' ? args[1] : args[3] ?? args[2]
+    if (pathname.endsWith('/_root.data') && typeof matchedPathname === 'string' &&
+      pathname.toLowerCase() === ((matchedPathname.endsWith('/')
+        ? matchedPathname.slice(0, -1)
+        : matchedPathname) + '/_root.data').toLowerCase()) {
+      pathname = matchedPathname
     } else if (pathname.endsWith('.data')) {
       pathname = pathname.slice(0, -'.data'.length)
     }
     if (pathname.length > 1 && pathname.endsWith('/')) pathname = pathname.slice(0, -1)
 
-    const args = ctx.arguments
-    const matchedPathname = typeof args[1] === 'string' ? args[1] : args[3] ?? args[2]
     if (pathname !== matchedPathname && pathname + '/' !== matchedPathname &&
       !(pathname.endsWith('/_') && pathname.slice(0, -1) === matchedPathname)) return
 
@@ -98,7 +101,7 @@ class ReactRouterPlugin extends WebPlugin {
       integrationName: ReactRouterPlugin.id,
       tags: {
         [COMPONENT]: ReactRouterPlugin.id,
-        [RESOURCE_NAME]: ctx.pattern || ctx.routeId || kind,
+        [RESOURCE_NAME]: ctx.pattern,
         'react-router.route_id': ctx.routeId,
       },
     })
@@ -109,7 +112,7 @@ class ReactRouterPlugin extends WebPlugin {
       const error = rejected ? result : outcome?.status === 'error' ? outcome.error : undefined
       try {
         if (error !== undefined && !span.context().getTag('error')) {
-          span.setTag('error', error || 1)
+          span.setTag('error', error)
         }
       } catch (failure) {
         log.error('Error in react-router completion: %s', failure)
