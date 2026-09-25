@@ -1,7 +1,7 @@
 'use strict'
 
 const tracer = require('../../../..')
-const { wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
+const { wrapLambdaHandler } = require('./handler')
 
 // The original returns exactly these three keys (datadog-lambda-js
 // `src/trace/context/extractor.ts:24-26`). `tracer.inject` would additionally emit the configured
@@ -21,7 +21,7 @@ const DATADOG_TRACE_HEADERS = [
  * @returns {Function} The wrapped handler.
  */
 function wrap (handler, config) {
-  return wrapHandler(handler, config)
+  return wrapLambdaHandler(handler, config)
 }
 
 /**

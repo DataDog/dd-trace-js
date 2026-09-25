@@ -2,9 +2,7 @@
 
 const dc = require('dc-polyfill')
 
-const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const { ImpendingTimeout } = require('../../dd-trace/src/lambda/runtime/errors')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const invocationStartChannel = dc.channel('datadog:aws-lambda:invocation:start')
@@ -12,7 +10,11 @@ const invocationEndChannel = dc.channel('datadog:aws-lambda:invocation:end')
 
 class AwsLambdaPlugin extends TracingPlugin {
   /**
-   * Starts the invocation span, timeout guard, and invocation boundary channels.
+   * Starts the invocation span and publishes the invocation start boundary.
+   *
+   * Impending-timeout monitoring is deliberately not here: it belongs to
+   * `packages/dd-trace/src/lambda/handler.js`, which decorates whatever span is active rather than
+   * one it owns. That is what lets it work while the pre-migration shim still owns the span.
    *
    * @param {object} context Invocation channel context.
    * @returns {object} Trace store bound to the customer handler.
@@ -32,7 +34,6 @@ class AwsLambdaPlugin extends TracingPlugin {
     }, context)
 
     context.lambdaSpan = span
-    this._startTimeout(context)
     invocationStartChannel.publish(context)
 
     return context.currentStore
@@ -54,54 +55,8 @@ class AwsLambdaPlugin extends TracingPlugin {
    */
   asyncStart (context) {
     invocationEndChannel.publish(context)
-    this._finishSpan(context)
-  }
-
-  /**
-   * Clears invocation resources after the result has propagated through the bound trace store.
-   *
-   * @param {object} context Invocation channel context.
-   */
-  asyncEnd (context) {
-    if (context.lambdaTimeout) clearTimeout(context.lambdaTimeout)
-  }
-
-  /**
-   * Arms the impending-timeout guard for an invocation with a Lambda context.
-   *
-   * @param {object} context Invocation channel context.
-   */
-  _startTimeout (context) {
-    if (typeof context.context?.getRemainingTimeInMillis !== 'function') return
-
-    const remainingTime = context.context.getRemainingTimeInMillis()
-    const flushDeadline = this.config.apmFlushDeadlineMs
-    if (!Number.isFinite(flushDeadline)) return
-
-    context.lambdaTimeout = setTimeout(() => {
-      const error = new ImpendingTimeout('Datadog detected an impending timeout')
-      context.lambdaSpan?.addTags({
-        [ERROR_MESSAGE]: error.message,
-        [ERROR_TYPE]: error.name,
-      })
-      this.tracer._processor?.killAll()
-      this._finishSpan(context)
-    }, Math.max(0, remainingTime - flushDeadline))
-    // Not unref'd: the whole point of the guard is to fire while the handler is still pending, and
-    // an unref'd timer is skipped when it is the only thing keeping the loop alive.
-  }
-
-  /**
-   * Finishes the invocation span at most once.
-   *
-   * Both the impending-timeout guard and the normal completion path reach this. A span that
-   * finishes twice reports a second, wrong duration to the agent.
-   *
-   * @param {object} context Invocation channel context.
-   */
-  _finishSpan (context) {
-    if (context.lambdaSpanFinished) return
-    context.lambdaSpanFinished = true
+    // Span.finish() is idempotent, so a span the impending-timeout monitor already finished when
+    // it fired is left untouched here.
     context.lambdaSpan?.finish()
   }
 }

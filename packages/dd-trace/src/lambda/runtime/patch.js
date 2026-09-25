@@ -2,7 +2,7 @@
 
 const path = require('path')
 
-const { datadog } = require('../handler')
+const { withTimeoutMonitor, wrapLambdaHandler } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
 const { isTrue } = require('../../util')
@@ -20,26 +20,44 @@ function patchDatadogLambdaModule (datadogLambdaModule) {
 }
 
 /**
- * Transitional migration gate, default off.
+ * Whether dd-trace creates the `aws.lambda` invocation span. Transitional, default off.
  *
- * Pre-migration datadog-lambda-js wraps the customer handler with its own full instrumentation.
- * If dd-trace also wraps (its `datadog()` now produces an `aws.lambda` span via the aws-lambda
- * plugin), customers running the old shim alongside a new dd-trace get two invocation spans per
- * invoke — the released shim does not know the `Symbol.for('dd-trace.lambda.wrapped')` marker,
- * and dd-trace deliberately does not claim the shim's `_ddWrapped` marker. So the dual wrap only
- * happens when explicitly enabled (migration testing); the gate goes away once the shim delegates
- * to `dd-trace/lambda` and the marker makes double wrapping idempotent.
+ * While the pre-migration datadog-lambda-js still owns the invocation span, dd-trace must not
+ * create a second one: the released shim does not know
+ * `Symbol.for('dd-trace.lambda.wrapped')`, and dd-trace deliberately does not claim the shim's
+ * `_ddWrapped` marker, so both would wrap and export two root `aws.lambda` spans in two separate
+ * traces. Off preserves the pre-PR3 division of ownership — dd-trace's Lambda support was timeout
+ * monitoring only and never produced a span.
+ *
+ * Enabling it is for migration testing and knowingly double-spans against the old shim. The gate
+ * goes away once the shim delegates to `dd-trace/lambda` and the marker makes wrapping idempotent.
  *
  * Migration-internal knob: registered in supported-configurations.json (env access validation
  * requires it) but intentionally not mapped to a customer-facing config option.
- *
- * @param {Function} datadogHandler
  */
+function ddTraceOwnsInvocationSpan () {
+  return isTrue(getValueFromEnvSources('DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS'))
+}
+
+/**
+ * Composes the two independent concerns, innermost first.
+ *
+ * Timeout monitoring always applies; span creation is gated. The monitor has to sit *inside* the
+ * span-creating wrapper so the span is active when its timer fires.
+ *
+ * @param {Function} lambdaHandler Customer handler.
+ * @param {Record<string, unknown>} [config] Per-handler overrides.
+ * @returns {Function} Instrumented handler.
+ */
+function instrumentLambdaHandler (lambdaHandler, config) {
+  return ddTraceOwnsInvocationSpan() ? wrapLambdaHandler(lambdaHandler, config) : withTimeoutMonitor(lambdaHandler)
+}
+
+/** @param {Function} datadogHandler */
 function patchDatadogLambdaHandler (datadogHandler) {
-  if (!isTrue(getValueFromEnvSources('DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS'))) {
-    return userHandler => datadogHandler(userHandler)
+  return function monitoredDatadog (userHandler, ...args) {
+    return datadogHandler.call(this, instrumentLambdaHandler(userHandler, args[0]), ...args)
   }
-  return userHandler => datadogHandler(datadog(userHandler))
 }
 
 /** @param {string} handlerPath */
@@ -52,7 +70,7 @@ function patchLambdaModule (handlerPath) {
 
 /** @param {Function} lambdaHandler */
 function patchLambdaHandler (lambdaHandler) {
-  return datadog(lambdaHandler)
+  return instrumentLambdaHandler(lambdaHandler)
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')

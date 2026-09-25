@@ -88,8 +88,7 @@ function promisifiedHandler (handler) {
     if (result !== undefined && typeof result?.then === 'function') {
       return Promise.race([callbackPromise, result])
     }
-    if (takesCallback || result === undefined) return callbackPromise
-    if (looksLikeSideEffectArtifact(result)) return callbackPromise
+    if (isCallbackCompletion(handler, result, contextIndex)) return callbackPromise
     return Promise.resolve(result)
   }
 }
@@ -129,8 +128,22 @@ function looksLikeSideEffectArtifact (result) {
       (result.constructor && /Server|Socket|Emitter/i.test(result.constructor.name)))
 }
 
+/**
+ * Whether a non-thenable return still needs a callback or legacy context completion signal.
+ * Shared with the span-agnostic timeout monitor so it cannot finish ahead of the invocation.
+ *
+ * @param {Function} handler Customer handler.
+ * @param {unknown} result Non-thenable handler return value.
+ * @param {number} contextIndex Lambda context position.
+ */
+function isCallbackCompletion (handler, result, contextIndex) {
+  return handler[HANDLER_STREAMING] !== STREAM_RESPONSE &&
+    ((handler.length >= 3 && contextIndex !== 2) || result === undefined || looksLikeSideEffectArtifact(result))
+}
+
 module.exports = {
   HANDLER_STREAMING,
   STREAM_RESPONSE,
+  isCallbackCompletion,
   promisifiedHandler,
 }

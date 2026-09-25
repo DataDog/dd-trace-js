@@ -5,9 +5,11 @@ const path = require('node:path')
 const { channel } = require('dc-polyfill')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const Hook = require('../../src/ritm')
+const { assertExactlyOneLambdaSpan } = require('./helpers')
 
 const oldEnv = process.env
 
@@ -86,10 +88,15 @@ describe('lambda', () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
-      // The lifecycle replaces the runtime's callback with its own, so a caller-supplied
-      // callback never fires — the invocation result comes back through the returned promise.
+      // dd-trace is timeout-monitoring only unless DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS is set, so
+      // it does not promisify the handler and the caller's callback is the one that fires. When
+      // the gate is on, `promisifiedHandler` intercepts the callback instead and the result
+      // arrives through the returned promise.
+      let result
       const wrappedHandler = datadog(app.callbackHandler)
-      const result = await wrappedHandler(_event, _context, () => {})
+      wrappedHandler(_event, _context, (_error, response) => {
+        result = response
+      })
 
       assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
 
@@ -150,7 +157,12 @@ describe('lambda', () => {
     // generic invocation boundary that the lifecycle owns.
     it('publishes exactly one generic invocation boundary for HTTP events', async () => {
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      await loadAgent()
+      // The boundary channels come from the aws-lambda plugin, which only creates the span when
+      // dd-trace owns it.
+      process.env.DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS = 'true'
+      const tracer = await loadAgent()
+      const traces = []
+      const exporter = sinon.stub(tracer._tracer._exporter, 'export').callsFake(trace => traces.push(trace))
 
       const starts = []
       const ends = []
@@ -162,7 +174,6 @@ describe('lambda', () => {
 
       try {
         const app = require(path.resolve(__dirname, './fixtures/handler.js'))
-        datadog = require('./fixtures/datadog-lambda')
         const event = {
           body: JSON.stringify({ hello: 'world' }),
           headers: { 'Content-Type': 'application/json' },
@@ -172,9 +183,9 @@ describe('lambda', () => {
         }
         const context = { getRemainingTimeInMillis: () => 150 }
 
-        const wrappedHandler = datadog(app.handler)
-        await wrappedHandler(event, context)
-        await agent.assertSomeTraces(() => {})
+        // The plugin owns this invocation; do not wrap it in the old span-owning shim as well.
+        await app.handler(event, context)
+        assertExactlyOneLambdaSpan(traces)
 
         assert.strictEqual(starts.length, 1)
         assert.strictEqual(ends.length, 1)
@@ -182,6 +193,7 @@ describe('lambda', () => {
         assert.strictEqual(starts[0].event, event)
         assert.strictEqual(starts[0].context, context)
       } finally {
+        exporter.restore()
         for (const [invocationChannel, handler] of subscriptions) invocationChannel.unsubscribe(handler)
       }
     })
