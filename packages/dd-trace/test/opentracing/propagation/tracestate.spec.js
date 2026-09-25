@@ -97,6 +97,57 @@ describe('TraceState', () => {
     assert.strictEqual(ts.size, 32)
   })
 
+  it('should put dd first without changing the order of other members', () => {
+    const ts = TraceState.fromString('a=1,dd=s:2,b=2')
+
+    assert.strictEqual(ts.toString(), 'dd=s:2,a=1,b=2')
+  })
+
+  it('should keep dd beyond the first 32 members in place of the last other member', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k32=v32`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should keep all 31 other members when dd is the 32nd member', () => {
+    const other = Array.from({ length: 31 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=s:2,k31=v31`)
+
+    assert.strictEqual(ts.size, 32)
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.join(',')}`)
+  })
+
+  it('should ignore invalid dd after the limit and keep the first 32 other members', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue`)
+
+    assert.strictEqual(ts.toString(), other.join(','))
+  })
+
+  it('should accept the first valid dd after an invalid one beyond the limit', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},dd=bad\tvalue,dd=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should skip dd text inside other members and accept surrounding whitespace', () => {
+    const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+    const ts = TraceState.fromString(`${other.join(',')},vendor=prefixdd=s:1,ddx=s:1, \tdd \t=s:2`)
+
+    assert.strictEqual(ts.toString(), `dd=s:2,${other.slice(0, 31).join(',')}`)
+  })
+
+  it('should not prioritize dd inside vendor data', () => {
+    const ts = TraceState.fromString('other=a:1;dd:2;b:3')
+
+    ts.forVendor('other', state => state.set('c', '4'))
+
+    assert.strictEqual(ts.toString(), 'other=c:4;a:1;dd:2;b:3')
+  })
+
   it('should accept internal spaces but drop tabs in tracestate values per W3C Trace Context §3.3.1.3.2', () => {
     const ts = TraceState.fromString('a=hello world,b=bye\tworld,c=ok')
     assert.strictEqual(ts.toString(), 'a=hello world,c=ok')
