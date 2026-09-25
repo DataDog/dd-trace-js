@@ -107,7 +107,7 @@ describe('aws-sdk instrumentation: channel suffix', () => {
    * @param {string} serviceId
    */
   async function suffixFor (serviceId) {
-    const candidates = ['eventbridge', 'default', 'sns']
+    const candidates = ['eventbridge', 'aws', 'default', 'sns']
     const seen = []
     const listeners = candidates.map(suffix => {
       const listener = () => seen.push(suffix)
@@ -140,7 +140,7 @@ describe('aws-sdk instrumentation: channel suffix', () => {
     assert.deepStrictEqual(await suffixFor('events'), ['eventbridge'])
   })
 
-  it('routes an unknown service to the default channel', async () => {
-    assert.deepStrictEqual(await suffixFor('Timestream Write'), ['default'])
+  it('routes an unknown service to the aws channel', async () => {
+    assert.deepStrictEqual(await suffixFor('Timestream Write'), ['aws'])
   })
 })

@@ -2,8 +2,6 @@
 
 const BaseAwsSdkPlugin = require('../base')
 
-class Default extends BaseAwsSdkPlugin {
-  static id = 'default'
-}
+class Default extends BaseAwsSdkPlugin {}
 
 module.exports = Default
