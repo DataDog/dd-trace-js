@@ -78,7 +78,9 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
         } else if (operation.toLowerCase().includes('stream')) {
           // every streamed frame was folded into the running totals as it arrived
           usage = ctx.streamedUsage
-        } else if (!tokensFromHeaders) {
+        } else {
+          // headers can report some counts and the body others, so both are read and
+          // `extractTokens` merges them field by field
           usage = responseBodyUsage(response, modelProvider, modelName)
         }
 
@@ -233,8 +235,7 @@ function mergeChunkUsage (ctx, chunk) {
 /**
  * Token usage a non-streamed `invokeModel` reports in its own response body, which several
  * providers carry and the headers do not always correlate. Read through the same extractor the
- * LLMObs path uses, and only when the headers reported nothing: parsing a body to recover counts
- * already in hand is work this path does not need.
+ * LLMObs path uses, which parses this body on every request anyway.
  *
  * @param {{ body?: Uint8Array }} response
  * @param {string} modelProvider
@@ -309,15 +310,16 @@ function extractTokens ({ tokensFromHeaders, usage }) {
 }
 
 /**
- * The body wins over the headers, and a value neither reported as a number is left undefined:
- * header counts are parsed from strings and can arrive empty.
+ * The body wins over the headers whenever it reported a count, a measured zero included, and a
+ * value neither reported as a number is left undefined: header counts are parsed from strings
+ * and can arrive empty.
  *
  * @param {unknown} fromBody
  * @param {unknown} fromHeaders
  * @returns {number | undefined}
  */
 function resolveCount (fromBody, fromHeaders) {
-  const value = fromBody || fromHeaders
+  const value = typeof fromBody === 'number' ? fromBody : fromHeaders
   return typeof value === 'number' && !Number.isNaN(value) ? value : undefined
 }
 

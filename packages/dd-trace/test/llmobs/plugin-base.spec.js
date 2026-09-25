@@ -168,7 +168,8 @@ describe('LLMObs plugin with LLM Observability disabled', () => {
 
       let tagged = 0
       plugin.setLLMObsTags = () => { tagged++ }
-      plugin._tagger = { registerLLMObsSpan () {} }
+      // no register options, so the start registers no span and leaves the LLMObs storage alone
+      registerOptions = undefined
 
       const ctx = publishStart()
       plugin._tracerConfig.llmobs.DD_LLMOBS_ENABLED = false

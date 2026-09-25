@@ -311,15 +311,18 @@ describe('BedrockRuntime LLMObs plugin pending token headers', () => {
       assert.equal(apmTags['gen_ai.usage.total_tokens'], 10)
     })
 
-    it('leaves the body unread when the token-count headers reported the counts', () => {
-      extractTextAndResponseReasonStub.returns({ usage: { inputTokens: 7, outputTokens: 3 } })
+    // the headers can report some counts and the body others, so neither source is skipped
+    it('merges the token-count headers with the counts the body reports', () => {
+      extractTextAndResponseReasonStub.returns({ usage: { cacheReadTokens: 2, cacheWriteTokens: 1 } })
       publishDeserialize('req-body-and-headers', { input: 20, output: 5 })
 
       completeCh.publish(buildInvokeModelComplete('req-body-and-headers'))
 
-      sinon.assert.notCalled(extractTextAndResponseReasonStub)
-      assert.equal(apmTags['gen_ai.usage.input_tokens'], 20)
+      // input tokens are normalized to also count cached tokens
+      assert.equal(apmTags['gen_ai.usage.input_tokens'], 23)
       assert.equal(apmTags['gen_ai.usage.output_tokens'], 5)
+      assert.equal(apmTags['gen_ai.usage.cache_read_input_tokens'], 2)
+      assert.equal(apmTags['gen_ai.usage.cache_write_input_tokens'], 1)
     })
 
     it('survives a non-streamed response body the extractor cannot parse', () => {
