@@ -51,7 +51,7 @@ class Writer {
   flushDirect (done = noop, options) {
     const count = this._encoder.count()
 
-    if (!request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
+    if (count > 0 && !request.writable && options?.deadline === undefined && !this.#retainOnBackpressure) {
       this._encoder.reset()
       if (options?.reportErrors) {
         const error = new log.NoTransmitError('Maximum active request buffer size reached: payload is discarded.')

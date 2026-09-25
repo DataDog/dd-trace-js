@@ -146,6 +146,16 @@ describe('common Writer', () => {
     })
   })
 
+  it('does not report backpressure when no payload is queued', () => {
+    request.writable = false
+    encoder.count.returns(0)
+    const done = sinon.stub()
+
+    writer.flush(done, { reportErrors: true })
+
+    sinon.assert.calledOnceWithExactly(done)
+  })
+
   it('retains a non-final payload under backpressure when configured', () => {
     request.writable = false
     writer = new Writer({ url: 'http://localhost:8126', retainOnBackpressure: true })

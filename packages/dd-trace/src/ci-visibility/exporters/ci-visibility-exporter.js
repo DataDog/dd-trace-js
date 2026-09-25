@@ -767,7 +767,7 @@ class CiVisibilityExporter extends BufferingExporter {
       return
     }
 
-    if (isFinalFlush && !this._isInitialized && !hasPendingFinalData && this.#pendingMediaUploads.size === 0) {
+    if (isFinalFlush && !this._isInitialized && !hasPendingFinalData) {
       this._initializationRequest?.controller.abort()
       onDone()
       return
