@@ -13,12 +13,16 @@ stages:
 
 # Config Registry CI jobs
 validate_supported_configurations_v2_local_file:
+  rules:
+    - when: never
   extends: .validate_supported_configurations_v2_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/config/supported-configurations.json"
     BACKFILLED: "true"
 
 update_central_configurations_version_range_v2:
+  rules:
+    - when: never
   extends: .update_central_configurations_version_range_v2
   variables:
     LOCAL_REPO_NAME: "dd-trace-js"
@@ -34,10 +38,10 @@ include:
     file: "/ci/llm-validation.gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
-    ref: "main"
+    ref: "12a3157e4e36ad5530c283c0e751f1fe71560192"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
-    ref: "main"
+    ref: "12a3157e4e36ad5530c283c0e751f1fe71560192"
 
 workflow:
   auto_cancel:
@@ -61,6 +65,8 @@ variables:
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
 
 "llm validation":
+  rules:
+    - when: never
   variables:
     LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
     LLMVAL_PLATFORM_REF: *llmval_platform_sha
@@ -71,36 +77,18 @@ llm validation definitions:
     LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
     LLMVAL_LEVEL: "minimum"
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      changes:
-        - .llm-validation/config.yaml
-        - .llm-validation/suites/**/*
-
+    - when: never
 configure_system_tests:
   variables:
     SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
   rules:
-    - if: $SKIP_SHARED_PIPELINE == "true"
-      when: never
-    - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
-      when: never
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
-      when: on_success
     - when: never
-
 system_tests:
   rules:
-    - if: $SKIP_SHARED_PIPELINE == "true"
-      when: never
-    - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
-      when: never
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^v6\.\d+\.\d+-proposal$/
-      when: on_success
     - when: never
-
 requirements_json_test:
   rules:
-    - when: on_success
+    - when: never
   variables:
     REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"

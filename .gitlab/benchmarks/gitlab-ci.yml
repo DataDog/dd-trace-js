@@ -60,9 +60,7 @@ benchmarks-pr-comment:
   stage: benchmarks-pr-comment
   needs: [ benchmark, benchmark-serverless ]
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
-      when: never
-    - when: on_success
+    - when: never
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
@@ -73,17 +71,15 @@ check-big-regressions:
   stage: benchmarks-pr-comment
   needs: [ benchmark, benchmark-serverless ]
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
-      when: never
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
+    - when: never
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
     - cd .gitlab/benchmarks && bp-runner bp-runner.fail-on-regression.yml --debug
 
 benchmark:
+  rules:
+    - when: always
   extends: .benchmarks
   # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
   # one, change the other — otherwise variants get silently skipped.
@@ -136,15 +132,7 @@ benchmark-serverless:
     branch: $SLS_CI_BRANCH
     strategy: depend
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
-      when: never
-    - if: $RELEASE_ALLOW_BENCHMARK_FAILURES == "true"
-      allow_failure: true
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-      allow_failure: false
-    - interruptible: true
-      allow_failure: false
+    - when: never
   variables:
     UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
     UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
