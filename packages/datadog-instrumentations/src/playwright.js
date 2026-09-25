@@ -1432,12 +1432,6 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
   return async function (config, options) {
-    const runnerConfig = config || getPlaywrightConfig(this)
-    // Listing discovers tests without executing them, so it must not create a test session.
-    if (runnerConfig.listOnly || runnerConfig.cliListOnly || options?.listMode) {
-      return runAllTests.apply(this, arguments)
-    }
-
     // A later run must not inherit ATR settings when configuration fails or the plugin is disabled.
     isFlakyTestRetriesEnabled = false
     flakyTestRetriesCount = 0
@@ -1473,6 +1467,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         config.config.reporter.unshift([require.resolve('./playwright-reporter')])
       }
     }
+    const runnerConfig = getPlaywrightConfig(this)
     const playwrightConfig = config?.config || runnerConfig.config || runnerConfig
     rootDir = getRootDir(this, config)
     const projects = getProjectsFromRunner(this, config)
@@ -1687,13 +1682,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
-    const isExpectedEmptyShard = finalStatus === 'pass' &&
+    const isTestDiscovery = finalStatus === 'pass' &&
+      Boolean(config?.listOnly || config?.cliListOnly || runnerConfig.cliListOnly || options?.listMode)
+    const isExpectedEmptyShard = finalStatus === 'pass' && !isTestDiscovery &&
       Boolean(playwrightConfig.shard) &&
       hasTestsBeforeSharding &&
       !hasTestsAssignedToShard &&
       testsReportedInGenerateSummary.size === 0
     await getChannelPromise(testSessionFinishCh, {
-      status: isExpectedEmptyShard ? 'skip' : finalStatus,
+      status: isTestDiscovery || isExpectedEmptyShard ? 'skip' : finalStatus,
+      isTestDiscovery,
       isExpectedEmptyShard,
       error: finalizationError,
       isEarlyFlakeDetectionEnabled,

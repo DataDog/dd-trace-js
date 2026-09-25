@@ -145,14 +145,24 @@ for (const version of [oldest, '1.55.1', '1.60.0', latest]) {
         proc.stdout?.on('data', chunk => { output += chunk.toString() })
         proc.stderr?.on('data', chunk => { output += chunk.toString() })
         const [actualExitCode] = await once(proc, 'close')
+        const isListing = args.startsWith('--list')
+        const isSuccessfulListing = isListing && exitCode === 0
+        const expectedTypes = isListing
+          ? ['test_module_end', 'test_session_end']
+          : ['test', 'test_module_end', 'test_session_end', 'test_suite_end']
         assert.deepStrictEqual(
           events.filter(event => event.type.startsWith('test')).map(event => ({
             type: event.type,
             status: event.content.meta[TEST_STATUS],
+            skipReason: event.content.meta[TEST_SKIP_REASON],
+            emptyReason: event.content.meta[TEST_SESSION_EMPTY_REASON],
           })).sort((a, b) => a.type.localeCompare(b.type)),
-          args.startsWith('--list')
-            ? []
-            : ['test', 'test_module_end', 'test_session_end', 'test_suite_end'].map(type => ({ type, status: 'pass' }))
+          expectedTypes.map(type => ({
+            type,
+            status: exitCode !== 0 ? 'fail' : (isListing ? 'skip' : 'pass'),
+            skipReason: isSuccessfulListing ? 'Test discovery only (--list)' : undefined,
+            emptyReason: isSuccessfulListing ? 'test_discovery' : undefined,
+          }))
         )
         assert.strictEqual(actualExitCode, exitCode, output)
         if (args.startsWith('--list')) {
