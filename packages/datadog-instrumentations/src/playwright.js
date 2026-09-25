@@ -1431,7 +1431,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
-  return async function (config) {
+  return async function (config, options) {
     // A later run must not inherit ATR settings when configuration fails or the plugin is disabled.
     isFlakyTestRetriesEnabled = false
     flakyTestRetriesCount = 0
@@ -1682,13 +1682,22 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
-    const isExpectedEmptyShard = finalStatus === 'pass' &&
+    const isTestDiscovery = finalStatus === 'pass' &&
+      Boolean(
+        config?.listOnly ||
+        config?.cliListOnly ||
+        runnerConfig.cliListOnly ||
+        runnerConfig._internal?.listOnly ||
+        options?.listMode
+      )
+    const isExpectedEmptyShard = finalStatus === 'pass' && !isTestDiscovery &&
       Boolean(playwrightConfig.shard) &&
       hasTestsBeforeSharding &&
       !hasTestsAssignedToShard &&
       testsReportedInGenerateSummary.size === 0
     await getChannelPromise(testSessionFinishCh, {
-      status: isExpectedEmptyShard ? 'skip' : finalStatus,
+      status: isTestDiscovery || isExpectedEmptyShard ? 'skip' : finalStatus,
+      isTestDiscovery,
       isExpectedEmptyShard,
       error: finalizationError,
       isEarlyFlakeDetectionEnabled,
