@@ -439,6 +439,98 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
+  describe('AWS Lambda configuration', () => {
+    it('owns the datadog-lambda-js defaults in the Config singleton', () => {
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.lambda, {
+        apiKeyKms: undefined,
+        apiKeySecretArn: undefined,
+        captureLambdaPayload: false,
+        captureLambdaPayloadMaxDepth: 10,
+        coldStartTraceSkipLib: './opentracing/tracer',
+        coldStartTracing: true,
+        createInferredSpan: true,
+        decodeAuthorizerContext: true,
+        encodeAuthorizerContext: true,
+        enhancedMetrics: true,
+        fipsMode: false,
+        localTesting: false,
+        logForwarding: false,
+        mergeXrayTraces: false,
+        minColdStartTraceDurationMs: 3,
+        serviceRepresentationEnabled: true,
+      })
+    })
+
+    it('parses Lambda environment variables into one namespace and tracks their origins', () => {
+      Object.assign(process.env, {
+        DD_API_KEY_SECRET_ARN: 'secret-arn',
+        DD_CAPTURE_LAMBDA_PAYLOAD: 'true',
+        DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: '4',
+        DD_COLD_START_TRACING: 'false',
+        DD_COLD_START_TRACE_SKIP_LIB: 'aws-sdk,express',
+        DD_DECODE_AUTHORIZER_CONTEXT: 'false',
+        DD_ENCODE_AUTHORIZER_CONTEXT: 'false',
+        DD_ENHANCED_METRICS: 'false',
+        DD_FLUSH_TO_LOG: 'true',
+        DD_KMS_API_KEY: 'kms-ciphertext',
+        DD_LAMBDA_FIPS_MODE: 'true',
+        DD_LOCAL_TESTING: 'true',
+        DD_MERGE_XRAY_TRACES: 'true',
+        DD_MIN_COLD_START_DURATION: '7',
+        DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: 'false',
+        DD_TRACE_MANAGED_SERVICES: 'false',
+      })
+
+      const config = getConfig()
+
+      assert.deepStrictEqual(config.lambda, {
+        apiKeyKms: 'kms-ciphertext',
+        apiKeySecretArn: 'secret-arn',
+        captureLambdaPayload: true,
+        captureLambdaPayloadMaxDepth: 4,
+        coldStartTraceSkipLib: 'aws-sdk,express',
+        coldStartTracing: false,
+        createInferredSpan: false,
+        decodeAuthorizerContext: false,
+        encodeAuthorizerContext: false,
+        enhancedMetrics: false,
+        fipsMode: true,
+        localTesting: true,
+        logForwarding: true,
+        mergeXrayTraces: true,
+        minColdStartTraceDurationMs: 7,
+        serviceRepresentationEnabled: false,
+      })
+      assert.strictEqual(config.getOrigin('lambda.apiKeySecretArn'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.captureLambdaPayloadMaxDepth'), 'env_var')
+      assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'env_var')
+    })
+
+    it('calculates FIPS mode for GovCloud unless the user explicitly overrides it', () => {
+      process.env.AWS_REGION = 'us-gov-west-1'
+      let config = getConfig()
+
+      assert.strictEqual(config.lambda.fipsMode, true)
+      assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'calculated')
+
+      process.env.DD_LAMBDA_FIPS_MODE = 'false'
+      config = getConfig()
+
+      assert.strictEqual(config.lambda.fipsMode, false)
+      assert.strictEqual(config.getOrigin('lambda.fipsMode'), 'env_var')
+    })
+
+    it('reuses the global log-injection setting instead of creating a Lambda alias', () => {
+      process.env.DD_LOGS_INJECTION = 'false'
+      const config = getConfig()
+
+      assert.strictEqual(config.logInjection, false)
+      assert.ok(!Object.hasOwn(config.lambda, 'injectLogContext'))
+    })
+  })
+
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {
     process.env.OTEL_SERVICE_NAME = 'otel_service'
     process.env.OTEL_LOG_LEVEL = 'debug'

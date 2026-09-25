@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, after, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -22,8 +22,10 @@ describe('Plugin Manager', () => {
   let Five
   let Six
   let Eight
+  let Fs
   let Nine
   let Graphql
+  let AwsLambda
   let pm
   let registeredDefaults
   let subscriptionCalls
@@ -80,11 +82,17 @@ describe('Plugin Manager', () => {
         static optIn = true
         static id = 'eight'
       },
+      fs: class Fs extends FakePlugin {
+        static id = 'fs'
+      },
       nine: class Nine extends FakePlugin {
         static id = 'nine'
       },
       graphql: class Graphql extends FakePlugin {
         static id = 'graphql'
+      },
+      'aws-lambda': class AwsLambda extends FakePlugin {
+        static id = 'aws-lambda'
       },
     }
 
@@ -94,6 +102,8 @@ describe('Plugin Manager', () => {
     Four.prototype.configure = sinon.spy()
     Graphql = plugins.graphql
     Graphql.prototype.configure = sinon.spy()
+    AwsLambda = plugins['aws-lambda']
+    AwsLambda.prototype.configure = sinon.spy()
 
     // disabled plugins
     Five = plugins.five
@@ -103,10 +113,15 @@ describe('Plugin Manager', () => {
 
     Eight = plugins.eight
     Eight.prototype.configure = sinon.spy()
+    Fs = plugins.fs
+    Fs.prototype.configure = sinon.spy()
+
     Nine = plugins.nine
     Nine.prototype.configure = sinon.spy()
 
-    process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
+    if (process.env.AWS_LAMBDA_FUNCTION_NAME === undefined) {
+      process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
+    }
 
     // Mirrors getValueFromEnvSources: an explicit env value wins, otherwise the registered
     // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
@@ -115,6 +130,7 @@ describe('Plugin Manager', () => {
     const loadPluginManager = proxyquire.noPreserveCache()
     PluginManager = loadPluginManager('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
+      './lambda': {},
       '../../datadog-instrumentations': {},
       '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
@@ -139,6 +155,7 @@ describe('Plugin Manager', () => {
 
   afterEach(() => {
     delete process.env.DD_TRACE_DISABLED_PLUGINS
+    delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
     delete process.env.DD_TRACE_EIGHT_ENABLED
     pm.destroy()
   })
@@ -321,6 +338,66 @@ describe('Plugin Manager', () => {
   })
 
   describe('configure', () => {
+    describe('in an AWS Lambda environment', () => {
+      before(() => {
+        process.env.AWS_LAMBDA_FUNCTION_NAME = 'test-function'
+      })
+
+      after(() => {
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME
+      })
+
+      it('registers the aws-lambda plugin without a module-load event', () => {
+        pm.configure(makeTracerConfig())
+
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure, { enabled: true })
+      })
+
+      it('forwards the centralized Lambda namespace and shared tracer settings', () => {
+        pm.configure(makeTracerConfig({
+          DD_API_KEY: 'api-key',
+          DD_APM_FLUSH_DEADLINE_MILLISECONDS: 25,
+          DD_TRACE_AWS_ADD_SPAN_POINTERS: true,
+          dsmEnabled: true,
+          lambda: {
+            enhancedMetrics: false,
+            fipsMode: true,
+          },
+          logInjection: false,
+          site: 'datadoghq.eu',
+        }))
+
+        sinon.assert.calledWithMatch(AwsLambda.prototype.configure, {
+          addSpanPointers: true,
+          apiKey: 'api-key',
+          apmFlushDeadlineMs: 25,
+          dataStreamsEnabled: true,
+          enhancedMetrics: false,
+          fipsMode: true,
+          logInjection: false,
+          site: 'datadoghq.eu',
+        })
+      })
+
+      it('applies the Lambda fs default when no disabled-plugin list was supplied', () => {
+        pm.configure(makeTracerConfig())
+        loadChannel.publish({ name: 'fs' })
+
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        sinon.assert.notCalled(Fs.prototype.configure)
+      })
+
+      it('preserves the lambda disabled-instrumentation alias', () => {
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http, lambda'
+        pm.configure(makeTracerConfig())
+
+        assert.deepStrictEqual(instantiated, [])
+        sinon.assert.notCalled(AwsLambda.prototype.configure)
+        delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+      })
+    })
+
     describe('without the load event', () => {
       it('should not instantiate plugins', () => {
         pm.configure(makeTracerConfig())

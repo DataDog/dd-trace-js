@@ -167,6 +167,8 @@
     "LICENSE.Apache",
     "LICENSE.BSD3",
     "loader-hook.mjs",
+    "lambda.d.ts",
+    "lambda.js",
     "openfeature.d.ts",
     "openfeature.js",
     "packages/*/index.js",

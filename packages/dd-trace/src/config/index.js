@@ -474,6 +474,11 @@ class Config extends ConfigBase {
       setAndTrack(this, 'flushInterval', 0)
     }
 
+    if (!trackedConfigOrigins.has('lambda.fipsMode') &&
+        getEnvironmentVariable('AWS_REGION')?.startsWith('us-gov-')) {
+      setAndTrack(this, 'lambda.fipsMode', true)
+    }
+
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
         trackedConfigOrigins.has('appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) {
       setAndTrack(this, 'apmTracingEnabled', !this.appsec.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED)

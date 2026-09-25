@@ -173,6 +173,7 @@ export interface GeneratedConfig {
   DD_TRACE_AVSC_ENABLED: boolean;
   DD_TRACE_AWS_ADD_SPAN_POINTERS: boolean;
   DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED: boolean;
+  DD_TRACE_AWS_LAMBDA_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_ENABLED: boolean;
   DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED: boolean;
@@ -305,6 +306,7 @@ export interface GeneratedConfig {
   DD_TRACE_KOA_ROUTE_ENABLED: boolean;
   DD_TRACE_KOA_ROUTER_ENABLED: boolean;
   DD_TRACE_KOA_WEBSOCKET_ENABLED: boolean;
+  DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS: boolean;
   DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_COHERE_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_CORE_ENABLED: boolean;
@@ -454,6 +456,24 @@ export interface GeneratedConfig {
     DD_IAST_TELEMETRY_VERBOSITY: string;
   };
   inferredProxyServicesEnabled: boolean;
+  lambda: {
+    apiKeyKms: string | undefined;
+    apiKeySecretArn: string | undefined;
+    captureLambdaPayload: boolean;
+    captureLambdaPayloadMaxDepth: number;
+    coldStartTraceSkipLib: string;
+    coldStartTracing: boolean;
+    createInferredSpan: boolean;
+    decodeAuthorizerContext: boolean;
+    encodeAuthorizerContext: boolean;
+    enhancedMetrics: boolean;
+    fipsMode: boolean;
+    localTesting: boolean;
+    logForwarding: boolean;
+    mergeXrayTraces: boolean;
+    minColdStartTraceDurationMs: number;
+    serviceRepresentationEnabled: boolean;
+  };
   langchain: {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
     DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
@@ -620,6 +640,7 @@ export interface GeneratedEnvVarConfig {
   DD_AI_GUARD_REDACTION_ENABLED: boolean;
   DD_AI_GUARD_TIMEOUT: number;
   DD_API_KEY: string | undefined;
+  DD_API_KEY_SECRET_ARN: string | undefined;
   DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
   DD_API_SECURITY_ENABLED: boolean;
   DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: boolean;
@@ -654,6 +675,8 @@ export interface GeneratedEnvVarConfig {
   DD_APPSEC_TRACE_RATE_LIMIT: number;
   DD_APPSEC_WAF_TIMEOUT: number;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
+  DD_CAPTURE_LAMBDA_PAYLOAD: boolean;
+  DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH: number;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
   DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
   DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
@@ -678,12 +701,15 @@ export interface GeneratedEnvVarConfig {
   DD_CODE_COVERAGE_FLAGS: string | undefined;
   DD_CODE_ORIGIN_FOR_SPANS_ENABLED: boolean;
   DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED: boolean;
+  DD_COLD_START_TRACE_SKIP_LIB: string;
+  DD_COLD_START_TRACING: boolean;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
   DD_DATA_STREAMS_ENABLED: boolean;
   DD_DBM_INJECT_SQL_BASEHASH: boolean;
   DD_DBM_PROPAGATION_MODE: "disabled" | "service" | "full" | "dynamic_service";
+  DD_DECODE_AUTHORIZER_CONTEXT: boolean;
   DD_DOGSTATSD_HOST: string;
   DD_DOGSTATSD_HOSTNAME: string;
   DD_DOGSTATSD_PORT: string | number;
@@ -696,6 +722,8 @@ export interface GeneratedEnvVarConfig {
   DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: number;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
+  DD_ENCODE_AUTHORIZER_CONTEXT: boolean;
+  DD_ENHANCED_METRICS: boolean;
   DD_ENV: string | undefined;
   DD_EXPERIMENTAL_API_SECURITY_ENABLED: boolean;
   DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED: boolean;
@@ -715,6 +743,7 @@ export interface GeneratedEnvVarConfig {
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_POLL_INTERVAL_SECONDS: number;
   DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_REQUEST_TIMEOUT_SECONDS: number;
   DD_FEATURE_FLAGS_ENABLED: boolean;
+  DD_FLUSH_TO_LOG: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;
@@ -758,6 +787,8 @@ export interface GeneratedEnvVarConfig {
   DD_INSTRUMENTATION_TELEMETRY_ENABLED: boolean;
   DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: number;
   DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: boolean;
+  DD_KMS_API_KEY: string | undefined;
+  DD_LAMBDA_FIPS_MODE: boolean;
   DD_LAMBDA_HANDLER: string | undefined;
   DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
   DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
@@ -772,10 +803,13 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_PROMPTS_TIMEOUT: number;
   DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS: number;
   DD_LLMOBS_SAMPLE_RATE: number;
+  DD_LOCAL_TESTING: boolean;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;
+  DD_MERGE_XRAY_TRACES: boolean;
   DD_METRICS_OTEL_ENABLED: boolean;
+  DD_MIN_COLD_START_DURATION: number;
   DD_MINI_AGENT_PATH: string | undefined;
   DD_OPENAI_LOGS_ENABLED: boolean;
   DD_OPENAI_REALTIME_ENABLED: boolean;
@@ -864,6 +898,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_AVSC_ENABLED: boolean;
   DD_TRACE_AWS_ADD_SPAN_POINTERS: boolean;
   DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED: boolean;
+  DD_TRACE_AWS_LAMBDA_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_ENABLED: boolean;
   DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED: boolean;
@@ -897,6 +932,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_AWS_SDK_STATES_ENABLED: boolean;
   DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED: boolean;
+  DD_TRACE_AWS_SERVICE_REPRESENTATION_ENABLED: boolean;
   DD_TRACE_AXIOS_ENABLED: boolean;
   DD_TRACE_AZURE_COSMOS_ENABLED: boolean;
   DD_TRACE_AZURE_DURABLE_FUNCTIONS_ENABLED: boolean;
@@ -1011,6 +1047,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_KOA_ROUTE_ENABLED: boolean;
   DD_TRACE_KOA_ROUTER_ENABLED: boolean;
   DD_TRACE_KOA_WEBSOCKET_ENABLED: boolean;
+  DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS: boolean;
   DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_COHERE_ENABLED: boolean;
   DD_TRACE_LANGCHAIN_CORE_ENABLED: boolean;
@@ -1025,6 +1062,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_LODASH_ENABLED: boolean;
   DD_TRACE_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_TRACE_LOOPBACK_ENABLED: boolean;
+  DD_TRACE_MANAGED_SERVICES: boolean;
   DD_TRACE_MARIADB_ENABLED: boolean;
   DD_TRACE_MEMCACHED_COMMAND_ENABLED: boolean;
   DD_TRACE_MEMCACHED_ENABLED: boolean;

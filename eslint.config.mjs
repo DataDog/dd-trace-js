@@ -1013,6 +1013,25 @@ export default [
     },
   },
   {
+    name: 'dd-trace/lambda-node-18',
+    files: [
+      // The whole v5-backported Lambda surface: plugin, instrumentation, facade, and the
+      // root facade re-export. Anything on this list must stay ES2021 / Node 18 compatible.
+      'lambda.js',
+      'packages/dd-trace/src/lambda/facade.js',
+      'packages/datadog-instrumentations/src/aws-lambda.js',
+      'packages/datadog-plugin-aws-lambda/**/*.js',
+    ],
+    languageOptions: {
+      ecmaVersion: 2021,
+    },
+    settings: {
+      node: {
+        version: '>=18.0.0',
+      },
+    },
+  },
+  {
     name: 'dd-trace/defaults/v18-latest',
     plugins: {
       n: eslintPluginN,

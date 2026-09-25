@@ -69,6 +69,7 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'VERCEL_REGION',
   'WEBSITE_SKU',
   // lambda RITM target path (computed once at module load)
+  'AWS_REGION',
   'LAMBDA_TASK_ROOT',
   // MicroVM clone-resume identity reseed hook registration
   'AWS_LAMBDA_MICROVM_IMAGE_ARN',
