@@ -8,7 +8,9 @@ const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
 const poolAcquireStartChannel = dc.channel('apm:oracledb:pool:acquire:start')
+const poolAcquireErrorChannel = dc.channel('apm:oracledb:pool:acquire:error')
 const poolAcquireFinishChannel = dc.channel('apm:oracledb:pool:acquire:finish')
+const poolAcquireUserChannel = dc.channel('apm:oracledb:pool:acquire:user')
 
 describe('oracledb instrumentation', () => {
   let transform
@@ -42,10 +44,13 @@ describe('oracledb instrumentation', () => {
   }
 
   /**
-   * @param {{ homogeneous?: boolean, poolUser?: string }} options
+   * @param {{ homogeneous?: boolean, poolUser?: string, legacy?: boolean }} options
    */
   function createOracledb (options) {
     class Connection {
+      /** @type {string | undefined} */
+      user
+
       execute () {}
     }
 
@@ -54,21 +59,43 @@ describe('oracledb instrumentation', () => {
         if (options.homogeneous !== undefined) this.homogeneous = options.homogeneous
         this.user = options.poolUser
         this.poolAttrs = poolAttrs
+        if (options.legacy) {
+          this.getConnection = nativeGetConnection
+        } else {
+          this._pendingRequestQueue = new Set()
+        }
       }
 
+      /** @param {{ options: { user?: string } }} request */
+      _processRequest (request) {
+        const connection = new Connection()
+        connection.user = request.options.user
+        return Promise.resolve(connection)
+      }
+
+      /**
+       * @param {{ user?: string } | ((error?: Error, connection?: Connection) => void)} [connectionOptions]
+       * @param {(error?: Error, connection?: Connection) => void} [callback]
+       */
       getConnection (connectionOptions, callback) {
         if (typeof connectionOptions === 'function') {
           callback = connectionOptions
+          connectionOptions = undefined
         }
-        const connection = new Connection()
+
+        const promise = (async () => {
+          const normalized = { user: connectionOptions?.user }
+          return this._processRequest({ options: normalized })
+        })()
         if (callback) {
-          callback(undefined, connection)
+          promise.then(connection => callback(undefined, connection), callback)
           return
         }
-        return Promise.resolve(connection)
+        return promise
       }
     }
 
+    const nativeGetConnection = Pool.prototype.getConnection
     const oracledb = {
       Connection,
       Pool,
@@ -95,7 +122,7 @@ describe('oracledb instrumentation', () => {
   }
 
   /**
-   * @param {{ homogeneous?: boolean, poolUser?: string }} options
+   * @param {{ homogeneous?: boolean, poolUser?: string, legacy?: boolean }} options
    * @param {{ homogeneous?: boolean, user?: string, username?: string }} poolAttrs
    * @param {(pool: { getConnection: Function }) => Promise<unknown>} acquire
    * @returns {Promise<string | undefined>}
@@ -115,6 +142,19 @@ describe('oracledb instrumentation', () => {
       { homogeneous: false, poolUser: 'base' },
       { homogeneous: false, user: 'base' },
       pool => pool.getConnection({ user: 'proxy' })
+    )
+
+    assert.strictEqual(user, 'proxy')
+  })
+
+  it('uses the pool user path when a legacy pool has no request queue', async () => {
+    const user = await getStartUser(
+      { homogeneous: false, poolUser: 'base', legacy: true },
+      { homogeneous: false, user: 'base' },
+      async pool => {
+        await pool.getConnection({ user: 'proxy' })
+        await pool.getConnection({ user: 'proxy' })
+      }
     )
 
     assert.strictEqual(user, 'proxy')
@@ -190,6 +230,74 @@ describe('oracledb instrumentation', () => {
     )
 
     assert.strictEqual(user, 'base')
+  })
+
+  it('preserves Promise and callback errors from acquisition option getters', async () => {
+    const errors = []
+    subscribe(poolAcquireStartChannel, () => {})
+    subscribe(poolAcquireErrorChannel, ctx => { errors.push(ctx.error) })
+    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base' })
+    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+    const getterError = new Error('getter failed')
+    const connectionOptions = {
+      get user () { throw getterError },
+    }
+
+    const promise = pool.getConnection(connectionOptions)
+    assert.ok(promise instanceof Promise)
+    await assert.rejects(promise, getterError)
+
+    await new Promise((resolve, reject) => {
+      const result = pool.getConnection(connectionOptions, error => {
+        try {
+          assert.strictEqual(error, getterError)
+          resolve(undefined)
+        } catch (assertionError) {
+          reject(assertionError)
+        }
+      })
+      assert.strictEqual(result, undefined)
+    })
+
+    assert.deepStrictEqual(errors, [getterError, getterError])
+  })
+
+  it('does not evaluate acquisition option getters before OracleDB', async () => {
+    let calls = 0
+    const resolvedUsers = []
+    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base' })
+    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+    const connectionOptions = {
+      get user () {
+        calls++
+        return 'proxy'
+      },
+    }
+
+    await pool.getConnection(connectionOptions)
+    const nativeCalls = calls
+    subscribe(poolAcquireStartChannel, () => {})
+    subscribe(poolAcquireUserChannel, ctx => { resolvedUsers.push(ctx.user) })
+    await pool.getConnection(connectionOptions)
+
+    assert.strictEqual(calls, nativeCalls * 2)
+    assert.deepStrictEqual(resolvedUsers, ['proxy'])
+  })
+
+  it('does not inspect proxy descriptors before OracleDB', async () => {
+    const resolvedUsers = []
+    subscribe(poolAcquireStartChannel, () => {})
+    subscribe(poolAcquireUserChannel, ctx => { resolvedUsers.push(ctx.user) })
+    const oracledb = createOracledb({ homogeneous: false, poolUser: 'base' })
+    const pool = await oracledb.createPool({ homogeneous: false, user: 'base' })
+    const connectionOptions = new Proxy({ user: 'proxy' }, {
+      getOwnPropertyDescriptor () { throw new Error('descriptor inspected') },
+    })
+
+    const connection = await pool.getConnection(connectionOptions)
+
+    assert.strictEqual(connection.user, 'proxy')
+    assert.deepStrictEqual(resolvedUsers, ['proxy'])
   })
 
   it('does not publish an inactive callback acquisition', async () => {
