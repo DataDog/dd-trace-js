@@ -114,21 +114,29 @@ unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound 
   })
 })
 
-for (const version of [oldest, '1.55.1', '1.60.0', latest]) {
+const legacyListingVersions = ['1.30.0', '1.31.0', '1.32.0', '1.33.0']
+for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', latest]) {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) continue
-  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) continue
+  // Run intermediate-version regressions in the latest CI job.
+  if (PLAYWRIGHT_VERSION === 'latest' && version === oldest) continue
 
-  describe(`playwright@${version} test listing`, function () {
+  // Playwright versions below the release line's minimum are not instrumented.
+  const listingContext = version === latest || satisfies(version, `>=${oldest}`) ? describe : describe.skip
+  listingContext(`playwright@${version} test listing`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
 
     this.timeout(60000)
     useSandbox([`@playwright/test@${version}`])
 
-    for (const [name, args, exitCode] of [
+    const listingCases = [
       ['lists matching tests', '--list --reporter=json --grep-invert @excluded', 0],
       ['preserves listing errors', '--list --reporter=line --grep nonexistent-test-name', 1],
-      ['runs tests with the list reporter', '--reporter=list', 0],
-    ]) {
+    ]
+    // Keep execution controls on the existing matrix; extra legacy versions cover discovery flag layouts.
+    if (!legacyListingVersions.includes(version)) {
+      listingCases.push(['runs tests with the list reporter', '--reporter=list', 0])
+    }
+    for (const [name, args, exitCode] of listingCases) {
       it(name, async (receiver, run) => {
         let output = ''
         const events = []
@@ -173,6 +181,8 @@ for (const version of [oldest, '1.55.1', '1.60.0', latest]) {
           } else if (version === '1.18.0') {
             // Playwright 1.18 returns before finalizing its list-mode reporter when no tests match.
             assert.strictEqual(output, '')
+          } else if (version === '1.30.0') {
+            assert.match(output, /no tests found\./)
           } else {
             assert.match(output, /No tests found/)
           }

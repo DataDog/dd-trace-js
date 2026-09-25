@@ -1683,7 +1683,13 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
     const isTestDiscovery = finalStatus === 'pass' &&
-      Boolean(config?.listOnly || config?.cliListOnly || runnerConfig.cliListOnly || options?.listMode)
+      Boolean(
+        config?.listOnly ||
+        config?.cliListOnly ||
+        runnerConfig.cliListOnly ||
+        runnerConfig._internal?.listOnly ||
+        options?.listMode
+      )
     const isExpectedEmptyShard = finalStatus === 'pass' && !isTestDiscovery &&
       Boolean(playwrightConfig.shard) &&
       hasTestsBeforeSharding &&
