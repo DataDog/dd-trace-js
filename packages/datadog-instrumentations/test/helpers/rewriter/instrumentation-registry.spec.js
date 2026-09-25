@@ -13,19 +13,19 @@ describe('instrumentation registry', () => {
     assert.deepStrictEqual(instrumentations, registry.flatMap(entry => entry.instrumentations))
   })
 
-  it('maps module names of entries with an activation name to that name', () => {
-    for (const { activationName, instrumentations: entryInstrumentations } of registry) {
-      if (!activationName) continue
+  it('uses the module name to activate opted-in rewrite targets', () => {
+    for (const { activate, instrumentations: entryInstrumentations } of registry) {
+      if (!activate) continue
 
       for (const { module } of entryInstrumentations) {
-        assert.strictEqual(getRewriteActivationName(module.name), activationName)
+        assert.strictEqual(getRewriteActivationName(module.name), module.name)
       }
     }
   })
 
-  it('does not map modules of entries without an activation name', () => {
-    for (const { activationName, instrumentations: entryInstrumentations } of registry) {
-      if (activationName) continue
+  it('does not activate rewrite targets without the opt-in flag', () => {
+    for (const { activate, instrumentations: entryInstrumentations } of registry) {
+      if (activate) continue
 
       for (const { module } of entryInstrumentations) {
         assert.strictEqual(getRewriteActivationName(module.name), undefined)

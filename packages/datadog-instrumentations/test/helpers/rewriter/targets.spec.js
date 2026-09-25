@@ -31,6 +31,7 @@ describe('rewriter targets', () => {
 
   it('distinguishes rewrite-activated integrations from hybrid rewrite targets', () => {
     assert.equal(getRewriteActivationName('@langchain/core'), '@langchain/core')
+    assert.equal(getRewriteActivationName('mercurius'), 'mercurius')
     assert.equal(getRewriteActivationName('@wdio/runner'), undefined)
     assert.deepStrictEqual(
       getRewriteTarget('file:///app/node_modules/@wdio/runner/build/index.js'),
