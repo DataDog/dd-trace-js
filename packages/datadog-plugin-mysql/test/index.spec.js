@@ -1096,8 +1096,9 @@ describe('Plugin', () => {
       await Promise.all([operation, trace])
     })
 
-    it('filters hash-commented commands but traces invalid syntax and executable modifiers', async () => {
+    it('filters line-commented commands but traces invalid syntax and executable modifiers', async () => {
       const hashComment = '# note\nCOMMIT'
+      const dashComment = '-- note\nCOMMIT'
       const invalidBegin = 'BEGIN TRANSACTION'
       const modifiedCommit = 'COMMIT /*! AND CHAIN */'
       const hintedCommit = 'COMMIT /*+ MAX_EXECUTION_TIME(1) */'
@@ -1109,6 +1110,7 @@ describe('Plugin', () => {
 
       tracer.use('mysql', false)
       await runQuery(hashComment)
+      await runQuery(dashComment)
       await assert.rejects(runQuery(invalidBegin), { code: 'ER_PARSE_ERROR' })
       await runQuery(modifiedCommit)
       await runQuery(hintedCommit)
@@ -1127,6 +1129,7 @@ describe('Plugin', () => {
       const operation = tracer.scope().activate(parent, async () => {
         try {
           await runQuery(hashComment)
+          await runQuery(dashComment)
           await assert.rejects(runQuery(invalidBegin), { code: 'ER_PARSE_ERROR' })
           await runQuery(modifiedCommit)
           await runQuery(hintedCommit)
