@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const path = require('node:path')
 
 const agent = require('../../../dd-trace/test/plugins/agent')
 
@@ -11,8 +12,9 @@ async function main (order) {
     ? ['trpc', 'http', 'express', 'router']
     : ['http', 'express', 'router', 'trpc']
   await agent.load(plugins, plugins.map(name => name === 'router' ? { middleware: false } : {}))
-  const express = require('../../../../versions/express@5').get()
-  const trpcVersion = require('../../../../versions/@trpc/server@11')
+  // Lint runs before versioned test packages are installed.
+  const express = require(path.join(__dirname, '../../../../versions/express@5')).get()
+  const trpcVersion = require(path.join(__dirname, '../../../../versions/@trpc/server@11'))
   const { initTRPC } = trpcVersion.get()
   const trpc = initTRPC.create()
   const router = trpc.router({ getValue: trpc.procedure.query(() => 7) })
