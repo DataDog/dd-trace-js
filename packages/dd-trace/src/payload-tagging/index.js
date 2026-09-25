@@ -1,6 +1,7 @@
 'use strict'
 
-const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const createRfdc = require('../../../../vendor/dist/rfdc')
+const rfdc = createRfdc({ proto: false, circles: false })
 
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,

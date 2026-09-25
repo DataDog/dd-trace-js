@@ -3,11 +3,14 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru()
 const sinon = require('sinon')
-const proxyquire = require('proxyquire')
 
 require('../setup/core')
+
+const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
 describe('profiler', function () {
   let Profiler
@@ -29,12 +32,18 @@ describe('profiler', function () {
   let mapperInstance
   let interval
   let flushInterval
+  let buildProfilingRuntimeError
 
   // Stubs the profiling config assembly so the lifecycle tests run against the test's
   // profiler/exporter doubles instead of real native profilers, while still exercising
   // the compression and tag derivation.
   const configStub = {
     buildProfilingRuntime: (config) => {
+      if (buildProfilingRuntimeError) {
+        const error = buildProfilingRuntimeError
+        buildProfilingRuntimeError = undefined
+        throw error
+      }
       const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
       const [method, level0] = compression.split('-')
       const level = level0 ? Number.parseInt(level0, 10) : undefined
@@ -47,6 +56,7 @@ describe('profiler', function () {
         systemInfoReport: { oomMonitoring: { enabled: false } },
       }
     },
+    getProfilingTags: (config) => ({ ...config.tags }),
   }
 
   async function waitForExport () {
@@ -61,6 +71,7 @@ describe('profiler', function () {
   }
 
   function setUpProfiler () {
+    buildProfilingRuntimeError = undefined
     flushInterval = 65 * 1000
     interval = flushInterval
     clock = sinon.useFakeTimers({
@@ -121,7 +132,10 @@ describe('profiler', function () {
   }
 
   describe('not serverless', function () {
-    function initProfiler () {
+    /**
+     * @param {Record<string, object>} [stubs]
+     */
+    function initProfiler (stubs = {}) {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
         './config': configStub,
@@ -129,6 +143,7 @@ describe('profiler', function () {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
         },
+        ...stubs,
       }).Profiler
 
       profiler = new Profiler()
@@ -200,7 +215,12 @@ describe('profiler', function () {
       profiler.stop()
 
       wallProfiler.setCustomLabelKeys.resetHistory()
-      await profiler.start(makeStartOptions())
+      profiler.start(makeStartOptions())
+
+      // stop()'s shutdown collection is still in flight, so this start() is deferred until it
+      // settles (see the '#stopping' chaining in Profiler#start/#stop).
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
 
       sinon.assert.calledOnce(wallProfiler.setCustomLabelKeys)
       assert.deepStrictEqual(
@@ -236,6 +256,40 @@ describe('profiler', function () {
       profiler.stop()
     })
 
+    it('should not retain endpoint counts across a restart when shutdown encoding fails', async () => {
+      await profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: true }))
+
+      const context = {
+        _parentId: undefined,
+        _trace: { started: [] },
+        getTags: () => ({
+          'span.type': 'web',
+          'resource.name': 'GET /before-restart',
+        }),
+      }
+      spanFinishedChannel.publish({ context: () => context })
+
+      wallProfiler.encode.rejects(new Error('wall encoding failed'))
+      spaceProfiler.encode.rejects(new Error('space encoding failed'))
+      profiler.stop()
+      profiler.start(makeStartOptions({ DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false }))
+
+      for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+      assert.strictEqual(profiler.enabled, true)
+
+      wallProfiler.encode.resolves(wallProfile)
+      spaceProfiler.encode.resolves(spaceProfile)
+      const exported = new Promise(resolve => {
+        exporter.export.callsFake(exportSpec => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        })
+      })
+      clock.tick(interval)
+
+      assert.deepStrictEqual((await exported).endpointCounts, {})
+    })
+
     it('should log an error when collecting with no profile types configured', async () => {
       profilers = []
       await profiler.start(makeStartOptions({ logger }))
@@ -246,14 +300,50 @@ describe('profiler', function () {
       assert.match(consoleLogger.error.firstCall.args[0].message, /No profile types configured/)
     })
 
-    it('should stop when starting failed', async () => {
-      wallProfiler.start.throws()
+    it('should stop a partial start and not retry when starting failed', async () => {
+      spaceProfiler.start.throws()
 
-      await profiler.start(makeStartOptions({ logger }))
+      const firstResult = await profiler.start(makeStartOptions({ logger }))
+      const secondResult = await profiler.start(makeStartOptions({ logger }))
 
+      assert.strictEqual(firstResult, false)
+      assert.strictEqual(secondResult, false)
+      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
       sinon.assert.calledOnce(wallProfiler.stop)
       sinon.assert.calledOnce(spaceProfiler.stop)
       sinon.assert.calledOnce(consoleLogger.error)
+    })
+
+    it('should report an early setup failure as stopped and not retry', () => {
+      const setupError = new Error('boom')
+      buildProfilingRuntimeError = setupError
+
+      const firstResult = profiler.start(makeStartOptions({ logger }))
+      const secondResult = profiler.start(makeStartOptions({ logger }))
+
+      assert.strictEqual(firstResult, false)
+      assert.strictEqual(secondResult, false)
+      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+      sinon.assert.calledOnceWithExactly(consoleLogger.error, setupError)
+    })
+
+    it('should contain cleanup errors after a partial start failure', () => {
+      const startError = new Error('start failed')
+      const stopError = new Error('stop failed')
+      spaceProfiler.start.throws(startError)
+      wallProfiler.stop.throws(stopError)
+
+      const result = profiler.start(makeStartOptions({ logger }))
+
+      assert.strictEqual(result, false)
+      assert.strictEqual(profiler.enabled, false)
+      sinon.assert.calledTwice(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], startError)
+      assert.strictEqual(consoleLogger.error.secondCall.args[0], stopError)
     })
 
     it('should stop when capturing failed', async () => {
@@ -324,6 +414,111 @@ describe('profiler', function () {
       sinon.assert.calledOnce(exporter.export)
     })
 
+    it('should defer a restart until a pending shutdown collection has finished', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+      wallProfiler.start.resetHistory()
+      spaceProfiler.start.resetHistory()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      // The chained restart resolves a few more microtask ticks after the shutdown export
+      // (submit -> _collect's returned promise settling -> .finally() -> .then()).
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
+    })
+
+    it('should cancel a deferred restart if stopped again before the shutdown collection finishes', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+      wallProfiler.start.resetHistory()
+      spaceProfiler.start.resetHistory()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      // A second stop() arrives before the first shutdown collection settles - it reflects the
+      // latest desired state, so it must cancel the queued restart above.
+      profiler.stop()
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.notCalled(wallProfiler.start)
+      sinon.assert.notCalled(spaceProfiler.start)
+      assert.strictEqual(profiler.enabled, false)
+    })
+
+    it('logs and does not crash when a deferred restart fails during setup', async () => {
+      await profiler.start(makeStartOptions())
+
+      let resolveEncode
+      wallProfilePromise = new Promise((resolve) => { resolveEncode = resolve })
+      wallProfiler.encode.returns(wallProfilePromise)
+
+      profiler.stop()
+
+      const restarted = profiler.start(makeStartOptions())
+      assert.strictEqual(restarted, true)
+      await Promise.resolve()
+
+      // The deferred restart calls start() again once the shutdown collection settles; make that
+      // call fail during setup.
+      const setupError = new Error('boom')
+      buildProfilingRuntimeError = setupError
+
+      resolveEncode(wallProfile)
+      await waitForExport()
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+
+      sinon.assert.calledOnce(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], setupError)
+      assert.strictEqual(profiler.enabled, false)
+
+      const retryResult = profiler.start(makeStartOptions())
+      assert.strictEqual(retryResult, false)
+      sinon.assert.calledOnce(wallProfiler.start)
+      sinon.assert.calledOnce(spaceProfiler.start)
+    })
+
+    it('logs shutdown cleanup failures without leaking a rejection', async () => {
+      await profiler.start(makeStartOptions())
+
+      const collectionError = new Error('collection failed')
+      const stopError = new Error('stop failed')
+      wallProfiler.profile.throws(collectionError)
+      wallProfiler.stop.throws(stopError)
+
+      profiler.stop()
+      for (let i = 0; i < 5; i++) await Promise.resolve()
+
+      sinon.assert.calledTwice(consoleLogger.error)
+      assert.strictEqual(consoleLogger.error.firstCall.args[0], collectionError)
+      assert.strictEqual(consoleLogger.error.secondCall.args[0], stopError)
+      assert.strictEqual(profiler.enabled, false)
+    })
+
     async function shouldExportProfiles (compression, magicBytes) {
       wallProfile = Buffer.from('uncompressed profile - wall')
       wallProfilePromise = Promise.resolve(wallProfile)
@@ -380,6 +575,108 @@ describe('profiler', function () {
 
     it('should export zstd profiles with a level', async function () {
       await shouldExportProfiles('zstd-4', Buffer.from([0x28, 0xb5, 0x2f, 0xfd]))
+    })
+
+    it('should refresh the compression method after a restart', async () => {
+      wallProfile = Buffer.from('uncompressed profile - wall')
+      wallProfilePromise = Promise.resolve(wallProfile)
+      wallProfiler.encode.returns(wallProfilePromise)
+      spaceProfile = Buffer.from('uncompressed profile - space')
+      spaceProfilePromise = Promise.resolve(spaceProfile)
+      spaceProfiler.encode.returns(spaceProfilePromise)
+
+      const nextExport = () => new Promise(resolve => {
+        exporter.export.callsFake(exportSpec => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        })
+      })
+
+      const env = process.env
+      try {
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off' }
+        profiler.start(makeStartOptions())
+        let exported = nextExport()
+        clock.tick(interval)
+        assert.strictEqual((await exported).profiles.wall.indexOf(wallProfile), 0)
+
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
+        exported = nextExport()
+        profiler.stop()
+        profiler.start(makeStartOptions())
+        await exported
+        for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+        assert.strictEqual(profiler.enabled, true)
+        exported = nextExport()
+        clock.tick(interval)
+        assert.strictEqual((await exported).profiles.wall.indexOf(Buffer.from([0x1f, 0x8b])), 0)
+
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off' }
+        exported = nextExport()
+        profiler.stop()
+        profiler.start(makeStartOptions())
+        await exported
+        for (let i = 0; i < 100 && !profiler.enabled; i++) await Promise.resolve()
+        assert.strictEqual(profiler.enabled, true)
+        exported = nextExport()
+        clock.tick(interval)
+        assert.strictEqual((await exported).profiles.wall.indexOf(wallProfile), 0)
+      } finally {
+        process.env = env
+      }
+    })
+
+    it('should refresh compression options after a restart', async () => {
+      const gzip = sinon.stub().callsFake((buffer, options, callback) => callback(undefined, buffer))
+      profiler.stop()
+      initProfiler({ zlib: { gzip } })
+
+      wallProfile = Buffer.from('profile - wall')
+      wallProfilePromise = Promise.resolve(wallProfile)
+      wallProfiler.encode.returns(wallProfilePromise)
+      spaceProfile = Buffer.from('profile - space')
+      spaceProfilePromise = Promise.resolve(spaceProfile)
+      spaceProfiler.encode.returns(spaceProfilePromise)
+
+      const env = process.env
+      try {
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip-3' }
+        profiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+        assert.deepStrictEqual(gzip.lastCall.args[1], { level: 3 })
+
+        profiler.stop()
+        await waitForExport()
+        for (let i = 0; i < 20; i++) await Promise.resolve()
+
+        gzip.resetHistory()
+        process.env = { DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip' }
+        profiler.start(makeStartOptions())
+        clock.tick(interval)
+        await waitForExport()
+
+        sinon.assert.calledTwice(gzip)
+        assert.strictEqual(gzip.firstCall.args[1], undefined)
+        assert.strictEqual(gzip.secondCall.args[1], undefined)
+      } finally {
+        process.env = env
+      }
+    })
+
+    it('should use the libdatadog zstd fallback', async () => {
+      profiler.stop()
+      const compressed = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
+      const zstdCompress = sinon.stub().returns(compressed)
+      initProfiler({
+        '@datadog/libdatadog': { zstd_compress: zstdCompress },
+        zlib: { zstdCompress: undefined },
+      })
+
+      await shouldExportProfiles('zstd-4', compressed)
+
+      sinon.assert.callCount(zstdCompress, 2)
+      sinon.assert.alwaysCalledWithExactly(zstdCompress, sinon.match.instanceOf(Buffer), 4)
     })
 
     it('should log exporter errors', async () => {
@@ -573,6 +870,45 @@ describe('profiler', function () {
       const { infos } = await exporterPromise
 
       assert.strictEqual(infos.hasMissingSourceMaps, false)
+    })
+
+    it('uses the tags captured at each snapshot start', async () => {
+      const exportSpecs = []
+      exporter.export = sinon.stub().callsFake((exportSpec) => {
+        exportSpecs.push(exportSpec)
+        return Promise.resolve()
+      })
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+
+      await clock.tickAsync(interval)
+
+      assert.strictEqual(exportSpecs.length, 1)
+      assert.strictEqual(exportSpecs[0].tags['runtime-id'], 'initial-id')
+
+      await clock.tickAsync(interval)
+
+      assert.strictEqual(exportSpecs.length, 2)
+      assert.strictEqual(exportSpecs[1].tags['runtime-id'], 'refreshed-id')
+    })
+
+    it('uses the current snapshot tags for near-OOM exports', async () => {
+      exporterPromise = new Promise(resolve => {
+        exporter.export = (exportSpec) => {
+          resolve(exportSpec)
+          return Promise.resolve()
+        }
+      })
+      const startOptions = makeStartOptions({ tags: { 'runtime-id': 'initial-id' } })
+      await profiler.start(startOptions)
+
+      startOptions.tags['runtime-id'] = 'refreshed-id'
+      wallProfiler.start.firstCall.args[0].nearOOMCallback('wall', wallProfile, {})
+
+      const { tags } = await exporterPromise
+      assert.strictEqual(tags['runtime-id'], 'initial-id')
     })
   })
 

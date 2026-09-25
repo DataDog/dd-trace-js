@@ -44,6 +44,7 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   ITR_CORRELATION_ID,
+  setExpectedEmptyTestSessionTags,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -361,13 +362,13 @@ class VitestPlugin extends CiPlugin {
         [TEST_SOURCE_START]: testStartLine || 1,
         [TEST_STATUS]: 'skip',
         [TEST_FINAL_STATUS]: 'skip',
-        ...(isAttemptToFix ? { [TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX]: 'true' } : {}),
-        ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
-        ...(isQuarantined ? { [TEST_MANAGEMENT_IS_QUARANTINED]: 'true' } : {}),
-        ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
-        ...(isRumActive ? { [TEST_IS_RUM_ACTIVE]: 'true' } : {}),
-        ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
       }
+      if (isAttemptToFix) extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'
+      if (isDisabled) extraTags[TEST_MANAGEMENT_IS_DISABLED] = 'true'
+      if (isQuarantined) extraTags[TEST_MANAGEMENT_IS_QUARANTINED] = 'true'
+      if (isNew) extraTags[TEST_IS_NEW] = 'true'
+      if (isRumActive) extraTags[TEST_IS_RUM_ACTIVE] = 'true'
+      if (isTestFrameworkWorker) extraTags[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       setBrowserTags(extraTags, {
         browserDriver,
         browserName,
@@ -523,7 +524,6 @@ class VitestPlugin extends CiPlugin {
           this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
           this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeFiles.length)
         }
-        this.tracer._exporter.deferTestSuiteSpan?.(testSuiteSpan)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -567,7 +567,6 @@ class VitestPlugin extends CiPlugin {
     this.addSub('ci:vitest:session:finish', ({
       status,
       error,
-      isTestSessionFinalizationError,
       testCodeCoverageLinesTotal,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
@@ -581,6 +580,7 @@ class VitestPlugin extends CiPlugin {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
+      isExpectedEmptySession,
       onDone,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags)) {
@@ -589,10 +589,15 @@ class VitestPlugin extends CiPlugin {
       }
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
+      if (isExpectedEmptySession) {
+        setExpectedEmptyTestSessionTags(
+          this.testSessionSpan,
+          this.testModuleSpan,
+          'No tests were executed',
+          'zero_tests'
+        )
+      }
       if (error) {
-        if (isTestSessionFinalizationError) {
-          this.tracer._exporter.setDeferredTestSuiteError?.(error)
-        }
         this.testModuleSpan.setTag('error', error)
         this.testSessionSpan.setTag('error', error)
       }
@@ -622,7 +627,6 @@ class VitestPlugin extends CiPlugin {
       if (vitestPool) {
         this.testSessionSpan.setTag(VITEST_POOL, vitestPool)
       }
-      this.tracer._exporter.exportDeferredTestSuiteSpans?.()
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()

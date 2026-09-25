@@ -67,4 +67,13 @@ describe('test optimization validation installed package check', () => {
     assert.match(failure.diagnosis, /No project test was run/)
     assert.match(failure.evidence.recommendation, /normal dependency workflow/)
   })
+
+  it('does not duplicate periods in a load failure diagnosis', () => {
+    fs.writeFileSync(path.join(root, 'ci', 'init.js'), "throw new Error('package output...')\n")
+
+    const result = checkInstalledPackage({ packageRoot: root })
+
+    assert.strictEqual(result.ok, false)
+    assert.match(result.diagnosis, /package output\.$/)
+  })
 })

@@ -1,33 +1,28 @@
 'use strict'
 
-const { createHash } = require('node:crypto')
+const { createHash, randomUUID } = require('node:crypto')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-/**
- * @typedef {object} PromptLRUCache
- * @property {(key: string, options?: object) => ManagedPrompt | undefined} get
- * @property {(key: string, prompt: ManagedPrompt, options?: object) => void} set
- * @property {(key: string, options: object) => Promise<ManagedPrompt | undefined>} fetch
- * @property {(key: string) => void} delete
- * @property {() => void} clear
- * @property {() => Array<[string, object]>} dump
- */
-
-const { LRUCache } = /** @type {{LRUCache: new (options: object) => PromptLRUCache}} */ (
-  require('../../../../../vendor/dist/lru-cache')
-)
+const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
 
 const log = require('../../log')
 const ManagedPrompt = require('./prompt')
 
+const CACHE_SUBPATH = path.join('datadog', 'llmobs', 'prompts')
 const MAX_HOT_ENTRIES = 1024
+const PROMPT_SOURCES = new Set(['registry', 'cache', 'fallback', 'ff', 'resolve'])
 
+/** @param {string} key */
 function promptIdFromKey (key) {
   return key.slice(0, key.lastIndexOf(':'))
 }
 
+/**
+ * @param {string} promptId
+ * @param {Array<unknown>} selector
+ */
 function cacheKey (promptId, selector) {
   const hash = createHash('sha1').update(JSON.stringify(selector)).digest('hex').slice(0, 16)
   return `${promptId}:${hash}`
@@ -36,9 +31,9 @@ function cacheKey (promptId, selector) {
 function defaultCacheDir () {
   try {
     const home = os.homedir()
-    if (home) return path.join(home, '.cache', 'datadog', 'llmobs', 'prompts')
+    if (home) return path.join(home, '.cache', CACHE_SUBPATH)
   } catch {}
-  return path.join(os.tmpdir(), 'datadog', 'llmobs', 'prompts')
+  return path.join(os.tmpdir(), CACHE_SUBPATH)
 }
 
 class HotCache {
@@ -63,12 +58,11 @@ class HotCache {
   /**
    * Read a prompt and its freshness.
    * @param {string} key
-   * @returns {{prompt: ManagedPrompt, stale: boolean} | undefined}
    */
   get (key) {
     if (!this.enabled) return
     const status = {}
-    const prompt = this.cache.get(key, { allowStale: true, noDeleteOnStaleGet: true, status })
+    const prompt = this.cache.get(key, { status })
     if (!prompt) return
     return { prompt, stale: status.get === 'stale' }
   }
@@ -78,7 +72,6 @@ class HotCache {
    * @param {string} key
    * @param {ManagedPrompt} prompt
    * @param {number} [ageMs]
-   * @returns {void}
    */
   set (key, prompt, ageMs = 0) {
     if (this.enabled) this.cache.set(key, prompt, { start: performance.now() - ageMs })
@@ -88,12 +81,10 @@ class HotCache {
    * Refresh a stale prompt in the background.
    * @param {string} key
    * @param {object} context
-   * @returns {void}
    */
   refresh (key, context) {
     if (!this.enabled) return
     void this.cache.fetch(key, {
-      allowStale: true,
       allowStaleOnFetchRejection: true,
       context,
       forceRefresh: true,
@@ -104,7 +95,6 @@ class HotCache {
   /**
    * Delete one selector.
    * @param {string} key
-   * @returns {void}
    */
   delete (key) {
     if (this.enabled) this.cache.delete(key)
@@ -112,7 +102,6 @@ class HotCache {
 
   /**
    * Clear all hot prompt entries.
-   * @returns {void}
    */
   clear () {
     if (this.enabled) this.cache.clear()
@@ -121,7 +110,6 @@ class HotCache {
   /**
    * Evict every selector for one exact prompt ID.
    * @param {string} promptId
-   * @returns {void}
    */
   evictPrompt (promptId) {
     if (!this.enabled) return
@@ -143,15 +131,14 @@ class WarmCache {
     this.enabled = enabled && ttlMs > 0
     this.ttlMs = ttlMs
     this.cacheDir = cacheDir || defaultCacheDir()
-    if (this.enabled) this._ensureDir(this.cacheDir)
+    if (this.enabled) this.#ensureDir(this.cacheDir)
   }
 
   /**
    * Create a secure cache directory.
    * @param {string} directory
-   * @returns {void}
    */
-  _ensureDir (directory) {
+  #ensureDir (directory) {
     try {
       fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
     } catch (error) {
@@ -163,60 +150,77 @@ class WarmCache {
   /**
    * Resolve the collision-safe directory for a prompt ID.
    * @param {string} promptId
-   * @returns {string}
    */
-  _promptDir (promptId) {
+  #promptDir (promptId) {
     return path.join(this.cacheDir, Buffer.from(promptId).toString('base64url') || '_')
   }
 
   /**
    * Resolve the cache file for a selector key.
    * @param {string} key
-   * @returns {string}
    */
-  _path (key) {
+  #path (key) {
     const index = key.lastIndexOf(':')
-    return path.join(this._promptDir(key.slice(0, index)), `${key.slice(index + 1)}.json`)
+    return path.join(this.#promptDir(key.slice(0, index)), `${key.slice(index + 1)}.json`)
+  }
+
+  /**
+   * Restore and validate a prompt from the warm cache.
+   * @param {object} data
+   */
+  #deserialize (data) {
+    const validTemplate = typeof data?.template === 'string' || (
+      Array.isArray(data?.template) && data.template.every(message => {
+        return message && typeof message.role === 'string' && typeof message.content === 'string'
+      })
+    )
+    if (
+      typeof data?.id !== 'string' ||
+      typeof data.version !== 'string' ||
+      !PROMPT_SOURCES.has(data.source) ||
+      !validTemplate ||
+      (data.promptUuid !== undefined && typeof data.promptUuid !== 'string') ||
+      (data.promptVersionUuid !== undefined && typeof data.promptVersionUuid !== 'string')
+    ) {
+      throw new TypeError('Invalid managed prompt cache entry')
+    }
+    return new ManagedPrompt(data)
   }
 
   /**
    * Read a prompt and its freshness.
    * @param {string} key
-   * @returns {{prompt: ManagedPrompt, stale: boolean, ageMs: number} | undefined}
    */
   get (key) {
     if (!this.enabled) return
-    let result
     try {
-      const data = JSON.parse(fs.readFileSync(this._path(key), 'utf8'))
+      const data = JSON.parse(fs.readFileSync(this.#path(key), 'utf8'))
       if (!Number.isFinite(data.timestamp)) throw new TypeError('Invalid prompt cache timestamp')
-      const prompt = ManagedPrompt._deserialize(data.prompt)
+      const prompt = this.#deserialize(data.prompt)
       const ageMs = Math.max(0, Date.now() - data.timestamp)
-      result = { prompt, stale: ageMs > this.ttlMs, ageMs }
+      return { prompt, stale: ageMs > this.ttlMs, ageMs }
     } catch (error) {
       log.debug('Failed to read prompt from cache: %s', error.message)
     }
-    return result
   }
 
   /**
    * Store a prompt with restrictive permissions.
    * @param {string} key
    * @param {ManagedPrompt} prompt
-   * @returns {void}
    */
   set (key, prompt) {
     if (!this.enabled) return
-    const file = this._path(key)
-    const temporary = `${file}.tmp.${process.pid}`
+    const file = this.#path(key)
+    const temporary = `${file}.tmp.${randomUUID()}`
     try {
-      this._ensureDir(path.dirname(file))
+      this.#ensureDir(path.dirname(file))
       if (!this.enabled) return
-      fs.writeFileSync(temporary, JSON.stringify({ prompt: prompt._serialize(), timestamp: Date.now() }), {
+      // Write separately, then rename so other processes see either the old file or the complete new one.
+      fs.writeFileSync(temporary, JSON.stringify({ prompt, timestamp: Date.now() }), {
         encoding: 'utf8',
         mode: 0o600,
       })
-      fs.chmodSync(temporary, 0o600)
       fs.renameSync(temporary, file)
     } catch (error) {
       try { fs.rmSync(temporary, { force: true }) } catch {}
@@ -227,11 +231,11 @@ class WarmCache {
   /**
    * Delete one selector.
    * @param {string} key
-   * @returns {void}
    */
   delete (key) {
+    if (!this.enabled) return
     try {
-      fs.rmSync(this._path(key), { force: true })
+      fs.rmSync(this.#path(key), { force: true })
     } catch (error) {
       log.debug('Failed to delete prompt from cache: %s', error.message)
     }
@@ -240,11 +244,11 @@ class WarmCache {
   /**
    * Evict every selector for one exact prompt ID.
    * @param {string} promptId
-   * @returns {void}
    */
   evictPrompt (promptId) {
+    if (!this.enabled) return
     try {
-      fs.rmSync(this._promptDir(promptId), { recursive: true, force: true })
+      fs.rmSync(this.#promptDir(promptId), { recursive: true, force: true })
     } catch (error) {
       log.debug('Failed to evict prompt from cache: %s', error.message)
     }
@@ -252,9 +256,9 @@ class WarmCache {
 
   /**
    * Clear all warm prompt entries.
-   * @returns {void}
    */
   clear () {
+    if (!this.enabled) return
     try {
       for (const entry of fs.readdirSync(this.cacheDir)) {
         fs.rmSync(path.join(this.cacheDir, entry), { recursive: true, force: true })

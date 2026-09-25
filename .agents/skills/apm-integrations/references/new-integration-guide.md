@@ -41,7 +41,7 @@ To find `filePath`, inspect the installed package to locate where the target met
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-for (const hook of getHooks('<npm-package>')) {
+for (const hook of getHooks('<npm-package>').values()) {
   addHook(hook, exports => exports)
 }
 ```
@@ -63,7 +63,7 @@ See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery 
 
 Create `packages/datadog-instrumentations/src/<name>.js`. Always add a comment explaining why orchestrion is not viable!!!
 
-**When using shimmer, prefer `tracingChannel` over manual channels.** `tracingChannel` (from `dc-polyfill` or `diagnostics_channel`) automatically provides `start`, `end`, `asyncStart`, `asyncEnd`, and `error` events — less boilerplate and consistent with how orchestrion works internally.
+**When using shimmer, prefer `tracingChannel` over manual channels.** `tracingChannel` from `dc-polyfill` automatically provides `start`, `end`, `asyncStart`, `asyncEnd`, and `error` events — less boilerplate and consistent with how orchestrion works internally.
 
 **Streaming example** (the main case where shimmer is needed — intercepting emitted events on returned stream objects):
 
@@ -177,6 +177,7 @@ class MyPlugin extends DatabasePlugin {
   // Orchestrion:              static prefix = 'tracing:orchestrion:<npm-package>:<channelName>'
   // Shimmer + tracingChannel: static prefix = 'tracing:apm:<name>:<operation>'
   // Shimmer + manual channels: omit prefix — defaults to `apm:${id}:${operation}`
+  static prefix = '<channel-prefix>'
   static peerServicePrecursors = ['db.name']
 
   bindStart (ctx) {
@@ -195,6 +196,11 @@ class MyPlugin extends DatabasePlugin {
     }, ctx)
 
     return ctx.currentStore
+  }
+
+  // Choose `end` (sync), `asyncEnd` (promise/callback), or `finish` (legacy manual channel).
+  asyncEnd (ctx) {
+    this.finish(ctx)
   }
 }
 
@@ -215,7 +221,7 @@ If multiple npm packages map to the same plugin (e.g., `redis` and `@redis/clien
 
 ## Step 4: Add TypeScript Definitions
 
-In `index.d.ts`, add to the `plugins` namespace:
+Add the plugin type to the `plugins` namespace in every supported public TypeScript surface:
 
 ```typescript
 // In the Plugins interface:
@@ -296,7 +302,7 @@ PLUGINS="<name>" npm run test:plugins:ci
 - [ ] Registered in hooks.js (required for both orchestrion and shimmer paths)
 - [ ] Plugin created with correct base class
 - [ ] Plugin registered in `packages/dd-trace/src/plugins/index.js`
-- [ ] TypeScript definitions added to `index.d.ts`
+- [ ] TypeScript definitions added to every supported public TypeScript surface
 - [ ] Type check added to `docs/test.ts`
 - [ ] Documentation added to `docs/API.md`
 - [ ] CI job added to `.github/workflows/apm-integrations.yml`

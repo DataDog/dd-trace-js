@@ -45,7 +45,7 @@ module.exports = {
   apollo: [
     {
       name: '@apollo/subgraph',
-      versions: ['>=2.3.0'],
+      versions: ['>=2.3.0 <2.15.0', '>=2.15.0'],
     },
     {
       name: 'graphql',
@@ -305,6 +305,19 @@ module.exports = {
       name: 'graphql',
       versions: ['^15.2.0'],
     },
+    {
+      name: 'graphql-jit',
+      versions: [
+        '>=0.8.0 <0.8.5',
+        '>=0.8.5 <0.8.7',
+      ],
+    },
+  ],
+  'graphql-jit': [
+    {
+      name: 'graphql',
+      dep: true,
+    },
   ],
   'apollo-server-core': [
     {
@@ -371,6 +384,15 @@ module.exports = {
   ],
   knex: [
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
+      name: 'mysql2',
+      dep: true,
+    },
+    {
       name: 'sqlite3',
       versions: ['^5.0.8'],
     },
@@ -384,6 +406,7 @@ module.exports = {
     },
     {
       name: 'pg',
+      dep: true,
       versions: [
         '8.7.3',
       ],
@@ -483,6 +506,7 @@ module.exports = {
       // mercurius peers graphql; pin the only supported major (16) so the
       // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
       name: 'graphql',
+      dep: true,
       versions: ['^16.0.0'],
     },
     {
@@ -552,6 +576,15 @@ module.exports = {
     },
     {
       name: 'react-dom',
+      dep: true,
+    },
+  ],
+  openai: [
+    {
+      // `ws` backs `OpenAIRealtimeWS`, but openai declares it as an *optional* peer dependency, so
+      // it is not installed into the version folders by default and `require('ws')` inside
+      // `openai/realtime/ws.js` would throw. Dependency-only, so it adds no version matrix.
+      name: 'ws',
       dep: true,
     },
   ],
@@ -635,6 +668,12 @@ module.exports = {
       versions: ['8.0.0'],
     },
   ],
+  postgres: [
+    {
+      name: 'pg',
+      versions: ['>=8.0.3'],
+    },
+  ],
   '@prisma/client': [
     {
       name: 'prisma',
@@ -705,8 +744,24 @@ module.exports = {
       versions: ['>=4'],
     },
     {
+      name: 'mysql',
+      dep: true,
+      versions: ['2.18.1'],
+    },
+    {
       name: 'mysql2',
       dep: true,
+      versions: ['3.9.3', '>=3.9.4'],
+    },
+    {
+      name: 'mariadb',
+      dep: true,
+      versions: ['2.5.6'],
+    },
+    {
+      name: 'pg',
+      dep: true,
+      versions: ['8.7.3'],
     },
     {
       name: 'sqlite3',
@@ -725,6 +780,28 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
+    },
+  ],
+  '@supabase/supabase-js': [
+    {
+      name: '@supabase/auth-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/functions-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/postgrest-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/realtime-js',
+      versions: ['>=2.112.2'],
+    },
+    {
+      name: '@supabase/storage-js',
+      versions: ['>=2.112.2'],
     },
   ],
 }

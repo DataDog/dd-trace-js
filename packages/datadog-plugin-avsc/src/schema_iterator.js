@@ -50,7 +50,12 @@ class SchemaExtractor {
 
     if (Array.isArray(fieldType)) {
       // Union Type
-      type = 'union[' + fieldType.map(t => SchemaExtractor.getType(t.type || t)).join(',') + ']'
+      type = 'union['
+      for (const typeDefinition of fieldType) {
+        if (type !== 'union[') type += ','
+        type += SchemaExtractor.getType(typeDefinition.type || typeDefinition)
+      }
+      type += ']'
     } else if (fieldType === 'array') {
       // Array Type
       array = true

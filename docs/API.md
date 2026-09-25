@@ -6,6 +6,24 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
+<h2 id="agentless-mode">Agentless mode</h2>
+
+Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
+Agentless mode disables features that require an Agent.
+
+Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+Agentless crash tracking requires this key and sends crash data directly to Datadog.
+
+Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
+`DD_METRICS_OTEL_ENABLED` settings still apply.
+
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. During Test Optimization, it also submits
+best-effort formatted `console.warn` and `console.error` calls made with an active test, suite, or session span. Set
+`DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+`DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
@@ -19,36 +37,6 @@ const tracer = require('dd-trace').init({
 ```
 
 The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
-
-<h2 id="llmobs-prompt-management">LLM Observability Prompt Management</h2>
-
-Prompt Management is available through `tracer.init().llmobs` even when LLM Observability span export is disabled. Set `DD_API_KEY` for all operations. Set `DD_APP_KEY` for prompt mutations and HTTP environment resolution; successful local OpenFeature resolution does not require it.
-
-```javascript
-const tracer = require('dd-trace').init()
-
-const prompt = await tracer.llmobs.getPrompt('greeting', {
-  targetingKey: user.id,
-  attributes: { tier: user.tier },
-  fallback: [{ role: 'user', content: 'Hello {name}' }],
-})
-const variables = { name: user.name }
-
-return tracer.llmobs.annotationContext(
-  { prompt: prompt.toAnnotation(variables) },
-  () => client.chat.completions.create({ messages: prompt.format(variables) })
-)
-```
-
-Without `DD_ENV`, `getPrompt()` fetches the latest registry version; pass `{ version: 3 }` for an exact version. With `DD_ENV`, it first evaluates `__llmobs__.prompt.<id>` through the tracer's existing Datadog OpenFeature provider, then falls through to the Prompt resolve API when local evaluation is unavailable or misses. `targetingKey` and `attributes` apply only to environment resolution; attributes must be flat string, number, or boolean values. A fallback may be a string, chat-message array, prompt-like object, or synchronous function returning one of those.
-
-`ManagedPrompt.format()` safely renders `{name}` and `{{ name }}` placeholders and leaves missing variables unchanged. JavaScript primitive strings cannot safely carry hidden prompt metadata, so rendered values are not tracked automatically: use `toAnnotation()` with `annotationContext()` as shown above.
-
-Use `createPrompt()`, `createPromptVersion()`, `updatePrompt()`, `updatePromptVersion()`, `deletePrompt()`, `listPrompts()`, and `listPromptVersions()` for registry management. Creation and version updates accept `envIds` to assign versions to Feature Flag environments. Successful mutations evict cached selectors for that prompt.
-
-The in-memory cache holds up to 1024 selectors and defaults to a 60-second TTL. Configure it with `DD_LLMOBS_PROMPTS_CACHE_TTL`; set the TTL to `0` to disable caching. The optional persistent cache is enabled with `DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED` and relocated with `DD_LLMOBS_PROMPTS_CACHE_DIR`. `DD_LLMOBS_PROMPTS_TIMEOUT` controls API timeouts in seconds. `clearPromptCache()` clears both cache levels by default.
-
-Prompt Management reuses the Feature Flags [configuration source](https://docs.datadoghq.com/feature_flags/concepts/configuration_sources/) selected for the [Node.js SDK](https://docs.datadoghq.com/feature_flags/server/nodejs/); it does not create a provider or polling source. The Node agentless source currently delivers configuration for local evaluation but does not publish exposures or experimentation telemetry. Use a supported Agent-backed source when those signals are required.
 
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
@@ -148,6 +136,7 @@ tracer.use('openai', {
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -156,6 +145,7 @@ tracer.use('openai', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -234,6 +224,7 @@ tracer.use('openai', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [playwright](./interfaces/export_.plugins.playwright.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
@@ -242,6 +233,7 @@ tracer.use('openai', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
@@ -319,6 +311,25 @@ async function handle () {
 ```
 
 Any error from the awaited handler will automatically be added to the span.
+
+<h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
+
+Use `span.recordException()` to add a handled exception as an event without marking the span as failed.
+
+```javascript
+tracer.trace('checkout', span => {
+  try {
+    authorizePayment()
+  } catch (error) {
+    span.recordException(error, {
+      handled: true,
+      'payment.provider': 'example',
+    })
+  }
+})
+```
+
+If the exception leaves the traced callback, `tracer.trace()` records it as a span error automatically.
 
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
@@ -512,7 +523,8 @@ dd-trace-js includes experimental support for OpenTelemetry metrics, designed as
 require('dd-trace').init()
 const { metrics } = require('@opentelemetry/api')
 
-const meter = metrics.getMeter('my-service', '1.0.0')
+const meterProvider = metrics.getMeterProvider()
+const meter = meterProvider.getMeter('my-service', '1.0.0')
 
 // Counter - monotonically increasing values
 const requestCounter = meter.createCounter('http.requests', {
@@ -547,6 +559,11 @@ cpuGauge.addCallback((result) => {
 })
 ```
 
+Short-lived processes can call `meterProvider.shutdown(callback)` after the final measurement to export once more and
+stop collection. The optional callback receives `null` on success or an error on failure. This method isn't part of the
+OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
+`import('dd-trace').opentelemetry.MeterProvider` to use it.
+
 #### Supported Configuration
 
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
@@ -579,6 +596,18 @@ Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to ove
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=true` to enable dynamic Auto Test Retries budgets based on test
+duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
+determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
+and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
+Requires Auto Test Retries to be enabled by the backend.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
+overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets
+respectively). When unset, empty, or invalid, the Early Flake Detection retry settings from the backend are
+used with a minimum of one ATR retry. Local EFD retry-count overrides do not affect dynamic ATR.
+Only takes effect when `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED` is enabled.
 
 Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests

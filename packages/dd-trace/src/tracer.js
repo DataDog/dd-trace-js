@@ -43,13 +43,10 @@ class DatadogTracer extends Tracer {
 
     if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
-      // Keep a reference to the handle, to keep the memfd alive in memory.
-      // It is read by the service discovery feature.
       const metadata = storeConfig(config)
       if (metadata === undefined) {
         log.warn('Could not store tracer configuration for service discovery')
       }
-      this._inmem_cfg = metadata
     }
   }
 
@@ -180,8 +177,10 @@ class DatadogTracer extends Tracer {
     if (!this._enableGetRumData) {
       return ''
     }
-    const span = this.scope().active().context()
-    const traceId = span.toTraceId()
+    const span = this.scope().active()
+    if (!span) return ''
+
+    const traceId = span.context().toTraceId()
     const traceTime = Date.now()
     return `\
 <meta name="dd-trace-id" content="${traceId}" />\

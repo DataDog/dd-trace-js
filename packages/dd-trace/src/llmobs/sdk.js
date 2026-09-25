@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 const { configurePromptTracking } = require('./prompts/tracking')
 
 // communicating with writer
@@ -48,15 +49,15 @@ class LLMObs extends NoopLLMObs {
 
   #promptManager
 
-  #provider
+  #getOpenFeatureProvider
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
-   * @param {() => object} provider - Lazy getter for the tracer's existing OpenFeature provider
+   * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config, provider = () => {}) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -64,7 +65,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
-    this.#provider = provider
+    this.#getOpenFeatureProvider = getOpenFeatureProvider
     configurePromptTracking(config)
   }
 
@@ -82,112 +83,12 @@ class LLMObs extends NoopLLMObs {
   }
 
   /**
-   * Get the lazily-created Prompt Management owner.
-   * @returns {import('./prompts/manager')}
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
    */
-  #getPromptManager () {
-    if (!this.#promptManager) {
-      const PromptManager = require('./prompts/manager')
-      this.#promptManager = new PromptManager(this._config, this.#provider)
-    }
+  get prompts () {
+    this.#promptManager ??= new PromptManager(this._config, this.#getOpenFeatureProvider)
     return this.#promptManager
-  }
-
-  /**
-   * Retrieve and resolve a managed prompt.
-   * @param {string} promptId
-   * @param {object} [options]
-   * @returns {Promise<import('./prompts/prompt')>}
-   */
-  getPrompt (promptId, options) {
-    return this.#getPromptManager().getPrompt(promptId, options)
-  }
-
-  /**
-   * Refresh the selector implied by the current environment.
-   * @param {string} promptId
-   * @returns {Promise<import('./prompts/prompt') | undefined>}
-   */
-  refreshPrompt (promptId) {
-    return this.#getPromptManager().refreshPrompt(promptId)
-  }
-
-  /**
-   * Clear managed prompt caches.
-   * @param {{hot?: boolean, warm?: boolean}} [options]
-   * @returns {void}
-   */
-  clearPromptCache (options = {}) {
-    this.#getPromptManager().clearCache(options)
-  }
-
-  /**
-   * Create a prompt.
-   * @param {string} promptId
-   * @param {Array<{role: string, content: string}>} template
-   * @param {object} [options]
-   * @returns {Promise<object>}
-   */
-  createPrompt (promptId, template, options) {
-    return this.#getPromptManager().createPrompt(promptId, template, options)
-  }
-
-  /**
-   * Create a prompt version.
-   * @param {string} promptId
-   * @param {Array<{role: string, content: string}>} template
-   * @param {object} [options]
-   * @returns {Promise<object>}
-   */
-  createPromptVersion (promptId, template, options) {
-    return this.#getPromptManager().createPromptVersion(promptId, template, options)
-  }
-
-  /**
-   * Update prompt metadata.
-   * @param {string} promptId
-   * @param {object} options
-   * @returns {Promise<object>}
-   */
-  updatePrompt (promptId, options) {
-    return this.#getPromptManager().updatePrompt(promptId, options)
-  }
-
-  /**
-   * Update prompt-version metadata.
-   * @param {string} promptId
-   * @param {number} version
-   * @param {object} options
-   * @returns {Promise<object>}
-   */
-  updatePromptVersion (promptId, version, options) {
-    return this.#getPromptManager().updatePromptVersion(promptId, version, options)
-  }
-
-  /**
-   * Delete a prompt.
-   * @param {string} promptId
-   * @returns {Promise<object>}
-   */
-  deletePrompt (promptId) {
-    return this.#getPromptManager().deletePrompt(promptId)
-  }
-
-  /**
-   * List prompts.
-   * @returns {Promise<object[]>}
-   */
-  listPrompts () {
-    return this.#getPromptManager().listPrompts()
-  }
-
-  /**
-   * List prompt versions.
-   * @param {string} promptId
-   * @returns {Promise<object[]>}
-   */
-  listPromptVersions (promptId) {
-    return this.#getPromptManager().listPromptVersions(promptId)
   }
 
   enable (options = {}) {
@@ -214,8 +115,8 @@ class LLMObs extends NoopLLMObs {
 
     // TODO: These configs should be passed through directly at construction time instead.
     this._config.llmobs.DD_LLMOBS_ENABLED = true
-    this._config.llmobs.mlApp = options.mlApp
-    this._config.llmobs.agentlessEnabled = options.agentlessEnabled
+    this._config.llmobs.DD_LLMOBS_ML_APP = options.mlApp
+    this._config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = options.agentlessEnabled
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)
@@ -510,7 +411,7 @@ class LLMObs extends NoopLLMObs {
           'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
         )
       }
-      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      const mlApp = options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP
       if (!mlApp) {
         err = 'missing_ml_app'
         throw new Error(
@@ -592,7 +493,6 @@ class LLMObs extends NoopLLMObs {
    * @param {number} [options.timestampMs] - When the feedback was generated. Defaults to now.
    * @param {'pass' | 'fail'} [options.assessment] - Assessment of the feedback.
    * @param {string} [options.reasoning] - Explanation of the feedback.
-   * @returns {void}
    */
   submitFeedback (options = {}) {
     if (!this.enabled) return
@@ -649,7 +549,7 @@ class LLMObs extends NoopLLMObs {
         throw new TypeError('submitter.type must be a string')
       }
 
-      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      const mlApp = options.mlApp || this._config.llmobs.DD_LLMOBS_ML_APP
       if (!mlApp) {
         err = 'missing_ml_app'
         throw new Error('ML App name is required for sending feedback. Feedback data will not be sent.')

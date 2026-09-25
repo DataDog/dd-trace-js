@@ -300,6 +300,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -308,6 +309,7 @@ interface Plugins {
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
   "sharedb": tracer.plugins.sharedb;
+  "supabase": tracer.plugins.supabase;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
   "vitest": tracer.plugins.vitest;
@@ -358,6 +360,16 @@ declare namespace tracer {
     links?: { context: SpanContext, attributes?: Object }[]
   }
 
+  export interface Exception {
+    message: string;
+    name?: string;
+    stack?: string;
+  }
+
+  export type SpanEventAttributeValue =
+    string | number | boolean | Array<string> | Array<number> | Array<boolean>;
+  export type SpanEventAttributes = Record<string, SpanEventAttributeValue>;
+
   /**
    * Span represents a logical unit of work as part of a broader Trace.
    * Examples of span might include remote procedure calls or a in-process
@@ -367,6 +379,14 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
+
+    /**
+     * Records an exception as a span event without marking the span as failed.
+     *
+     * @param exception The exception to record.
+     * @param attributes Additional attributes for the exception event.
+     */
+    recordException (exception: Exception, attributes?: SpanEventAttributes): void;
 
     /**
      * Causally links another span to the current span
@@ -461,6 +481,13 @@ declare namespace tracer {
      * Maximum number of traces matching this rule to sample per second.
      */
     maxPerSecond?: number
+
+    /**
+     * When `true`, a trace chunk rejected by this rule is fully dropped:
+     * it is excluded from client-side stats and never sent to the Agent.
+     * @default false
+     */
+    discard?: boolean
   }
 
   /**
@@ -645,6 +672,7 @@ declare namespace tracer {
      * Sampling rules to apply to priority sampling. Each rule matches against a trace's
      * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
      * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * Specify `"discard": true` to fully drop it from stats as well.
      * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
@@ -3272,6 +3300,25 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Postgres.js](https://github.com/porsager/postgres) module.
+     */
+    interface postgres extends DatabaseInstrumentation {
+      /**
+       * The service name to be used for this plugin.
+       */
+      service?: string;
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: TracerOptions['dbmPropagationMode'];
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
      */
     interface prisma extends PrismaClient, PrismaEngine {
@@ -3403,6 +3450,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Supabase JavaScript client](https://github.com/supabase/supabase-js).
+     */
+    interface supabase extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
      * [tedious](https://github.com/tediousjs/tedious/) module.
      */
     interface tedious extends Instrumentation {}
@@ -3447,6 +3500,10 @@ declare namespace tracer {
   }
 
   export namespace opentelemetry {
+    export interface MeterProvider {
+      shutdown(callback?: (error: Error | null) => void): void;
+    }
+
     /**
      * A registry for creating named {@link Tracer}s.
      */
@@ -3862,38 +3919,8 @@ declare namespace tracer {
        */
       experiments: Experiments,
 
-      /** Resolve an exact, environment-targeted, or latest managed prompt. */
-      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
-      /** Refresh the prompt selected by the current environment. */
-      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
-      /** Clear the in-memory and/or persistent prompt caches. */
-      clearPromptCache (options?: ClearPromptCacheOptions): void
-      /** Create a prompt and its first version. */
-      createPrompt (
-        promptId: string,
-        template: PromptTemplateMessage[],
-        options?: CreatePromptOptions
-      ): Promise<PromptResponse>
-      /** Add a version to an existing prompt. */
-      createPromptVersion (
-        promptId: string,
-        template: PromptTemplateMessage[],
-        options?: CreatePromptVersionOptions
-      ): Promise<PromptVersionResponse>
-      /** Update prompt metadata. */
-      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
-      /** Update prompt-version metadata or environment assignments. */
-      updatePromptVersion (
-        promptId: string,
-        version: number,
-        options: UpdatePromptVersionOptions
-      ): Promise<PromptVersionResponse>
-      /** Delete a prompt. */
-      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
-      /** List prompts. */
-      listPrompts (): Promise<PromptResponse[]>
-      /** List versions for a prompt. */
-      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
+      /** Prompt Management API. */
+      prompts: Prompts,
 
       /**
        * Enable LLM Observability tracing.
@@ -4046,6 +4073,41 @@ declare namespace tracer {
       flush (): void
     }
 
+    interface Prompts {
+      /** Resolve an exact, environment-targeted, or latest managed prompt. */
+      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
+      /** Refresh the prompt selected by the current environment. */
+      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
+      /** Clear the in-memory and/or persistent prompt caches. */
+      clearPromptCache (options?: ClearPromptCacheOptions): void
+      /** Create a text or chat prompt and its first version. */
+      createPrompt (
+        promptId: string,
+        template: string | PromptTemplateMessage[],
+        options?: CreatePromptOptions
+      ): Promise<PromptResponse>
+      /** Add a text or chat version to an existing prompt. */
+      createPromptVersion (
+        promptId: string,
+        template: string | PromptTemplateMessage[],
+        options?: CreatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Update prompt metadata. */
+      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
+      /** Update prompt-version metadata or environment assignments. */
+      updatePromptVersion (
+        promptId: string,
+        version: number,
+        options: UpdatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Delete a prompt. */
+      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
+      /** List prompts. */
+      listPrompts (): Promise<PromptResponse[]>
+      /** List versions for a prompt. */
+      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
+    }
+
     interface PromptTemplateMessage {
       role: string,
       content: string
@@ -4173,17 +4235,27 @@ declare namespace tracer {
       metadata?: Array<Record<string, any>>
     ) => any | Promise<any>
 
+    interface DatasetRecord {
+      id: string | null
+      input: JSONType
+      expectedOutput: JSONType
+      metadata: Record<string, JSONType>
+      tags: string[]
+    }
+
+    interface DatasetRecordNew {
+      id?: string
+      inputData: JSONType
+      expectedOutput?: JSONType
+      metadata?: Record<string, JSONType>
+      tags?: string[]
+    }
+
     interface CreateDatasetOptions {
       /** Override the configured project for this dataset. */
       projectName?: string
       description?: string
-      records?: Array<{
-        id?: string,
-        inputData: JSONType,
-        expectedOutput?: JSONType,
-        metadata?: Record<string, JSONType>,
-        tags?: string[]
-      }>
+      records?: DatasetRecordNew[]
     }
 
     interface ExperimentOptions {
@@ -4352,6 +4424,8 @@ declare namespace tracer {
         metadata?: Record<string, JSONType>,
         tags?: string[]
       ): Dataset
+      /** Add multiple records to the dataset. */
+      addRecords (records: DatasetRecordNew[]): Dataset
       /** Update fields on an existing dataset record. */
       update (index: number, fields: {
         input?: JSONType
@@ -4376,13 +4450,7 @@ declare namespace tracer {
       projectName (): string | null | undefined
       version (): number | null
       latestVersion (): number | null
-      records (): Array<{
-        id: string | null,
-        input: JSONType,
-        expectedOutput: JSONType,
-        metadata: Record<string, JSONType>,
-        tags: string[]
-      }>
+      records (): DatasetRecord[]
       /** Return the tags used to filter this dataset. */
       filterTags (): string[]
       /** Dashboard URL for the dataset, or null until pushed. */

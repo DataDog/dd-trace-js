@@ -88,7 +88,7 @@ class LLMObsTagger {
   }
 
   /**
-   * The sampler reads its rate from `config.llmobs.sampleRate`, which can change
+   * The sampler reads its rate from `config.llmobs.DD_LLMOBS_SAMPLE_RATE`, which can change
    * at runtime (e.g. via remote config). Rebuild the sampler whenever the rate
    * changes so decisions reflect the current config, while reusing the existing
    * sampler when it hasn't.
@@ -96,7 +96,7 @@ class LLMObsTagger {
    * @returns {import('../sampler')}
    */
   #getSampler () {
-    const rate = this.#config.llmobs?.sampleRate ?? 1
+    const rate = this.#config.llmobs?.DD_LLMOBS_SAMPLE_RATE ?? 1
     if (this.#sampler === null || rate !== this.#sampler.rate()) {
       this.#sampler = new Sampler(rate)
     }
@@ -129,7 +129,7 @@ class LLMObsTagger {
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this.#config.llmobs.mlApp ||
+      this.#config.llmobs.DD_LLMOBS_ML_APP ||
       this.#config.service // this should always have a default
 
     if (!spanMlApp) {
@@ -432,6 +432,8 @@ class LLMObsTagger {
       }
     }
 
+    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
+    const replacesPrompt = id != null || version != null || template != null
     const finalPromptId = id ?? `${mlApp}_${DEFAULT_PROMPT_NAME}`
     const finalCtxVariablesKeys = contextVariables ?? ['context']
     const finalQueryVariablesKeys = queryVariables ?? ['question']
@@ -535,7 +537,7 @@ class LLMObsTagger {
     }
 
     const validatedPrompt = {}
-    if (finalPromptId) validatedPrompt.id = finalPromptId
+    if (finalPromptId && (!currentPrompt || replacesPrompt)) validatedPrompt.id = finalPromptId
     if (version) validatedPrompt.version = version
     if (promptUuid) validatedPrompt.prompt_uuid = promptUuid
     if (promptVersionUuid) validatedPrompt.prompt_version_uuid = promptVersionUuid
@@ -543,11 +545,18 @@ class LLMObsTagger {
     if (finalTemplate) validatedPrompt.template = finalTemplate
     if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
     if (tags) validatedPrompt.tags = tags
-    if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
-    if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    if (finalCtxVariablesKeys && (!currentPrompt || replacesPrompt || contextVariables != null)) {
+      validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
+    }
+    if (finalQueryVariablesKeys && (!currentPrompt || replacesPrompt || queryVariables != null)) {
+      validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    }
 
-    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
     if (currentPrompt) {
+      if (replacesPrompt) {
+        if (promptUuid == null) currentPrompt.prompt_uuid = undefined
+        if (promptVersionUuid == null) currentPrompt.prompt_version_uuid = undefined
+      }
       Object.assign(currentPrompt, validatedPrompt)
     } else {
       this._setTag(span, INPUT_PROMPT, validatedPrompt)
@@ -560,7 +569,6 @@ class LLMObsTagger {
    * Tag an automatically carried managed prompt without replacing an explicit annotation.
    * @param {import('../opentracing/span')} span
    * @param {Record<string, unknown> | undefined} prompt
-   * @returns {void}
    */
   tagAutoPrompt (span, prompt) {
     if (!prompt || registry.get(span)?.[SPAN_KIND] !== 'llm' || registry.get(span)?.[INPUT_PROMPT]) return

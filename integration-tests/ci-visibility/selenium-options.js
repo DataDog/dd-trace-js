@@ -29,7 +29,6 @@ function createChromeOptions () {
  * Removes a Chrome profile directory created for a browser session.
  *
  * @param {string|undefined} userDataDir
- * @returns {void}
  */
 function cleanChromeOptions (userDataDir) {
   if (userDataDir !== undefined) {

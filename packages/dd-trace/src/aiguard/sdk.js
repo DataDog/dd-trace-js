@@ -30,7 +30,7 @@ class AIGuard extends NoopAIGuard {
     this.#tracer = tracer
     this.#client = new AIGuardClient(config)
     this.#reporter = new EvaluationReporter(config)
-    this.#redactionEnabled = config.experimental.aiguard.redactionEnabled
+    this.#redactionEnabled = config.aiguard.DD_AI_GUARD_REDACTION_ENABLED
     this.#meta = { service: config.service, env: config.env }
     this.#initialized = true
   }

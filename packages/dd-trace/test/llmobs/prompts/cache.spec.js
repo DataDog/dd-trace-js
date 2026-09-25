@@ -87,13 +87,27 @@ describe('Prompt caches', () => {
     for (const file of files) assert.strictEqual(fs.statSync(file).mode & 0o777, 0o600)
     assert.strictEqual(files.some(file => file.includes('.tmp.')), false)
 
-    const slashFile = cache._path(slashKey)
+    const slashFile = files.find(file => JSON.parse(fs.readFileSync(file, 'utf8')).prompt.id === 'a/b')
+    assert.ok(slashFile)
+    const serializedPrompt = JSON.parse(fs.readFileSync(slashFile, 'utf8')).prompt
     fs.writeFileSync(slashFile, 'not json')
     assert.strictEqual(cache.get(slashKey), undefined)
     fs.writeFileSync(slashFile, JSON.stringify({ prompt: {}, timestamp: Date.now() }))
     assert.strictEqual(cache.get(slashKey), undefined)
-    fs.writeFileSync(slashFile, JSON.stringify({ prompt: prompt('a/b')._serialize() }))
+    fs.writeFileSync(slashFile, JSON.stringify({ prompt: serializedPrompt }))
     assert.strictEqual(cache.get(slashKey), undefined)
+  })
+
+  it('uses a unique temporary file for each warm cache write', () => {
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-temporary-'))
+    const cache = new WarmCache({ cacheDir, ...WARM_OPTIONS })
+    const rename = sinon.spy(fs, 'renameSync')
+    const key = cacheKey('prompt', ['latest'])
+
+    cache.set(key, prompt('prompt'))
+    cache.set(key, prompt('prompt'))
+
+    assert.notStrictEqual(rename.firstCall.args[0], rename.secondCall.args[0])
   })
 
   it('falls back to the temporary directory when no home directory can be resolved', () => {
@@ -107,19 +121,17 @@ describe('Prompt caches', () => {
     assert.strictEqual(cache.cacheDir, path.join(cacheDir, 'datadog', 'llmobs', 'prompts'))
   })
 
-  it('clears and evicts owned files even when warm reads and writes are disabled', () => {
+  it('does not delete warm cache files when disabled', () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-prompt-cache-disabled-'))
     const enabled = new WarmCache({ cacheDir, ...WARM_OPTIONS })
     const disabled = new WarmCache({ cacheDir, ...WARM_OPTIONS, enabled: false })
     const key = cacheKey('prompt', ['latest'])
     enabled.set(key, prompt('prompt'))
 
+    disabled.delete(key)
     disabled.evictPrompt('prompt')
-    assert.strictEqual(enabled.get(key), undefined)
-
-    enabled.set(key, prompt('prompt'))
     disabled.clear()
-    assert.strictEqual(enabled.get(key), undefined)
+    assert.strictEqual(enabled.get(key).prompt.id, 'prompt')
   })
 
   it('preserves warm entry age when promoting it to the hot cache', () => {

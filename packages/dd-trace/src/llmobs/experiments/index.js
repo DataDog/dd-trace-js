@@ -2,7 +2,7 @@
 
 const log = require('../../log')
 const { ExperimentsClient } = require('./client')
-const { Dataset, DatasetRecord } = require('./dataset')
+const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
@@ -35,8 +35,8 @@ class Experiments {
 
   constructor (config, llmobs) {
     this.#config = config
-    this.#llmobs = config.llmobs?.mlApp || config.service ? llmobs : undefined
-    this.#projectName = config.llmobs?.projectName || DEFAULT_PROJECT_NAME
+    this.#llmobs = config.llmobs?.DD_LLMOBS_ML_APP || config.service ? llmobs : undefined
+    this.#projectName = config.llmobs?.DD_LLMOBS_PROJECT_NAME || DEFAULT_PROJECT_NAME
     this.#client = this.#clientForProject(this.#projectName)
   }
 
@@ -72,21 +72,7 @@ class Experiments {
       : (descriptionOrOptions ?? {})
     const client = this.#clientForOperation(options.projectName)
     const dataset = new Dataset(client, name, options.description ?? '')
-    const recordIds = new Set()
-    if ((options.records) != null) {
-      for (const record of options.records) {
-        if (record.id !== undefined && (typeof record.id !== 'string' || record.id.length === 0)) {
-          throw new Error('record id must be a non-empty string')
-        }
-        if (record.id !== undefined) {
-          if (recordIds.has(record.id)) throw new Error(`Duplicate record id '${record.id}'`)
-          recordIds.add(record.id)
-        }
-        dataset.addRecord(
-          new DatasetRecord(record.inputData, record.expectedOutput, record.metadata, record.id, record.tags)
-        )
-      }
-    }
+    if ((options.records) != null) dataset.addRecords(options.records)
     return dataset
   }
 
@@ -193,9 +179,9 @@ class Experiments {
     const projectName = options?.projectName ?? datasetProjectName
     const client = this.#clientForOperation(projectName)
     const usesDatasetOverride = datasetProjectName !== undefined && datasetProjectName !== this.#projectName
-    const resolvedProjectName = projectName ?? this.#config.llmobs?.projectName
+    const resolvedProjectName = projectName ?? this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME
     const experimentOptions = options?.projectName === undefined &&
-      (usesDatasetOverride || this.#config.llmobs?.projectName !== undefined) &&
+      (usesDatasetOverride || this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined) &&
       resolvedProjectName !== undefined
       ? { ...options, projectName: resolvedProjectName }
       : options
@@ -212,8 +198,9 @@ class Experiments {
    */
   startExperiment (options) {
     const client = this.#clientForOperation(options?.projectName)
-    const experimentOptions = options?.projectName === undefined && this.#config.llmobs?.projectName !== undefined
-      ? { ...options, projectName: this.#config.llmobs.projectName }
+    const experimentOptions = options?.projectName === undefined &&
+      this.#config.llmobs?.DD_LLMOBS_PROJECT_NAME !== undefined
+      ? { ...options, projectName: this.#config.llmobs.DD_LLMOBS_PROJECT_NAME }
       : options
     return new Experiment(client, { ...experimentOptions, external: true }).start()
       .then(experiment => new ExternalExperiment(experiment))

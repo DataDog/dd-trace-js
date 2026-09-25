@@ -1,13 +1,13 @@
 'use strict'
 
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
+const { AUDIO_FALLBACK } = require('../../constants/audio')
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart } = require('../../util')
 const {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
-  AUDIO_FALLBACK,
   AUDIO_MIME_TYPES,
 } = require('./constants')
 
@@ -134,15 +134,17 @@ function hasMultimodalInputs (variables) {
  * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
  */
 function extractContentParts (parts) {
-  const extracted = []
+  let content = ''
+  let hasContent = false
   const audioParts = []
 
   for (const part of parts) {
     const partType = part?.type ?? ''
+    let extracted
     if (partType === 'text') {
-      extracted.push(part.text ?? '')
+      extracted = part.text ?? ''
     } else if (partType === 'image_url') {
-      extracted.push(IMAGE_FALLBACK)
+      extracted = IMAGE_FALLBACK
     } else if (partType === 'input_audio') {
       const inputAudio = part.input_audio ?? {}
       const data = inputAudio.data
@@ -151,14 +153,19 @@ function extractContentParts (parts) {
         // is needed. Only fall back to "[audio]" when there's no audio to capture.
         audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format, AUDIO_MIME_TYPES)))
       } else {
-        extracted.push(AUDIO_FALLBACK)
+        extracted = AUDIO_FALLBACK
       }
     } else {
-      extracted.push(`[${partType}]`)
+      extracted = `[${partType}]`
     }
+
+    if (extracted === undefined) continue
+    if (hasContent) content += '\n'
+    content += extracted
+    hasContent = true
   }
 
-  return { content: extracted.join('\n'), audioParts }
+  return { content, audioParts }
 }
 
 /**
@@ -170,7 +177,6 @@ function extractContentParts (parts) {
  * client baseURL convention.
  *
  * @param {string} baseUrl
- * @returns {string}
  */
 function getOpenAIModelProvider (baseUrl = '') {
   if (baseUrl.includes('azure')) return 'azure_openai'
@@ -179,11 +185,25 @@ function getOpenAIModelProvider (baseUrl = '') {
   return UNKNOWN_MODEL_PROVIDER
 }
 
+/**
+ * Pair an OpenAI-compatible base URL's model provider with the client label used in span names.
+ *
+ * @param {string} [baseUrl]
+ * @returns {{ modelProvider: string, client: string }}
+ */
+function getModelProviderAndClient (baseUrl = '') {
+  const modelProvider = getOpenAIModelProvider(baseUrl)
+  if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
+  if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
+  return { modelProvider, client: 'OpenAI' }
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
+  getModelProviderAndClient,
   getOpenAIModelProvider,
 }

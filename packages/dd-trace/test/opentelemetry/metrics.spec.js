@@ -8,6 +8,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
@@ -15,6 +16,8 @@ const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
 const MeterProvider = require('../../src/opentelemetry/metrics/meter_provider')
 const PeriodicMetricReader = require('../../src/opentelemetry/metrics/periodic_metric_reader')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 /**
  * @param {object} type protobufjs Type instance for the OTLP service message
@@ -57,8 +60,9 @@ describe('OpenTelemetry Meter Provider', () => {
     metrics.disable()
     const config = getConfigFresh()
     if (config.DD_METRICS_OTEL_ENABLED) {
+      const loadMetrics = proxyquire.noPreserveCache()
       const { initializeOpenTelemetryMetrics } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+        loadMetrics('../../src/opentelemetry/metrics', {})
       initializeOpenTelemetryMetrics(config)
     }
     return { config, meterProvider: metrics.getMeterProvider() }
@@ -663,12 +667,36 @@ describe('OpenTelemetry Meter Provider', () => {
   })
 
   describe('Lifecycle', () => {
-    it('waits for an in-flight export during forceFlush', () => {
+    function completeNext (callbacks) {
+      const callback = callbacks.shift()
+      callback()
+    }
+
+    it('exposes callback shutdown on the meter provider', () => {
+      const callbacks = {}
+      const reader = {
+        shutdown: done => { callbacks.shutdown = done },
+      }
+      const provider = new MeterProvider({ reader })
+      const shutdownDone = sinon.spy()
+
+      assert.strictEqual(provider.shutdown(shutdownDone), undefined)
+      sinon.assert.notCalled(shutdownDone)
+      callbacks.shutdown(null)
+      sinon.assert.calledOnceWithExactly(shutdownDone, null)
+
+      const emptyProvider = new MeterProvider()
+      const emptyShutdownDone = sinon.spy()
+      emptyProvider.shutdown(emptyShutdownDone)
+      sinon.assert.calledOnceWithExactly(emptyShutdownDone, null)
+    })
+
+    it('serializes forceFlush exports', async () => {
       const exports = []
       const flushes = []
       const reader = new PeriodicMetricReader({
         export: (metrics, done) => { exports.push(done) },
-        flush: (done) => { flushes.push(done) },
+        flush: done => { flushes.push(done) },
       }, 60_000, 'DELTA', 1024)
       const meter = new MeterProvider({ reader }).getMeter('test')
       const firstDone = sinon.spy()
@@ -676,18 +704,23 @@ describe('OpenTelemetry Meter Provider', () => {
 
       meter.createCounter('in-flight').add(1)
       reader.forceFlush(firstDone)
-      flushes.shift()()
       meter.createCounter('boundary').add(1)
       reader.forceFlush(done)
 
       sinon.assert.notCalled(done)
+      assert.strictEqual(exports.length, 1)
+      exports[0]({ code: 0 })
+      sinon.assert.notCalled(firstDone)
+      completeNext(flushes)
+      sinon.assert.calledOnceWithExactly(firstDone, null)
+      await Promise.resolve()
       assert.strictEqual(exports.length, 2)
       exports[1]({ code: 0 })
       sinon.assert.notCalled(done)
-      flushes[0]()
-      sinon.assert.calledOnce(done)
-      exports[0]({ code: 0 })
+      completeNext(flushes)
+      sinon.assert.calledOnceWithExactly(done, null)
       reader.shutdown()
+      completeNext(flushes)
     })
 
     it('waits for an earlier export when the boundary export throws', () => {
@@ -704,18 +737,80 @@ describe('OpenTelemetry Meter Provider', () => {
 
       sinon.assert.notCalled(done)
       priorDone()
-      sinon.assert.calledOnce(done)
+      sinon.assert.calledOnceWithMatch(done, { message: 'encode failed' })
       reader.shutdown()
+      priorDone()
     })
 
-    it('handles shutdown gracefully', async () => {
+    it('waits for an in-flight export before shutting down', async () => {
+      const exports = []
+      const flushes = []
+      const exporter = {
+        export: (metrics, done) => { exports.push(done) },
+        flush: done => { flushes.push(done) },
+        shutdown: sinon.spy(done => { done() }),
+      }
+      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+      const provider = new MeterProvider({ reader })
+      const forceFlushDone = sinon.spy()
+      const shutdownFlushDone = sinon.spy()
+      const done = sinon.spy()
+
+      provider.getMeter('test').createCounter('requests').add(1)
+      reader.forceFlush(forceFlushDone)
+      provider.getMeter('test').createCounter('final').add(1)
+      assert.strictEqual(provider.shutdown(done), undefined)
+      reader.forceFlush(shutdownFlushDone)
+
+      assert.strictEqual(exports.length, 1)
+      sinon.assert.notCalled(exporter.shutdown)
+      sinon.assert.notCalled(shutdownFlushDone)
+      exports[0]({ code: 0 })
+      completeNext(flushes)
+      sinon.assert.calledOnceWithExactly(forceFlushDone, null)
+      await Promise.resolve()
+
+      assert.strictEqual(exports.length, 2)
+      sinon.assert.notCalled(exporter.shutdown)
+      exports[1]({ code: 0 })
+      completeNext(flushes)
+      sinon.assert.calledOnce(exporter.shutdown)
+      sinon.assert.calledOnceWithExactly(shutdownFlushDone, null)
+      sinon.assert.calledOnceWithExactly(done, null)
+    })
+
+    it('isolates lifecycle callback errors', async () => {
+      const flushes = []
+      const exporter = {
+        export: sinon.spy(),
+        flush: done => { flushes.push(done) },
+        shutdown: done => { done() },
+      }
+      const reader = new PeriodicMetricReader(exporter, 60_000, 'DELTA', 1024)
+      const shutdownDone = sinon.spy()
+
+      reader.forceFlush(() => { throw new Error('force flush callback failed') })
+      reader.shutdown(() => { throw new Error('shutdown callback failed') })
+      reader.shutdown(shutdownDone)
+
+      completeNext(flushes)
+      await Promise.resolve()
+      completeNext(flushes)
+      sinon.assert.notCalled(exporter.export)
+      sinon.assert.calledOnce(shutdownDone)
+    })
+
+    it('handles shutdown gracefully', (done) => {
       setupMetrics()
       const provider = metrics.getMeterProvider()
-      await provider.reader.shutdown()
-      await provider.reader.shutdown() // Second shutdown should be safe
+      assert.strictEqual(provider.forceFlush, undefined)
+      provider.shutdown(error => {
+        assert.ifError(error)
+        provider.shutdown(done)
+      })
     })
 
-    it('handles forceFlush', async () => {
+    it('handles internal force flush', (done) => {
       const validator = mockOtlpExport((decoded) => {
         assert(decoded.resourceMetrics)
       })
@@ -725,8 +820,11 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.createCounter('test').add(1)
 
       const provider = metrics.getMeterProvider()
-      await provider.reader.forceFlush()
-      validator()
+      provider.reader.forceFlush(error => {
+        assert.ifError(error)
+        validator()
+        done()
+      })
     })
 
     it('removes callbacks from observable instruments', (done) => {
@@ -1282,6 +1380,42 @@ describe('OpenTelemetry Meter Provider', () => {
       } finally {
         clock.restore()
       }
+    })
+  })
+
+  describe('Identity refresh', () => {
+    it('exports refreshed resources without resetting the ObservableCounter delta baseline', () => {
+      const clock = sinon.useFakeTimers()
+      const exportedMetrics = []
+      mockOtlpExport((decoded) => {
+        const resourceAttributes = decoded.resourceMetrics[0].resource.attributes
+        const runtimeId = resourceAttributes.find(attribute => attribute.key === 'runtime-id')
+        const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
+        exportedMetrics.push({
+          runtimeId: runtimeId.value.stringValue,
+          value: counter.sum.dataPoints[0].asInt,
+        })
+      })
+
+      const { config } = setupMetrics()
+      const initialRuntimeId = config.tags['runtime-id']
+      const meter = metrics.getMeter('app')
+      let value = 20
+      meter.createObservableCounter('obs').addCallback((result) => result.observe(value))
+
+      clock.tick(100)
+
+      // Refresh happens after the first export already established a baseline of 20.
+      config.tags['runtime-id'] = 'refreshed-id'
+      identityRefreshChannel.publish(config)
+      value = 25
+
+      clock.tick(100)
+
+      assert.deepStrictEqual(exportedMetrics, [
+        { runtimeId: initialRuntimeId, value: 20 },
+        { runtimeId: 'refreshed-id', value: 5 },
+      ])
     })
   })
 })

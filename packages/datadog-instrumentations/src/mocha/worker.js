@@ -7,6 +7,7 @@ const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper'
 const log = require('../../../dd-trace/src/log')
 const { DD_MAJOR } = require('../../../../version')
 
+const { addMochaRunHooks } = require('./common')
 const {
   runnableWrapper,
   getOnTestHandler,
@@ -29,7 +30,6 @@ const {
   WEBDRIVERIO_WORKER_ENV,
   WORKER_READY,
 } = require('./webdriverio-protocol')
-require('./common')
 
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
@@ -39,6 +39,7 @@ const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const config = {
   earlyFlakeDetectionRetryPolicy: EMPTY_EFD_RETRY_POLICY,
 }
+const patchedRunners = new WeakSet()
 const runnerToFiles = new WeakMap()
 const runnerToFailedHooks = new WeakMap()
 const isWebdriverioWorker = !!getEnvironmentVariable(WEBDRIVERIO_WORKER_ENV)
@@ -50,7 +51,6 @@ let configurationRequestId = 0
  * @param {object} message
  * @param {() => void} [onError]
  * @param {() => void} [onDone]
- * @returns {void}
  */
 function sendWebdriverioMessage (message, onError, onDone) {
   sendWebdriverioWorkerMessage(message, error => {
@@ -65,7 +65,6 @@ function sendWebdriverioMessage (message, onError, onDone) {
  * Applies configuration encoded as private Mocha options by its parallel runner.
  *
  * @param {object} options
- * @returns {void}
  */
 function applyMochaOptions (options) {
   if (options._ddIsKnownTestsEnabled) {
@@ -95,8 +94,12 @@ function applyMochaOptions (options) {
   if (options._ddIsFlakyTestRetriesEnabled) {
     config.isFlakyTestRetriesEnabled = true
     config.flakyTestRetriesCount = options._ddFlakyTestRetriesCount
+    config.isDynamicAtrEnabled = options._ddIsDynamicAtrEnabled
+    config.dynamicAtrBuckets = options._ddDynamicAtrBuckets
     delete options._ddIsFlakyTestRetriesEnabled
     delete options._ddFlakyTestRetriesCount
+    delete options._ddIsDynamicAtrEnabled
+    delete options._ddDynamicAtrBuckets
   }
   if (options._ddIsFailedTestReplayEnabled) {
     config.isTestDynamicInstrumentationEnabled = true
@@ -110,7 +113,6 @@ function applyMochaOptions (options) {
  *
  * @param {object} runner
  * @param {string[]} skippedFiles
- * @returns {void}
  */
 function filterSkippedFiles (runner, skippedFiles) {
   if (!skippedFiles.length) {
@@ -128,7 +130,6 @@ function filterSkippedFiles (runner, skippedFiles) {
  * @param {string} frameworkVersion
  * @param {string[]} files
  * @param {(response: object) => void} onDone
- * @returns {void}
  */
 function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
   const requestId = `${process.pid}-${++configurationRequestId}`
@@ -138,7 +139,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
    * Finishes the configuration request exactly once.
    *
    * @param {object} response
-   * @returns {void}
    */
   function finish (response) {
     if (finished) {
@@ -155,7 +155,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
    * Receives the matching coordinator response.
    *
    * @param {object} message
-   * @returns {void}
    */
   function onMessage (message) {
     if (message?.name === CONFIGURATION_RESPONSE && message.content?.requestId === requestId) {
@@ -166,7 +165,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
   /**
    * Releases the runner if its parent disconnects.
    *
-   * @returns {void}
    */
   function onDisconnect () {
     finish({})
@@ -190,7 +188,6 @@ function requestWebdriverioConfiguration (frameworkVersion, files, onDone) {
  * Reports the Mocha version as soon as WebdriverIO loads its framework adapter.
  *
  * @param {string} frameworkVersion
- * @returns {void}
  */
 function reportWebdriverioWorkerReady (frameworkVersion) {
   if (!isWebdriverioWorker) {
@@ -208,7 +205,6 @@ function reportWebdriverioWorkerReady (frameworkVersion) {
  * Checks whether Test Optimization converts a failed WebdriverIO test attempt to a passing result.
  *
  * @param {object|undefined} test
- * @returns {boolean}
  */
 function isWebdriverioFailureSuppressed (test) {
   if (!test) {
@@ -235,7 +231,6 @@ function getWebdriverioHookTest (hook) {
  * Removes managed hook failures from WebdriverIO's Mocha runner totals.
  *
  * @param {object} runner
- * @returns {void}
  */
 function adjustWebdriverioHookFailures (runner) {
   let suppressedFailures = 0
@@ -314,7 +309,6 @@ function getWebdriverioSuiteResults (runner) {
  *
  * @param {object} runner
  * @param {() => void} [onDone]
- * @returns {void}
  */
 function reportWebdriverioSuiteResults (runner, onDone) {
   if (!isWebdriverioWorker) {
@@ -336,7 +330,6 @@ function reportWebdriverioSuiteResults (runner, onDone) {
  *
  * @param {object} runner
  * @param {() => void} onDone
- * @returns {void}
  */
 function finishWebdriverioWorker (runner, onDone) {
   try {
@@ -360,13 +353,15 @@ function isFailedTestReplayEnabled () {
   return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
 }
 
-addHook({
-  name: 'mocha',
-  versions: ['>=8.0.0'],
-  file: 'lib/mocha.js',
-}, (Mocha, frameworkVersion) => {
+/**
+ * @param {Function} Mocha
+ * @param {string} frameworkVersion
+ * @returns {Function}
+ */
+function wrapMochaRun (Mocha, frameworkVersion) {
   reportWebdriverioWorkerReady(frameworkVersion)
 
+  // Shimmer is required because run must return its Runner while execution is paused and resumed after configuration.
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
     applyMochaOptions(this.options)
     if (!isWebdriverioWorker || !workerFinishCh.hasSubscribers) {
@@ -383,7 +378,6 @@ addHook({
     /**
      * Restores the root suite method after both delayed-mode gates are open.
      *
-     * @returns {void}
      */
     function restoreRootSuiteRun () {
       if (hasOwnRootSuiteRun) {
@@ -422,7 +416,7 @@ addHook({
         })
       }
       filterSkippedFiles(runner, skippedFiles)
-      if (isFailedTestReplayEnabled()) {
+      if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
         patchFailedTestReplayHookUp(runner.constructor)
       }
       configurationReady = true
@@ -438,21 +432,28 @@ addHook({
   })
 
   return Mocha
-})
+}
+
+addMochaRunHooks(['>=8.0.0'], wrapMochaRun)
 
 // Runner is also hooked in mocha/main.js, but in here we only generate test events.
 addHook({
   name: 'mocha',
   versions: [MINIMUM_MOCHA_VERSION],
-  file: 'lib/runner.js',
-}, function (Runner) {
+  filePattern: String.raw`lib/runner\.(?:c?js)$`,
+}, function (runnerPackage) {
+  const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
+  if (typeof Runner !== 'function') return
+  if (patchedRunners.has(Runner)) return
+
+  patchedRunners.add(Runner)
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!workerFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-    if (isFailedTestReplayEnabled()) {
+    if (isFailedTestReplayEnabled() || config.isFlakyTestRetriesEnabled) {
       patchFailedTestReplayHookUp(Runner)
     }
     if (isWebdriverioWorker) {
@@ -508,7 +509,7 @@ addHook({
 
     return run.apply(this, args)
   })
-  return Runner
+  return runnerPackage
 })
 
 // Used both in serial and parallel mode, and by both the main process and the workers

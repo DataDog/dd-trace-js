@@ -6,7 +6,6 @@ let config
 /**
  * Use the tracer's live configuration when deciding whether renders need a carrier.
  * @param {import('../../config/config-base')} tracerConfig
- * @returns {void}
  */
 function configurePromptTracking (tracerConfig) {
   config = tracerConfig

@@ -255,9 +255,13 @@ describe('Kinesis', function () {
           }
           const tracePromise = agent.assertSomeTraces(assertNoPathwayHash, { spanResourceMatch: /^putRecord/ })
           const params = { Data: data, PartitionKey: partitionKey, StreamName: streamNameDSM }
-          const requestPromise = promisesSupported
-            ? callViaPromise(testKinesis, 'putRecord', params)
-            : promisify(testKinesis.putRecord.bind(testKinesis))(params)
+          let requestPromise
+          if (promisesSupported) {
+            requestPromise = callViaPromise(testKinesis, 'putRecord', params)
+          } else {
+            const putRecordAsync = promisify(testKinesis.putRecord.bind(testKinesis))
+            requestPromise = putRecordAsync(params)
+          }
 
           await Promise.all([tracePromise, requestPromise])
           assert.deepStrictEqual(requestTargets, ['Kinesis_20131202.PutRecord'])

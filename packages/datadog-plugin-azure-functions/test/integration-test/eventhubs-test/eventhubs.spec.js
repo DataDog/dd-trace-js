@@ -266,12 +266,13 @@ describe('esm', () => {
 
       it('enqueues events to an event hub with a cardinality of many', async () => {
         const senderGroup = (group) => group.some(s => s.name === 'azure.eventhubs.send')
+        const isEventHubTest2Group = azureInvokeGroup('EventHubs eventHubTest2')
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/eh2-enqueueEvents'),
-          predicate: (group) => azureInvokeGroup('EventHubs eventHubTest2')(group) || senderGroup(group),
+          predicate: (group) => isEventHubTest2Group(group) || senderGroup(group),
           expectedCount: 2,
         })
-        const ehGroups = groups.filter(azureInvokeGroup('EventHubs eventHubTest2'))
+        const ehGroups = groups.filter(isEventHubTest2Group)
         const senderGroups = groups.filter(senderGroup)
         assert.strictEqual(ehGroups.length, 1)
         assert.strictEqual(senderGroups.length, 1)
@@ -294,12 +295,13 @@ describe('esm', () => {
 
       it('enqueues amqp messages to an event hub with a cardinality of many', async () => {
         const senderGroup = (group) => group.some(s => s.name === 'azure.eventhubs.send')
+        const isEventHubTest2Group = azureInvokeGroup('EventHubs eventHubTest2')
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/eh2-enqueueAmqp'),
-          predicate: (group) => azureInvokeGroup('EventHubs eventHubTest2')(group) || senderGroup(group),
+          predicate: (group) => isEventHubTest2Group(group) || senderGroup(group),
           expectedCount: 2,
         })
-        const ehGroups = groups.filter(azureInvokeGroup('EventHubs eventHubTest2'))
+        const ehGroups = groups.filter(isEventHubTest2Group)
         const senderGroups = groups.filter(senderGroup)
         assert.strictEqual(ehGroups.length, 1)
         assert.strictEqual(senderGroups.length, 1)
@@ -342,11 +344,12 @@ describe('esm', () => {
       // Batch test runs first so its re-triggers (no span links) don't contaminate the
       // eventdata test, which looks for span links.
       it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
+        const isEventHubTest2Group = azureInvokeGroup('EventHubs eventHubTest2')
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/eh2-batch'),
-          predicate: (group) => azureInvokeGroup('EventHubs eventHubTest2')(group) || azureCreateGroup(group),
+          predicate: (group) => isEventHubTest2Group(group) || azureCreateGroup(group),
         })
-        const ehGroups = groups.filter(azureInvokeGroup('EventHubs eventHubTest2'))
+        const ehGroups = groups.filter(isEventHubTest2Group)
         const createGroups = groups.filter(azureCreateGroup)
         assert.strictEqual(ehGroups.length, 1)
         assert.strictEqual(createGroups.length, 0)
@@ -357,8 +360,9 @@ describe('esm', () => {
       // window, so we look for any EH group that has span links rather than asserting on
       // a fixed count.
       it('should add span links to non-batched messages when batch links are disabled', async () => {
+        const isEventHubTest2Group = azureInvokeGroup('EventHubs eventHubTest2')
         const hasSpanLinks = (group) =>
-          azureInvokeGroup('EventHubs eventHubTest2')(group) && '_dd.span_links' in group[0].meta
+          isEventHubTest2Group(group) && '_dd.span_links' in group[0].meta
         const groups = await agent.collectGroups({
           trigger: () => curl('http://127.0.0.1:7071/api/eh2-eventdata'),
           predicate: hasSpanLinks,

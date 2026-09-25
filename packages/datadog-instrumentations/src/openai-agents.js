@@ -24,7 +24,7 @@ function captureChatCompletionsModelBaseURL (ctx) {
 
 chatCompletionsModelConstructorCh.end.subscribe(captureChatCompletionsModelBaseURL)
 
-for (const hook of getHooks('@openai/agents-openai')) {
+for (const hook of getHooks('@openai/agents-openai').values()) {
   addHook(hook, moduleExports => moduleExports)
 }
 

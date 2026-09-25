@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
+
 describe('AppSec Lambda handler', () => {
   let lambda
   let waf
@@ -14,9 +16,10 @@ describe('AppSec Lambda handler', () => {
   let log
   let addresses
 
-  const fakeSpan = () => {
+  const fakeSpan = (sampling) => {
     const tags = {}
     const spanContext = {
+      _sampling: sampling,
       getTag (key) { return tags[key] },
     }
     return {
@@ -282,6 +285,19 @@ describe('AppSec Lambda handler', () => {
       sinon.assert.calledOnce(log.error)
     })
 
+    it('should release the WAF context and finish the report when the work throws', () => {
+      const span = fakeSpan()
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      waf.run.throws(new Error('boom'))
+
+      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
+
+      sinon.assert.calledOnce(waf.disposeContext)
+      sinon.assert.calledOnce(Reporter.finishRequest)
+      sinon.assert.calledOnce(log.error)
+    })
+
     it('should use the same synthetic req key across WAF run, dispose, and finishRequest', () => {
       const span = fakeSpan()
 
@@ -305,6 +321,423 @@ describe('AppSec Lambda handler', () => {
       // ...and it is the synthetic req, never the span.
       assert.notEqual(startKey, span)
       assert.deepStrictEqual(startKey, { headers: { host: 'example.com' } })
+    })
+  })
+
+  describe('API Security', () => {
+    let apiSecurity
+    let telemetry
+
+    // The real sampler is used here on purpose: the sampling key is built from the method and
+    // route published on the start-invocation channel, and that plumbing is what these cases
+    // are about. Only the telemetry sink is stubbed.
+    beforeEach(() => {
+      telemetry = {
+        incrementApiSecRequestSchemaMetric: sinon.stub(),
+        incrementApiSecRequestNoSchemaMetric: sinon.stub(),
+        incrementApiSecMissingRouteMetric: sinon.stub(),
+      }
+
+      apiSecurity = proxyquire('../../src/appsec/api_security', {
+        '../telemetry': telemetry,
+      })
+
+      apiSecurity.configure({
+        appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 },
+        apmTracingEnabled: true,
+      })
+
+      lambda = proxyquire('../../src/appsec/lambda', {
+        '../log': log,
+        './waf': waf,
+        './reporter': Reporter,
+        '../priority_sampler': { keepTrace },
+        './api_security': apiSecurity,
+      })
+    })
+
+    afterEach(() => {
+      // The sampler holds module-level state, so the TTL cache has to be cleared between cases.
+      apiSecurity.disable()
+    })
+
+    const invoke = (span, options = {}) => {
+      const { method = 'GET', statusCode = '200' } = options
+      // Not a destructuring default: these cases need to pass an explicit undefined route.
+      const route = 'route' in options ? options.route : '/api/{id}'
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method, path: '/api/1', route })
+      waf.run.resetHistory()
+      lambda.onLambdaEndInvocation({ span, statusCode })
+      return waf.run.firstCall?.args[0].persistent
+    }
+
+    it('should add the extract-schema processor when the invocation is sampled', () => {
+      const persistent = invoke(fakeSpan())
+
+      assert.deepStrictEqual(persistent[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should not add the processor when API Security is disabled', () => {
+      apiSecurity.disable()
+
+      const persistent = invoke(fakeSpan())
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should not add the processor on a second invocation of the same endpoint', () => {
+      const first = invoke(fakeSpan())
+      const second = invoke(fakeSpan())
+
+      assert.deepStrictEqual(first[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+      assert.equal(second[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+    })
+
+    it('should sample again when the route differs', () => {
+      invoke(fakeSpan(), { route: '/api/{id}' })
+      const other = invoke(fakeSpan(), { route: '/other/{id}' })
+
+      assert.deepStrictEqual(other[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should sample again when the status code differs', () => {
+      invoke(fakeSpan(), { statusCode: '200' })
+      const other = invoke(fakeSpan(), { statusCode: '201' })
+
+      assert.deepStrictEqual(other[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should not sample when the trace is rejected', () => {
+      const persistent = invoke(fakeSpan({ priority: AUTO_REJECT }))
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should not sample when the trace is rejected by the user', () => {
+      const persistent = invoke(fakeSpan({ priority: USER_REJECT }))
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+    })
+
+    it('should not report missing_route for a rejected trace without route', () => {
+      invoke(fakeSpan({ priority: AUTO_REJECT }), { route: undefined })
+
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should leave the TTL slot free after a rejected trace', () => {
+      invoke(fakeSpan({ priority: AUTO_REJECT }))
+      const kept = invoke(fakeSpan())
+
+      assert.deepStrictEqual(kept[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    it('should report missing_route when the event carried no route', () => {
+      const span = fakeSpan()
+      span.setTag('component', 'aws-lambda')
+
+      const persistent = invoke(span, { route: undefined })
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, 'aws-lambda')
+    })
+
+    it('should not report missing_route on a 404 without route', () => {
+      const persistent = invoke(fakeSpan(), { route: undefined, statusCode: '404' })
+
+      assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+    })
+
+    it('should skip sampling when the invocation has no status code', () => {
+      const span = fakeSpan()
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/', route: '/api/{id}' })
+      waf.run.resetHistory()
+
+      lambda.onLambdaEndInvocation({ span })
+
+      sinon.assert.notCalled(waf.run)
+      sinon.assert.notCalled(telemetry.incrementApiSecMissingRouteMetric)
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+    })
+
+    it('should emit request.schema when the WAF returned schema attributes', () => {
+      const span = fakeSpan()
+      span.setTag('component', 'aws-lambda')
+      waf.run.returns({ attributes: { '_dd.appsec.s.req.body': [] } })
+
+      invoke(span)
+
+      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestSchemaMetric, 'aws-lambda')
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
+    })
+
+    it('should emit request.no_schema when the WAF returned no schema attributes', () => {
+      const span = fakeSpan()
+      span.setTag('component', 'aws-lambda')
+
+      invoke(span)
+
+      sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'aws-lambda')
+      sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
+    })
+
+    it('should keep the response addresses alongside the processor', () => {
+      const span = fakeSpan()
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/', route: '/api/{id}' })
+      waf.run.resetHistory()
+
+      lambda.onLambdaEndInvocation({
+        span,
+        statusCode: '200',
+        responseHeaders: { 'content-type': 'application/json', 'set-cookie': 'foo=bar' },
+      })
+
+      const { persistent } = waf.run.firstCall.args[0]
+      assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_CODE], '200')
+      assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS], {
+        'content-type': 'application/json',
+      })
+      assert.deepStrictEqual(persistent[addresses.WAF_CONTEXT_PROCESSOR], { 'extract-schema': true })
+    })
+
+    describe('response body', () => {
+      const invokeWithBody = (data, options = {}) => {
+        const span = options.span ?? fakeSpan()
+        lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/', route: '/api/{id}' })
+        waf.run.resetHistory()
+
+        lambda.onLambdaEndInvocation({
+          span,
+          statusCode: '200',
+          responseHeaders: { 'content-type': 'application/json' },
+          ...data,
+        })
+
+        return waf.run.firstCall?.args[0].persistent
+      }
+
+      it('should parse a JSON body published as a string', () => {
+        const persistent = invokeWithBody({ responseBody: '{"payload":{"a":"b"}}' })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: { a: 'b' } })
+      })
+
+      it('should pass through a body that is already an object', () => {
+        const persistent = invokeWithBody({ responseBody: { payload: 1 }, responseHeaders: undefined })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should decode a base64 encoded body', () => {
+        const responseBody = Buffer.from('{"payload":[1,2]}').toString('base64')
+
+        const persistent = invokeWithBody({ responseBody, isBase64Encoded: true })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: [1, 2] })
+      })
+
+      it('should accept a differently cased media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'Application/JSON' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a media type with parameters', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json; charset=utf-8' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a structured JSON suffix media type', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/problem+json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept text/json', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a subtype that merely contains json, trading precision for a cheap gate', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/notjson' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should still drop a real JSON sequence body at JSON.parse, not at the content type gate', () => {
+        // RFC 7464: each document is prefixed with RS (0x1E), which JSON.parse rejects outright.
+        const persistent = invokeWithBody({
+          responseBody: '\x1E{"a":1}\x1E{"b":2}\n',
+          responseHeaders: { 'content-type': 'application/json-seq' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should accept json appearing only in a media type parameter', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain; filename=data.json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should parse the body when a repeated content type resolves to a single value', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json, application/json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept an ambiguous content type list if any value mentions json', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain, application/problem+json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should accept a bare json suffix with no type/subtype shape', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'bogus+json' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should not parse the body when the content type is not JSON', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'text/plain' },
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should not parse a string body when there are no response headers', () => {
+        const persistent = invokeWithBody({ responseBody: '{"payload":1}', responseHeaders: undefined })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should swallow a malformed JSON body', () => {
+        const persistent = invokeWithBody({ responseBody: '{not json' })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.notCalled(log.error)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/Failed to parse/))
+      })
+
+      it('should not log the body when it fails to parse', () => {
+        invokeWithBody({ responseBody: '{"secret-token-123' })
+
+        // The SyntaxError message embeds a fragment of the body, so the error must not be logged.
+        sinon.assert.neverCalledWithMatch(log.debug, sinon.match(/secret-token-123/))
+      })
+
+      it('should not attempt to parse a gzip-encoded body', () => {
+        // The gzip of {"payload":1}. Without the content-encoding check this would reach
+        // JSON.parse as garbage and fail silently, instead of being skipped up front.
+        const persistent = invokeWithBody({
+          responseBody: 'H4sIAAAAAAAAE6tWKkiszMlPTFGyMqwFALsByqQNAAAA',
+          responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
+          isBase64Encoded: true,
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.notCalled(log.debug)
+      })
+
+      it('should still parse a body whose content-encoding is identity', () => {
+        const persistent = invokeWithBody({
+          responseBody: '{"payload":1}',
+          responseHeaders: { 'content-type': 'application/json', 'content-encoding': 'IDENTITY' },
+        })
+
+        assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], { payload: 1 })
+      })
+
+      it('should ignore a JSON scalar, which carries no schema', () => {
+        const persistent = invokeWithBody({ responseBody: '"just a string"' })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should ignore a body over the 16MB cap', () => {
+        const responseBody = `{"payload":"${'a'.repeat(16 * 1024 * 1024)}"}`
+
+        const persistent = invokeWithBody({ responseBody })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should measure the cap in bytes, not in code units', () => {
+        const responseBody = `{"payload":"${'デ'.repeat(6 * 1024 * 1024)}"}`
+        assert.ok(responseBody.length < 16 * 1024 * 1024)
+
+        const persistent = invokeWithBody({ responseBody })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/larger than/))
+      })
+
+      it('should reject an oversized base64 body from its encoded length alone', () => {
+        const persistent = invokeWithBody({
+          responseBody: 'A'.repeat(Math.ceil(16 * 1024 * 1024 * 4 / 3)),
+          isBase64Encoded: true,
+        })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.calledWithMatch(log.debug, sinon.match(/larger than/))
+      })
+
+      it('should ignore an empty body', () => {
+        const persistent = invokeWithBody({ responseBody: '' })
+
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+      })
+
+      it('should not set the body when the invocation is not sampled', () => {
+        // The first invocation takes the TTL slot, so the second one is skipped. Its body is
+        // malformed on purpose: parsing it would fail and log, so the absence of that log is
+        // what makes the laziness observable instead of assumed.
+        invokeWithBody({ responseBody: '{"payload":1}' })
+        const persistent = invokeWithBody({ responseBody: '{not json' })
+
+        assert.equal(persistent[addresses.WAF_CONTEXT_PROCESSOR], undefined)
+        assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_BODY], undefined)
+        sinon.assert.neverCalledWithMatch(log.debug, sinon.match(/Failed to parse/))
+      })
     })
   })
 })

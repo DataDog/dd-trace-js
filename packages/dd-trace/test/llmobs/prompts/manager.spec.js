@@ -9,10 +9,25 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const log = require('../../../src/log')
 const telemetry = require('../../../src/llmobs/telemetry')
 const { cacheKey } = require('../../../src/llmobs/prompts/cache')
-const PromptManager = require('../../../src/llmobs/prompts/manager')
 const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
+
+let fetchStub
+const PromptManager = proxyquire('../../../src/llmobs/prompts/manager', {
+  '../../exporters/common/request': (body, options, callback) => {
+    Promise.resolve(fetchStub(options.url, { ...options, body: body || undefined }))
+      .then(async response => {
+        const responseBody = await response.text()
+        if (response.ok) return callback(null, responseBody, response.status, {})
+        const error = new Error()
+        if (options.includeErrorResponseBody) error.responseBody = responseBody
+        callback(error, null, response.status, {})
+      })
+      .catch(callback)
+  },
+})
 
 function response (status, body) {
   const text = typeof body === 'string' ? body : (body === undefined ? '' : JSON.stringify(body))
@@ -49,12 +64,11 @@ function makeConfig (overrides = {}) {
 }
 
 describe('PromptManager', () => {
-  let fetchStub
   let provider
   let cacheDir
 
   beforeEach(() => {
-    fetchStub = sinon.stub(global, 'fetch')
+    fetchStub = sinon.stub()
     provider = { resolveObjectEvaluation: sinon.stub().resolves({ value: {} }) }
   })
 
@@ -83,6 +97,7 @@ describe('PromptManager', () => {
       user_version: '0.3.0',
       prompt_version_uuid: undefined,
       ID: 'backend-version-id',
+      template: { messages: [{ role: 'user', content: 'Hello {name}' }] },
     })))
     const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
 
@@ -97,15 +112,46 @@ describe('PromptManager', () => {
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/greeting')
     assert.strictEqual(fetchStub.secondCall.args[0],
       'https://proxy.example.test/dd-proxy/api/unstable/llm-obs/v1/prompts/a%2Fb/versions/3')
+    assert.strictEqual(fetchStub.firstCall.args[1].retry, false)
     assert.strictEqual(latest.source, 'registry')
     assert.strictEqual(exact.version, '0.3.0')
     assert.strictEqual(exact.promptVersionUuid, 'backend-version-id')
+    assert.deepStrictEqual(exact.format({ name: 'Ada' }), [{ role: 'user', content: 'Hello Ada' }])
     sinon.assert.notCalled(provider.resolveObjectEvaluation)
   })
 
-  it('uses the injected provider lazily with targeting-key precedence', async () => {
+  it('rejects cleartext non-loopback origins and allows loopback development endpoints', async () => {
+    process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'http://api.example.test'
+    const insecure = new PromptManager(makeConfig(), () => provider)
+    await assert.rejects(insecure.getPrompt('greeting'), {
+      name: 'PromptAuthError',
+      status: 0,
+      detail: 'Prompt origin must use HTTPS unless it targets a loopback host',
+    })
+    sinon.assert.notCalled(fetchStub)
+
+    process.env._DD_LLMOBS_OVERRIDE_ORIGIN = 'http://127.0.0.1:8126'
+    const manager = new PromptManager(makeConfig(), () => provider)
+    assert.strictEqual(manager.origin, 'http://127.0.0.1:8126')
+  })
+
+  it('rejects DD_SITE values containing URL authority delimiters', async () => {
+    const manager = new PromptManager(makeConfig({ site: 'datadoghq.com@collector.example' }), () => provider)
+    await assert.rejects(manager.getPrompt('greeting'), {
+      name: 'PromptAuthError',
+      status: 0,
+      detail: 'DD_SITE is invalid for prompt operations',
+    })
+    sinon.assert.notCalled(fetchStub)
+  })
+
+  it('uses the provider without credentials and preserves targeting-key precedence', async () => {
     provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1', template: undefined }) })
-    const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
+    const manager = new PromptManager(makeConfig({
+      DD_API_KEY: undefined,
+      DD_APP_KEY: undefined,
+      env: 'production',
+    }), () => provider)
     const fallback = sinon.spy()
 
     const prompt = await manager.getPrompt('greeting', {
@@ -125,6 +171,17 @@ describe('PromptManager', () => {
     )
     sinon.assert.notCalled(fetchStub)
     sinon.assert.notCalled(fallback)
+  })
+
+  it('treats a null version as absent', async () => {
+    provider.resolveObjectEvaluation.resolves({ value: promptResponse({ user_version: 'ff-v1' }) })
+    const manager = new PromptManager(makeConfig({ env: 'production' }), () => provider)
+
+    const prompt = await manager.getPrompt('greeting', { version: null })
+
+    assert.strictEqual(prompt.source, 'ff')
+    sinon.assert.calledOnce(provider.resolveObjectEvaluation)
+    sinon.assert.notCalled(fetchStub)
   })
 
   it('snapshots targeting attributes before provider evaluation', async () => {
@@ -188,16 +245,22 @@ describe('PromptManager', () => {
       data: { type: 'prompt_resolve_requests', attributes: { env: 'production' } },
     })
     assert.strictEqual(fetchStub.firstCall.args[1].headers['DD-APPLICATION-KEY'], 'app-key')
+    assert.strictEqual(fetchStub.firstCall.args[1].headers['DD-API-KEY'], 'api-key')
   })
 
-  it('skips an unauthorized resolve request and uses the caller fallback', async () => {
-    const manager = new PromptManager(makeConfig({ env: 'production', DD_APP_KEY: undefined }), () => provider)
+  it('uses the fallback without HTTP when the provider and credentials are unavailable', async () => {
+    const manager = new PromptManager(makeConfig({
+      DD_API_KEY: undefined,
+      DD_APP_KEY: undefined,
+      env: 'production',
+    }), () => provider)
     const fallback = sinon.stub().returns({ template: 'Local {name}', version: 'local' })
 
     const prompt = await manager.getPrompt('greeting', { fallback })
 
     assert.strictEqual(prompt.source, 'fallback')
     assert.strictEqual(prompt.version, 'local')
+    sinon.assert.calledOnce(provider.resolveObjectEvaluation)
     sinon.assert.calledOnce(fallback)
     sinon.assert.notCalled(fetchStub)
   })
@@ -209,6 +272,34 @@ describe('PromptManager', () => {
     await assert.rejects(manager.getPrompt('greeting'), {
       message: "Prompt 'greeting' could not be fetched and no fallback was provided: missing",
     })
+  })
+
+  it('records fallback source only after constructing the caller fallback', async () => {
+    fetchStub.resolves(response(404, { detail: 'missing' }))
+    const source = sinon.stub(telemetry, 'recordPromptSource')
+    const manager = new PromptManager(makeConfig({ DD_LLMOBS_PROMPTS_CACHE_TTL: 0 }), () => provider)
+
+    await assert.rejects(manager.getPrompt('greeting', { fallback: { version: 'local' } }), {
+      name: 'TypeError',
+    })
+    sinon.assert.notCalled(source)
+  })
+
+  it('coalesces concurrent cold fetches while keeping fallbacks caller-specific', async () => {
+    let resolveFetch
+    fetchStub.onFirstCall().returns(new Promise(resolve => { resolveFetch = resolve }))
+    fetchStub.onSecondCall().resolves(response(200, promptResponse({ version: 2 })))
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    const first = manager.getPrompt('greeting', { fallback: 'first' })
+    const second = manager.getPrompt('greeting', { fallback: 'second' })
+    sinon.assert.calledOnce(fetchStub)
+    resolveFetch(response(500, { detail: 'unavailable' }))
+
+    const prompts = await Promise.all([first, second])
+    assert.deepStrictEqual(prompts.map(prompt => prompt.template), ['first', 'second'])
+    assert.strictEqual((await manager.getPrompt('greeting')).version, '2')
+    sinon.assert.calledTwice(fetchStub)
   })
 
   it('isolates resolve selectors and canonicalizes attribute order', async () => {
@@ -313,8 +404,28 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.warmCache.get(key), undefined)
   })
 
+  it('keeps unrelated prompt fetches pending and cacheable after a mutation', async () => {
+    let resolvePrompt
+    fetchStub.onFirstCall().returns(new Promise(resolve => { resolvePrompt = resolve }))
+    fetchStub.onSecondCall().resolves(response(200, {}))
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    const first = manager.getPrompt('other')
+    await manager.updatePrompt('greeting', { title: 'Updated' })
+    const second = manager.getPrompt('other')
+    sinon.assert.calledTwice(fetchStub)
+
+    resolvePrompt(response(200, promptResponse({ prompt_id: 'other' })))
+    assert.strictEqual((await first).id, 'other')
+    assert.strictEqual((await second).id, 'other')
+    assert.strictEqual((await manager.getPrompt('other')).source, 'cache')
+    sinon.assert.calledTwice(fetchStub)
+  })
+
   it('aborts an obsolete background refresh when a manual refresh replaces it', async () => {
     const now = sinon.stub(performance, 'now').returns(100)
+    const warning = sinon.stub(log, 'warn')
+    const fetchError = sinon.stub(telemetry, 'recordPromptFetchError')
     let backgroundSignal
     fetchStub.onFirstCall().resolves(response(200, promptResponse({ version: 1 })))
     fetchStub.onSecondCall().callsFake((...args) => {
@@ -336,6 +447,34 @@ describe('PromptManager', () => {
 
     assert.strictEqual((await manager.getPrompt('greeting')).version, '2')
     sinon.assert.calledThrice(fetchStub)
+    sinon.assert.notCalled(warning)
+    sinon.assert.notCalled(fetchError)
+  })
+
+  it('does not report cache clearing as a fetch failure', async () => {
+    const now = sinon.stub(performance, 'now').returns(100)
+    const warning = sinon.stub(log, 'warn')
+    const fetchError = sinon.stub(telemetry, 'recordPromptFetchError')
+    let backgroundSignal
+    fetchStub.onFirstCall().resolves(response(200, promptResponse()))
+    fetchStub.onSecondCall().callsFake((...args) => {
+      const { signal } = args[1]
+      backgroundSignal = signal
+      return new Promise((resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      })
+    })
+    const manager = new PromptManager(makeConfig(), () => provider)
+
+    await manager.getPrompt('greeting')
+    now.returns(60_101)
+    await manager.getPrompt('greeting')
+    manager.clearPromptCache()
+    assert.strictEqual(backgroundSignal.aborted, true)
+    await new Promise(setImmediate)
+
+    sinon.assert.notCalled(warning)
+    sinon.assert.notCalled(fetchError)
   })
 
   it('keeps the newest same-selector fetch in the cache', async () => {
@@ -384,17 +523,17 @@ describe('PromptManager', () => {
 
     manager.hotCache.set(key, cached)
     manager.warmCache.set(key, cached)
-    manager.clearCache({ hot: false })
+    manager.clearPromptCache({ hot: false })
     assert.strictEqual(manager.hotCache.get(key).prompt.id, 'greeting')
     assert.strictEqual(manager.warmCache.get(key), undefined)
 
     manager.warmCache.set(key, cached)
-    manager.clearCache({ warm: false })
+    manager.clearPromptCache({ warm: false })
     assert.strictEqual(manager.hotCache.get(key), undefined)
     assert.strictEqual(manager.warmCache.get(key).prompt.id, 'greeting')
 
     manager.hotCache.set(key, cached)
-    manager.clearCache()
+    manager.clearPromptCache()
     assert.strictEqual(manager.hotCache.get(key), undefined)
     assert.strictEqual(manager.warmCache.get(key), undefined)
   })
@@ -402,7 +541,7 @@ describe('PromptManager', () => {
   it('implements every CRUD route, body, and credential boundary', async () => {
     fetchStub.resolves(response(200, {}))
     const manager = new PromptManager(makeConfig(), () => provider)
-    const template = [{ role: 'user', content: 'Hi' }]
+    const template = 'Hi {name}'
 
     await manager.createPrompt('a/b', template, { title: '', description: '', userVersion: '', envIds: [] })
     await manager.createPromptVersion('a/b', template, { description: 'v', userVersion: '1', envIds: [] })
@@ -434,6 +573,7 @@ describe('PromptManager', () => {
     assert.deepStrictEqual(JSON.parse(calls[3].options.body), { description: '', env_ids: [] })
     for (const call of calls.slice(0, 5)) assert.strictEqual(call.options.headers['DD-APPLICATION-KEY'], 'app-key')
     for (const call of calls.slice(5)) assert.strictEqual(call.options.headers['DD-APPLICATION-KEY'], undefined)
+    for (const call of calls) assert.strictEqual(call.options.retry, false)
   })
 
   it('evicts exact prompt-wide hot and warm selectors after successful mutations', async () => {
@@ -459,29 +599,53 @@ describe('PromptManager', () => {
     assert.strictEqual(manager.warmCache.get(second).prompt.id, 'foo:bar')
   })
 
-  it('rejects missing API credentials before provider, cache, HTTP, or fallback', async () => {
-    const crudError = sinon.stub(telemetry, 'recordPromptCrudError')
-    const fallback = sinon.spy()
-    const manager = new PromptManager(makeConfig({ DD_API_KEY: undefined, env: 'production' }), () => provider)
+  it('requires an API key for Registry requests and both keys for /resolve', async () => {
+    const noApi = new PromptManager(makeConfig({ DD_API_KEY: undefined }), () => provider)
+    for (const options of [{}, { version: 1 }]) {
+      await assert.rejects(noApi.getPrompt('greeting', options), {
+        name: 'PromptAuthError',
+        status: 0,
+        detail: 'DD_API_KEY is required for prompt operations',
+      })
+    }
+    sinon.assert.notCalled(fetchStub)
 
-    await assert.rejects(manager.getPrompt('greeting', { fallback }), {
+    fetchStub.resolves(response(200, promptResponse()))
+    const registryNoApp = new PromptManager(makeConfig({
+      DD_APP_KEY: undefined,
+      DD_LLMOBS_PROMPTS_CACHE_TTL: 0,
+    }), () => provider)
+    await registryNoApp.getPrompt('greeting')
+    await registryNoApp.getPrompt('greeting', { version: 1 })
+    for (const call of fetchStub.getCalls()) {
+      assert.strictEqual(call.args[1].headers['DD-API-KEY'], 'api-key')
+      assert.strictEqual(call.args[1].headers['DD-APPLICATION-KEY'], undefined)
+    }
+
+    const noResolveApi = new PromptManager(makeConfig({ DD_API_KEY: undefined, env: 'production' }), () => provider)
+    await assert.rejects(noResolveApi.getPrompt('greeting'), {
       name: 'PromptAuthError',
       status: 0,
       detail: 'DD_API_KEY is required for prompt operations',
     })
-    await assert.rejects(manager.updatePrompt('greeting', { title: 'Greeting' }), {
-      name: 'PromptAuthError', status: 0,
+
+    const noResolveApp = new PromptManager(makeConfig({ DD_APP_KEY: undefined, env: 'production' }), () => provider)
+    await assert.rejects(noResolveApp.getPrompt('greeting'), {
+      message: "Prompt 'greeting' could not be fetched and no fallback was provided: " +
+        'DD_APP_KEY is required to resolve prompts for an environment',
     })
-    sinon.assert.notCalled(provider.resolveObjectEvaluation)
-    sinon.assert.notCalled(fetchStub)
-    sinon.assert.notCalled(fallback)
-    sinon.assert.calledOnceWithExactly(crudError, 'PATCH', 'PromptAuthError', 0)
+
+    sinon.assert.calledTwice(provider.resolveObjectEvaluation)
+    sinon.assert.calledTwice(fetchStub)
   })
 
   it('validates update fields and write application credentials', async () => {
     const manager = new PromptManager(makeConfig(), () => provider)
     await assert.rejects(manager.updatePrompt('p'), { name: 'PromptValidationError', status: 0 })
     await assert.rejects(manager.updatePromptVersion('p', 1), { name: 'PromptValidationError', status: 0 })
+
+    const noApi = new PromptManager(makeConfig({ DD_API_KEY: undefined }), () => provider)
+    await assert.rejects(noApi.updatePrompt('p', { title: 'Prompt' }), { name: 'PromptAuthError', status: 0 })
 
     const noApp = new PromptManager(makeConfig({ DD_APP_KEY: undefined }), () => provider)
     await assert.rejects(noApp.deletePrompt('p'), { name: 'PromptAuthError', status: 0 })
@@ -511,7 +675,7 @@ describe('PromptManager', () => {
     })
   })
 
-  it('handles empty and invalid successful bodies and normalizes IDs without deprecated backend fields', async () => {
+  it('handles empty and invalid successful bodies and omits deprecated backend fields', async () => {
     const manager = new PromptManager(makeConfig(), () => provider)
     fetchStub.onFirstCall().resolves(response(204))
     fetchStub.onSecondCall().resolves(response(200, 'not json{'))

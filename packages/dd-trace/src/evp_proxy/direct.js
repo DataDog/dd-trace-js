@@ -1,17 +1,15 @@
 'use strict'
 
-const { format } = require('node:url')
-
-const { HttpsProxyAgent } = require('../../../../vendor/dist/https-proxy-agent')
-const { getProxyForUrl } = require('../../../../vendor/dist/proxy-from-env')
+const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
+
+let invalidSiteWarningLogged = false
 
 /**
  * @typedef {object} DirectEVPRoute
  * @property {URL} url - Direct intake URL
  * @property {string} basePath - Direct intake base path
  * @property {object} headers - Direct intake authentication headers
- * @property {import('node:https').Agent} [agent] - Optional HTTPS proxy agent
  */
 
 /**
@@ -25,39 +23,23 @@ const log = require('../log')
  */
 function createDirectEVPRoute (config, intake) {
   const apiKey = config.DD_API_KEY
-  if (!apiKey || !config.site) return
+  if (!apiKey) return
 
-  try {
-    const hostname = `${intake}.${config.site}`.toLowerCase()
-    const url = new URL(format({
-      protocol: 'https:',
-      hostname,
-    }))
-    if (
-      url.hostname !== hostname ||
-      url.username ||
-      url.password ||
-      url.port ||
-      url.pathname !== '/' ||
-      url.search ||
-      url.hash
-    ) {
-      throw new Error('Invalid direct EVP intake URL')
+  const url = createSiteUrl(config.site, intake)
+  if (url === undefined) {
+    if (!invalidSiteWarningLogged) {
+      invalidSiteWarningLogged = true
+      log.warn('Feature Flags direct event delivery is disabled because DD_SITE is invalid.')
     }
+    return
+  }
 
-    const proxyUrl = getProxyForUrl(url.href)
-    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined
-
-    return {
-      url,
-      basePath: '',
-      headers: {
-        'DD-API-KEY': apiKey,
-      },
-      ...(agent && { agent }),
-    }
-  } catch (error) {
-    log.debug('Unable to configure direct EVP intake: %s', error.message)
+  return {
+    url,
+    basePath: '',
+    headers: {
+      'DD-API-KEY': apiKey,
+    },
   }
 }
 

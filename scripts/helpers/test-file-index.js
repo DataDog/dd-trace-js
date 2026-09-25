@@ -71,30 +71,31 @@ function walkTestFiles (repoRoot) {
  * on a bare string keeps them and would then compare one segment too many.
  *
  * @param {string} pattern
- * @returns {string}
  */
 function normalizePattern (pattern) {
   if (!pattern.includes('./') && !pattern.includes('//')) return pattern
 
   const segments = pattern.split('/')
-  const kept = []
+  let normalized = ''
+  let hasSegment = false
 
   for (let i = 0; i < segments.length; i++) {
     const segment = segments[i]
     // A leading empty segment marks an absolute pattern and a trailing one a directory-only
     // pattern; both change what matches, so only interior blanks are collapsed.
     if (segment === '.' || (segment === '' && i !== 0 && i !== segments.length - 1)) continue
-    kept.push(segment)
+    if (hasSegment) normalized += '/'
+    normalized += segment
+    hasSegment = true
   }
 
-  return kept.join('/')
+  return normalized
 }
 
 /**
  * Longest leading directory path of `pattern` that contains no wildcard.
  *
  * @param {string} pattern
- * @returns {string}
  */
 function literalPrefix (pattern) {
   const magic = pattern.search(PATTERN_MAGIC)

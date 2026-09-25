@@ -78,9 +78,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
     ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
-    'office-addin-mock',
-    'winston',
     'jest-image-snapshot',
+    'office-addin-mock',
   ].filter(Boolean), true)
 
   before(function () {
@@ -482,7 +481,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                     'across 1 of 1 test\\(s\\)\\.'
                   )
                 )
-                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+                assert.doesNotMatch(stdout, /executions? [\d, -]+:/)
               }
               if (isQuarantined || isDisabled) {
                 assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
@@ -1874,7 +1873,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           // Verify Datadog Test Optimization message is shown for suppressed quarantine failures
           assert.match(stdout, /Datadog Test Optimization/)
           assert.match(stdout, /Quarantined: 1 test run; 1 failure did not affect the test session\./)
-          assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
+          assert.match(stdout, /test-quarantine-1[^\n\r\u2028\u2029›]*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
         }
@@ -2066,6 +2065,46 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // Exit code should be 0 because the failing test is quarantined
         assert.strictEqual(exitCode, 0)
       })
+
+      for (const parallel of [false, true]) {
+        it(`preserves quarantine with dynamic ATR and bail (parallel=${parallel})`, async () => {
+          receiver.setSettings({
+            test_management: { enabled: true },
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+          const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const quarantined = tests.filter(test => test.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true')
+              assert.strictEqual(quarantined.length, 2)
+              assert.ok(quarantined.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.strictEqual(quarantined.at(-1).meta[TEST_FINAL_STATUS], 'skip')
+              assert.strictEqual(quarantined.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(tests.filter(test => test.meta[TEST_NAME].startsWith('quarantine tests 2')).length, 2)
+              const session = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(session.meta[TEST_STATUS], 'pass')
+            }
+          )
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine',
+              TEST_SEQUENCER: './ci-visibility/jest-mock-bypass-require/test-sequencer.js',
+              JEST_BAIL: '1',
+              SHOULD_CHECK_RESULTS: '1',
+              ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            },
+          })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 0)
+        })
+      }
 
       onlyLatestIt('reports failed ATR attempts when a quarantined test eventually passes', async () => {
         receiver.setSettings({
@@ -2425,7 +2464,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       }
 
-      const runJestWithBail = async (testsToRun) => {
+      const runJestWithBail = async (testsToRun, extraEnv = {}) => {
         let output = ''
         childProcess = exec(
           runTestsCommand,
@@ -2436,6 +2475,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               TESTS_TO_RUN: testsToRun,
               JEST_BAIL: '1',
               SHOULD_CHECK_RESULTS: '1',
+              ...extraEnv,
             },
           }
         )
@@ -2462,19 +2502,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       })
 
-      it('bails when attempt to fix makes quarantine and disabled a noop', async () => {
-        for (const bailCase of bailCases) {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 2 } })
-          setManagedTest(bailCase, true)
+      for (const dynamicAtrEnabled of [false, true]) {
+        it(`bails for attempt to fix despite quarantine or disabled (dynamic ATR=${dynamicAtrEnabled})`, async () => {
+          for (const bailCase of bailCases) {
+            receiver.setSettings({
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+              flaky_test_retries_enabled: dynamicAtrEnabled,
+            })
+            setManagedTest(bailCase, true)
 
-          const { exitCode, output } = await runJestWithBail(bailCase.testsToRun)
+            const { exitCode, output } = await runJestWithBail(bailCase.testsToRun, {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamicAtrEnabled),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,3,3,3,3',
+            })
 
-          assert.match(output, bailCase.attemptingToFixMessage, bailCase.label)
-          assert.strictEqual((output.match(bailCase.executionLogMessage) || []).length, 3, bailCase.label)
-          assert.match(output, /Test Suites:.*1 failed/, bailCase.label)
-          assert.strictEqual(exitCode, 1, bailCase.label)
-        }
-      })
+            assert.match(output, bailCase.attemptingToFixMessage, bailCase.label)
+            assert.strictEqual((output.match(bailCase.executionLogMessage) || []).length, 3, bailCase.label)
+            assert.match(output, /Test Suites:.*1 failed/, bailCase.label)
+            assert.strictEqual(exitCode, 1, bailCase.label)
+          }
+        })
+      }
     })
 
     it('does not crash if the request to get test management tests fails', async () => {
@@ -3061,7 +3109,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             eventsPromise,
           ])
 
-          assert.doesNotMatch(output, /\d+ skipped/)
+          assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         })
       }
 
@@ -3328,7 +3376,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         assert.doesNotMatch(output, /I am running concurrent hooks/)
-        assert.doesNotMatch(output, /\d+ skipped/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         assert.strictEqual(exitCode, 0)
       })
 
@@ -3405,7 +3453,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         // Discarded retries must leave the test tree, not surface as skipped tests.
-        assert.doesNotMatch(output, /\d+ skipped/)
+        assert.doesNotMatch(output, /(?<!\d)\d+ skipped/)
         // Retries must not run the *Each hooks Jest skips for their concurrent original.
         assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.strictEqual(exitCode, 0)
@@ -3553,25 +3601,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         // All retries should pass, so exit code should be 0
         assert.strictEqual(exitCode[0], 0)
       })
-    })
-  })
-
-  context('winston mocking', () => {
-    it('should allow winston to be mocked and verify createLogger is called', async () => {
-      childProcess = exec(
-        runTestsCommand,
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'jest-mock-bypass-require/winston-mock-test',
-            SHOULD_CHECK_RESULTS: '1',
-          },
-        }
-      )
-
-      const [code] = await once(childProcess, 'exit')
-      assert.strictEqual(code, 0, `Jest should pass but failed with code ${code}`)
     })
   })
 

@@ -328,12 +328,12 @@ describe('end to end sdk integration tests', () => {
     let originalMlApp
 
     before(() => {
-      originalMlApp = tracer._tracer._config.llmobs.mlApp
-      tracer._tracer._config.llmobs.mlApp = null
+      originalMlApp = tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP
+      tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = undefined
     })
 
     after(() => {
-      tracer._tracer._config.llmobs.mlApp = originalMlApp
+      tracer._tracer._config.llmobs.DD_LLMOBS_ML_APP = originalMlApp
     })
 
     it('defaults to the service name', async () => {

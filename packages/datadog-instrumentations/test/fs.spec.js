@@ -1,15 +1,49 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
+const { errorMonitor, EventEmitter, once } = require('node:events')
+const nativeFs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { describe, it, after, afterEach, before } = require('mocha')
+const { describe, it, after, afterEach, before, beforeEach } = require('mocha')
 
 const dc = require('dc-polyfill')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 
+const opErrorCh = dc.channel('apm:fs:operation:error')
+const opFinishCh = dc.channel('apm:fs:operation:finish')
 const opStartCh = dc.channel('apm:fs:operation:start')
+
+const streamConstructors = [
+  { methodName: 'createReadStream', className: 'ReadStream', resource: 'ReadStream' },
+  { methodName: 'createWriteStream', className: 'WriteStream', resource: 'WriteStream' },
+]
+const streamEvents = ['close', 'end', 'finish', errorMonitor]
+const expectedErrors = new Map()
+for (const { methodName } of streamConstructors) {
+  expectedErrors.set(methodName, getThrownError(() => nativeFs[methodName](null)))
+}
+
+/**
+ * @param {() => unknown} callback
+ * @returns {Error & { code?: string }}
+ */
+function getThrownError (callback) {
+  let thrownError
+
+  /**
+   * @param {Error & { code?: string }} error
+   * @returns {true}
+   */
+  function capture (error) {
+    thrownError = error
+    return true
+  }
+
+  assert.throws(callback, capture)
+  return thrownError
+}
 
 describe('fs instrumentation', () => {
   afterEach(() => {
@@ -26,6 +60,189 @@ describe('fs instrumentation', () => {
     await agent.load('fs', undefined, { flushInterval: 1 })
     const fs = require('fs')
     assert.notStrictEqual(fs, undefined)
+  })
+
+  describe('stream constructors', () => {
+    let fs, tracer
+
+    beforeEach(async () => {
+      tracer = await agent.load('fs', undefined, { flushInterval: 1 })
+      tracer.use('fs', { enabled: true })
+      fs = require('node:fs')
+    })
+
+    for (const { methodName, className, resource } of streamConstructors) {
+      describe(methodName, () => {
+        it('preserves invalid path errors', () => {
+          const expectedError = expectedErrors.get(methodName)
+          const activeSpan = tracer.scope().active()
+
+          assert.throws(() => fs[methodName](null), {
+            name: expectedError.name,
+            code: expectedError.code,
+            message: expectedError.message,
+          })
+
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+        })
+
+        it('rethrows the original constructor error without retaining tracing state or listeners', async () => {
+          const originalConstructor = fs[className]
+          const expectedError = getThrownError(() => Reflect.construct(originalConstructor, [null]))
+          let failedStream
+
+          fs[className] = class extends EventEmitter {
+            constructor () {
+              super()
+              failedStream = this
+              throw expectedError
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+          })
+          const activeSpan = tracer.scope().active()
+          let publishedError
+
+          /**
+           * @param {{ operation: string, error?: Error }} ctx
+           */
+          function onError (ctx) {
+            if (ctx.operation === resource) publishedError = ctx.error
+          }
+
+          opErrorCh.subscribe(onError)
+          try {
+            tracer.trace('parent', parentSpan => {
+              const actualError = getThrownError(() => fs[methodName](null))
+
+              assert.strictEqual(actualError, expectedError)
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+            })
+          } finally {
+            opErrorCh.unsubscribe(onError)
+            fs[className] = originalConstructor
+          }
+
+          assert.strictEqual(publishedError, expectedError)
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+          for (const event of streamEvents) {
+            assert.strictEqual(failedStream.listenerCount(event), 0)
+          }
+          await tracePromise
+        })
+
+        it('finishes tracing when the stream emits an error', async () => {
+          const originalConstructor = fs[className]
+          const streamError = new Error('stream failed')
+          let createdStream
+
+          fs[className] = class extends EventEmitter {
+            constructor () {
+              super()
+              createdStream = this
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+          })
+          const activeSpan = tracer.scope().active()
+          let publishedError
+
+          /**
+           * @param {{ operation: string, error?: Error }} ctx
+           */
+          function onError (ctx) {
+            if (ctx.operation === resource) publishedError = ctx.error
+          }
+
+          opErrorCh.subscribe(onError)
+          try {
+            tracer.trace('parent', parentSpan => {
+              const stream = fs[methodName]('unused')
+              stream.on('error', () => {})
+              stream.emit('error', streamError)
+
+              assert.strictEqual(stream, createdStream)
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+            })
+          } finally {
+            opErrorCh.unsubscribe(onError)
+            fs[className] = originalConstructor
+          }
+
+          assert.strictEqual(publishedError, streamError)
+          assert.strictEqual(tracer.scope().active(), activeSpan)
+          for (const event of streamEvents) {
+            assert.strictEqual(createdStream.listenerCount(event), 0)
+          }
+          await tracePromise
+        })
+
+        it('returns a valid stream and removes its tracing listeners after completion', async () => {
+          const directory = methodName === 'createWriteStream'
+            ? fs.mkdtempSync(path.join(os.tmpdir(), 'dd-fs-stream-'))
+            : undefined
+          const filename = directory ? path.join(directory, 'output') : __filename
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat().filter(span => span.name === 'fs.operation' && span.resource === resource)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].error, 0)
+            assert.strictEqual(spans[0].meta['file.path'], filename)
+          })
+          const activeSpan = tracer.scope().active()
+          const terminalEvent = methodName === 'createReadStream' ? 'end' : 'finish'
+          let publishedFinishes = 0
+
+          /**
+           * @param {{ operation: string }} ctx
+           */
+          function onFinish (ctx) {
+            if (ctx.operation === resource) publishedFinishes++
+          }
+
+          opFinishCh.subscribe(onFinish)
+          try {
+            const streamPromise = tracer.trace('parent', async parentSpan => {
+              const stream = fs[methodName](filename)
+              const closePromise = once(stream, 'close')
+              const terminalPromise = once(stream, terminalEvent)
+
+              assert.ok(stream instanceof fs[className])
+              if (methodName === 'createReadStream') {
+                stream.resume()
+              } else {
+                stream.end('test')
+              }
+              await terminalPromise
+
+              assert.strictEqual(tracer.scope().active(), parentSpan)
+              for (const event of streamEvents) {
+                assert.strictEqual(stream.listenerCount(event), event === 'close' ? 1 : 0)
+              }
+
+              await closePromise
+              for (const event of streamEvents) {
+                assert.strictEqual(stream.listenerCount(event), 0)
+              }
+            })
+
+            await Promise.all([streamPromise, tracePromise])
+            assert.strictEqual(publishedFinishes, 1)
+            assert.strictEqual(tracer.scope().active(), activeSpan)
+          } finally {
+            opFinishCh.unsubscribe(onFinish)
+            if (directory) fs.rmSync(directory, { recursive: true })
+          }
+        })
+      })
+    }
   })
 
   // Node 20 defines `fs.opendir` / `fs.opendirSync` as lazy accessor properties.
