@@ -38,13 +38,13 @@ To find `filePath`, inspect the installed package to locate where the target met
 `packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js`:
 
 ```javascript
-{ instrumentations: require('./instrumentations/<name>') },
+{ activate: true, instrumentations: require('./instrumentations/<name>') },
 ```
 
 Pure Orchestrion integrations need no identity instrumentation entrypoint or `hooks.js` entry. Add those only for a
 hybrid integration that also needs runtime setup or export modification (see Register in hooks.js below). For a pure
-integration, set `activationName` to its npm package name in the registry entry, then run
-`npm run generate:rewriter:targets`.
+integration, set `activate: true` in the registry entry as shown above, then run
+`npm run generate:rewriter:targets`. Omit the flag for hybrid integrations with another activation path.
 
 See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery support, and channel naming.
 

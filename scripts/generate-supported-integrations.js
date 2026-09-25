@@ -17,7 +17,7 @@ const VERSIONS_PACKAGE = path.join(ROOT, 'packages/dd-trace/test/plugins/version
 const INSTRUMENTATION_HOOKS = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/hooks.js')
 const INSTRUMENTATION_REGISTRY = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/instrumentations.js')
 const {
-  getRewriteActivationName,
+  isRewriteActivationEnabled,
   instrumentations: rewriterInstrumentations,
 } = require(
   '../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry'
@@ -106,7 +106,7 @@ function readInstrumentationRanges (engines) {
     }
 
     for (const { module } of rewriterInstrumentations) {
-      if (!module?.versionRange || !getRewriteActivationName(module.name)) continue
+      if (!module?.versionRange || !isRewriteActivationEnabled(module.name)) continue
       const set = ranges.get(module.name) ?? new Set()
       set.add(module.versionRange)
       ranges.set(module.name, set)

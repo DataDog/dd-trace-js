@@ -42,7 +42,7 @@ shimmer is still necessary, leave a code comment naming the reason.
 ```text
 packages/datadog-instrumentations/src/
 └── helpers/rewriter/
-    ├── instrumentation-registry.js            # Add the config group and optional activationName
+    ├── instrumentation-registry.js            # Add the config group and optional activate: true flag
     └── instrumentations/<name>.js             # The config array
 ```
 
@@ -56,9 +56,9 @@ integrations report compatibility at the rewrite-target level when an exact targ
 from the same package is not reported. Bundler rewrites keep their existing activation path and do not report this
 compatibility telemetry.
 
-Register a pure integration by adding its config and a config-registry entry with `activationName` set to its npm
-package name, then run `npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery;
-the registry's `activationName` controls evaluation-time plugin activation.
+Register a pure integration by adding its config and a config-registry entry with `activate: true`, then run
+`npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; the registry's
+`activate` flag controls evaluation-time plugin activation using the module name from the config.
 
 ## Config Schema
 

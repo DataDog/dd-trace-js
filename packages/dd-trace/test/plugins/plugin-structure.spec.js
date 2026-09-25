@@ -9,7 +9,7 @@ const { describe, it } = require('mocha')
 require('../setup/core')
 const hooks = require('../../../datadog-instrumentations/src/helpers/hooks')
 const {
-  getRewriteActivationName,
+  isRewriteActivationEnabled,
   isRewriteTargetName,
 } = require('../../../datadog-instrumentations/src/helpers/rewriter/targets')
 const plugins = require('../../src/plugins')
@@ -193,9 +193,9 @@ describe('Plugin Structure Validation', () => {
     for (const name of names) {
       assert.equal(hooks[name], undefined)
       assert.equal(isRewriteTargetName(name), true)
-      assert.equal(getRewriteActivationName(name), name)
+      assert.equal(isRewriteActivationEnabled(name), true)
     }
-    assert.equal(getRewriteActivationName('graphql'), undefined)
+    assert.equal(isRewriteActivationEnabled('graphql'), false)
     assert.equal(typeof hooks.graphql, 'function')
   })
 
