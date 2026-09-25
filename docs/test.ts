@@ -199,6 +199,7 @@ const httpServerOptions: plugins.HttpServer = {
 
 const httpClientOptions: plugins.HttpClient = {
   ...httpOptions,
+  queryStringAllowlist: ['page', 'filter'],
   splitByDomain: true,
   propagationBlocklist: ['url', /url/, url => true],
   hooks: {
@@ -212,6 +213,7 @@ const http2ServerOptions: plugins.Http2Server = {
 
 const http2ClientOptions: plugins.Http2Client = {
   ...httpOptions,
+  queryStringAllowlist: ['page', 'filter'],
   splitByDomain: true
 };
 

@@ -9,7 +9,7 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
-const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { buildClientHttpUrl, normalizeQueryStringAllowlist } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -35,11 +35,17 @@ class HttpClientPlugin extends ClientPlugin {
     const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
     const path = pathname ? stripQueryAndFragment(pathname) : '/'
     const uri = `${base}${path}`
+    const hasQuery = pathname.length > path.length && pathname.charCodeAt(path.length) === 63
 
     const allowed = this.config.filter(uri)
 
     const method = (options.method || 'GET').toUpperCase()
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const httpUrl = hasQuery && allowed && this.config.queryStringTaggingEnabled !== false
+      ? otelSemantics
+        ? buildClientHttpUrl(this.config, base, pathname, uri)
+        : this.config.queryStringSchema.getUrl(this.config, pathname, uri, this.constructor.id)
+      : uri
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
@@ -52,7 +58,7 @@ class HttpClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, pathname, uri) : uri,
+        'http.url': httpUrl,
         'out.host': hostname,
       },
       metrics: {
@@ -180,6 +186,7 @@ function normalizeClientConfig (config) {
     propagationFilter,
     headers,
     hooks,
+    queryStringAllowlist: normalizeQueryStringAllowlist(config.queryStringAllowlist),
   }
 }
 

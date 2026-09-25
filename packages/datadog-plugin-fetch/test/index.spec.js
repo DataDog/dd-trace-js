@@ -30,6 +30,25 @@ describe('Plugin', function () {
       return server
     }
 
+    /**
+     * @param {string} requestUrl
+     * @param {string} expectedUrl
+     * @returns {Promise<void>}
+     */
+    async function sendFetchWithExpectedUrl (requestUrl, expectedUrl) {
+      const trace = agent.assertFirstTraceSpan({
+        meta: {
+          'http.status_code': '200',
+          'http.url': expectedUrl,
+        },
+      })
+      const [, response] = await Promise.all([
+        trace,
+        fetch(requestUrl),
+      ])
+      assert.strictEqual(response.status, 200)
+    }
+
     beforeEach(() => {
       appListener = null
     })
@@ -216,6 +235,27 @@ describe('Plugin', function () {
             .catch(done)
 
           fetch(`http://localhost:${port}/user?foo=bar`)
+        })
+      })
+
+      it('should report a repeated query schema without retaining values', done => {
+        const app = express()
+
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+
+        appListener = server(app, port => {
+          const strippedUrl = `http://localhost:${port}/user`
+
+          async function run () {
+            await sendFetchWithExpectedUrl(`${strippedUrl}?page=1`, strippedUrl)
+            await sendFetchWithExpectedUrl(`${strippedUrl}?page=2`, strippedUrl)
+            await sendFetchWithExpectedUrl(`${strippedUrl}?page=3`, `${strippedUrl}?page=<number>`)
+            done()
+          }
+
+          run().catch(done)
         })
       })
 
