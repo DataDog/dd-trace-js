@@ -7,6 +7,7 @@ const formats = require('../../../../ext/formats')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
+const NoopSpan = require('../noop/span')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -69,10 +70,17 @@ class DatadogTracer {
     }
   }
 
+  /**
+   * @param {string} name
+   * @param {import('opentracing').SpanOptions & { operationName?: string, integrationName?: string }} [options]
+   * @returns {Span | NoopSpan}
+   */
   startSpan (name, options = {}) {
     const parent = options.childOf
       ? getContext(options.childOf)
       : getParent(options.references)
+
+    if (parent?._noop) return parent._noop
 
     const span = new Span(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
@@ -105,15 +113,13 @@ class DatadogTracer {
   }
 
   /**
-   * @param {Span|SpanContext} context
+   * @param {Span|NoopSpan|SpanContext} context
    * @param {string} format
    * @param {object} [carrier]
    * @returns {object | undefined}
    */
   inject (context, format, carrier) {
-    if (context instanceof Span) {
-      context = context.context()
-    }
+    context = getContext(context) || context
 
     try {
       if (format !== 'text_map_dsm' && format !== formats.LOG) {
@@ -140,11 +146,11 @@ class DatadogTracer {
 /**
  * Get the span context from a span or a span context.
  *
- * @param {Span|SpanContext} spanContext
+ * @param {Span|NoopSpan|SpanContext} spanContext
  * @returns {SpanContext|null}
  */
 function getContext (spanContext) {
-  if (spanContext instanceof Span) {
+  if (spanContext instanceof Span || spanContext instanceof NoopSpan) {
     spanContext = spanContext.context()
   }
 

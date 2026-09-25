@@ -235,6 +235,22 @@ describe('plugins/util/web', () => {
       assert.strictEqual(span.context().hasTag(HTTP_CLIENT_IP), false)
     })
 
+    it('extracts the client IP once for a suppressed request', () => {
+      const config = web.normalizeConfig({
+        clientIpEnabled: true,
+        DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: false,
+      })
+      config.extractIp = sinon.spy(config.extractIp)
+      req.method = 'OPTIONS'
+      req.url = '/'
+      req.headers['x-forwarded-for'] = '8.8.8.8'
+
+      web.startSpan(tracer, config, req, res, 'test.request')
+      web.finishAll(web.getContext(req))
+
+      sinon.assert.calledOnce(config.extractIp)
+    })
+
     // Regression for the per-plugin scoping fix: a later normalizeConfig call
     // for a different plugin must not disable IP extraction on the earlier
     // plugin's config. Used to fail because extractIp lived on the module.
@@ -248,6 +264,23 @@ describe('plugins/util/web', () => {
 
         assert.strictEqual(span.context().getTag(HTTP_CLIENT_IP), '8.8.8.8')
       })
+  })
+
+  describe('startSpan parent selection', () => {
+    it('preserves an active Pub/Sub parent for a suppressed OPTIONS request', () => {
+      const config = web.normalizeConfig({ DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED: false })
+      req.method = 'OPTIONS'
+      req.url = '/'
+
+      tracer.trace('pubsub.push.receive', parent => {
+        const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+        assert.strictEqual(span.context().toTraceId(), parent.context().toTraceId())
+        assert.strictEqual(span.context()._noop, span)
+        assert.notStrictEqual(span.context()._sampling, parent.context()._sampling)
+        assert.strictEqual(parent.context()._sampling.priority, undefined)
+      })
+    })
   })
 
   describe('extractIncomingServerContext', () => {
