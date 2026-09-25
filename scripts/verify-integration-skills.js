@@ -22,6 +22,19 @@ const MECHANISM_TRAITS = new Set([...ORCHESTRION_TRAITS, 'shimmer'])
 const PLUGIN_BASE_DIRECTORY = 'packages/dd-trace/src/plugins/'
 const NON_BASE_PLUGIN_FILES = new Set(['index.js', 'plugin.js'])
 const ROUTER_BASE_SOURCE = 'packages/datadog-plugin-router/src/index.js'
+const INSTRUMENTATION_DIRECTORY = 'packages/datadog-instrumentations/src'
+const BASE_CATEGORIES = [
+  ['packages/dd-trace/src/plugins/database.js', 'database'],
+  ['packages/dd-trace/src/plugins/cache.js', 'cache'],
+  ['packages/dd-trace/src/plugins/storage.js', 'database'],
+  ['packages/dd-trace/src/plugins/producer.js', 'queue'],
+  ['packages/dd-trace/src/plugins/consumer.js', 'queue'],
+  [ROUTER_BASE_SOURCE, 'web'],
+  ['packages/dd-trace/src/plugins/server.js', 'web'],
+  ['packages/dd-trace/src/plugins/log_plugin.js', 'log'],
+  ['packages/dd-trace/src/plugins/ci_plugin.js', 'test-optimization'],
+  ['packages/dd-trace/src/plugins/client.js', 'client'],
+]
 const SOURCE_SUFFIXES = ['.js', '.cjs', '.mjs']
 const TEST_SUFFIXES = ['.spec.js', '.spec.cjs', '.spec.mjs']
 const TERMINAL_CONTROL_PATTERN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
@@ -139,7 +152,7 @@ const failures = []
  * @property {PackageRegistration[]} packages
  * @property {{ contractSources: string[], channelAnchors: string[] }} evidence
  * @property {InspectionRegistrations} registrations
- * @property {{ integration: string, files: string[], registrations: string[] } | undefined} reference
+ * @property {{ integration: string, category: string, files: string[], registrations: string[] } | undefined} reference
  * @property {string[]} references
  */
 
@@ -1070,45 +1083,50 @@ function findReferences (mode, traits, hasRewriter) {
 }
 
 /**
+ * Picks the most specific category a plugin's base-class chain reaches; database and cache precede the client base
+ * they inherit from.
+ *
+ * @param {string[]} contractSources
+ */
+function findCategory (contractSources) {
+  for (const [source, category] of BASE_CATEGORIES) {
+    if (contractSources.includes(source)) return category
+  }
+  return 'common'
+}
+
+/**
  * @param {string} integration
  * @param {string} mode
  * @param {string[]} traits
- * @returns {{ integration: string, files: string[], registrations: string[] } | undefined}
+ * @returns {{ integration: string, category: string, files: string[], registrations: string[] } | undefined}
  */
 function findClosestReference (integration, mode, traits) {
   if (traits.length === 0) return
 
   const isServerless = mode === 'serverless'
   const isShimmer = traits.includes('shimmer')
-  const directory = isShimmer || isServerless
-    ? 'packages/datadog-instrumentations/src'
-    : 'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations'
+  const isOrchestrion = traits.some(trait => ORCHESTRION_TRAITS.has(trait))
   const requestedBase = traits.find(trait => pluginBaseSources.has(trait))
   const requestedSource = requestedBase ? pluginBaseSources.get(requestedBase) : undefined
-  let closest
-  let closestScore = 0
+  // Serverless runtimes are their own category; their base class only describes the invocation role.
+  const requestedCategory = isServerless
+    ? 'serverless'
+    : requestedSource ? findCategory([requestedSource]) : undefined
+  const candidates = []
 
-  for (const filename of listRelativeFiles(directory, SOURCE_SUFFIXES)) {
-    if ((isShimmer || isServerless) && path.posix.dirname(filename) !== directory) continue
+  for (const filename of listRelativeFiles(INSTRUMENTATION_DIRECTORY, SOURCE_SUFFIXES)) {
+    if (path.posix.dirname(filename) !== INSTRUMENTATION_DIRECTORY) continue
 
     const candidate = path.basename(filename, path.extname(filename))
-    if (candidate === 'index' || candidate === integration) continue
-
-    const source = read(filename)
-    if (isServerless) {
-      if (findHookPackages(candidate).size === 0) continue
-    } else if (isShimmer
-      ? !source.includes('datadog-shimmer') || findHookPackages(candidate).size === 0
-      : findRewriterRegistrations(candidate).length === 0) continue
+    if (candidate === 'index' || candidate === integration || findHookPackages(candidate).size === 0) continue
 
     const registrations = findIntegrationRegistrations(candidate)
     const pluginSources = listPluginFiles(registrations.pluginDirectories, 'src', SOURCE_SUFFIXES)
     const contracts = findContractSources(pluginSources, registrations.pluginDirectories)
-    const contractSources = contracts.sources
-    const requestedPluginSource = requestedSource ? contracts.direct.get(requestedSource) : undefined
-    let hasServerlessType = false
     let hasRequestedKind = false
     if (isServerless) {
+      let hasServerlessType = false
       for (const pluginSource of pluginSources) {
         const sourceCode = parseJavaScript(pluginSource)
         if (!sourceCode) continue
@@ -1124,17 +1142,49 @@ function findClosestReference (integration, mode, traits) {
       if (!hasServerlessType) continue
     }
 
-    let score = isServerless || isShimmer || traits.includes('orchestrion') ? 1 : 0
+    const rewriter = resolveLocalSource(`${INSTRUMENTATION_DIRECTORY}/helpers/rewriter/instrumentations/index.js`,
+      `./${candidate}`)
+    candidates.push({
+      candidate,
+      filename,
+      rewriter: rewriter && findRewriterRegistrations(candidate).length > 0 ? rewriter : undefined,
+      registrations,
+      pluginSources,
+      contracts,
+      hasRequestedKind,
+      category: isServerless ? 'serverless' : findCategory(contracts.sources),
+    })
+  }
+
+  // A sibling in the requested category outranks every mechanism match; only an unmatched category uses `common`.
+  const sameCategory = requestedCategory
+    ? candidates.filter(({ category }) => category === requestedCategory)
+    : candidates
+  const pool = sameCategory.length > 0 || !requestedCategory
+    ? sameCategory
+    : candidates.filter(({ category }) => category === 'common')
+  let closest
+  let closestScore = 0
+
+  for (const { candidate, filename, rewriter, registrations, pluginSources, contracts, hasRequestedKind, category }
+    of pool) {
+    const source = read(filename)
+    const rewriterSource = rewriter ? read(rewriter) : ''
+    const requestedPluginSource = requestedSource ? contracts.direct.get(requestedSource) : undefined
+    let score = requestedCategory || isServerless ? 1 : 0
+    if (isShimmer && !rewriter && source.includes('datadog-shimmer')) score += 2
+    if (isOrchestrion && rewriter) score += 2
     if (requestedPluginSource) {
       score += 9
-    } else if (requestedSource && contractSources.includes(requestedSource)) {
+    } else if (requestedSource && contracts.sources.includes(requestedSource)) {
       score += 8
     }
     if (hasRequestedKind) score += 8
-    if (traits.includes('cjs-esm') && /cjs|commonjs/i.test(source) && /esm/i.test(source)) score += 4
+    if (traits.includes('cjs-esm') && /cjs|commonjs/i.test(rewriterSource || source) &&
+        /esm/i.test(rewriterSource || source)) score += 4
     for (const [trait, kind] of TRAIT_KINDS) {
       if (traits.includes(trait) && (
-        source.includes(`kind: '${kind}'`) || source.includes(`kind: "${kind}"`)
+        rewriterSource.includes(`kind: '${kind}'`) || rewriterSource.includes(`kind: "${kind}"`)
       )) score += 2
     }
     if (score <= closestScore) continue
@@ -1142,15 +1192,16 @@ function findClosestReference (integration, mode, traits) {
     closestScore = score
     const tests = listPluginFiles(registrations.pluginDirectories, 'test', TEST_SUFFIXES)
     const pluginIndex = existingPath(`packages/datadog-plugin-${candidate}/src/index.js`) ??
-      pluginSources.find(filename => path.basename(filename) === 'index.js')
+      pluginSources.find(pluginSource => path.basename(pluginSource) === 'index.js')
     const integrationTest = existingPath(`packages/datadog-plugin-${candidate}/test/index.spec.js`) ??
-      tests.find(filename => path.basename(filename) === 'index.spec.js')
+      tests.find(test => path.basename(test) === 'index.spec.js')
     const ledger = findRegistrationLedger(registrations.publicIds)
     closest = {
       integration: candidate,
+      category,
       files: compactPaths([
+        rewriter,
         filename,
-        resolveLocalSource('packages/datadog-instrumentations/src/helpers/hooks.js', `../${candidate}`),
         requestedPluginSource ?? pluginIndex ?? pluginSources[0],
         integrationTest ?? tests[0],
       ]),
@@ -1306,7 +1357,8 @@ function renderInspection (packet) {
   }
   if (packet.reference) {
     lines.push(
-      `Closest current reference: ${escapeControlCharacters(packet.reference.integration)}`,
+      `Closest current reference: ${escapeControlCharacters(packet.reference.integration)} ` +
+        `(${escapeControlCharacters(packet.reference.category)})`,
       '  files:',
       ...packet.reference.files.map(filename => `    ${escapeControlCharacters(filename)}`),
       '  registrations:',

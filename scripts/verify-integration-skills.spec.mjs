@@ -771,6 +771,7 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     ])
     assert.deepStrictEqual(packet.reference, {
       integration: 'fixture',
+      category: 'cache',
       files: [
         'packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/fixture.js',
         'packages/datadog-instrumentations/src/fixture.js',
@@ -882,7 +883,7 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(missing.stdout, /^ {2}new-plugin \(candidate\)$/m)
     assert.match(missing.stdout, /^Contract sources:\n {2}none$/m)
     assert.match(missing.stdout, /^ {2}packages\/dd-trace\/src\/plugins\/cache\.js$/m)
-    assert.match(missing.stdout, /^Closest current reference: fixture$/m)
+    assert.match(missing.stdout, /^Closest current reference: fixture \(cache\)$/m)
     assert.strictEqual(noTraits.status, 0)
     assert.match(noTraits.stdout, /^Mode: review$/m)
     assert.match(noTraits.stdout, /^Contract sources:\n {2}none$/m)
@@ -1064,19 +1065,18 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.strictEqual(reference.files.includes('packages/datadog-instrumentations/src/memcached.js'), true)
   })
 
-  it('accepts every plugin base in the repository as a trait', () => {
-    const bases = new Map([
-      ['composite', 'packages/dd-trace/src/plugins/composite.js'],
-      ['log', 'packages/dd-trace/src/plugins/log_plugin.js'],
-      ['schema', 'packages/dd-trace/src/plugins/schema.js'],
-      ['storage', 'packages/dd-trace/src/plugins/storage.js'],
-    ])
-    for (const [trait, source] of bases) {
+  for (const [trait, source] of [
+    ['composite', 'packages/dd-trace/src/plugins/composite.js'],
+    ['log', 'packages/dd-trace/src/plugins/log_plugin.js'],
+    ['schema', 'packages/dd-trace/src/plugins/schema.js'],
+    ['storage', 'packages/dd-trace/src/plugins/storage.js'],
+  ]) {
+    it(`accepts the repository plugin base ${trait} as a trait`, () => {
       const packet = inspect(runRepositoryTool, 'new-plugin', ['--traits', trait])
 
-      assert.strictEqual(packet.references.includes(source), true, trait)
-    }
-  })
+      assert.strictEqual(packet.references.includes(source), true)
+    })
+  }
 
   it('derives plugin base traits from the plugin base directory', () => {
     const packet = inspect(runTool, 'new-plugin', ['--traits', 'fixture_base'], (root) => {
@@ -1096,11 +1096,35 @@ module.exports = require('../../dd-trace/src/plugins/pro' + 'ducer')
     assert.match(packet.reference.files.join('\n'), /rewriter\/instrumentations/)
   })
 
+  for (const [traits, category] of [
+    ['database', 'database'],
+    ['database,callback', 'database'],
+    ['producer,shimmer', 'queue'],
+    ['cache,orchestrion', 'cache'],
+    ['log', 'log'],
+    ['router', 'web'],
+  ]) {
+    it(`selects a ${category} reference first for --traits ${traits}`, () => {
+      const { reference } = inspect(runRepositoryTool, 'new-plugin', ['--traits', traits])
+
+      assert.strictEqual(reference?.category, category)
+    })
+  }
+
+  it('falls back to a common reference only when no integration shares the category', () => {
+    const common = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'tracing,shimmer'])
+    const none = inspect(runTool, 'new-plugin', ['--traits', 'server'])
+
+    assert.strictEqual(common.reference?.category, 'common')
+    assert.strictEqual(none.reference, undefined)
+  })
+
   it('prefers a direct plugin base when selecting a shimmer reference', () => {
     const reference = inspect(runRepositoryTool, 'new-plugin', ['--traits', 'shimmer,client']).reference
 
-    assert.strictEqual(reference.integration, 'amqplib')
-    assert.strictEqual(reference.files.includes('packages/datadog-plugin-amqplib/src/client.js'), true)
+    // amqplib also extends the client base, but its producer and consumer make it a queue sibling.
+    assert.strictEqual(reference.category, 'client')
+    assert.strictEqual(reference.integration, 'aws-sdk')
   })
 
   it('keeps package linkage narrow when an instrumentation uses a shared plugin', () => {
