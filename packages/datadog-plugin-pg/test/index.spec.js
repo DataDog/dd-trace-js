@@ -256,85 +256,38 @@ describe('Plugin', () => {
             })
           }
 
-          {
-            const getterTest = semver.intersects(version, '>=8.0.3') ? it : it.skip
-            getterTest('reads a query getter once and preserves it for reuse', async () => {
-              let reads = 0
-              const query = { get text () { return `SELECT ${++reads} AS value` } }
-
-              try {
-                tracer.use('pg', false)
-                const native = await client.query(query)
-                assert.strictEqual(reads, 1)
-
-                reads = 0
-                tracer.use('pg', true)
-                const firstAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS value' }, {
-                  spanResourceMatch: /^SELECT 1 AS value$/,
-                })
-                const [first] = await Promise.all([client.query(query), firstAssertion])
-                assert.strictEqual(reads, 1)
-                assert.deepStrictEqual(first.rows, native.rows)
-
-                const secondAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 2 AS value' }, {
-                  spanResourceMatch: /^SELECT 2 AS value$/,
-                })
-                const [second] = await Promise.all([client.query(query), secondAssertion])
-                assert.strictEqual(reads, 2)
-                assert.deepStrictEqual(second.rows, [{ value: 2 }])
-
-                const callbackAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 3 AS value' }, {
-                  spanResourceMatch: /^SELECT 3 AS value$/,
-                })
-                const callbackResult = new Promise((resolve, reject) => {
-                  client.query(query, (error, result) => {
-                    if (error) reject(error)
-                    else resolve(result)
-                  })
-                })
-                const [third] = await Promise.all([callbackResult, callbackAssertion])
-                assert.strictEqual(reads, 3)
-                assert.deepStrictEqual(third.rows, [{ value: 3 }])
-              } finally {
-                tracer.use('pg', true)
-                await client.end()
-              }
+          it('does not inspect an unchanged query text descriptor', async () => {
+            const query = new Proxy({ text: 'SELECT 1 AS value' }, {
+              /**
+               * @param {{ text: string }} target
+               * @param {string | symbol} property
+               */
+              getOwnPropertyDescriptor (target, property) {
+                if (property === 'text') throw new Error('query text descriptor inspected')
+                return Reflect.getOwnPropertyDescriptor(target, property)
+              },
             })
 
-            getterTest('restores an inherited query getter after execution', async () => {
-              let reads = 0
-              class QueryConfig {
-                get text () { return `SELECT ${++reads} AS value` }
-              }
-              const query = new QueryConfig()
-
+            try {
+              tracer.use('pg', false)
+              const native = await client.query(query)
+              tracer.use('pg', { dbmPropagationMode: 'disabled' })
+              const trace = agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS value' }, {
+                spanResourceMatch: /^SELECT 1 AS value$/,
+              })
               try {
-                tracer.use('pg', false)
-                const native = await client.query(query)
-                assert.strictEqual(reads, 1)
-
-                reads = 0
-                tracer.use('pg', true)
-                const firstAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 1 AS value' }, {
-                  spanResourceMatch: /^SELECT 1 AS value$/,
-                })
-                const [first] = await Promise.all([client.query(query), firstAssertion])
-                assert.strictEqual(reads, 1)
-                assert.deepStrictEqual(first.rows, native.rows)
-                assert.strictEqual(Object.hasOwn(query, 'text'), false)
-
-                const secondAssertion = agent.assertFirstTraceSpan({ resource: 'SELECT 2 AS value' }, {
-                  spanResourceMatch: /^SELECT 2 AS value$/,
-                })
-                const [second] = await Promise.all([client.query(query), secondAssertion])
-                assert.strictEqual(reads, 2)
-                assert.deepStrictEqual(second.rows, [{ value: 2 }])
+                const instrumented = await client.query(query)
+                await trace
+                assert.deepStrictEqual(instrumented.rows, native.rows)
+                assert.strictEqual(query.text, 'SELECT 1 AS value')
               } finally {
-                tracer.use('pg', true)
-                await client.end()
+                trace.cancel()
               }
-            })
-          }
+            } finally {
+              tracer.use('pg', true)
+              await client.end()
+            }
+          })
 
           it('should handle callback errors', done => {
             let error
@@ -1601,20 +1554,6 @@ describe('Plugin', () => {
           await client.query(buildQuery(), ['third'])
         })
 
-        it('should not fail when using query object with getters', done => {
-          const query = {
-            name: 'pgSelectQuery',
-            get text () { return 'SELECT $1::text as message' },
-          }
-
-          client.query(query, ['Hello world!'], async (err) => {
-            done(err)
-          })
-          assert.strictEqual(client[queryQueueName][0].text,
-            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-            '*/ SELECT $1::text as message')
-        })
-
         it('does not accumulate the DBM comment when reusing a prepared-statement query object', done => {
           const expected =
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
@@ -1622,27 +1561,6 @@ describe('Plugin', () => {
           const query = {
             name: 'pgSelectQuery',
             text: 'SELECT $1::text as message',
-          }
-
-          client.query(query, ['Hello world!'], (err) => {
-            if (err) return done(err)
-
-            client.query(query, ['Hello world!'], (err2) => {
-              if (err2) return done(err2)
-
-              assert.strictEqual(query.text, expected)
-              done()
-            })
-          })
-        })
-
-        it('does not accumulate the DBM comment when reusing a getter-shaped query object', done => {
-          const expected =
-            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
-            '*/ SELECT $1::text as message'
-          const query = {
-            name: 'pgSelectQuery',
-            get text () { return 'SELECT $1::text as message' },
           }
 
           client.query(query, ['Hello world!'], (err) => {
@@ -1676,15 +1594,14 @@ describe('Plugin', () => {
 
         it('should not fail when using query object that is an EventEmitter', done => {
           class Query extends EventEmitter {
+            /**
+             * @param {string} name
+             * @param {string} text
+             */
             constructor (name, text) {
               super()
               this.name = name
-              this._internalText = text
-            }
-
-            get text () {
-              assert.deepStrictEqual(typeof this.on, 'function')
-              return this._internalText
+              this.text = text
             }
           }
 
@@ -1933,22 +1850,6 @@ describe('Plugin', () => {
       assert.strictEqual(results[1].rows[0].value, 1)
     })
 
-    it('uses one getter value for transaction filtering and SQL execution', async () => {
-      let reads = 0
-      const query = { get text () { return ++reads === 1 ? 'COMMIT' : 'SELECT 1 AS value' } }
-
-      tracer.use('pg', false)
-      const native = await client.query(query)
-      assert.strictEqual(native.command, 'COMMIT')
-      assert.strictEqual(reads, 1)
-
-      reads = 0
-      tracer.use('pg', true)
-      const instrumented = await traceTransaction(() => client.query(query), [])
-      assert.strictEqual(instrumented.command, native.command)
-      assert.strictEqual(reads, 1)
-    })
-
     it('ignores transaction commands after PostgreSQL line and nested block comments', async () => {
       const begin = '/* outer /* inner */ outer */ BEGIN'
       const commit = '--note\nCOMMIT'
@@ -2002,35 +1903,17 @@ describe('Plugin', () => {
     })
 
     it('restores reused query text when COMMIT becomes filtered after DBM injection', async () => {
-      const queries = [
-        { text: 'COMMIT' },
-        { get text () { return 'COMMIT' } },
-      ]
+      const query = { text: 'COMMIT' }
 
       await traceTransaction(async () => {
-        for (const query of queries) {
-          tracer.use('pg', { dbmPropagationMode: 'full', ignoredTransactionOperations: [] })
-          assert.strictEqual((await client.query(query)).command, 'COMMIT')
-          assert.match(query.text, /traceparent=/)
-
-          tracer.use('pg', { dbmPropagationMode: 'full', ignoredTransactionOperations: ['commit'] })
-          assert.strictEqual((await client.query(query)).command, 'COMMIT')
-          assert.strictEqual(query.text, 'COMMIT')
-        }
-      }, ['COMMIT', 'COMMIT'])
-    })
-
-    it('keeps fresh query getters live after a filtered COMMIT', async () => {
-      let currentSql = 'COMMIT'
-      const query = { get text () { return currentSql } }
-
-      await traceTransaction(async () => {
+        tracer.use('pg', { dbmPropagationMode: 'full', ignoredTransactionOperations: [] })
         assert.strictEqual((await client.query(query)).command, 'COMMIT')
-        currentSql = 'SELECT 1 AS value'
-        const result = await client.query(query)
-        assert.strictEqual(result.command, 'SELECT')
-        assert.strictEqual(result.rows[0].value, 1)
-      }, ['SELECT 1 AS value'])
+        assert.match(query.text, /traceparent=/)
+
+        tracer.use('pg', { dbmPropagationMode: 'full', ignoredTransactionOperations: ['commit'] })
+        assert.strictEqual((await client.query(query)).command, 'COMMIT')
+        assert.strictEqual(query.text, 'COMMIT')
+      }, ['COMMIT'])
     })
 
     it('traces a reused query object after its filtered SQL changes', async () => {

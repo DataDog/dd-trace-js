@@ -194,11 +194,12 @@ function wrapQuery (query) {
     const pgQuery = args[0] !== null && typeof args[0] === 'object'
       ? args[0]
       : { text: args[0] }
+    const isCallerQuery = pgQuery === args[0]
 
     const textPropObj = pgQuery.cursor ?? pgQuery
     const stream = typeof textPropObj.read === 'function'
 
-    const cachedText = originalTextCache.get(textPropObj)
+    const cachedText = isCallerQuery ? originalTextCache.get(textPropObj) : undefined
     const originalText = cachedText === undefined ? textPropObj.text : cachedText
 
     const abortController = new AbortController()
@@ -260,61 +261,24 @@ function wrapQuery (query) {
       }
 
       const injected = ctx.injected
-      let originalDescriptor
-      let restoreText = false
       if (injected !== undefined && (injected !== originalText || cachedText !== undefined)) {
-        // Skip the per-read getter trampoline when `text` is a configurable, writable data
-        // property (the pg / pg-cursor common shape). Accessor descriptors and read-only data
-        // still go through `defineProperty(get)` so `get text ()` query objects keep working.
-        const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
-        let replaced = false
-        if (textProp?.configurable === true && textProp.writable === true) {
-          textPropObj.text = injected
-          replaced = true
-        } else if (textProp === undefined || textProp.configurable === true) {
-          Object.defineProperty(textPropObj, 'text', {
-            configurable: true,
-            get () { return injected },
-          })
-          replaced = true
-        }
-        if (replaced) {
-          if (injected === originalText) {
-            originalTextCache.delete(textPropObj)
-          } else {
-            originalTextCache.set(textPropObj, originalText)
+        if (isCallerQuery) {
+          const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+          if (textProp?.configurable === true && textProp.writable === true) {
+            textPropObj.text = injected
+            if (injected === originalText) {
+              originalTextCache.delete(textPropObj)
+            } else {
+              originalTextCache.set(textPropObj, originalText)
+            }
           }
-        }
-      } else if (injected !== undefined && injected === originalText &&
-        pgQuery === args[0] && textPropObj === pgQuery) {
-        const descriptor = Object.getOwnPropertyDescriptor(pgQuery, 'text')
-        if ((descriptor === undefined || (descriptor.configurable && typeof descriptor.get === 'function')) &&
-          typeof pgQuery.submit !== 'function') {
-          Object.defineProperty(pgQuery, 'text', {
-            configurable: true,
-            value: originalText,
-          })
-          originalDescriptor = descriptor
-          restoreText = true
+        } else {
+          textPropObj.text = injected
         }
       }
 
       args[0] = pgQuery
-
-      let retval
-      if (restoreText) {
-        try {
-          retval = query.apply(this, args)
-        } finally {
-          if (originalDescriptor === undefined) {
-            delete pgQuery.text
-          } else {
-            Object.defineProperty(pgQuery, 'text', originalDescriptor)
-          }
-        }
-      } else {
-        retval = query.apply(this, args)
-      }
+      const retval = query.apply(this, args)
 
       const deperecated = Object.hasOwn(this, '_activeQuery')
       const queryQueue = deperecated ? this._queryQueue : this.queryQueue
