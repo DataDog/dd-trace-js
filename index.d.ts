@@ -298,6 +298,7 @@ interface Plugins {
   "playwright": tracer.plugins.playwright;
   "pg": tracer.plugins.pg;
   "pino": tracer.plugins.pino;
+  "postgres": tracer.plugins.postgres;
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
@@ -3129,6 +3130,25 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [Postgres.js](https://github.com/porsager/postgres) module.
+     */
+    interface postgres extends DatabaseInstrumentation {
+      /**
+       * The service name to be used for this plugin.
+       */
+      service?: string;
+      /**
+       * The database monitoring propagation mode to be used for this plugin.
+       */
+      dbmPropagationMode?: TracerOptions['dbmPropagationMode'];
+      /**
+       * Appends the SQL comment propagation to the query string. Prepends the comment if `false`. For long query strings, the appended propagation comment might be truncated, causing loss of correlation between the query and trace.
+       */
+      appendComment?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [@prisma/client](https://www.prisma.io/docs/orm/prisma-client) module.
      */
     interface prisma extends PrismaClient, PrismaEngine {
@@ -3693,6 +3713,9 @@ declare namespace tracer {
        */
       experiments: Experiments,
 
+      /** Prompt Management API. */
+      prompts: Prompts,
+
       /**
        * Enable LLM Observability tracing.
        *
@@ -3851,6 +3874,135 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    interface Prompts {
+      /** Resolve an exact, environment-targeted, or latest managed prompt. */
+      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
+      /** Refresh the prompt selected by the current environment. */
+      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
+      /** Clear the in-memory and/or persistent prompt caches. */
+      clearPromptCache (options?: ClearPromptCacheOptions): void
+      /** Create a text or chat prompt and its first version. */
+      createPrompt (
+        promptId: string,
+        template: string | PromptTemplateMessage[],
+        options?: CreatePromptOptions
+      ): Promise<PromptResponse>
+      /** Add a text or chat version to an existing prompt. */
+      createPromptVersion (
+        promptId: string,
+        template: string | PromptTemplateMessage[],
+        options?: CreatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Update prompt metadata. */
+      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
+      /** Update prompt-version metadata or environment assignments. */
+      updatePromptVersion (
+        promptId: string,
+        version: number,
+        options: UpdatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Delete a prompt. */
+      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
+      /** List prompts. */
+      listPrompts (): Promise<PromptResponse[]>
+      /** List versions for a prompt. */
+      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
+    }
+
+    interface PromptTemplateMessage {
+      role: string,
+      content: string
+    }
+
+    type PromptFallbackValue =
+      | string
+      | PromptTemplateMessage[]
+      | { template: string | PromptTemplateMessage[], version?: string }
+    type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
+
+    interface GetPromptOptions {
+      version?: number,
+      fallback?: PromptFallback,
+      targetingKey?: string,
+      attributes?: Record<string, string | number | boolean>
+    }
+
+    interface ClearPromptCacheOptions {
+      hot?: boolean,
+      warm?: boolean
+    }
+
+    interface CreatePromptOptions {
+      title?: string,
+      description?: string,
+      userVersion?: string,
+      envIds?: string[]
+    }
+
+    interface CreatePromptVersionOptions {
+      description?: string,
+      userVersion?: string,
+      envIds?: string[]
+    }
+
+    interface UpdatePromptOptions {
+      title?: string,
+      description?: string
+    }
+
+    interface UpdatePromptVersionOptions {
+      description?: string,
+      envIds?: string[]
+    }
+
+    interface ManagedPrompt {
+      readonly id: string,
+      readonly version: string,
+      readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
+      readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
+      readonly promptUuid?: string,
+      readonly promptVersionUuid?: string,
+      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      toAnnotation (variables?: Record<string, unknown>): Prompt
+    }
+
+    interface PromptResponse {
+      id?: string,
+      prompt_id?: string,
+      title?: string,
+      description?: string,
+      created_at?: string,
+      source?: string,
+      num_versions?: number,
+      in_registry?: boolean,
+      created_from?: string,
+      author?: string,
+      ml_app?: string,
+      ml_apps?: string[],
+      last_version_created_at?: string,
+      extracted_from?: string
+    }
+
+    interface PromptVersionResponse {
+      id?: string,
+      prompt_uuid?: string,
+      prompt_id?: string,
+      template?: string | PromptTemplateMessage[],
+      version?: number,
+      user_version?: string,
+      created_at?: string,
+      version_created_at?: string,
+      author?: string,
+      description?: string,
+      ml_app?: string
+    }
+
+    interface DeletedPromptResponse {
+      id?: string,
+      prompt_id?: string,
+      deleted_at?: string
     }
 
     /** JSON-serializable value accepted by LLMObs Experiments. */
@@ -4456,6 +4608,12 @@ declare namespace tracer {
        * A template string or chat message template list.
        */
       template?: string | Message[]
+
+      /** Internal Datadog prompt identity. */
+      promptUuid?: string,
+
+      /** Internal Datadog prompt-version identity. */
+      promptVersionUuid?: string
     }
 
     interface ToolDefinition {

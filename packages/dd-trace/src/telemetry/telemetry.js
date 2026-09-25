@@ -150,14 +150,14 @@ function getIntegrations () {
 function getProducts (config) {
   return {
     appsec: {
-      enabled: config.appsec.enabled,
+      enabled: config.appsec.DD_APPSEC_ENABLED,
     },
     profiler: {
       version: tracerVersion,
       enabled: profilingEnabledToBoolean(config.profiling.DD_PROFILING_ENABLED),
     },
     dynamic_instrumentation: {
-      enabled: config.dynamicInstrumentation.enabled,
+      enabled: config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED,
     },
   }
 }

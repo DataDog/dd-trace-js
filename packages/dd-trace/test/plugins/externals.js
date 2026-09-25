@@ -579,6 +579,15 @@ module.exports = {
       dep: true,
     },
   ],
+  openai: [
+    {
+      // `ws` backs `OpenAIRealtimeWS`, but openai declares it as an *optional* peer dependency, so
+      // it is not installed into the version folders by default and `require('ws')` inside
+      // `openai/realtime/ws.js` would throw. Dependency-only, so it adds no version matrix.
+      name: 'ws',
+      dep: true,
+    },
+  ],
   'openai-agents': [
     {
       name: '@openai/agents',
@@ -657,6 +666,12 @@ module.exports = {
       name: 'pino-pretty',
       dep: true,
       versions: ['8.0.0'],
+    },
+  ],
+  postgres: [
+    {
+      name: 'pg',
+      versions: ['>=8.0.3'],
     },
   ],
   '@prisma/client': [

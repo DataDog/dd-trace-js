@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
+const { patchRealtimeEmitter, patchRealtimeTransport, realtimeEnabled } = require('./openai-realtime')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
@@ -297,9 +298,10 @@ for (const extension of extensions) {
           // chat.completions and completions
           const stream = streamedResponse && getOption(args, 'stream', false)
 
-          const intercepted = !stream && interceptChannel?.hasSubscribers
+          const tracing = ch.start.hasSubscribers
+          const intercepted = interceptChannel?.hasSubscribers
 
-          if (!ch.start.hasSubscribers && !intercepted) {
+          if (!tracing && !intercepted) {
             return methodFn.apply(this, args)
           }
 
@@ -325,7 +327,7 @@ for (const extension of extensions) {
             // pagination page types reach the prototype wrappers above. A method that resolves to
             // a plain value has none, and a WeakMap rejects a non-object key.
             if (apiProm?.responsePromise) {
-              responsePromiseContexts.set(apiProm.responsePromise, { ctx, stream, interceptCtx })
+              responsePromiseContexts.set(apiProm.responsePromise, { ctx, stream, interceptCtx, tracing })
             }
 
             ch.end.publish(ctx)
@@ -339,20 +341,57 @@ for (const extension of extensions) {
   }
 }
 
+// The Realtime API is a bidirectional WebSocket event stream, not request/response, so it can't
+// reuse the resource shims above. Every server event funnels through the emitter's `_emit`, and
+// every client event through the transport's `send`.
+//
+// Realtime ships at two paths: the current `realtime/*` (openai >=5.17.0) and the older
+// `beta/realtime/*`, which is a fully duplicated implementation with its own emitter and transport
+// classes — not a re-export — and still ships alongside it. Both are hooked, so an app that has not
+// moved off the beta import path is still instrumented. `addHook` on a file a given version doesn't
+// have is a no-op, so the ranges only need to be loose enough.
+const REALTIME_SHIMS = [
+  { file: 'realtime/internal-base', targetClass: 'OpenAIRealtimeEmitter', versions: ['>=5.17.0'] },
+  { file: 'realtime/ws', targetClass: 'OpenAIRealtimeWS', versions: ['>=5.17.0'] },
+  { file: 'realtime/websocket', targetClass: 'OpenAIRealtimeWebSocket', versions: ['>=5.17.0'] },
+  { file: 'beta/realtime/internal-base', targetClass: 'OpenAIRealtimeEmitter', versions: ['>=4'] },
+  { file: 'beta/realtime/ws', targetClass: 'OpenAIRealtimeWS', versions: ['>=4'] },
+  { file: 'beta/realtime/websocket', targetClass: 'OpenAIRealtimeWebSocket', versions: ['>=4'] },
+]
+
+if (realtimeEnabled()) {
+  for (const extension of extensions) {
+    for (const { file, targetClass, versions } of REALTIME_SHIMS) {
+      addHook({ name: 'openai', file: file + extension, versions }, exports => {
+        const prototype = exports[targetClass]?.prototype
+        if (targetClass === 'OpenAIRealtimeEmitter') {
+          patchRealtimeEmitter(prototype)
+        } else {
+          patchRealtimeTransport(prototype)
+        }
+        return exports
+      })
+    }
+  }
+}
+
 function handleUnwrappedAPIPromise (apiProm, state) {
-  const { ctx, stream, interceptCtx } = state
+  const { ctx, stream, interceptCtx, tracing } = state
 
   return heldUntil(apiProm, interceptCtx?.beforeResult?.())
     .then(([{ response, options }, body]) => {
       if (stream) {
-        const wrapIterator = wrapStreamIterator(response, options, ctx)
+        return Promise.resolve(interceptCtx?.onResult ? interceptCtx.onResult(body) : body).then(streamBody => {
+          if (!tracing) return streamBody
 
-        if (body.iterator) {
-          shimmer.wrap(body, 'iterator', wrapIterator)
-        } else {
-          shimmer.wrap(body.response.body, Symbol.asyncIterator, wrapIterator)
-        }
-        return body
+          const wrapIterator = wrapStreamIterator(response, options, ctx)
+          if (streamBody.iterator) {
+            shimmer.wrap(streamBody, 'iterator', wrapIterator)
+          } else {
+            shimmer.wrap(streamBody.response.body, Symbol.asyncIterator, wrapIterator)
+          }
+          return streamBody
+        })
       }
 
       const responseData = {

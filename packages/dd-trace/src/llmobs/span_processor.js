@@ -55,6 +55,7 @@ const {
   GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY,
   GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
   GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  ARTIFICIAL_GEN_AI_TAGS,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -356,6 +357,9 @@ class LLMObsSpanProcessor {
         if (value != null) spanContext.setTag(genAiKey, value)
       }
     }
+
+    // matches the value dd-trace-py writes
+    spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'true')
   }
 
   // For now, this only applies to metadata, as we let users annotate this field with any object

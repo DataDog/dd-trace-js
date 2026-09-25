@@ -3,7 +3,7 @@
 const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
-const instrumentations = require('../packages/datadog-instrumentations/src/helpers/rewriter/instrumentations')
+const { registry } = require('../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry')
 
 const CHECK_FLAG = '--check'
 const OUTPUT_PATH_IN_REPOSITORY = 'packages/datadog-instrumentations/src/helpers/rewriter/targets.json'
@@ -12,12 +12,30 @@ const OUTPUT_PATH = path.join(__dirname, '..', OUTPUT_PATH_IN_REPOSITORY)
 function generateRewriterTargets () {
   /** @type {Record<string, string>} */
   const targets = {}
+  const activatedModules = new Set()
 
-  for (const { module: { name, filePath } } of instrumentations) {
-    targets[`${name}/${filePath}`] = name
+  for (const { activationName, instrumentations } of registry) {
+    let activatedModuleName
+    for (const { module: { name, filePath } } of instrumentations) {
+      targets[`${name}/${filePath}`] = name
+
+      if (!activationName) continue
+      if (activatedModuleName && activatedModuleName !== name) {
+        throw new Error(`Rewrite activation group ${activationName} contains multiple modules`)
+      }
+      activatedModuleName = name
+    }
+    if (activationName && !activatedModuleName) {
+      throw new Error(`Rewrite activation group ${activationName} has no instrumentations`)
+    }
+    if (activatedModuleName) {
+      if (activatedModules.has(activatedModuleName)) {
+        throw new Error(`Rewrite target ${activatedModuleName} has multiple activation groups`)
+      }
+      activatedModules.add(activatedModuleName)
+    }
   }
 
-  // The replacer array orders the keys, so adding a descriptor stays a one-line diff.
   return `${JSON.stringify(targets, Object.keys(targets).sort(), 2)}\n`
 }
 
@@ -27,12 +45,12 @@ function checkRewriterTargets () {
   }
 
   // eslint-disable-next-line no-console
-  console.error(`❌ The rewriter target map is out of date.
+  console.error(`❌ The generated rewriter metadata is out of date.
 
-The checked-in map no longer matches the rewriter instrumentation descriptors in:
-- packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/
+The checked-in map no longer matches the registered rewriter instrumentation descriptors in:
+- packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry.js
 
-A stale map silently disables rewriting for the descriptors it is missing.
+A stale file can silently disable rewriting or plugin activation.
 
 To regenerate it locally, run:
   npm run generate:rewriter:targets

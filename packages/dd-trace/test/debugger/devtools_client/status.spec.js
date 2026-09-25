@@ -7,8 +7,9 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 require('../../setup/mocha')
 
+const { DEBUGGER_DIAGNOSTICS_V1, DIAGNOSTICS_QUEUE_MAX_BYTES } = require('../../../src/debugger/constants')
+const { DROPPED_REASON, EVENT_TYPE } = require('../../../src/debugger/guardrail-metrics')
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
-const { DEBUGGER_DIAGNOSTICS_V1 } = require('../../../src/debugger/constants')
 const { getRequestOptions } = require('./utils')
 
 const ddsource = 'dd_debugger'
@@ -16,7 +17,9 @@ const service = 'my-service'
 const runtimeId = 'my-runtime-id'
 
 describe('diagnostic message http requests', function () {
-  let clock, statusproxy, request, jsonBuffer
+  let clock, statusproxy, request, jsonBuffer, jsonBufferOptions
+  /** @type {{ eventDropped: sinon.SinonStub, '@noCallThru': boolean }} */
+  let guardrailMetrics
 
   /** @type {Array<[string, string] | [string, string, Error]>} */
   const acks = [
@@ -34,9 +37,13 @@ describe('diagnostic message http requests', function () {
     request = sinon.spy()
     request['@noCallThru'] = true
 
+    guardrailMetrics = { eventDropped: sinon.stub(), '@noCallThru': true }
+
     class JSONBufferSpy extends JSONBuffer {
-      constructor (...args) {
-        super(...args)
+      /** @param {ConstructorParameters<typeof JSONBuffer>[0]} options */
+      constructor (options) {
+        super(options)
+        jsonBufferOptions = options
         jsonBuffer = this
         sinon.spy(this, 'write')
       }
@@ -48,10 +55,11 @@ describe('diagnostic message http requests', function () {
         runtimeId,
         maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1,
+          DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
         },
         '@noCallThru': true,
       },
+      './guardrail-metrics': guardrailMetrics,
       './json-buffer': JSONBufferSpy,
       '../../exporters/common/request': request,
     })
@@ -149,6 +157,33 @@ describe('diagnostic message http requests', function () {
     })
   }
 
+  describe('diagnostics queue', function () {
+    it('should bound the queue, release completed uploads, and retry a dropped status', function () {
+      let accepted = 0
+
+      assert.strictEqual(jsonBufferOptions.maxQueueBytes, DIAGNOSTICS_QUEUE_MAX_BYTES)
+
+      // Flush a status per upload interval, without ever completing the uploads, until the queue is full
+      while (!guardrailMetrics.eventDropped.called) {
+        assert.ok(accepted < 10_000, 'the queue should have filled up by now')
+        statusproxy.ackReceived({ id: 'foo', version: accepted++ })
+        clock.tick(1000)
+      }
+
+      sinon.assert.calledOnceWithExactly(
+        guardrailMetrics.eventDropped, DROPPED_REASON.QUEUE_FULL, EVENT_TYPE.DIAGNOSTIC
+      )
+      sinon.assert.callCount(request, accepted - 1)
+
+      const requestsBeforeRelease = request.callCount
+      request.firstCall.args[2](new Error('boom'))
+      statusproxy.ackReceived({ id: 'foo', version: accepted - 1 })
+      clock.tick(1000)
+
+      sinon.assert.callCount(request, requestsBeforeRelease + 1)
+    })
+  })
+
   it('should send directly to the debugger intake in agentless mode', function () {
     const requestAgentless = sinon.spy()
     requestAgentless['@noCallThru'] = true
@@ -162,7 +197,7 @@ describe('diagnostic message http requests', function () {
         url: new URL('https://debugger-intake.us3.datadoghq.com'),
         maxTotalPayloadSize: 5 * 1024 * 1024,
         dynamicInstrumentation: {
-          uploadIntervalSeconds: 1,
+          DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
         },
         '@noCallThru': true,
       },

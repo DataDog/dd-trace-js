@@ -2,6 +2,7 @@
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const processTags = require('../../process-tags')
+const { DEFAULT_QUEUE_MAX_BYTES } = require('../constants')
 const log = require('./log')
 
 processTags.initialize()
@@ -10,6 +11,7 @@ const config = module.exports = {
   ...parentConfig,
   parentThreadId,
   maxTotalPayloadSize: 5 * 1024 * 1024, // 5MB
+  queueMaxBytes: DEFAULT_QUEUE_MAX_BYTES,
 }
 
 updateConfig(parentConfig)
@@ -23,5 +25,6 @@ function updateConfig (updates) {
   // The worker receives a serialized config (see ../config.js) where `url` is a string, so it is
   // reconstructed into a URL here rather than read directly off a Config instance.
   config.url = new URL(updates.url)
-  config.dynamicInstrumentation.captureTimeoutNs = BigInt(updates.dynamicInstrumentation.captureTimeoutMs) * 1_000_000n
+  config.dynamicInstrumentation.captureTimeoutNs =
+    BigInt(updates.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS) * 1_000_000n
 }

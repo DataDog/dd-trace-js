@@ -57,14 +57,16 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "aiguard",
         "default": "false",
-        "description": "Buffer Vercel AI streamed responses for After Model evaluation before replaying them."
+        "description": "Analyze streamed OpenAI and Vercel AI responses with AI Guard After Model evaluation."
       }
     ],
     "DD_AI_GUARD_BLOCK": [
       {
         "implementation": "C",
         "type": "boolean",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.block"
         ],
@@ -75,6 +77,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.enabled"
         ],
@@ -85,6 +88,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.endpoint"
         ],
@@ -95,6 +99,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.maxContentSize"
         ],
@@ -105,6 +110,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.maxMessagesLength"
         ],
@@ -115,6 +121,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.redactionEnabled"
         ],
@@ -125,6 +132,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.timeout"
         ],
@@ -247,6 +255,7 @@
       {
         "implementation": "E",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.eventTracking.mode",
           "experimental.appsec.eventTracking.mode"
@@ -261,6 +270,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.enabled",
           "experimental.appsec.extendedHeadersCollection.enabled"
@@ -273,6 +283,7 @@
       {
         "implementation": "C",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.enabled",
           "appsec",
@@ -286,6 +297,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateGraphql",
           "experimental.appsec.blockedTemplateGraphql"
@@ -298,6 +310,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.redaction",
           "experimental.appsec.extendedHeadersCollection.redaction"
@@ -310,6 +323,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateHtml",
           "experimental.appsec.blockedTemplateHtml"
@@ -322,6 +336,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateJson",
           "experimental.appsec.blockedTemplateJson"
@@ -334,6 +349,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.maxHeaders",
           "experimental.appsec.extendedHeadersCollection.maxHeaders"
@@ -346,6 +362,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.maxStackTraces",
           "experimental.appsec.stackTrace.maxStackTraces"
@@ -360,6 +377,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.maxDepth",
           "experimental.appsec.stackTrace.maxDepth"
@@ -374,6 +392,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.obfuscatorKeyRegex",
           "experimental.appsec.obfuscatorKeyRegex"
@@ -385,6 +404,7 @@
       {
         "implementation": "G",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.obfuscatorValueRegex",
           "experimental.appsec.obfuscatorValueRegex"
@@ -396,6 +416,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rasp.bodyCollection",
           "experimental.appsec.rasp.bodyCollection"
@@ -408,6 +429,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rasp.enabled",
           "experimental.appsec.rasp.enabled"
@@ -419,6 +441,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rules",
           "experimental.appsec.rules"
@@ -438,6 +461,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.enabled",
           "experimental.appsec.stackTrace.enabled"
@@ -449,6 +473,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rateLimit",
           "experimental.appsec.rateLimit"
@@ -460,6 +485,7 @@
       {
         "implementation": "E",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.wafTimeout",
           "experimental.appsec.wafTimeout"
@@ -524,6 +550,22 @@
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -760,6 +802,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.captureTimeoutMs"
         ],
@@ -770,6 +813,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.enabled"
         ],
@@ -780,6 +824,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
         ],
@@ -790,6 +835,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
@@ -800,6 +846,7 @@
       {
         "implementation": "C",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
@@ -810,6 +857,7 @@
       {
         "implementation": "C",
         "type": "decimal",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.uploadIntervalSeconds"
         ],
@@ -837,6 +885,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "appsec",
         "default": "false",
         "configurationNames": [
           "experimental.appsec.standalone.enabled"
@@ -847,6 +896,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.initializationTimeoutMs"
         ],
@@ -857,6 +907,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
         ],
@@ -867,6 +918,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.spanEnrichment.enabled"
         ],
@@ -1123,6 +1175,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.dbRowsToTaint",
           "experimental.iast.dbRowsToTaint"
@@ -1134,6 +1187,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.deduplicationEnabled",
           "experimental.iast.deduplicationEnabled"
@@ -1145,6 +1199,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.enabled",
           "iast",
@@ -1158,6 +1213,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.maxConcurrentRequests",
           "experimental.iast.maxConcurrentRequests"
@@ -1169,6 +1225,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.maxContextOperations",
           "experimental.iast.maxContextOperations"
@@ -1180,6 +1237,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionEnabled",
           "experimental.iast.redactionEnabled"
@@ -1191,6 +1249,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionNamePattern",
           "experimental.iast.redactionNamePattern"
@@ -1202,6 +1261,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionValuePattern",
           "experimental.iast.redactionValuePattern"
@@ -1213,6 +1273,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.requestSampling",
           "experimental.iast.requestSampling"
@@ -1234,6 +1295,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.stackTrace.enabled",
           "experimental.iast.stackTrace.enabled"
@@ -1245,6 +1307,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.telemetryVerbosity",
           "experimental.iast.telemetryVerbosity"
@@ -1349,7 +1412,8 @@
         "configurationNames": [
           "llmobs.agentlessEnabled"
         ],
-        "default": null
+        "default": null,
+        "namespace": "llmobs"
       }
     ],
     "DD_LLMOBS_ENABLED": [
@@ -1367,7 +1431,8 @@
         "configurationNames": [
           "llmobs.mlApp"
         ],
-        "default": null
+        "default": null,
+        "namespace": "llmobs"
       }
     ],
     "DD_LLMOBS_PROJECT_NAME": [
@@ -1377,7 +1442,43 @@
         "configurationNames": [
           "llmobs.projectName"
         ],
+        "default": null,
+        "namespace": "llmobs"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_DIR": [
+      {
+        "implementation": "A",
+        "type": "string",
         "default": null
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_TTL": [
+      {
+        "implementation": "B",
+        "type": "decimal",
+        "default": "60",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS"
+        ]
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_TIMEOUT": [
+      {
+        "implementation": "B",
+        "type": "decimal",
+        "default": "5.0",
+        "allowed": "\\d+(\\.\\d+)?",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS"
+        ]
       }
     ],
     "DD_LLMOBS_SAMPLE_RATE": [
@@ -1387,7 +1488,8 @@
         "configurationNames": [
           "llmobs.sampleRate"
         ],
-        "default": "1.0"
+        "default": "1.0",
+        "namespace": "llmobs"
       }
     ],
     "DD_LOGS_INJECTION": [
@@ -1454,10 +1556,19 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "openai",
         "default": "false",
         "configurationNames": [
           "openAiLogsEnabled"
         ]
+      }
+    ],
+    "DD_OPENAI_REALTIME_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
       }
     ],
     "DD_OPENAI_SPAN_CHAR_LIMIT": [
@@ -2769,6 +2880,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
+        "namespace": "tracing",
         "default": ""
       }
     ],
@@ -2779,6 +2891,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
+        "namespace": "rum",
         "default": "false"
       }
     ],
@@ -3697,6 +3810,13 @@
       }
     ],
     "DD_TRACE_PLAYWRIGHT_TEST_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_POSTGRES_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

@@ -25,6 +25,7 @@ const pathSepExpr = new RegExp(`\\${path.sep}`, 'g')
 const disabledInstrumentations = getDisabledInstrumentations()
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const orchestrionLoadChannel = channel('dd-trace:instrumentation:load:orchestrion')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -33,6 +34,10 @@ if (!disabledInstrumentations.has('fetch')) {
 
 if (!disabledInstrumentations.has('process')) {
   require('../process')
+}
+
+if (!disabledInstrumentations.has('console')) {
+  require('../console')
 }
 
 const debugEnabled = DD_TRACE_DEBUG
@@ -51,6 +56,25 @@ const instrumentedNodeModules = new Map()
 const instrumentedIntegrationsSuccess = new Map()
 /** @type {Set<string>} */
 const alreadyLoggedIncompatibleIntegrations = new Set()
+/** @type {Set<string>} */
+const compatibleOrchestrionTargets = new Set()
+
+orchestrionLoadChannel.subscribe(({ moduleName, activationName, version, result }) => {
+  const nameVersion = `${moduleName}@${version}`
+
+  if (result === 'unsupported') {
+    if (!compatibleOrchestrionTargets.has(nameVersion) && !instrumentedIntegrationsSuccess.has(nameVersion)) {
+      instrumentedIntegrationsSuccess.set(nameVersion, false)
+    }
+    return
+  }
+
+  if (result === 'matched' || result === 'rewritten') {
+    compatibleOrchestrionTargets.add(nameVersion)
+    instrumentedIntegrationsSuccess.set(nameVersion, true)
+    if (result === 'rewritten') loadChannel.publish({ name: activationName })
+  }
+})
 
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
