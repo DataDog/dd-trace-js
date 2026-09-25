@@ -66,10 +66,11 @@ async function runEsmRequest (versionKey, agentPort) {
  * @param {boolean} [checkBody]
  * @param {string} [route]
  * @param {boolean} [checkLoaderError]
+ * @param {Record<string, string>} [requestHeaders]
  */
 async function assertHttpRoute (
   handleRequest, hasRoute = true, path = '/users/123', expectedStatus = 200, checkBody = true,
-  route = '/users/:id', checkLoaderError = false
+  route = '/users/:id', checkLoaderError = false, requestHeaders
 ) {
   const http = require('node:http')
   const server = http.createServer(async (req, res) => {
@@ -89,6 +90,7 @@ async function assertHttpRoute (
     const trace = agent.assertSomeTraces(traces => {
       const span = traces[0].find(span => span.type === 'web')
       assert.ok(span)
+      if (requestHeaders?.Host) assert.equal(span.meta['http.url'], `http://${requestHeaders.Host}${path}`)
       assert.equal(span.meta['http.route'], hasRoute ? route : undefined)
       if (hasRoute) assert.equal(span.resource, `GET ${route}`)
       if (checkLoaderError) {
@@ -99,7 +101,10 @@ async function assertHttpRoute (
       }
     })
     const address = /** @type {import('node:net').AddressInfo} */ (server.address())
-    const response = axios.get(`http://127.0.0.1:${address.port}${path}`, { validateStatus: () => true })
+    const response = axios.get(`http://127.0.0.1:${address.port}${path}`, {
+      headers: requestHeaders,
+      validateStatus: () => true,
+    })
     const [, result] = await Promise.all([trace, response])
     assert.equal(result.status, expectedStatus)
     if (checkBody) assert.equal(result.data, 'ok')
@@ -200,6 +205,14 @@ describe('Plugin', () => {
         tracer.use('react-router', {})
         const handleRequest = createRequestHandler(createBuild(), 'test')
         await assertHttpRoute(handleRequest, true, '/users/123/')
+      })
+
+      it('continues tracing after an invalid Host header', async () => {
+        tracer.use('react-router', {})
+        const handleRequest = createRequestHandler(createBuild(), 'test')
+        await assertHttpRoute(handleRequest, false, '/users/123', 200, true, '/users/:id', false,
+          { Host: 'localhost:abc' })
+        await assertHttpRoute(handleRequest)
       })
 
       it('leaves an unmatched request without a route', async () => {
