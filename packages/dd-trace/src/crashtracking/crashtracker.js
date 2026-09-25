@@ -11,7 +11,6 @@ const { getEnvironmentVariable } = require('../config/helper')
 const log = require('../log')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
-const getAgentlessTelemetryUrl = require('../telemetry/agentless-url')
 
 const identityRefreshChannel = channel('datadog:identity:refresh')
 const INHERITED_RECEIVER_ENVIRONMENT_VARIABLES = [
@@ -38,16 +37,12 @@ function getAgentlessReceiverEnvironment (config) {
   }
 
   const site = config.site.toLowerCase()
-  const telemetryUrl = getAgentlessTelemetryUrl(site).origin
 
   const environment = /** @type {Array<[string, string]>} */ ([
     ['_DD_DIRECT_SUBMISSION_ENABLED', 'true'],
     ['DD_API_KEY', config.DD_API_KEY],
     ['DD_SITE', site],
-    ['DD_APM_TELEMETRY_DD_URL', telemetryUrl],
-    // libdatadog v43 parses the dedicated URL above but does not use it when constructing the
-    // endpoint. Keep this compatibility fallback until its telemetry config honors that setting.
-    ['DD_TRACE_AGENT_URL', telemetryUrl],
+    ['DD_CRASHTRACKING_ERRORS_INTAKE_ENABLED', 'true'],
   ])
 
   // The receiver environment does not inherit from this process.
@@ -117,21 +112,19 @@ class Crashtracker {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   #getConfig (config) {
-    let endpoint = null
-    if (!config.DD_AGENTLESS_ENABLED) {
-      const url = config.url
-      endpoint = {
-        // TODO: Use the string directly when deserialization is fixed.
-        url: {
-          scheme: url.protocol.slice(0, -1),
-          authority: url.protocol === 'unix:'
-            ? Buffer.from(url.pathname).toString('hex')
-            : url.host,
-          path_and_query: '',
-        },
-        timeout_ms: 3000,
-      }
-    }
+    const endpoint = config.DD_AGENTLESS_ENABLED
+      ? undefined
+      : {
+          // TODO: Use the string directly when deserialization is fixed.
+          url: {
+            scheme: config.url.protocol.slice(0, -1),
+            authority: config.url.protocol === 'unix:'
+              ? Buffer.from(config.url.pathname).toString('hex')
+              : config.url.host,
+            path_and_query: '',
+          },
+          timeout_ms: 3000,
+        }
 
     // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
