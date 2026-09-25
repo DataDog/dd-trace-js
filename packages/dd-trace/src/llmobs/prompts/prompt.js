@@ -1,5 +1,7 @@
 'use strict'
 
+/** @typedef {import('../../../../../index').llmobs.FormattedPromptMessage} FormattedPromptMessage */
+
 const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
 
 function isMessage (value) {
@@ -70,7 +72,7 @@ class ManagedPrompt {
   /**
    * Render the prompt without changing its stored template.
    * @param {Record<string, unknown>} [variables]
-   * @returns {string | import('../../../../../index').llmobs.FormattedPromptMessage[]}
+   * @returns {string | FormattedPromptMessage[]}
    */
   format (variables = {}) {
     if (typeof this.template === 'string') return render(this.template, variables)
