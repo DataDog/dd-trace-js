@@ -29,10 +29,10 @@ const reachedEndpoints = new Set()
 
 /**
  * @typedef {object} EndpointOptions
- * @property {string} [socketPath]
- * @property {string} [hostname]
- * @property {string} [host]
- * @property {string|number} [port]
+ * @property {string|null} [socketPath]
+ * @property {string|null} [hostname]
+ * @property {string|null} [host]
+ * @property {string|number|null} [port]
  */
 
 /**
