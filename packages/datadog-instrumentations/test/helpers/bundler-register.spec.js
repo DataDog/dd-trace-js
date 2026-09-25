@@ -97,9 +97,41 @@ describe('bundler register', () => {
     sinon.assert.calledOnceWithExactly(hook)
     sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-rewritten-integration' })
     sinon.assert.calledOnceWithExactly(integrationHook, undefined, '1.0.0')
+    sinon.assert.callOrder(hook, loadChannel.publish, integrationHook)
     sinon.assert.notCalled(duplicateHook)
     sinon.assert.notCalled(ordinaryHook)
     assert.equal(Object.hasOwn(payload, 'module'), false)
+  })
+
+  it('activates a hookless source-rewritten integration without loading a hook', () => {
+    const { loadChannel, log, publish } = loadBundlerRegister({
+      activationNames: new Map([['test-hookless', 'test-plugin']]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({
+      activate: true,
+      package: 'test-hookless',
+      path: 'test-hookless/index.js',
+      version: '1.0.0',
+    })
+
+    sinon.assert.calledOnceWithExactly(loadChannel.publish, { name: 'test-plugin' })
+    sinon.assert.notCalled(log.error)
+  })
+
+  it('does not activate a disabled hookless source-rewritten integration', () => {
+    const { loadChannel, publish } = loadBundlerRegister({
+      disabled: new Set(['test-hookless']),
+      activationNames: new Map([['test-hookless', 'test-plugin']]),
+      hooks: {},
+      instrumentations: {},
+    })
+
+    publish({ activate: true, package: 'test-hookless' })
+
+    sinon.assert.notCalled(loadChannel.publish)
   })
 
   it('does not report activation-only integrations as missing export hooks', () => {
@@ -229,11 +261,12 @@ function throwValue (value) {
 /**
  * @param {{
  *   disabled?: Set<string>,
+ *   activationNames?: Map<string, string>,
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, Array<object>>
  * }} options
  */
-function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations }) {
+function loadBundlerRegister ({ disabled = new Set(), activationNames = new Map(), hooks, instrumentations }) {
   const bundlerRegisterPath = require.resolve('../../src/helpers/bundler-register')
   const originalRequire = Module.prototype.require
   const loadChannel = { publish: sinon.stub() }
@@ -255,6 +288,7 @@ function loadBundlerRegister ({ disabled = new Set(), hooks, instrumentations })
           getDisabledInstrumentations: () => disabled,
         },
         './instrumentations': instrumentations,
+        './rewriter/targets': { getRewriteActivationName: name => activationNames.get(name) },
         './register.js': register,
         '../../../dd-trace/src/log': log,
         'dc-polyfill': dc,
