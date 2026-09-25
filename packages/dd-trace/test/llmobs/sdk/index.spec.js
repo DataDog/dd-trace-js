@@ -1282,7 +1282,7 @@ describe('sdk', () => {
         })
       })
 
-      it('merges repeated annotations field by field', () => {
+      it('shallow-updates the manifest across repeated annotations', () => {
         llmobs.trace({ kind: 'agent', name: 'test' }, span => {
           llmobs.annotate({
             agent: {
@@ -1301,11 +1301,12 @@ describe('sdk', () => {
               tools: [{ name: 'three' }],
             },
           })
+          llmobs.annotate({ agent: { name: 42, modelSettings: { extra_headers: { authorization: 'secret' } } } })
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span)[MANIFEST], {
             name: 'second',
             model: 'gpt-4o',
-            model_settings: { temperature: 0.5, max_tokens: 10, tool_choice: 'auto' },
+            model_settings: { temperature: 0.5 },
             tools: [{ name: 'three' }],
           })
         })
@@ -1596,19 +1597,20 @@ describe('sdk', () => {
         return new LLMObsTagger({ llmobs: { DD_LLMOBS_ENABLED: true }, service: 'service' }, true)
       }
 
-      it('applies the manifest to agent spans only', () => {
+      it('emits the declaration on agent spans only', () => {
         llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {
             llmobs.trace({ kind: 'agent', name: 'agent' }, agentSpan => {
               assert.strictEqual(tagsOf(agentSpan)[VERSION], '1.0.0')
               assert.deepStrictEqual(tagsOf(agentSpan)[MANIFEST], { name: 'travel_desk' })
             })
-            assert.strictEqual(tagsOf(workflow)[MANIFEST], undefined)
           })
         })
 
         assert.ok(emittedEvent('agent').tags.includes('agent_version:1.0.0'))
-        assert.ok(!emittedEvent('workflow').tags.some(tag => tag.startsWith('agent_version:')))
+        const workflow = emittedEvent('workflow')
+        assert.ok(!workflow.tags.some(tag => tag.startsWith('agent_version:')))
+        assert.strictEqual(workflow.meta.metadata, undefined)
       })
 
       it('emits the manifest and version on the span event', () => {
@@ -1623,42 +1625,31 @@ describe('sdk', () => {
         assert.ok(event.tags.includes('agent_version:1.0.0'))
       })
 
-      it('gives the manifest to the outermost agent span and the version to every agent span', () => {
+      it('declares every agent span in the block, nested and sibling ones included', () => {
         llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
-          llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
-            llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
-              llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
-                assert.strictEqual(tagsOf(inner)[VERSION], '1.0.0')
-                assert.strictEqual(tagsOf(inner)[MANIFEST], undefined)
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {
+            llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
+              llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
+                llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
+                  assert.strictEqual(tagsOf(inner)[VERSION], '1.0.0')
+                  assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'travel_desk' })
+                })
               })
+              assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'travel_desk' })
             })
-            assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'travel_desk' })
+            llmobs.trace({ kind: 'agent', name: 'sibling' }, sibling => {
+              assert.deepStrictEqual(tagsOf(sibling)[MANIFEST], { name: 'travel_desk' })
+            })
           })
         })
-      })
 
-      it('does not give the manifest to a sibling handoff target in the same trace', () => {
-        llmobs.annotationContext({ agent: { name: 'triage' } }, () => {
-          llmobs.trace({ kind: 'workflow', name: 'Agent workflow' }, () => {
-            llmobs.trace({ kind: 'agent', name: 'agent_a' }, agentA => {
-              assert.deepStrictEqual(tagsOf(agentA)[MANIFEST], { name: 'triage' })
-            })
-            llmobs.trace({ kind: 'agent', name: 'agent_b' }, agentB => {
-              assert.strictEqual(tagsOf(agentB)[MANIFEST], undefined)
-            })
+        for (const name of ['outer', 'inner', 'sibling']) {
+          assert.deepStrictEqual(emittedEvent(name).meta.metadata._dd.agent_manifest, {
+            framework: 'manual',
+            name: 'travel_desk',
           })
-        })
-      })
-
-      it('gives the manifest to the agent span of each separate trace in the block', () => {
-        llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
-          llmobs.trace({ kind: 'agent', name: 'first' }, first => {
-            assert.deepStrictEqual(tagsOf(first)[MANIFEST], { name: 'travel_desk' })
-          })
-          llmobs.trace({ kind: 'agent', name: 'second' }, second => {
-            assert.deepStrictEqual(tagsOf(second)[MANIFEST], { name: 'travel_desk' })
-          })
-        })
+        }
+        assert.strictEqual(emittedEvent('workflow').meta.metadata, undefined)
       })
 
       it('lets a nested block declare the nested agent span', () => {
@@ -1666,7 +1657,7 @@ describe('sdk', () => {
           llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
             llmobs.annotationContext({ agent: { name: 'inner_agent' } }, () => {
               llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
-                assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'inner_agent' })
+                assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'inner_agent', model: 'gpt-4o' })
               })
             })
             assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'outer_agent', model: 'gpt-4o' })
@@ -1674,7 +1665,7 @@ describe('sdk', () => {
         })
       })
 
-      it('merges nested blocks onto one agent span, the inner block winning', () => {
+      it('shallow-updates nested blocks onto one agent span, the inner block winning', () => {
         llmobs.annotationContext({
           agent: { version: '1.0.0', name: 'outer_agent', model: 'gpt-4o', modelSettings: { temperature: 0.1 } },
         }, () => {
@@ -1686,20 +1677,21 @@ describe('sdk', () => {
               assert.deepStrictEqual(tagsOf(agentSpan)[MANIFEST], {
                 name: 'inner_agent',
                 model: 'gpt-4o',
-                model_settings: { temperature: 0.1, top_p: 0.9 },
+                model_settings: { top_p: 0.9 },
               })
             })
           })
         })
       })
 
-      it('lets a direct annotation declare a nested agent span', () => {
+      it('lets a direct annotation override the context declaration on a nested agent span', () => {
         llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
-          llmobs.trace({ kind: 'agent', name: 'outer' }, () => {
+          llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
             llmobs.trace({ kind: 'agent', name: 'inner' }, inner => {
-              llmobs.annotate({ agent: { instructions: 'Check the weather.' } })
-              assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { instructions: 'Check the weather.' })
+              llmobs.annotate({ agent: { name: 'weather', instructions: 'Check the weather.' } })
+              assert.deepStrictEqual(tagsOf(inner)[MANIFEST], { name: 'weather', instructions: 'Check the weather.' })
             })
+            assert.deepStrictEqual(tagsOf(outer)[MANIFEST], { name: 'travel_desk' })
           })
         })
       })
@@ -1829,7 +1821,7 @@ describe('sdk', () => {
         })
       })
 
-      it('gives the manifest to an integration agent span that is the first agent span of its trace', () => {
+      it('declares an integration agent span in the block', () => {
         const pluginTagger = createPluginTagger()
         llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
           llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
@@ -1841,22 +1833,9 @@ describe('sdk', () => {
         })
       })
 
-      it('does not give the manifest to an integration agent span nested under an annotated agent span', () => {
+      it('emits the context declaration on a span promoted to an agent after registration', () => {
         const pluginTagger = createPluginTagger()
         llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
-          llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {
-            const span = tracer._tracer.startSpan('claude_agent_sdk.query', { childOf: outer })
-            pluginTagger.registerLLMObsSpan(span, { kind: 'agent', parent: outer, integration: 'test' })
-            assert.strictEqual(tagsOf(span)[VERSION], '1.0.0')
-            assert.strictEqual(tagsOf(span)[MANIFEST], undefined)
-            span.finish()
-          })
-        })
-      })
-
-      it('emits the context version on a span promoted to an agent after registration', () => {
-        const pluginTagger = createPluginTagger()
-        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
           llmobs.trace({ kind: 'agent', name: 'query' }, query => {
             const span = tracer._tracer.startSpan('Agent (subagent)', { childOf: query })
             pluginTagger.registerLLMObsSpan(span, { kind: 'tool', parent: query, integration: 'test' })
@@ -1865,7 +1844,9 @@ describe('sdk', () => {
           })
         })
 
-        assert.ok(emittedEvent('Agent (subagent)').tags.includes('agent_version:1.0.0'))
+        const event = emittedEvent('Agent (subagent)')
+        assert.ok(event.tags.includes('agent_version:1.0.0'))
+        assert.deepStrictEqual(event.meta.metadata._dd.agent_manifest, { framework: 'manual', name: 'travel_desk' })
       })
     })
   })

@@ -6,7 +6,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../src/log')
-const { buildAgentDeclaration, mergeAgentManifest } = require('../../src/llmobs/agent-manifest')
+const { buildAgentDeclaration } = require('../../src/llmobs/agent-manifest')
 
 describe('agent manifest', () => {
   describe('buildAgentDeclaration', () => {
@@ -274,38 +274,6 @@ describe('agent manifest', () => {
       it('does not read a caller-supplied framework', () => {
         assert.deepStrictEqual(manifestOf({ name: 'a', framework: 'custom' }), { name: 'a' })
       })
-    })
-  })
-
-  describe('mergeAgentManifest', () => {
-    it('lets incoming fields win, merges model_settings and replaces tools', () => {
-      const base = {
-        name: 'a',
-        model: 'gpt-4o',
-        model_settings: { temperature: 0.1, max_tokens: 10 },
-        tools: [{ name: 'one' }, { name: 'two' }],
-      }
-      const incoming = {
-        name: 'b',
-        model_settings: { temperature: 0.5 },
-        tools: [{ name: 'three' }],
-      }
-
-      assert.deepStrictEqual(mergeAgentManifest(base, incoming), {
-        name: 'b',
-        model: 'gpt-4o',
-        model_settings: { temperature: 0.5, max_tokens: 10 },
-        tools: [{ name: 'three' }],
-      })
-      assert.deepStrictEqual(base.model_settings, { temperature: 0.1, max_tokens: 10 })
-    })
-
-    it('copies incoming when there is no base', () => {
-      const incoming = { name: 'a' }
-      const merged = mergeAgentManifest(undefined, incoming)
-
-      assert.deepStrictEqual(merged, incoming)
-      assert.notEqual(merged, incoming)
     })
   })
 })
