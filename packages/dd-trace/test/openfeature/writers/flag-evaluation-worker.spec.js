@@ -23,12 +23,14 @@ describe('flag evaluation worker producer', () => {
   let workers
   let Writer
   let startupError
+  let failPostAfter
   let log
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     workers = []
     startupError = false
+    failPostAfter = Infinity
     log = { warn: sinon.spy(), debug: sinon.spy() }
     class Worker extends EventEmitter {
       constructor (path, options) {
@@ -39,7 +41,11 @@ describe('flag evaluation worker producer', () => {
         workers.push(this)
       }
 
-      postMessage (message) { this.messages.push(structuredClone(message)) }
+      postMessage (message) {
+        if (this.messages.length >= failPostAfter) throw new Error('post failure')
+        this.messages.push(structuredClone(message))
+      }
+
       unref () {}
       ref () {}
       terminate () { this.emit('exit', 1) }
@@ -62,6 +68,84 @@ describe('flag evaluation worker producer', () => {
       assert.strictEqual(writer.enqueue({ flagKey: 'flag', timestamp: 100, observeFullEvaluationData: false }), true)
     }
   }
+
+  it('queues within the existing capacity while discovery is pending, then drains bounded messages', () => {
+    assert.strictEqual(writer.getUnavailableReason(), undefined)
+    enqueue(4096)
+    assert.strictEqual(writer.hasCapacity(), false)
+    assert.strictEqual(writer.enqueue({ flagKey: 'overflow', timestamp: 100 }), false)
+    clock.tick(10000)
+    assert.strictEqual(workers.length, 0)
+    assert.strictEqual(clock.countTimers(), 0)
+    writer.setEnabled(true)
+    const batches = workers[0].messages.filter(message => message.type === 'batch')
+    assert.strictEqual(batches.length, 64)
+    assert.ok(batches.every(message => message.events.length === 64))
+    assert.strictEqual(writer.hasCapacity(), false)
+    assert.strictEqual(dropped('unavailable'), 0)
+    assert.strictEqual(dropped('queue_overflow'), 1)
+  })
+
+  it('preserves consented startup snapshots and the eight-snapshot message limit', () => {
+    for (let i = 0; i < 17; i++) {
+      assert.strictEqual(writer.enqueue({
+        flagKey: 'flag',
+        timestamp: 100,
+        observeFullEvaluationData: true,
+        attrs: Object.freeze({ plan: 'pro' }),
+      }), true)
+    }
+    writer.flush()
+    assert.strictEqual(workers.length, 0)
+    writer.setEnabled(true)
+    assert.deepStrictEqual(workers[0].messages.map(message => message.type), ['batch', 'batch', 'batch', 'flush'])
+    const batches = workers[0].messages.filter(message => message.type === 'batch')
+    assert.deepStrictEqual(batches.map(message => message.events.length), [8, 8, 1])
+    assert.ok(batches.flatMap(message => message.events).every(event =>
+      event.observeFullEvaluationData === true && event.attrs.plan === 'pro'))
+  })
+
+  it('keeps mixed discovery batches within both message limits', () => {
+    enqueue(60)
+    for (let i = 0; i < 10; i++) {
+      writer.enqueue({ flagKey: 'flag', timestamp: 100, observeFullEvaluationData: true })
+    }
+    enqueue(70)
+    writer.setEnabled(true)
+    const batches = workers[0].messages.filter(message => message.type === 'batch')
+    assert.strictEqual(batches.flatMap(message => message.events).length, 140)
+    assert.ok(batches.every(message => message.events.length <= 64 &&
+      message.events.filter(event => event.observeFullEvaluationData).length <= 8))
+  })
+
+  for (const outcome of ['unavailable', 'closed', 'worker_failure']) {
+    it(`settles discovery-pending observations once when ${outcome}`, () => {
+      enqueue(130)
+      if (outcome === 'unavailable') writer.setEnabled(false)
+      else if (outcome === 'closed') writer.destroy()
+      else {
+        startupError = true
+        writer.setEnabled(true)
+      }
+      assert.strictEqual(writer.getUnavailableReason(), outcome)
+      assert.strictEqual(dropped(outcome), 130)
+      assert.strictEqual(workers.length, 0)
+      writer.destroy()
+      assert.strictEqual(dropped(outcome), 130)
+      writer.setEnabled(true)
+      assert.strictEqual(workers.length, 0)
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+  }
+
+  it('drops the whole startup backlog once if posting a later batch fails', () => {
+    enqueue(130)
+    failPostAfter = 1
+    writer.setEnabled(true)
+    assert.strictEqual(workers[0].messages.filter(message => message.type === 'batch').length, 1)
+    assert.strictEqual(writer.getUnavailableReason(), 'worker_failure')
+    assert.strictEqual(dropped('worker_failure'), 130)
+  })
 
   it('starts lazily and posts full batches synchronously with one deferred partial batch', () => {
     assert.strictEqual(workers.length, 0)

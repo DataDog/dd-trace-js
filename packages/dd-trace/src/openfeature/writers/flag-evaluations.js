@@ -55,6 +55,8 @@ function serializeRoute (route, id) {
 
 class FlagEvaluationsWriter {
   #enabled = false
+  #discoveryPending = true
+  #flushPending = false
   #closed = false
   #failed = false
   #worker
@@ -99,7 +101,7 @@ class FlagEvaluationsWriter {
   getUnavailableReason () {
     if (this.#closed) return 'closed'
     if (this.#failed) return 'worker_failure'
-    return this.#enabled ? undefined : 'unavailable'
+    return this.#enabled || this.#discoveryPending ? undefined : 'unavailable'
   }
 
   /**
@@ -108,18 +110,22 @@ class FlagEvaluationsWriter {
    */
   setEnabled (enabled, route) {
     if (this.#closed || this.#failed) return
+    const discoveryPending = this.#discoveryPending
+    this.#discoveryPending = false
     this.#routeId++
     if (route) this.#route = route
     if (!enabled) {
       this.#discardPartial('unavailable')
       this.#post({ type: 'enabled', enabled: false })
       this.#enabled = false
+      this.#flushPending = false
       return
     }
     try {
       this.#serializedRoute = serializeRoute(this.#route, this.#routeId)
       this.#post({ type: 'enabled', enabled: true, route: this.#serializedRoute })
       this.#enabled = !this.#failed
+      if (discoveryPending && this.#enabled) this.#drainDiscoveryQueue()
     } catch {
       this.#fail()
     }
@@ -140,6 +146,8 @@ class FlagEvaluationsWriter {
     Atomics.add(this.#state, 0, 1)
     Atomics.add(this.#state, 1, 1)
     this.#batch.push(normalized)
+    // Discovery uses the same queue credits; no worker or timer is needed until a route is known.
+    if (this.#discoveryPending) return true
     // A consented event flushes any batch of 8+, so a mixed batch contains at most 8 context snapshots.
     if (this.#batch.length >= (consent ? CONSENT_BATCH_SIZE : BATCH_SIZE)) this.#sendBatch()
     else if (this.#batchTimer === undefined) {
@@ -151,6 +159,10 @@ class FlagEvaluationsWriter {
 
   flush () {
     if (this.#closed || this.#failed) return
+    if (this.#discoveryPending) {
+      this.#flushPending = true
+      return
+    }
     this.#sendBatch()
     this.#post({ type: 'flush' })
     collectWorkerTelemetry(this.#state)
@@ -158,7 +170,8 @@ class FlagEvaluationsWriter {
 
   destroy () {
     if (this.#closed) return
-    this.#sendBatch()
+    if (this.#discoveryPending) this.#discardPartial('closed')
+    else this.#sendBatch()
     this.#closed = true
     this.#enabled = false
     this.#cleanup()
@@ -186,6 +199,24 @@ class FlagEvaluationsWriter {
     this.#post({ type: 'batch', events })
   }
 
+  #drainDiscoveryQueue () {
+    const events = this.#batch
+    this.#batch = []
+    // Keep the normal message limits when releasing a potentially queue-sized startup backlog.
+    for (const event of events) {
+      this.#batch.push(event)
+      if (this.#batch.length >= (event.observeFullEvaluationData ? CONSENT_BATCH_SIZE : BATCH_SIZE)) {
+        this.#sendBatch()
+        if (this.#failed) return
+      }
+    }
+    this.#sendBatch()
+    if (this.#flushPending) {
+      this.#flushPending = false
+      this.flush()
+    }
+  }
+
   // Providers that never evaluate need no worker. A first batch during destroy still uses the bounded drain.
   #startWorker () {
     try {
@@ -193,9 +224,12 @@ class FlagEvaluationsWriter {
       // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
       // Strip preloads so the worker cannot initialize the application tracer recursively.
       const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
+      // PnP has no node_modules fallback: retain only its active resolver, not application preloads.
+      // eslint-disable-next-line n/no-missing-require -- Yarn supplies this virtual module only in PnP applications.
+      const execArgv = process.versions.pnp ? ['--require', require.resolve('pnpapi')] : []
       this.#worker = new Worker(join(__dirname, 'flag-evaluation-worker.js'), {
         name: 'dd-flag-evaluation',
-        execArgv: [],
+        execArgv,
         env,
         workerData: { route: this.#serializedRoute, context: this.#context, state: this.#state.buffer },
       })

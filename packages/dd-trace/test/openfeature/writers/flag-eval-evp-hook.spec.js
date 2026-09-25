@@ -51,7 +51,7 @@ describe('FlagEvalEVPHook', () => {
   beforeEach(() => {
     clock = sinon.useFakeTimers({ now })
     writer = {
-      getUnavailableReason: sinon.stub().returns('unavailable'),
+      getUnavailableReason: sinon.stub().returns(undefined),
       hasCapacity: sinon.stub().returns(true),
       enqueue: sinon.spy(),
       setEnabled: sinon.spy(enabled => writer.getUnavailableReason.returns(enabled ? undefined : 'unavailable')),
@@ -80,6 +80,16 @@ describe('FlagEvalEVPHook', () => {
   function enable () {
     selectRoute.firstCall.args[1](true, route)
   }
+
+  it('captures an evaluation-time snapshot while route discovery is still pending', () => {
+    const context = { targetingKey: 'customer', nested: { plan: 'pro' } }
+    hook.finally({ flagKey: 'flag', context }, details())
+    context.nested.plan = 'changed'
+    enable()
+    sinon.assert.calledOnce(writer.enqueue)
+    assert.deepStrictEqual({ ...writer.enqueue.firstCall.args[0].attrs }, { 'nested.plan': 'pro' })
+    assert.strictEqual(metricValue('flagevaluation.rows.dropped', 'unavailable'), 0)
+  })
 
   it('reuses route selection and captures detached context with evaluation-time metadata', () => {
     enable()
@@ -117,6 +127,7 @@ describe('FlagEvalEVPHook', () => {
   }
 
   it('counts unavailable, full and closed separately before touching context', () => {
+    selectRoute.firstCall.args[1](false)
     const getContext = sinon.spy(() => { throw new Error('context accessed') })
     const input = { flagKey: 'flag', get context () { return getContext() } }
     hook.finally(input, details())
