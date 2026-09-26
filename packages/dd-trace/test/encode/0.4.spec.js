@@ -808,6 +808,24 @@ describe('encode', () => {
         assert.strictEqual(msgpack.decode(trace[0].meta_struct.baz), metaStruct.baz)
       })
 
+      it('should encode boolean and null values in meta_struct and nested arrays', () => {
+        const metaStruct = {
+          enabled: true,
+          nested: {
+            flags: [true, false, null],
+          },
+        }
+        data[0].meta_struct = metaStruct
+        encoder.encode(data)
+
+        const buffer = encoder.makePayload()
+
+        const decoded = msgpack.decode(buffer, { useBigInt64: true })
+        const trace = decoded[0]
+        assert.strictEqual(msgpack.decode(trace[0].meta_struct.enabled), metaStruct.enabled)
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.nested), metaStruct.nested)
+      })
+
       it('should ignore array in meta_struct', () => {
         const metaStruct = ['one', 2, 'three', 4, 5, 'six']
         data[0].meta_struct = metaStruct
@@ -967,7 +985,7 @@ describe('encode', () => {
         assert.strictEqual(trace[0].meta_struct.undefinedProperty, undefined)
       })
 
-      it('should encode meta_struct ignoring null properties', () => {
+      it('should encode null values in meta_struct', () => {
         const metaStruct = {
           foo: 'bar',
           nullProperty: null,
@@ -981,11 +999,8 @@ describe('encode', () => {
         const decoded = msgpack.decode(buffer, { useBigInt64: true })
         const trace = decoded[0]
 
-        const expectedMetaStruct = {
-          foo: 'bar',
-        }
-        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
-        assert.strictEqual(trace[0].meta_struct.nullProperty, undefined)
+        assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), metaStruct.foo)
+        assert.strictEqual(msgpack.decode(trace[0].meta_struct.nullProperty), null)
       })
 
       it('should not encode null meta_struct', () => {
