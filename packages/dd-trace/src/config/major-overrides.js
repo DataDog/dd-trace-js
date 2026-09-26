@@ -65,6 +65,13 @@ function applyMajorOverrides (supportedConfigurations, majorVersion) {
     const electronEntry = supportedConfigurations.DD_TRACE_ELECTRON_ENABLED?.[0]
     if (electronEntry) electronEntry.default = 'false'
   }
+
+  if (majorVersion >= 8) {
+    // CORS preflight traces are low-value and high-cardinality. Keep them on through v7 to
+    // avoid silently changing exported traces, and make them opt-in from v8 on.
+    const optionsRequestsEntry = supportedConfigurations.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED?.[0]
+    if (optionsRequestsEntry) optionsRequestsEntry.default = 'false'
+  }
 }
 
 /**
