@@ -542,6 +542,74 @@ versions.forEach((version) => {
       })
     })
 
+    context('retry outcome metadata', () => {
+      for (const outcome of ['fails', 'passes', 'times-out']) {
+        it(`identifies expected failures only when the test ${outcome}`, async (receiver, run) => {
+          receiver.setSettings({ flaky_test_retries_enabled: true })
+          const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-dynamic-atr',
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'false',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              PLAYWRIGHT_EXPECTED_FAILURE: outcome,
+            },
+          })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, outcome === 'fails' ? 1 : 3)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === (outcome === 'passes' ? 'pass' : 'fail')))
+              assert.ok(tests.every(test => test.meta['test.result'] === (outcome === 'fails' ? 'xfail' : undefined)))
+              assert.ok(tests.every(test => test.meta['test.playwright.has_non_retriable_error'] === undefined))
+              assert.strictEqual(tests.filter(test =>
+                test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, outcome === 'fails' ? 0 : 2)
+            })
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, outcome === 'fails' ? 0 : 1)
+        })
+      }
+
+      // Playwright added the non-retriable snapshot marker in 1.43.
+      const snapshotTest = satisfies(version, '>=1.43.0') || version === 'latest' ? it : global.it.skip
+      for (const snapshot of ['missing', 'missing-no-update', 'mismatch']) {
+        snapshotTest(`reports snapshot retryability for ${snapshot}`, async (receiver, run) => {
+          receiver.setSettings({ flaky_test_retries_enabled: true })
+          const config = './ci-visibility/playwright-snapshot-retryability/config.js'
+          const proc = run(`./node_modules/.bin/playwright test -c ${config}`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PLAYWRIGHT_SNAPSHOT_CASE: snapshot,
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'false',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            },
+          })
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const nonRetriable = snapshot === 'missing'
+              assert.strictEqual(tests.length, nonRetriable ? 1 : 3)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.ok(tests.every(test => test.meta['test.result'] === undefined))
+              assert.ok(tests.every(test =>
+                test.meta['test.playwright.has_non_retriable_error'] === (nonRetriable ? 'true' : undefined)))
+              assert.strictEqual(tests.filter(test =>
+                test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, nonRetriable ? 0 : 2)
+              const session = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(session.meta['test.playwright.has_non_retriable_error'], undefined)
+              assert.strictEqual(session.meta['test.result'], undefined)
+            })
+          const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1)
+        })
+      }
+    })
+
     contextNewVersions('dynamic name detection', () => {
       it('tags new tests with dynamic names and logs a warning', async (receiver, run) => {
         receiver.setSettings({

@@ -536,6 +536,8 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:finish', ({
       span,
       testStatus,
+      isExpectedFailure,
+      hasNonRetriableError,
       steps,
       error,
       extraTags,
@@ -574,6 +576,12 @@ class PlaywrightPlugin extends CiPlugin {
       }
       if (extraTags) {
         span.addTags(extraTags)
+      }
+      if (isExpectedFailure) {
+        span.setTag('test.result', 'xfail')
+      }
+      if (hasNonRetriableError === true) {
+        span.setTag('test.playwright.has_non_retriable_error', 'true')
       }
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
