@@ -915,6 +915,7 @@ function testEndHandler ({
   testDuration,
   testResultStatus,
   expectedStatus = test.expectedStatus,
+  hasNonRetriableError,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -1087,6 +1088,8 @@ function testEndHandler ({
     if (testCtx) {
       testFinishCh.publish({
         testStatus,
+        isExpectedFailure: testResultStatus === 'failed' && expectedStatus === 'failed',
+        hasNonRetriableError,
         steps: testResult?.steps || [],
         isRetry: testResult?.retry > 0,
         error,
@@ -1278,7 +1281,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       videos.push(attachment)
     }
   })
-  worker.on('testEnd', ({ testId, status, errors, annotations, duration, expectedStatus }) => {
+  worker.on('testEnd', ({ testId, status, errors, annotations, duration, expectedStatus, hasNonRetriableError }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
@@ -1300,6 +1303,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
         testDuration: duration,
         testResultStatus: status,
         expectedStatus,
+        hasNonRetriableError,
       }
     )
     const testResult = test.results.at(-1)
@@ -1406,6 +1410,8 @@ function dispatcherHook (dispatcherExport) {
             annotations: params.annotations,
             testStatus: STATUS_TO_TEST_STATUS[testResult.status],
             testResultStatus: testResult.status,
+            expectedStatus: params.expectedStatus,
+            hasNonRetriableError: params.hasNonRetriableError,
             error: testResult.error,
             isTimeout,
             shouldCreateTestSpan: true,
@@ -2665,6 +2671,8 @@ function instrumentWorkerMainMethods (workerMain) {
 
     await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
+      isExpectedFailure: status === 'failed' && testInfo.expectedStatus === 'failed',
+      hasNonRetriableError: testInfo._hasNonRetriableError,
       retryTestId,
       deferFinalStatus: test._ddDeferFinalStatus,
       steps: steps.filter(step => step.testId === testId),
