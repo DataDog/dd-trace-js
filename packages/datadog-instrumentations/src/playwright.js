@@ -69,6 +69,7 @@ const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatch
 const filterForShardCh = tracingChannel('orchestrion:playwright:filterForShard')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
+const lastRunTestIdCh = tracingChannel('orchestrion:playwright:lastRunTestId')
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
@@ -76,6 +77,7 @@ const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomati
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
 const testToCtx = new WeakMap()
+const originalTestIdsByRetry = new WeakMap()
 const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
@@ -475,6 +477,7 @@ function deepCloneSuite (suite, filterTest, tags = [], configureCopiedTest) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
+        originalTestIdsByRetry.set(copiedTest, originalTestIdsByRetry.get(entry) ?? entry.id)
         if (configureCopiedTest) {
           configureCopiedTest(copiedTest, entry)
         }
@@ -1904,6 +1907,14 @@ pageGotoCh.subscribe({
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
     const rumDetectionPromise = handlePageGoto(ctx.self)
     ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
+  },
+})
+
+// Retry clones exist only after discovery, so persist their original IDs for --last-failed.
+lastRunTestIdCh.subscribe({
+  end (ctx) {
+    const originalId = originalTestIdsByRetry.get(ctx.arguments[0])
+    if (originalId !== undefined) ctx.result = originalId
   },
 })
 

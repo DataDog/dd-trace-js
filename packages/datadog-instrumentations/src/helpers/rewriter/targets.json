@@ -77,6 +77,8 @@
   "playwright-core/lib/coreBundle.js": "playwright-core",
   "playwright/lib/index.js": "playwright",
   "playwright/lib/runner/index.js": "playwright",
+  "playwright/lib/runner/lastRun.js": "playwright",
+  "playwright/lib/runner/runner.js": "playwright",
   "postgres/cjs/src/connection.js": "postgres",
   "postgres/cjs/src/index.js": "postgres",
   "postgres/cjs/src/query.js": "postgres",

@@ -2,6 +2,8 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const fs = require('node:fs/promises')
+const path = require('node:path')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
@@ -190,6 +192,104 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
           }
         } else {
           assert.match(output, /1 passed/)
+        }
+      })
+    }
+  })
+}
+
+for (const version of ['1.44.0', '1.58.2', '1.60.0', '1.63.0']) {
+  describe(`playwright@${version} SDK retry history`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+    this.timeout(60000)
+    useSandbox([`@playwright/test@${version}`])
+
+    for (const feature of ['efd', 'attempt-to-fix', 'efd-repeat-each']) {
+      it(`can select a test whose ${feature} repetition failed`, async (receiver, run) => {
+        const nativeRepeats = feature === 'efd-repeat-each' ? 2 : 1
+        const cwd = sandboxCwd()
+        const fixture = path.join(cwd, `sdk-retry-history-${feature}`)
+        const historyFile = path.join(fixture, 'results', '.last-run.json')
+        await fs.mkdir(fixture, { recursive: true })
+        await fs.writeFile(path.join(fixture, 'repeat-test.js'),
+          "const { test } = require('@playwright/test')\n" +
+          "test('synthetic changing result', ({}, info) => {\n" +
+          `  if (process.env.DIAG_FAIL_REPEATS === 'true' && info.repeatEachIndex >= ${nativeRepeats}) {\n` +
+          "    throw new Error('Synthetic repetition failure')\n  }\n})\n")
+        await fs.writeFile(path.join(fixture, 'playwright.config.js'),
+          `module.exports = { testDir: '.', testMatch: '*-test.js', workers: 1, repeatEach: ${nativeRepeats}, ` +
+          "outputDir: './results' }\n")
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: feature !== 'attempt-to-fix',
+            slow_test_retries: { '5s': 2 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: feature !== 'attempt-to-fix',
+          test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 2 },
+        })
+        receiver.setKnownTests({ playwright: {} })
+        receiver.setTestManagementTests({
+          playwright: {
+            suites: {
+              'repeat-test.js': {
+                tests: { 'synthetic changing result': { properties: { attempt_to_fix: true } } },
+              },
+            },
+          },
+        })
+        const events = []
+        receiver.on('message', ({ url, payload }) => {
+          if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+        })
+        const command = './node_modules/.bin/playwright test ' +
+          `-c ${fixture}/playwright.config.js --retries=0 --reporter=json repeat-test.js`
+        const execute = async (args, traced, failRepeats) => {
+          let stdout = ''
+          let stderr = ''
+          const proc = run(`${command} ${args}`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: traced ? '-r dd-trace/ci/init' : '',
+              DD_TRACE_ENABLED: String(traced),
+              DD_CIVISIBILITY_ENABLED: String(traced),
+              DD_CIVISIBILITY_ITR_ENABLED: 'true',
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              DIAG_FAIL_REPEATS: String(failRepeats),
+            },
+          })
+          proc.stdout?.on('data', data => { stdout += data.toString() })
+          proc.stderr?.on('data', data => { stderr += data.toString() })
+          const [exitCode] = await once(proc, 'close')
+          return { exitCode, report: JSON.parse(stdout), stderr }
+        }
+        const seed = await execute('', true, true)
+        const seedEvents = events.splice(0)
+        const history = await fs.readFile(historyFile)
+        const runs = []
+        for (const traced of [false, true]) {
+          await fs.writeFile(historyFile, history)
+          const result = await execute('--last-failed', traced, false)
+          runs.push({ traced, ...result, events: events.splice(0) })
+        }
+        if (process.env.PW_DIAG_OUTPUT) {
+          await fs.mkdir(process.env.PW_DIAG_OUTPUT, { recursive: true })
+          await fs.writeFile(path.join(process.env.PW_DIAG_OUTPUT, `${version}-${feature}-history.json`),
+            JSON.stringify({ seed, seedEvents, history: JSON.parse(history), runs },
+              (key, value) => typeof value === 'bigint' ? value.toString() : value, 2))
+        }
+        assert.strictEqual(seedEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+        assert.strictEqual(seed.report.stats.unexpected, 2 * nativeRepeats)
+        assert.strictEqual(new Set(JSON.parse(history).failedTests).size, nativeRepeats)
+        for (const result of runs) {
+          assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
+          assert.strictEqual(result.report.stats.expected, (result.traced ? 3 : 1) * nativeRepeats)
+          if (result.traced) {
+            assert.strictEqual(result.events.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+            const session = result.events.find(event => event.type === 'test_session_end')
+            assert.strictEqual(session.content.meta[TEST_STATUS], 'pass')
+          }
         }
       })
     }
