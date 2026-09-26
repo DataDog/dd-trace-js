@@ -10,10 +10,13 @@ const proxyquire = require('proxyquire')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-const { MANUAL_KEEP } = require('../../../../ext/tags')
+const { USER_KEEP, USER_REJECT } = require('../../../../ext/priority')
+const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
 const getConfig = require('../../src/config')
 const TextMapPropagator = require('../../src/opentracing/propagation/text_map')
+const DatadogSpan = require('../../src/opentracing/span')
+const PrioritySampler = require('../../src/priority_sampler')
 
 const startCh = channel('dd-trace:span:start')
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
@@ -46,6 +49,7 @@ describe('Span', () => {
 
     prioritySampler = {
       sample: sinon.stub(),
+      setPriorityFromTags: sinon.stub(),
     }
 
     tagger = {
@@ -594,7 +598,20 @@ describe('Span', () => {
       span.setTag(MANUAL_KEEP, true)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledWith(prioritySampler.sample, span, false)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, span.context().getTags())
+    })
+
+    it('should reapply all manual sampling tags so precedence is preserved', () => {
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.setTag(MANUAL_KEEP, true)
+      span.setTag(MANUAL_DROP, true)
+
+      sinon.assert.calledTwice(prioritySampler.setPriorityFromTags)
+      assert.deepStrictEqual(prioritySampler.setPriorityFromTags.secondCall.args, [span, span.context().getTags()])
+      assert.deepStrictEqual(prioritySampler.setPriorityFromTags.secondCall.args[1], {
+        [MANUAL_KEEP]: true,
+        [MANUAL_DROP]: true,
+      })
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {
@@ -637,13 +654,44 @@ describe('Span', () => {
       sinon.assert.notCalled(prioritySampler.sample)
     })
 
-    const legacyAddTagsShape = DD_MAJOR < 6 ? it : it.skip
-    legacyAddTagsShape('still accepts string and array inputs via tagger on v5', () => {
-      span.addTags('foo:bar')
-      span.addTags([{ baz: 'qux' }])
+    it('reapplies live tags only when the legacy v5 input contains sampling tags', () => {
+      const legacyTagger = { add: sinon.spy(require('../../src/tagger').add) }
+      const LegacySpan = proxyquire('../../src/opentracing/span', {
+        perf_hooks: { performance: { now } },
+        '../id': sinon.stub().returns('789'),
+        '../log': log,
+        '../tagger': legacyTagger,
+        '../../../../version': { DD_MAJOR: 5 },
+      })
+      const legacySpan = new LegacySpan(tracer, processor, prioritySampler, { operationName: 'operation' })
 
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), 'foo:bar')
-      sinon.assert.calledWith(tagger.add, span.context().getTags(), [{ baz: 'qux' }])
+      legacySpan.addTags(`${MANUAL_KEEP}:true`)
+
+      assert.strictEqual(legacySpan.context().getTag(MANUAL_KEEP), 'true')
+      sinon.assert.calledOnceWithExactly(
+        prioritySampler.setPriorityFromTags,
+        legacySpan,
+        { [MANUAL_KEEP]: 'true' }
+      )
+
+      prioritySampler.setPriorityFromTags.resetHistory()
+      legacySpan.addTags([{ [MANUAL_DROP]: true }])
+      sinon.assert.calledOnceWithExactly(
+        prioritySampler.setPriorityFromTags,
+        legacySpan,
+        legacySpan.context().getTags()
+      )
+      assert.deepStrictEqual(prioritySampler.setPriorityFromTags.firstCall.args[1], {
+        [MANUAL_KEEP]: 'true',
+        [MANUAL_DROP]: true,
+      })
+      prioritySampler.setPriorityFromTags.resetHistory()
+      legacySpan.addTags('foo:bar')
+      legacySpan.addTags([{ baz: 'qux' }])
+
+      assert.strictEqual(legacySpan.context().getTag('foo'), 'bar')
+      assert.strictEqual(legacySpan.context().getTag('baz'), 'qux')
+      sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
     })
 
     const v6AddTagsShape = DD_MAJOR >= 6 ? it : it.skip
@@ -658,10 +706,58 @@ describe('Span', () => {
     })
 
     it('should sample based on manual sampling tags', () => {
-      span.addTags({ [MANUAL_KEEP]: true })
+      const tags = { [MANUAL_KEEP]: true }
+      span.addTags(tags)
 
       assert.strictEqual(span.context().getTag(MANUAL_KEEP), true)
-      sinon.assert.calledWith(prioritySampler.sample, span, false)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, tags)
+    })
+
+    for (const [first, second, expected] of [
+      [{ [MANUAL_KEEP]: true }, { [MANUAL_DROP]: true }, USER_KEEP],
+      [{ [MANUAL_DROP]: true }, { [MANUAL_KEEP]: true }, USER_KEEP],
+      [{ [MANUAL_DROP]: true }, { [SAMPLING_PRIORITY]: USER_KEEP }, USER_REJECT],
+      [{ [MANUAL_KEEP]: true, [MANUAL_DROP]: true }, { [MANUAL_KEEP]: false }, USER_REJECT],
+    ]) {
+      it(`preserves priority ${expected} when adding ${JSON.stringify(second)} after ${JSON.stringify(first)}`, () => {
+        const sampler = new PrioritySampler('test', { sampleRate: 1 })
+        const batched = new DatadogSpan(tracer, processor, sampler, { operationName: 'batched' })
+        const combined = new DatadogSpan(tracer, processor, sampler, { operationName: 'combined' })
+
+        batched.addTags(first)
+        batched.addTags(second)
+        combined.addTags({ ...first, ...second })
+
+        assert.strictEqual(batched.context()._sampling.priority, expected)
+        assert.strictEqual(combined.context()._sampling.priority, expected)
+        assert.strictEqual(batched.context()._sampling.isProbabilityDecision, false)
+      })
+    }
+
+    for (const key of [MANUAL_KEEP, MANUAL_DROP, SAMPLING_PRIORITY]) {
+      it(`checks inherited ${key} while sampling only the live tag map`, () => {
+        const tags = Object.create({ [key]: true })
+        tags.foo = 'bar'
+
+        span.addTags(tags)
+
+        assert.deepStrictEqual(span.context().getTags(), { foo: 'bar' })
+        sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, span.context().getTags())
+      })
+
+      it(`does not reapply sampling for an undefined ${key}`, () => {
+        span.addTags({ [key]: undefined })
+
+        sinon.assert.notCalled(prioritySampler.setPriorityFromTags)
+      })
+    }
+
+    it('checks falsy sampling values on prototype-free tag maps', () => {
+      const tags = Object.assign(Object.create(null), { [MANUAL_KEEP]: false })
+
+      span.addTags(tags)
+
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriorityFromTags, span, span.context().getTags())
     })
 
     it('should be published via dd-trace:span:tags:update channel', () => {
