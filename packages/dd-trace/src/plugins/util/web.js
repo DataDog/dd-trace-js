@@ -7,6 +7,7 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
+const { USER_REJECT } = require('../../../../../ext/priority')
 const { ERROR_MESSAGE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
@@ -102,8 +103,7 @@ const web = {
     context.config = config
 
     if (!config.filter(req.url)) {
-      span.setTag(MANUAL_DROP, true)
-      span.context()._trace.isRecording = false
+      excludeRequest(span)
     }
 
     if (config.service) {
@@ -230,7 +230,15 @@ const web = {
       }
     }
 
-    return startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+    const span = startSpanHelper(tracer, name, { childOf }, traceCtx, config)
+
+    // Runs once at span creation rather than in `setConfig` so the serverless
+    // path (Azure Functions), which never calls `setConfig`, is covered too.
+    if (req.method === 'OPTIONS' && config.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED === false) {
+      excludeRequest(span)
+    }
+
+    return span
   },
 
   extractIncomingServerContext (tracer, headers) {
@@ -397,6 +405,20 @@ function isOriginAllowed (req, headers) {
 
 function splitHeader (str) {
   return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
+}
+
+// Shared request-exclusion path (`blocklist`, disabled OPTIONS tracing). The
+// span still runs its full lifecycle so context propagation, AppSec, and the
+// framework plugins keep working, but the trace is never exported and
+// downstream services receive a rejecting sampling priority.
+/** @param {import('../../opentracing/span')} span */
+function excludeRequest (span) {
+  span.setTag(MANUAL_DROP, true)
+  // `MANUAL_DROP` only samples when no priority exists yet. An upstream that
+  // already kept the trace must still be overridden, otherwise downstream
+  // services keep their spans and the backend shows an orphaned trace.
+  span._prioritySampler?.setPriority(span, USER_REJECT)
+  span.context()._trace.isRecording = false
 }
 
 function addRequestTags (context, spanType) {
