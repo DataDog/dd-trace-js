@@ -1166,6 +1166,52 @@ describe('Plugin', () => {
           ])
         })
       })
+
+      describe('with ignored transaction operations', () => {
+        let tracer
+
+        beforeEach(async () => {
+          tracer = await agent.load('mariadb', undefined, { ignoredTransactionOperations: ['begin', 'COMMIT'] })
+        })
+
+        afterEach(() => agent.close())
+
+        it('omits transaction spans for promise and callback bundles', async () => {
+          const promiseApi = require(versionModule).get('mariadb')
+          const callbackApi = require(versionModule).get('mariadb/callback')
+          const promiseConnection = await promiseApi.createConnection(connectionOptions)
+          const callbackConnection = callbackApi.createConnection(connectionOptions)
+
+          try {
+            await callbackResult(callback => callbackConnection.connect(callback))
+            const assertion = assertTraceResources('bundle.ignored_transactions', [
+              'SELECT 23 AS promise_value',
+              'SELECT 24 AS callback_value',
+            ])
+            const operation = tracer.trace('bundle.ignored_transactions', async () => {
+              await promiseConnection.beginTransaction()
+              const promiseRows = await promiseConnection.query('SELECT 23 AS promise_value')
+              await promiseConnection.commit()
+
+              await callbackResult(callback => callbackConnection.beginTransaction(callback))
+              const [callbackRows] = await callbackResult(callback => {
+                callbackConnection.query('SELECT 24 AS callback_value', callback)
+              })
+              await callbackResult(callback => callbackConnection.commit(callback))
+
+              return [promiseRows[0].promise_value, callbackRows[0].callback_value]
+            })
+
+            const [values] = await Promise.all([operation, assertion])
+            assert.deepStrictEqual(values, [23, 24])
+          } finally {
+            await Promise.all([
+              promiseConnection.end(),
+              callbackResult(callback => callbackConnection.end(callback)),
+            ])
+          }
+        })
+      })
     })
   })
 })

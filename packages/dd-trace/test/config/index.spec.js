@@ -3500,6 +3500,36 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
+  describe('ignored transaction operations', () => {
+    it('defaults to an empty list', () => {
+      assert.deepStrictEqual(getConfig().ignoredTransactionOperations, [])
+    })
+
+    it('normalizes case from the environment', () => {
+      process.env.DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS = 'BeGiN, COMMIT'
+
+      assert.deepStrictEqual(getConfig().ignoredTransactionOperations, ['begin', 'commit'])
+      assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+        { name: 'DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS', value: 'BeGiN, COMMIT', origin: 'env_var' },
+      ])
+    })
+
+    it('prefers programmatic configuration', () => {
+      process.env.DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS = 'begin'
+
+      assert.deepStrictEqual(
+        getConfig({ ignoredTransactionOperations: ['RoLlBaCk'] }).ignoredTransactionOperations,
+        ['rollback']
+      )
+    })
+
+    it('rejects unknown operations', () => {
+      process.env.DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS = 'begin,savepoint'
+
+      assert.deepStrictEqual(getConfig().ignoredTransactionOperations, [])
+    })
+  })
+
   describe('graphql plugin config env vars', () => {
     it('parses the defaults onto the config object', () => {
       const config = getConfig()

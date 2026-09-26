@@ -2786,6 +2786,18 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "configurationNames": [
+          "ignoredTransactionOperations"
+        ],
+        "default": "",
+        "allowed": "|(?:begin|commit|rollback)(?:,(?:begin|commit|rollback))*",
+        "transform": "toLowerCase"
+      }
+    ],
     "DD_TRACE_DEBUG": [
       {
         "implementation": "B",

@@ -53,6 +53,17 @@ tracer.use('pg', {
 })
 ```
 
+Set `ignoredTransactionOperations` to omit spans for simple transaction statements from `pg`, `mysql`,
+`mysql2`, and `mariadb`. The database command still runs. The accepted operations are `begin`, `commit`, and
+`rollback`, matched without regard to case. `begin` also covers `START TRANSACTION`. `BEGIN`, `COMMIT`, and
+`ROLLBACK` can include `WORK`. PostgreSQL also accepts `TRANSACTION` after those commands. Leading and trailing
+whitespace or SQL comments follow each database's syntax; executable comments keep their spans.
+SQL modifiers, savepoint operations, multi-statement queries, and non-string SQL remain traced. The default is `[]`.
+
+Set the option in `tracer.init({ ignoredTransactionOperations: ['begin', 'commit'] })` or use
+`DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS=begin,commit`. A plugin option can override the global value:
+`tracer.use('pg', { ignoredTransactionOperations: ['begin'] })`.
+
 LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
 
 The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
