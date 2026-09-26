@@ -1216,6 +1216,7 @@ function getFinishWrapper (exitOrClose) {
       error = new Error(`Test suites failed: ${failedSuites.length}.`)
     }
 
+    // pathsSet contains candidates before sharding, including files that never run.
     const hasNoTestFiles = this.state.pathsSet.size === 0
     const isEmptyShard = emptyShardContexts.has(this)
     const hasUnexpectedEmptySession = hasNoTestFiles && !isEmptyShard &&

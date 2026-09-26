@@ -154,20 +154,17 @@ describe('register', () => {
     loadRegisterWithEnv()
 
     channel('dd-trace:instrumentation:load:orchestrion').publish({
-      activationName: 'bullmq',
       moduleName: 'bullmq',
       result: 'unsupported',
       version: '5.65.0',
     })
     channel('dd-trace:instrumentation:load:orchestrion').publish({
-      activationName: 'bullmq',
       moduleName: 'bullmq',
       result: 'unsupported',
       version: '5.65.0',
     })
     channel('dd-trace:exporter:first-flush').publish()
     channel('dd-trace:instrumentation:load:orchestrion').publish({
-      activationName: 'bullmq',
       moduleName: 'bullmq',
       result: 'unsupported',
       version: '5.65.0',
@@ -191,7 +188,7 @@ describe('register', () => {
     const subscriber = message => activations.push(message)
     loadChannel.subscribe(subscriber)
     const orchestrionChannel = channel('dd-trace:instrumentation:load:orchestrion')
-    const message = { activationName: '@langchain/core', moduleName: '@langchain/core', version: '1.0.0' }
+    const message = { moduleName: '@langchain/core', version: '1.0.0' }
 
     try {
       orchestrionChannel.publish({ ...message, result: 'unsupported' })

@@ -1431,7 +1431,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
 
 function runAllTestsWrapper (runAllTests, playwrightVersion) {
   // Config parameter is only available from >=1.55.0
-  return async function (config) {
+  return async function (config, options) {
     // A later run must not inherit ATR settings when configuration fails or the plugin is disabled.
     isFlakyTestRetriesEnabled = false
     flakyTestRetriesCount = 0
@@ -1682,6 +1682,14 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     const finalStatus = hasReporterError
       ? 'fail'
       : (preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus])
+    const isTestDiscovery = finalStatus === 'pass' &&
+      Boolean(
+        config?.listOnly ||
+        config?.cliListOnly ||
+        runnerConfig.cliListOnly ||
+        runnerConfig._internal?.listOnly ||
+        options?.listMode
+      )
     const isEmptyShard = Boolean(playwrightConfig.shard) &&
       hasTestsBeforeSharding &&
       !hasTestsAssignedToShard &&
@@ -1691,7 +1699,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     )
     const hasSkippedTests = testsToTestStatuses.size > 0 || testsReportedInGenerateSummary.size > 0
     const testSessionEmptyReason = finalStatus === 'pass' && !hasExecutedTests
-      ? (isEmptyShard ? 'zero_test_shard' : hasSkippedTests ? 'all_tests_skipped' : 'zero_tests')
+      ? (isTestDiscovery
+          ? 'test_discovery'
+          : isEmptyShard ? 'zero_test_shard' : hasSkippedTests ? 'all_tests_skipped' : 'zero_tests')
       : undefined
     await getChannelPromise(testSessionFinishCh, {
       status: testSessionEmptyReason ? 'skip' : finalStatus,

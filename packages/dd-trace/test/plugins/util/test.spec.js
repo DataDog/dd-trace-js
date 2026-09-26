@@ -106,6 +106,7 @@ describe('setExpectedEmptyTestSessionTags', () => {
     ['zero_tests', 'No tests were detected'],
     ['all_tests_skipped', 'All tests were skipped'],
     ['zero_test_shard', 'No tests were assigned to this shard'],
+    ['test_discovery', 'Test discovery only (--list)'],
   ]) {
     it(`explains ${reason} on both the session and module`, () => {
       const testSessionSpan = { setTag: sinon.spy() }

@@ -13,6 +13,7 @@ const {
   useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
+  stopCiVisTestEnv,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -3380,6 +3381,87 @@ versions.forEach((version) => {
           const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
           assert.strictEqual(exitCode, 1)
         })
+      })
+    }
+  })
+})
+
+versions.forEach(version => {
+  describe(`vitest@${version} empty-session reporting`, function () {
+    this.timeout(60_000)
+    let receiver, childProcess
+
+    useSandbox([`vitest@${version}`], false, ['./integration-tests/ci-visibility/vitest-empty-sessions'])
+
+    beforeEach(async () => {
+      receiver = await new FakeCiVisIntake().start()
+      receiver.setSettings({ itr_enabled: false })
+    })
+
+    afterEach(async () => {
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
+    })
+
+    const scenarios = [
+      'empty-shard', 'empty-shard-default', 'empty-file', 'empty-file-disallowed', 'setup-error', 'normal', 'skipped',
+    ]
+    for (const scenario of scenarios) {
+      // Vitest 1.6 aborts global setup before the session finalizer can be installed.
+      const scenarioIt = version === '1.6.0' && scenario === 'setup-error' ? it.skip : it
+      scenarioIt(`reports ${scenario} with the correct session status`, async () => {
+        // Unlike 1.6, newer Vitest versions reject excess shards unless passWithNoTests is enabled.
+        const isFailure = scenario === 'empty-file-disallowed' || scenario === 'setup-error' ||
+          (scenario === 'empty-shard-default' && version !== '1.6.0')
+        const reason = isFailure
+          ? undefined
+          : scenario.startsWith('empty-shard')
+            ? 'zero_test_shard'
+            : scenario === 'empty-file'
+              ? 'zero_tests'
+              : scenario === 'skipped' ? 'all_tests_skipped' : undefined
+        const skipReason = reason === 'zero_test_shard'
+          ? 'No tests were assigned to this shard'
+          : reason === 'zero_tests'
+            ? 'No tests were detected'
+            : reason === 'all_tests_skipped' ? 'All tests were skipped' : undefined
+        const expectedStatus = isFailure ? 'fail' : reason ? 'skip' : 'pass'
+        const shard = scenario.startsWith('empty-shard') ? ' --shard=2/2' : ''
+        let output = ''
+        childProcess = exec(
+          `./node_modules/.bin/vitest run --config vitest-empty-sessions/config.mjs${shard}`,
+          {
+            cwd: sandboxCwd(),
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              EMPTY_SESSION_SCENARIO: scenario,
+            },
+          }
+        )
+        childProcess.stdout.on('data', chunk => { output += chunk })
+        childProcess.stderr.on('data', chunk => { output += chunk })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const sessions = events.filter(event => event.type === 'test_session_end')
+            const modules = events.filter(event => event.type === 'test_module_end')
+            const tests = events.filter(event => event.type === 'test')
+            assert.strictEqual(sessions.length, 1, output)
+            assert.strictEqual(modules.length, 1, output)
+            assert.strictEqual(tests.length, ['normal', 'skipped'].includes(scenario) ? 1 : 0, output)
+            for (const event of [...sessions, ...modules]) {
+              assert.strictEqual(event.content.meta[TEST_STATUS], expectedStatus, output)
+              assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], reason, output)
+              assert.strictEqual(event.content.meta[TEST_SKIP_REASON], skipReason, output)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, isFailure ? 1 : 0, output)
       })
     }
   })

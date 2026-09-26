@@ -114,6 +114,88 @@ unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound 
   })
 })
 
+const legacyListingVersions = ['1.30.0', '1.31.0', '1.32.0', '1.33.0']
+for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', latest]) {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) continue
+  // Run intermediate-version regressions in the latest CI job.
+  if (PLAYWRIGHT_VERSION === 'latest' && version === oldest) continue
+
+  // Playwright versions below the release line's minimum are not instrumented.
+  const listingContext = version === latest || satisfies(version, `>=${oldest}`) ? describe : describe.skip
+  listingContext(`playwright@${version} test listing`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    this.timeout(60000)
+    useSandbox([`@playwright/test@${version}`])
+
+    const listingCases = [
+      ['lists matching tests', '--list --reporter=json --grep-invert @excluded', 0],
+      ['preserves listing errors', '--list --reporter=line --grep nonexistent-test-name', 1],
+    ]
+    // Keep execution controls on the existing matrix; extra legacy versions cover discovery flag layouts.
+    if (!legacyListingVersions.includes(version)) {
+      listingCases.push(['runs tests with the list reporter', '--reporter=list', 0])
+    }
+    for (const [name, args, exitCode] of listingCases) {
+      it(name, async (receiver, run) => {
+        let stdout = ''
+        let stderr = ''
+        const events = []
+        receiver.on('message', ({ url, payload }) => {
+          if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+        })
+        const proc = run(`./node_modules/.bin/playwright test -c playwright.config.js ${args}`, {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        })
+        proc.stdout?.on('data', chunk => { stdout += chunk.toString() })
+        proc.stderr?.on('data', chunk => { stderr += chunk.toString() })
+        const [actualExitCode] = await once(proc, 'close')
+        const output = stdout + stderr
+        const isListing = args.startsWith('--list')
+        const isSuccessfulListing = isListing && exitCode === 0
+        const expectedTypes = isListing
+          ? ['test_module_end', 'test_session_end']
+          : ['test', 'test_module_end', 'test_session_end', 'test_suite_end']
+        assert.deepStrictEqual(
+          events.filter(event => event.type.startsWith('test')).map(event => ({
+            type: event.type,
+            status: event.content.meta[TEST_STATUS],
+            skipReason: event.content.meta[TEST_SKIP_REASON],
+            emptyReason: event.content.meta[TEST_SESSION_EMPTY_REASON],
+          })).sort((a, b) => a.type.localeCompare(b.type)),
+          expectedTypes.map(type => ({
+            type,
+            status: exitCode !== 0 ? 'fail' : (isListing ? 'skip' : 'pass'),
+            skipReason: isSuccessfulListing ? 'Test discovery only (--list)' : undefined,
+            emptyReason: isSuccessfulListing ? 'test_discovery' : undefined,
+          }))
+        )
+        assert.strictEqual(actualExitCode, exitCode, output)
+        if (args.startsWith('--list')) {
+          if (exitCode === 0) {
+            const report = JSON.parse(stdout)
+            assert.strictEqual(report.suites[0].specs[0].title, 'should report request error tags')
+            assert.deepStrictEqual(report.suites[0].specs[0].tests[0].results, [])
+          } else if (version === '1.18.0') {
+            // Playwright 1.18 returns before finalizing its list-mode reporter when no tests match.
+            assert.strictEqual(stdout, '')
+          } else if (version === '1.30.0') {
+            assert.match(output, /no tests found\./)
+          } else {
+            assert.match(output, /No tests found/)
+          }
+        } else {
+          assert.match(output, /1 passed/)
+        }
+      })
+    }
+  })
+}
+
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
