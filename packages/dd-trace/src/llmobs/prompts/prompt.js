@@ -1,6 +1,7 @@
 'use strict'
 
-const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
+// Match double braces first; preserve surrounding braces such as the closing object in {"age": {age}}.
+const VARIABLE_PATTERN = /\{\{\s*(\w+)\s*\}\}|\{\s*(\w+)\s*\}/g
 
 function render (template, variables) {
   return template.replaceAll(VARIABLE_PATTERN, (match, doubleName, singleName) => {

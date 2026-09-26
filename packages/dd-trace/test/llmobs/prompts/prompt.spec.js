@@ -29,19 +29,32 @@ describe('ManagedPrompt', () => {
     assert.ok(Object.isFrozen(prompt))
   })
 
-  it('renders only balanced single- and double-brace placeholders', () => {
-    const prompt = new ManagedPrompt({
-      id: 'balanced',
-      version: '1',
-      source: 'registry',
-      template: '{{double}} {single} | {{double} | {single}} | {{{double}}} | JSON: {"age": {age}}',
-    })
-
-    assert.strictEqual(
-      prompt.format({ double: 'two', single: 'one', age: 42 }),
-      'two one | {{double} | {single}} | {{{double}}} | JSON: {"age": {age}}'
-    )
-  })
+  for (const chat of [false, true]) {
+    for (const [template, expected] of [
+      ['{name} {{ name }} {user_id} {missing}', 'Ada Ada 42 {missing}'],
+      ['{{name}}}', 'Ada}'],
+      ['{{{name}}}', '{Ada}'],
+      ['{{name}', '{Ada'],
+      ['{name}}', 'Ada}'],
+      ['{"age": {age}}', '{"age": 42}'],
+      ['{"age": {{age}}}', '{"age": 42}'],
+      ['{"user": {"age": {age}}}', '{"user": {"age": 42}}'],
+      ['{"user": {"age": {{age}}}}', '{"user": {"age": 42}}'],
+    ]) {
+      it(`preserves surrounding braces in ${chat ? 'chat' : 'text'}: ${template}`, () => {
+        const prompt = new ManagedPrompt({
+          id: 'balanced',
+          version: '1',
+          source: 'registry',
+          template: chat ? [{ role: 'user', content: template }] : template,
+        })
+        const rendered = prompt.format({ name: 'Ada', user_id: 42, age: 42 })
+        const text = chat ? rendered[0].content : rendered
+        assert.strictEqual(text, expected)
+        if (template.startsWith('{"')) assert.deepStrictEqual(JSON.parse(text), JSON.parse(expected))
+      })
+    }
+  }
 
   it('copies, freezes, and renders chat templates without mutation', () => {
     const template = [
