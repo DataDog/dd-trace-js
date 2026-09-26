@@ -664,6 +664,11 @@ async function promptManagement () {
   })
   const messages = prompt.format({ name: 'Ada', count: 2 })
   const annotation = prompt.toAnnotation({ name: 'Ada', count: 2 })
+  const nestedConfig = prompt.config.model
+  if (nestedConfig && typeof nestedConfig === 'object' && !Array.isArray(nestedConfig)) {
+    // @ts-expect-error Returned configuration is immutable, including nested objects.
+    nestedConfig.temperature = 0.5
+  }
   if (typeof prompt.template !== 'string') {
     // @ts-expect-error Managed prompt templates are immutable.
     prompt.template[0].content = 'Changed'
