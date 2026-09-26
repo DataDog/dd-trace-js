@@ -3947,13 +3947,17 @@ describe(`cucumber@${version} commonJS`, () => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.find(event => event.type === 'test').content
             const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
 
             if (isDisabling) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+            }
+            for (const event of [testSession, testModule]) {
+              assert.strictEqual(event.meta[TEST_STATUS], isDisabling ? 'skip' : 'fail')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], isDisabling ? 'all_tests_skipped' : undefined)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], isDisabling ? 'All tests were skipped' : undefined)
             }
 
             assert.strictEqual(tests.resource, 'ci-visibility/features-test-management/disabled.feature.Say disabled')
