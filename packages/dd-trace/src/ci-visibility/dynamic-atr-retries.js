@@ -86,12 +86,9 @@ function getDynamicAtrBuckets (value) {
  * @param {number[] | null} customBuckets
  */
 function getDynamicAtrRetryCount (durationMs, efdRetryPolicy, customBuckets) {
-  let retryCount
-  if (customBuckets) {
-    retryCount = customBuckets[retryBucketIndexForDuration(durationMs)]
-  } else {
-    retryCount = retriesForDuration(durationMs, efdRetryPolicy)
-  }
+  const retryCount = customBuckets
+    ? customBuckets[retryBucketIndexForDuration(durationMs)]
+    : retriesForDuration(durationMs, efdRetryPolicy)
   return Math.max(1, retryCount)
 }
 
