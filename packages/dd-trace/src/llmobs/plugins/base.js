@@ -3,6 +3,7 @@
 const log = require('../../log')
 const { storage: llmobsStorage } = require('../storage')
 const telemetry = require('../telemetry')
+const { captureTrackedPrompt } = require('../prompts/tracking')
 
 const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
@@ -31,17 +32,19 @@ class LLMObsPlugin extends TracingPlugin {
     const parentStore = llmobsStorage.getStore()
     const apmStore = ctx.currentStore
     const span = apmStore?.span
+    const prompt = captureTrackedPrompt(ctx) ?? parentStore?.prompt
 
     const registerOptions = this.getLLMObsSpanRegisterOptions(ctx)
 
     // register options may not be set for operations we do not trace with llmobs
     // ie OpenAI fine tuning jobs, file jobs, etc.
+    if (registerOptions || prompt) {
+      ctx.llmobs = { parent: parentStore, prompt }
+      llmobsStorage.enterWith({ ...parentStore, span: registerOptions ? span : parentStore?.span, prompt })
+    }
+
     if (registerOptions) {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: this.constructor.integration })
-
-      ctx.llmobs = {} // initialize context-based namespace
-      llmobsStorage.enterWith({ ...parentStore, span })
-      ctx.llmobs.parent = parentStore
 
       this._tagger.registerLLMObsSpan(span, {
         parent: parentStore?.span,
@@ -55,13 +58,7 @@ class LLMObsPlugin extends TracingPlugin {
     const enabled = this._tracerConfig.llmobs.DD_LLMOBS_ENABLED
     if (!enabled) return
 
-    // only attempt to restore the context if the current span was an LLMObs span
-    const apmStore = ctx.currentStore
-    const span = apmStore?.span
-    if (!LLMObsTagger.tagMap.has(span)) return
-
-    const parentStore = ctx.llmobs.parent
-    llmobsStorage.enterWith(parentStore)
+    if (ctx.llmobs) llmobsStorage.enterWith(ctx.llmobs.parent)
   }
 
   asyncEnd (ctx) {
@@ -81,6 +78,12 @@ class LLMObsPlugin extends TracingPlugin {
     }
 
     this.setLLMObsTags(ctx)
+
+    try {
+      this._tagger.tagAutoPrompt(span, ctx.llmobs?.prompt)
+    } catch (error) {
+      log.debug('Failed to automatically track managed prompt: %s', error.message)
+    }
   }
 
   configure (config) {

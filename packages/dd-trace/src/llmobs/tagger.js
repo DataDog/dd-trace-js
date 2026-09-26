@@ -48,6 +48,7 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  INSTRUMENTATION_METHOD_AUTO,
   INSTRUMENTATION_METHOD_ANNOTATED,
   SAMPLE_RATE,
   SAMPLING_DECISION,
@@ -562,6 +563,20 @@ class LLMObsTagger {
     }
 
     this.tagSpanTags(span, { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_ANNOTATED })
+  }
+
+  /**
+   * Tag an automatically carried managed prompt without replacing an explicit annotation.
+   * @param {import('../opentracing/span')} span
+   * @param {Record<string, unknown> | undefined} prompt
+   */
+  tagAutoPrompt (span, prompt) {
+    if (!prompt || registry.get(span)?.[SPAN_KIND] !== 'llm' || registry.get(span)?.[INPUT_PROMPT]) return
+
+    this.tagPrompt(span, prompt, true)
+    if (registry.get(span)?.[INPUT_PROMPT]) {
+      this.tagSpanTags(span, { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_AUTO })
+    }
   }
 
   changeKind (span, newKind) {
