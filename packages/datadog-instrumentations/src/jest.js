@@ -3153,6 +3153,7 @@ function getCliWrapper (isNewJestVersion) {
         results: {
           numFailedTestSuites,
           numFailedTests,
+          numPassedTests,
           numRuntimeErrorTestSuites = 0,
           numTotalTests,
           numTotalTestSuites,
@@ -3323,16 +3324,19 @@ function getCliWrapper (isNewJestVersion) {
 
       // Determine session status after EFD and quarantine checks have potentially modified success
       let status, error
-      const isExpectedEmptySession = numTotalTests === 0 && numTotalTestSuites === 0
+      const hasExecutedTests = numPassedTests > 0 || numFailedTests > 0 || numSuppressedQuarantinedTests > 0
+      const testSessionEmptyReason = result.results.success && !hasExecutedTests
+        ? (numTotalTests > 0 || isSuitesSkipped ? 'all_tests_skipped' : 'zero_tests')
+        : undefined
       if (result.results.success) {
-        status = isExpectedEmptySession ? 'skip' : 'pass'
+        status = testSessionEmptyReason ? 'skip' : 'pass'
       } else {
         status = 'fail'
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
-        isExpectedEmptySession: result.results.success && isExpectedEmptySession,
+        testSessionEmptyReason,
         ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
       }))
 

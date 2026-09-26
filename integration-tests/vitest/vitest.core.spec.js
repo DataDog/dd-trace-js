@@ -22,6 +22,8 @@ const {
 } = require('../../packages/dd-trace/src/constants')
 const {
   TEST_STATUS,
+  TEST_SESSION_EMPTY_REASON,
+  TEST_SKIP_REASON,
   TEST_TYPE,
   TEST_IS_RETRY,
   TEST_CODE_OWNERS,
@@ -208,6 +210,53 @@ versions.forEach((version) => {
 
       assert.notStrictEqual(exitCode, 0)
     })
+
+    for (const { mode, args, reason, exitCode: expectedExitCode } of [
+      { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
+      { mode: 'skip-suite', args: '', reason: 'all_tests_skipped', exitCode: 0 },
+      { mode: 'mixed', args: '', reason: undefined, exitCode: 0 },
+      { mode: 'mixed', args: '--testNamePattern never-matches', reason: 'all_tests_skipped', exitCode: 0 },
+      { mode: 'mixed', args: 'never-matches --passWithNoTests', reason: 'zero_tests', exitCode: 0 },
+      { mode: 'mixed', args: '--shard=2/2 --passWithNoTests', reason: 'zero_test_shard', exitCode: 0 },
+      { mode: 'mixed', args: 'never-matches', reason: undefined, exitCode: 1 },
+      { mode: 'error', args: '', reason: undefined, exitCode: 1 },
+    ]) {
+      it(`reports zero-execution sessions: ${mode} ${args}`, async () => {
+        receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+        childProcess = exec('./node_modules/.bin/vitest run ' + args, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/empty-session.mjs',
+            EMPTY_SESSION_MODE: mode,
+          },
+        })
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const type of ['test_session_end', 'test_module_end']) {
+              const event = events.find(event => event.type === type)?.content
+              assert.ok(event, testOutput)
+              const expectedStatus = expectedExitCode ? 'fail' : reason ? 'skip' : 'pass'
+              assert.strictEqual(event.meta[TEST_STATUS], expectedStatus, testOutput)
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason, testOutput)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+                ? 'All tests were skipped'
+                : reason === 'zero_test_shard'
+                  ? 'No tests were assigned to this shard'
+                  : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, expectedExitCode, testOutput)
+      })
+    }
 
     typecheckIt('reports a failed typecheck suite when a custom reporter rejects onTestRunEnd', async function () {
       this.timeout(20_000)

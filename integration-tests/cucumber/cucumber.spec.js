@@ -269,6 +269,41 @@ describe(`cucumber@${version} commonJS`, () => {
     await receiver.stop()
   })
 
+  for (const [args, reason] of [
+    ['--dry-run', 'all_tests_skipped'],
+    ['--dry-run --parallel 2', 'all_tests_skipped'],
+    ['--tags @no-matching-scenarios', 'zero_tests'],
+    ['', undefined],
+  ]) {
+    it(`reports zero-execution sessions: ${args || 'executed scenarios'}`, async () => {
+      receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+      childProcess = exec(`./node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature ${args}`, {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const type of ['test_session_end', 'test_module_end']) {
+            const event = events.find(event => event.type === type)?.content
+            assert.ok(event, testOutput)
+            assert.strictEqual(event.meta[TEST_STATUS], reason ? 'skip' : 'pass', testOutput)
+            assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+              ? 'All tests were skipped'
+              : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+  }
+
   it('sends telemetry with test_session metric when telemetry is enabled', async () => {
     receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
@@ -1404,8 +1439,8 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
               for (const event of [testSession, testModule]) {
                 assert.strictEqual(event.meta[TEST_STATUS], 'skip')
-                assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No scenarios were executed')
-                assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+                assert.strictEqual(event.meta[TEST_SKIP_REASON], 'All tests were skipped')
+                assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
               }
             })
 

@@ -398,11 +398,34 @@ for (const version of versions) {
 
           for (const event of [session, module]) {
             assert.strictEqual(event.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No tests were executed')
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No tests were detected')
             assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           }
         }, 0, { framework })
       })
+    }
+
+    for (const framework of ['mocha', 'jasmine']) {
+      for (const [scenario, sessions, reason] of [
+        ['allSkipped', 1, 'all_tests_skipped'],
+        ['emptyShard', 0, 'zero_test_shard'],
+        ['noWorkers', 0, undefined],
+      ]) {
+        it(`reports zero-execution sessions: ${framework} ${scenario}`, async () => {
+          await runScenario(scenario, sessions, ({ session, module, tests }) => {
+            assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'skip'))
+            for (const event of [session, module]) {
+              assert.strictEqual(event.meta[TEST_STATUS], reason ? 'skip' : 'fail')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+                ? 'All tests were skipped'
+                : reason === 'zero_test_shard'
+                  ? 'No tests were assigned to this shard'
+                  : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+            }
+          }, reason ? 0 : 1, { framework })
+        })
+      }
     }
 
     it('reports parallel Jasmine workers as one session', async () => {

@@ -242,7 +242,7 @@ function getSessionStatus (summary, testSuiteStatuses) {
   if (summary.status === 'failed' || summary.failures > 0 || summary.totalFailed > 0) {
     return 'fail'
   }
-  if (summary.totalSkipped !== undefined && summary.totalSkipped === summary.totalTests) {
+  if ((summary.totalSkipped ?? 0) + (summary.totalPending ?? 0) === summary.totalTests) {
     return 'skip'
   }
   return 'pass'
@@ -381,7 +381,7 @@ function getSuiteStatus (suiteStats) {
     return 'fail'
   }
   if (suiteStats.tests !== undefined &&
-    (suiteStats.tests === suiteStats.pending || suiteStats.tests === suiteStats.skipped)) {
+    suiteStats.tests === (suiteStats.pending ?? 0) + (suiteStats.skipped ?? 0)) {
     return 'skip'
   }
   return 'pass'
@@ -1384,12 +1384,11 @@ class CypressPlugin {
 
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
-      if (testStatus !== 'fail' && hasNoTests) {
+      if (testStatus !== 'fail' && (hasNoTests || testStatus === 'skip')) {
         setExpectedEmptyTestSessionTags(
           this.testSessionSpan,
           this.testModuleSpan,
-          'No tests were executed',
-          'zero_tests'
+          hasNoTests ? 'zero_tests' : 'all_tests_skipped'
         )
       }
       if (error) {
@@ -1507,7 +1506,7 @@ class CypressPlugin {
   afterSpec (spec, results, error) {
     const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
-    if (cypressTests.length > 0) this.hasTestsReported = true
+    if (cypressTests.length > 0 || stats?.tests > 0) this.hasTestsReported = true
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []

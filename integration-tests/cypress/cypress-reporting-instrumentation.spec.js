@@ -2237,6 +2237,29 @@ moduleTypes.forEach(({
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
 
+    for (const [summary, status, reason] of [
+      [{ totalTests: 2, totalPassed: 0, totalFailed: 0, totalPending: 2, totalSkipped: 0 },
+        'skip', 'all_tests_skipped'],
+      [{ totalTests: 2, totalPassed: 0, totalFailed: 0, totalPending: 1, totalSkipped: 1 },
+        'skip', 'all_tests_skipped'],
+      [{ totalTests: 2, totalPassed: 1, totalFailed: 0, totalPending: 1, totalSkipped: 0 },
+        'pass', undefined],
+      [{ totalTests: 0, totalPassed: 0, totalFailed: 0, totalPending: 0, totalSkipped: 0 },
+        'skip', 'zero_tests'],
+    ]) {
+      it(`reports zero-execution sessions from Cypress statistics: ${JSON.stringify(summary)}`, async () => {
+        const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+        await cypressPlugin.afterRun(summary)
+        for (const span of [testSessionSpan, testModuleSpan]) {
+          assert.strictEqual(span.tags[TEST_STATUS], status)
+          assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], reason)
+          assert.strictEqual(span.tags[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+            ? 'All tests were skipped'
+            : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+        }
+      })
+    }
+
     it('preserves a failed Cypress run that reports zero tests', async () => {
       const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
 
@@ -2268,7 +2291,7 @@ moduleTypes.forEach(({
 
       for (const span of [testSessionSpan, testModuleSpan]) {
         assert.strictEqual(span.tags[TEST_STATUS], 'skip')
-        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were executed')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were detected')
         assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'zero_tests')
       }
     })
@@ -2318,8 +2341,8 @@ moduleTypes.forEach(({
 
       for (const span of [testSessionSpan, testModuleSpan]) {
         assert.strictEqual(span.tags[TEST_STATUS], 'skip')
-        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
-        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'All tests were skipped')
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
       }
     })
 

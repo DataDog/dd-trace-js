@@ -885,7 +885,7 @@ class MochaPlugin extends CiPlugin {
       isTestManagementEnabled,
       isParallel,
       isFrameworkError,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
       onDone,
     }) => {
       this._exportPendingWorkerTraces()
@@ -898,12 +898,11 @@ class MochaPlugin extends CiPlugin {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
-        if (isExpectedEmptySession) {
+        if (testSessionEmptyReason) {
           setExpectedEmptyTestSessionTags(
             this.testSessionSpan,
             this.testModuleSpan,
-            'No tests were executed',
-            'zero_tests'
+            testSessionEmptyReason
           )
         }
 
