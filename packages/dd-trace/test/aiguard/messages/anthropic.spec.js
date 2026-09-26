@@ -9,6 +9,7 @@ const {
   convertAnthropicMessage,
   getMessagesInputMessages,
   getMessagesOutputMessages,
+  getStreamedMessagesOutputMessages,
 } = require('../../../src/aiguard/messages/anthropic')
 
 describe('aiguard/messages/anthropic', () => {
@@ -1265,6 +1266,144 @@ describe('aiguard/messages/anthropic', () => {
         },
         { role: 'tool', tool_call_id: 'call_1', content: 'x=42' },
         { role: 'assistant', content: 'x is 42' },
+      ])
+    })
+  })
+
+  describe('streamed output', () => {
+    it('concatenates text deltas', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hello' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: ' world' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'message_stop' },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [
+        { role: 'assistant', content: 'Hello world' },
+      ])
+    })
+
+    it('combines text and parallel tool input deltas', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Searching' } },
+        {
+          type: 'content_block_start',
+          index: 1,
+          content_block: { type: 'tool_use', id: 'call_1', name: 'search', input: {} },
+        },
+        { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '{"q":' } },
+        { type: 'content_block_delta', index: 1, delta: { type: 'input_json_delta', partial_json: '"unsafe"}' } },
+        {
+          type: 'content_block_start',
+          index: 2,
+          content_block: { type: 'tool_use', id: 'call_2', name: 'search', input: {} },
+        },
+        { type: 'content_block_delta', index: 2, delta: { type: 'input_json_delta', partial_json: '{"q":"safe"}' } },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [{
+        role: 'assistant',
+        content: 'Searching',
+        tool_calls: [
+          { id: 'call_1', function: { name: 'search', arguments: '{"q":"unsafe"}' } },
+          { id: 'call_2', function: { name: 'search', arguments: '{"q":"safe"}' } },
+        ],
+      }])
+    })
+
+    it('keeps an empty tool input as {} rather than an empty string', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'call_1', name: 'now', input: {} },
+        },
+        // A no-argument tool call accumulates an empty buffer, which the SDK leaves as `{}`.
+        { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '' } },
+      ]
+
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'now', arguments: '{}' } }],
+      }])
+    })
+
+    it('appends blocks in arrival order so a huge index cannot grow the array', () => {
+      const index = 1e9
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        {
+          type: 'content_block_start',
+          index,
+          content_block: { type: 'tool_use', id: 'call_1', name: 'search', input: {} },
+        },
+        { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: '{"q":"x"}' } },
+      ]
+
+      // The block lands at position 0, so the delta addressing 1e9 finds nothing — exactly what
+      // the SDK's own accumulator does with these events.
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [{
+        role: 'assistant',
+        tool_calls: [{ id: 'call_1', function: { name: 'search', arguments: '{}' } }],
+      }])
+    })
+
+    it('keeps blocks the caller still receives when indices are out of range', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: -1, content_block: { type: 'text', text: 'a' } },
+        { type: 'content_block_start', index: 0.5, content_block: { type: 'text', text: 'b' } },
+        {
+          type: 'content_block_start',
+          index: Number.MAX_SAFE_INTEGER + 1,
+          content_block: { type: 'text', text: 'c' },
+        },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: -1, delta: { type: 'text_delta', text: 'NEG' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Hi' } },
+      ]
+
+      // The SDK delivers all four blocks, addressing the deltas positionally; dropping the odd
+      // indices would hide 'b' and 'c' from the evaluation while the caller still sees them.
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [
+        { role: 'assistant', content: 'aHi\nb\nc\nNEG' },
+      ])
+    })
+
+    it('evaluates both blocks when a content_block_start index is repeated', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: 'benign' } },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: 'unsafe' } },
+      ]
+
+      // The SDK appends on every start event, so a repeated index must not overwrite — otherwise
+      // the second block reaches the caller without ever being evaluated.
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [
+        { role: 'assistant', content: 'benign\nunsafe' },
+      ])
+    })
+
+    it('keeps deltas on the block their index addresses when a start event repeats', () => {
+      const events = [
+        { type: 'message_start', message: { role: 'assistant', content: [] } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'unsafe' } },
+        { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+        { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: ' content' } },
+      ]
+
+      // Both deltas address position 0, so they accumulate on the first block and the repeated
+      // one stays empty — the trailing newline is that second, empty block.
+      assert.deepStrictEqual(getStreamedMessagesOutputMessages(events), [
+        { role: 'assistant', content: 'unsafe content\n' },
       ])
     })
   })
