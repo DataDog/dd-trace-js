@@ -117,19 +117,18 @@ class JestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
       onDone,
     }) => {
       const finishSession = () => {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
-        if (isExpectedEmptySession) {
+        if (testSessionEmptyReason) {
           setExpectedEmptyTestSessionTags(
             this.testSessionSpan,
             this.testModuleSpan,
-            'No tests were found',
-            'zero_tests'
+            testSessionEmptyReason
           )
         }
 

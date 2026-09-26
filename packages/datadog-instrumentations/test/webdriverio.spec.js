@@ -4585,7 +4585,7 @@ describe('webdriverio instrumentation', () => {
 
       assert.strictEqual(sessionFinishes.length, 1)
       assert.strictEqual(sessionFinishes[0].status, 'fail')
-      assert.strictEqual(sessionFinishes[0].isExpectedEmptySession, false)
+      assert.strictEqual(sessionFinishes[0].testSessionEmptyReason, undefined)
     } finally {
       testFinishCh.unsubscribe(onTestFinish)
       testSessionFinishCh.unsubscribe(onSessionFinish)

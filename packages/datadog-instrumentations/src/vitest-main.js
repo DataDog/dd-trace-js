@@ -65,6 +65,9 @@ const workerProcesses = new WeakSet()
 const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
+const finishedSessionContexts = new WeakSet()
+const sessionWrappedPrototypes = new WeakSet()
+const emptyShardContexts = new WeakSet()
 const runFilesWrappedPrototypes = new WeakSet()
 const activeRunFilesContexts = new WeakSet()
 const runErrorsByContext = new WeakMap()
@@ -161,16 +164,6 @@ function getForksPoolWorkerExport (vitestPackage) {
 
 function getThreadsPoolWorkerExport (vitestPackage) {
   return findExportByName(vitestPackage, 'ThreadsPoolWorker')
-}
-
-function getSessionStatus (state) {
-  if (state.getCountOfFailedTests() > 0) {
-    return 'fail'
-  }
-  if (state.pathsSet.size === 0) {
-    return 'skip'
-  }
-  return 'pass'
 }
 
 function getTestFilepathsFromSpecifications (testSpecifications) {
@@ -1194,6 +1187,7 @@ function safeWorkspaceProject (ctx) {
 
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
+    if (this.ctx.config.shard && arguments[0].length === 0) emptyShardContexts.add(this.ctx)
     if (!activeRunFilesContexts.has(this.ctx)) {
       const testSpecifications = arguments[0]
       await ensureMainProcessSetup(this.ctx, frameworkVersion, testSpecifications)
@@ -1204,16 +1198,15 @@ function getSortWrapper (sort, frameworkVersion) {
 }
 
 function getFinishWrapper (exitOrClose) {
-  let isClosed = false
   return async function () {
-    if (isClosed) { // needed because exit calls close
+    if (finishedSessionContexts.has(this)) {
       return exitOrClose.apply(this, arguments)
     }
-    isClosed = true
 
     if (!testSessionFinishCh.hasSubscribers) {
       return exitOrClose.apply(this, arguments)
     }
+    finishedSessionContexts.add(this)
 
     const failedSuites = this.state.getFailedFilepaths()
     const runError = runErrorsByContext.get(this)
@@ -1225,19 +1218,27 @@ function getFinishWrapper (exitOrClose) {
 
     // pathsSet contains candidates before sharding, including files that never run.
     const hasNoTestFiles = this.state.pathsSet.size === 0
-    const hasNoTests = this.state.getFiles().every(file => getTypeTasks(file.tasks).length === 0)
-    const hasUnexpectedEmptySession = hasNoTestFiles && !areAllSuitesSkipped && !this.config.passWithNoTests
+    const isEmptyShard = emptyShardContexts.has(this)
+    const hasUnexpectedEmptySession = hasNoTestFiles && !isEmptyShard &&
+      !areAllSuitesSkipped && !this.config.passWithNoTests
     if (!error && hasUnexpectedEmptySession) {
       error = new Error('No test files were found.')
     }
-    const hasFailedEmptySession = hasNoTests && (error || this.state.getUnhandledErrors().length > 0)
-    const status = runError || hasUnexpectedEmptySession || hasFailedEmptySession
-      ? 'fail'
-      : (areAllSuitesSkipped ? 'skip' : getSessionStatus(this.state))
-    const isExpectedEmptySession = status !== 'fail' && (areAllSuitesSkipped || hasNoTests)
+    const tests = getTypeTasks(this.state.getFiles())
+    const hasExecutedTests = tests.some(test =>
+      test.mode !== 'skip' && test.mode !== 'todo' &&
+      test.result?.state !== 'skip' && test.result?.state !== 'todo'
+    )
+    const hasErrors = error || this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
+    const testSessionEmptyReason = !hasErrors && !hasExecutedTests
+      ? (isEmptyShard
+          ? 'zero_test_shard'
+          : tests.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
+      : undefined
+    const status = hasErrors ? 'fail' : (testSessionEmptyReason ? 'skip' : 'pass')
     const flushPromise = getChannelPromise(testSessionFinishCh, {
       status,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
       testCodeCoverageLinesTotal,
       error,
       isEarlyFlakeDetectionEnabled,
@@ -1393,11 +1394,43 @@ function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = fa
   config.env = getVitestWorkerEnv(config.env, shouldSkipWorkerInit)
 }
 
+/**
+ * Installs completion hooks before discovery, which can bypass runFiles entirely.
+ * @param {Function} Vitest
+ */
+function wrapVitestSession (Vitest) {
+  if (!Vitest?.prototype?.start || sessionWrappedPrototypes.has(Vitest.prototype)) return
+  sessionWrappedPrototypes.add(Vitest.prototype)
+
+  // Empty discovery bypasses runFiles. Vitest 1 exits directly after reporting coverage,
+  // so its finalization must be awaited before that process.exit rather than only in close.
+  shimmer.wrap(Vitest.prototype, 'start', start => async function () {
+    if (!testSessionFinishCh.hasSubscribers) return start.apply(this, arguments)
+    wrapSessionFinish(this)
+    try {
+      return await start.apply(this, arguments)
+    } catch (error) {
+      if (error.code !== 'VITEST_FILES_NOT_FOUND') runErrorsByContext.set(this, error)
+      throw error
+    }
+  })
+  shimmer.wrap(Vitest.prototype, 'reportCoverage', reportCoverage => async function () {
+    const result = await reportCoverage.apply(this, arguments)
+    if (isSessionStarted && !this.config.watch && !mainProcessSetupStates.has(this) && this.state.pathsSet.size === 0) {
+      const finish = getFinishWrapper(() => {})
+      await finish.call(this)
+    }
+    return result
+  })
+}
+
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
   if (!Vitest?.prototype?.runFiles || runFilesWrappedPrototypes.has(Vitest.prototype)) {
     return
   }
   runFilesWrappedPrototypes.add(Vitest.prototype)
+
+  wrapVitestSession(Vitest)
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
     if (activeRunFilesContexts.has(this)) {
@@ -2081,6 +2114,36 @@ addHook({
 }, (TinyPool) => {
   return wrapTinyPool(TinyPool)
 })
+
+/**
+ * Older Vitest versions expose their core instance through the logger constructor.
+ * @param {Record<string, Function>} vitestPackage
+ */
+function wrapVitestLogger (vitestPackage) {
+  const logger = findExportByName(vitestPackage, 'Logger')
+  if (logger) {
+    // Hashed bundle names prevent Orchestrion's exact-file matching.
+    shimmer.wrap(vitestPackage, logger.key, Logger => class extends Logger {
+      constructor (...args) {
+        super(...args)
+        if (testSessionFinishCh.hasSubscribers) wrapVitestSession(args[0]?.constructor)
+      }
+    })
+  }
+  return vitestPackage
+}
+
+addHook({
+  name: 'vitest',
+  versions: ['>=1.6.0 <2.0.5'],
+  filePattern: 'dist/vendor/index.*',
+}, wrapVitestLogger)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=2.0.5 <3.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, wrapVitestLogger)
 
 // There are multiple index* files across different versions of vitest,
 // so we check for the existence of BaseSequencer to determine if we are in the right file

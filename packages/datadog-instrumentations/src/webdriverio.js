@@ -936,6 +936,7 @@ function waitForRumTestStart (context) {
  * @property {string} framework
  * @property {string|undefined} rootDir
  * @property {typeof process.env|undefined} runnerEnv
+ * @property {{total: number}|undefined} shard
  */
 
 /**
@@ -1806,17 +1807,18 @@ function getSessionStatus (state) {
 }
 
 /**
- * Returns whether every started worker reported that it discovered no tests.
+ * Explains a skipped session using the workers' discovery results.
  *
  * @param {CoordinatorState} state
  */
-function isExpectedEmptySession (state) {
-  if (state.workers.size === 0) return false
-
-  for (const workerRecord of state.workers) {
-    if (workerRecord.hasTests !== false) return false
+function getTestSessionEmptyReason (state) {
+  if (state.workers.size === 0 && getRunnerConfiguration(state.localRunner)?.shard?.total > 1) {
+    return 'zero_test_shard'
   }
-  return true
+  for (const workerRecord of state.workers) {
+    if (workerRecord.hasTests !== false) return 'all_tests_skipped'
+  }
+  return 'zero_tests'
 }
 
 /**
@@ -1832,9 +1834,8 @@ function finishCoordinator (state, error, onDone) {
     return
   }
   if (!state.sessionStarted) {
-    if (!error && getSessionStatus(state) !== 'fail') {
-      onDone()
-      return
+    if (!error && state.workers.size === 0 && !(getRunnerConfiguration(state.localRunner)?.shard?.total > 1)) {
+      error = new Error('No test files were found.')
     }
     initializeCoordinator(state, () => finishCoordinator(state, error, onDone))
     return
@@ -1861,7 +1862,7 @@ function finishCoordinator (state, error, onDone) {
   const status = error ? 'fail' : getSessionStatus(state)
   testSessionFinishCh.publish({
     status,
-    isExpectedEmptySession: status === 'skip' && isExpectedEmptySession(state),
+    testSessionEmptyReason: status === 'skip' ? getTestSessionEmptyReason(state) : undefined,
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,
@@ -2050,10 +2051,11 @@ localRunnerRunCh.subscribe({
 // @ts-expect-error See the partial tracing-channel subscriber above.
 localRunnerShutdownCh.subscribe({
   asyncEnd (context) {
-    const state = coordinatorStates.get(context.self)
-    if (!state) {
+    const runnerConfiguration = getRunnerConfiguration(context.self)
+    if (!testFinishCh.hasSubscribers || !SUPPORTED_FRAMEWORK_ADAPTERS.has(runnerConfiguration?.framework)) {
       return
     }
+    const state = getCoordinatorState(context.self)
 
     // Orchestrion uses the callback for the matching settlement path to delay LocalRunner.shutdown.
     const waitForCoordinator = onDone => {

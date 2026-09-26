@@ -244,12 +244,9 @@ describe('vitest main instrumentation', () => {
         return []
       },
       state: {
-        getFiles () {
-          return []
-        },
-        getUnhandledErrors () {
-          return []
-        },
+        getFiles: () => [],
+        getCountOfFailedTests: () => 0,
+        getUnhandledErrors: () => [],
         getFailedFilepaths () {
           return []
         },
@@ -396,7 +393,7 @@ describe('vitest main instrumentation', () => {
     await ctx.close()
     assert.strictEqual(testSessionFinishPayloads.length, 1)
     assert.strictEqual(testSessionFinishPayloads[0].status, 'fail')
-    assert.strictEqual(testSessionFinishPayloads[0].isExpectedEmptySession, false)
+    assert.strictEqual(testSessionFinishPayloads[0].testSessionEmptyReason, undefined)
     assert.match(testSessionFinishPayloads[0].error.message, /No test files were found/)
   })
 })

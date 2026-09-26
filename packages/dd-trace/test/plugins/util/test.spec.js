@@ -102,26 +102,33 @@ describe('finishAllTraceSpans', () => {
 })
 
 describe('setExpectedEmptyTestSessionTags', () => {
-  it('marks both the session and module as skipped with an explanation', () => {
-    const testSessionSpan = { setTag: sinon.spy() }
-    const testModuleSpan = { setTag: sinon.spy() }
+  for (const [reason, explanation] of [
+    ['zero_tests', 'No tests were detected'],
+    ['all_tests_skipped', 'All tests were skipped'],
+    ['zero_test_shard', 'No tests were assigned to this shard'],
+    ['test_discovery', 'Test discovery only (--list)'],
+  ]) {
+    it(`explains ${reason} on both the session and module`, () => {
+      const testSessionSpan = { setTag: sinon.spy() }
+      const testModuleSpan = { setTag: sinon.spy() }
 
-    setExpectedEmptyTestSessionTags(testSessionSpan, testModuleSpan, 'No tests were executed', 'zero_tests')
+      setExpectedEmptyTestSessionTags(testSessionSpan, testModuleSpan, reason)
 
-    for (const span of [testSessionSpan, testModuleSpan]) {
-      sinon.assert.calledWithExactly(span.setTag, TEST_STATUS, 'skip')
-      sinon.assert.calledWithExactly(span.setTag, TEST_SKIP_REASON, 'No tests were executed')
-      sinon.assert.calledWithExactly(span.setTag, TEST_SESSION_EMPTY_REASON, 'zero_tests')
-    }
-  })
+      for (const span of [testSessionSpan, testModuleSpan]) {
+        sinon.assert.calledWithExactly(span.setTag, TEST_STATUS, 'skip')
+        sinon.assert.calledWithExactly(span.setTag, TEST_SKIP_REASON, explanation)
+        sinon.assert.calledWithExactly(span.setTag, TEST_SESSION_EMPTY_REASON, reason)
+      }
+    })
+  }
 
   it('marks the session when an empty run does not create a module', () => {
     const testSessionSpan = { setTag: sinon.spy() }
 
-    setExpectedEmptyTestSessionTags(testSessionSpan, undefined, 'No tests were executed', 'zero_tests')
+    setExpectedEmptyTestSessionTags(testSessionSpan, undefined, 'zero_tests')
 
     sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_STATUS, 'skip')
-    sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_SKIP_REASON, 'No tests were executed')
+    sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_SKIP_REASON, 'No tests were detected')
     sinon.assert.calledWithExactly(testSessionSpan.setTag, TEST_SESSION_EMPTY_REASON, 'zero_tests')
   })
 })
