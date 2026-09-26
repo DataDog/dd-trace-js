@@ -66,6 +66,25 @@ describe('end to end sdk integration tests', () => {
     })
   })
 
+  it('preserves structured experiment input and output', async () => {
+    const input = { prompt: 'smoke test' }
+    const output = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
+
+    llmobs.trace({ kind: 'experiment', name: 'json-stringify-repro' }, () => {
+      llmobs.annotate({ inputData: input, outputData: output, tags: { experiment_id: 'exp-1' } })
+    })
+
+    const { llmobsSpans } = await getEvents()
+    assert.equal(llmobsSpans.length, 1)
+    assert.deepStrictEqual(llmobsSpans[0].meta.input, input)
+    assert.deepStrictEqual(llmobsSpans[0].meta.output, output)
+    assert.equal(llmobsSpans[0]._dd.scope, 'experiments')
+  })
+
   it('uses wrap correctly', async () => {
     function agent (input) {
       llmobs.annotate({ inputData: 'hello' })

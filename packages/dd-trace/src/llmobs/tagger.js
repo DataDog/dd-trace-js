@@ -10,6 +10,8 @@ const {
   SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_VALUE,
   OUTPUT_DOCUMENTS,
   INPUT_DOCUMENTS,
@@ -278,6 +280,18 @@ class LLMObsTagger {
   tagRetrievalIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
+  }
+
+  /**
+   * Tags arbitrary JSON-compatible experiment input and output without converting structured values to text.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} inputData
+   * @param {unknown} outputData
+   */
+  tagExperimentIO (span, inputData, outputData) {
+    this.#tagExperimentValue(span, inputData, EXPERIMENT_INPUT, 'input')
+    this.#tagExperimentValue(span, outputData, EXPERIMENT_OUTPUT, 'output')
   }
 
   tagTextIO (span, inputData, outputData) {
@@ -589,6 +603,27 @@ class LLMObsTagger {
         }
       }
     }
+  }
+
+  /**
+   * Validates and stores one free-form experiment I/O value.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} data
+   * @param {string} key
+   * @param {string} type
+   */
+  #tagExperimentValue (span, data, key, type) {
+    if (data === undefined) return
+
+    try {
+      if (JSON.stringify(data) !== undefined) {
+        this._setTag(span, key, data)
+        return
+      }
+    } catch {}
+
+    this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
   }
 
   #tagDocuments (span, data, key) {

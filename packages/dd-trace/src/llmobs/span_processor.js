@@ -16,6 +16,8 @@ const {
   METADATA,
   COST_TAGS,
   TOOL_DEFINITIONS,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -254,34 +256,39 @@ class LLMObsSpanProcessor {
     const processedSpan = this.#runProcessor(llmObsSpan)
     if (processedSpan === undefined) return null
 
-    if (processedSpan.input) {
-      if (inputType === 'messages') {
-        input.messages = processedSpan.input
-      } else if (inputType === 'value') {
-        input.value = processedSpan.input[0].content
-      } else if (inputType === 'documents') {
-        input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+    if (spanKind === 'experiment') {
+      if (Object.hasOwn(mlObsTags, EXPERIMENT_INPUT)) meta.input = mlObsTags[EXPERIMENT_INPUT]
+      if (Object.hasOwn(mlObsTags, EXPERIMENT_OUTPUT)) meta.output = mlObsTags[EXPERIMENT_OUTPUT]
+    } else {
+      if (processedSpan.input) {
+        if (inputType === 'messages') {
+          input.messages = processedSpan.input
+        } else if (inputType === 'value') {
+          input.value = processedSpan.input[0].content
+        } else if (inputType === 'documents') {
+          input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (processedSpan.output) {
-      if (outputType === 'messages') {
-        output.messages = processedSpan.output
-      } else if (outputType === 'value') {
-        output.value = processedSpan.output[0].content
-      } else if (outputType === 'documents') {
-        output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+      if (processedSpan.output) {
+        if (outputType === 'messages') {
+          output.messages = processedSpan.output
+        } else if (outputType === 'value') {
+          output.value = processedSpan.output[0].content
+        } else if (outputType === 'documents') {
+          output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (input) meta.input = input
-    if (output) meta.output = output
+      meta.input = input
+      meta.output = output
+    }
 
     const prompt = mlObsTags[INPUT_PROMPT]
     if (prompt && spanKind === 'llm') {

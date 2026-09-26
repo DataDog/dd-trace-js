@@ -144,8 +144,12 @@ describe('span processor', () => {
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'experiment',
         '_ml_obs.meta.ml_app': 'myApp',
-        '_ml_obs.meta.input.value': 'input',
-        '_ml_obs.meta.output.value': 'output',
+        '_ml_obs.meta.input': { prompt: 'smoke test' },
+        '_ml_obs.meta.output': {
+          status: 'ok',
+          count: 3,
+          nested: { a: 1, b: [1, 2, 3] },
+        },
         '_ml_obs.tags': { experiment_id: 'exp-1', run_id: 'run-1' },
         '_ml_obs.llmobs_parent_id': 'undefined',
         '_ml_obs.sample_rate': '1',
@@ -158,6 +162,12 @@ describe('span processor', () => {
       assert.equal(payload._dd.scope, 'experiments')
       assert.ok(payload.tags.includes('experiment_id:exp-1'))
       assert.ok(payload.tags.includes('run_id:run-1'))
+      assert.deepStrictEqual(payload.meta.input, { prompt: 'smoke test' })
+      assert.deepStrictEqual(payload.meta.output, {
+        status: 'ok',
+        count: 3,
+        nested: { a: 1, b: [1, 2, 3] },
+      })
     })
 
     it('removes problematic fields from the metadata', () => {

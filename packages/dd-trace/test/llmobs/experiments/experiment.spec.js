@@ -69,6 +69,11 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       ['topic:math', 'topic:logic', 'project_name:record-project']
     )
     const callsToLlmobs = []
+    const structuredOutput = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
     const llmobs = {
       enabled: true,
       trace: (options, fn) => {
@@ -84,7 +89,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       name: 'exp-demo',
       projectName: 'demo-project',
       dataset,
-      task: (input) => input.q,
+      task: () => structuredOutput,
       evaluators: { ok: () => true },
       config: { temperature: 0 },
     }, llmobs).run()
@@ -92,6 +97,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][0], 'trace')
     assert.equal(callsToLlmobs[0][1].kind, 'experiment')
     assert.equal(callsToLlmobs[0][1].name, 'task')
+    assert.deepEqual(callsToLlmobs[1][1].inputData, { q: 'apple' })
+    assert.deepEqual(callsToLlmobs[1][1].outputData, structuredOutput)
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
