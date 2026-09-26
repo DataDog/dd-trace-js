@@ -2,10 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { beforeEach, describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { AUTO_KEEP, AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
@@ -13,12 +14,21 @@ describe('span processor', () => {
   let LLMObsSpanProcessor
   let processor
   let writer
+  let exporter
+  let LLMObsExporter
   let log
 
   beforeEach(() => {
     writer = {
       append: sinon.stub(),
     }
+    LLMObsExporter = class {}
+    exporter = new LLMObsExporter()
+    const setTagMap = LLMObsTagger.tagMap.set.bind(LLMObsTagger.tagMap)
+    sinon.stub(LLMObsTagger.tagMap, 'set').callsFake((span, tags) => {
+      span.tracer ??= () => ({ _exporter: exporter })
+      return setTagMap(span, tags)
+    })
 
     log = {
       warn: sinon.stub(),
@@ -27,11 +37,17 @@ describe('span processor', () => {
 
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
       '../../../../package.json': { version: 'x.y.z' },
+      '../exporters/llmobs': LLMObsExporter,
       '../log': log,
     })
 
     processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
     processor.setWriter(writer)
+  })
+
+  afterEach(() => {
+    processor.destroy()
+    sinon.restore()
   })
 
   describe('process', () => {
@@ -833,6 +849,159 @@ describe('span processor', () => {
       processor.process(span)
 
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+  })
+
+  describe('APM meta_struct routing', () => {
+    function createSpan (extraTags = {}, priority) {
+      const apmTags = {}
+      const trace = {}
+      const context = {
+        _spanId: '456',
+        _sampling: { priority },
+        _tags: apmTags,
+        _trace: trace,
+        getTags () { return this._tags },
+        getTag (key) { return this._tags[key] },
+        setTag (key, value) { this._tags[key] = value },
+        toTraceId () { return '123' },
+        toSpanId () { return '456' },
+      }
+      const span = {
+        _name: 'llm.request',
+        _startTime: 1,
+        _duration: 2,
+        context () { return context },
+      }
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.model_name': 'model',
+        '_ml_obs.meta.model_provider': 'provider',
+        '_ml_obs.meta.ml_app': 'app',
+        '_ml_obs.trace_id': 'llm-trace',
+        ...extraTags,
+      })
+      return { apmTags, span }
+    }
+
+    it('uses the traditional writer immediately when the configured exporter is incompatible', () => {
+      const { span } = createSpan()
+      span.tracer = () => ({ _exporter: {} })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assert.strictEqual(span.meta_struct, undefined)
+      sinon.assert.calledOnce(writer.append)
+    })
+
+    it('attaches kept events to meta_struct without marking direct submission', () => {
+      const { apmTags, span } = createSpan({}, AUTO_KEEP)
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assertObjectContains(span.meta_struct._llmobs, {
+        trace_id: 'llm-trace',
+        name: 'llm.request',
+        ml_app: 'app',
+        tags: {
+          ml_app: 'app',
+          source: 'integration',
+        },
+        meta: {
+          span: { kind: 'llm' },
+          model_name: 'model',
+          model_provider: 'provider',
+        },
+      })
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+      sinon.assert.notCalled(writer.append)
+      processor.processPending()
+      sinon.assert.notCalled(writer.append)
+    })
+
+    for (const priority of [USER_REJECT, AUTO_REJECT]) {
+      it(`uses the writer when sampling priority ${priority} predicts the APM trace will be dropped`, () => {
+        const { apmTags, span } = createSpan({}, priority)
+        writer.append.returns(true)
+
+        processor.process(span)
+        processor.processTrace({ spans: [span], willExport: true })
+
+        assert.strictEqual(span.meta_struct, undefined)
+        sinon.assert.calledOnce(writer.append)
+        assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+      })
+    }
+
+    it('rescues events when the APM trace will not be exported', () => {
+      const { apmTags, span } = createSpan()
+      writer.append.returns(true)
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: false })
+
+      assert.strictEqual(span.meta_struct, undefined)
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+    })
+
+    it('uses the writer when repeated tag keys cannot be represented losslessly', () => {
+      const { span } = createSpan({ '_ml_obs.tags': { topic: ['math', 'logic'] } })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assert.strictEqual(span.meta_struct, undefined)
+      sinon.assert.calledOnce(writer.append)
+    })
+
+    it('uses the writer for multi-tenant routing', () => {
+      const routing = { apiKey: 'tenant-key', site: 'tenant.example' }
+      const { span } = createSpan({
+        '_dd.llmobs.routing.api_key': routing.apiKey,
+        '_dd.llmobs.routing.site': routing.site,
+      })
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+
+      assert.strictEqual(span.meta_struct, undefined)
+      sinon.assert.calledOnce(writer.append)
+      assert.deepStrictEqual(writer.append.firstCall.args[1], routing)
+    })
+
+    it('rescues pending events when destroyed before their trace closes', () => {
+      const { span } = createSpan()
+
+      processor.process(span)
+      processor.destroy()
+
+      sinon.assert.calledOnce(writer.append)
+    })
+
+    it('does not retain attached events after handing them to the APM trace', () => {
+      const { span } = createSpan()
+
+      processor.process(span)
+      processor.processTrace({ spans: [span], willExport: true })
+      processor.processPending()
+
+      assert.ok(span.meta_struct._llmobs)
+      sinon.assert.notCalled(writer.append)
+    })
+
+    it('caches spans by identity when separate traces use the same span id', () => {
+      const first = createSpan({ '_ml_obs.name': 'first' }).span
+      const second = createSpan({ '_ml_obs.name': 'second' }).span
+
+      processor.process(first)
+      processor.process(second)
+      processor.processTrace({ spans: [first, second], willExport: true })
+
+      assert.strictEqual(first.meta_struct._llmobs.name, 'first')
+      assert.strictEqual(second.meta_struct._llmobs.name, 'second')
     })
   })
 })

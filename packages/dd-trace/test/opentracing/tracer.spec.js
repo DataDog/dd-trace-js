@@ -23,10 +23,12 @@ describe('Tracer', () => {
   let PrioritySampler
   let prioritySampler
   let AgentExporter
+  let LLMObsExporter
   let SpanProcessor
   let processor
   let exporter
   let agentExporter
+  let llmobsExporter
   let otlpExporter
   let createOtlpTraceExporter
   let spanContext
@@ -62,6 +64,8 @@ describe('Tracer', () => {
       export: sinon.spy(),
     }
     AgentExporter = sinon.stub().returns(agentExporter)
+    llmobsExporter = { export: sinon.spy() }
+    LLMObsExporter = sinon.stub().returns(llmobsExporter)
     otlpExporter = {
       export: sinon.spy(),
     }
@@ -154,6 +158,22 @@ describe('Tracer', () => {
 
     sinon.assert.calledWith(AgentExporter, config, sampler)
     sinon.assert.calledWith(SpanProcessor, agentExporter, sampler, config)
+  })
+
+  it('uses the configured LLMObs exporter', () => {
+    config.llmobs = {
+      DD_LLMOBS_ENABLED: true,
+      DD_LLMOBS_AGENTLESS_ENABLED: undefined,
+    }
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER = 'llmobs'
+    exporter.returns(LLMObsExporter)
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWithExactly(exporter, 'llmobs')
+    sinon.assert.calledOnceWithExactly(LLMObsExporter, config, prioritySampler)
+    sinon.assert.calledWith(SpanProcessor, llmobsExporter, prioritySampler, config)
+    sinon.assert.notCalled(AgentExporter)
   })
 
   describe('startSpan', () => {

@@ -280,6 +280,7 @@
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/dd-trace-js @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/dd-trace-js @DataDog/ml-observability
 /packages/datadog-plugin-openai/ @DataDog/dd-trace-js @DataDog/ml-observability
+/packages/dd-trace/src/exporters/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
 /packages/dd-trace/src/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
 /packages/dd-trace/test/llmobs/ @DataDog/dd-trace-js @DataDog/ml-observability
 /packages/dd-trace/test/plugins/util/llm.spec.js @DataDog/dd-trace-js @DataDog/ml-observability
