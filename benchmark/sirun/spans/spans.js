@@ -7,7 +7,9 @@ const tracer = require('../../..').init()
 
 tracer._tracer._processor.process = function process (span) {
   const trace = span.context()._trace
-  this._erase(trace)
+  const active = trace.started
+  active.length = 0
+  this._erase(trace, active)
 }
 
 const {
@@ -89,6 +91,7 @@ assert.equal(sanitySpan.context().getTag('service'), 'svc')
 assert.equal(sanitySpan._links.length, 1)
 assert.equal(sanitySpan._events.length, 1)
 sanitySpan.finish()
+assert.ok(Array.isArray(sanitySpan.context()._trace.started), 'benchmark processor left an invalid trace state')
 
 // One span creation for the active shape. addEvent only applies to the otel shape.
 function startOne () {

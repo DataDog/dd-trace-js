@@ -14,19 +14,21 @@
       }
     },
     "activate-finish-immediately": {
+      "iterations": 6,
       "env": {
         "ACTIVATE": "true",
         "DD_TRACE_OTEL_CTX_ENABLED": "false",
         "FINISH": "now",
-        "OPERATIONS": "500000"
+        "OPERATIONS": "1500000"
       }
     },
     "activate-finish-immediately-with-thread-context": {
+      "iterations": 6,
       "env": {
         "ACTIVATE": "true",
         "DD_TRACE_OTEL_CTX_ENABLED": "true",
         "FINISH": "now",
-        "OPERATIONS": "500000"
+        "OPERATIONS": "1500000"
       }
     },
     "finish-later": {
