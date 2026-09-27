@@ -10,7 +10,17 @@ tracer._tracer._processor.process = function process (span) {
   this._erase(trace)
 }
 
-const { FINISH, SHAPE = 'plain' } = process.env
+const {
+  ACTIVATE,
+  DD_TRACE_OTEL_CTX_ENABLED,
+  FINISH,
+  SHAPE = 'plain',
+} = process.env
+
+if (DD_TRACE_OTEL_CTX_ENABLED === 'true') {
+  const validateThreadContext = require('../validate-thread-context')
+  validateThreadContext(tracer)
+}
 
 // Total spans created per process. The fixed tracer load (~75 ms) must be a small
 // fraction of the run so the bench measures span construction, not startup; at
@@ -96,10 +106,25 @@ function startOne () {
   return tracer.startSpan('some.span.name', {})
 }
 
+const scope = ACTIVATE === 'true' ? tracer.scope() : undefined
+/** @type {import('../../../index').Span} */
+let activeSpan
+
+function finishActiveSpan () {
+  activeSpan.finish()
+}
+
 guard.loopStart()
 if (FINISH === 'now') {
-  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-    startOne().finish()
+  if (scope) {
+    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+      activeSpan = startOne()
+      scope.activate(activeSpan, finishActiveSpan)
+    }
+  } else {
+    for (let iteration = 0; iteration < OPERATIONS; iteration++) {
+      startOne().finish()
+    }
   }
 } else {
   // Deferred finish in batches: start BATCH spans, finish them after the batch is
