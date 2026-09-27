@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const guard = require('../startup-guard')
 const createTimeoutGuard = require('../timeout-guard')
+const validateThreadContext = require('../validate-thread-context')
 const clearTimeoutGuard = createTimeoutGuard('appsec server')
 const assertReplayValidated = require('./mock-native-appsec')
 
@@ -15,10 +16,7 @@ const tracer = require('../../..').init()
 // Fail loudly if the tracer did not load: a broken require would otherwise
 // measure a plain server and silently "pass".
 assert.equal(typeof tracer.startSpan, 'function', 'tracer did not initialize')
-if (process.env.DD_TRACE_OTEL_CTX_ENABLED === 'true') {
-  const validateThreadContext = require('../validate-thread-context')
-  validateThreadContext(tracer)
-}
+validateThreadContext(tracer)
 
 // eslint-disable-next-line import/order -- the tracer must load before http to instrument it
 const http = require('http')

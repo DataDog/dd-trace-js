@@ -1,30 +1,23 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
 const guard = require('../startup-guard')
+const validateThreadContext = require('../validate-thread-context')
 
 const tracer = require('../../..').init()
 
 tracer._tracer._processor.process = function process (span) {
-  const trace = span.context()._trace
-  const active = []
-  for (const traceSpan of trace.started) {
-    if (traceSpan._duration === undefined) active.push(traceSpan)
-  }
-  this._erase(trace, active)
+  this._erase(span.context()._trace, [])
 }
 
 const {
   ACTIVATE,
-  DD_TRACE_OTEL_CTX_ENABLED,
   FINISH,
   SHAPE = 'plain',
 } = process.env
 
-if (DD_TRACE_OTEL_CTX_ENABLED === 'true') {
-  const validateThreadContext = require('../validate-thread-context')
-  validateThreadContext(tracer)
-}
+validateThreadContext(tracer)
 
 // Total spans created per process. The fixed tracer load (~75 ms) must be a small
 // fraction of the run so the bench measures span construction, not startup; at
