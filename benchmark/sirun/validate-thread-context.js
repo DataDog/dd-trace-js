@@ -14,7 +14,16 @@ module.exports = function validateThreadContext (tracer) {
   const { isACFActive } = require('../../packages/datadog-core/src/storage')
   if (process.platform !== 'linux' || !isACFActive) return
 
-  const { getContext } = require('@datadog/pprof').otelThreadCtx
+  const { getThreadLocalMetadata } = require('../../packages/dd-trace/src/otel-thread-ctx')
+  assert.ok(getThreadLocalMetadata(), 'thread-context writer did not start during benchmark preflight')
+
+  let getContext
+  try {
+    ({ getContext } = require('@datadog/pprof').otelThreadCtx)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    assert.fail(`thread-context writer dependency failed to load during benchmark preflight: ${message}`)
+  }
   const span = tracer.startSpan('sirun.thread-context.preflight')
   let activeContext
 
