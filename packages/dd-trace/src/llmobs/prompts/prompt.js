@@ -45,6 +45,19 @@ function render (template, variables) {
   })
 }
 
+function freezeConfig (config) {
+  if (config === undefined) return Object.freeze({})
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    throw new TypeError('Invalid prompt config: expected a JSON object')
+  }
+  const copy = structuredClone(config)
+  const freeze = value => {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value
+    for (const nested of Object.values(value)) freeze(nested)
+    return Object.freeze(value)
+  }
+  return freeze(copy)
+}
 class ManagedPrompt {
   /**
    * @param {object} data
@@ -52,10 +65,11 @@ class ManagedPrompt {
    * @param {string} data.version
    * @param {'registry'|'cache'|'fallback'|'ff'|'resolve'} data.source
    * @param {string | Array<{role: string, content: string} | {type: 'placeholder', name: string}>} data.template
+   * @param {Record<string, unknown>} [data.config]
    * @param {string} [data.promptUuid]
    * @param {string} [data.promptVersionUuid]
    */
-  constructor ({ id, version, source, template, promptUuid, promptVersionUuid }) {
+  constructor ({ id, version, source, template, config, promptUuid, promptVersionUuid }) {
     this.id = id
     this.version = version
     this.source = source
@@ -64,6 +78,7 @@ class ManagedPrompt {
         ? { type: 'placeholder', name: item.name }
         : { role: item.role, content: item.content })))
       : template
+    this.config = freezeConfig(config)
     this.promptUuid = promptUuid
     this.promptVersionUuid = promptVersionUuid
     Object.freeze(this)
@@ -135,6 +150,7 @@ class ManagedPrompt {
       version: String(promptLike && value.version ? value.version : 'fallback'),
       source: 'fallback',
       template,
+      config: promptLike ? value.config : undefined,
     })
   }
 }

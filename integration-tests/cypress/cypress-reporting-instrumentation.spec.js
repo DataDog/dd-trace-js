@@ -45,6 +45,8 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_UPLOADED,
   TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_SCOPE,
@@ -256,6 +258,156 @@ moduleTypes.forEach(({
     const getCypressRunCommand = specToRun => version === '6.7.0'
       ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
       : testCommand
+
+    // These CLI fixtures exercise lifecycle behavior, not module loading. Running them in the ESM cell
+    // would repeat the same .js configs; dedicated tests below cover .mjs config loading and hook chaining.
+    if (type === 'commonJS') {
+      describe('late manual finalization', () => {
+        /**
+         * Run the fixture and check the event hierarchy shared by all recovery scenarios.
+         * @param {{ afterSpec?: 'missing'|'partial'|'forwarded', screenshots?: boolean, video?: boolean }} options
+         */
+        async function runLateManual ({ afterSpec = 'missing', screenshots = false, video = false }) {
+          let output = ''
+          const command = './node_modules/.bin/cypress run --config-file ci-visibility/cypress-late-manual/config.js'
+          childProcess = exec(command, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '',
+              DD_CYPRESS_AFTER_SPEC_MODE: afterSpec,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(screenshots),
+              DD_TEST_FAILURE_VIDEOS_ENABLED: String(video),
+            },
+          })
+          childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
+          let messages
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'close'),
+            receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url, media }) => url.endsWith('/api/v2/citestcycle') || !!media,
+              payloads => { messages = payloads }
+            ),
+          ])
+          const events = messages.flatMap(({ payload }) => payload?.events ?? [])
+          const uploads = messages.filter(({ media }) => media).map(({ media }) => media)
+          assert.strictEqual(exitCode, 1, output)
+          assert.match(output, /synthetic late hook failure/)
+          const tests = events.filter(event => event.type === 'test').map(({ content }) => content)
+          const suites = events.filter(event => event.type === 'test_suite_end').map(({ content }) => content)
+          assert.deepStrictEqual(tests.map(({ meta }) => ({
+            name: meta['test.name'],
+            status: meta[TEST_STATUS],
+          })).sort((a, b) => a.name.localeCompare(b.name)), [
+            { name: 'first suite is skipped', status: 'skip' },
+            { name: 'first suite passes', status: 'pass' },
+            { name: 'second suite fails in a late hook', status: 'fail' },
+          ], output)
+          assert.strictEqual(suites.length, 2)
+          assert.strictEqual(new Set(suites.map(suite => String(suite.test_suite_id))).size, 2)
+          for (const test of tests) {
+            const suite = suites.find(suite => suite.meta['test.suite'] === test.meta['test.suite'])
+            assert.ok(suite)
+            assert.strictEqual(String(test.test_suite_id), String(suite.test_suite_id))
+            // Recovery at after:run must keep tests inside their original suite, not move them to run end.
+            // Compare at Cypress run-result precision (milliseconds).
+            const testStart = Math.round(Number(test.start) / 1e6)
+            const testEnd = Math.round((Number(test.start) + Number(test.duration)) / 1e6)
+            const suiteStart = Math.round(Number(suite.start) / 1e6)
+            const suiteEnd = Math.round((Number(suite.start) + Number(suite.duration)) / 1e6)
+            assert.ok(testStart >= suiteStart && testEnd <= suiteEnd,
+              `${test.meta['test.name']}: ${testStart}-${testEnd} must be within suite ${suiteStart}-${suiteEnd}`)
+            if (test.meta[TEST_STATUS] === 'skip' && afterSpec === 'missing') {
+              assert.strictEqual(Number(test.duration), 0)
+              assert.strictEqual(testStart, suiteEnd)
+            }
+          }
+          const firstSuite = suites.find(suite => suite.meta['test.suite'].endsWith('first.cy.js'))
+          const secondSuite = suites.find(suite => suite.meta['test.suite'].endsWith('second.cy.js'))
+          assert.strictEqual(firstSuite.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(secondSuite.meta[TEST_STATUS], 'fail')
+          assert.ok(Number(firstSuite.start) + Number(firstSuite.duration) < Number(secondSuite.start),
+            `recovered suite duration must not include later specs\n${output}`)
+          const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+          assert.match(failedTest.meta[ERROR_MESSAGE], /synthetic late hook failure/)
+          for (const type of ['test_session_end', 'test_module_end']) {
+            assert.deepStrictEqual(events.filter(event => event.type === type)
+              .map(({ content }) => content.meta[TEST_STATUS]), ['fail'], type)
+          }
+          return { failedTest, failedSuite: secondSuite, uploads }
+        }
+
+        over10It('recovers both specs with screenshots but no video when after:spec is missing', async () => {
+          receiver.setMediaResponseDelay(100)
+          const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true })
+
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+          assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+          assert.deepStrictEqual(uploads.map(media => media.contentType), ['image/png'])
+          assert.strictEqual(uploads[0].traceId, String(failedTest.trace_id))
+        })
+
+        over10It('recovers the second spec with media when after:spec handles only the first', async () => {
+          receiver.setMediaResponseDelay(100)
+          const { failedTest, failedSuite, uploads } = await runLateManual({
+            afterSpec: 'partial', screenshots: true, video: true,
+          })
+
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+          assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+          assert.deepStrictEqual(uploads.map(media => media.contentType).sort(), ['image/png', 'video/mp4'])
+          const screenshot = uploads.find(media => media.contentType === 'image/png')
+          const video = uploads.find(media => media.contentType === 'video/mp4')
+          assert.strictEqual(screenshot.traceId, String(failedTest.trace_id))
+          assert.strictEqual(video.testSuiteId, String(failedSuite.test_suite_id))
+        })
+
+        over10It('does not duplicate specs already finalized by after:spec', async () => {
+          await runLateManual({ afterSpec: 'forwarded' })
+        })
+      })
+
+      for (const { manual, reject } of [
+        { manual: false, reject: false },
+        { manual: true, reject: false },
+        { manual: false, reject: true },
+        { manual: true, reject: true },
+      ]) {
+        over10It(`preserves before:run handlers (manual=${manual}, reject=${reject})`, async () => {
+          let output = ''
+          const events = []
+          receiver.on('message', ({ url, payload }) => {
+            if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+          })
+          childProcess = exec('./node_modules/.bin/cypress run --config-file cypress-before-run.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              CYPRESS_MANUAL_PLUGIN: manual ? '1' : '',
+              CYPRESS_REJECT_BEFORE_RUN: reject ? '1' : '',
+            },
+          })
+          childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
+          const [exitCode] = await once(childProcess, 'close')
+          const tests = events.filter(event => event.type === 'test')
+          if (reject) {
+            assert.strictEqual(events.length, 0)
+            assert.notStrictEqual(exitCode, 0)
+            assert.match(output, /custom before:run failed/)
+          } else {
+            assert.strictEqual(exitCode, 0, output)
+            assert.deepStrictEqual(tests.map(({ content }) => content.meta[TEST_STATUS]), ['pass'], output)
+          }
+        })
+      }
+    }
 
     // Regression guard: when OTEL_TRACES_EXPORTER=otlp is set in the
     // environment (e.g. by an unrelated OpenTelemetry-instrumented shell),
@@ -2192,6 +2344,7 @@ moduleTypes.forEach(({
       cypressPlugin.testSessionSpan = testSessionSpan
       cypressPlugin.testModuleSpan = testModuleSpan
       cypressPlugin.tracer = {
+        startSpan: sinon.stub().callsFake(createSpan),
         _tracer: {
           _exporter: {
             flush: callback => callback(),
@@ -2204,6 +2357,54 @@ moduleTypes.forEach(({
       sinon.stub(cypressPlugin, 'ciVisEvent')
 
       return { testModuleSpan, testSessionSpan, createSpan }
+    }
+
+    for (const uploadFails of [false, true]) {
+      it(`waits for recovered screenshot-only spans before closing the run (uploadFails=${uploadFails})`, async () => {
+        const { testSessionSpan, createSpan } = prepareRunFinalization()
+        const testSpan = createSpan()
+        testSpan.finish.callsFake(() => { testSpan._duration = 0 })
+        const context = testSessionSpan.context()
+        context._trace.started.push(testSpan)
+        sinon.stub(testSessionSpan, 'context').returns(context)
+        const spec = { relative: 'cypress/e2e/failure.cy.js' }
+        cypressPlugin.getTestSuiteSpan({ testSuite: spec.relative })
+        cypressPlugin.finishedTestsByFile[spec.relative] = [{
+          testName: 'fails', testStatus: 'fail', testSpan, finishTime: 900,
+        }]
+        let completeUpload
+        const exporter = cypressPlugin.tracer._tracer._exporter
+        exporter.canUploadTestScreenshots = () => true
+        exporter.uploadTestScreenshot = sinon.stub().callsFake((options, callback) => { completeUpload = callback })
+        const flush = sinon.spy(exporter, 'flush')
+        const afterRunPromise = cypressPlugin.afterRun({
+          totalFailed: 1,
+          totalTests: 1,
+          runs: [{
+            spec,
+            stats: { failures: 1, tests: 1, endedAt: new Date(1000).toISOString() },
+            tests: [{
+              title: ['fails'],
+              state: 'failed',
+              attempts: [{ state: 'failed', screenshots: [{ path: '/tmp/failure.png', testFailure: true }] }],
+            }],
+          }],
+        })
+        try {
+          sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+          sinon.assert.notCalled(testSpan.finish)
+          sinon.assert.notCalled(testSessionSpan.finish)
+          sinon.assert.notCalled(flush)
+        } finally {
+          completeUpload(uploadFails ? new Error('synthetic upload failure') : undefined)
+          await afterRunPromise
+        }
+        sinon.assert.calledOnceWithExactly(testSpan.finish, 900)
+        assert.strictEqual(testSpan.tags[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadFails ? undefined : 'true')
+        assert.strictEqual(testSpan.tags[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadFails ? 'true' : undefined)
+        sinon.assert.calledOnce(testSessionSpan.finish)
+        assert.strictEqual(testSessionSpan.tags[TEST_STATUS], 'fail')
+      })
     }
 
     it('waits for the existing initialization before the first run', async () => {
@@ -2237,6 +2438,29 @@ moduleTypes.forEach(({
       sinon.assert.calledOnceWithExactly(init, tracer, cypressConfig)
     })
 
+    for (const [summary, status, reason] of [
+      [{ totalTests: 2, totalPassed: 0, totalFailed: 0, totalPending: 2, totalSkipped: 0 },
+        'skip', 'all_tests_skipped'],
+      [{ totalTests: 2, totalPassed: 0, totalFailed: 0, totalPending: 1, totalSkipped: 1 },
+        'skip', 'all_tests_skipped'],
+      [{ totalTests: 2, totalPassed: 1, totalFailed: 0, totalPending: 1, totalSkipped: 0 },
+        'pass', undefined],
+      [{ totalTests: 0, totalPassed: 0, totalFailed: 0, totalPending: 0, totalSkipped: 0 },
+        'skip', 'zero_tests'],
+    ]) {
+      it(`reports zero-execution sessions from Cypress statistics: ${JSON.stringify(summary)}`, async () => {
+        const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
+        await cypressPlugin.afterRun(summary)
+        for (const span of [testSessionSpan, testModuleSpan]) {
+          assert.strictEqual(span.tags[TEST_STATUS], status)
+          assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], reason)
+          assert.strictEqual(span.tags[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+            ? 'All tests were skipped'
+            : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+        }
+      })
+    }
+
     it('preserves a failed Cypress run that reports zero tests', async () => {
       const { testModuleSpan, testSessionSpan } = prepareRunFinalization()
 
@@ -2268,7 +2492,7 @@ moduleTypes.forEach(({
 
       for (const span of [testSessionSpan, testModuleSpan]) {
         assert.strictEqual(span.tags[TEST_STATUS], 'skip')
-        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were executed')
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'No tests were detected')
         assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'zero_tests')
       }
     })
@@ -2318,8 +2542,8 @@ moduleTypes.forEach(({
 
       for (const span of [testSessionSpan, testModuleSpan]) {
         assert.strictEqual(span.tags[TEST_STATUS], 'skip')
-        assert.strictEqual(span.tags[TEST_SKIP_REASON], undefined)
-        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], undefined)
+        assert.strictEqual(span.tags[TEST_SKIP_REASON], 'All tests were skipped')
+        assert.strictEqual(span.tags[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
       }
     })
 
@@ -2586,8 +2810,8 @@ moduleTypes.forEach(({
       for (const retries of [0, 2]) {
         const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, retries=${retries}`
         it(`only applies dynamic ATR in terminal mode (${configDescription})`, async () => {
+          prepareRunFinalization()
           cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
-          cypressPlugin.testSuiteSpan = {}
           sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(true)
           const tasks = cypressPlugin.getTasks()
           const hooks = {}
@@ -2657,7 +2881,6 @@ moduleTypes.forEach(({
         it(`only accounts for ATR in terminal mode (${configDescription})`, () => {
           const { createSpan } = prepareRunFinalization()
           cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
-          cypressPlugin.testSuiteSpan = createSpan()
           sinon.stub(cypressPlugin, 'isFlakyTestRetriesEnabled').value(true)
           sinon.stub(cypressPlugin, 'flakyTestRetriesCount').value(1)
           sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(isDynamicAtrEnabled)
