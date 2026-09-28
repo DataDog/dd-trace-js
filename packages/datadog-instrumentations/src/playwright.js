@@ -1690,15 +1690,22 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         runnerConfig._internal?.listOnly ||
         options?.listMode
       )
-    const isExpectedEmptyShard = finalStatus === 'pass' && !isTestDiscovery &&
-      Boolean(playwrightConfig.shard) &&
+    const isEmptyShard = Boolean(playwrightConfig.shard) &&
       hasTestsBeforeSharding &&
       !hasTestsAssignedToShard &&
       testsReportedInGenerateSummary.size === 0
+    const hasExecutedTests = [...testsToTestStatuses.values()].some(statuses =>
+      statuses.some(status => status !== 'skip')
+    )
+    const hasSkippedTests = testsToTestStatuses.size > 0 || testsReportedInGenerateSummary.size > 0
+    const testSessionEmptyReason = finalStatus === 'pass' && !hasExecutedTests
+      ? (isTestDiscovery
+          ? 'test_discovery'
+          : isEmptyShard ? 'zero_test_shard' : hasSkippedTests ? 'all_tests_skipped' : 'zero_tests')
+      : undefined
     await getChannelPromise(testSessionFinishCh, {
-      status: isTestDiscovery || isExpectedEmptyShard ? 'skip' : finalStatus,
-      isTestDiscovery,
-      isExpectedEmptyShard,
+      status: testSessionEmptyReason ? 'skip' : finalStatus,
+      testSessionEmptyReason,
       error: finalizationError,
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
