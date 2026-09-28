@@ -231,10 +231,6 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
           },
         },
       })
-      const events = []
-      receiver.on('message', ({ url, payload }) => {
-        if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
-      })
       const command = './node_modules/.bin/playwright test ' +
         `-c playwright.config.js --workers=1 --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
       const execute = async (args, traced, failRepeats) => {
@@ -257,27 +253,32 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
         })
         proc.stdout?.on('data', data => { stdout += data.toString() })
         proc.stderr?.on('data', data => { stderr += data.toString() })
-        const [exitCode] = await once(proc, 'close')
+        let events = []
+        const eventsPromise = traced
+          ? receiver.gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            events = payloads.flatMap(({ payload }) => payload.events)
+          })
+          : undefined
+        const [[exitCode]] = await Promise.all([once(proc, 'close'), eventsPromise])
         assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
-        return { exitCode, report: JSON.parse(stdout) }
+        return { exitCode, report: JSON.parse(stdout), events }
       }
       const seed = await execute('', true, true)
-      const seedEvents = events.splice(0)
       const history = await fs.readFile(historyFile)
-      assert.strictEqual(seedEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+      assert.strictEqual(seed.events.filter(event => event.type === 'test').length, 3 * nativeRepeats)
       assert.strictEqual(seed.report.stats.expected, nativeRepeats)
       assert.strictEqual(seed.report.stats.unexpected, 2 * nativeRepeats)
       assert.strictEqual(new Set(JSON.parse(history).failedTests).size, nativeRepeats)
 
+      // Saved history must also work when a later run uses plain Playwright.
       for (const traced of [false, true]) {
         await fs.writeFile(historyFile, history)
         const result = await execute('--last-failed', traced, false)
-        const runEvents = events.splice(0)
         assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
         assert.strictEqual(result.report.stats.expected, (traced ? 3 : 1) * nativeRepeats)
         if (traced) {
-          assert.strictEqual(runEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
-          const session = runEvents.find(event => event.type === 'test_session_end')
+          assert.strictEqual(result.events.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+          const session = result.events.find(event => event.type === 'test_session_end')
           assert.strictEqual(session.content.meta[TEST_STATUS], 'pass')
         }
       }
