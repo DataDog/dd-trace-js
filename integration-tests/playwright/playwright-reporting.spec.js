@@ -198,7 +198,15 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
   })
 }
 
-for (const version of ['1.44.0', '1.58.2', '1.60.0', latest]) {
+// Exercise each history-writer layout hooked by the instrumentation.
+const retryHistoryVersions = [
+  '1.44.0', // writeLastRunInfo in runner.js; first release with --last-failed.
+  '1.58.2', // LastRunReporter in lastRun.js.
+  latest, // LastRunReporter bundled into runner/index.js.
+]
+for (const version of retryHistoryVersions) {
+  if (PLAYWRIGHT_VERSION === 'oldest') continue
+
   describe(`playwright@${version} SDK retry history`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
     this.timeout(60000)
@@ -208,17 +216,8 @@ for (const version of ['1.44.0', '1.58.2', '1.60.0', latest]) {
       it(`can select a test whose ${feature} repetition failed`, async (receiver, run) => {
         const nativeRepeats = feature === 'efd-repeat-each' ? 2 : 1
         const cwd = sandboxCwd()
-        const fixture = path.join(cwd, `sdk-retry-history-${feature}`)
-        const historyFile = path.join(fixture, 'results', '.last-run.json')
-        await fs.mkdir(fixture, { recursive: true })
-        await fs.writeFile(path.join(fixture, 'repeat-test.js'),
-          "const { test } = require('@playwright/test')\n" +
-          "test('synthetic changing result', ({}, info) => {\n" +
-          `  if (process.env.DIAG_FAIL_REPEATS === 'true' && info.repeatEachIndex >= ${nativeRepeats}) {\n` +
-          "    throw new Error('Synthetic repetition failure')\n  }\n})\n")
-        await fs.writeFile(path.join(fixture, 'playwright.config.js'),
-          `module.exports = { testDir: '.', testMatch: '*-test.js', workers: 1, repeatEach: ${nativeRepeats}, ` +
-          "outputDir: './results' }\n")
+        const outputDir = `./test-results-retry-history-${feature}`
+        const historyFile = path.join(cwd, outputDir, '.last-run.json')
         receiver.setSettings({
           early_flake_detection: {
             enabled: feature !== 'attempt-to-fix',
@@ -232,8 +231,8 @@ for (const version of ['1.44.0', '1.58.2', '1.60.0', latest]) {
         receiver.setTestManagementTests({
           playwright: {
             suites: {
-              'repeat-test.js': {
-                tests: { 'synthetic changing result': { properties: { attempt_to_fix: true } } },
+              'retry-history-test.js': {
+                tests: { 'fails only SDK repetitions': { properties: { attempt_to_fix: true } } },
               },
             },
           },
@@ -243,7 +242,7 @@ for (const version of ['1.44.0', '1.58.2', '1.60.0', latest]) {
           if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
         })
         const command = './node_modules/.bin/playwright test ' +
-          `-c ${fixture}/playwright.config.js --retries=0 --reporter=json repeat-test.js`
+          `-c playwright.config.js --workers=1 --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
         const execute = async (args, traced, failRepeats) => {
           let stdout = ''
           let stderr = ''
@@ -256,39 +255,33 @@ for (const version of ['1.44.0', '1.58.2', '1.60.0', latest]) {
               DD_CIVISIBILITY_ENABLED: String(traced),
               DD_CIVISIBILITY_ITR_ENABLED: 'true',
               DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
-              DIAG_FAIL_REPEATS: String(failRepeats),
+              TEST_DIR: './ci-visibility/playwright-retry-history',
+              PLAYWRIGHT_OUTPUT_DIR: outputDir,
+              FAIL_SDK_REPETITIONS: String(failRepeats),
             },
           })
           proc.stdout?.on('data', data => { stdout += data.toString() })
           proc.stderr?.on('data', data => { stderr += data.toString() })
           const [exitCode] = await once(proc, 'close')
           assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
-          return { exitCode, report: JSON.parse(stdout), stderr }
+          return { exitCode, report: JSON.parse(stdout) }
         }
         const seed = await execute('', true, true)
         const seedEvents = events.splice(0)
         const history = await fs.readFile(historyFile)
-        const runs = []
-        for (const traced of [false, true]) {
-          await fs.writeFile(historyFile, history)
-          const result = await execute('--last-failed', traced, false)
-          runs.push({ traced, ...result, events: events.splice(0) })
-        }
-        if (process.env.PW_DIAG_OUTPUT) {
-          await fs.mkdir(process.env.PW_DIAG_OUTPUT, { recursive: true })
-          await fs.writeFile(path.join(process.env.PW_DIAG_OUTPUT, `${version}-${feature}-history.json`),
-            JSON.stringify({ seed, seedEvents, history: JSON.parse(history), runs },
-              (key, value) => typeof value === 'bigint' ? value.toString() : value, 2))
-        }
         assert.strictEqual(seedEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
         assert.strictEqual(seed.report.stats.unexpected, 2 * nativeRepeats)
         assert.strictEqual(new Set(JSON.parse(history).failedTests).size, nativeRepeats)
-        for (const result of runs) {
+
+        for (const traced of [false, true]) {
+          await fs.writeFile(historyFile, history)
+          const result = await execute('--last-failed', traced, false)
+          const runEvents = events.splice(0)
           assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
-          assert.strictEqual(result.report.stats.expected, (result.traced ? 3 : 1) * nativeRepeats)
-          if (result.traced) {
-            assert.strictEqual(result.events.filter(event => event.type === 'test').length, 3 * nativeRepeats)
-            const session = result.events.find(event => event.type === 'test_session_end')
+          assert.strictEqual(result.report.stats.expected, (traced ? 3 : 1) * nativeRepeats)
+          if (traced) {
+            assert.strictEqual(runEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+            const session = runEvents.find(event => event.type === 'test_session_end')
             assert.strictEqual(session.content.meta[TEST_STATUS], 'pass')
           }
         }
