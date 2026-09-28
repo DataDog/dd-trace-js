@@ -1211,6 +1211,7 @@ function getFinishWrapper (exitOrClose) {
     finishedSessionContexts.add(this)
 
     const failedSuites = this.state.getFailedFilepaths()
+    const hasRunError = runErrorsByContext.has(this)
     const runError = runErrorsByContext.get(this)
     runErrorsByContext.delete(this)
     let error = runError
@@ -1231,7 +1232,8 @@ function getFinishWrapper (exitOrClose) {
       test.mode !== 'skip' && test.mode !== 'todo' &&
       test.result?.state !== 'skip' && test.result?.state !== 'todo'
     )
-    const hasErrors = error || this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
+    const hasErrors = hasRunError || error ||
+      this.state.getCountOfFailedTests() > 0 || this.state.getUnhandledErrors().length > 0
     const testSessionEmptyReason = !hasErrors && !hasExecutedTests
       ? (isEmptyShard
           ? 'zero_test_shard'
@@ -1411,7 +1413,7 @@ function wrapVitestSession (Vitest) {
     if (!testSessionFinishCh.hasSubscribers) return start.apply(this, arguments)
     wrapSessionFinish(this)
     return start.apply(this, arguments).then(undefined, error => {
-      if (error.code !== 'VITEST_FILES_NOT_FOUND') runErrorsByContext.set(this, error)
+      if (error?.code !== 'VITEST_FILES_NOT_FOUND') runErrorsByContext.set(this, error)
       throw error
     })
   })

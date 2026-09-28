@@ -155,6 +155,71 @@ describe('vitest main instrumentation', () => {
     })
   }
 
+  for (const method of ['start', 'runFiles']) {
+    for (const reason of [null, undefined, false, 0, '', 'startup failure', new Error('startup failure')]) {
+      it(`preserves ${method} rejection ${String(reason) || 'empty string'} and reports a failed session`, async () => {
+        const hooks = []
+        const finishes = []
+        const testSessionFinishCh = { hasSubscribers: true }
+        proxyquire('../src/vitest-main', {
+          './helpers/instrument': {
+            ...require('../src/helpers/instrument'),
+            addHook (target, hook) { hooks.push({ target, hook }) },
+          },
+          './helpers/channel': {
+            getChannelPromise (channel, payload) {
+              if (channel === testSessionFinishCh) finishes.push(payload)
+              return Promise.resolve({ libraryConfig: {} })
+            },
+          },
+          './vitest-util': {
+            ...require('../src/vitest-util'),
+            testSessionFinishCh,
+            testSessionConfigurationCh: { hasSubscribers: false },
+          },
+        })
+        class Vitest {
+          config = { passWithNoTests: true }
+          state = {
+            pathsSet: new Set(),
+            getFailedFilepaths: () => [],
+            getFiles: () => [],
+            getCountOfFailedTests: () => 0,
+            getUnhandledErrors: () => [],
+          }
+
+          start () {
+            // A framework or user hook can reject with any JavaScript value.
+            return Promise.reject(reason)
+          }
+
+          runFiles () {
+            return Promise.reject(reason)
+          }
+
+          close () {}
+          exit () {}
+          reportCoverage () {}
+          getRootProject () { return { _provided: {} } }
+        }
+        const hook = hooks.find(({ target }) => target.versions[0] === '>=5.0.0').hook
+        hook({ Vitest }, '5.0.1')
+        const vitest = new Vitest()
+
+        await assert.rejects(vitest[method]([]), error => {
+          assert.strictEqual(error, reason)
+          return true
+        })
+        await vitest.close()
+
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(finishes[0].testSessionEmptyReason, undefined)
+        assert.strictEqual(finishes[0].error, reason)
+      })
+    }
+  }
+
   it('keeps no-worker capabilities active and handles EFD admission boundaries', async () => {
     const hooks = []
     const libraryConfigurationRequests = []
