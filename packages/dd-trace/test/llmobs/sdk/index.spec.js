@@ -957,6 +957,96 @@ describe('sdk', () => {
         })
       })
     })
+    describe('version option', () => {
+      function emittedTags (name) {
+        return LLMObsSpanWriter.prototype.append.getCalls().find(call => call.args[0].name === name)?.args[0].tags
+      }
+
+      it('reports the version on an agent span started with trace, and not on the APM span options', () => {
+        sinon.spy(llmobs._tracer, 'trace')
+        try {
+          llmobs.trace({ kind: 'agent', name: 'agent', version: '2.1.0' }, () => {})
+          assert.strictEqual(llmobs._tracer.trace.firstCall.args[1].version, undefined)
+        } finally {
+          llmobs._tracer.trace.restore()
+        }
+
+        assert.ok(emittedTags('agent').includes('agent_version:2.1.0'))
+      })
+
+      it('reports a numeric version on an agent span started with wrap', () => {
+        const agentFn = llmobs.wrap({ kind: 'agent', name: 'agent', version: 0 }, () => {})
+        agentFn()
+
+        assert.ok(emittedTags('agent').includes('agent_version:0'))
+      })
+
+      it('reports the version on a decorated agent method', () => {
+        const decorator = llmobs.decorate({ kind: 'agent', version: '2.1.0' })
+        const run = decorator(() => {}, { kind: 'method', name: 'run' })
+        run()
+
+        assert.ok(emittedTags('run').includes('agent_version:2.1.0'))
+      })
+
+      it('does not report the version on child spans', () => {
+        llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'agent', name: 'inner' }, () => {})
+          llmobs.trace({ kind: 'tool', name: 'tool' }, () => {})
+        })
+
+        assert.ok(emittedTags('outer').includes('agent_version:1.0.0'))
+        for (const name of ['inner', 'tool']) {
+          assert.ok(!emittedTags(name).some(tag => tag.startsWith('agent_version:')))
+        }
+      })
+
+      it('wins over the version declared by an enclosing annotation context', () => {
+        llmobs.annotationContext({ agent: { version: 'from_context', name: 'travel_desk' } }, () => {
+          llmobs.trace({ kind: 'agent', name: 'agent', version: 'from_option' }, agentSpan => {
+            assert.deepStrictEqual(LLMObsTagger.tagMap.get(agentSpan)['_ml_obs.meta.metadata._dd.agent_manifest'], {
+              name: 'travel_desk',
+            })
+          })
+        })
+
+        assert.ok(emittedTags('agent').includes('agent_version:from_option'))
+        assert.ok(!emittedTags('agent').includes('agent_version:from_context'))
+      })
+
+      it('is replaced by a later annotation', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, () => {
+          llmobs.annotate({ agent: { version: '1.0.1' } })
+        })
+
+        assert.ok(emittedTags('agent').includes('agent_version:1.0.1'))
+        assert.ok(!emittedTags('agent').includes('agent_version:1.0.0'))
+      })
+
+      for (const version of ['', Number.NaN, { major: 1 }]) {
+        it(`ignores an unreportable version (${inspect(version)})`, () => {
+          llmobs.trace({ kind: 'agent', name: 'agent', version }, () => {})
+
+          assert.ok(!emittedTags('agent').some(tag => tag.startsWith('agent_version:')))
+        })
+      }
+
+      it('drops the version on a non-agent span with a warning', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.trace({ kind: 'workflow', name: 'workflow', version: '1.0.0' }, () => {})
+          sinon.assert.calledWith(
+            logger.warn,
+            'Dropping the version option on a %s span, it is only supported for agent spans.',
+            'workflow'
+          )
+        } finally {
+          logger.warn.restore()
+        }
+
+        assert.ok(!emittedTags('workflow').some(tag => tag.startsWith('agent_version:')))
+      })
+    })
   })
 
   describe('annotate', () => {

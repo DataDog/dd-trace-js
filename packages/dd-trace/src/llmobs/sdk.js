@@ -27,7 +27,7 @@ const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
-const { buildAgentDeclaration } = require('./agent-manifest')
+const { buildAgentDeclaration, toAgentVersion } = require('./agent-manifest')
 /** @typedef {import('./agent-manifest').AgentDeclaration} AgentDeclaration */
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
@@ -161,7 +161,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
@@ -191,7 +191,7 @@ class LLMObs extends NoopLLMObs {
     const {
       spanOptions,
       ...llmobsOptions
-    } = this.#extractOptions(options)
+    } = this.#extractOptions(options, kind)
 
     const llmobs = this
 
@@ -703,21 +703,32 @@ class LLMObs extends NoopLLMObs {
     }
   }
 
-  #extractOptions (options) {
+  #extractOptions (options, kind) {
     const {
       modelName,
       modelProvider,
       sessionId,
       mlApp,
+      version,
       _decorator,
       ...spanOptions
     } = options
+
+    let agentVersion
+    if (version !== undefined) {
+      if (kind === 'agent') {
+        agentVersion = toAgentVersion(version)
+      } else {
+        logger.warn('Dropping the version option on a %s span, it is only supported for agent spans.', kind)
+      }
+    }
 
     return {
       mlApp,
       modelName,
       modelProvider,
       sessionId,
+      agentVersion,
       _decorator,
       spanOptions,
     }

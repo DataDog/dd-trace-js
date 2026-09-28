@@ -50,7 +50,7 @@ function buildAgentDeclaration (agent) {
   let declaration
   try {
     if (isPlainObject(agent)) {
-      const version = toVersion(agent.version)
+      const version = toAgentVersion(agent.version)
       const manifest = buildAgentManifest(agent)
       if (version !== undefined || manifest !== undefined) declaration = { version, manifest }
     } else {
@@ -110,9 +110,9 @@ function buildAgentManifest (agent) {
 /**
  * @param {unknown} version
  */
-function toVersion (version) {
-  if (typeof version === 'string') return version === '' ? undefined : version
-  if (typeof version === 'number' && Number.isFinite(version)) return String(version)
+function toAgentVersion (version) {
+  if (typeof version === 'number') return Number.isFinite(version) ? String(version) : undefined
+  return typeof version === 'string' && version !== '' ? version : undefined
 }
 
 /**
@@ -303,4 +303,5 @@ function isScalar (value) {
 module.exports = {
   MANUAL_FRAMEWORK_NAME,
   buildAgentDeclaration,
+  toAgentVersion,
 }
