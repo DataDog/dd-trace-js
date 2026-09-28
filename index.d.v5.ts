@@ -4872,11 +4872,12 @@ declare namespace tracer {
     }
 
     /**
-     * A plain JSON Schema object. Schema-library objects (for example Zod schemas) must be converted first, for
-     * example with `z.toJSONSchema()`, or they are dropped.
+     * A plain JSON Schema object with `type: 'object'`, which is how it is told apart from a parameter map.
+     * Schema-library objects (for example Zod schemas) must be converted first, for example with
+     * `z.toJSONSchema()`, or they are dropped.
      */
     interface AgentToolJsonSchema {
-      type?: 'object',
+      type: 'object',
       properties: { [param: string]: { type?: string, [key: string]: unknown } },
       required?: string[]
     }
