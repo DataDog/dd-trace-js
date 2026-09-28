@@ -80,7 +80,7 @@ class ReactRouterPlugin extends WebPlugin {
     let route = ''
     for (const match of matches) {
       const path = match.route?.path
-      if (path) route += '/' + path
+      if (path) route = path.startsWith('/') ? path : route + '/' + path
     }
     route = route.replaceAll(/\/+/g, '/') || '/'
 
