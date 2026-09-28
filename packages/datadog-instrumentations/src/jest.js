@@ -109,6 +109,10 @@ const CHILD_MESSAGE_CALL = 1
 const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
+const JEST_CIRCUS_TEST_RUNNER_PATH = /(?:^|[\\/])jest-circus(?:[\\/]|$)/
+const UNSUPPORTED_JEST_TEST_RUNNER_WARNING =
+  'dd-trace Test Optimization supports jest-circus; another test runner was detected; ' +
+  'suite and test events may be incomplete.'
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
@@ -248,6 +252,7 @@ const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0
 const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
+let hasWarnedUnsupportedJestTestRunner = false
 let isJestCoverageBackfillSupported = false
 let hasFinishedTestSession = false
 let jestEachBind
@@ -320,6 +325,20 @@ function warnDeprecatedJestVersion (frameworkVersion) {
     'dd-trace support for Jest<28.0.0 is deprecated and will be removed in dd-trace v6. ' +
       'Please upgrade Jest to >=28.0.0.'
   )
+}
+
+/** @param {object[]} configs resolved Jest project configurations */
+function warnIfUnsupportedJestTestRunner (configs) {
+  if (hasWarnedUnsupportedJestTestRunner || !testSessionConfigurationCh.hasSubscribers) return
+
+  const usesUnsupportedTestRunner = getEnvironmentVariable('JEST_JASMINE') === '1' ||
+    configs.some(config => !JEST_CIRCUS_TEST_RUNNER_PATH.test(config.testRunner))
+
+  if (usesUnsupportedTestRunner) {
+    hasWarnedUnsupportedJestTestRunner = true
+    // eslint-disable-next-line no-console
+    console.warn(UNSUPPORTED_JEST_TEST_RUNNER_WARNING)
+  }
 }
 
 function getTestEnvironmentOptions (config) {
@@ -3625,6 +3644,7 @@ addHook({
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
+  warnIfUnsupportedJestTestRunner(readConfigsResult.configs)
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   const isCodeCoverageEnabledBecauseOfUs = shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled

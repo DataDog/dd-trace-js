@@ -41,32 +41,24 @@ shimmer is still necessary, leave a code comment naming the reason.
 
 ```text
 packages/datadog-instrumentations/src/
-├── <name>.js                                 # Hooks file — triggers the rewriter
-└── helpers/
-    ├── hooks.js                              # Add: '<name>': () => require('../<name>')
-    └── rewriter/
-        └── instrumentations/
-            ├── index.js                      # Add: ...require('./<name>')
-            └── <name>.js                     # The config array
+└── helpers/rewriter/
+    ├── instrumentation-registry.js            # Add the config group and optional activate: true flag
+    └── instrumentations/<name>.js             # The config array
 ```
 
 Add to `transforms.js` only when the built-in operators cannot express the
 required lifecycle.
 
-Hooks file (`src/<name>.js`):
+Pure Orchestrion integrations are discovered from their rewrite targets and publish plugin activation from successfully
+rewritten source when the module is evaluated. They do not need an identity instrumentation file or `hooks.js` entry.
+Hybrid integrations still need both when runtime setup or export modification complements source rewriting. Pure
+integrations report compatibility at the rewrite-target level when an exact target is evaluated, so loading other files
+from the same package is not reported. Bundler rewrites keep their existing activation path and do not report this
+compatibility telemetry.
 
-```javascript
-'use strict'
-
-const { addHook, getHooks } = require('./helpers/instrument')
-
-for (const hook of getHooks('<npm-package>').values()) {
-  addHook(hook, exports => exports)
-}
-```
-
-`getHooks` reads the config and registers `addHook` entries so the rewriter
-runs on the matched files. Without this file the rewriter is never triggered.
+Register a pure integration by adding its config and a config-registry entry with `activate: true`, then run
+`npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; the registry's
+`activate` flag controls evaluation-time plugin activation using the module name from the config.
 
 ## Config Schema
 
@@ -283,13 +275,12 @@ directly.
 ## Reference Implementations
 
 - **Langchain** (multi-method, CompositePlugin): config
-  `helpers/rewriter/instrumentations/langchain.js`, hooks `src/langchain.js`,
+  `helpers/rewriter/instrumentations/langchain.js`,
   plugin `packages/datadog-plugin-langchain/src/tracing.js`.
 - **LangGraph** (`returnKind: 'AsyncIterator'`):
   `helpers/rewriter/instrumentations/langgraph.js` and
   `packages/datadog-plugin-langgraph/src/stream.js`.
 - **graphql** (`functionName` + `Sync`, and why per-field resolve hooks are
   *not* done via orchestrion): `helpers/rewriter/instrumentations/graphql.js`.
-- **BullMQ** (single package): config
-  `helpers/rewriter/instrumentations/bullmq.js`, hooks `src/bullmq.js`.
+- **BullMQ** (single package): config `helpers/rewriter/instrumentations/bullmq.js`.
 - **Custom transform**: `helpers/rewriter/transforms.js` (`waitForAsyncEnd`).

@@ -3,6 +3,8 @@
 const { createSiteUrl } = require('../exporters/common/url')
 const log = require('../log')
 
+let invalidSiteWarningLogged = false
+
 /**
  * @typedef {object} DirectEVPRoute
  * @property {URL} url - Direct intake URL
@@ -21,21 +23,23 @@ const log = require('../log')
  */
 function createDirectEVPRoute (config, intake) {
   const apiKey = config.DD_API_KEY
-  if (!apiKey || !config.site) return
+  if (!apiKey) return
 
-  try {
-    const url = createSiteUrl(config.site, intake)
-    if (url === undefined) throw new Error('Invalid direct EVP intake URL')
-
-    return {
-      url,
-      basePath: '',
-      headers: {
-        'DD-API-KEY': apiKey,
-      },
+  const url = createSiteUrl(config.site, intake)
+  if (url === undefined) {
+    if (!invalidSiteWarningLogged) {
+      invalidSiteWarningLogged = true
+      log.warn('Feature Flags direct event delivery is disabled because DD_SITE is invalid.')
     }
-  } catch (error) {
-    log.debug('Unable to configure direct EVP intake: %s', error.message)
+    return
+  }
+
+  return {
+    url,
+    basePath: '',
+    headers: {
+      'DD-API-KEY': apiKey,
+    },
   }
 }
 

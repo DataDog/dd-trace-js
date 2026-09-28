@@ -802,6 +802,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.captureTimeoutMs"
         ],
@@ -812,6 +813,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.enabled"
         ],
@@ -822,6 +824,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
         ],
@@ -832,6 +835,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
@@ -842,6 +846,7 @@
       {
         "implementation": "C",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
@@ -852,6 +857,7 @@
       {
         "implementation": "C",
         "type": "decimal",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.uploadIntervalSeconds"
         ],
@@ -890,6 +896,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.initializationTimeoutMs"
         ],
@@ -900,6 +907,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
         ],
@@ -910,6 +918,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.spanEnrichment.enabled"
         ],
@@ -2871,6 +2880,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
+        "namespace": "tracing",
         "default": ""
       }
     ],
@@ -2881,6 +2891,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
+        "namespace": "rum",
         "default": "false"
       }
     ],
