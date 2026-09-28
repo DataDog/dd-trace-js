@@ -80,7 +80,6 @@ function functionName (fn, fallback) {
 /**
  * @param {unknown} evaluator
  * @param {string} kind
- * @returns {boolean}
  */
 function isClassEvaluator (evaluator, kind) {
   // Lazy loading avoids a cycle: evaluator.js uses validateEvaluatorName from this module.
@@ -94,7 +93,6 @@ function isClassEvaluator (evaluator, kind) {
  * @param {unknown} evaluator
  * @param {string} kind
  * @param {number} index
- * @returns {string}
  */
 function evaluatorName (evaluator, kind, index) {
   if (isClassEvaluator(evaluator, kind)) return evaluator.name
