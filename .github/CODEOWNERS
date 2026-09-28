@@ -228,6 +228,7 @@
 /integration-tests/CODEOWNERS @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/config-jest-multiproject.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/config-jest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/cypress-before-run.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-config.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
