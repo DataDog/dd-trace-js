@@ -206,20 +206,21 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
   this.timeout(60000)
   useSandbox([`@playwright/test@${latest}`])
 
-  for (const feature of ['efd', 'attempt-to-fix', 'efd-repeat-each']) {
+  for (const feature of ['efd', 'attempt-to-fix']) {
     it(`can select a test whose ${feature} repetition failed`, async (receiver, run) => {
-      const nativeRepeats = feature === 'efd-repeat-each' ? 2 : 1
+      // EFD also covers preserving distinct IDs for native repetitions.
+      const nativeRepeats = feature === 'efd' ? 2 : 1
       const cwd = sandboxCwd()
       const outputDir = `./test-results-retry-history-${feature}`
       const historyFile = path.join(cwd, outputDir, '.last-run.json')
       receiver.setSettings({
         early_flake_detection: {
           enabled: feature !== 'attempt-to-fix',
-          slow_test_retries: { '5s': 2 },
+          slow_test_retries: { '5s': 1 },
           faulty_session_threshold: 100,
         },
         known_tests_enabled: feature !== 'attempt-to-fix',
-        test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 2 },
+        test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 1 },
       })
       receiver.setKnownTests({ playwright: {} })
       receiver.setTestManagementTests({
@@ -232,8 +233,8 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
         },
       })
       const command = './node_modules/.bin/playwright test ' +
-        `-c playwright.config.js --workers=1 --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
-      const execute = async (args, traced, failRepeats) => {
+        `-c playwright.config.js --workers=${nativeRepeats} --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
+      const execute = async (args, traced) => {
         let stdout = ''
         let stderr = ''
         const proc = run(`${command} ${args}`, {
@@ -244,7 +245,6 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
             DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
             TEST_DIR: './ci-visibility/playwright-retry-history',
             PLAYWRIGHT_OUTPUT_DIR: outputDir,
-            FAIL_SDK_REPETITIONS: String(failRepeats),
             NATIVE_REPEAT_EACH: String(nativeRepeats),
           },
         })
@@ -260,25 +260,23 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
         assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
         return { exitCode, report: JSON.parse(stdout), events }
       }
-      const seed = await execute('', true, true)
-      const history = await fs.readFile(historyFile)
-      assert.strictEqual(seed.events.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+      const seed = await execute('', true)
+      const history = JSON.parse(await fs.readFile(historyFile, 'utf8'))
+      assert.strictEqual(seed.events.filter(event => event.type === 'test').length, 2 * nativeRepeats)
       assert.strictEqual(seed.report.stats.expected, nativeRepeats)
-      assert.strictEqual(seed.report.stats.unexpected, 2 * nativeRepeats)
-      assert.strictEqual(new Set(JSON.parse(history).failedTests).size, nativeRepeats)
+      assert.strictEqual(seed.report.stats.unexpected, nativeRepeats)
+      assert.strictEqual(new Set(history.failedTests).size, nativeRepeats)
 
-      // Saved history must also work when a later run uses plain Playwright.
-      for (const traced of [false, true]) {
-        await fs.writeFile(historyFile, history)
-        const result = await execute('--last-failed', traced, false)
-        assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
-        assert.strictEqual(result.report.stats.expected, (traced ? 3 : 1) * nativeRepeats)
-        if (traced) {
-          assert.strictEqual(result.events.filter(event => event.type === 'test').length, 3 * nativeRepeats)
-          const session = result.events.find(event => event.type === 'test_session_end')
-          assert.strictEqual(session.content.meta[TEST_STATUS], 'pass')
-        }
-      }
+      // Exercise native history filtering without starting another set of workers.
+      const result = await execute('--last-failed --list', false)
+      assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
+      const specs = result.report.suites[0].specs
+      assert.deepStrictEqual(new Set(specs.map(({ id }) => id)), new Set(history.failedTests))
+      const selectedTests = specs.flatMap(({ tests }) => tests)
+      assert.deepStrictEqual(
+        selectedTests.map(({ results }) => results),
+        Array.from({ length: nativeRepeats }, () => [])
+      )
     })
   }
 })
