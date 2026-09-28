@@ -45,6 +45,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_VIDEO_UPLOADED,
   TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_SCOPE,
@@ -258,6 +259,105 @@ moduleTypes.forEach(({
       : testCommand
 
     if (type === 'commonJS') {
+      for (const mode of ['missing', 'partial', 'forwarded', 'missing-with-media']) {
+        over10It(`reports late manual tests with ${mode} after:spec finalization`, async () => {
+          const fixture = fs.realpathSync(fs.mkdtempSync(path.join(cwd, 'late-manual-')))
+          const withMedia = mode === 'missing-with-media'
+          if (withMedia) receiver.setMediaResponseDelay(100)
+          fs.writeFileSync(path.join(fixture, 'first.cy.js'),
+            "describe('first suite', () => {\n" +
+            "  it('passes', () => {})\n" +
+            "  it.skip('is skipped', () => {})\n" +
+            '})\n')
+          fs.writeFileSync(path.join(fixture, 'second.cy.js'),
+            "describe('second suite', () => {\n" +
+            "  it('fails in a late hook', () => {})\n" +
+            "  after(() => { throw new Error('synthetic late hook failure') })\n" +
+            '})\n')
+          fs.writeFileSync(path.join(fixture, 'support.js'), "require('dd-trace/ci/cypress/support')\n")
+          fs.writeFileSync(path.join(fixture, 'cypress.config.js'),
+            "const { defineConfig } = require('cypress')\n" +
+            `module.exports = defineConfig({ video: ${withMedia}, screenshotOnRunFailure: ${withMedia}, e2e: {\n` +
+            `  specPattern: ${JSON.stringify(path.join(fixture, '*.cy.js'))},\n` +
+            `  supportFile: ${JSON.stringify(path.join(fixture, 'support.js'))},\n` +
+            '  async setupNodeEvents(on, config) {\n' +
+            "    const plugin = require('dd-trace/ci/cypress/plugin')\n" +
+            '    await plugin(on, config)\n' +
+            "    on('after:spec', (spec, results) => {\n" +
+            `      if (${JSON.stringify(mode)} === 'forwarded' ||\n` +
+            `          (${JSON.stringify(mode)} === 'partial' && spec.name === 'first.cy.js')) {\n` +
+            "        const afterSpec = require('dd-trace/ci/cypress/after-spec')\n" +
+            '        return afterSpec(spec, results)\n' +
+            '      }\n' +
+            '    })\n' +
+            '    return config\n' +
+            '  }\n' +
+            '} })\n')
+          const events = []
+          const uploads = []
+          receiver.on('message', ({ url, payload, media }) => {
+            if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+            if (media) uploads.push(media)
+          })
+          let output = ''
+          childProcess = exec(`./node_modules/.bin/cypress run --config-file ${fixture}/cypress.config.js`, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(withMedia),
+              DD_TEST_FAILURE_VIDEOS_ENABLED: String(withMedia),
+            },
+          })
+          childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
+          const [exitCode] = await once(childProcess, 'close')
+          assert.strictEqual(exitCode, 1, output)
+          assert.match(output, /synthetic late hook failure/)
+          const tests = events.filter(event => event.type === 'test')
+          const suites = events.filter(event => event.type === 'test_suite_end')
+          assert.deepStrictEqual(tests.map(({ content }) => ({
+            name: content.meta['test.name'],
+            status: content.meta[TEST_STATUS],
+          })).sort((a, b) => a.name.localeCompare(b.name)), [
+            { name: 'first suite is skipped', status: 'skip' },
+            { name: 'first suite passes', status: 'pass' },
+            { name: 'second suite fails in a late hook', status: 'fail' },
+          ], output)
+          assert.strictEqual(suites.length, 2)
+          assert.strictEqual(new Set(suites.map(({ content }) => String(content.test_suite_id))).size, 2)
+          for (const { content } of tests) {
+            const suite = suites.find(({ content: suite }) => suite.meta['test.suite'] === content.meta['test.suite'])
+            assert.ok(suite)
+            assert.strictEqual(String(content.test_suite_id), String(suite.content.test_suite_id))
+          }
+          const firstSuite = suites.find(({ content }) => content.meta['test.suite'].endsWith('first.cy.js')).content
+          const secondSuite = suites.find(({ content }) => content.meta['test.suite'].endsWith('second.cy.js')).content
+          assert.strictEqual(firstSuite.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(secondSuite.meta[TEST_STATUS], 'fail')
+          assert.ok(Number(firstSuite.start) + Number(firstSuite.duration) < Number(secondSuite.start),
+            `recovered suite duration must not include later specs\n${output}`)
+          const failedTest = tests.find(({ content }) => content.meta[TEST_STATUS] === 'fail').content
+          assert.match(failedTest.meta[ERROR_MESSAGE], /synthetic late hook failure/)
+          if (withMedia) {
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(secondSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            const screenshots = uploads.filter(media => media.contentType === 'image/png')
+            const videos = uploads.filter(media => media.contentType === 'video/mp4')
+            assert.strictEqual(screenshots.length, 1)
+            assert.strictEqual(videos.length, 1)
+            assert.strictEqual(screenshots[0].traceId, String(failedTest.trace_id))
+            assert.strictEqual(videos[0].testSuiteId, String(secondSuite.test_suite_id))
+          }
+          for (const type of ['test_session_end', 'test_module_end']) {
+            const spans = events.filter(event => event.type === type)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].content.meta[TEST_STATUS], 'fail')
+          }
+        })
+      }
+
       for (const mode of ['auto', 'manual', 'reject']) {
         over10It(`preserves before:run handlers in ${mode} mode`, async () => {
           let output = ''
