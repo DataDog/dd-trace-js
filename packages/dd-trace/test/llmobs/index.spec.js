@@ -618,6 +618,21 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
         })
       })
+
+      describe('when the agent lists full proxy paths (Lambda extension)', () => {
+        beforeEach(() => {
+          fetchAgentInfoStub.callsFake((url, cb) => {
+            cb(null, { endpoints: ['/v0.4/traces', '/evp_proxy/v2/api/v2/llmobs'] })
+          })
+        })
+
+        it('configures the agent-proxy writers', () => {
+          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
+
+          sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+        })
+      })
     })
 
     describe('when no agent is running', () => {

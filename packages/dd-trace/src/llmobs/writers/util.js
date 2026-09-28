@@ -24,7 +24,9 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
     }
 
     const endpoints = agentInfo.endpoints
-    const hasEndpoint = Array.isArray(endpoints) && endpoints.includes(EVP_PROXY_AGENT_BASE_PATH)
+    // The Lambda extension lists full proxy paths (e.g. /evp_proxy/v2/api/v2/llmobs), not the bare prefix.
+    const hasEndpoint = Array.isArray(endpoints) &&
+      endpoints.some(endpoint => endpoint.startsWith(EVP_PROXY_AGENT_BASE_PATH))
     setWritersAgentlessValue(!hasEndpoint)
   })
 }
