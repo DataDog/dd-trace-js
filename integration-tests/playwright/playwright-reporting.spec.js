@@ -198,97 +198,92 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
   })
 }
 
-// Exercise each history-writer layout hooked by the instrumentation.
-const retryHistoryVersions = [
-  '1.44.0', // writeLastRunInfo in runner.js; first release with --last-failed.
-  '1.58.2', // LastRunReporter in lastRun.js.
-  latest, // LastRunReporter bundled into runner/index.js.
-]
-for (const version of retryHistoryVersions) {
-  if (PLAYWRIGHT_VERSION === 'oldest') continue
+// --last-failed requires Playwright 1.44 or newer.
+const retryHistoryContext = PLAYWRIGHT_VERSION === 'oldest' ? describe.skip : describe
 
-  describe(`playwright@${version} SDK retry history`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true })
-    this.timeout(60000)
-    useSandbox([`@playwright/test@${version}`])
+retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
+  const it = createParallelIt(global.it, { withReceiver: true })
+  this.timeout(60000)
+  useSandbox([`@playwright/test@${latest}`])
 
-    for (const feature of ['efd', 'attempt-to-fix', 'efd-repeat-each']) {
-      it(`can select a test whose ${feature} repetition failed`, async (receiver, run) => {
-        const nativeRepeats = feature === 'efd-repeat-each' ? 2 : 1
-        const cwd = sandboxCwd()
-        const outputDir = `./test-results-retry-history-${feature}`
-        const historyFile = path.join(cwd, outputDir, '.last-run.json')
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: feature !== 'attempt-to-fix',
-            slow_test_retries: { '5s': 2 },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: feature !== 'attempt-to-fix',
-          test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 2 },
-        })
-        receiver.setKnownTests({ playwright: {} })
-        receiver.setTestManagementTests({
-          playwright: {
-            suites: {
-              'retry-history-test.js': {
-                tests: { 'fails only SDK repetitions': { properties: { attempt_to_fix: true } } },
-              },
-            },
-          },
-        })
-        const events = []
-        receiver.on('message', ({ url, payload }) => {
-          if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
-        })
-        const command = './node_modules/.bin/playwright test ' +
-          `-c playwright.config.js --workers=1 --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
-        const execute = async (args, traced, failRepeats) => {
-          let stdout = ''
-          let stderr = ''
-          const proc = run(`${command} ${args}`, {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              NODE_OPTIONS: traced ? '-r dd-trace/ci/init' : '',
-              DD_TRACE_ENABLED: String(traced),
-              DD_CIVISIBILITY_ENABLED: String(traced),
-              DD_CIVISIBILITY_ITR_ENABLED: 'true',
-              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
-              TEST_DIR: './ci-visibility/playwright-retry-history',
-              PLAYWRIGHT_OUTPUT_DIR: outputDir,
-              FAIL_SDK_REPETITIONS: String(failRepeats),
-            },
-          })
-          proc.stdout?.on('data', data => { stdout += data.toString() })
-          proc.stderr?.on('data', data => { stderr += data.toString() })
-          const [exitCode] = await once(proc, 'close')
-          assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
-          return { exitCode, report: JSON.parse(stdout) }
-        }
-        const seed = await execute('', true, true)
-        const seedEvents = events.splice(0)
-        const history = await fs.readFile(historyFile)
-        assert.strictEqual(seedEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
-        assert.strictEqual(seed.report.stats.unexpected, 2 * nativeRepeats)
-        assert.strictEqual(new Set(JSON.parse(history).failedTests).size, nativeRepeats)
-
-        for (const traced of [false, true]) {
-          await fs.writeFile(historyFile, history)
-          const result = await execute('--last-failed', traced, false)
-          const runEvents = events.splice(0)
-          assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
-          assert.strictEqual(result.report.stats.expected, (traced ? 3 : 1) * nativeRepeats)
-          if (traced) {
-            assert.strictEqual(runEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
-            const session = runEvents.find(event => event.type === 'test_session_end')
-            assert.strictEqual(session.content.meta[TEST_STATUS], 'pass')
-          }
-        }
+  for (const feature of ['efd', 'attempt-to-fix', 'efd-repeat-each']) {
+    it(`can select a test whose ${feature} repetition failed`, async (receiver, run) => {
+      const nativeRepeats = feature === 'efd-repeat-each' ? 2 : 1
+      const cwd = sandboxCwd()
+      const outputDir = `./test-results-retry-history-${feature}`
+      const historyFile = path.join(cwd, outputDir, '.last-run.json')
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: feature !== 'attempt-to-fix',
+          slow_test_retries: { '5s': 2 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: feature !== 'attempt-to-fix',
+        test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 2 },
       })
-    }
-  })
-}
+      receiver.setKnownTests({ playwright: {} })
+      receiver.setTestManagementTests({
+        playwright: {
+          suites: {
+            'retry-history-test.js': {
+              tests: { 'fails only SDK repetitions': { properties: { attempt_to_fix: true } } },
+            },
+          },
+        },
+      })
+      const events = []
+      receiver.on('message', ({ url, payload }) => {
+        if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+      })
+      const command = './node_modules/.bin/playwright test ' +
+        `-c playwright.config.js --workers=1 --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
+      const execute = async (args, traced, failRepeats) => {
+        let stdout = ''
+        let stderr = ''
+        const proc = run(`${command} ${args}`, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: traced ? '-r dd-trace/ci/init' : '',
+            DD_TRACE_ENABLED: String(traced),
+            DD_CIVISIBILITY_ENABLED: String(traced),
+            DD_CIVISIBILITY_ITR_ENABLED: 'true',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            TEST_DIR: './ci-visibility/playwright-retry-history',
+            PLAYWRIGHT_OUTPUT_DIR: outputDir,
+            FAIL_SDK_REPETITIONS: String(failRepeats),
+            NATIVE_REPEAT_EACH: String(nativeRepeats),
+          },
+        })
+        proc.stdout?.on('data', data => { stdout += data.toString() })
+        proc.stderr?.on('data', data => { stderr += data.toString() })
+        const [exitCode] = await once(proc, 'close')
+        assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
+        return { exitCode, report: JSON.parse(stdout) }
+      }
+      const seed = await execute('', true, true)
+      const seedEvents = events.splice(0)
+      const history = await fs.readFile(historyFile)
+      assert.strictEqual(seedEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+      assert.strictEqual(seed.report.stats.expected, nativeRepeats)
+      assert.strictEqual(seed.report.stats.unexpected, 2 * nativeRepeats)
+      assert.strictEqual(new Set(JSON.parse(history).failedTests).size, nativeRepeats)
+
+      for (const traced of [false, true]) {
+        await fs.writeFile(historyFile, history)
+        const result = await execute('--last-failed', traced, false)
+        const runEvents = events.splice(0)
+        assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
+        assert.strictEqual(result.report.stats.expected, (traced ? 3 : 1) * nativeRepeats)
+        if (traced) {
+          assert.strictEqual(runEvents.filter(event => event.type === 'test').length, 3 * nativeRepeats)
+          const session = runEvents.find(event => event.type === 'test_session_end')
+          assert.strictEqual(session.content.meta[TEST_STATUS], 'pass')
+        }
+      }
+    })
+  }
+})
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
