@@ -228,6 +228,7 @@
 /integration-tests/CODEOWNERS @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/config-jest-multiproject.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/config-jest.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/cypress-before-run.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-config.json @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries
@@ -345,6 +346,7 @@
 /packages/dd-trace/test/runtime_metrics.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/startup-log.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/startup-log.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/generate-supported-integrations.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 
 /scripts/generate-config-types.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/generate-supported-integrations.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js

@@ -88,6 +88,7 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'GOOGLE_CLOUD_REGION',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
+  'JEST_JASMINE',
   'JEST_WORKER_ID',
   'MOCHA_WORKER_ID',
   'TINYPOOL_WORKER_ID',
