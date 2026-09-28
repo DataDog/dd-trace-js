@@ -1453,6 +1453,41 @@ describe('tagger', () => {
         })
       })
 
+      it('preserves message placeholders in a managed prompt annotation', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        tagger.tagPrompt(span, {
+          template: [
+            { role: 'system', content: 'Be concise.' },
+            { type: 'placeholder', name: 'history' },
+            { role: 'user', content: '{{question}}' },
+          ],
+          variables: { question: 'Why?' },
+          id: 'chat-prompt',
+          version: '1',
+        })
+
+        assert.deepEqual(Tagger.tagMap.get(span)[INPUT_PROMPT], {
+          chat_template: [
+            { role: 'system', content: 'Be concise.' },
+            { type: 'placeholder', name: 'history' },
+            { role: 'user', content: '{{question}}' },
+          ],
+          variables: { question: 'Why?' },
+          _dd_context_variable_keys: ['context'],
+          _dd_query_variable_keys: ['question'],
+          version: '1',
+          id: 'chat-prompt',
+        })
+      })
+
+      it('rejects a malformed placeholder even when it has message fields', () => {
+        tagger.registerLLMObsSpan(span, { kind: 'llm' })
+        assert.throws(() => tagger.tagPrompt(span, {
+          template: [{ type: 'placeholder', role: 'user', content: 'Hi' }],
+        }), /Prompt chat template/)
+        assert.equal(Tagger.tagMap.get(span)[INPUT_PROMPT], undefined)
+      })
+
       it('throws for a non-string and non-array prompt template', () => {
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
         assert.throws(() => tagger.tagPrompt(span, {
@@ -1467,7 +1502,7 @@ describe('tagger', () => {
             { role: 'system', message: 'Please use the following information: \n\n{{context}}' },
             { role: 'user', content: 'Tell me a bit about {{subject}}.' },
           ],
-        }), { message: 'Prompt chat template must be an array of objects with role and content properties.' })
+        }), { message: 'Prompt chat template must contain messages or message placeholders.' })
       })
 
       it('defaults the prompt id', () => {
