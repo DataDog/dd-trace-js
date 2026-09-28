@@ -519,6 +519,9 @@ function registerDdTraceHooks (
   if (generatedSupportFiles) registerGeneratedFilesForExitCleanup(generatedSupportFiles)
 
   const cleanupWrapper = () => {
+    // Open mode reuses this support file across runs, including failed setup attempts.
+    // The registered process-exit cleanup owns its lifetime instead.
+    if (config.isInteractive) return
     if (generatedSupportFiles) cleanupGeneratedFiles(generatedSupportFiles)
   }
 

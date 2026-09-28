@@ -2360,6 +2360,54 @@ moduleTypes.forEach(({
       return { testModuleSpan, testSessionSpan, createSpan }
     }
 
+    for (const uploadFails of [false, true]) {
+      it(`waits for recovered screenshot-only spans before closing the run (uploadFails=${uploadFails})`, async () => {
+        const { testSessionSpan, createSpan } = prepareRunFinalization()
+        const testSpan = createSpan()
+        testSpan.finish.callsFake(() => { testSpan._duration = 0 })
+        const context = testSessionSpan.context()
+        context._trace.started.push(testSpan)
+        sinon.stub(testSessionSpan, 'context').returns(context)
+        const spec = { relative: 'cypress/e2e/failure.cy.js' }
+        cypressPlugin.getTestSuiteSpan({ testSuite: spec.relative })
+        cypressPlugin.finishedTestsByFile[spec.relative] = [{
+          testName: 'fails', testStatus: 'fail', testSpan, finishTime: 900,
+        }]
+        let completeUpload
+        const exporter = cypressPlugin.tracer._tracer._exporter
+        exporter.canUploadTestScreenshots = () => true
+        exporter.uploadTestScreenshot = sinon.stub().callsFake((options, callback) => { completeUpload = callback })
+        const flush = sinon.spy(exporter, 'flush')
+        const afterRunPromise = cypressPlugin.afterRun({
+          totalFailed: 1,
+          totalTests: 1,
+          runs: [{
+            spec,
+            stats: { failures: 1, tests: 1, endedAt: new Date(1000).toISOString() },
+            tests: [{
+              title: ['fails'],
+              state: 'failed',
+              attempts: [{ state: 'failed', screenshots: [{ path: '/tmp/failure.png', testFailure: true }] }],
+            }],
+          }],
+        })
+        try {
+          sinon.assert.calledOnce(exporter.uploadTestScreenshot)
+          sinon.assert.notCalled(testSpan.finish)
+          sinon.assert.notCalled(testSessionSpan.finish)
+          sinon.assert.notCalled(flush)
+        } finally {
+          completeUpload(uploadFails ? new Error('synthetic upload failure') : undefined)
+          await afterRunPromise
+        }
+        sinon.assert.calledOnceWithExactly(testSpan.finish, 900)
+        assert.strictEqual(testSpan.tags[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadFails ? undefined : 'true')
+        assert.strictEqual(testSpan.tags[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadFails ? 'true' : undefined)
+        sinon.assert.calledOnce(testSessionSpan.finish)
+        assert.strictEqual(testSessionSpan.tags[TEST_STATUS], 'fail')
+      })
+    }
+
     it('waits for the existing initialization before the first run', async () => {
       const initializationError = new Error('stop after existing initialization')
       cypressPlugin._isInit = true

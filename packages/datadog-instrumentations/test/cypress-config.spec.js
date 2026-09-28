@@ -84,6 +84,73 @@ describe('Cypress config', () => {
     }
   }
 
+  for (const mode of ['auto', 'manual']) {
+    for (const isInteractive of [false, true]) {
+      for (const failingHandler of ['user', 'datadog']) {
+        it(`retains interactive support after setup fails (${mode}, interactive=${isInteractive}, ${failingHandler})`,
+          async () => {
+            const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-before-run-'))
+            const setupChannel = channel('ci:cypress:setup-node-events')
+            const rejection = new Error('before-run rejected')
+            let shouldFail = true
+            let cleanup
+            const datadogHandler = sinon.spy(() => {
+              if (shouldFail && failingHandler === 'datadog') throw rejection
+            })
+            const register = payload => {
+              payload.registerBeforeRun(datadogHandler)
+              payload.on('after:run', payload.cleanupWrapper)
+              cleanup = payload.cleanupWrapper
+              payload.registered = true
+            }
+            if (mode === 'auto') setupChannel.subscribe(register)
+            const config = wrapConfig({
+              e2e: {
+                setupNodeEvents (on) {
+                  on('before:run', () => {
+                    if (shouldFail && failingHandler === 'user') throw rejection
+                  })
+                  if (mode === 'manual') {
+                    on('before:run', datadogHandler)
+                    on('after:spec', () => {})
+                    on('after:run', () => {})
+                    on('task', {
+                      'dd:testSuiteStart': () => {},
+                      'dd:beforeEach': () => {},
+                      'dd:afterEach': () => {},
+                      'dd:addTags': () => {},
+                    })
+                  }
+                },
+              },
+            })
+            const resolved = { projectRoot: project, supportFile: false, isInteractive }
+            const handlers = {}
+            try {
+              config.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, resolved)
+              assert.ok(fs.existsSync(resolved.supportFile))
+              await assert.rejects(handlers['before:run']({}), error => error === rejection)
+              assert.strictEqual(fs.existsSync(resolved.supportFile), isInteractive)
+              if (isInteractive) {
+                shouldFail = false
+                datadogHandler.resetHistory()
+                await handlers['before:run']({})
+                sinon.assert.calledOnce(datadogHandler)
+                await handlers['after:run']({})
+                assert.ok(fs.existsSync(resolved.supportFile))
+              }
+            } finally {
+              if (mode === 'auto') setupChannel.unsubscribe(register)
+              resolved.isInteractive = false
+              if (cleanup) cleanup()
+              else await handlers['after:run']({})
+              fs.rmSync(project, { recursive: true, force: true })
+            }
+          })
+      }
+    }
+  }
+
   it('loads and wraps an ESM config', async () => {
     const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
     const configFile = join(project, 'cypress.config.mjs')

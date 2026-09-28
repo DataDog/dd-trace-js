@@ -1380,10 +1380,13 @@ class CypressPlugin {
       }
       return
     }
-    const finalizationPromise = this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
-    if (videoUploadsPromise) pendingFinalizations.push(videoUploadsPromise)
-    if (pendingFinalizations.length > 0) {
-      return Promise.all([...pendingFinalizations, finalizationPromise])
+    // Recovered screenshot-only tests must finish before the run closes any remaining trace spans.
+    const finalizeRun = () => this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
+    const finalizationPromise = pendingFinalizations.length > 0
+      ? Promise.all(pendingFinalizations).then(finalizeRun)
+      : finalizeRun()
+    if (videoUploadsPromise) {
+      return Promise.all([videoUploadsPromise, finalizationPromise])
         .then(() => this.#flushExporter(false))
     }
     return finalizationPromise
