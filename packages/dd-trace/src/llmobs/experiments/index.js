@@ -6,8 +6,6 @@ const { Dataset } = require('./dataset')
 const { Experiment, ExternalExperiment } = require('./experiment')
 const evaluatorTypes = require('./evaluator')
 const remoteEvaluatorTypes = require('./remote-evaluator')
-const builtinEvaluators = require('./builtins')
-const llmJudgeTypes = require('./llm-judge')
 const { validateTagsList } = require('./util')
 const NoopExperiments = require('./noop')
 
@@ -229,6 +227,4 @@ module.exports = {
   createExperiments,
   ...evaluatorTypes,
   ...remoteEvaluatorTypes,
-  ...builtinEvaluators,
-  ...llmJudgeTypes,
 }

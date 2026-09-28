@@ -3,10 +3,6 @@
 const NoopPrompts = require('./prompts/noop')
 const evaluatorTypes = require('./experiments/evaluator')
 const remoteEvaluatorTypes = require('./experiments/remote-evaluator')
-const evaluatorBuiltins = {
-  ...require('./experiments/llm-judge'),
-  ...require('./experiments/builtins'),
-}
 
 let NoopExperiments
 
@@ -70,46 +66,6 @@ class NoopLLMObs {
 
   get RemoteEvaluatorError () {
     return remoteEvaluatorTypes.RemoteEvaluatorError
-  }
-
-  get BaseStructuredOutput () {
-    return evaluatorBuiltins.BaseStructuredOutput
-  }
-
-  get BooleanStructuredOutput () {
-    return evaluatorBuiltins.BooleanStructuredOutput
-  }
-
-  get CategoricalStructuredOutput () {
-    return evaluatorBuiltins.CategoricalStructuredOutput
-  }
-
-  get LLMJudge () {
-    return evaluatorBuiltins.LLMJudge
-  }
-
-  get ScoreStructuredOutput () {
-    return evaluatorBuiltins.ScoreStructuredOutput
-  }
-
-  get JSONEvaluator () {
-    return evaluatorBuiltins.JSONEvaluator
-  }
-
-  get LengthEvaluator () {
-    return evaluatorBuiltins.LengthEvaluator
-  }
-
-  get RegexMatchEvaluator () {
-    return evaluatorBuiltins.RegexMatchEvaluator
-  }
-
-  get SemanticSimilarityEvaluator () {
-    return evaluatorBuiltins.SemanticSimilarityEvaluator
-  }
-
-  get StringCheckEvaluator () {
-    return evaluatorBuiltins.StringCheckEvaluator
   }
 
   enable (options) {}

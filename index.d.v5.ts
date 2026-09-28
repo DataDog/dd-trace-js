@@ -3,6 +3,66 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
+declare const EvaluatorContext: {
+  new (options: {
+    inputData: tracer.llmobs.JSONType
+    outputData: tracer.llmobs.JSONType
+    expectedOutput?: tracer.llmobs.JSONType
+    metadata?: Record<string, tracer.llmobs.JSONType>
+    spanId?: string
+    traceId?: string
+  }): tracer.llmobs.EvaluatorContext
+}
+
+declare const SummaryEvaluatorContext: {
+  new (options: {
+    inputs: tracer.llmobs.JSONType[]
+    outputs: tracer.llmobs.JSONType[]
+    expectedOutputs: tracer.llmobs.JSONType[]
+    evaluationResults: Record<string, tracer.llmobs.JSONType[]>
+    metadata?: Array<Record<string, tracer.llmobs.JSONType>>
+  }): tracer.llmobs.SummaryEvaluatorContext
+}
+
+declare const EvaluatorResult: {
+  new (value: tracer.llmobs.JSONType, options?: tracer.llmobs.EvaluatorResultOptions): tracer.llmobs.EvaluatorResult
+  new (options: tracer.llmobs.EvaluatorResultOptions & { value: tracer.llmobs.JSONType }): tracer.llmobs.EvaluatorResult
+}
+
+declare const MultiEvaluatorResult: {
+  new (values: Record<string, tracer.llmobs.JSONType | tracer.llmobs.EvaluatorResult>, prefix?: boolean): tracer.llmobs.MultiEvaluatorResult
+}
+
+declare const BaseEvaluator: {
+  new (name?: string): tracer.llmobs.BaseEvaluator
+}
+
+declare const BaseSummaryEvaluator: {
+  new (name?: string): tracer.llmobs.BaseSummaryEvaluator
+}
+
+declare const BaseAsyncEvaluator: {
+  new (name?: string): tracer.llmobs.BaseAsyncEvaluator
+}
+
+declare const BaseAsyncSummaryEvaluator: {
+  new (name?: string): tracer.llmobs.BaseAsyncSummaryEvaluator
+}
+
+declare const RemoteEvaluatorError: {
+  new (message: string, options?: {
+    status?: string
+    backendError?: Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluatorError
+}
+
+declare const RemoteEvaluator: {
+  new (options: {
+    evalName: string
+    transformFn?: (context: tracer.llmobs.EvaluatorContext) => Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluator
+}
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
@@ -3928,16 +3988,6 @@ declare namespace tracer {
       MultiEvaluatorResult: typeof MultiEvaluatorResult,
       RemoteEvaluator: typeof RemoteEvaluator,
       RemoteEvaluatorError: typeof RemoteEvaluatorError,
-      BaseStructuredOutput: typeof BaseStructuredOutput,
-      BooleanStructuredOutput: typeof BooleanStructuredOutput,
-      CategoricalStructuredOutput: typeof CategoricalStructuredOutput,
-      LLMJudge: typeof LLMJudge,
-      ScoreStructuredOutput: typeof ScoreStructuredOutput,
-      JSONEvaluator: typeof JSONEvaluator,
-      LengthEvaluator: typeof LengthEvaluator,
-      RegexMatchEvaluator: typeof RegexMatchEvaluator,
-      SemanticSimilarityEvaluator: typeof SemanticSimilarityEvaluator,
-      StringCheckEvaluator: typeof StringCheckEvaluator,
 
       /** Prompt Management API. */
       prompts: Prompts,
@@ -4233,15 +4283,7 @@ declare namespace tracer {
     type ReadonlyJSONType = string | number | boolean | null | ReadonlyArray<ReadonlyJSONType> | { readonly [key: string]: ReadonlyJSONType }
 
     /** Context passed to a record-level class evaluator. */
-    class EvaluatorContext {
-      constructor (options: {
-        inputData: JSONType
-        outputData: JSONType
-        expectedOutput?: JSONType
-        metadata?: Record<string, JSONType>
-        spanId?: string
-        traceId?: string
-      })
+    interface EvaluatorContext {
       inputData: JSONType
       outputData: JSONType
       expectedOutput: JSONType
@@ -4251,14 +4293,7 @@ declare namespace tracer {
     }
 
     /** Context passed to a summary class evaluator. */
-    class SummaryEvaluatorContext {
-      constructor (options: {
-        inputs: JSONType[]
-        outputs: JSONType[]
-        expectedOutputs: JSONType[]
-        evaluationResults: Record<string, JSONType[]>
-        metadata?: Array<Record<string, JSONType>>
-      })
+    interface SummaryEvaluatorContext {
       inputs: JSONType[]
       outputs: JSONType[]
       expectedOutputs: JSONType[]
@@ -4274,9 +4309,7 @@ declare namespace tracer {
     }
 
     /** A metric value with optional evaluation details. */
-    class EvaluatorResult {
-      constructor (value: JSONType, options?: EvaluatorResultOptions)
-      constructor (options: EvaluatorResultOptions & { value: JSONType })
+    interface EvaluatorResult {
       value: JSONType
       reasoning?: string
       assessment?: 'pass' | 'fail'
@@ -4285,216 +4318,37 @@ declare namespace tracer {
     }
 
     /** A result that emits several named metrics from one evaluator invocation. */
-    class MultiEvaluatorResult {
-      constructor (values: Record<string, JSONType | EvaluatorResult>, prefix?: boolean)
+    interface MultiEvaluatorResult {
       values: Record<string, JSONType | EvaluatorResult>
       prefix: boolean
     }
 
     /** Error returned by a managed evaluator configured in Datadog. */
-    class RemoteEvaluatorError extends Error {
-      constructor (message: string, options?: {
-        status?: string
-        backendError?: Record<string, JSONType>
-      })
+    interface RemoteEvaluatorError extends Error {
       status: string
       backendError: Record<string, JSONType>
     }
 
     /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
-    class RemoteEvaluator extends BaseEvaluator {
-      constructor (options: {
-        evalName: string
-        transformFn?: (context: EvaluatorContext) => Record<string, JSONType>
-      })
-    }
+    interface RemoteEvaluator extends BaseEvaluator {}
 
     /** Base class for reusable record-level evaluators. */
-    class BaseEvaluator {
-      constructor (name?: string)
+    interface BaseEvaluator {
       name: string
       evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
     /** Base class for reusable summary evaluators. */
-    class BaseSummaryEvaluator {
-      constructor (name?: string)
+    interface BaseSummaryEvaluator {
       name: string
       evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
     /** Base class for reusable asynchronous record-level evaluators. */
-    class BaseAsyncEvaluator extends BaseEvaluator {}
+    interface BaseAsyncEvaluator extends BaseEvaluator {}
 
     /** Base class for reusable asynchronous summary evaluators. */
-    class BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
-
-    /** Base class for structured LLM judge output specifications. */
-    class BaseStructuredOutput {
-      readonly label: string
-      toJsonSchema (): Record<string, JSONType>
-      toJSONSchema (): Record<string, JSONType>
-    }
-
-    /** Structured output specification for boolean LLM judge results. */
-    class BooleanStructuredOutput extends BaseStructuredOutput {
-      constructor (description: string, options?: {
-        reasoning?: boolean
-        reasoningDescription?: string
-        passWhen?: boolean
-      })
-      constructor (options: {
-        description: string
-        reasoning?: boolean
-        reasoningDescription?: string
-        passWhen?: boolean
-      })
-      description: string
-      reasoning: boolean
-      reasoningDescription?: string
-      passWhen?: boolean
-      readonly label: 'boolean_eval'
-      toJsonSchema (): Record<string, JSONType>
-    }
-
-    /** Structured output specification for numeric LLM judge results. */
-    class ScoreStructuredOutput extends BaseStructuredOutput {
-      constructor (description: string, options: {
-        minScore: number
-        maxScore: number
-        reasoning?: boolean
-        reasoningDescription?: string
-        minThreshold?: number
-        maxThreshold?: number
-      })
-      constructor (options: {
-        description: string
-        minScore: number
-        maxScore: number
-        reasoning?: boolean
-        reasoningDescription?: string
-        minThreshold?: number
-        maxThreshold?: number
-      })
-      description: string
-      minScore: number
-      maxScore: number
-      reasoning: boolean
-      reasoningDescription?: string
-      minThreshold?: number
-      maxThreshold?: number
-      readonly label: 'score_eval'
-      toJsonSchema (): Record<string, JSONType>
-    }
-
-    /** Structured output specification for categorical LLM judge results. */
-    class CategoricalStructuredOutput extends BaseStructuredOutput {
-      constructor (options: {
-        categories: Record<string, string>
-        reasoning?: boolean
-        reasoningDescription?: string
-        passValues?: string[]
-      })
-      categories: Record<string, string>
-      reasoning: boolean
-      reasoningDescription?: string
-      passValues?: string[]
-      readonly label: 'categorical_eval'
-      toJsonSchema (): Record<string, JSONType>
-    }
-
-    type LLMJudgeClient = (
-      provider: string | undefined,
-      messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>,
-      jsonSchema: Record<string, JSONType> | undefined,
-      model: string,
-      modelParams?: Record<string, unknown>
-    ) => string | Promise<string>
-
-    /** Evaluator that uses an LLM to judge an experiment row. */
-    class LLMJudge extends BaseEvaluator {
-      constructor (options: {
-        userPrompt: string
-        systemPrompt?: string
-        structuredOutput?: BaseStructuredOutput | Record<string, JSONType>
-        provider?: 'openai' | 'anthropic' | 'azure_openai' | 'vertexai' | 'bedrock'
-        model?: string
-        modelParams?: Record<string, unknown>
-        client?: LLMJudgeClient
-        clientOptions?: Record<string, unknown>
-        name?: string
-      })
-      evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
-    }
-
-    /** Evaluator that validates output length constraints. */
-    class LengthEvaluator extends BaseEvaluator {
-      constructor (options: {
-        minLength?: number
-        maxLength?: number
-        countType?: 'characters' | 'words' | 'lines'
-        outputExtractor?: (output: JSONType) => JSONType
-        name?: string
-      })
-      minLength?: number
-      maxLength?: number
-      countType: 'characters' | 'words' | 'lines'
-      outputExtractor?: (output: JSONType) => JSONType
-    }
-
-    /** Evaluator that validates whether output is JSON. */
-    class JSONEvaluator extends BaseEvaluator {
-      constructor (options?: {
-        requiredKeys?: string[]
-        outputExtractor?: (output: JSONType) => JSONType
-        name?: string
-      })
-      requiredKeys: string[]
-      outputExtractor?: (output: JSONType) => JSONType
-    }
-
-    /** Evaluator that compares output and expected output as strings. */
-    class StringCheckEvaluator extends BaseEvaluator {
-      constructor (options?: {
-        operation?: 'eq' | 'ne' | 'contains' | 'icontains'
-        caseSensitive?: boolean
-        stripWhitespace?: boolean
-        outputExtractor?: (output: JSONType) => JSONType
-        expectedOutputExtractor?: (output: JSONType) => JSONType
-        name?: string
-      })
-      operation: 'eq' | 'ne' | 'contains' | 'icontains'
-      caseSensitive: boolean
-      stripWhitespace: boolean
-      outputExtractor?: (output: JSONType) => JSONType
-      expectedOutputExtractor?: (output: JSONType) => JSONType
-    }
-
-    /** Evaluator that checks output against a regular expression. */
-    class RegexMatchEvaluator extends BaseEvaluator {
-      constructor (options: {
-        pattern: string | RegExp
-        matchMode?: 'search' | 'match' | 'fullmatch'
-        flags?: string
-        outputExtractor?: (output: JSONType) => JSONType
-        name?: string
-      })
-      patternString: string
-      matchMode: 'search' | 'match' | 'fullmatch'
-      flags: string
-      outputExtractor?: (output: JSONType) => JSONType
-    }
-
-    /** Evaluator that measures semantic similarity using an embedding function. */
-    class SemanticSimilarityEvaluator extends BaseEvaluator {
-      constructor (options: {
-        embeddingFn: (text: string) => number[] | Promise<number[]>
-        threshold?: number
-        name?: string
-      })
-      embeddingFn: (text: string) => number[] | Promise<number[]>
-      threshold: number
-    }
+    interface BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
 
     /**
      * A task run over each dataset record during an experiment.
