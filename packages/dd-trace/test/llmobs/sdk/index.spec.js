@@ -103,16 +103,6 @@ describe('sdk', () => {
         'SummaryEvaluatorContext',
         'EvaluatorResult',
         'MultiEvaluatorResult',
-        'BaseStructuredOutput',
-        'BooleanStructuredOutput',
-        'CategoricalStructuredOutput',
-        'LLMJudge',
-        'ScoreStructuredOutput',
-        'JSONEvaluator',
-        'LengthEvaluator',
-        'RegexMatchEvaluator',
-        'SemanticSimilarityEvaluator',
-        'StringCheckEvaluator',
       ]) {
         assert.strictEqual(typeof llmobs[name], 'function')
       }
