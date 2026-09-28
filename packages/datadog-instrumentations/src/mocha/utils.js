@@ -54,7 +54,7 @@ const testsQuarantined = new Set()
 const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
-const dynamicAtrRetryCountByTestFullName = new Map()
+let dynamicAtrRetryCountByTest = new WeakMap()
 const attemptToFixExecutions = new Map()
 const isMochaWorker = !!getEnvironmentVariable('MOCHA_WORKER_ID')
 
@@ -343,7 +343,7 @@ function resetRunState (rootSuite) {
   testsStatuses.clear()
   efdRetryCountByTestFullName.clear()
   efdSlowAbortedTests.clear()
-  dynamicAtrRetryCountByTestFullName.clear()
+  dynamicAtrRetryCountByTest = new WeakMap()
   attemptToFixExecutions.clear()
   loggedAttemptToFixTests.clear()
 
@@ -538,8 +538,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
       if (libraryConfig.isDynamicAtrEnabled) {
         // Dynamic ATR: set the max possible retries initially.
         // The actual duration-based count is computed after the first attempt.
-        const testName = getTestFullName(test)
-        const dynamicCount = dynamicAtrRetryCountByTestFullName.get(testName)
+        const dynamicCount = dynamicAtrRetryCountByTest.get(test._retriedTest || test)
         if (dynamicCount === undefined) {
           const maxRetries = libraryConfig.dynamicAtrBuckets
             ? Math.max(...libraryConfig.dynamicAtrBuckets)
@@ -723,12 +722,14 @@ function getTestFinishInfo (test, status, config, error) {
   }
 
   // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+  // Mocha's native retry clones point to the original test, independently of duplicate titles.
+  const originalTest = test._retriedTest || test
   if (
     config.isDynamicAtrEnabled &&
     config.isFlakyTestRetriesEnabled &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry &&
-    !dynamicAtrRetryCountByTestFullName.has(testName) &&
+    !dynamicAtrRetryCountByTest.has(originalTest) &&
     test._currentRetry === 0
   ) {
     const duration = test.duration > 0 ? test.duration : performance.now() - test._ddStartTime
@@ -737,7 +738,7 @@ function getTestFinishInfo (test, status, config, error) {
       config.earlyFlakeDetectionRetryPolicy,
       config.dynamicAtrBuckets
     )
-    dynamicAtrRetryCountByTestFullName.set(testName, dynamicCount)
+    dynamicAtrRetryCountByTest.set(originalTest, dynamicCount)
   }
 
   if (testsStatuses.get(testName)) {
@@ -1094,13 +1095,12 @@ function getOnTestRetryHandler (config) {
       !test._ddIsAttemptToFix &&
       !isEarlyFlakeDetectionTest(test, config)
     if (isDynamicAtrTest && isFirstAttempt) {
-      const testName = getTestFullName(test)
       const dynamicCount = getDynamicAtrRetryCount(
         test.duration > 0 ? test.duration : performance.now() - test._ddStartTime,
         config.earlyFlakeDetectionRetryPolicy,
         config.dynamicAtrBuckets
       )
-      dynamicAtrRetryCountByTestFullName.set(testName, dynamicCount)
+      dynamicAtrRetryCountByTest.set(test._retriedTest || test, dynamicCount)
       // Mocha emits retry before its next attempt starts; narrow its ceiling here.
       test._retries = dynamicCount
     }

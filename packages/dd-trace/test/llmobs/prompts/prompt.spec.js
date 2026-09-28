@@ -8,11 +8,13 @@ const ManagedPrompt = require('../../../src/llmobs/prompts/prompt')
 
 describe('ManagedPrompt', () => {
   it('renders text safely and builds a string-valued annotation', () => {
+    const config = { model: { temperature: 0.2 }, unknown: [1, true] }
     const prompt = new ManagedPrompt({
       id: 'greeting',
       version: '1',
       source: 'registry',
       template: 'Hello {name}, {{ count }} times; {missing}',
+      config,
       promptUuid: 'prompt-uuid',
       promptVersionUuid: 'version-uuid',
     })
@@ -27,6 +29,12 @@ describe('ManagedPrompt', () => {
       promptVersionUuid: 'version-uuid',
     })
     assert.ok(Object.isFrozen(prompt))
+    assert.ok(Object.isFrozen(prompt.config))
+    assert.ok(Object.isFrozen(prompt.config.model))
+    assert.ok(Object.isFrozen(prompt.config.unknown))
+    config.model.temperature = 1
+    assert.throws(() => { prompt.config.model.temperature = 1 }, TypeError)
+    assert.deepStrictEqual(prompt.config, { model: { temperature: 0.2 }, unknown: [1, true] })
   })
 
   it('renders only balanced single- and double-brace placeholders', () => {
@@ -70,7 +78,11 @@ describe('ManagedPrompt', () => {
   it('supports string, chat, object, and synchronous callable fallbacks', () => {
     const string = ManagedPrompt.fromFallback('p', 'Hello {name}')
     const chat = ManagedPrompt.fromFallback('p', [{ role: 'user', content: 'Hi {name}' }])
-    const object = ManagedPrompt.fromFallback('p', { template: 'Local', version: 'local-v1' })
+    const object = ManagedPrompt.fromFallback('p', {
+      template: 'Local',
+      version: 'local-v1',
+      config: { model: { temperature: 0.4 } },
+    })
     let calls = 0
     const callable = ManagedPrompt.fromFallback('p', () => {
       calls++
@@ -80,6 +92,7 @@ describe('ManagedPrompt', () => {
     assert.strictEqual(string.format({ name: 'A' }), 'Hello A')
     assert.deepStrictEqual(chat.format({ name: 'B' }), [{ role: 'user', content: 'Hi B' }])
     assert.strictEqual(object.version, 'local-v1')
+    assert.deepStrictEqual(object.config, { model: { temperature: 0.4 } })
     assert.strictEqual(callable.template, 'Lazy')
     assert.strictEqual(calls, 1)
     for (const prompt of [string, chat, object, callable]) assert.strictEqual(prompt.source, 'fallback')
@@ -97,5 +110,9 @@ describe('ManagedPrompt', () => {
         message: 'Invalid prompt fallback: expected a string, chat message array, or object with a template',
       })
     }
+    assert.throws(
+      () => ManagedPrompt.fromFallback('p', { template: 'Local', config: [] }),
+      { name: 'TypeError', message: 'Invalid prompt config: expected a JSON object' }
+    )
   })
 })

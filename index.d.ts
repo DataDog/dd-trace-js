@@ -3937,7 +3937,7 @@ declare namespace tracer {
     type PromptFallbackValue =
       | string
       | PromptTemplateMessage[]
-      | { template: string | PromptTemplateMessage[], version?: string }
+      | { template: string | PromptTemplateMessage[], version?: string, config?: Record<string, JSONType> }
     type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
 
     interface GetPromptOptions {
@@ -3956,13 +3956,15 @@ declare namespace tracer {
       title?: string,
       description?: string,
       userVersion?: string,
-      envIds?: string[]
+      envIds?: string[],
+      config?: Record<string, JSONType>
     }
 
     interface CreatePromptVersionOptions {
       description?: string,
       userVersion?: string,
-      envIds?: string[]
+      envIds?: string[],
+      config?: Record<string, JSONType>
     }
 
     interface UpdatePromptOptions {
@@ -3980,6 +3982,7 @@ declare namespace tracer {
       readonly version: string,
       readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
       readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
+      readonly config: Readonly<Record<string, ReadonlyJSONType>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
       format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
@@ -4000,7 +4003,8 @@ declare namespace tracer {
       ml_app?: string,
       ml_apps?: string[],
       last_version_created_at?: string,
-      extracted_from?: string
+      extracted_from?: string,
+      config?: Record<string, JSONType>
     }
 
     interface PromptVersionResponse {
@@ -4014,7 +4018,8 @@ declare namespace tracer {
       version_created_at?: string,
       author?: string,
       description?: string,
-      ml_app?: string
+      ml_app?: string,
+      config?: Record<string, JSONType>
     }
 
     interface DeletedPromptResponse {
@@ -4025,6 +4030,8 @@ declare namespace tracer {
 
     /** JSON-serializable value accepted by LLMObs Experiments. */
     type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
+    type ReadonlyJSONType = string | number | boolean | null | ReadonlyArray<ReadonlyJSONType> | { readonly [key: string]: ReadonlyJSONType }
 
     /** Context passed to a record-level class evaluator. */
     class EvaluatorContext {
@@ -4272,7 +4279,9 @@ declare namespace tracer {
       threshold: number
     }
 
-    /** A task run over each dataset record during an experiment. */
+    /**
+     * A task run over each dataset record during an experiment.
+     */
     type ExperimentTask = (
       input: JSONType,
       config: Record<string, JSONType>,
