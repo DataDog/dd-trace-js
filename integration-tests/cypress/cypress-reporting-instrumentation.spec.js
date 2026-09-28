@@ -2325,6 +2325,7 @@ moduleTypes.forEach(({
       cypressPlugin.testSessionSpan = testSessionSpan
       cypressPlugin.testModuleSpan = testModuleSpan
       cypressPlugin.tracer = {
+        startSpan: sinon.stub().callsFake(createSpan),
         _tracer: {
           _exporter: {
             flush: callback => callback(),
@@ -2719,8 +2720,8 @@ moduleTypes.forEach(({
       for (const retries of [0, 2]) {
         const configDescription = `terminal=${isTextTerminal}, plugin=${pluginMode}, retries=${retries}`
         it(`only applies dynamic ATR in terminal mode (${configDescription})`, async () => {
+          prepareRunFinalization()
           cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
-          cypressPlugin.testSuiteSpan = {}
           sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(true)
           const tasks = cypressPlugin.getTasks()
           const hooks = {}
@@ -2790,7 +2791,6 @@ moduleTypes.forEach(({
         it(`only accounts for ATR in terminal mode (${configDescription})`, () => {
           const { createSpan } = prepareRunFinalization()
           cypressPlugin.cypressConfig = { isTextTerminal: pluginMode, isInteractive: true }
-          cypressPlugin.testSuiteSpan = createSpan()
           sinon.stub(cypressPlugin, 'isFlakyTestRetriesEnabled').value(true)
           sinon.stub(cypressPlugin, 'flakyTestRetriesCount').value(1)
           sinon.stub(cypressPlugin, 'isDynamicAtrEnabled').value(isDynamicAtrEnabled)
