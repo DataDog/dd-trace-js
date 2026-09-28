@@ -31,8 +31,10 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
-    this.hooks.push(new EvalMetricsHook(config))
-    this.hooks.push(new DebugLoggingHook())
+    this.hooks.push(
+      new EvalMetricsHook(config),
+      new DebugLoggingHook()
+    )
 
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
