@@ -298,6 +298,37 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     }
 
+    for (const mode of ['skip-tests', 'skip-suite', 'mixed', 'error']) {
+      it(`reports zero-execution sessions: ${mode}`, async (receiver, run) => {
+        receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+        const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-tests-empty-session',
+            EMPTY_SESSION_MODE: mode,
+          },
+        })
+        const reason = mode.startsWith('skip-') ? 'all_tests_skipped' : undefined
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const type of ['test_session_end', 'test_module_end']) {
+              const event = events.find(event => event.type === type)?.content
+              assert.ok(event, `expected ${type}`)
+              assert.strictEqual(event.meta[TEST_STATUS], mode === 'error' ? 'fail' : reason ? 'skip' : 'pass')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason ? 'All tests were skipped' : undefined)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, mode === 'error' ? 1 : 0)
+      })
+    }
+
     emptyShardTest('reports successful zero-test shards as skipped', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2',
@@ -330,7 +361,7 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     })
 
-    emptyShardTest('does not classify non-empty shards as empty', async (receiver, run) => {
+    emptyShardTest('reports a non-empty shard with skipped tests as all skipped', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=1/2',
         {
@@ -352,9 +383,9 @@ versions.forEach((version) => {
           for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(({ type }) => type === eventType)
             assert.ok(event, `expected ${eventType} event`)
-            assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
-            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'All tests were skipped')
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
           }
         }
       )
@@ -362,7 +393,7 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     })
 
-    emptyShardTest('does not classify an empty discovery as an empty shard', async (receiver, run) => {
+    emptyShardTest('reports empty discovery separately from an empty shard', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2 ' +
         '--grep=does-not-exist --pass-with-no-tests',
@@ -385,9 +416,9 @@ versions.forEach((version) => {
           for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(({ type }) => type === eventType)
             assert.ok(event, `expected ${eventType} event`)
-            assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
-            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'No tests were detected')
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           }
         }
       )
