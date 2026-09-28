@@ -118,6 +118,8 @@ class BaseLLMObsWriter {
 
     buffer.size += eventSize
     buffer.events.push(event)
+    // flushInterval is 0 in Lambda, where the sandbox can freeze before the periodic flush runs.
+    if (this._config.flushInterval === 0) this.flush()
     return true
   }
 
