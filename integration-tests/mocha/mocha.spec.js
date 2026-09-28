@@ -5527,6 +5527,60 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }
     }
 
+    for (const parallel of [false, true]) {
+      for (const durations of [[100, 6000], [6000, 100]]) {
+        const runTest = parallel ? parallelIt : retryEventsIt
+        runTest(`isolates dynamic ATR duplicate names: ${durations} (parallel=${parallel})`, async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify(['./test-flaky-test-retries/dynamic-atr-duplicates.js']),
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,3,3',
+              DYNAMIC_ATR_DURATIONS: JSON.stringify(durations),
+              SHOULD_CHECK_RESULTS: '1',
+              ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk })
+          const retryCounts = durations.map(duration => duration === 100 ? 1 : 2)
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 5, testOutput)
+              for (const [index, retryCount] of retryCounts.entries()) {
+                const attempts = tests.filter(test => test.meta[ERROR_MESSAGE] === `declaration ${index}`)
+                assert.strictEqual(attempts.length, retryCount + 1, testOutput)
+                assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'))
+                assert.strictEqual(attempts.filter(test =>
+                  test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, retryCount)
+                assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+              }
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise])
+          assert.strictEqual(exitCode, 1, testOutput)
+          const budgets = [...testOutput.matchAll(/RETRY_BUDGET (\[[^\n]+\])/g)].map(match => JSON.parse(match[1]))
+          const expectedBudgets = retryCounts.flatMap(count => [
+            [0, 3],
+            ...Array.from({ length: count }, (_, index) => [index + 1, count]),
+          ])
+          assert.deepStrictEqual(budgets, expectedBudgets, testOutput)
+        })
+      }
+    }
+
     for (const nativeRetries of [0, 1]) {
       rerunIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true })
