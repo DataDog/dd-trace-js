@@ -64,25 +64,6 @@ function addMochaRunHooks (versions, wrapMochaRun) {
   }, wrapMochaPackage)
 }
 
-if (DD_MAJOR < 6) {
-  addHook({
-    name: 'mocha',
-    versions: ['>=6.0.0 <7.1.0'],
-    file: 'lib/test.js',
-  }, Test => {
-    if (Test.prototype.retriedTest || patched.has(Test)) return Test
-    patched.add(Test)
-
-    // Mocha <7.1 omits the original-test link. Add it before the runner consumes the returned clone.
-    shimmer.wrap(Test.prototype, 'clone', clone => function () {
-      const test = clone.apply(this, arguments)
-      test._retriedTest = this._retriedTest || this
-      return test
-    })
-    return Test
-  })
-}
-
 // mocha-each support
 addHook({
   name: 'mocha-each',

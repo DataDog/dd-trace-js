@@ -127,8 +127,9 @@ const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA
 const supportsMochaRetryEvents = mochaMajor >= 6
 // ATR needs the retry event introduced in Mocha 6.
 const retryEventsIt = supportsMochaRetryEvents ? it : it.skip
-// Reusing a runner requires cleanReferencesAfterRun, introduced in Mocha 7.2.
-const rerunIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=7.2.0') ? it : it.skip
+// Dynamic ATR requires Mocha 8; older versions retain fixed-count ATR.
+const supportsDynamicAtr = mochaMajor >= 8
+const dynamicAtrIt = supportsDynamicAtr ? it : it.skip
 // Global setup/teardown fixtures were introduced in Mocha 8.2.0.
 const globalFixturesIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.2.0') ? it : it.skip
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
@@ -5443,10 +5444,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('auto test retries', () => {
+    // Without dynamic ATR, the configured flat limit of four retries applies.
     const dynamicCases = [
-      { name: 'custom buckets', buckets: '1,3,3,3,3', attempts: 2 },
-      { name: 'backend buckets', buckets: '', attempts: 3 },
-      { name: 'malformed buckets', buckets: '1,,3,3,3', attempts: 3 },
+      { name: 'custom buckets', buckets: '1,3,3,3,3', attempts: supportsDynamicAtr ? 2 : 5 },
+      { name: 'backend buckets', buckets: '', attempts: supportsDynamicAtr ? 3 : 5 },
+      { name: 'malformed buckets', buckets: '1,,3,3,3', attempts: supportsDynamicAtr ? 3 : 5 },
       { name: 'disabled flag', buckets: '1,3,3,3,3', attempts: 5, enabled: false },
       { name: 'recovery', buckets: '1,3,3,3,3', attempts: 2, recover: true },
       { name: 'retry hook failure', buckets: '1,3,3,3,3', attempts: 2, hookFailure: 'beforeEach' },
@@ -5478,7 +5480,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     for (const parallel of [false, true]) {
       for (const scenario of dynamicCases) {
         const runTest = parallel ? parallelIt : retryEventsIt
-        runTest(`uses dynamic ATR ${scenario.name} (parallel=${parallel})`, async () => {
+        const retryMode = supportsDynamicAtr ? 'uses dynamic ATR' : 'uses fixed retries without dynamic ATR'
+        runTest(`${retryMode} ${scenario.name} (parallel=${parallel})`, async () => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             early_flake_detection: {
@@ -5529,7 +5532,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
     for (const parallel of [false, true]) {
       for (const durations of [[100, 6000], [6000, 100]]) {
-        const runTest = parallel ? parallelIt : retryEventsIt
+        const runTest = parallel ? parallelIt : dynamicAtrIt
         runTest(`isolates dynamic ATR duplicate names: ${durations} (parallel=${parallel})`, async () => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
@@ -5581,9 +5584,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }
     }
 
-    // Configuring the worker through Mocha options requires Mocha 8's worker entry point.
-    const workerIt = mochaMajor >= 8 ? it : it.skip
-    workerIt('allows completed dynamic ATR worker tests to be garbage collected', async () => {
+    dynamicAtrIt('allows completed dynamic ATR worker tests to be garbage collected', async () => {
       childProcess = exec('node --expose-gc ./ci-visibility/run-mocha-atr-gc.js', {
         cwd,
         env: {
@@ -5598,7 +5599,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
 
     for (const nativeRetries of [0, 1]) {
-      rerunIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
+      dynamicAtrIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true })
         let output = ''
         childProcess = exec('node ./ci-visibility/run-mocha-atr-rerun.js', {
