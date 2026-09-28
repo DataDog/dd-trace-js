@@ -5581,6 +5581,22 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }
     }
 
+    // Configuring the worker through Mocha options requires Mocha 8's worker entry point.
+    const workerIt = mochaMajor >= 8 ? it : it.skip
+    workerIt('allows completed dynamic ATR worker tests to be garbage collected', async () => {
+      childProcess = exec('node --expose-gc ./ci-visibility/run-mocha-atr-gc.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_WORKER_ID: '0',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk })
+      const [exitCode] = await once(childProcess, 'close')
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     for (const nativeRetries of [0, 1]) {
       rerunIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true })
