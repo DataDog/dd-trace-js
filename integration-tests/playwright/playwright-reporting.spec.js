@@ -198,7 +198,7 @@ for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', lat
   })
 }
 
-for (const version of ['1.44.0', '1.58.2', '1.60.0', '1.63.0']) {
+for (const version of ['1.44.0', '1.58.2', '1.60.0', latest]) {
   describe(`playwright@${version} SDK retry history`, function () {
     const it = createParallelIt(global.it, { withReceiver: true })
     this.timeout(60000)
@@ -262,6 +262,7 @@ for (const version of ['1.44.0', '1.58.2', '1.60.0', '1.63.0']) {
           proc.stdout?.on('data', data => { stdout += data.toString() })
           proc.stderr?.on('data', data => { stderr += data.toString() })
           const [exitCode] = await once(proc, 'close')
+          assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
           return { exitCode, report: JSON.parse(stdout), stderr }
         }
         const seed = await execute('', true, true)
