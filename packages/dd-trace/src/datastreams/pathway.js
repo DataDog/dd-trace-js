@@ -4,7 +4,6 @@
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
-const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const {
   hasDsmBase64,
   hasDsmBinary,
@@ -16,7 +15,11 @@ const {
 const log = require('../log')
 const { encodeVarintInto, decodeVarint } = require('./encoding')
 
-const cache = new LRUCache({ max: 500 })
+// edge key -> (parent hash latin1 -> pathway hash). Cleared when full: hash inputs have low
+// cardinality, so this only bounds pathological cases.
+const CACHE_MAX_ENTRIES = 500
+const cache = new Map()
+let cacheSize = 0
 
 const PATHWAY_CONTEXT_BYTES = 20
 
@@ -25,7 +28,7 @@ const PATHWAY_CONTEXT_BYTES = 20
 const pathwayScratch = Buffer.allocUnsafe(PATHWAY_CONTEXT_BYTES)
 
 function shaHash (checkpointString) {
-  // Copy out of the 32-byte digest so the LRU cache doesn't retain it.
+  // Copy out of the 32-byte digest so the cache doesn't retain it.
   return Buffer.from(crypto.createHash('sha256').update(checkpointString).digest().subarray(0, 8))
 }
 
@@ -38,31 +41,55 @@ function shaHash (checkpointString) {
  */
 function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
   edgeTags.sort()
-  const hashableEdgeTags = edgeTags.includes('manual_checkpoint:true')
-    ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
-    : edgeTags
-
-  // The cache key includes parentHash so a fan-in node with different parents
-  // gets distinct cache entries; the hash input below excludes parentHash and
-  // gets combined with it via a second sha pass to produce the final hash.
-  const joinedEdgeTags = hashableEdgeTags.join('')
   const propagationHex = propagationHashBigInt ? propagationHashBigInt.toString(16) : ''
-  const propagationPart = propagationHex ? `:${propagationHex}` : ''
-  const key = `${service}${env}${joinedEdgeTags}${parentHash}${propagationPart}`
 
-  let value = cache.get(key)
+  // Runs on every checkpoint, and its inputs take few distinct values per process (one per
+  // edge and parent), so hashes are cached. The key avoids interpolating parentHash (a UTF-8
+  // decode) and the LRU bookkeeping: each edge maps to a per-parent map keyed by the hash's
+  // latin1 bytes.
+  const edgeKey = `${service}\0${env}\0${edgeTags.join('\0')}\0${propagationHex}`
+  const parentKey = parentHash.toString('latin1')
+  let byParent = cache.get(edgeKey)
+  let value = byParent?.get(parentKey)
   if (value) {
     return value
   }
 
-  const baseString = `${service}${env}${joinedEdgeTags}`
+  value = hashPathway(service, env, edgeTags, parentHash, propagationHex)
+  if (cacheSize >= CACHE_MAX_ENTRIES) {
+    cache.clear()
+    cacheSize = 0
+    byParent = undefined
+  }
+  if (!byParent) {
+    byParent = new Map()
+    cache.set(edgeKey, byParent)
+  }
+  byParent.set(parentKey, value)
+  cacheSize++
+  return value
+}
+
+/**
+ * @param {string} service
+ * @param {string} env
+ * @param {string[]} edgeTags - Sorted.
+ * @param {Buffer} parentHash
+ * @param {string} propagationHex
+ * @returns {Buffer}
+ */
+function hashPathway (service, env, edgeTags, parentHash, propagationHex) {
+  const hashableEdgeTags = edgeTags.includes('manual_checkpoint:true')
+    ? edgeTags.filter(item => item !== 'manual_checkpoint:true')
+    : edgeTags
+
+  // The edge's own hash excludes parentHash; a second sha pass combines the two.
+  const baseString = `${service}${env}${hashableEdgeTags.join('')}`
   const hashInput = propagationHex ? `${baseString}:${propagationHex}` : baseString
 
   const currentHash = shaHash(hashInput)
   const buf = Buffer.concat([currentHash, parentHash], 16)
-  value = shaHash(buf.toString())
-  cache.set(key, value)
-  return value
+  return shaHash(buf.toString())
 }
 
 /**

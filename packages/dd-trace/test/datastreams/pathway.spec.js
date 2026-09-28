@@ -55,6 +55,26 @@ describe('encoding', () => {
     assert.notDeepStrictEqual(hash1, hash2, 'Different propagation hashes should produce different pathway hashes')
   })
 
+  it('hash should stay the same after the hash cache fills up and is cleared', () => {
+    const edgeTags = () => ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka']
+    const parent = Buffer.from('0000000000000000', 'hex')
+    const first = computePathwayHash('test-service', 'test-env', edgeTags(), parent)
+    for (let i = 0; i < 1000; i++) {
+      const otherParent = Buffer.alloc(8)
+      otherParent.writeUInt32BE(i + 1, 4)
+      computePathwayHash('test-service', 'test-env', edgeTags(), otherParent)
+    }
+    assert.deepStrictEqual(computePathwayHash('test-service', 'test-env', edgeTags(), parent), first)
+    assert.deepStrictEqual(first, Buffer.from('67b0b35e65c0acfa', 'hex'))
+  })
+
+  it('hash should differ per parent hash for the same edge', () => {
+    const edgeTags = () => ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka']
+    const hash1 = computePathwayHash('test-service', 'test-env', edgeTags(), Buffer.from('0000000000000001', 'hex'))
+    const hash2 = computePathwayHash('test-service', 'test-env', edgeTags(), Buffer.from('0000000000000002', 'hex'))
+    assert.notDeepStrictEqual(hash1, hash2)
+  })
+
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {
       hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
