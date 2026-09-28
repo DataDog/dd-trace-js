@@ -2001,6 +2001,12 @@ snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreensh
 saveAutomaticVideoCh.subscribe({ start: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  tracingChannel('orchestrion:@playwright/test:Multiplexer_onError').subscribe({
+    start (ctx) {
+      recordReporterError(ctx.arguments[0])
+    },
+  })
+
   addHook({
     name: '@playwright/test',
     file: 'lib/runner.js',
