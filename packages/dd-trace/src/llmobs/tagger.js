@@ -17,6 +17,7 @@ const {
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
+  AGENT_VERSION,
   METRICS,
   TOOL_DEFINITIONS,
   PARENT_ID_KEY,
@@ -211,15 +212,16 @@ class LLMObsTagger {
 
   /**
    * Applies the agents declared by the enclosing annotation contexts, outermost first, to every span in the block.
-   * The manifest is emitted only if the span is an agent when it finishes, since some integrations promote a span
-   * to an agent after registration.
+   * Both are emitted only if the span is an agent when it finishes, since some integrations promote a span to an
+   * agent after registration.
    *
    * @param {import('../opentracing/span')} span
    * @param {import('./agent-manifest').AgentDeclaration[]} declarations
    */
   #applyAgentDeclarations (span, declarations) {
     for (const declaration of declarations) {
-      this.#tagAgentManifestFields(span, declaration.manifest)
+      if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+      if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
     }
   }
 
@@ -231,7 +233,9 @@ class LLMObsTagger {
    */
   tagAgent (span, agent) {
     const declaration = buildAgentDeclaration(agent)
-    if (declaration) this.#tagAgentManifestFields(span, declaration.manifest)
+    if (!declaration) return
+    if (declaration.version) this._setTag(span, AGENT_VERSION, declaration.version)
+    if (declaration.manifest) this.#tagAgentManifestFields(span, declaration.manifest)
   }
 
   /**

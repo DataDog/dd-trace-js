@@ -4924,11 +4924,14 @@ declare namespace tracer {
     }
 
     /**
-     * Declares the agent an `agent` span represents, reported as the agent's manifest. Only applies to
-     * `agent` spans. Unreportable values are dropped with a warning, and unset values (`undefined`, `null`,
-     * `''`, `[]`) leave what an earlier annotation declared in place.
+     * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag, and the
+     * other fields are reported as the agent's manifest. Only applies to `agent` spans. Unreportable
+     * values are dropped with a warning, and unset values (`undefined`, `null`, `''`, `[]`) leave what an
+     * earlier annotation declared in place.
      */
     interface Agent {
+      /** The version of the agent. A number is reported as a string. */
+      version?: string | number,
       /** The agent's name. Defaults to the agent span's name. */
       name?: string,
       /** The system instructions the agent runs with. */
@@ -5024,8 +5027,8 @@ declare namespace tracer {
       prompt?: Prompt,
 
       /**
-       * Declares the agent running in this context, read when the context is entered. The manifest is
-       * reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
+       * Declares the agent running in this context, read when the context is entered. The version and manifest
+       * are reported on every `agent` span in the context, nested ones included. Use `annotate` on a nested agent
        * span to declare its own agent.
        */
       agent?: Agent,

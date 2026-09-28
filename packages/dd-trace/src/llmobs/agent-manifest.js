@@ -35,7 +35,7 @@ const LABEL_FIELDS = ['name', 'instructions', 'model']
  *   model_settings?: Record<string, unknown>,
  *   tools?: AgentTool[],
  * }} AgentManifestFields
- * @typedef {{ manifest: AgentManifestFields }} AgentDeclaration
+ * @typedef {{ version?: string, manifest?: AgentManifestFields }} AgentDeclaration
  */
 
 /**
@@ -50,8 +50,9 @@ function buildAgentDeclaration (agent) {
   let declaration
   try {
     if (isPlainObject(agent)) {
+      const version = toVersion(agent.version)
       const manifest = buildAgentManifest(agent)
-      if (manifest !== undefined) declaration = { manifest }
+      if (version !== undefined || manifest !== undefined) declaration = { version, manifest }
     } else {
       log.warn('Dropping agent annotation, the agent must be a plain object.')
     }
@@ -104,6 +105,14 @@ function buildAgentManifest (agent) {
   }
 
   return hasField ? manifest : undefined
+}
+
+/**
+ * @param {unknown} version
+ */
+function toVersion (version) {
+  if (typeof version === 'string') return version === '' ? undefined : version
+  if (typeof version === 'number' && Number.isFinite(version)) return String(version)
 }
 
 /**
