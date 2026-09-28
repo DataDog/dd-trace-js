@@ -786,6 +786,8 @@ module.exports = {
     {
       name: '@supabase/supabase-js',
       versions: ['>=2.112.2'],
+      // This package is the Supabase test target even though it differs from the integration key above.
+      honourEnvRange: true,
     },
   ],
 }
