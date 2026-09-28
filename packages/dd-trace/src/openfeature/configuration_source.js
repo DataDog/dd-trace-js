@@ -97,7 +97,6 @@ function endpoint (config, configuredBaseUrl) {
  * Strips credentials and query string; a custom base URL may embed a signed token.
  *
  * @param {URL} url
- * @returns {string}
  */
 function redactedUrl (url) {
   return `${url.protocol}//${url.host}${url.pathname}`
