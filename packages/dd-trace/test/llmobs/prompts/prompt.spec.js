@@ -120,6 +120,11 @@ describe('ManagedPrompt', () => {
     assert.deepStrictEqual(rendered, expected)
     history[0].content = 'changed'
     assert.strictEqual(rendered[1].content, '{{ opaque }}')
+    history[1].tool_calls[0].arguments.id = 99
+    history[3].tool_calls[0].function.arguments = '{"id":99}'
+    assert.deepStrictEqual(rendered, expected)
+    rendered[2].tool_calls[0].arguments.id = 42
+    assert.strictEqual(rendered[8].tool_calls[0].arguments.id, 1)
     assert.deepStrictEqual(prompt.toAnnotation(variables), {
       id: 'chat',
       version: '3',

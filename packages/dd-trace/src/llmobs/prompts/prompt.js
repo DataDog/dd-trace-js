@@ -100,7 +100,7 @@ class ManagedPrompt {
       if (!Array.isArray(messages) || !messages.every(message => isMessage(message) && hasValidTools(message))) {
         throw new TypeError(`Invalid message placeholder variable '${item.name}': expected an array of messages`)
       }
-      return messages.map(message => ({ ...message }))
+      return structuredClone(messages)
     })
   }
 
