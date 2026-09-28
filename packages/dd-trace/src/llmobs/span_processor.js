@@ -16,6 +16,8 @@ const {
   METADATA,
   COST_TAGS,
   AGENT_MANIFEST,
+  AGENT_VERSION,
+  AGENT_VERSION_TAG_KEY,
   TOOL_DEFINITIONS,
   EXPERIMENT_INPUT,
   EXPERIMENT_OUTPUT,
@@ -406,6 +408,13 @@ class LLMObsSpanProcessor {
 
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
+
+    const mlObsTags = LLMObsTagger.tagMap.get(span)
+    // Resolved here because a span can become an agent after registration. A declared version wins over a
+    // user tag of the same name, matching dd-trace-py.
+    if (mlObsTags?.[SPAN_KIND] === 'agent' && mlObsTags[AGENT_VERSION]) {
+      tags[AGENT_VERSION_TAG_KEY] = mlObsTags[AGENT_VERSION]
+    }
 
     return tags
   }
