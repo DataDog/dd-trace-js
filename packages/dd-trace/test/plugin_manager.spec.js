@@ -381,12 +381,24 @@ describe('Plugin Manager', () => {
         sinon.assert.notCalled(Fs.prototype.configure)
       })
 
-      it('preserves the lambda disabled-instrumentation alias', () => {
-        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http, lambda'
+      // Both spellings name one integration. Accepting only one and silently ignoring the other
+      // leaves a customer who asked for it to be off with tracing still on.
+      for (const value of ['http, lambda', 'lambda', 'aws-lambda', 'http,aws-lambda', ' lambda ']) {
+        it(`disables the plugin for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+          process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+          pm.configure(makeTracerConfig())
+
+          assert.deepStrictEqual(instantiated, [])
+          sinon.assert.notCalled(AwsLambda.prototype.configure)
+          delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+        })
+      }
+
+      it('leaves the plugin enabled when another integration is named', () => {
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,express'
         pm.configure(makeTracerConfig())
 
-        assert.deepStrictEqual(instantiated, [])
-        sinon.assert.notCalled(AwsLambda.prototype.configure)
+        assert.deepStrictEqual(instantiated, ['aws-lambda'])
         delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
       })
     })

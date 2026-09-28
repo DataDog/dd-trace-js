@@ -93,14 +93,29 @@ describe('lambda', () => {
       assert.throws(loadLambdaWithHookSpy, { message: 'Malformed handler name: handler' })
     })
 
-    it('does not register a hook when lambda is in DD_TRACE_DISABLED_INSTRUMENTATIONS', () => {
+    // The hook check and the plugin check previously disagreed: this one matched `lambda` with no
+    // trim, the other trimmed but rejected `aws-lambda`. Both now share one helper, so the same
+    // spelling has the same effect on both.
+    for (const value of ['http,lambda,fs', 'lambda', 'aws-lambda', 'http, aws-lambda', ' lambda ']) {
+      it(`does not register a hook for DD_TRACE_DISABLED_INSTRUMENTATIONS=${JSON.stringify(value)}`, () => {
+        process.env.LAMBDA_TASK_ROOT = '/var/task'
+        process.env.DD_LAMBDA_HANDLER = 'handler.handler'
+        process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = value
+
+        const { hookCalls } = loadLambdaWithHookSpy()
+
+        assert.strictEqual(hookCalls.length, 0)
+      })
+    }
+
+    it('still registers a hook when another integration is disabled', () => {
       process.env.LAMBDA_TASK_ROOT = '/var/task'
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,lambda,fs'
+      process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'http,express'
 
       const { hookCalls } = loadLambdaWithHookSpy()
 
-      assert.strictEqual(hookCalls.length, 0)
+      assert.strictEqual(hookCalls.length, 1)
     })
 
     it('wraps the registered handler key when the lambda Hook callback fires', () => {
