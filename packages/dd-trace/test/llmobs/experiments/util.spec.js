@@ -5,7 +5,11 @@ const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
-const { BaseEvaluator, BaseSummaryEvaluator } = require('../../../src/llmobs/experiments/evaluator')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  MultiEvaluatorResult,
+} = require('../../../src/llmobs/experiments/evaluator')
 
 const {
   buildTags,
@@ -42,6 +46,16 @@ describe('LLMObs Experiments util', () => {
     assert.throws(() => validateEvaluatorName('bad.name'), /invalid/)
     assert.throws(() => validateEvaluatorName(''), /empty/)
     assert.throws(() => validateEvaluatorName(1), /must be a string/)
+  })
+
+  it('requires base evaluator subclasses to implement evaluate', () => {
+    assert.throws(() => new BaseEvaluator().evaluate({}), /BaseEvaluator subclasses must implement evaluate/)
+    assert.throws(() => new BaseSummaryEvaluator().evaluate({}), /BaseSummaryEvaluator subclasses must implement evaluate/)
+  })
+
+  it('validates multi-evaluator result values', () => {
+    assert.throws(() => new MultiEvaluatorResult(null), /must be an object/)
+    assert.throws(() => new MultiEvaluatorResult([]), /must be an object/)
   })
 
   it('normalizes evaluator maps and arrays', () => {

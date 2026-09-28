@@ -1,6 +1,6 @@
 import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
-import type { PluginName, PluginOptions, plugins } from '..';
+import type { PluginName, PluginOptions, plugins, llmobs as llmobsTypes } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
@@ -754,10 +754,10 @@ llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
 llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
 
 // export a span
-llmobs.enable({ mlApp: 'myApp', projectName: 'my-project', agentlessEnabled: false })
+llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
 
 class ExampleEvaluator extends llmobs.BaseEvaluator {
-  evaluate (context: llmobs.EvaluatorContext) {
+  evaluate (context: InstanceType<typeof llmobsTypes.EvaluatorContext>) {
     return context.outputData
   }
 }

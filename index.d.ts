@@ -3,6 +3,52 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
+declare const EvaluatorContext: {
+  new (options: {
+    inputData: tracer.llmobs.JSONType
+    outputData: tracer.llmobs.JSONType
+    expectedOutput?: tracer.llmobs.JSONType
+    metadata?: Record<string, tracer.llmobs.JSONType>
+    spanId?: string
+    traceId?: string
+  }): tracer.llmobs.EvaluatorContext
+}
+
+declare const SummaryEvaluatorContext: {
+  new (options: {
+    inputs: tracer.llmobs.JSONType[]
+    outputs: tracer.llmobs.JSONType[]
+    expectedOutputs: tracer.llmobs.JSONType[]
+    evaluationResults: Record<string, tracer.llmobs.JSONType[]>
+    metadata?: Array<Record<string, tracer.llmobs.JSONType>>
+  }): tracer.llmobs.SummaryEvaluatorContext
+}
+
+declare const EvaluatorResult: {
+  new (value: tracer.llmobs.JSONType, options?: tracer.llmobs.EvaluatorResultOptions): tracer.llmobs.EvaluatorResult
+  new (options: tracer.llmobs.EvaluatorResultOptions & { value: tracer.llmobs.JSONType }): tracer.llmobs.EvaluatorResult
+}
+
+declare const MultiEvaluatorResult: {
+  new (values: Record<string, tracer.llmobs.JSONType | tracer.llmobs.EvaluatorResult>, prefix?: boolean): tracer.llmobs.MultiEvaluatorResult
+}
+
+declare const BaseEvaluator: {
+  new (name?: string): tracer.llmobs.BaseEvaluator
+}
+
+declare const BaseSummaryEvaluator: {
+  new (name?: string): tracer.llmobs.BaseSummaryEvaluator
+}
+
+declare const BaseAsyncEvaluator: {
+  new (name?: string): tracer.llmobs.BaseAsyncEvaluator
+}
+
+declare const BaseAsyncSummaryEvaluator: {
+  new (name?: string): tracer.llmobs.BaseAsyncSummaryEvaluator
+}
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
@@ -4024,15 +4070,7 @@ declare namespace tracer {
     type ReadonlyJSONType = string | number | boolean | null | ReadonlyArray<ReadonlyJSONType> | { readonly [key: string]: ReadonlyJSONType }
 
     /** Context passed to a record-level class evaluator. */
-    class EvaluatorContext {
-      constructor (options: {
-        inputData: JSONType
-        outputData: JSONType
-        expectedOutput?: JSONType
-        metadata?: Record<string, JSONType>
-        spanId?: string
-        traceId?: string
-      })
+    interface EvaluatorContext {
       inputData: JSONType
       outputData: JSONType
       expectedOutput: JSONType
@@ -4042,14 +4080,7 @@ declare namespace tracer {
     }
 
     /** Context passed to a summary class evaluator. */
-    class SummaryEvaluatorContext {
-      constructor (options: {
-        inputs: JSONType[]
-        outputs: JSONType[]
-        expectedOutputs: JSONType[]
-        evaluationResults: Record<string, JSONType[]>
-        metadata?: Array<Record<string, JSONType>>
-      })
+    interface SummaryEvaluatorContext {
       inputs: JSONType[]
       outputs: JSONType[]
       expectedOutputs: JSONType[]
@@ -4065,9 +4096,7 @@ declare namespace tracer {
     }
 
     /** A metric value with optional evaluation details. */
-    class EvaluatorResult {
-      constructor (value: JSONType, options?: EvaluatorResultOptions)
-      constructor (options: EvaluatorResultOptions & { value: JSONType })
+    interface EvaluatorResult {
       value: JSONType
       reasoning?: string
       assessment?: 'pass' | 'fail'
@@ -4076,31 +4105,28 @@ declare namespace tracer {
     }
 
     /** A result that emits several named metrics from one evaluator invocation. */
-    class MultiEvaluatorResult {
-      constructor (values: Record<string, JSONType | EvaluatorResult>, prefix?: boolean)
+    interface MultiEvaluatorResult {
       values: Record<string, JSONType | EvaluatorResult>
       prefix: boolean
     }
 
     /** Base class for reusable record-level evaluators. */
-    class BaseEvaluator {
-      constructor (name?: string)
+    interface BaseEvaluator {
       name: string
       evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
     /** Base class for reusable summary evaluators. */
-    class BaseSummaryEvaluator {
-      constructor (name?: string)
+    interface BaseSummaryEvaluator {
       name: string
       evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
     /** Base class for reusable asynchronous record-level evaluators. */
-    class BaseAsyncEvaluator extends BaseEvaluator {}
+    interface BaseAsyncEvaluator extends BaseEvaluator {}
 
     /** Base class for reusable asynchronous summary evaluators. */
-    class BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
+    interface BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
 
     /**
      * A task run over each dataset record during an experiment.
