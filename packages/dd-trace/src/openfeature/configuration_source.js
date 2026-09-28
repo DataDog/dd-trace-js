@@ -42,7 +42,7 @@ function create (config, applyConfiguration) {
 
     const AgentlessConfigurationSource = require('./agentless_configuration_source')
     const resolvedEndpoint = endpoint(config, baseUrl)
-    log.debug('Feature Flags: starting agentless configuration source at %s', resolvedEndpoint.href)
+    log.debug('Feature Flags: starting agentless configuration source at %s', redactedUrl(resolvedEndpoint))
     return new AgentlessConfigurationSource({
       endpoint: resolvedEndpoint,
       pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
@@ -91,6 +91,19 @@ function endpoint (config, configuredBaseUrl) {
   }
 
   return url
+}
+
+/**
+ * Formats a URL for logging with credentials and query string stripped.
+ * `DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL` is declared
+ * sensitive because a customer-configured URL may embed userinfo or a
+ * signed/query-token credential; only the origin and path are safe to log.
+ *
+ * @param {URL} url
+ * @returns {string}
+ */
+function redactedUrl (url) {
+  return `${url.protocol}//${url.host}${url.pathname}`
 }
 
 module.exports = {

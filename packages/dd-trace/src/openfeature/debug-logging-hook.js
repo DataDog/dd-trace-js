@@ -21,7 +21,14 @@ class DebugLoggingHook {
    * @param {object} evaluationDetails - Full evaluation details
    */
   finally (hookContext, evaluationDetails) {
-    log.debug('Feature Flags: evaluated %s: %o', hookContext?.flagKey, evaluationDetails)
+    try {
+      log.debug('Feature Flags: evaluated %s: %o', hookContext?.flagKey, evaluationDetails)
+    } catch (error) {
+      // A diagnostic failure (e.g. a custom inspect method that throws while formatting
+      // evaluationDetails for %o) must not escape this `finally` hook and disrupt the
+      // actual flag evaluation. Contain it here, same as SpanEnrichmentHook.finally().
+      log.warn('DebugLoggingHook: error in finally hook: %s', error.message)
+    }
   }
 }
 

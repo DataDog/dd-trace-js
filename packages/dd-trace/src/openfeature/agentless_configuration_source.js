@@ -110,7 +110,12 @@ class AgentlessConfigurationSource {
       const response = await this.#request(abortController.signal)
       if (this.#abortController !== abortController) return
 
-      if (response.error) {
+      if (response.statusCode === 304) {
+        // The shared request() helper reports every non-2xx status as an error, but 304
+        // means the cached configuration is still valid — a healthy poll, not a failure.
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP 304 (unchanged)',
+          attempt, MAX_ATTEMPTS)
+      } else if (response.error) {
         log.debug('Feature Flags: agentless configuration poll attempt %d/%d failed: %s',
           attempt, MAX_ATTEMPTS, errorMessage(response.error))
       } else {
