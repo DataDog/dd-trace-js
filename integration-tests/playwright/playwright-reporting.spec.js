@@ -285,6 +285,91 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
+  describe(`playwright@${version} global errors`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+    this.timeout(60000)
+    useSandbox([`@playwright/test@${version}`])
+
+    for (const mode of ['collection', 'global-setup', 'web-server', 'global-teardown']) {
+      it(`preserves ${mode} errors on the session and module`, async (receiver, run) => {
+        const cwd = sandboxCwd()
+        const fixture = path.join(cwd, `global-error-${mode}`)
+        await fs.mkdir(fixture, { recursive: true })
+        const config = {
+          testDir: '.',
+          testMatch: '*.spec.js',
+          workers: 1,
+          retries: 0,
+          reporter: 'line',
+          projects: [{ name: 'chromium' }],
+        }
+        for (let index = 0; index < 5; index++) {
+          await fs.writeFile(path.join(fixture, `test-${index}.spec.js`),
+            "const { test } = require('@playwright/test')\n" +
+            (mode === 'collection' ? `throw new Error('Synthetic collection failure ${index}')\n` : '') +
+            "test('synthetic test', () => {})\n")
+        }
+        if (mode === 'global-setup' || mode === 'global-teardown') {
+          await fs.writeFile(path.join(fixture, 'hook.js'),
+            `module.exports = () => { throw new Error('Synthetic ${mode} failure') }\n`)
+          config[mode === 'global-setup' ? 'globalSetup' : 'globalTeardown'] = './hook.js'
+        }
+        if (mode === 'web-server') {
+          config.webServer = {
+            command: 'node -e "process.exit(1)"', port: 1, timeout: 10000,
+          }
+        }
+        await fs.writeFile(path.join(fixture, 'playwright.config.js'),
+          `module.exports = ${JSON.stringify(config)}\n`)
+
+        let output = ''
+        const proc = run(
+          './node_modules/.bin/playwright test ' +
+          `-c ./global-error-${mode}/playwright.config.js --project=chromium --shard=2/5`,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { output += chunk.toString() })
+        proc.stderr?.on('data', chunk => { output += chunk.toString() })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(({ type }) => type === 'test')
+            assert.strictEqual(tests.length, mode === 'global-teardown' ? 1 : 0)
+            for (const test of tests) assert.strictEqual(test.content.meta[TEST_STATUS], 'pass')
+            const expectedError = mode === 'web-server'
+              ? /Process from config.webServer was not able to start/
+              : new RegExp(`Synthetic ${mode} failure${mode === 'collection' ? ' 0' : ''}`)
+            for (const type of ['test_session_end', 'test_module_end']) {
+              const matching = events.filter(event => event.type === type)
+              assert.strictEqual(matching.length, 1, `expected one ${type}`)
+              const { content } = matching[0]
+              assert.strictEqual(content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+              assert.match(content.meta[ERROR_MESSAGE], expectedError)
+              assert.strictEqual(content.error, 1)
+              if (mode !== 'web-server') assert.match(content.meta['error.stack'], expectedError)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'close'), eventsPromise])
+        assert.strictEqual(exitCode, 1, output)
+      })
+    }
+  })
+})
+
+versions.forEach((version) => {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
   const contextOldVersions = version !== 'latest' && satisfies(version, '<1.38.0') ? context : context.skip
