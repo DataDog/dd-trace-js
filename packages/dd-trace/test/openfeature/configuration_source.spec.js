@@ -144,16 +144,16 @@ describe('OpenFeature configuration source', () => {
     assert.strictEqual(resolved.apiKey, undefined)
   })
 
-  it('logs a redacted URL, without credentials or query string, when starting the agentless source', () => {
+  it('logs only the origin, dropping credentials, path, and query, when starting the agentless source', () => {
     config.featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL =
-      'https://user:tok@example.com/custom/ufc?sig=super-secret-value'
+      'https://user:tok@example.com/signed-token-in-path/ufc?sig=super-secret-value'
 
     createSourceConfig()
 
     sinon.assert.calledOnceWithExactly(
       log.debug,
       'Feature Flags: starting agentless configuration source at %s',
-      'https://example.com/custom/ufc'
+      'https://example.com'
     )
   })
 

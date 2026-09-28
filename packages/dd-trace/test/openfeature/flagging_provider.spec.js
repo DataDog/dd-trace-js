@@ -33,6 +33,7 @@ describe('FlaggingProvider', () => {
       service: 'test-service',
       version: '1.0.0',
       env: 'test',
+      debug: true,
       featureFlags: {
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: true,
         DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
@@ -145,10 +146,18 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(provider.hooks[1], mockDebugLoggingHook)
     })
 
-    it('should always register DebugLoggingHook, regardless of any flag', () => {
+    it('should register DebugLoggingHook when debug logging is enabled', () => {
       new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
 
       sinon.assert.calledOnceWithExactly(mockDebugLoggingHookClass)
+    })
+
+    it('should not register DebugLoggingHook when debug logging is disabled', () => {
+      mockConfig.debug = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      sinon.assert.notCalled(mockDebugLoggingHookClass)
+      assert.strictEqual(provider.hooks.length, 2)
     })
 
     it('should log info message when span enrichment is enabled', () => {

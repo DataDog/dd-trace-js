@@ -94,12 +94,12 @@ function endpoint (config, configuredBaseUrl) {
 }
 
 /**
- * Strips credentials and query string; a custom base URL may embed a signed token.
+ * Drops everything but the origin; a custom base URL may embed a signed token in its path.
  *
  * @param {URL} url
  */
 function redactedUrl (url) {
-  return `${url.protocol}//${url.host}${url.pathname}`
+  return `${url.protocol}//${url.host}`
 }
 
 module.exports = {

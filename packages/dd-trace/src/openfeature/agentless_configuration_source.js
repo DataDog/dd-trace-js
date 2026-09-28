@@ -220,8 +220,11 @@ class AgentlessConfigurationSource {
     const value = Array.isArray(etag) ? etag[0] : etag
     this.#etag = value?.trim() || undefined
 
-    log.debug('Feature Flags: agentless configuration applied successfully (%d flag(s))',
-      Object.keys(configuration.flags ?? {}).length)
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => {
+      const flagCount = Object.keys(configuration.flags ?? {}).length
+      return `Feature Flags: agentless configuration applied successfully (${flagCount} flag(s))`
+    })
   }
 
   /**
