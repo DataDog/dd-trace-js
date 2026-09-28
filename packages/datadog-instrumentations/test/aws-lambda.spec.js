@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { afterEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru()
 
 const {
   WRAPPED,
@@ -33,12 +34,44 @@ describe('aws-lambda instrumentation', () => {
     const handler = () => 'result'
     const wrapped = wrapHandler(handler)
 
-    assert.strictEqual(handler[WRAPPED], wrapped)
+    assert.strictEqual(handler[WRAPPED], undefined)
     assert.strictEqual(wrapped[WRAPPED], wrapped)
     // Both the layer and the NODE_OPTIONS path resolve the same customer handler, so the guard has
     // to hand back the instrumented function. Returning `handler` here would silently drop tracing.
     assert.strictEqual(wrapHandler(handler), wrapped)
     assert.strictEqual(wrapHandler(wrapped), wrapped)
+  })
+
+  for (const protect of [Object.freeze, Object.seal, Object.preventExtensions]) {
+    it(`memoizes ${protect.name} handlers and wrappers without modifying them`, async () => {
+      const handler = protect(() => 'result')
+      const descriptors = Object.getOwnPropertyDescriptors(handler)
+      const wrapped = protect(wrapHandler(handler))
+      assert.strictEqual(wrapHandler(handler), wrapped)
+      assert.strictEqual(wrapHandler(wrapped), wrapped)
+      const forced = wrapHandler(handler, { forceWrap: true })
+      assert.notStrictEqual(forced, wrapped)
+      assert.strictEqual(wrapHandler(handler), forced)
+      assert.strictEqual(await forced({}), 'result')
+      const forcedWrapper = wrapHandler(wrapped, { forceWrap: true })
+      assert.strictEqual(wrapHandler(wrapped), forcedWrapper)
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptors(handler), descriptors)
+    })
+  }
+
+  it('shares memoization across independently loaded instrumentation copies', async () => {
+    const other = proxyquire('../src/aws-lambda', {})
+    assert.notStrictEqual(other.wrapHandler, wrapHandler)
+    const handler = Object.freeze(() => 'result')
+    const wrapped = Object.freeze(wrapHandler(handler))
+    assert.strictEqual(other.wrapHandler(handler), wrapped)
+    assert.strictEqual(other.wrapHandler(wrapped), wrapped)
+    const forced = other.wrapHandler(handler, { forceWrap: true })
+    assert.strictEqual(wrapHandler(handler), forced)
+    const starts = []
+    subscribe(invocationChannel.start, message => starts.push(message))
+    assert.strictEqual(await forced({}), 'result')
+    assert.strictEqual(starts.length, 1)
   })
 
   it('does not claim datadog-lambda-js\'s _ddWrapped marker', () => {

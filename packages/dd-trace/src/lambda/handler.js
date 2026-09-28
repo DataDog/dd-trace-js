@@ -4,7 +4,7 @@ const dc = require('dc-polyfill')
 
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const log = require('../log')
-const { WRAPPED, wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
+const { getWrappedHandler, wrapHandler } = require('../../../datadog-instrumentations/src/aws-lambda')
 const { HANDLER_STREAMING, isCallbackCompletion } = require('../../../datadog-plugin-aws-lambda/src/handler-utils')
 const { extractContext } = require('./context')
 const { ImpendingTimeout } = require('./runtime/errors')
@@ -14,6 +14,8 @@ const { ImpendingTimeout } = require('./runtime/errors')
 // it every re-patch hands `wrapHandler` a fresh inner function, its own marker cannot match, and
 // the span wrappers stack.
 const MONITORED = Symbol.for('dd-trace.lambda.timeout-monitored')
+const monitorsKey = Symbol.for('dd-trace.lambda.timeout-monitors')
+const monitors = globalThis[monitorsKey] ??= new WeakMap()
 
 const timeoutChannel = dc.channel('apm:aws:lambda:timeout')
 timeoutChannel.subscribe(() => {
@@ -82,10 +84,10 @@ function armTimeout (context) {
  */
 function withTimeoutMonitor (lambdaHandler, reuseSpan = true) {
   if (typeof lambdaHandler !== 'function') throw new TypeError('AWS Lambda handler must be a function')
-  const monitored = lambdaHandler[MONITORED]
+  const monitored = monitors.get(lambdaHandler) || lambdaHandler[MONITORED]
   // A monitor-only hook may subsequently be promoted by the facade. Follow that promotion so a
   // later hook neither adds a second span nor puts a timer outside the existing invocation scope.
-  if (monitored !== undefined) return (reuseSpan && monitored[WRAPPED]) || monitored
+  if (monitored !== undefined) return (reuseSpan && getWrappedHandler(monitored)) || monitored
 
   function timeoutMonitoredHandler (...args) {
     const context = extractContext(args)
@@ -137,7 +139,8 @@ function withTimeoutMonitor (lambdaHandler, reuseSpan = true) {
     return result
   }
 
-  lambdaHandler[MONITORED] = timeoutMonitoredHandler
+  monitors.set(lambdaHandler, timeoutMonitoredHandler)
+  monitors.set(timeoutMonitoredHandler, timeoutMonitoredHandler)
   timeoutMonitoredHandler[MONITORED] = timeoutMonitoredHandler
   // The released shim uses declared arity to distinguish callback handlers, and this symbol to
   // choose (event, stream, context). A rest-argument wrapper must not erase either contract.
@@ -174,8 +177,8 @@ function wrapLambdaHandler (handler, config) {
   // forceWrap(rawHandler) replaces its wrapper, not wraps its previous span wrapper again.
   // An explicitly supplied already-wrapped handler can still be force-wrapped, as before.
   const wrapped = wrapHandler(withTimeoutMonitor(handler, config?.forceWrap !== true), config)
-  handler[WRAPPED] = wrapped
-  wrapped[MONITORED] = wrapped
+  // Do not stamp a previously returned wrapper: callers can freeze it before re-patching.
+  monitors.set(wrapped, wrapped)
   return wrapped
 }
 

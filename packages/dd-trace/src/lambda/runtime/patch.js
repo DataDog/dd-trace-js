@@ -63,6 +63,18 @@ function patchDatadogLambdaHandler (datadogHandler) {
 /** @param {string} handlerPath */
 function patchLambdaModule (handlerPath) {
   return lambdaModule => {
+    const descriptor = Object.getOwnPropertyDescriptor(lambdaModule, handlerPath)
+    if (descriptor?.writable && typeof descriptor.value === 'function') {
+      const wrapped = patchLambdaHandler(descriptor.value)
+      // A cached wrapper may have been frozen by the caller. Reinstall it without shimmer
+      // trying to copy the original function's properties onto it again.
+      if (Object.isExtensible(wrapped)) {
+        shimmer.wrap(lambdaModule, handlerPath, () => wrapped)
+      } else {
+        Object.defineProperty(lambdaModule, handlerPath, { ...descriptor, value: wrapped })
+      }
+      return lambdaModule
+    }
     shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler)
     return lambdaModule
   }

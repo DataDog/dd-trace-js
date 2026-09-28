@@ -80,6 +80,7 @@ describe('Lambda facade and hook composition', () => {
           clock.tick(75)
           return Promise.resolve('done')
         }
+        Object.freeze(handler)
         const shim = h => tracer.wrap('aws.lambda', {}, promisifiedHandler(h))
         let wrapped
         if (entry === 'facade') wrapped = facade.wrap(handler)
@@ -113,8 +114,8 @@ describe('Lambda facade and hook composition', () => {
           const subscriber = message => starts.push(message)
           invocationChannel.start.subscribe(subscriber)
           try {
-            const handler = () => 'done'
-            const earlier = first === 'facade' ? facade.wrap(handler) : patch(branch, handler)
+            const handler = Object.freeze(() => 'done')
+            const earlier = Object.freeze(first === 'facade' ? facade.wrap(handler) : patch(branch, handler))
             const wrapped = first === 'facade' ? patch(branch, earlier) : facade.wrap(earlier)
             assert.strictEqual(facade.wrap(handler), wrapped)
             assert.strictEqual(patch(branch, handler), wrapped)
@@ -188,8 +189,8 @@ describe('Lambda facade and hook composition', () => {
     invocationChannel.start.subscribe(subscriber)
     try {
       const config = { traceExtractor: () => ({}) }
-      const handler = () => 'done'
-      const wrapped = facade.wrap(handler, config)
+      const handler = Object.freeze(() => 'done')
+      const wrapped = Object.freeze(facade.wrap(handler, config))
       assert.strictEqual(facade.wrap(handler), wrapped)
       await wrapped({}, context)
       assert.strictEqual(starts[0].config, config)
@@ -224,6 +225,7 @@ describe('Lambda facade and hook composition', () => {
       return Promise.resolve('streamed')
     }
     handler[HANDLER_STREAMING] = STREAM_RESPONSE
+    Object.freeze(handler)
     const monitored = patch('layer', handler)
     assert.strictEqual(monitored[HANDLER_STREAMING], STREAM_RESPONSE)
     const wrapped = facade.wrap(monitored)

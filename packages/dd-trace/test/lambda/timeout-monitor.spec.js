@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire').noCallThru()
 
 const { withTimeoutMonitor } = require('../../src/lambda/handler')
 const { HANDLER_STREAMING, STREAM_RESPONSE } = require('../../../datadog-plugin-aws-lambda/src/handler-utils')
@@ -33,6 +34,42 @@ describe('Lambda timeout monitor', () => {
   afterEach(() => {
     clock.restore()
     global._ddtrace = originalTracer
+  })
+
+  for (const protect of [Object.freeze, Object.seal, Object.preventExtensions]) {
+    it(`memoizes and monitors a ${protect.name} handler without modifying it`, () => {
+      const original = protect((_event, _context, callback) => undefined)
+      const descriptors = Object.getOwnPropertyDescriptors(original)
+      const monitored = protect(withTimeoutMonitor(original))
+      assert.strictEqual(withTimeoutMonitor(original), monitored)
+      assert.strictEqual(withTimeoutMonitor(monitored), monitored)
+      assert.strictEqual(monitored.length, 3)
+      monitored({}, context, () => {})
+      assert.strictEqual(clock.countTimers(), 1)
+      clock.tick(75)
+      assert.strictEqual(killAll.callCount, 1)
+      assert.strictEqual(span.addTags.firstCall.args[0]['error.type'], 'Impending Timeout')
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptors(original), descriptors)
+    })
+  }
+
+  it('shares monitor identity and span promotion across independently loaded copies', () => {
+    // Loading another handler module must not add a second crash-flush subscriber to this test.
+    const other = proxyquire('../../src/lambda/handler', {
+      'dc-polyfill': { channel: () => ({ subscribe () {} }) },
+    })
+    assert.notStrictEqual(other.withTimeoutMonitor, withTimeoutMonitor)
+    const handler = Object.freeze(() => 'result')
+    const monitored = Object.freeze(withTimeoutMonitor(handler))
+    assert.strictEqual(other.withTimeoutMonitor(handler), monitored)
+    assert.strictEqual(other.withTimeoutMonitor(monitored), monitored)
+    const wrapped = Object.freeze(other.wrapLambdaHandler(handler))
+    assert.strictEqual(withTimeoutMonitor(handler), wrapped)
+    assert.strictEqual(withTimeoutMonitor(monitored), wrapped)
+    assert.strictEqual(withTimeoutMonitor(wrapped), wrapped)
+    const forced = other.wrapLambdaHandler(handler, { forceWrap: true })
+    assert.notStrictEqual(forced, wrapped)
+    assert.strictEqual(withTimeoutMonitor(handler), forced)
   })
 
   it('preserves callback arity, receiver, arguments, and the raw return value', () => {

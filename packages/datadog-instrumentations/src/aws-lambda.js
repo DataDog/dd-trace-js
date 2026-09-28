@@ -12,6 +12,10 @@ const {
 // same marker. The value is the wrapper itself, so a second wrap of the same handler returns the
 // instrumented function rather than the raw one.
 const WRAPPED = Symbol.for('dd-trace.lambda.wrapped')
+// Customer functions (and wrappers handed back to us) may be frozen. Share weak keys across
+// tracer copies without adding properties to those functions or retaining them indefinitely.
+const wrappersKey = Symbol.for('dd-trace.lambda.invocation-wrappers')
+const wrappers = globalThis[wrappersKey] ??= new WeakMap()
 const invocationChannel = dc.tracingChannel('datadog:aws-lambda:invoke')
 
 /**
@@ -25,7 +29,8 @@ function wrapHandler (handler, config) {
   if (typeof handler !== 'function') {
     throw new TypeError('AWS Lambda handler must be a function')
   }
-  if (handler[WRAPPED] !== undefined && config?.forceWrap !== true) return handler[WRAPPED]
+  const existing = getWrappedHandler(handler)
+  if (existing !== undefined && config?.forceWrap !== true) return existing
 
   const isResponseStream = handler[HANDLER_STREAMING] === STREAM_RESPONSE
   const invoke = promisifiedHandler(handler)
@@ -44,8 +49,9 @@ function wrapHandler (handler, config) {
     return invocationChannel.tracePromise(invoke, invocationContext, this, ...args)
   }
 
-  markWrapped(handler, wrappedHandler)
-  markWrapped(wrappedHandler, wrappedHandler)
+  wrappers.set(handler, wrappedHandler)
+  wrappers.set(wrappedHandler, wrappedHandler)
+  wrappedHandler[WRAPPED] = wrappedHandler
   if (isResponseStream) wrappedHandler[HANDLER_STREAMING] = STREAM_RESPONSE
 
   return wrappedHandler
@@ -64,22 +70,23 @@ function findContextIndex (args) {
 }
 
 /**
- * Records which wrapper instruments a handler so repeat wrapping is idempotent.
+ * Looks up the invocation wrapper, including markers from older tracer copies.
  *
  * Deliberately does not set datadog-lambda-js's `_ddWrapped` property: the released shim treats
  * that property as "already fully instrumented" and returns early, which would suppress its
  * extractors, inferred spans, enhanced metrics, log injection, and cold-start tracing. dd-trace
  * may only claim that marker once it reproduces those behaviors (Phases 2-3).
  *
- * @param {Function} handler Handler to mark.
- * @param {Function} wrappedHandler Wrapper that instruments the handler.
+ * @param {Function} handler Handler whose invocation wrapper is needed.
+ * @returns {Function|undefined} Existing invocation wrapper.
  */
-function markWrapped (handler, wrappedHandler) {
-  handler[WRAPPED] = wrappedHandler
+function getWrappedHandler (handler) {
+  return wrappers.get(handler) || handler[WRAPPED]
 }
 
 module.exports = {
   WRAPPED,
   invocationChannel,
+  getWrappedHandler,
   wrapHandler,
 }
