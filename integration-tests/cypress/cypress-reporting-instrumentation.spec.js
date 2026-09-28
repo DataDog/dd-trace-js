@@ -259,6 +259,8 @@ moduleTypes.forEach(({
       ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
       : testCommand
 
+    // These CLI fixtures exercise lifecycle behavior, not module loading. Running them in the ESM cell
+    // would repeat the same .js configs; dedicated tests below cover .mjs config loading and hook chaining.
     if (type === 'commonJS') {
       describe('late manual finalization', () => {
         /**
@@ -293,64 +295,51 @@ moduleTypes.forEach(({
           const uploads = messages.filter(({ media }) => media).map(({ media }) => media)
           assert.strictEqual(exitCode, 1, output)
           assert.match(output, /synthetic late hook failure/)
-          const tests = events.filter(event => event.type === 'test')
-          const suites = events.filter(event => event.type === 'test_suite_end')
-          assert.deepStrictEqual(tests.map(({ content }) => ({
-            name: content.meta['test.name'],
-            status: content.meta[TEST_STATUS],
+          const tests = events.filter(event => event.type === 'test').map(({ content }) => content)
+          const suites = events.filter(event => event.type === 'test_suite_end').map(({ content }) => content)
+          assert.deepStrictEqual(tests.map(({ meta }) => ({
+            name: meta['test.name'],
+            status: meta[TEST_STATUS],
           })).sort((a, b) => a.name.localeCompare(b.name)), [
             { name: 'first suite is skipped', status: 'skip' },
             { name: 'first suite passes', status: 'pass' },
             { name: 'second suite fails in a late hook', status: 'fail' },
           ], output)
           assert.strictEqual(suites.length, 2)
-          assert.strictEqual(new Set(suites.map(({ content }) => String(content.test_suite_id))).size, 2)
-          for (const { content } of tests) {
-            const suite = suites.find(({ content: suite }) => suite.meta['test.suite'] === content.meta['test.suite'])
+          assert.strictEqual(new Set(suites.map(suite => String(suite.test_suite_id))).size, 2)
+          for (const test of tests) {
+            const suite = suites.find(suite => suite.meta['test.suite'] === test.meta['test.suite'])
             assert.ok(suite)
-            assert.strictEqual(String(content.test_suite_id), String(suite.content.test_suite_id))
+            assert.strictEqual(String(test.test_suite_id), String(suite.test_suite_id))
             // Recovery at after:run must keep tests inside their original suite, not move them to run end.
             // Compare at Cypress run-result precision (milliseconds).
-            const testStart = Math.round(Number(content.start) / 1e6)
-            const testEnd = Math.round((Number(content.start) + Number(content.duration)) / 1e6)
-            const suiteStart = Math.round(Number(suite.content.start) / 1e6)
-            const suiteEnd = Math.round((Number(suite.content.start) + Number(suite.content.duration)) / 1e6)
+            const testStart = Math.round(Number(test.start) / 1e6)
+            const testEnd = Math.round((Number(test.start) + Number(test.duration)) / 1e6)
+            const suiteStart = Math.round(Number(suite.start) / 1e6)
+            const suiteEnd = Math.round((Number(suite.start) + Number(suite.duration)) / 1e6)
             assert.ok(testStart >= suiteStart && testEnd <= suiteEnd,
-              `${content.meta['test.name']}: ${testStart}-${testEnd} must be within suite ${suiteStart}-${suiteEnd}`)
-            if (content.meta[TEST_STATUS] === 'skip' && afterSpec === 'missing') {
-              assert.strictEqual(Number(content.duration), 0)
+              `${test.meta['test.name']}: ${testStart}-${testEnd} must be within suite ${suiteStart}-${suiteEnd}`)
+            if (test.meta[TEST_STATUS] === 'skip' && afterSpec === 'missing') {
+              assert.strictEqual(Number(test.duration), 0)
               assert.strictEqual(testStart, suiteEnd)
             }
           }
-          const firstSuite = suites.find(({ content }) => content.meta['test.suite'].endsWith('first.cy.js')).content
-          const secondSuite = suites.find(({ content }) => content.meta['test.suite'].endsWith('second.cy.js')).content
+          const firstSuite = suites.find(suite => suite.meta['test.suite'].endsWith('first.cy.js'))
+          const secondSuite = suites.find(suite => suite.meta['test.suite'].endsWith('second.cy.js'))
           assert.strictEqual(firstSuite.meta[TEST_STATUS], 'pass')
           assert.strictEqual(secondSuite.meta[TEST_STATUS], 'fail')
           assert.ok(Number(firstSuite.start) + Number(firstSuite.duration) < Number(secondSuite.start),
             `recovered suite duration must not include later specs\n${output}`)
-          const failedTest = tests.find(({ content }) => content.meta[TEST_STATUS] === 'fail').content
+          const failedTest = tests.find(test => test.meta[TEST_STATUS] === 'fail')
           assert.match(failedTest.meta[ERROR_MESSAGE], /synthetic late hook failure/)
           for (const type of ['test_session_end', 'test_module_end']) {
-            const spans = events.filter(event => event.type === type)
-            assert.strictEqual(spans.length, 1)
-            assert.strictEqual(spans[0].content.meta[TEST_STATUS], 'fail')
+            assert.deepStrictEqual(events.filter(event => event.type === type)
+              .map(({ content }) => content.meta[TEST_STATUS]), ['fail'], type)
           }
           return { failedTest, failedSuite: secondSuite, uploads }
         }
 
-        over10It('recovers both specs when Datadog after:spec is never called', async () => {
-          await runLateManual({ afterSpec: 'missing' })
-        })
-
-        over10It('recovers only the unfinished spec when after:spec handles the first', async () => {
-          await runLateManual({ afterSpec: 'partial' })
-        })
-
-        over10It('does not duplicate specs already finalized by after:spec', async () => {
-          await runLateManual({ afterSpec: 'forwarded' })
-        })
-
-        over10It('waits for screenshot upload before reporting recovered tests without video', async () => {
+        over10It('recovers both specs with screenshots but no video when after:spec is missing', async () => {
           receiver.setMediaResponseDelay(100)
           const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true })
 
@@ -362,20 +351,25 @@ moduleTypes.forEach(({
           assert.strictEqual(uploads[0].traceId, String(failedTest.trace_id))
         })
 
-        over10It('reports screenshots and videos on recovered tests and suites', async () => {
+        over10It('recovers the second spec with media when after:spec handles only the first', async () => {
           receiver.setMediaResponseDelay(100)
-          const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true, video: true })
+          const { failedTest, failedSuite, uploads } = await runLateManual({
+            afterSpec: 'partial', screenshots: true, video: true,
+          })
 
           assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
           assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
           assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
           assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
-          const screenshots = uploads.filter(media => media.contentType === 'image/png')
-          const videos = uploads.filter(media => media.contentType === 'video/mp4')
-          assert.strictEqual(screenshots.length, 1)
-          assert.strictEqual(videos.length, 1)
-          assert.strictEqual(screenshots[0].traceId, String(failedTest.trace_id))
-          assert.strictEqual(videos[0].testSuiteId, String(failedSuite.test_suite_id))
+          assert.deepStrictEqual(uploads.map(media => media.contentType).sort(), ['image/png', 'video/mp4'])
+          const screenshot = uploads.find(media => media.contentType === 'image/png')
+          const video = uploads.find(media => media.contentType === 'video/mp4')
+          assert.strictEqual(screenshot.traceId, String(failedTest.trace_id))
+          assert.strictEqual(video.testSuiteId, String(failedSuite.test_suite_id))
+        })
+
+        over10It('does not duplicate specs already finalized by after:spec', async () => {
+          await runLateManual({ afterSpec: 'forwarded' })
         })
       })
 
@@ -409,8 +403,7 @@ moduleTypes.forEach(({
             assert.match(output, /custom before:run failed/)
           } else {
             assert.strictEqual(exitCode, 0, output)
-            assert.strictEqual(tests.length, 1, output)
-            assert.strictEqual(tests[0].content.meta[TEST_STATUS], 'pass', output)
+            assert.deepStrictEqual(tests.map(({ content }) => content.meta[TEST_STATUS]), ['pass'], output)
           }
         })
       }
