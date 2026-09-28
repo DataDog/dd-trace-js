@@ -21,6 +21,7 @@
     "verify:supported-integrations": "node scripts/generate-supported-integrations.js --check",
     "type:check": "node node_modules/typescript/bin/tsc --noEmit -p tsconfig.dev.json",
     "type:check:public": "node node_modules/typescript-v7/bin/tsc --noEmit -p docs/tsconfig.json",
+    "type:check:packed": "node scripts/check-typescript-v7-package.js",
     "type:doc:build": "cd docs && yarn && yarn build",
     "type:doc:test": "cd docs && yarn && yarn test",
     "lint": "bash ./scripts/lint.sh",

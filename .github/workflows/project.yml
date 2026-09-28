@@ -150,6 +150,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run type:check:public
+      - run: npm run type:check:packed
       - run: npm run type:doc:test
       - run: npm run type:doc:build
 
