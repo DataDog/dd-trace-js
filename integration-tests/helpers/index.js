@@ -69,7 +69,6 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
     if (process.env.DD_TRACE_DEBUG) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
-      out = out.replace('Feature Flags: configuration source is not remote_config; skipping Remote Config setup\n', '')
     }
     assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
   }

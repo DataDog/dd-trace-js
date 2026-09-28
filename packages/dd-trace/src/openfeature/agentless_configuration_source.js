@@ -111,16 +111,16 @@ class AgentlessConfigurationSource {
       if (this.#abortController !== abortController) return
 
       if (response.statusCode === 304) {
-        // The shared request() helper reports every non-2xx status as an error, but 304
-        // means the cached configuration is still valid — a healthy poll, not a failure.
+        // 304 means the cached configuration is still valid, not a failure.
         log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP 304 (unchanged)',
           attempt, MAX_ATTEMPTS)
-      } else if (response.error) {
-        log.debug('Feature Flags: agentless configuration poll attempt %d/%d failed: %s',
-          attempt, MAX_ATTEMPTS, errorMessage(response.error))
-      } else {
+      } else if (response.statusCode !== undefined) {
+        // Avoids errorMessage(response.error), which embeds the full request URL.
         log.debug('Feature Flags: agentless configuration poll attempt %d/%d returned HTTP %d',
           attempt, MAX_ATTEMPTS, response.statusCode)
+      } else {
+        log.debug('Feature Flags: agentless configuration poll attempt %d/%d failed: %s',
+          attempt, MAX_ATTEMPTS, errorMessage(response.error))
       }
 
       const retryable = response.statusCode === undefined || isRetryableStatus(response.statusCode)

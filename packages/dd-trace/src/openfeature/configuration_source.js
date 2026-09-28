@@ -94,10 +94,7 @@ function endpoint (config, configuredBaseUrl) {
 }
 
 /**
- * Formats a URL for logging with credentials and query string stripped.
- * `DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL` is declared
- * sensitive because a customer-configured URL may embed userinfo or a
- * signed/query-token credential; only the origin and path are safe to log.
+ * Strips credentials and query string; a custom base URL may embed a signed token.
  *
  * @param {URL} url
  * @returns {string}

@@ -67,12 +67,14 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // TODO: remove once `@datadog/openfeature-node-server` unrefs this timer itself.
     this.initController?.timeoutId?.unref?.()
 
-    // Observes the outcome for logging only, on a separate promise chain. Does not alter
-    // it: `promise` itself is returned unmodified below, so the caller still sees the
-    // original resolution or rejection.
+    // Only observes the outcome for logging; `promise` itself is returned unmodified below.
+    // errorWithoutTelemetry avoids inflating telemetry volume for every routine init timeout.
     promise.then(
       () => log.debug('Feature Flags: provider initialized successfully'),
-      (error) => log.error('Feature Flags: provider failed to initialize: %s', error.message)
+      (error) => log.errorWithoutTelemetry(
+        'Feature Flags: provider failed to initialize: %s',
+        error instanceof Error ? error.message : String(error)
+      )
     )
 
     return promise

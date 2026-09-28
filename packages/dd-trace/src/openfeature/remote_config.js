@@ -11,10 +11,7 @@ const RemoteConfigCapabilities = require('../remote_config/capabilities')
  * @param {boolean} subscribe - Whether Agent Remote Config owns UFC delivery
  */
 function enable (rc, getOpenfeatureProxy, subscribe) {
-  if (!subscribe) {
-    log.debug('Feature Flags: configuration source is not remote_config; skipping Remote Config setup')
-    return
-  }
+  if (!subscribe) return
 
   log.debug('Feature Flags: starting remote_config configuration source (Agent Remote Configuration)')
 
