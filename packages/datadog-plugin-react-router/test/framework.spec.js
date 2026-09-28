@@ -206,6 +206,21 @@ describe('Plugin', () => {
         await assertHttpRoute(handleRequest)
       })
 
+      it('sets the route for a nested absolute child path', async () => {
+        tracer.use('react-router', {})
+        const build = createBuild()
+        build.routes.users.path = 'users'
+        build.routes.user = {
+          id: 'user', parentId: 'users', path: '/users/:id', module: { default () {} },
+        }
+        build.routes.details = {
+          id: 'details', parentId: 'user', path: 'details', module: { default () {} },
+        }
+        const handleRequest = createRequestHandler(build, 'test')
+        await assertHttpRoute(handleRequest)
+        await assertHttpRoute(handleRequest, true, '/users/123/details', 200, true, '/users/:id/details')
+      })
+
       it('sets the request route through Express middleware', async () => {
         const sendRequest = await prepareEsmRequest(version, agent.port, 'express')
         const trace = agent.assertSomeTraces(traces => {
