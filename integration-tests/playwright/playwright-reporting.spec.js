@@ -241,8 +241,6 @@ retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: traced ? '-r dd-trace/ci/init' : '',
-            DD_TRACE_ENABLED: String(traced),
-            DD_CIVISIBILITY_ENABLED: String(traced),
             DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
             TEST_DIR: './ci-visibility/playwright-retry-history',
             PLAYWRIGHT_OUTPUT_DIR: outputDir,
