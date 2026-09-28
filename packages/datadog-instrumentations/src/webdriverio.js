@@ -63,6 +63,7 @@ const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseR
 const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
 const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
+const configParserShardCh = tracingChannel('orchestrion:@wdio/config:ConfigParser_shard')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
@@ -87,6 +88,7 @@ if (loadCh.hasSubscribers) {
 }
 
 const coordinatorStates = new WeakMap()
+const emptyShardConfigurations = new WeakSet()
 const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
@@ -936,6 +938,7 @@ function waitForRumTestStart (context) {
  * @property {string} framework
  * @property {string|undefined} rootDir
  * @property {typeof process.env|undefined} runnerEnv
+ * @property {{total: number}|undefined} shard
  */
 
 /**
@@ -1806,17 +1809,18 @@ function getSessionStatus (state) {
 }
 
 /**
- * Returns whether every started worker reported that it discovered no tests.
+ * Explains a skipped session using the workers' discovery results.
  *
  * @param {CoordinatorState} state
  */
-function isExpectedEmptySession (state) {
-  if (state.workers.size === 0) return false
-
-  for (const workerRecord of state.workers) {
-    if (workerRecord.hasTests !== false) return false
+function getTestSessionEmptyReason (state) {
+  if (state.workers.size === 0 && emptyShardConfigurations.has(getRunnerConfiguration(state.localRunner))) {
+    return 'zero_test_shard'
   }
-  return true
+  for (const workerRecord of state.workers) {
+    if (workerRecord.hasTests !== false) return 'all_tests_skipped'
+  }
+  return 'zero_tests'
 }
 
 /**
@@ -1832,9 +1836,9 @@ function finishCoordinator (state, error, onDone) {
     return
   }
   if (!state.sessionStarted) {
-    if (!error && getSessionStatus(state) !== 'fail') {
-      onDone()
-      return
+    if (!error && state.workers.size === 0 &&
+      !emptyShardConfigurations.has(getRunnerConfiguration(state.localRunner))) {
+      error = new Error('No test files were found.')
     }
     initializeCoordinator(state, () => finishCoordinator(state, error, onDone))
     return
@@ -1861,7 +1865,7 @@ function finishCoordinator (state, error, onDone) {
   const status = error ? 'fail' : getSessionStatus(state)
   testSessionFinishCh.publish({
     status,
-    isExpectedEmptySession: status === 'skip' && isExpectedEmptySession(state),
+    testSessionEmptyReason: status === 'skip' ? getTestSessionEmptyReason(state) : undefined,
     error,
     isEarlyFlakeDetectionEnabled: state.configuration.isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty: state.configuration.isEarlyFlakeDetectionFaulty,
@@ -1976,6 +1980,17 @@ jasmineAdapterInitCh.subscribe({
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error
+configParserShardCh.subscribe({
+  end (context) {
+    const config = context.self._config
+    if (testFinishCh.hasSubscribers && config?.shard?.total > 1 &&
+      context.arguments[0].length > 0 && context.result?.length === 0) {
+      emptyShardConfigurations.add(config)
+    }
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
 launcherStartInstanceCh.subscribe({
   start (context) {
     const localRunner = context.self?.runner
@@ -2050,10 +2065,11 @@ localRunnerRunCh.subscribe({
 // @ts-expect-error See the partial tracing-channel subscriber above.
 localRunnerShutdownCh.subscribe({
   asyncEnd (context) {
-    const state = coordinatorStates.get(context.self)
-    if (!state) {
+    const runnerConfiguration = getRunnerConfiguration(context.self)
+    if (!testFinishCh.hasSubscribers || !SUPPORTED_FRAMEWORK_ADAPTERS.has(runnerConfiguration?.framework)) {
       return
     }
+    const state = getCoordinatorState(context.self)
 
     // Orchestrion uses the callback for the matching settlement path to delay LocalRunner.shutdown.
     const waitForCoordinator = onDone => {

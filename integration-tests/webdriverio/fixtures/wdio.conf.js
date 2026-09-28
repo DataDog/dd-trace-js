@@ -32,6 +32,21 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  emptyShard: {
+    specs: ['./first.e2e.js'],
+    shard: { current: 2, total: 2 },
+  },
+  noWorkers: {
+    specs: [],
+  },
+  noWorkersSharded: {
+    specs: ['./no-matching-specs.e2e.js'],
+    shard: { current: 2, total: 2 },
+  },
+  allSkipped: {
+    maxInstances: 1,
+    specs: ['./all-skipped.e2e.js'],
+  },
   empty: {
     maxInstances: 1,
     specs: ['./empty.e2e.js'],

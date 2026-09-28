@@ -41,6 +41,7 @@
   "@supabase/storage-js/dist/index.cjs": "@supabase/storage-js",
   "@supabase/storage-js/dist/index.mjs": "@supabase/storage-js",
   "@wdio/cli/build/index.js": "@wdio/cli",
+  "@wdio/config/build/node/index.js": "@wdio/config",
   "@wdio/jasmine-framework/build/index.js": "@wdio/jasmine-framework",
   "@wdio/local-runner/build/index.js": "@wdio/local-runner",
   "@wdio/runner/build/index.js": "@wdio/runner",
