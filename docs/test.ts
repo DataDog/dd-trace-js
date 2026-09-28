@@ -835,7 +835,6 @@ llmobs.annotate(span, {
 
 // declare an agent
 const agentDeclaration: import('..').llmobs.Agent = {
-  version: '2.1.0',
   name: 'travel_desk',
   instructions: 'Book travel.',
   model: 'gpt-4o',
@@ -847,7 +846,6 @@ const agentDeclaration: import('..').llmobs.Agent = {
 }
 llmobs.annotate({ agent: agentDeclaration })
 llmobs.annotationContext({ agent: agentDeclaration }, () => {})
-llmobs.annotate({ agent: { version: 2 } })
 
 
 

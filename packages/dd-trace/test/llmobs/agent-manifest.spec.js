@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -25,7 +24,6 @@ describe('agent manifest', () => {
 
     it('builds every supported field', () => {
       const declaration = buildAgentDeclaration({
-        version: '2.1.0',
         name: 'travel_desk',
         instructions: 'Book travel.',
         model: 'gpt-4o',
@@ -38,7 +36,6 @@ describe('agent manifest', () => {
       })
 
       assert.deepStrictEqual(declaration, {
-        version: '2.1.0',
         manifest: {
           name: 'travel_desk',
           instructions: 'Book travel.',
@@ -54,20 +51,6 @@ describe('agent manifest', () => {
       sinon.assert.notCalled(log.warn)
     })
 
-    it('declares a version without a manifest for a version-only agent', () => {
-      assert.deepStrictEqual(buildAgentDeclaration({ version: '1.0.0' }), { version: '1.0.0', manifest: undefined })
-    })
-
-    const versions = [
-      ['1.0.0', '1.0.0'], [2, '2'], [0, '0'], ['', undefined], [Infinity, undefined], [Number.NaN, undefined],
-      [{}, undefined],
-    ]
-    for (const [version, expected] of versions) {
-      it(`reads version ${inspect(version)} as ${inspect(expected)}`, () => {
-        assert.strictEqual(buildAgentDeclaration({ version, name: 'a' }).version, expected)
-      })
-    }
-
     it('returns undefined for an agent that declares nothing', () => {
       assert.strictEqual(buildAgentDeclaration({}), undefined)
       assert.strictEqual(buildAgentDeclaration({ name: '', tools: [], modelSettings: {} }), undefined)
@@ -82,7 +65,7 @@ describe('agent manifest', () => {
     }
 
     it('never throws on an agent whose fields cannot be read', () => {
-      const agent = { version: '1.0.0' }
+      const agent = { name: 'travel_desk' }
       Object.defineProperty(agent, 'instructions', { enumerable: true, get () { throw new Error('dynamic') } })
 
       assert.strictEqual(buildAgentDeclaration(agent), undefined)
