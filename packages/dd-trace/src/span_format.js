@@ -28,7 +28,7 @@ const PROCESS_ID = constants.PROCESS_ID
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
-const { IGNORE_OTEL_ERROR, SDK_OTLP_EXPORT_KEY } = constants
+const { IGNORE_OTEL_ERROR } = constants
 
 /**
  * @typedef {object} FormattedSpan
@@ -55,14 +55,14 @@ const { IGNORE_OTEL_ERROR, SDK_OTLP_EXPORT_KEY } = constants
  * @property {Record<string, string>} [attributes]
  */
 
-function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false, nativeExport = false) {
+function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
   if (isFirstSpanInChunk) {
-    extractChunkTags(formatted, span, tagForFirstSpanInChunk, nativeExport)
+    extractChunkTags(formatted, span, tagForFirstSpanInChunk)
   }
   extractTags(formatted, span)
 
@@ -321,11 +321,8 @@ function extractRootTags (formattedSpan, span) {
   metrics[TOP_LEVEL_KEY] = 1
 }
 
-function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk, nativeExport) {
+function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {
   const meta = formattedSpan.meta
-  if (nativeExport) {
-    meta[SDK_OTLP_EXPORT_KEY] = 'false'
-  }
   if (typeof tagForFirstSpanInChunk === 'string') {
     meta[TRACING_FIELD_NAME] = tagForFirstSpanInChunk.length > MAX_META_VALUE_LENGTH
       ? `${tagForFirstSpanInChunk.slice(0, MAX_META_VALUE_LENGTH)}...`

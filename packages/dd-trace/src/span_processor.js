@@ -7,7 +7,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { APM_TRACING_ENABLED_KEY } = require('./constants')
+const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -77,9 +77,13 @@ class SpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else if (!discard) {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags, this._nativeExport)
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           if (stampApmDisabled) {
             formattedSpan.metrics[APM_TRACING_ENABLED_KEY] = 0
+          }
+          // Stamped after formatting so a span tag with the same key can't override it.
+          if (isFirstSpanInChunk && this._nativeExport) {
+            formattedSpan.meta[SDK_OTLP_EXPORT_KEY] = 'false'
           }
           isFirstSpanInChunk = false
           // Span stats read Datadog HTTP tag names from the formatted span, so

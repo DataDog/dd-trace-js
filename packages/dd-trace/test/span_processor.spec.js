@@ -9,7 +9,7 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 
-const { APM_TRACING_ENABLED_KEY } = require('../src/constants')
+const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('../src/constants')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 
 describe('SpanProcessor', () => {
@@ -68,7 +68,7 @@ describe('SpanProcessor', () => {
       },
       appsec: {},
     }
-    spanFormat = sinon.stub().returns({ formatted: true })
+    spanFormat = sinon.stub().callsFake(() => ({ formatted: true, meta: {} }))
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
@@ -189,9 +189,9 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     sinon.assert.calledWith(exporter.export, [
-      { formatted: true },
-      { formatted: true },
-      { formatted: true },
+      { formatted: true, meta: { [SDK_OTLP_EXPORT_KEY]: 'false' } },
+      { formatted: true, meta: {} },
+      { formatted: true, meta: {} },
     ])
 
     assert.ok('started' in trace)
@@ -247,7 +247,7 @@ describe('SpanProcessor', () => {
 
     processor.process(finishedSpan)
 
-    sinon.assert.calledWith(exporter.export, [{ formatted: true }])
+    sinon.assert.calledWith(exporter.export, [{ formatted: true, meta: { [SDK_OTLP_EXPORT_KEY]: 'false' } }])
   })
 
   it('should configure span sampler correctly', () => {
@@ -342,7 +342,7 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
 
-  it('should request the native export marker on the first span of each chunk', () => {
+  it('should add the native export marker to the first span of each chunk', () => {
     config.flushMinSpans = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
     trace.started = [activeSpan, finishedSpan, finishedSpan]
@@ -353,12 +353,26 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
-    sinon.assert.calledWithExactly(spanFormat.getCall(0), finishedSpan, true, false, true)
-    sinon.assert.calledWithExactly(spanFormat.getCall(1), finishedSpan, false, false, true)
-    sinon.assert.calledWithExactly(spanFormat.getCall(2), finishedSpan, true, false, true)
+    const [firstChunk] = exporter.export.firstCall.args
+    const [secondChunk] = exporter.export.secondCall.args
+    assert.strictEqual(firstChunk[0].meta[SDK_OTLP_EXPORT_KEY], 'false')
+    assert.ok(!Object.hasOwn(firstChunk[1].meta, SDK_OTLP_EXPORT_KEY))
+    assert.strictEqual(secondChunk[0].meta[SDK_OTLP_EXPORT_KEY], 'false')
   })
 
-  it('should not request the native export marker when traces are exported over OTLP', () => {
+  it('should not let a span tag override the native export marker', () => {
+    config.flushMinSpans = 1
+    const processor = new SpanProcessor(exporter, prioritySampler, config)
+    const formattedSpan = { meta: { [SDK_OTLP_EXPORT_KEY]: 'true' } }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    processor.process(finishedSpan)
+
+    assert.strictEqual(formattedSpan.meta[SDK_OTLP_EXPORT_KEY], 'false')
+  })
+
+  it('should not add the native export marker when traces are exported over OTLP', () => {
     config.flushMinSpans = 1
     config.OTEL_TRACES_EXPORTER = 'otlp'
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -366,15 +380,16 @@ describe('SpanProcessor', () => {
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
-    sinon.assert.calledWithExactly(spanFormat, finishedSpan, true, false, false)
+    const [chunk] = exporter.export.firstCall.args
+    assert.ok(!Object.hasOwn(chunk[0].meta, SDK_OTLP_EXPORT_KEY))
   })
 
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {
     config.apmTracingEnabled = false
     config.flushMinSpans = 2
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const firstFormatted = { metrics: {} }
-    const secondFormatted = { metrics: {} }
+    const firstFormatted = { meta: {}, metrics: {} }
+    const secondFormatted = { meta: {}, metrics: {} }
     spanFormat.onFirstCall().returns(firstFormatted)
     spanFormat.onSecondCall().returns(secondFormatted)
     trace.started = [activeSpan, finishedSpan, finishedSpan]
@@ -393,8 +408,8 @@ describe('SpanProcessor', () => {
     // later in its own chunk. Both chunks must carry _dd.apm.enabled:0.
     config.apmTracingEnabled = false
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const parentFormatted = { metrics: {} }
-    const childFormatted = { metrics: {} }
+    const parentFormatted = { meta: {}, metrics: {} }
+    const childFormatted = { meta: {}, metrics: {} }
     spanFormat.onFirstCall().returns(parentFormatted)
     spanFormat.onSecondCall().returns(childFormatted)
 
@@ -420,7 +435,7 @@ describe('SpanProcessor', () => {
   it('should not add APM disabled marker when APM tracing is enabled', () => {
     config.apmTracingEnabled = true
     const processor = new SpanProcessor(exporter, prioritySampler, config)
-    const formattedSpan = { metrics: {} }
+    const formattedSpan = { meta: {}, metrics: {} }
     spanFormat.returns(formattedSpan)
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
