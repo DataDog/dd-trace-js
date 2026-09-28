@@ -70,10 +70,6 @@ const log = require('../../dd-trace/src/log')
 
 const PLAYWRIGHT_FAILURE_SCREENSHOT_RE = /^test-failed-\d+\.png$/
 const PLAYWRIGHT_VIDEO_CONTENT_TYPES = new Set(['video/mp4', 'video/webm'])
-const EMPTY_SHARD_SKIP_REASON = 'No tests were assigned to this shard'
-const EMPTY_SHARD_REASON = 'zero_test_shard'
-const TEST_DISCOVERY_SKIP_REASON = 'Test discovery only (--list)'
-const TEST_DISCOVERY_REASON = 'test_discovery'
 const RETRY_TEST_ID = '_dd.playwright.retry_test_id'
 const DEFER_FINAL_STATUS = '_dd.playwright.defer_final_status'
 const noop = () => {}
@@ -188,8 +184,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isExpectedEmptyShard,
-      isTestDiscovery,
+      testSessionEmptyReason,
       error,
       onDone,
     }) => {
@@ -215,19 +210,11 @@ class PlaywrightPlugin extends CiPlugin {
         this.testModuleSpan.setTag(TEST_STATUS, status)
         this.testSessionSpan.setTag(TEST_STATUS, status)
 
-        if (isTestDiscovery) {
+        if (testSessionEmptyReason) {
           setExpectedEmptyTestSessionTags(
             this.testSessionSpan,
             this.testModuleSpan,
-            TEST_DISCOVERY_SKIP_REASON,
-            TEST_DISCOVERY_REASON
-          )
-        } else if (isExpectedEmptyShard) {
-          setExpectedEmptyTestSessionTags(
-            this.testSessionSpan,
-            this.testModuleSpan,
-            EMPTY_SHARD_SKIP_REASON,
-            EMPTY_SHARD_REASON
+            testSessionEmptyReason
           )
         }
 

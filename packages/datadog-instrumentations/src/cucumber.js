@@ -142,7 +142,6 @@ let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
 let areAllSuitesSkipped = false
-let hasTestsToRun = false
 let repositoryRoot
 
 function shouldRunEarlyFlakeDetection () {
@@ -1218,7 +1217,6 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
     }
 
-    hasTestsToRun = isCoordinator ? this.sourcedPickles.length > 0 : this.pickleIds.length > 0
     pickleByFile = isCoordinator ? getPickleByFileNew(this) : getPickleByFile(this)
 
     if (isKnownTestsEnabled) {
@@ -1330,10 +1328,17 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
     }
 
-    const isExpectedEmptySession = success && !hasTestsToRun
+    const testCaseAttempts = (this.eventDataCollector || eventDataCollector).getTestCaseAttempts()
+    const getStatus = satisfies(frameworkVersion, '>=7.3.0') ? getStatusFromResultLatest : getStatusFromResult
+    const hasExecutedTests = testCaseAttempts.some(({ worstTestStepResult }) =>
+      getStatus(worstTestStepResult).status !== 'skip'
+    )
+    const testSessionEmptyReason = success && !hasExecutedTests
+      ? (testCaseAttempts.length > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
+      : undefined
     const flushPromise = getChannelPromise(sessionFinishCh, {
-      status: isExpectedEmptySession ? 'skip' : (success ? 'pass' : 'fail'),
-      isExpectedEmptySession,
+      status: testSessionEmptyReason ? 'skip' : (success ? 'pass' : 'fail'),
+      testSessionEmptyReason,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
       testSessionCoverageFiles,

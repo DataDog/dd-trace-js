@@ -316,8 +316,8 @@ function getOnEndHandler (isParallel, onDone) {
     let status = 'pass'
     let error = frameworkError
     if (this.stats) {
-      status = this.stats.failures === 0 ? 'pass' : 'fail'
-      if (this.stats.tests === 0 && this.stats.failures === 0) {
+      status = this.stats.failures === 0 && this.failures === 0 ? 'pass' : 'fail'
+      if (this.stats.tests === this.stats.pending && status === 'pass') {
         status = 'skip'
       }
     } else if (this.failures !== 0) {
@@ -329,7 +329,9 @@ function getOnEndHandler (isParallel, onDone) {
     } else if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }
-    const isExpectedEmptySession = arguments.length === 0 && status === 'skip'
+    const testSessionEmptyReason = status === 'skip'
+      ? (this.stats.pending > 0 || skippedSuites.length > 0 ? 'all_tests_skipped' : 'zero_tests')
+      : undefined
 
     testFileToSuiteCtx.clear()
 
@@ -373,7 +375,7 @@ function getOnEndHandler (isParallel, onDone) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
       isFrameworkError: arguments.length > 0,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
     }, () => {
       try {
         onDone()
