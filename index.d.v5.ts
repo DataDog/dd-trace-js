@@ -5230,6 +5230,12 @@ declare namespace tracer {
        * If not provided for LLM or embedding spans, a default value of 'custom' will be set.
        */
       modelProvider?: string,
+
+      /**
+       * The version of the agent, set as an `agent_version` tag. A number is reported as a string. Only used on
+       * `agent` spans, and wins over a version declared by an enclosing `annotationContext`.
+       */
+      version?: string | number,
     }
 
     interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {
