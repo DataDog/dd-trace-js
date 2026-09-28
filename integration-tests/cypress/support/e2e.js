@@ -62,4 +62,16 @@ if (getTestEnvironment('RUM_LOG_FAILURE')) {
     return log(options)
   }
 }
+if (getTestEnvironment('DYNAMIC_ATR_DURATION_MS')) {
+  afterEach(function () {
+    this.currentTest.duration = Number(getTestEnvironment('DYNAMIC_ATR_DURATION_MS'))
+  })
+}
+if (getTestEnvironment('EARLY_BEFORE_EACH_FAILURE')) {
+  beforeEach(function () {
+    return cy.task('dd:log', `early beforeEach attempt ${this.currentTest.currentRetry()}`).then(() => {
+      throw new Error('early beforeEach failure')
+    })
+  })
+}
 require('dd-trace/ci/cypress/support')

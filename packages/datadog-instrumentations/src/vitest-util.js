@@ -178,6 +178,8 @@ function getProvidedContext () {
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
+      _ddDynamicAtrBuckets: dynamicAtrBuckets,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesIncludesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
@@ -205,6 +207,8 @@ function getProvidedContext () {
       testManagementAttemptToFixRetries,
       isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
+      isDynamicAtrEnabled,
+      dynamicAtrBuckets,
       flakyTestRetriesIncludesUnnamedProject,
       flakyTestRetriesProjectNames,
       isImpactedTestsEnabled,
@@ -231,6 +235,8 @@ function getProvidedContext () {
       testManagementAttemptToFixRetries: 0,
       isFlakyTestRetriesEnabled: false,
       flakyTestRetriesCount: 0,
+      isDynamicAtrEnabled: false,
+      dynamicAtrBuckets: undefined,
       flakyTestRetriesIncludesUnnamedProject: false,
       flakyTestRetriesProjectNames: undefined,
       isImpactedTestsEnabled: false,
@@ -249,6 +255,7 @@ function getProvidedContext () {
 
 function isFlakyTestRetriesEnabledForTask (providedContext, task) {
   if (!providedContext.isFlakyTestRetriesEnabled) return false
+  if (providedContext.isDynamicAtrEnabled && !task.retry?.__ddTestOptAtr) return false
 
   const { flakyTestRetriesProjectNames } = providedContext
   if (!Array.isArray(flakyTestRetriesProjectNames)) return true

@@ -421,15 +421,18 @@ describe('request', function () {
   it('should handle an http error', done => {
     nock('http://localhost:8080')
       .put('/path')
-      .reply(400)
+      .reply(400, 'bad request')
 
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
       port: 8080,
+      includeErrorResponseBody: true,
     }, err => {
       assert.ok(err instanceof Error)
-      assert.strictEqual(err.message, 'Error from http://localhost:8080/path: 400 Bad Request.')
+      assert.strictEqual(err.message,
+        'Error from http://localhost:8080/path: 400 Bad Request. Response from the endpoint: "bad request"')
+      assert.strictEqual(err.responseBody, 'bad request')
       done()
     })
   })
@@ -446,6 +449,7 @@ describe('request', function () {
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'Error from http://api.datadog.com/path: 400 Bad Request.')
+      assert.strictEqual(err.responseBody, undefined)
       done()
     })
   })

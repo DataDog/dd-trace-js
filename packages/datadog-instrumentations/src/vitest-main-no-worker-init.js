@@ -4,7 +4,8 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
-const { hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const { getDynamicAtrRetryCount } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const { EMPTY_EFD_RETRY_POLICY, hasEfdRetries } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
@@ -349,7 +350,20 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
     testManagementTestsBySuite,
     testPropertiesByFilepath,
     testSessionConfiguration,
+    flakyTestRetriesConfiguration,
   } = setupData
+  const { earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets } = state
+
+  // Resolve the shared policy in Node; Browser Mode receives only serializable duration/count pairs.
+  const dynamicAtrRetryPolicy = state.isDynamicAtrEnabled
+    ? [
+        ...EMPTY_EFD_RETRY_POLICY.durationRetryCounts.map(({ durationLimitMs }) => ({
+          durationLimitMs,
+          retryCount: getDynamicAtrRetryCount(durationLimitMs, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets),
+        })),
+        { retryCount: getDynamicAtrRetryCount(Infinity, earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets) },
+      ]
+    : undefined
 
   setProvidedContext(ctx, {
     _ddVitestWorkerSetup: {
@@ -361,6 +375,8 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       efdSuiteAdmissionBrowserCommand: VITEST_BROWSER_EFD_SUITE_ADMISSION_COMMAND,
       isEfdSuiteAdmissionEnabled: state.isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
+      dynamicAtrRetryPolicy,
+      flakyTestRetriesConfiguration,
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},
       modifiedFiles: modifiedFiles || {},
@@ -917,6 +933,7 @@ function createMainProcessReporter (reporterState) {
     const { flakyTestRetriesConfiguration } = testOptimizationData
     const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
       isFlakyTestRetriesEnabled: state.isFlakyTestRetriesEnabled,
+      isDynamicAtrEnabled: state.isDynamicAtrEnabled,
       flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, task)

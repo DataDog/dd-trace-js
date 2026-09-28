@@ -5,11 +5,13 @@ const { once } = require('node:events')
 const path = require('node:path')
 
 const dc = require('dc-polyfill')
+const ddpv = require('mocha/package.json').version
 const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const PostgresPlugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const postgresStartChannel = dc.channel('tracing:orchestrion:postgres:query:start')
@@ -28,6 +30,13 @@ const POSTGRES_TARGET = {
  */
 function resourcePattern (resource) {
   return new RegExp(`^${resource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+}
+
+/**
+ * @param {string} service
+ */
+function dbmComment (service) {
+  return `dddb='postgres',dddbs='${service}',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'`
 }
 
 /**
@@ -84,6 +93,19 @@ function executeQuery (query) {
 
 describe('Plugin', () => {
   describe('postgres', () => {
+    it('accepts boolean disable configuration', () => {
+      const plugin = new PostgresPlugin({
+        _env: 'tester',
+        _nomenclature: {
+          serviceName: () => ({ name: 'test-postgres', source: 'postgres' }),
+        },
+        _service: 'test',
+        _version: ddpv,
+      }, {})
+
+      plugin.configure(false)
+    })
+
     withVersions('postgres', 'postgres', version => {
       let postgres
       let resolvedVersion
@@ -116,7 +138,10 @@ describe('Plugin', () => {
 
       withNamingSchema(
         () => sql`SELECT 1 AS value`,
-        rawExpectedSchema.outbound
+        rawExpectedSchema.outbound,
+        {
+          hooks: () => beforeEach(() => tracer.use('postgres', {})),
+        }
       )
 
       it('instruments tagged queries without changing their result', async () => {
@@ -413,11 +438,14 @@ describe('Plugin', () => {
       })
 
       it('reports server and build errors without leaking spans', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'full', service: 'postgres-dbm' })
+
         const sqlErrorSpanPromise = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.resource, 'INVALID SQL')
           assert.match(span.meta[ERROR_MESSAGE], /syntax error/)
           assert.strictEqual(span.meta[ERROR_TYPE], 'PostgresError')
           assert.strictEqual(typeof span.meta[ERROR_STACK], 'string')
+          assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
         })
 
         await assert.rejects(sql.unsafe('INVALID SQL'), { name: 'PostgresError', message: /syntax error/ })
@@ -426,6 +454,7 @@ describe('Plugin', () => {
         const buildErrorSpanPromise = agent.assertFirstTraceSpan(span => {
           assert.strictEqual(span.name, expectedSchema.outbound.opName)
           assert.match(span.meta[ERROR_MESSAGE], /Undefined values are not allowed/)
+          assert.strictEqual(span.meta['_dd.dbm_trace_injected'], undefined)
         })
 
         await assert.rejects(sql`SELECT ${undefined}`, { message: /Undefined values are not allowed/ })
@@ -577,11 +606,185 @@ describe('Plugin', () => {
         }
       })
 
-      it('supports a configured service name', async () => {
-        tracer.use('postgres', { service: 'custom-postgres' })
-        const spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres' })
+      it('injects service DBM data without changing the query resource or identity', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'service', service: 'postgres-dbm' })
+
+        const resource = 'SELECT current_query() AS query'
+        const query = sql.unsafe(resource, [], { prepare: false, simple: true })
+        let span
+        const spanPromise = agent.assertFirstTraceSpan(value => { span = value }, {
+          spanResourceMatch: resourcePattern(resource),
+        })
+
+        assert.strictEqual(query.execute(), query)
+
+        const [result] = await Promise.all([query, spanPromise])
+
+        assert.strictEqual(result[0].query, `/*${dbmComment('postgres-dbm')}*/ ${resource}`)
+        assert.strictEqual(span.resource, resource)
+        assert.strictEqual(span.meta['_dd.dbm_trace_injected'], undefined)
+      })
+
+      it('injects trace context for extended unprepared queries in full DBM mode', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'full', service: 'postgres-dbm' })
+
+        const resource = 'SELECT current_query() AS query'
+        global._ddtrace._tracer.configure({
+          env: 'tester',
+          sampler: {
+            sampleRate: 1,
+            rules: [{ resource, sampleRate: 0 }],
+          },
+        })
+
+        try {
+          let span
+          const spanPromise = agent.assertFirstTraceSpan(value => { span = value }, {
+            spanResourceMatch: resourcePattern(resource),
+          })
+          const [result] = await Promise.all([
+            sql.unsafe(resource, [], { prepare: false, simple: false }),
+            spanPromise,
+          ])
+          const traceIdHigh = span.meta['_dd.p.tid'].toString(16).padStart(16, '0')
+          const traceId = traceIdHigh + span.trace_id.toString(16).padStart(16, '0')
+          const spanId = span.span_id.toString(16).padStart(16, '0')
+          const traceparent = `00-${traceId}-${spanId}-00`
+
+          assert.strictEqual(
+            result[0].query,
+            `/*${dbmComment('postgres-dbm')},traceparent='${traceparent}'*/ ${resource}`
+          )
+          assert.strictEqual(span.resource, resource)
+          assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
+        } finally {
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+        }
+      })
+
+      it('injects trace context for simple queries in full DBM mode', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'full', service: 'postgres-dbm' })
+
+        const resource = 'SELECT current_query() AS query'
+        let span
+        const spanPromise = agent.assertFirstTraceSpan(value => { span = value }, {
+          spanResourceMatch: resourcePattern(resource),
+        })
+        const [result] = await Promise.all([
+          sql.unsafe(resource, [], { prepare: true, simple: true }),
+          spanPromise,
+        ])
+        const traceIdHigh = span.meta['_dd.p.tid'].toString(16).padStart(16, '0')
+        const traceId = traceIdHigh + span.trace_id.toString(16).padStart(16, '0')
+        const spanId = span.span_id.toString(16).padStart(16, '0')
+        const traceparent = `00-${traceId}-${spanId}-01`
+
+        assert.strictEqual(
+          result[0].query,
+          `/*${dbmComment('postgres-dbm')},traceparent='${traceparent}'*/ ${resource}`
+        )
+        assert.strictEqual(span.resource, resource)
+        assert.strictEqual(span.meta['_dd.dbm_trace_injected'], 'true')
+      })
+
+      it('omits trace context for prepared queries in full DBM mode', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'full', service: 'postgres-dbm' })
+
+        const resource = 'SELECT current_query() AS query'
+        let span
+        const spanPromise = agent.assertFirstTraceSpan(value => { span = value }, {
+          spanResourceMatch: resourcePattern(resource),
+        })
+        const [result] = await Promise.all([sql`SELECT current_query() AS query`, spanPromise])
+
+        assert.strictEqual(result[0].query, `/*${dbmComment('postgres-dbm')}*/ ${resource}`)
+        assert.strictEqual(span.resource, resource)
+        assert.strictEqual(span.meta['_dd.dbm_trace_injected'], undefined)
+      })
+
+      it('appends DBM data when configured', async () => {
+        tracer.use('postgres', {
+          appendComment: true,
+          dbmPropagationMode: 'service',
+          service: 'postgres-dbm',
+        })
+
+        const resource = 'SELECT current_query() AS query'
+        const result = await assertQuerySpan(
+          resource,
+          () => sql.unsafe(resource, [], { prepare: false, simple: true })
+        )
+
+        assert.strictEqual(result[0].query, `${resource} /*${dbmComment('postgres-dbm')}*/`)
+      })
+
+      it('injects DBM data into the final query source after caller mutation', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'service', service: 'postgres-dbm' })
+
+        const query = sql.unsafe('SELECT 1 AS value')
+        const resource = 'SELECT 2 AS value, current_query() AS query'
+        Reflect.get(query, 'strings')[0] = resource
+        Reflect.set(query, 'options', { prepare: false, simple: true })
+
+        const result = await assertQuerySpan(resource, () => query)
+
+        assert.strictEqual(result[0].value, 2)
+        assert.strictEqual(result[0].query, `/*${dbmComment('postgres-dbm')}*/ ${resource}`)
+        assert.strictEqual(Reflect.get(query, 'strings')[0], resource)
+      })
+
+      it('keeps DBM propagation disabled by default', async () => {
+        const resource = 'SELECT current_query() AS query'
+        const result = await assertQuerySpan(
+          resource,
+          () => sql.unsafe(resource, [], { prepare: false, simple: true })
+        )
+
+        assert.strictEqual(result[0].query, resource)
+      })
+
+      it('injects DBM data in dynamic service mode', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'dynamic_service', service: 'postgres-dbm' })
+
+        const resource = 'SELECT current_query() AS query'
+        const result = await assertQuerySpan(
+          resource,
+          () => sql.unsafe(resource, [], { prepare: false, simple: true })
+        )
+
+        assert.match(
+          result[0].query,
+          /^\/\*dddb='postgres',dddbs='postgres-dbm',.*ddsh='[^']+'\*\/ SELECT current_query\(\) AS query$/
+        )
+      })
+
+      it('injects one DBM comment when Postgres.js retries a prepared statement', async () => {
+        tracer.use('postgres', { dbmPropagationMode: 'service', service: 'postgres-dbm' })
+
+        const resource = 'SELECT $1::int AS value, current_query() AS query'
+        await assertQuerySpan(resource, () => sql`SELECT ${1}::int AS value, current_query() AS query`)
+        await assertQuerySpan('DISCARD ALL', () => sql.unsafe('DISCARD ALL'))
+
+        const result = await assertQuerySpan(
+          resource,
+          () => sql`SELECT ${2}::int AS value, current_query() AS query`
+        )
+
+        assert.strictEqual(result[0].value, 2)
+        assert.strictEqual(result[0].query, `/*${dbmComment('postgres-dbm')}*/ ${resource}`)
+      })
+
+      it('updates a configured service name', async () => {
+        tracer.use('postgres', { service: 'custom-postgres-1' })
+        let spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres-1' })
 
         await sql`SELECT 1 AS value`
+        await spanPromise
+
+        tracer.use('postgres', { service: 'custom-postgres-2' })
+        spanPromise = agent.assertFirstTraceSpan({ service: 'custom-postgres-2' })
+
+        await sql`SELECT 2 AS value`
         await spanPromise
       })
 

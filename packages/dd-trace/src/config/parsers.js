@@ -289,28 +289,28 @@ const parsers = {
     }
     return parsed
   },
-  ARRAY (raw) {
+  ARRAY (raw, optionName) {
     // TODO: Make the parsing a helper that is reused everywhere.
     const result = []
     if (!raw) {
       return result
     }
+    // Dynamic ATR buckets are positional; retain empty slots for downstream validation.
+    const preserveEmptyEntries = optionName === 'DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS'
     let valueStart = 0
     for (let i = 0; i < raw.length; i++) {
       const char = raw[i]
       if (char === ',') {
         const value = raw.slice(valueStart, i).trim()
-        // Auto filter empty entries.
-        if (value.length > 0) {
+        if (value.length > 0 || preserveEmptyEntries) {
           result.push(value)
         }
         valueStart = i + 1
       }
     }
-    if (valueStart < raw.length) {
+    if (valueStart < raw.length || preserveEmptyEntries) {
       const value = raw.slice(valueStart).trim()
-      // Auto filter empty entries.
-      if (value.length > 0) {
+      if (value.length > 0 || preserveEmptyEntries) {
         result.push(value)
       }
     }

@@ -63,6 +63,7 @@ const {
   TEST_SUITE,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
+const { describeDynamicAtr } = require('./dynamic-atr')
 
 const DEFAULT_NODE_OPTIONS = '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init'
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
@@ -877,6 +878,18 @@ SUPPORTED_VERSIONS.forEach((version) => {
 
       const [exitCode] = await once(childProcess, 'exit')
       return exitCode
+    }
+
+    if (version === 'latest') {
+      describeDynamicAtr({
+        mode: 'no-worker',
+        getContext: () => ({
+          cwd,
+          receiver,
+          env: { [VITEST_NO_WORKER_INIT_REQUEST_ENV]: 'true', POOL_CONFIG: 'forks' },
+          onChildProcess: child => { childProcess = child },
+        }),
+      })
     }
 
     for (const poolConfig of ['forks', 'threads']) {

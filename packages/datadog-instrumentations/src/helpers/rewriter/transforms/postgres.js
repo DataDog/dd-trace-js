@@ -8,11 +8,13 @@ const POSTGRES_OPTIONS = '__ddTracePostgresOptions'
 const POSTGRES_QUERY_REGISTRY = '__ddTracePostgresQueries'
 const POSTGRES_QUERY_REGISTRY_SYMBOL = '__ddTracePostgresQueriesSymbol'
 const POSTGRES_READY = '__ddTracePostgresQueryReady'
+const POSTGRES_SIMPLE_DBM_QUERIES = '__ddTracePostgresSimpleDbmQueries'
 const POSTGRES_STATEMENT = 'this.string ?? (this.tagged && this.strings?.length !== 1 ? undefined : this.strings?.[0])'
 
 module.exports = {
   postgresQueryHandlers,
   postgresQueryLifecycle,
+  postgresQueryPreparation,
 }
 
 /**
@@ -63,6 +65,83 @@ function postgresQueryLifecycle (state, program) {
   }
   for (const assignment of rejectAssignments) {
     wrapPostgresRejection(assignment, channelVariable)
+  }
+}
+
+/**
+ * Injects DBM data after Postgres.js builds the final statement and before it creates wire messages.
+ *
+ * @param {object} state
+ * @param {import('estree').Program} program
+ */
+function postgresQueryPreparation (state, program) {
+  const channelVariable = injectPostgresTracingChannel(state, program)
+  const buildFunctions = query(program, 'FunctionDeclaration[id.name="build"]')
+  const toBufferFunctions = query(program, 'FunctionDeclaration[id.name="toBuffer"]')
+
+  assert(buildFunctions.length === 1, 'postgresQueryPreparation: build function changed')
+  assert(toBufferFunctions.length === 1, 'postgresQueryPreparation: toBuffer function changed')
+
+  const build = buildFunctions[0]
+  const queryParameter = build.params[0]
+  assert(queryParameter?.type === 'Identifier', 'postgresQueryPreparation: build query parameter changed')
+  assert(build.body.type === 'BlockStatement', 'postgresQueryPreparation: build body changed')
+
+  const queryName = queryParameter.name
+  const body = build.body.body
+  const stringDeclaration = body.find(statement =>
+    statement.type === 'VariableDeclaration' &&
+      statement.declarations.some(({ id }) => id.type === 'Identifier' && id.name === 'string')
+  )
+  assert(stringDeclaration?.kind === 'const', 'postgresQueryPreparation: string declaration changed')
+
+  const prepareIndex = body.findIndex(statement =>
+    statement.type === 'ExpressionStatement' &&
+      statement.expression.type === 'AssignmentExpression' &&
+      statement.expression.left.type === 'MemberExpression' &&
+      statement.expression.left.object.type === 'Identifier' &&
+      statement.expression.left.object.name === queryName &&
+      statement.expression.left.property.type === 'Identifier' &&
+      statement.expression.left.property.name === 'prepare'
+  )
+  assert(prepareIndex !== -1, 'postgresQueryPreparation: prepare assignment changed')
+
+  const legacySimpleString = findLegacyPostgresSimpleString(toBufferFunctions[0], queryName)
+  const contextStatements = parse(`
+    if (${channelVariable}.start.hasSubscribers) {
+      const __ddTraceContext = {
+        query: ${queryName},
+        statement: string,
+        prepared: Boolean(${queryName}.prepare && !${queryName}.options.simple)
+      };
+      ${channelVariable}.start.publish(__ddTraceContext);
+      ${legacySimpleString === undefined
+        ? ''
+        : `if (${queryName}.options.simple && __ddTraceContext.statement !== string) {
+          ${POSTGRES_SIMPLE_DBM_QUERIES}.add(${queryName});
+        }`}
+      string = __ddTraceContext.statement;
+    }
+  `).body
+
+  stringDeclaration.kind = 'let'
+  body.splice(prepareIndex + 1, 0, ...contextStatements)
+
+  if (legacySimpleString !== undefined) {
+    injectPostgresModuleStatements(
+      program,
+      parse(`const ${POSTGRES_SIMPLE_DBM_QUERIES} = new WeakSet();`).body
+    )
+    const replacement = parse(`
+      ${channelVariable}.start.hasSubscribers && ${POSTGRES_SIMPLE_DBM_QUERIES}.delete(${queryName})
+        ? ${queryName}.string
+        : ${queryName}.strings[0]
+    `).body[0].expression
+
+    for (const key of Object.keys(legacySimpleString)) {
+      delete legacySimpleString[key]
+    }
+    Object.assign(legacySimpleString, replacement)
   }
 }
 
@@ -124,6 +203,46 @@ function injectPostgresReadyCheck (program, queryIdentifier) {
     const ${POSTGRES_READY} = ${POSTGRES_QUERY_REGISTRY} instanceof WeakSet &&
       ${POSTGRES_QUERY_REGISTRY}.has(${queryIdentifier});
   `).body
+  injectPostgresModuleStatements(program, statements)
+}
+
+/**
+ * @param {import('estree').FunctionDeclaration} toBuffer
+ * @param {string} queryName
+ * @returns {import('estree').MemberExpression | undefined}
+ */
+function findLegacyPostgresSimpleString (toBuffer, queryName) {
+  const simpleConditions = query(toBuffer, 'ConditionalExpression').filter(({ test }) =>
+    test.type === 'MemberExpression' &&
+      test.object.type === 'MemberExpression' &&
+      test.object.object.type === 'Identifier' &&
+      test.object.object.name === queryName &&
+      test.object.property.type === 'Identifier' &&
+      test.object.property.name === 'options' &&
+      test.property.type === 'Identifier' &&
+      test.property.name === 'simple'
+  )
+  assert(simpleConditions.length === 1, 'postgresQueryPreparation: simple query branch changed')
+
+  const legacyStrings = query(simpleConditions[0].consequent, 'MemberExpression').filter(node =>
+    node.computed &&
+      node.object.type === 'MemberExpression' &&
+      node.object.object.type === 'Identifier' &&
+      node.object.object.name === queryName &&
+      node.object.property.type === 'Identifier' &&
+      node.object.property.name === 'strings' &&
+      node.property.type === 'Literal' &&
+      node.property.value === 0
+  )
+  assert(legacyStrings.length <= 1, 'postgresQueryPreparation: simple query string changed')
+  return legacyStrings[0]
+}
+
+/**
+ * @param {import('estree').Program} program
+ * @param {import('estree').Statement[]} statements
+ */
+function injectPostgresModuleStatements (program, statements) {
   let importIndex = program.body.length - 1
   while (importIndex >= 0) {
     const statement = program.body[importIndex]

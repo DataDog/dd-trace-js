@@ -100,6 +100,8 @@ module.exports = class FakeAgent extends EventEmitter {
     }
     this.#sockets.clear()
     this.server.close()
+    // Subclasses can create their own HTTP server without installing the socket tracker in start().
+    this.server.closeAllConnections?.()
 
     return once(this.server, 'close')
   }

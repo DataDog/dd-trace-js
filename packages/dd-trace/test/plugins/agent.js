@@ -83,6 +83,7 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_RESOURCE_GROUP',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
+  'JEST_JASMINE',
   'JEST_WORKER_ID',
   'MOCHA_WORKER_ID',
   'TINYPOOL_WORKER_ID',

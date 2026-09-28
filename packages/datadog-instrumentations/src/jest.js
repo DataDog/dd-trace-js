@@ -18,6 +18,9 @@ const {
   getEfdRetryCountForDuration,
   hasEfdRetries,
 } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
+const {
+  getDynamicAtrRetryCount,
+} = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
 const { FINAL_FLUSH_FALLBACK_DELAY, FINAL_FLUSH_TIMEOUT } =
   require('../../dd-trace/src/ci-visibility/final-flush')
 const {
@@ -85,6 +88,8 @@ const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
 const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
+const consoleLogSubmissionCh = channel('ci:log-submission:console')
+const logSubmissionFlushCh = channel('ci:log-submission:flush')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -104,6 +109,10 @@ const CHILD_MESSAGE_CALL = 1
 const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
+const JEST_CIRCUS_TEST_RUNNER_PATH = /(?:^|[\\/])jest-circus(?:[\\/]|$)/
+const UNSUPPORTED_JEST_TEST_RUNNER_WARNING =
+  'dd-trace Test Optimization supports jest-circus; another test runner was detected; ' +
+  'suite and test events may be incomplete.'
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
@@ -171,6 +180,14 @@ const efdExpectedExecutions = new Map()
 const efdSlowAbortedTests = new Set()
 // Tests whose first execution determines the duration-based EFD retry count.
 const efdCandidates = new Set()
+// Per-declaration dynamic ATR retry count, retained across attempts of the same Jest test object.
+const dynamicAtrRetryCountByTest = new Map()
+// Jest only accepts a suite-wide retry ceiling. Terminal dynamic failures are
+// temporarily cleared to keep that ceiling from scheduling another retry, then
+// restored before Jest reports the suite result.
+const dynamicAtrFinalErrorsByTest = new Map()
+// Custom environments may prevent extensions after their base constructor runs.
+const dynamicAtrResultHandlerRegistrations = new WeakMap()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
@@ -235,6 +252,7 @@ const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0
 const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
+let hasWarnedUnsupportedJestTestRunner = false
 let isJestCoverageBackfillSupported = false
 let hasFinishedTestSession = false
 let jestEachBind
@@ -307,6 +325,20 @@ function warnDeprecatedJestVersion (frameworkVersion) {
     'dd-trace support for Jest<28.0.0 is deprecated and will be removed in dd-trace v6. ' +
       'Please upgrade Jest to >=28.0.0.'
   )
+}
+
+/** @param {object[]} configs resolved Jest project configurations */
+function warnIfUnsupportedJestTestRunner (configs) {
+  if (hasWarnedUnsupportedJestTestRunner || !testSessionConfigurationCh.hasSubscribers) return
+
+  const usesUnsupportedTestRunner = getEnvironmentVariable('JEST_JASMINE') === '1' ||
+    configs.some(config => !JEST_CIRCUS_TEST_RUNNER_PATH.test(config.testRunner))
+
+  if (usesUnsupportedTestRunner) {
+    hasWarnedUnsupportedJestTestRunner = true
+    // eslint-disable-next-line no-console
+    console.warn(UNSUPPORTED_JEST_TEST_RUNNER_WARNING)
+  }
 }
 
 function getTestEnvironmentOptions (config) {
@@ -522,6 +554,31 @@ function setOriginalConcurrentTest (wrappedConcurrentTest, originalConcurrentTes
 }
 
 /**
+ * Stops further retries only after Jest's test-result handlers have observed the failure.
+ *
+ * @param {{ name: string, test?: { errors: unknown[] } }} event
+ */
+function suppressDynamicAtrErrors (event) {
+  if (event.name === 'test_done' && dynamicAtrFinalErrorsByTest.has(event.test)) {
+    event.test.errors = []
+  }
+}
+
+/**
+ * Restores terminal failures before custom environments inspect the completed describe block.
+ *
+ * @param {{ name: string }} event
+ */
+function restoreDynamicAtrErrors (event) {
+  if (event.name !== 'run_describe_finish' || dynamicAtrFinalErrorsByTest.size === 0) return
+
+  for (const [test, errors] of dynamicAtrFinalErrorsByTest) {
+    test.errors = errors
+  }
+  dynamicAtrFinalErrorsByTest.clear()
+}
+
+/**
  * Wraps a custom Jest environment handler so Datadog still observes events even
  * when the custom environment does not call `super.handleTestEvent`.
  *
@@ -539,6 +596,7 @@ function getWrappedCustomHandleTestEvent (handleTestEvent, datadogHandleTestEven
   }
 
   const wrappedHandleTestEvent = function (event, state) {
+    restoreDynamicAtrErrors(event)
     const result = handleTestEvent.call(this, event, state)
     const runDatadogHandler = value => {
       if (isDatadogJestEventHandled(event)) return value
@@ -638,11 +696,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
+      this.isDynamicAtrEnabled = this.testEnvironmentOptions._ddIsDynamicAtrEnabled
+      this.dynamicAtrBuckets = this.testEnvironmentOptions._ddDynamicAtrBuckets
       this.isDiEnabled = this.testEnvironmentOptions._ddIsDiEnabled
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
       this.hasConcurrentTests = false
+      this.concurrentTestState = undefined
       this.concurrentTestContexts = new Map()
       this.concurrentTestStates = new WeakMap()
       this.concurrentTestSourceFns = new WeakMap()
@@ -674,7 +735,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (this.isFlakyTestRetriesEnabled) {
         const currentNumRetries = this.global[RETRY_TIMES]
         if (!currentNumRetries) {
-          this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+          // When dynamic ATR is enabled, use the max bucket value as the initial count.
+          // The actual duration-based count is computed per test after the first attempt.
+          if (this.isDynamicAtrEnabled) {
+            this.global[RETRY_TIMES] = Math.max(
+              1,
+              this.dynamicAtrBuckets
+                ? Math.max(...this.dynamicAtrBuckets)
+                : this.#earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+            )
+          } else {
+            this.global[RETRY_TIMES] = this.flakyTestRetriesCount
+          }
         }
       }
 
@@ -1845,11 +1917,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.handleAddTestEvent(event, state)
       }
 
+      restoreDynamicAtrErrors(event)
+
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
       }
 
-      if (event.name === 'setup') {
+      if (event.name === 'run_start') {
+        const registerResultHandler = dynamicAtrResultHandlerRegistrations.get(this)
+        dynamicAtrResultHandlerRegistrations.delete(this)
+        registerResultHandler?.()
+      } else if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
         this.bindTestEach(this.global.test)
       }
@@ -2156,7 +2234,24 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         // ATR: set failedAllTests when all auto test retries were exhausted and every attempt failed
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
-          const maxRetries = Number(this.global[RETRY_TIMES]) || 0
+          // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
+          if (
+            this.isDynamicAtrEnabled &&
+            event.test?.invocations === 1 &&
+            !dynamicAtrRetryCountByTest.has(event.test)
+          ) {
+            const dynamicCount = getDynamicAtrRetryCount(
+              event.test.duration ?? 0,
+              this.#earlyFlakeDetectionRetryPolicy,
+              this.dynamicAtrBuckets
+            )
+            // Jest captures this ceiling when it starts running the describe block.
+            const nativeRetryCount = Math.max(0, Number.parseInt(this.global[RETRY_TIMES], 10) || 0)
+            dynamicAtrRetryCountByTest.set(event.test, Math.min(dynamicCount, nativeRetryCount))
+          }
+          const maxRetries = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTest.has(event.test)
+            ? dynamicAtrRetryCountByTest.get(event.test)
+            : (Number(this.global[RETRY_TIMES]) || 0)
           if (event.test?.invocations === maxRetries + 1 && status === 'fail') {
             failedAllTests = true
           }
@@ -2165,7 +2260,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
-        const willBeRetriedByAutoTestRetry = numRetries > 0 && numTestExecutions - 1 < numRetries
+        // Dynamic ATR: use the per-test duration-based count instead of the global flat limit.
+        const dynamicAtrCount = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTest.has(event.test)
+          ? dynamicAtrRetryCountByTest.get(event.test)
+          : undefined
+        const effectiveMaxRetries = dynamicAtrCount === undefined ? numRetries : dynamicAtrCount
+        const willBeRetriedByAutoTestRetry = effectiveMaxRetries > 0 && numTestExecutions - 1 < effectiveMaxRetries
         const isFailedTestReplayAllowed = !this.hasConcurrentTests
         const willBeRetriedByFailedTestReplay = isFailedTestReplayAllowed && willBeRetriedByAutoTestRetry
         const mightHitBreakpoint = this.isDiEnabled && isFailedTestReplayAllowed && numTestExecutions >= 2
@@ -2180,6 +2280,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)
             event.test.errors = []
           }
+        }
+
+        // Quarantine must consume terminal failures before we save errors for Jest's final result.
+        if (dynamicAtrCount !== undefined && failedAllTests && event.test.errors?.length) {
+          dynamicAtrFinalErrorsByTest.set(event.test, event.test.errors)
         }
 
         const ctx = testContexts.get(event.test)
@@ -2207,7 +2312,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           !!ctx.isModified,
           isEfdRetry,
           isAttemptToFix,
-          numTestExecutions)
+          numTestExecutions,
+          dynamicAtrCount)
 
         if (status === 'fail') {
           const shouldSetProbe = this.isDiEnabled && willBeRetriedByFailedTestReplay && numTestExecutions === 1
@@ -2276,6 +2382,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         efdDeterminedRetries.clear()
         efdExpectedExecutions.clear()
         efdSlowAbortedTests.clear()
+        dynamicAtrRetryCountByTest.clear()
         efdCandidates.clear()
         newTests.clear()
         retriedTestsToNumAttempts.clear()
@@ -2331,14 +2438,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       return { isEfdEnabled, isEfdActive, isFinalEfdTestExecution, finalStatus }
     }
 
-    getAtrResult ({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations }) {
+    getAtrResult ({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations, dynamicAtrRetryCount }) {
+      const maxRetries = dynamicAtrRetryCount ?? Number(this.global[RETRY_TIMES])
       const isAtrEnabled =
         this.isFlakyTestRetriesEnabled &&
         !isEfdRetry &&
         !isAttemptToFix &&
-        Number.isFinite(this.global[RETRY_TIMES])
+        Number.isFinite(maxRetries)
       const isLastAtrRetry =
-        status === 'pass' || numberOfTestInvocations >= (Number(this.global[RETRY_TIMES]) + 1)
+        status === 'pass' || numberOfTestInvocations >= (maxRetries + 1)
       const isFinalAtrTestExecution = isAtrEnabled && isLastAtrRetry
 
       // For ATR: The last execution's status is what the framework reports
@@ -2370,7 +2478,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       isModifiedTest,
       isEfdRetry,
       isAttemptToFix,
-      numberOfTestInvocations
+      numberOfTestInvocations,
+      dynamicAtrRetryCount
     ) {
       const numberOfExecutedRetries = retriedTestsToNumAttempts.get(testName) ?? 0
 
@@ -2379,7 +2488,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         isNewTest,
         isModifiedTest,
       })
-      const atrResult = this.getAtrResult({ status, isEfdRetry, isAttemptToFix, numberOfTestInvocations })
+      const atrResult = this.getAtrResult({
+        status,
+        isEfdRetry,
+        isAttemptToFix,
+        numberOfTestInvocations,
+        dynamicAtrRetryCount,
+      })
       const attemptToFixResult = this.getAttemptToFixResult({
         testName,
         isAttemptToFix,
@@ -2701,7 +2816,10 @@ async function waitForTestSessionFinish (payload) {
 
   publishWithCompletion(testSessionFinishCh, payload, onDone)
 
-  const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+  const waitingResult = await Promise.race([
+    Promise.all([flushPromise, getChannelPromise(logSubmissionFlushCh)]),
+    timeoutPromise,
+  ])
 
   if (waitingResult === 'timeout') {
     log.error('Timeout waiting for the tracer to flush')
@@ -3054,6 +3172,7 @@ function getCliWrapper (isNewJestVersion) {
         results: {
           numFailedTestSuites,
           numFailedTests,
+          numPassedTests,
           numRuntimeErrorTestSuites = 0,
           numTotalTests,
           numTotalTestSuites,
@@ -3224,16 +3343,19 @@ function getCliWrapper (isNewJestVersion) {
 
       // Determine session status after EFD and quarantine checks have potentially modified success
       let status, error
-      const isExpectedEmptySession = numTotalTests === 0 && numTotalTestSuites === 0
+      const hasExecutedTests = numPassedTests > 0 || numFailedTests > 0 || numSuppressedQuarantinedTests > 0
+      const testSessionEmptyReason = result.results.success && !hasExecutedTests
+        ? (numTotalTests > 0 || isSuitesSkipped ? 'all_tests_skipped' : 'zero_tests')
+        : undefined
       if (result.results.success) {
-        status = isExpectedEmptySession ? 'skip' : 'pass'
+        status = testSessionEmptyReason ? 'skip' : 'pass'
       } else {
         status = 'fail'
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
-        isExpectedEmptySession: result.results.success && isExpectedEmptySession,
+        testSessionEmptyReason,
         ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
       }))
 
@@ -3393,7 +3515,7 @@ addHook({
   versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
 }, coverageReporterWrapper)
 
-function jestAdapterWrapper (jestAdapter, jestVersion) {
+function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
   const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function (...args) {
     const environment = args[2]
@@ -3402,6 +3524,18 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
     }
 
     wrapEnvironmentCustomHandleTestEvent(environment)
+
+    if (environment.isDynamicAtrEnabled && environment.isFlakyTestRetriesEnabled) {
+      // Register at run_start, after Circus installs its per-test reporter and snapshot handlers.
+      dynamicAtrResultHandlerRegistrations.set(environment, () => {
+        if (satisfies(jestVersion, '>=30.0.0')) {
+          environment.global[Symbol.for('EVENT_HANDLERS')].push(suppressDynamicAtrErrors)
+        } else {
+          const circusState = args[3].requireInternalModule(path.join(hookMeta.moduleBaseDir, 'build/state.js'))
+          circusState.addEventHandler(suppressDynamicAtrErrors)
+        }
+      })
+    }
 
     testSuiteStartCh.publish({
       testSuite: environment.testSuite,
@@ -3514,6 +3648,7 @@ addHook({
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
+  warnIfUnsupportedJestTestRunner(readConfigsResult.configs)
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   const isCodeCoverageEnabledBecauseOfUs = shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled
@@ -3595,6 +3730,8 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddTestCodeCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddIsDynamicAtrEnabled',
+  '_ddDynamicAtrBuckets',
   '_ddItrSkippingEnabledTags',
   '_ddIsDiEnabled',
   '_ddIsKnownTestsEnabled',
@@ -3711,6 +3848,19 @@ const JEST_LOGGING_LIBRARIES = new Set([
 const disabledJestInstrumentations = new Set(
   getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')?.split(',')
 )
+
+addHook({
+  name: '@jest/console',
+  versions: [MINIMUM_JEST_VERSION],
+}, jestConsole => {
+  const isConsoleDisabled = disabledJestInstrumentations.has('console') ||
+    disabledJestInstrumentations.has('node:console')
+  if (!isConsoleDisabled && consoleLogSubmissionCh.hasSubscribers) {
+    require('./console').wrapJestConsole(jestConsole)
+  }
+  return jestConsole
+})
+
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
   'selenium-webdriver/chrome',

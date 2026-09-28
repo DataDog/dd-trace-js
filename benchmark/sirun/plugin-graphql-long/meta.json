@@ -7,6 +7,7 @@
   "instructions": true,
   "variants": {
     "with-depth-off": {
+      "iterations": 7,
       "operations_by_node": {
         "20": "1280",
         "24": "2550"
@@ -22,6 +23,7 @@
       }
     },
     "with-depth-on-max": {
+      "iterations": 6,
       "operations_by_node": {
         "20": "840",
         "24": "1680"
@@ -38,6 +40,7 @@
       }
     },
     "with-depth-and-collapse-off": {
+      "iterations": 5,
       "run": "node --predictable-gc-schedule --require ../noop-request.js index.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --predictable-gc-schedule --require ../noop-request.js index.js\"",
       "operations_by_node": {

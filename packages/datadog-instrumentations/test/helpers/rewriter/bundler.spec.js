@@ -5,6 +5,9 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const { createBundlerRewriter } = require('../../../src/helpers/rewriter')
 
 describe('bundler rewriter', () => {
@@ -72,6 +75,29 @@ describe('bundler rewriter', () => {
       rewrite(source, filename, 'commonjs', { filePath: 'index.js', moduleName: 'unsupported' }, sourceMap),
       { code: source, map: sourceMap }
     )
+  })
+
+  it('skips rewriting without a resolved version rather than failing in the matcher', () => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-rewriter-'))
+    const filename = path.join(directory, 'dist', 'index.js')
+    const source = Buffer.from('function getTracer () {}')
+    const sourceMap = { mappings: '', version: 3 }
+    const target = { moduleName: 'ai', filePath: 'dist/index.js' }
+    const error = sinon.stub()
+    const rewriter = proxyquire('../../../src/helpers/rewriter', {
+      '../../../../dd-trace/src/log': { error, '@noCallThru': true },
+    })
+    const rewrite = rewriter.createBundlerRewriter('/absolute/dc-polyfill.js')
+
+    for (const metadata of [undefined, '{', '{}']) {
+      if (metadata !== undefined) fs.writeFileSync(path.join(directory, 'package.json'), metadata)
+
+      assert.strictEqual(rewriter.rewrite(source, filename, 'commonjs', target), source)
+      const result = rewrite(source, filename, 'commonjs', target, sourceMap)
+      assert.strictEqual(result.code, source)
+      assert.strictEqual(result.map, sourceMap)
+      sinon.assert.notCalled(error)
+    }
   })
 
   it('preserves sources and maps when transformation fails', () => {

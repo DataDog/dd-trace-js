@@ -15,6 +15,8 @@ const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryP
   schedulingRetryCount: 0,
 }
 const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
+const dynamicAtrRetryPolicy = providedContext.dynamicAtrRetryPolicy
+const flakyTestRetriesConfiguration = providedContext.flakyTestRetriesConfiguration
 const isEfdSuiteAdmissionEnabled = providedContext.isEfdSuiteAdmissionEnabled === true
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
@@ -31,6 +33,7 @@ const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
 const retryAttemptIndexByTask = new WeakMap()
+const dynamicAtrExecutionStartByTask = new WeakMap()
 const usedRumTestExecutionIds = new Set()
 let browserCommands
 let now
@@ -86,6 +89,11 @@ if (isNoWorkerInitActive) {
     const isQuarantinedTest = quarantinedTests[testSuite]?.[testName] && !isAttemptToFixTest
     const attemptIndex = getNextAttemptIndex(task)
     const attemptStart = now()
+    if (task.retry?.__ddTestOptAtr && retryAttemptIndexByTask.get(task).index === 0) {
+      const executionStart = task.result.repeatCount > 0 ? attemptStart : task.result.startTime - timeOrigin
+      dynamicAtrExecutionStartByTask.set(task, executionStart)
+      task.meta.__ddTestOptAtrRetries = undefined
+    }
     if (attemptIndex > 0) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
     }
@@ -153,8 +161,40 @@ function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
         task.repeats = earlyFlakeDetectionRetries
         task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
       }
+      configureDynamicAtr(task)
       wrapRetryCondition(task)
     }
+  }
+}
+
+/**
+ * Stops Datadog-managed retries at the initial attempt's duration budget, after the complete lifecycle.
+ *
+ * @param {object} task
+ */
+function configureDynamicAtr (task) {
+  if (!dynamicAtrRetryPolicy || !flakyTestRetriesConfiguration) return
+  const projectName = task.file.projectName
+  const isManagedProject = projectName
+    ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
+    : flakyTestRetriesConfiguration.includesUnnamedProject
+  if (!isManagedProject || !task.retry?.__ddTestOptAtr || task.retry.count <= 0) return
+
+  task.retry = {
+    ...task.retry,
+    condition () {
+      // AroundEach fixture teardown can fail after onTestFinished recorded the attempt's errors.
+      recordRetryErrorCount(task)
+      if (task.meta.__ddTestOptAtrRetries === undefined) {
+        const executionStart = dynamicAtrExecutionStartByTask.get(task) ?? task.result.startTime - timeOrigin
+        const duration = now() - executionStart
+        task.meta.__ddTestOptAtrRetries = dynamicAtrRetryPolicy.find(
+          ({ durationLimitMs }) => durationLimitMs === undefined || duration <= durationLimitMs
+        ).retryCount
+      }
+      const retryIndex = retryAttemptIndexByTask.get(task)?.index ?? task.result.retryCount
+      return retryIndex < task.meta.__ddTestOptAtrRetries
+    },
   }
 }
 
@@ -463,7 +503,7 @@ function recordTestAttemptTiming (task, attemptIndex, attemptStart) {
  * @param {object} task
  */
 function getRetryLimit (task) {
-  return typeof task.retry === 'number' ? task.retry : task.retry?.count || 0
+  return task.meta.__ddTestOptAtrRetries ?? (typeof task.retry === 'number' ? task.retry : task.retry?.count || 0)
 }
 
 /**

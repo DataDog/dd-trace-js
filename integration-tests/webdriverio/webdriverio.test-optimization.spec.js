@@ -435,6 +435,28 @@ for (const version of versions) {
               assertLoggerOutput()
             })
 
+            it('submits correlated logs from the global console', async () => {
+              await runScenario('automaticConsoleLogSubmission', 1, payloads => {
+                const logRequests = getLogRequests(payloads).filter(({ url }) =>
+                  url === '/api/v2/logs?ddsource=nodejs&service=my-service')
+                const messages = logRequests.flatMap(({ logMessage }) => logMessage)
+                const message = messages.find(({ message }) =>
+                  message === 'WebdriverIO console warning: details')
+                const test = getEvents(payloads).find(event => event.type === 'test').content
+
+                assert.ok(message)
+                assert.strictEqual(message.status, 'warn')
+                assert.deepStrictEqual(Object.keys(message.dd).sort(), ['service', 'span_id', 'trace_id'])
+                assert.strictEqual(message.dd.service, 'my-service')
+                assert.strictEqual(message.dd.span_id, test.span_id.toString())
+                assert.strictEqual(message.dd.trace_id, test.trace_id.toString())
+              }, {
+                DD_AGENTLESS_LOG_SUBMISSION_ENABLED: '1',
+                DD_AGENTLESS_LOG_SUBMISSION_URL: `http://127.0.0.1:${receiver.port}`,
+                DD_SERVICE: 'my-service',
+              })
+            })
+
             it('does not submit logs when automatic submission is disabled', async () => {
               await runScenario('automaticLogSubmission', 1, payloads => {
                 assert.strictEqual(getLogRequests(payloads).length, 0)
@@ -858,6 +880,42 @@ for (const version of versions) {
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
           }, 1)
         })
+
+        for (const enabled of [true, false]) {
+          it(`uses the worker retry budget with dynamic ATR enabled=${enabled}`, async () => {
+            receiver.setSettings({
+              early_flake_detection: {
+                enabled: false,
+                slow_test_retries: { '5s': 3, '10s': 3, '30s': 3, '5m': 3 },
+              },
+              flaky_test_retries_enabled: true,
+            })
+
+            await runScenario('atrAlwaysFails', 1, payloads => {
+              const events = getEvents(payloads)
+              const session = events.find(event => event.type === 'test_session_end').content
+              const suite = events.find(event => event.type === 'test_suite_end').content
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              const retryCount = enabled ? 1 : 5
+
+              assert.strictEqual(countRequests(payloads, SETTINGS_PATH), 1)
+              assert.strictEqual(tests.length, retryCount + 1)
+              assert.strictEqual(retries.length, retryCount)
+              assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+              assert.strictEqual(session.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+              assert.strictEqual(tests.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+            }, {
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(enabled),
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,1,1,1,1',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            }, 1)
+          })
+        }
 
         {
           const jasmineTest = framework === 'jasmine' ? it : it.skip

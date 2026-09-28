@@ -881,14 +881,19 @@ function setRumTestTags (testSpan, isRumActive, browserVersion) {
 }
 
 /**
- * Marks a successful test session that intentionally executed no tests.
+ * Marks a successful test session that did not execute any tests.
  *
  * @param {import('../../opentracing/span')} testSessionSpan
  * @param {import('../../opentracing/span')|undefined} testModuleSpan
- * @param {string} skipReason
- * @param {string} emptyReason
+ * @param {'zero_tests'|'all_tests_skipped'|'zero_test_shard'|'test_discovery'} emptyReason
  */
-function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, skipReason, emptyReason) {
+function setExpectedEmptyTestSessionTags (testSessionSpan, testModuleSpan, emptyReason) {
+  const skipReason = emptyReason === 'test_discovery'
+    ? 'Test discovery only (--list)'
+    : emptyReason === 'zero_test_shard'
+      ? 'No tests were assigned to this shard'
+      : emptyReason === 'all_tests_skipped' ? 'All tests were skipped' : 'No tests were detected'
+
   for (const span of [testSessionSpan, testModuleSpan]) {
     if (!span) continue
 

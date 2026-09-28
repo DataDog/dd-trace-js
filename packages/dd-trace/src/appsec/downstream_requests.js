@@ -347,6 +347,7 @@ module.exports = {
   disable,
   planResponseBodyCollection,
   incrementDownstreamAnalysisCount,
+  extractMimeType,
   extractRequestData,
   extractResponseData,
 }

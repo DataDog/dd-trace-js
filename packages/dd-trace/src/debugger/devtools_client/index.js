@@ -1,17 +1,19 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { workerData: { probeSamplerBuffer } } = require('worker_threads')
+const { parentPort, workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
 const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const {
+  CONDITION_ERROR_FLAG,
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
+const { getTakeConditionErrorExpression } = require('./probe_sampler')
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
 const { refreshBreakpoints } = require('./breakpoints')
 const session = require('./session')
@@ -57,7 +59,11 @@ session.on('Debugger.paused', async ({ params }) => {
   let numberOfProbesWithSnapshots = 0
   let probesWithCaptureExpressions = false
   const probes = []
-  let templateExpressions = ''
+  // Expressions evaluated on the paused frame in one round trip, in the order of `probes`: the evaluated template for
+  // probes whose template requires evaluation, and the recorded error for probes paused to report a condition error
+  let frameExpressions = ''
+  /** @type {Set<object> | undefined} */
+  let conditionErrorProbes
 
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
@@ -83,7 +89,8 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     for (let j = 0; j < numberOfSampledProbeIndexes; j++) {
-      const samplingIndex = Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + j)
+      const sampledValue = Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + j)
+      const samplingIndex = sampledValue & ~CONDITION_ERROR_FLAG
       const probe = samplingIndexToProbe.get(samplingIndex)
 
       if (probe === undefined) {
@@ -93,6 +100,15 @@ session.on('Debugger.paused', async ({ params }) => {
       if (!probesAtLocation.has(probe.id)) {
         log.error('[debugger:devtools_client] Sampled probe %s was not found at breakpoint %s',
           probe.id, params.hitBreakpoints[i])
+        continue
+      }
+
+      if ((sampledValue & CONDITION_ERROR_FLAG) !== 0) {
+        // The condition threw, so there's nothing to capture. Only the recorded error is needed from the paused thread.
+        conditionErrorProbes ??= new Set()
+        conditionErrorProbes.add(probe)
+        frameExpressions += `,${getTakeConditionErrorExpression(probe.id)}`
+        probes.push(probe)
         continue
       }
 
@@ -109,7 +125,7 @@ session.on('Debugger.paused', async ({ params }) => {
       }
 
       if (probe.templateRequiresEvaluation) {
-        templateExpressions += `,${probe.template}`
+        frameExpressions += `,${probe.template}`
       }
 
       probes.push(probe)
@@ -118,7 +134,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
   // This can happen if sampled probe indexes are inconsistent with the worker state. Those cases are logged above.
   if (probes.length === 0) {
-    return session.post('Debugger.resume')
+    await session.post('Debugger.resume')
+    reportPauseDuration(start)
+    return
   }
 
   const timestamp = Date.now()
@@ -127,9 +145,9 @@ session.on('Debugger.paused', async ({ params }) => {
   const { result } = /** @type {EvaluateOnCallFrameResult} */ (
     await session.post('Debugger.evaluateOnCallFrame', {
       callFrameId: params.callFrames[0].callFrameId,
-      expression: templateExpressions.length === 0
+      expression: frameExpressions.length === 0
         ? `[${getDDTagsExpression}]`
-        : `${templateExpressionSetupCode}[${getDDTagsExpression}${templateExpressions}]`,
+        : `${templateExpressionSetupCode}[${getDDTagsExpression}${frameExpressions}]`,
       returnByValue: true,
       includeCommandLineAPI: true,
     })
@@ -157,7 +175,7 @@ session.on('Debugger.paused', async ({ params }) => {
   if (probesWithCaptureExpressions === true) {
     captureExpressionResults = new Map()
     for (const probe of probes) {
-      if (probe.compiledCaptureExpressions === undefined) continue
+      if (conditionErrorProbes?.has(probe) || probe.compiledCaptureExpressions === undefined) continue
       // eslint-disable-next-line no-await-in-loop
       captureExpressionResults.set(probe.id, await evaluateCaptureExpressions(
         params.callFrames[0],
@@ -168,14 +186,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   await session.post('Debugger.resume')
-  const diff = process.hrtime.bigint() - start // TODO: Recorded as telemetry (DEBUG-2858)
-
-  // This doesn't measure the overhead of the CDP protocol. The actual pause time is slightly larger.
-  // On my machine I'm seeing around 1.7ms of overhead.
-  // eslint-disable-next-line eslint-rules/eslint-log-printf-style
-  log.debug(() => `[debugger:devtools_client] Finished processing breakpoints - main thread paused for: ~${
-    Number(diff) / 1_000_000
-  } ms`)
+  reportPauseDuration(start)
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
@@ -188,7 +199,7 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   const stack = await getStackFromCallFrames(params.callFrames)
-  const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the probe template results
+  const dd = processDD(evalResults[0]) // the first result is the dd tags, the rest are the frame expression results
   let messageIndex = 1
 
   // The probes whose capture got permanently disabled during this pause, if any
@@ -215,6 +226,22 @@ session.on('Debugger.paused', async ({ params }) => {
     /** @type {number} */
     let eventType = EVENT_TYPE.LOG
     let incompleteReasons = 0
+
+    if (conditionErrorProbes?.has(probe)) {
+      // Report the failing condition instead of a probe result, so the user can see why the probe doesn't fire
+      const error = evalResults[messageIndex++]
+      const message = typeof error === 'string' ? error : 'Unknown evaluation error'
+      log.debug('[debugger:devtools_client] Condition of probe %s failed to evaluate: %s', probe.id, message)
+      snapshot.evaluationErrors = [{ expr: probe.when.dsl, message }]
+      ackEmitting(probe)
+      send(message, logger, dd, snapshot,
+        config.propagateProcessTags.enabled ? processTags.serialized : undefined,
+        probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined
+          ? EVENT_TYPE.SNAPSHOT
+          : EVENT_TYPE.LOG,
+        0)
+      continue
+    }
 
     if (probe.captureSnapshot) {
       eventType = EVENT_TYPE.SNAPSHOT
@@ -322,6 +349,19 @@ session.on('Debugger.paused', async ({ params }) => {
     })
   }
 })
+
+/**
+ * Called after resuming so reporting the elapsed time doesn't extend the pause. This measures from receipt of the
+ * pause notification through the resume response, not the full time V8 suspends the instrumented thread.
+ *
+ * @param {bigint} start - Monotonic time when the pause notification was received, in nanoseconds.
+ */
+function reportPauseDuration (start) {
+  const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000
+  parentPort.postMessage({ type: 'thread-paused', durationMs })
+  log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: ~%d ms',
+    durationMs)
+}
 
 function processDD (result) {
   return result?.trace_id === undefined ? undefined : result

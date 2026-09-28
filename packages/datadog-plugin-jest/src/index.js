@@ -117,19 +117,18 @@ class JestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
       onDone,
     }) => {
       const finishSession = () => {
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
-        if (isExpectedEmptySession) {
+        if (testSessionEmptyReason) {
           setExpectedEmptyTestSessionTags(
             this.testSessionSpan,
             this.testModuleSpan,
-            'No tests were found',
-            'zero_tests'
+            testSessionEmptyReason
           )
         }
 
@@ -215,6 +214,8 @@ class JestPlugin extends CiPlugin {
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
+        config._ddIsDynamicAtrEnabled = this.libraryConfig?.isDynamicAtrEnabled ?? false
+        config._ddDynamicAtrBuckets = this.libraryConfig?.dynamicAtrBuckets
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false

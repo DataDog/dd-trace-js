@@ -88,7 +88,7 @@ function parseSlowTestRetries (value) {
  * @returns {EarlyFlakeDetectionSettings}
  */
 function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
-  if (!isRecord(value) || value.enabled !== true) {
+  if (!isRecord(value)) {
     return {
       enabled: false,
       retryPolicy: DEFAULT_EARLY_FLAKE_DETECTION_RETRY_POLICY,
@@ -117,7 +117,7 @@ function parseEarlyFlakeDetectionSettings (value, isKnownTestsEnabled) {
   }
 
   return {
-    enabled: isKnownTestsEnabled && isValid,
+    enabled: value.enabled === true && isKnownTestsEnabled && isValid,
     retryPolicy,
     faultyThreshold,
   }

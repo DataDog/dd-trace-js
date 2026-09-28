@@ -8,6 +8,7 @@ const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const dc = require('dc-polyfill')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -165,6 +166,9 @@ describe('TracerProxy', () => {
       DD_TRACE_ENABLED: true,
       testOptimization: {},
       featureFlags: {
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: false,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS: 30_000,
+        DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED: false,
         DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless',
         DD_FEATURE_FLAGS_ENABLED: false,
       },
@@ -211,7 +215,11 @@ describe('TracerProxy', () => {
     flushServerlessTelemetry = sinon.spy()
 
     profiler = {
-      start: sinon.spy(),
+      isStarted: sinon.stub().returns(true),
+      start: sinon.stub().returns(true),
+      stop: sinon.spy(),
+      setCustomLabelKeys: sinon.spy(),
+      runWithLabels: sinon.stub().callsFake((labels, fn) => fn()),
     }
 
     appsec = {
@@ -448,7 +456,7 @@ describe('TracerProxy', () => {
       })
 
       it('starts and configures Dynamic Instrumentation when enabled', () => {
-        config.dynamicInstrumentation.enabled = true
+        config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED = true
 
         proxy.init()
 
@@ -510,7 +518,8 @@ describe('TracerProxy', () => {
 
       it('does not load Dynamic Instrumentation for a disabled remote config update', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
+            conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
@@ -527,7 +536,8 @@ describe('TracerProxy', () => {
 
       it('loads Dynamic Instrumentation when remote config enables it', () => {
         config.setRemoteConfig.callsFake(conf => {
-          config.dynamicInstrumentation.enabled = conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
+          config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_ENABLED =
+            conf.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true'
         })
         proxy.init()
 
@@ -921,51 +931,33 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(iast.enable)
       })
 
-      it('should not load the profiler when not configured', () => {
-        config.profiling = { DD_PROFILING_ENABLED: false }
+      it('should publish the config on the config-update channel during init', () => {
+        const configUpdateChannel = dc.channel('datadog:config:update')
+        const subscriber = sinon.spy()
+        configUpdateChannel.subscribe(subscriber)
 
-        proxy.init()
+        try {
+          proxy.init()
 
-        sinon.assert.notCalled(profiler.start)
+          sinon.assert.calledOnce(subscriber)
+          assert.strictEqual(subscriber.firstCall.args[0], config)
+        } finally {
+          configUpdateChannel.unsubscribe(subscriber)
+        }
       })
 
-      it('should not load the profiler when profiling config does not exist', () => {
-        config.pro_fil_ing = 'invalidConfig'
-
+      it('should resolve profilerStarted() from the profiler module', async () => {
         proxy.init()
 
-        sinon.assert.notCalled(profiler.start)
+        assert.strictEqual(await proxy.profilerStarted(), true)
+        sinon.assert.calledOnce(profiler.isStarted)
       })
 
-      it('should load profiler when configured', () => {
-        config.profiling = { DD_PROFILING_ENABLED: 'true' }
-
-        proxy.init()
-
-        sinon.assert.called(profiler.start)
-      })
-
-      it('should throw an error since profiler fails to be imported', () => {
-        config.profiling = { DD_PROFILING_ENABLED: 'true' }
-
-        const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
-          './tracer': DatadogTracer,
-          './noop/tracer': NoopTracer,
-          './config': Config,
-          './runtime_metrics': runtimeMetrics,
-          './log': log,
-          './profiler': null, // this will cause the import failure error
-          './appsec': appsec,
-          './telemetry': telemetry,
-          './remote_config': RemoteConfig,
-        })
-
-        const profilerImportFailureProxy = new ProfilerImportFailureProxy()
-        profilerImportFailureProxy.init()
-
-        sinon.assert.calledOnce(log.error)
-        const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
-        sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
+      it('should throw when profilerStarted() is called before init()', () => {
+        assert.throws(
+          () => proxy.profilerStarted(),
+          { message: 'profilerStarted() must be called after init()' }
+        )
       })
 
       it('should start telemetry', () => {
@@ -1384,8 +1376,21 @@ describe('TracerProxy', () => {
         publish: sinon.stub(),
       }
 
+      const microVmChannelNames = new Set([
+        'http.server.request.start',
+        'datadog:identity:update',
+        'datadog:identity:refresh',
+      ])
+      const otherChannelMocks = new Map()
+
       diagnosticsChannelMock = {
-        channel: sinon.stub().returns(channelMock),
+        channel: sinon.stub().callsFake((name) => {
+          if (microVmChannelNames.has(name)) return channelMock
+          if (!otherChannelMocks.has(name)) {
+            otherChannelMocks.set(name, { subscribe: sinon.stub(), unsubscribe: sinon.stub(), publish: sinon.stub() })
+          }
+          return otherChannelMocks.get(name)
+        }),
       }
       storeConfig = sinon.stub().returns({})
 
