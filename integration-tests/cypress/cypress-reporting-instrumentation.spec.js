@@ -257,6 +257,39 @@ moduleTypes.forEach(({
       ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
       : testCommand
 
+    if (type === 'commonJS') {
+      for (const mode of ['auto', 'manual', 'reject']) {
+        over10It(`preserves before:run handlers in ${mode} mode`, async () => {
+          let output = ''
+          const events = []
+          receiver.on('message', ({ url, payload }) => {
+            if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+          })
+          childProcess = exec('./node_modules/.bin/cypress run --config-file cypress-before-run.config.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              CYPRESS_MANUAL_PLUGIN: mode === 'manual' ? '1' : '',
+              CYPRESS_REJECT_BEFORE_RUN: mode === 'reject' ? '1' : '',
+            },
+          })
+          childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
+          const [exitCode] = await once(childProcess, 'close')
+          const tests = events.filter(event => event.type === 'test')
+          if (mode === 'reject') {
+            assert.strictEqual(events.length, 0)
+            assert.notStrictEqual(exitCode, 0)
+            assert.match(output, /custom before:run failed/)
+          } else {
+            assert.strictEqual(exitCode, 0, output)
+            assert.strictEqual(tests.length, 1, output)
+            assert.strictEqual(tests[0].content.meta[TEST_STATUS], 'pass', output)
+          }
+        })
+      }
+    }
+
     // Regression guard: when OTEL_TRACES_EXPORTER=otlp is set in the
     // environment (e.g. by an unrelated OpenTelemetry-instrumented shell),
     // the tracer must still ship Test Optimization spans to

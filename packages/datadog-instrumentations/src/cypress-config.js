@@ -426,15 +426,16 @@ function registerManualAfterScreenshotHandlers (on, handlers, datadogHandler) {
 }
 
 /**
- * Registers one Cypress after:spec handler that runs every collected handler
+ * Registers one Cypress lifecycle handler that runs every collected handler
  * in registration order. Cypress 10+ otherwise keeps only the last handler.
  *
  * @param {Function} on Cypress event registration function
- * @param {Function[]} handlers collected after:spec handlers
- * @param {Function} [datadogHandler] manual Datadog after:spec handler
+ * @param {'before:run'|'after:spec'} event lifecycle event
+ * @param {Function[]} handlers collected lifecycle handlers
+ * @param {Function} [datadogHandler] Datadog lifecycle handler
  * @param {Function} [cleanup] removes generated support files after an error
  */
-function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
+function registerLifecycleHandlers (on, event, handlers, datadogHandler, cleanup) {
   const userHandlers = datadogHandler
     ? handlers.filter(handler => handler !== datadogHandler)
     : handlers
@@ -442,27 +443,31 @@ function registerAfterSpecHandlers (on, handlers, datadogHandler, cleanup) {
   if (userHandlers.length === 0) {
     if (datadogHandler) {
       if (cleanup) {
-        on('after:spec', (...args) => Promise.resolve().then(() => datadogHandler(...args)).catch((error) => {
+        on(event, (...args) => Promise.resolve().then(() => datadogHandler(...args)).catch((error) => {
           cleanup()
           throw error
         }))
       } else {
-        on('after:spec', datadogHandler)
+        on(event, datadogHandler)
       }
     }
     return
   }
 
-  on('after:spec', (spec, results) => {
+  on(event, (...args) => {
     const callHandler = datadogHandler
-      ? handler => runUserHandler(() => handler(spec, results))
-      : handler => handler(spec, results)
+      ? handler => runUserHandler(() => handler(...args))
+      : handler => handler(...args)
     const chain = userHandlers.reduce(
       (promise, handler) => promise.then(() => callHandler(handler)),
       Promise.resolve()
     )
     if (!datadogHandler) return chain
-    const finalization = finalizeAfterUserHandlers(chain, (...args) => datadogHandler(spec, results, ...args))
+    const finalization = finalizeAfterUserHandlers(chain, (...errors) => {
+      // A failed setup hook must abort the run before Datadog starts its session.
+      if (event === 'before:run' && errors.length > 0) return
+      return datadogHandler(...args, ...errors)
+    })
     if (!cleanup) return finalization
     return finalization.catch((error) => {
       cleanup()
@@ -537,8 +542,13 @@ function registerDdTraceHooks (
     })
   }
 
+  const registerBeforeRun = handler => {
+    registerLifecycleHandlers(on, 'before:run', userBeforeRunHandlers, handler, cleanupWrapper)
+  }
+
   const registerNoopHandlers = () => {
-    registerAfterSpecHandlers(on, userAfterSpecHandlers)
+    registerBeforeRun()
+    registerLifecycleHandlers(on, 'after:spec', userAfterSpecHandlers)
     for (const h of userAfterScreenshotHandlers) on('after:screenshot', h)
     registerAfterRunWithCleanup()
     on('task', noopTask)
@@ -555,8 +565,8 @@ function registerDdTraceHooks (
         manualPlugin.initialConfig.experimentalInteractiveRunEvents = config.experimentalInteractiveRunEvents
       }
     }
-    for (const handler of userBeforeRunHandlers) on('before:run', handler)
-    registerAfterSpecHandlers(on, userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
+    registerBeforeRun()
+    registerLifecycleHandlers(on, 'after:spec', userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)
     on('task', manualPlugin.taskHandler)
@@ -572,8 +582,6 @@ function registerDdTraceHooks (
     )
   }
 
-  for (const handler of userBeforeRunHandlers) on('before:run', handler)
-
   if (!setupNodeEventsCh.hasSubscribers) {
     registerNoopHandlers()
     return config
@@ -588,6 +596,7 @@ function registerDdTraceHooks (
     userAfterSpecHandlers,
     userAfterRunHandlers,
     userAfterScreenshotHandlers,
+    registerBeforeRun,
     cleanupWrapper,
     registered: false,
     configPromise: undefined,
