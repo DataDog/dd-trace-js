@@ -1064,7 +1064,9 @@ class CypressPlugin {
     return testSuiteSpan
   }
 
-  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
+  getTestSpan ({
+    testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined, startTime,
+  }) {
     const testSuiteTags = {
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
     }
@@ -1121,6 +1123,7 @@ class CypressPlugin {
 
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
+      startTime,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         [ORIGIN_KEY]: CI_APP_ORIGIN,
@@ -1560,7 +1563,10 @@ class CypressPlugin {
         ? getTestSuitePath(spec.absolute, this.repositoryRoot)
         : spec.relative
 
-      const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+      // Recovered tests that never ran have no execution time; keep them at the recorded suite end.
+      const skippedTestSpan = this.getTestSpan({
+        testName: cypressTestName, testSuite: spec.relative, testSourceFile, startTime: finishTime,
+      })
       skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
 
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
@@ -1598,7 +1604,7 @@ class CypressPlugin {
         })
       }
 
-      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: this._now() })
+      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: finishTime ?? this._now() })
     }
 
     // Make sure that reported test statuses are the same as Cypress reports.

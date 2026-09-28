@@ -46,6 +46,7 @@ const {
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_UPLOADED,
   TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_FAILURE_VIDEO_SCOPE,
@@ -259,11 +260,17 @@ moduleTypes.forEach(({
       : testCommand
 
     if (type === 'commonJS') {
-      for (const mode of ['missing', 'partial', 'forwarded', 'missing-with-media']) {
+      for (const mode of [
+        'missing', 'partial', 'forwarded', 'missing-with-media',
+        'missing-with-screenshots', 'missing-with-screenshot-error',
+      ]) {
         over10It(`reports late manual tests with ${mode} after:spec finalization`, async () => {
           const fixture = fs.realpathSync(fs.mkdtempSync(path.join(cwd, 'late-manual-')))
-          const withMedia = mode === 'missing-with-media'
+          const withMedia = mode.startsWith('missing-with-')
+          const withVideo = mode === 'missing-with-media'
+          const screenshotError = mode === 'missing-with-screenshot-error'
           if (withMedia) receiver.setMediaResponseDelay(100)
+          if (screenshotError) receiver.setMediaResponseStatusCode(400)
           fs.writeFileSync(path.join(fixture, 'first.cy.js'),
             "describe('first suite', () => {\n" +
             "  it('passes', () => {})\n" +
@@ -277,7 +284,7 @@ moduleTypes.forEach(({
           fs.writeFileSync(path.join(fixture, 'support.js'), "require('dd-trace/ci/cypress/support')\n")
           fs.writeFileSync(path.join(fixture, 'cypress.config.js'),
             "const { defineConfig } = require('cypress')\n" +
-            `module.exports = defineConfig({ video: ${withMedia}, screenshotOnRunFailure: ${withMedia}, e2e: {\n` +
+            `module.exports = defineConfig({ video: ${withVideo}, screenshotOnRunFailure: ${withMedia}, e2e: {\n` +
             `  specPattern: ${JSON.stringify(path.join(fixture, '*.cy.js'))},\n` +
             `  supportFile: ${JSON.stringify(path.join(fixture, 'support.js'))},\n` +
             '  async setupNodeEvents(on, config) {\n' +
@@ -306,7 +313,7 @@ moduleTypes.forEach(({
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '',
               DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(withMedia),
-              DD_TEST_FAILURE_VIDEOS_ENABLED: String(withMedia),
+              DD_TEST_FAILURE_VIDEOS_ENABLED: String(withVideo),
             },
           })
           childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
@@ -330,6 +337,17 @@ moduleTypes.forEach(({
             const suite = suites.find(({ content: suite }) => suite.meta['test.suite'] === content.meta['test.suite'])
             assert.ok(suite)
             assert.strictEqual(String(content.test_suite_id), String(suite.content.test_suite_id))
+            // Cypress run-result timestamps have millisecond precision.
+            const testStart = Math.round(Number(content.start) / 1e6)
+            const testEnd = Math.round((Number(content.start) + Number(content.duration)) / 1e6)
+            const suiteStart = Math.round(Number(suite.content.start) / 1e6)
+            const suiteEnd = Math.round((Number(suite.content.start) + Number(suite.content.duration)) / 1e6)
+            assert.ok(testStart >= suiteStart && testEnd <= suiteEnd,
+              `${content.meta['test.name']}: ${testStart}-${testEnd} must be within suite ${suiteStart}-${suiteEnd}`)
+            if (content.meta[TEST_STATUS] === 'skip' && mode.startsWith('missing')) {
+              assert.strictEqual(Number(content.duration), 0)
+              assert.strictEqual(testStart, suiteEnd)
+            }
           }
           const firstSuite = suites.find(({ content }) => content.meta['test.suite'].endsWith('first.cy.js')).content
           const secondSuite = suites.find(({ content }) => content.meta['test.suite'].endsWith('second.cy.js')).content
@@ -340,15 +358,17 @@ moduleTypes.forEach(({
           const failedTest = tests.find(({ content }) => content.meta[TEST_STATUS] === 'fail').content
           assert.match(failedTest.meta[ERROR_MESSAGE], /synthetic late hook failure/)
           if (withMedia) {
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
-            assert.strictEqual(secondSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], screenshotError ? undefined : 'true')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR],
+              screenshotError ? 'true' : undefined)
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], withVideo ? 'true' : undefined)
+            assert.strictEqual(secondSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], withVideo ? 'true' : undefined)
             const screenshots = uploads.filter(media => media.contentType === 'image/png')
             const videos = uploads.filter(media => media.contentType === 'video/mp4')
             assert.strictEqual(screenshots.length, 1)
-            assert.strictEqual(videos.length, 1)
+            assert.strictEqual(videos.length, withVideo ? 1 : 0)
             assert.strictEqual(screenshots[0].traceId, String(failedTest.trace_id))
-            assert.strictEqual(videos[0].testSuiteId, String(secondSuite.test_suite_id))
+            if (withVideo) assert.strictEqual(videos[0].testSuiteId, String(secondSuite.test_suite_id))
           }
           for (const type of ['test_session_end', 'test_module_end']) {
             const spans = events.filter(event => event.type === type)
