@@ -565,7 +565,7 @@ function registerDdTraceHooks (
         manualPlugin.initialConfig.experimentalInteractiveRunEvents = config.experimentalInteractiveRunEvents
       }
     }
-    registerBeforeRun()
+    registerBeforeRun(manualPlugin.beforeRunHandler)
     registerLifecycleHandlers(on, 'after:spec', userAfterSpecHandlers, manualPlugin.afterSpecHandler, cleanupWrapper)
     registerManualAfterScreenshotHandlers(on, userAfterScreenshotHandlers, manualPlugin.afterScreenshotHandler)
     registerAfterRunWithCleanup(manualPlugin.afterRunHandler)

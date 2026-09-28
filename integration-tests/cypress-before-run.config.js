@@ -7,12 +7,16 @@ module.exports = defineConfig({
   screenshotOnRunFailure: false,
   e2e: {
     specPattern: 'cypress/e2e/before-run.js',
-    setupNodeEvents (on, config) {
+    async setupNodeEvents (on, config) {
       const calls = []
       on('before:run', details => {
         if (!details.cypressVersion) throw new Error('Missing Cypress run details')
         calls.push('first')
       })
+      if (process.env.CYPRESS_MANUAL_PLUGIN) {
+        const createPlugin = require('dd-trace/ci/cypress/plugin')
+        config = await createPlugin(on, config)
+      }
       on('before:run', async details => {
         await new Promise(resolve => setImmediate(resolve))
         if (!details.cypressVersion) throw new Error('Missing Cypress run details')
@@ -20,10 +24,6 @@ module.exports = defineConfig({
         calls.push('second')
       })
       on('task', { beforeRunOrder: () => calls })
-      if (process.env.CYPRESS_MANUAL_PLUGIN) {
-        const createPlugin = require('dd-trace/ci/cypress/plugin')
-        return createPlugin(on, config)
-      }
       return config
     },
   },

@@ -14,24 +14,25 @@ const log = require('../../dd-trace/src/log')
 const { wrapCliConfigFileOptions, wrapConfig } = require('../src/cypress-config')
 
 describe('Cypress config', () => {
-  for (const enabled of [false, true]) {
-    for (const failure of [false, true]) {
-      it(`preserves before:run ordering and errors (enabled=${enabled}, failure=${failure})`, async () => {
+  for (const mode of ['disabled', 'auto', 'manual']) {
+    for (const failure of [false, 'first', 'second']) {
+      it(`preserves before:run ordering and errors (mode=${mode}, failure=${failure})`, async () => {
         const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-before-run-'))
         const setupChannel = channel('ci:cypress:setup-node-events')
         const calls = []
         const details = { cypressVersion: '14.5.4' }
         const rejection = new Error('before-run rejected')
         let cleanup
+        const datadogHandler = runDetails => {
+          assert.strictEqual(runDetails, details)
+          calls.push('datadog')
+        }
         const register = payload => {
-          payload.registerBeforeRun(runDetails => {
-            assert.strictEqual(runDetails, details)
-            calls.push('datadog')
-          })
+          payload.registerBeforeRun(datadogHandler)
           cleanup = payload.cleanupWrapper
           payload.registered = true
         }
-        if (enabled) setupChannel.subscribe(register)
+        if (mode === 'auto') setupChannel.subscribe(register)
         const config = wrapConfig({
           e2e: {
             setupNodeEvents (on) {
@@ -39,11 +40,24 @@ describe('Cypress config', () => {
                 assert.strictEqual(runDetails, details)
                 await Promise.resolve()
                 calls.push('first')
-                if (failure) throw rejection
+                if (failure === 'first') throw rejection
               })
-              on('before:run', runDetails => {
+              if (mode === 'manual') {
+                on('before:run', datadogHandler)
+                on('after:spec', () => {})
+                on('after:run', () => {})
+                on('task', {
+                  'dd:testSuiteStart': () => {},
+                  'dd:beforeEach': () => {},
+                  'dd:afterEach': () => {},
+                  'dd:addTags': () => {},
+                })
+              }
+              on('before:run', async runDetails => {
                 assert.strictEqual(runDetails, details)
+                await Promise.resolve()
                 calls.push('second')
+                if (failure === 'second') throw rejection
               })
             },
           },
@@ -55,13 +69,13 @@ describe('Cypress config', () => {
           })
           if (failure) {
             await assert.rejects(handlers['before:run'](details), error => error === rejection)
-            assert.deepStrictEqual(calls, ['first'])
+            assert.deepStrictEqual(calls, failure === 'first' ? ['first'] : ['first', 'second'])
           } else {
             await handlers['before:run'](details)
-            assert.deepStrictEqual(calls, enabled ? ['first', 'second', 'datadog'] : ['first', 'second'])
+            assert.deepStrictEqual(calls, mode === 'disabled' ? ['first', 'second'] : ['first', 'second', 'datadog'])
           }
         } finally {
-          if (enabled) setupChannel.unsubscribe(register)
+          if (mode === 'auto') setupChannel.unsubscribe(register)
           if (cleanup) cleanup()
           else await handlers['after:run']({})
           fs.rmSync(project, { recursive: true, force: true })

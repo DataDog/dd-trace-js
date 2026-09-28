@@ -358,7 +358,7 @@ moduleTypes.forEach(({
         })
       }
 
-      for (const mode of ['auto', 'manual', 'reject']) {
+      for (const mode of ['auto', 'manual', 'reject', 'manual-reject']) {
         over10It(`preserves before:run handlers in ${mode} mode`, async () => {
           let output = ''
           const events = []
@@ -369,15 +369,15 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              CYPRESS_MANUAL_PLUGIN: mode === 'manual' ? '1' : '',
-              CYPRESS_REJECT_BEFORE_RUN: mode === 'reject' ? '1' : '',
+              CYPRESS_MANUAL_PLUGIN: mode.startsWith('manual') ? '1' : '',
+              CYPRESS_REJECT_BEFORE_RUN: mode.endsWith('reject') ? '1' : '',
             },
           })
           childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
           childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
           const [exitCode] = await once(childProcess, 'close')
           const tests = events.filter(event => event.type === 'test')
-          if (mode === 'reject') {
+          if (mode.endsWith('reject')) {
             assert.strictEqual(events.length, 0)
             assert.notStrictEqual(exitCode, 0)
             assert.match(output, /custom before:run failed/)
