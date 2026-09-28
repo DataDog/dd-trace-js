@@ -19,7 +19,7 @@ const { getRewriteTarget } = require('./targets')
  *   { code: string, map?: string|object }} transform
  *
  * @typedef {(content: string|Buffer|ArrayBuffer|Uint8Array, filename: string, format?: string,
- *   target?: { moduleName: string, filePath: string, activationName?: string }, sourceMap?: string|object) =>
+ *   target?: { moduleName: string, filePath: string, activate?: boolean }, sourceMap?: string|object) =>
  *   { code: string|Buffer|ArrayBuffer|Uint8Array, map?: string|object }} BundlerRewriter
  */
 
@@ -62,7 +62,7 @@ function normalizeFilename (filename) {
  * @param {string|Buffer|ArrayBuffer|Uint8Array} content
  * @param {string} filename
  * @param {string} [format]
- * @param {{ moduleName: string, filePath: string, activationName?: string }} [target]
+ * @param {{ moduleName: string, filePath: string, activate?: boolean }} [target]
  * @returns {string|Buffer|ArrayBuffer|Uint8Array}
  */
 function rewrite (content, filename, format, target) {
@@ -74,7 +74,7 @@ function rewrite (content, filename, format, target) {
     if (!target) return content
 
     const moduleType = format === 'module' ? 'esm' : 'cjs'
-    const { moduleName, filePath, activationName } = target
+    const { moduleName, filePath, activate } = target
     if (disabled.has(moduleName)) return content
 
     const version = getVersion(filename, filePath)
@@ -82,14 +82,14 @@ function rewrite (content, filename, format, target) {
 
     const transformer = getMatcher(moduleType).getTransformer(moduleName, version, filePath)
 
-    if (!transformer && !activationName) return content
+    if (!transformer && !activate) return content
 
     const source = getSourceText(content)
 
     if (!transformer) {
       return appendOrchestrionLoad(
         source,
-        { moduleName, activationName, version, result: 'unsupported' },
+        { moduleName, version, result: 'unsupported' },
         moduleType
       )
     }
@@ -106,9 +106,9 @@ function rewrite (content, filename, format, target) {
       map = shiftSourceMapLine(map)
     }
 
-    if (activationName) {
+    if (activate) {
       const result = code === source ? 'matched' : 'rewritten'
-      code = appendOrchestrionLoad(code, { moduleName, activationName, version, result }, moduleType)
+      code = appendOrchestrionLoad(code, { moduleName, version, result }, moduleType)
     }
 
     if (!map) return code
@@ -253,7 +253,7 @@ function getSourceText (source) {
  * Publish target-level compatibility on the application thread when a pure target is evaluated.
  *
  * @param {string} source
- * @param {{ moduleName: string, activationName: string, version: string,
+ * @param {{ moduleName: string, version: string,
  *   result: 'unsupported'|'matched'|'rewritten' }} payload
  * @param {'cjs'|'esm'} moduleType
  */

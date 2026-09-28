@@ -458,7 +458,7 @@ moduleTypes.forEach(({
             const event = events.find(({ type }) => type === eventType)
             assert.ok(event, `expected ${eventType}`)
             assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
-            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'No tests were executed')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'No tests were detected')
             assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           }
         }

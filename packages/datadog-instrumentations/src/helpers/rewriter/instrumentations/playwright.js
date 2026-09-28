@@ -5,6 +5,49 @@
 module.exports = [
   {
     module: {
+      name: '@playwright/test',
+      versionRange: '>=1.18.0 <1.38.0',
+      filePath: 'lib/reporters/multiplexer.js',
+    },
+    functionQuery: {
+      className: 'Multiplexer',
+      methodName: 'onError',
+      kind: 'Sync',
+    },
+    channelName: 'Multiplexer_onError',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.44.0 <1.60.0',
+      filePath: 'lib/runner/runner.js',
+    },
+    astQuery: 'FunctionDeclaration[id.name="writeLastRunInfo"] ' +
+      'CallExpression[callee.property.name="map"] > ArrowFunctionExpression',
+    channelName: 'lastRunTestId',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.44.0 <1.60.0',
+      filePath: 'lib/runner/lastRun.js',
+    },
+    astQuery: 'ClassDeclaration[id.name="LastRunReporter"] ' +
+      'CallExpression[callee.property.name="map"] > ArrowFunctionExpression',
+    channelName: 'lastRunTestId',
+  },
+  {
+    module: {
+      name: 'playwright',
+      versionRange: '>=1.60.0',
+      filePath: 'lib/runner/index.js',
+    },
+    astQuery: 'VariableDeclarator[id.name="LastRunReporter"] ' +
+      'CallExpression[callee.property.name="map"] > ArrowFunctionExpression',
+    channelName: 'lastRunTestId',
+  },
+  {
+    module: {
       name: 'playwright',
       versionRange: '>=1.38.0',
       filePath: 'lib/index.js',

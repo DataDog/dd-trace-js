@@ -1,0 +1,12 @@
+issuer: https://token.actions.githubusercontent.com
+
+subject_pattern: 'repo:DataDog/dd-trace-js:ref:refs/heads/gh-readonly-queue/v[0-9]+\.x/pr-[1-9][0-9]*-[0-9a-f]{40}'
+
+claim_pattern:
+  event_name: merge_group
+  ref: 'refs/heads/gh-readonly-queue/v[0-9]+\.x/pr-[1-9][0-9]*-[0-9a-f]{40}'
+  job_workflow_ref: DataDog/dd-trace-js/\.github/workflows/release-proposal-merge-queue\.yml@.*
+
+permissions:
+  contents: read
+  pull_requests: read

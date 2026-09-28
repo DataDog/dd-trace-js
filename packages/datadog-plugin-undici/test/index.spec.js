@@ -45,6 +45,7 @@ describe('Plugin', () => {
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
       const hasNativeDiagnostics = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')
+      const hasNativeUpgradeCompletion = satisfies(resolvedVersion, '>=6.29.0 <7.0.0 || >=7.30.0 <8.0.0 || >=8.11.0')
 
       /**
        * @param {import('express').Application} app
@@ -246,8 +247,10 @@ describe('Plugin', () => {
             socket.destroy()
             await Promise.all([tracePromise, client.close()])
 
-            assert.strictEqual(fallbackMessages.length, 1)
-            assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            assert.strictEqual(fallbackMessages.length, hasNativeUpgradeCompletion ? 0 : 1)
+            if (!hasNativeUpgradeCompletion) {
+              assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            }
             assert.strictEqual(requestHookCalls, 1)
           } finally {
             upgradeChannel.unsubscribe(fallbackSubscriber)
@@ -323,8 +326,10 @@ describe('Plugin', () => {
             })
             await Promise.all([tracePromise, client.close()])
 
-            assert.strictEqual(fallbackMessages.length, 1)
-            assert.strictEqual(fallbackMessages[0].error, expectedError)
+            assert.strictEqual(fallbackMessages.length, hasNativeUpgradeCompletion ? 0 : 1)
+            if (!hasNativeUpgradeCompletion) {
+              assert.strictEqual(fallbackMessages[0].error, expectedError)
+            }
           } finally {
             upgradeChannel.unsubscribe(fallbackSubscriber)
           }
