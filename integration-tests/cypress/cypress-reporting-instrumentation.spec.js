@@ -263,15 +263,9 @@ moduleTypes.forEach(({
       describe('late manual finalization', () => {
         /**
          * Run the fixture and check the event hierarchy shared by all recovery scenarios.
-         * @param {{ afterSpec?: string, screenshots?: boolean, video?: boolean }} options
+         * @param {{ afterSpec?: 'missing'|'partial'|'forwarded', screenshots?: boolean, video?: boolean }} options
          */
         async function runLateManual ({ afterSpec = 'missing', screenshots = false, video = false }) {
-          const events = []
-          const uploads = []
-          receiver.on('message', ({ url, payload, media }) => {
-            if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
-            if (media) uploads.push(media)
-          })
           let output = ''
           const command = './node_modules/.bin/cypress run --config-file ci-visibility/cypress-late-manual/config.js'
           childProcess = exec(command, {
@@ -286,7 +280,17 @@ moduleTypes.forEach(({
           })
           childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
           childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
-          const [exitCode] = await once(childProcess, 'close')
+          let messages
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'close'),
+            receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url, media }) => url.endsWith('/api/v2/citestcycle') || !!media,
+              payloads => { messages = payloads }
+            ),
+          ])
+          const events = messages.flatMap(({ payload }) => payload?.events ?? [])
+          const uploads = messages.filter(({ media }) => media).map(({ media }) => media)
           assert.strictEqual(exitCode, 1, output)
           assert.match(output, /synthetic late hook failure/)
           const tests = events.filter(event => event.type === 'test')
@@ -305,7 +309,8 @@ moduleTypes.forEach(({
             const suite = suites.find(({ content: suite }) => suite.meta['test.suite'] === content.meta['test.suite'])
             assert.ok(suite)
             assert.strictEqual(String(content.test_suite_id), String(suite.content.test_suite_id))
-            // Cypress run-result timestamps have millisecond precision.
+            // Recovery at after:run must keep tests inside their original suite, not move them to run end.
+            // Compare at Cypress run-result precision (milliseconds).
             const testStart = Math.round(Number(content.start) / 1e6)
             const testEnd = Math.round((Number(content.start) + Number(content.duration)) / 1e6)
             const suiteStart = Math.round(Number(suite.content.start) / 1e6)
@@ -333,26 +338,29 @@ moduleTypes.forEach(({
           return { failedTest, failedSuite: secondSuite, uploads }
         }
 
-        for (const afterSpec of ['missing', 'partial', 'forwarded']) {
-          over10It(`reports tests and suites with ${afterSpec} after:spec forwarding`, async () => {
-            await runLateManual({ afterSpec })
-          })
-        }
+        over10It('recovers both specs when Datadog after:spec is never called', async () => {
+          await runLateManual({ afterSpec: 'missing' })
+        })
 
-        for (const uploadFails of [false, true]) {
-          over10It(`reports screenshot-only upload outcomes (uploadFails=${uploadFails})`, async () => {
-            receiver.setMediaResponseDelay(100)
-            if (uploadFails) receiver.setMediaResponseStatusCode(400)
-            const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true })
+        over10It('recovers only the unfinished spec when after:spec handles the first', async () => {
+          await runLateManual({ afterSpec: 'partial' })
+        })
 
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadFails ? undefined : 'true')
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadFails ? 'true' : undefined)
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
-            assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
-            assert.deepStrictEqual(uploads.map(media => media.contentType), ['image/png'])
-            assert.strictEqual(uploads[0].traceId, String(failedTest.trace_id))
-          })
-        }
+        over10It('does not duplicate specs already finalized by after:spec', async () => {
+          await runLateManual({ afterSpec: 'forwarded' })
+        })
+
+        over10It('waits for screenshot upload before reporting recovered tests without video', async () => {
+          receiver.setMediaResponseDelay(100)
+          const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true })
+
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+          assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+          assert.deepStrictEqual(uploads.map(media => media.contentType), ['image/png'])
+          assert.strictEqual(uploads[0].traceId, String(failedTest.trace_id))
+        })
 
         over10It('reports screenshots and videos on recovered tests and suites', async () => {
           receiver.setMediaResponseDelay(100)

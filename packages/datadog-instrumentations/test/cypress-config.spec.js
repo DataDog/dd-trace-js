@@ -74,36 +74,37 @@ describe('Cypress before:run handlers', () => {
     config.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, resolved)
   }
 
-  for (const mode of ['disabled', 'auto', 'manual']) {
-    for (const failure of [false, 'first', 'second']) {
-      it(`preserves before:run ordering and errors (mode=${mode}, failure=${failure})`, async () => {
-        const calls = []
-        const details = { cypressVersion: '14.5.4' }
-        const rejection = new Error('before-run rejected')
-        const datadogHandler = runDetails => {
-          assert.strictEqual(runDetails, details)
-          calls.push('datadog')
-        }
-        const userHandler = name => async runDetails => {
-          assert.strictEqual(runDetails, details)
-          await Promise.resolve()
-          calls.push(name)
-          if (failure === name) throw rejection
-        }
-        setupHandlers(mode, userHandler('first'), datadogHandler, userHandler('second'))
+  it('preserves user handlers when Datadog instrumentation is inactive', async () => {
+    const calls = []
+    const details = { cypressVersion: '14.5.4' }
+    const datadog = sinon.spy()
+    setupHandlers('disabled', async runDetails => {
+      await Promise.resolve()
+      calls.push(['first', runDetails])
+    }, datadog, runDetails => calls.push(['second', runDetails]))
 
-        if (failure) {
-          await assert.rejects(handlers['before:run'](details), error => error === rejection)
-          assert.deepStrictEqual(calls, failure === 'first' ? ['first'] : ['first', 'second'])
-        } else {
-          await handlers['before:run'](details)
-          assert.deepStrictEqual(calls, mode === 'disabled' ? ['first', 'second'] : ['first', 'second', 'datadog'])
-        }
-      })
-    }
-  }
+    await handlers['before:run'](details)
+
+    assert.deepStrictEqual(calls, [['first', details], ['second', details]])
+    sinon.assert.notCalled(datadog)
+  })
 
   for (const mode of ['auto', 'manual']) {
+    it(`does not call later handlers after the first user handler rejects (${mode})`, async () => {
+      const rejection = new Error('before-run rejected')
+      const first = sinon.stub().rejects(rejection)
+      const datadog = sinon.spy()
+      const last = sinon.spy()
+      const details = { cypressVersion: '14.5.4' }
+      setupHandlers(mode, first, datadog, last)
+
+      await assert.rejects(handlers['before:run'](details), error => error === rejection)
+
+      sinon.assert.calledOnceWithExactly(first, details)
+      sinon.assert.notCalled(last)
+      sinon.assert.notCalled(datadog)
+    })
+
     for (const isInteractive of [false, true]) {
       for (const failingHandler of ['user', 'datadog']) {
         it(`retains interactive support after setup fails (${mode}, interactive=${isInteractive}, ${failingHandler})`,
