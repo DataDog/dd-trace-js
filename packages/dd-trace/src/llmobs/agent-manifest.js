@@ -108,13 +108,11 @@ function buildAgentManifest (agent) {
 }
 
 /**
- * Matches the Python SDK, which tags any truthy version, so `0` and `''` declare none.
- *
  * @param {unknown} version
  */
 function toVersion (version) {
-  if (!version || (typeof version !== 'string' && typeof version !== 'number')) return
-  return String(version)
+  if (typeof version === 'string') return version === '' ? undefined : version
+  if (typeof version === 'number' && Number.isFinite(version)) return String(version)
 }
 
 /**

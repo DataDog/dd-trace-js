@@ -1684,6 +1684,16 @@ describe('sdk', () => {
         })
       })
 
+      it('lets a nested block replace the version with a numeric zero', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
+          llmobs.annotationContext({ agent: { version: 0 } }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, () => {})
+          })
+        })
+
+        assert.ok(emittedEvent('agent').tags.includes('agent_version:0'))
+      })
+
       it('lets a direct annotation override the context declaration on a nested agent span', () => {
         llmobs.annotationContext({ agent: { name: 'travel_desk' } }, () => {
           llmobs.trace({ kind: 'agent', name: 'outer' }, outer => {

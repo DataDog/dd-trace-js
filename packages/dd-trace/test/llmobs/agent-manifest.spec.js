@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -57,9 +58,12 @@ describe('agent manifest', () => {
       assert.deepStrictEqual(buildAgentDeclaration({ version: '1.0.0' }), { version: '1.0.0', manifest: undefined })
     })
 
-    const versions = [['1.0.0', '1.0.0'], [2, '2'], [0, undefined], ['', undefined], [{}, undefined]]
+    const versions = [
+      ['1.0.0', '1.0.0'], [2, '2'], [0, '0'], ['', undefined], [Infinity, undefined], [Number.NaN, undefined],
+      [{}, undefined],
+    ]
     for (const [version, expected] of versions) {
-      it(`reads version ${JSON.stringify(version)} as ${JSON.stringify(expected)}`, () => {
+      it(`reads version ${inspect(version)} as ${inspect(expected)}`, () => {
         assert.strictEqual(buildAgentDeclaration({ version, name: 'a' }).version, expected)
       })
     }
