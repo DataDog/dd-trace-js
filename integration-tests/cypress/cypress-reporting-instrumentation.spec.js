@@ -260,46 +260,12 @@ moduleTypes.forEach(({
       : testCommand
 
     if (type === 'commonJS') {
-      for (const mode of [
-        'missing', 'partial', 'forwarded', 'missing-with-media',
-        'missing-with-screenshots', 'missing-with-screenshot-error',
-      ]) {
-        over10It(`reports late manual tests with ${mode} after:spec finalization`, async () => {
-          const fixture = fs.realpathSync(fs.mkdtempSync(path.join(cwd, 'late-manual-')))
-          const withMedia = mode.startsWith('missing-with-')
-          const withVideo = mode === 'missing-with-media'
-          const screenshotError = mode === 'missing-with-screenshot-error'
-          if (withMedia) receiver.setMediaResponseDelay(100)
-          if (screenshotError) receiver.setMediaResponseStatusCode(400)
-          fs.writeFileSync(path.join(fixture, 'first.cy.js'),
-            "describe('first suite', () => {\n" +
-            "  it('passes', () => {})\n" +
-            "  it.skip('is skipped', () => {})\n" +
-            '})\n')
-          fs.writeFileSync(path.join(fixture, 'second.cy.js'),
-            "describe('second suite', () => {\n" +
-            "  it('fails in a late hook', () => {})\n" +
-            "  after(() => { throw new Error('synthetic late hook failure') })\n" +
-            '})\n')
-          fs.writeFileSync(path.join(fixture, 'support.js'), "require('dd-trace/ci/cypress/support')\n")
-          fs.writeFileSync(path.join(fixture, 'cypress.config.js'),
-            "const { defineConfig } = require('cypress')\n" +
-            `module.exports = defineConfig({ video: ${withVideo}, screenshotOnRunFailure: ${withMedia}, e2e: {\n` +
-            `  specPattern: ${JSON.stringify(path.join(fixture, '*.cy.js'))},\n` +
-            `  supportFile: ${JSON.stringify(path.join(fixture, 'support.js'))},\n` +
-            '  async setupNodeEvents(on, config) {\n' +
-            "    const plugin = require('dd-trace/ci/cypress/plugin')\n" +
-            '    await plugin(on, config)\n' +
-            "    on('after:spec', (spec, results) => {\n" +
-            `      if (${JSON.stringify(mode)} === 'forwarded' ||\n` +
-            `          (${JSON.stringify(mode)} === 'partial' && spec.name === 'first.cy.js')) {\n` +
-            "        const afterSpec = require('dd-trace/ci/cypress/after-spec')\n" +
-            '        return afterSpec(spec, results)\n' +
-            '      }\n' +
-            '    })\n' +
-            '    return config\n' +
-            '  }\n' +
-            '} })\n')
+      describe('late manual finalization', () => {
+        /**
+         * Run the fixture and check the event hierarchy shared by all recovery scenarios.
+         * @param {{ afterSpec?: string, screenshots?: boolean, video?: boolean }} options
+         */
+        async function runLateManual ({ afterSpec = 'missing', screenshots = false, video = false }) {
           const events = []
           const uploads = []
           receiver.on('message', ({ url, payload, media }) => {
@@ -307,13 +273,15 @@ moduleTypes.forEach(({
             if (media) uploads.push(media)
           })
           let output = ''
-          childProcess = exec(`./node_modules/.bin/cypress run --config-file ${fixture}/cypress.config.js`, {
+          const command = './node_modules/.bin/cypress run --config-file ci-visibility/cypress-late-manual/config.js'
+          childProcess = exec(command, {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '',
-              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(withMedia),
-              DD_TEST_FAILURE_VIDEOS_ENABLED: String(withVideo),
+              DD_CYPRESS_AFTER_SPEC_MODE: afterSpec,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: String(screenshots),
+              DD_TEST_FAILURE_VIDEOS_ENABLED: String(video),
             },
           })
           childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
@@ -344,7 +312,7 @@ moduleTypes.forEach(({
             const suiteEnd = Math.round((Number(suite.content.start) + Number(suite.content.duration)) / 1e6)
             assert.ok(testStart >= suiteStart && testEnd <= suiteEnd,
               `${content.meta['test.name']}: ${testStart}-${testEnd} must be within suite ${suiteStart}-${suiteEnd}`)
-            if (content.meta[TEST_STATUS] === 'skip' && mode.startsWith('missing')) {
+            if (content.meta[TEST_STATUS] === 'skip' && afterSpec === 'missing') {
               assert.strictEqual(Number(content.duration), 0)
               assert.strictEqual(testStart, suiteEnd)
             }
@@ -357,29 +325,59 @@ moduleTypes.forEach(({
             `recovered suite duration must not include later specs\n${output}`)
           const failedTest = tests.find(({ content }) => content.meta[TEST_STATUS] === 'fail').content
           assert.match(failedTest.meta[ERROR_MESSAGE], /synthetic late hook failure/)
-          if (withMedia) {
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], screenshotError ? undefined : 'true')
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR],
-              screenshotError ? 'true' : undefined)
-            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], withVideo ? 'true' : undefined)
-            assert.strictEqual(secondSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], withVideo ? 'true' : undefined)
-            const screenshots = uploads.filter(media => media.contentType === 'image/png')
-            const videos = uploads.filter(media => media.contentType === 'video/mp4')
-            assert.strictEqual(screenshots.length, 1)
-            assert.strictEqual(videos.length, withVideo ? 1 : 0)
-            assert.strictEqual(screenshots[0].traceId, String(failedTest.trace_id))
-            if (withVideo) assert.strictEqual(videos[0].testSuiteId, String(secondSuite.test_suite_id))
-          }
           for (const type of ['test_session_end', 'test_module_end']) {
             const spans = events.filter(event => event.type === type)
             assert.strictEqual(spans.length, 1)
             assert.strictEqual(spans[0].content.meta[TEST_STATUS], 'fail')
           }
-        })
-      }
+          return { failedTest, failedSuite: secondSuite, uploads }
+        }
 
-      for (const mode of ['auto', 'manual', 'reject', 'manual-reject']) {
-        over10It(`preserves before:run handlers in ${mode} mode`, async () => {
+        for (const afterSpec of ['missing', 'partial', 'forwarded']) {
+          over10It(`reports tests and suites with ${afterSpec} after:spec forwarding`, async () => {
+            await runLateManual({ afterSpec })
+          })
+        }
+
+        for (const uploadFails of [false, true]) {
+          over10It(`reports screenshot-only upload outcomes (uploadFails=${uploadFails})`, async () => {
+            receiver.setMediaResponseDelay(100)
+            if (uploadFails) receiver.setMediaResponseStatusCode(400)
+            const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true })
+
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadFails ? undefined : 'true')
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadFails ? 'true' : undefined)
+            assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.deepStrictEqual(uploads.map(media => media.contentType), ['image/png'])
+            assert.strictEqual(uploads[0].traceId, String(failedTest.trace_id))
+          })
+        }
+
+        over10It('reports screenshots and videos on recovered tests and suites', async () => {
+          receiver.setMediaResponseDelay(100)
+          const { failedTest, failedSuite, uploads } = await runLateManual({ screenshots: true, video: true })
+
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+          assert.strictEqual(failedTest.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+          assert.strictEqual(failedSuite.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+          const screenshots = uploads.filter(media => media.contentType === 'image/png')
+          const videos = uploads.filter(media => media.contentType === 'video/mp4')
+          assert.strictEqual(screenshots.length, 1)
+          assert.strictEqual(videos.length, 1)
+          assert.strictEqual(screenshots[0].traceId, String(failedTest.trace_id))
+          assert.strictEqual(videos[0].testSuiteId, String(failedSuite.test_suite_id))
+        })
+      })
+
+      for (const { manual, reject } of [
+        { manual: false, reject: false },
+        { manual: true, reject: false },
+        { manual: false, reject: true },
+        { manual: true, reject: true },
+      ]) {
+        over10It(`preserves before:run handlers (manual=${manual}, reject=${reject})`, async () => {
           let output = ''
           const events = []
           receiver.on('message', ({ url, payload }) => {
@@ -389,15 +387,15 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              CYPRESS_MANUAL_PLUGIN: mode.startsWith('manual') ? '1' : '',
-              CYPRESS_REJECT_BEFORE_RUN: mode.endsWith('reject') ? '1' : '',
+              CYPRESS_MANUAL_PLUGIN: manual ? '1' : '',
+              CYPRESS_REJECT_BEFORE_RUN: reject ? '1' : '',
             },
           })
           childProcess.stdout?.on('data', chunk => { output += chunk.toString() })
           childProcess.stderr?.on('data', chunk => { output += chunk.toString() })
           const [exitCode] = await once(childProcess, 'close')
           const tests = events.filter(event => event.type === 'test')
-          if (mode.endsWith('reject')) {
+          if (reject) {
             assert.strictEqual(events.length, 0)
             assert.notStrictEqual(exitCode, 0)
             assert.match(output, /custom before:run failed/)

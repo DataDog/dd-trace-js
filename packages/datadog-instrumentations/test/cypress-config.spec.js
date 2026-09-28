@@ -7,78 +7,97 @@ const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
 const { channel } = require('dc-polyfill')
-const { describe, it } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../dd-trace/src/log')
 const { wrapCliConfigFileOptions, wrapConfig } = require('../src/cypress-config')
 
-describe('Cypress config', () => {
+describe('Cypress before:run handlers', () => {
+  const setupChannel = channel('ci:cypress:setup-node-events')
+  let project, resolved, handlers, register, cleanup
+
+  beforeEach(() => {
+    project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-before-run-'))
+    resolved = { projectRoot: project, supportFile: false, isInteractive: false }
+    handlers = {}
+    register = cleanup = undefined
+  })
+
+  afterEach(async () => {
+    if (register) setupChannel.unsubscribe(register)
+    resolved.isInteractive = false
+    try {
+      if (cleanup) cleanup()
+      else await handlers['after:run']?.({})
+    } finally {
+      fs.rmSync(project, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * Register the same hooks through the automatic or manual plugin entry point.
+   * @param {string} mode
+   * @param {(details: object) => unknown} first
+   * @param {(details: object) => unknown} datadog
+   * @param {(details: object) => unknown} [last]
+   */
+  function setupHandlers (mode, first, datadog, last = () => {}) {
+    if (mode === 'auto') {
+      register = payload => {
+        payload.registerBeforeRun(datadog)
+        payload.on('after:run', payload.cleanupWrapper)
+        cleanup = payload.cleanupWrapper
+        payload.registered = true
+      }
+      setupChannel.subscribe(register)
+    }
+    const config = wrapConfig({
+      e2e: {
+        setupNodeEvents (on) {
+          on('before:run', first)
+          if (mode === 'manual') {
+            on('before:run', datadog)
+            on('after:spec', () => {})
+            on('after:run', () => {})
+            on('task', {
+              'dd:testSuiteStart': () => {},
+              'dd:beforeEach': () => {},
+              'dd:afterEach': () => {},
+              'dd:addTags': () => {},
+            })
+          }
+          on('before:run', last)
+        },
+      },
+    })
+    config.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, resolved)
+  }
+
   for (const mode of ['disabled', 'auto', 'manual']) {
     for (const failure of [false, 'first', 'second']) {
       it(`preserves before:run ordering and errors (mode=${mode}, failure=${failure})`, async () => {
-        const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-before-run-'))
-        const setupChannel = channel('ci:cypress:setup-node-events')
         const calls = []
         const details = { cypressVersion: '14.5.4' }
         const rejection = new Error('before-run rejected')
-        let cleanup
         const datadogHandler = runDetails => {
           assert.strictEqual(runDetails, details)
           calls.push('datadog')
         }
-        const register = payload => {
-          payload.registerBeforeRun(datadogHandler)
-          cleanup = payload.cleanupWrapper
-          payload.registered = true
+        const userHandler = name => async runDetails => {
+          assert.strictEqual(runDetails, details)
+          await Promise.resolve()
+          calls.push(name)
+          if (failure === name) throw rejection
         }
-        if (mode === 'auto') setupChannel.subscribe(register)
-        const config = wrapConfig({
-          e2e: {
-            setupNodeEvents (on) {
-              on('before:run', async runDetails => {
-                assert.strictEqual(runDetails, details)
-                await Promise.resolve()
-                calls.push('first')
-                if (failure === 'first') throw rejection
-              })
-              if (mode === 'manual') {
-                on('before:run', datadogHandler)
-                on('after:spec', () => {})
-                on('after:run', () => {})
-                on('task', {
-                  'dd:testSuiteStart': () => {},
-                  'dd:beforeEach': () => {},
-                  'dd:afterEach': () => {},
-                  'dd:addTags': () => {},
-                })
-              }
-              on('before:run', async runDetails => {
-                assert.strictEqual(runDetails, details)
-                await Promise.resolve()
-                calls.push('second')
-                if (failure === 'second') throw rejection
-              })
-            },
-          },
-        })
-        const handlers = {}
-        try {
-          config.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, {
-            projectRoot: project, supportFile: false,
-          })
-          if (failure) {
-            await assert.rejects(handlers['before:run'](details), error => error === rejection)
-            assert.deepStrictEqual(calls, failure === 'first' ? ['first'] : ['first', 'second'])
-          } else {
-            await handlers['before:run'](details)
-            assert.deepStrictEqual(calls, mode === 'disabled' ? ['first', 'second'] : ['first', 'second', 'datadog'])
-          }
-        } finally {
-          if (mode === 'auto') setupChannel.unsubscribe(register)
-          if (cleanup) cleanup()
-          else await handlers['after:run']({})
-          fs.rmSync(project, { recursive: true, force: true })
+        setupHandlers(mode, userHandler('first'), datadogHandler, userHandler('second'))
+
+        if (failure) {
+          await assert.rejects(handlers['before:run'](details), error => error === rejection)
+          assert.deepStrictEqual(calls, failure === 'first' ? ['first'] : ['first', 'second'])
+        } else {
+          await handlers['before:run'](details)
+          assert.deepStrictEqual(calls, mode === 'disabled' ? ['first', 'second'] : ['first', 'second', 'datadog'])
         }
       })
     }
@@ -89,68 +108,34 @@ describe('Cypress config', () => {
       for (const failingHandler of ['user', 'datadog']) {
         it(`retains interactive support after setup fails (${mode}, interactive=${isInteractive}, ${failingHandler})`,
           async () => {
-            const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-before-run-'))
-            const setupChannel = channel('ci:cypress:setup-node-events')
             const rejection = new Error('before-run rejected')
             let shouldFail = true
-            let cleanup
             const datadogHandler = sinon.spy(() => {
               if (shouldFail && failingHandler === 'datadog') throw rejection
             })
-            const register = payload => {
-              payload.registerBeforeRun(datadogHandler)
-              payload.on('after:run', payload.cleanupWrapper)
-              cleanup = payload.cleanupWrapper
-              payload.registered = true
-            }
-            if (mode === 'auto') setupChannel.subscribe(register)
-            const config = wrapConfig({
-              e2e: {
-                setupNodeEvents (on) {
-                  on('before:run', () => {
-                    if (shouldFail && failingHandler === 'user') throw rejection
-                  })
-                  if (mode === 'manual') {
-                    on('before:run', datadogHandler)
-                    on('after:spec', () => {})
-                    on('after:run', () => {})
-                    on('task', {
-                      'dd:testSuiteStart': () => {},
-                      'dd:beforeEach': () => {},
-                      'dd:afterEach': () => {},
-                      'dd:addTags': () => {},
-                    })
-                  }
-                },
-              },
-            })
-            const resolved = { projectRoot: project, supportFile: false, isInteractive }
-            const handlers = {}
-            try {
-              config.e2e.setupNodeEvents((event, handler) => { handlers[event] = handler }, resolved)
+            resolved.isInteractive = isInteractive
+            setupHandlers(mode, () => {
+              if (shouldFail && failingHandler === 'user') throw rejection
+            }, datadogHandler)
+
+            assert.ok(fs.existsSync(resolved.supportFile))
+            await assert.rejects(handlers['before:run']({}), error => error === rejection)
+            assert.strictEqual(fs.existsSync(resolved.supportFile), isInteractive)
+            if (isInteractive) {
+              shouldFail = false
+              datadogHandler.resetHistory()
+              await handlers['before:run']({})
+              sinon.assert.calledOnce(datadogHandler)
+              await handlers['after:run']({})
               assert.ok(fs.existsSync(resolved.supportFile))
-              await assert.rejects(handlers['before:run']({}), error => error === rejection)
-              assert.strictEqual(fs.existsSync(resolved.supportFile), isInteractive)
-              if (isInteractive) {
-                shouldFail = false
-                datadogHandler.resetHistory()
-                await handlers['before:run']({})
-                sinon.assert.calledOnce(datadogHandler)
-                await handlers['after:run']({})
-                assert.ok(fs.existsSync(resolved.supportFile))
-              }
-            } finally {
-              if (mode === 'auto') setupChannel.unsubscribe(register)
-              resolved.isInteractive = false
-              if (cleanup) cleanup()
-              else await handlers['after:run']({})
-              fs.rmSync(project, { recursive: true, force: true })
             }
           })
       }
     }
   }
+})
 
+describe('Cypress config', () => {
   it('loads and wraps an ESM config', async () => {
     const project = fs.mkdtempSync(join(tmpdir(), 'dd-cypress-config-'))
     const configFile = join(project, 'cypress.config.mjs')
