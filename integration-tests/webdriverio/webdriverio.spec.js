@@ -406,10 +406,11 @@ for (const version of versions) {
     }
 
     for (const framework of ['mocha', 'jasmine']) {
-      for (const [scenario, sessions, reason] of [
-        ['allSkipped', 1, 'all_tests_skipped'],
-        ['emptyShard', 0, 'zero_test_shard'],
-        ['noWorkers', 0, undefined],
+      for (const [scenario, sessions, reason, exitCode] of [
+        ['allSkipped', 1, 'all_tests_skipped', 0],
+        ['emptyShard', 0, 'zero_test_shard', 0],
+        ['noWorkers', 0, undefined, 1],
+        ['noWorkersSharded', 0, undefined, 0],
       ]) {
         it(`reports zero-execution sessions: ${framework} ${scenario}`, async () => {
           await runScenario(scenario, sessions, ({ session, module, tests }) => {
@@ -423,7 +424,7 @@ for (const version of versions) {
                   ? 'No tests were assigned to this shard'
                   : reason === 'zero_tests' ? 'No tests were detected' : undefined)
             }
-          }, reason ? 0 : 1, { framework })
+          }, exitCode, { framework })
         })
       }
     }

@@ -1187,7 +1187,9 @@ function safeWorkspaceProject (ctx) {
 
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
-    if (this.ctx.config.shard && arguments[0].length === 0) emptyShardContexts.add(this.ctx)
+    if (this.ctx.config.shard && this.ctx.state.pathsSet.size > 0 && arguments[0].length === 0) {
+      emptyShardContexts.add(this.ctx)
+    }
     if (!activeRunFilesContexts.has(this.ctx)) {
       const testSpecifications = arguments[0]
       await ensureMainProcessSetup(this.ctx, frameworkVersion, testSpecifications)
@@ -1404,23 +1406,25 @@ function wrapVitestSession (Vitest) {
 
   // Empty discovery bypasses runFiles. Vitest 1 exits directly after reporting coverage,
   // so its finalization must be awaited before that process.exit rather than only in close.
-  shimmer.wrap(Vitest.prototype, 'start', start => async function () {
+  // Hashed bundle names prevent Orchestrion's exact-file matching.
+  shimmer.wrap(Vitest.prototype, 'start', start => function () {
     if (!testSessionFinishCh.hasSubscribers) return start.apply(this, arguments)
     wrapSessionFinish(this)
-    try {
-      return await start.apply(this, arguments)
-    } catch (error) {
+    return start.apply(this, arguments).then(undefined, error => {
       if (error.code !== 'VITEST_FILES_NOT_FOUND') runErrorsByContext.set(this, error)
       throw error
-    }
+    })
   })
-  shimmer.wrap(Vitest.prototype, 'reportCoverage', reportCoverage => async function () {
-    const result = await reportCoverage.apply(this, arguments)
-    if (isSessionStarted && !this.config.watch && !mainProcessSetupStates.has(this) && this.state.pathsSet.size === 0) {
-      const finish = getFinishWrapper(() => {})
-      await finish.call(this)
+  shimmer.wrap(Vitest.prototype, 'reportCoverage', reportCoverage => function () {
+    const result = reportCoverage.apply(this, arguments)
+    if (!testSessionFinishCh.hasSubscribers || !isSessionStarted || this.config.watch ||
+      mainProcessSetupStates.has(this) || this.state.pathsSet.size > 0) {
+      return result
     }
-    return result
+    return result.then(value => {
+      const finish = getFinishWrapper(() => value)
+      return finish.call(this)
+    })
   })
 }
 

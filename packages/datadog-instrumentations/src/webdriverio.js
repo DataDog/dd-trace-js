@@ -63,6 +63,7 @@ const baseReporterWaitForSyncCh = tracingChannel('orchestrion:@wdio/runner:BaseR
 const runnerRunCh = tracingChannel('orchestrion:@wdio/runner:Runner_run')
 const executeAsyncCh = tracingChannel('orchestrion:@wdio/utils:executeAsync')
 const launcherStartInstanceCh = tracingChannel('orchestrion:@wdio/cli:Launcher_startInstance')
+const configParserShardCh = tracingChannel('orchestrion:@wdio/config:ConfigParser_shard')
 const localRunnerRunCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_run')
 const localRunnerShutdownCh = tracingChannel('orchestrion:@wdio/local-runner:LocalRunner_shutdown')
 const testFrameworkFnWrapperCh = tracingChannel('orchestrion:@wdio/utils:testFrameworkFnWrapper')
@@ -87,6 +88,7 @@ if (loadCh.hasSubscribers) {
 }
 
 const coordinatorStates = new WeakMap()
+const emptyShardConfigurations = new WeakSet()
 const localRunnerVersions = new WeakMap()
 const rumBrowsers = new Set()
 const rumCorrelationBrowsers = new Set()
@@ -1812,7 +1814,7 @@ function getSessionStatus (state) {
  * @param {CoordinatorState} state
  */
 function getTestSessionEmptyReason (state) {
-  if (state.workers.size === 0 && getRunnerConfiguration(state.localRunner)?.shard?.total > 1) {
+  if (state.workers.size === 0 && emptyShardConfigurations.has(getRunnerConfiguration(state.localRunner))) {
     return 'zero_test_shard'
   }
   for (const workerRecord of state.workers) {
@@ -1834,7 +1836,8 @@ function finishCoordinator (state, error, onDone) {
     return
   }
   if (!state.sessionStarted) {
-    if (!error && state.workers.size === 0 && !(getRunnerConfiguration(state.localRunner)?.shard?.total > 1)) {
+    if (!error && state.workers.size === 0 &&
+      !emptyShardConfigurations.has(getRunnerConfiguration(state.localRunner))) {
       error = new Error('No test files were found.')
     }
     initializeCoordinator(state, () => finishCoordinator(state, error, onDone))
@@ -1977,6 +1980,17 @@ jasmineAdapterInitCh.subscribe({
 
 // dc-polyfill supports partial tracing-channel subscribers, unlike the Node.js type definition.
 // @ts-expect-error
+configParserShardCh.subscribe({
+  end (context) {
+    const config = context.self._config
+    if (testFinishCh.hasSubscribers && config?.shard?.total > 1 &&
+      context.arguments[0].length > 0 && context.result?.length === 0) {
+      emptyShardConfigurations.add(config)
+    }
+  },
+})
+
+// @ts-expect-error See the partial tracing-channel subscriber above.
 launcherStartInstanceCh.subscribe({
   start (context) {
     const localRunner = context.self?.runner

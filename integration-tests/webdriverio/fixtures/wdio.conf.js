@@ -39,6 +39,10 @@ const scenarioConfig = {
   noWorkers: {
     specs: [],
   },
+  noWorkersSharded: {
+    specs: ['./no-matching-specs.e2e.js'],
+    shard: { current: 2, total: 2 },
+  },
   allSkipped: {
     maxInstances: 1,
     specs: ['./all-skipped.e2e.js'],

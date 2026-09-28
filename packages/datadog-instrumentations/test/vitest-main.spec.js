@@ -116,6 +116,45 @@ describe('vitest utilities', () => {
 })
 
 describe('vitest main instrumentation', () => {
+  for (const method of ['start', 'reportCoverage']) {
+    it(`preserves ${method} results and synchronous errors without subscribers`, () => {
+      const hooks = []
+      proxyquire('../src/vitest-main', {
+        './helpers/instrument': {
+          ...require('../src/helpers/instrument'),
+          addHook (target, hook) { hooks.push({ target, hook }) },
+        },
+        './vitest-util': {
+          ...require('../src/vitest-util'),
+          testSessionFinishCh: { hasSubscribers: false },
+        },
+      })
+      let result
+      class Vitest {
+        /** @param {string} argument */
+        start (argument) {
+          assert.strictEqual(this, vitest)
+          assert.strictEqual(argument, 'argument')
+          if (result instanceof Error) throw result
+          return result
+        }
+
+        /** @param {string} argument */
+        reportCoverage (argument) { return this.start(argument) }
+        runFiles () {}
+      }
+      const vitest = new Vitest()
+      const hook = hooks.find(({ target }) => target.versions[0] === '>=5.0.0').hook
+      hook({ Vitest }, '5.0.1')
+
+      for (result of [undefined, {}, Promise.resolve('result')]) {
+        assert.strictEqual(vitest[method]('argument'), result)
+      }
+      result = new Error('synchronous failure')
+      assert.throws(() => vitest[method]('argument'), result)
+    })
+  }
+
   it('keeps no-worker capabilities active and handles EFD admission boundaries', async () => {
     const hooks = []
     const libraryConfigurationRequests = []
@@ -238,7 +277,7 @@ describe('vitest main instrumentation', () => {
 
     const ctx = {
       close () {},
-      config: { passWithNoTests: false },
+      config: { passWithNoTests: false, shard: { index: 2, count: 2 } },
       exit () {},
       getTestFilepaths () {
         return []
@@ -390,6 +429,7 @@ describe('vitest main instrumentation', () => {
     assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))
     assert.strictEqual(efdAdmissionContexts[efdAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
 
+    await sequencer.sort([])
     await ctx.close()
     assert.strictEqual(testSessionFinishPayloads.length, 1)
     assert.strictEqual(testSessionFinishPayloads[0].status, 'fail')

@@ -3405,6 +3405,7 @@ versions.forEach(version => {
 
     const scenarios = [
       'empty-shard', 'empty-shard-default', 'empty-file', 'empty-file-disallowed', 'setup-error', 'normal', 'skipped',
+      'no-candidates', 'no-candidates-default', 'no-candidates-sharded', 'no-candidates-sharded-default',
     ]
     for (const scenario of scenarios) {
       // Vitest 1.6 aborts global setup before the session finalizer can be installed.
@@ -3412,12 +3413,13 @@ versions.forEach(version => {
       scenarioIt(`reports ${scenario} with the correct session status`, async () => {
         // Unlike 1.6, newer Vitest versions reject excess shards unless passWithNoTests is enabled.
         const isFailure = scenario === 'empty-file-disallowed' || scenario === 'setup-error' ||
+          (scenario.startsWith('no-candidates') && scenario.endsWith('default')) ||
           (scenario === 'empty-shard-default' && version !== '1.6.0')
         const reason = isFailure
           ? undefined
           : scenario.startsWith('empty-shard')
             ? 'zero_test_shard'
-            : scenario === 'empty-file'
+            : scenario === 'empty-file' || scenario.startsWith('no-candidates')
               ? 'zero_tests'
               : scenario === 'skipped' ? 'all_tests_skipped' : undefined
         const skipReason = reason === 'zero_test_shard'
@@ -3426,7 +3428,7 @@ versions.forEach(version => {
             ? 'No tests were detected'
             : reason === 'all_tests_skipped' ? 'All tests were skipped' : undefined
         const expectedStatus = isFailure ? 'fail' : reason ? 'skip' : 'pass'
-        const shard = scenario.startsWith('empty-shard') ? ' --shard=2/2' : ''
+        const shard = scenario.startsWith('empty-shard') || scenario.includes('sharded') ? ' --shard=2/2' : ''
         let output = ''
         childProcess = exec(
           `./node_modules/.bin/vitest run --config vitest-empty-sessions/config.mjs${shard}`,
