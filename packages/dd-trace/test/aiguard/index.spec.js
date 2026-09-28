@@ -134,7 +134,7 @@ describe('AIGuard SDK', () => {
     sinon.assert.calledOnceWithExactly(request,
       postData,
       sinon.match({
-        url: url ?? `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`,
+        url: new URL(url ?? `${config.aiguard.DD_AI_GUARD_ENDPOINT}/evaluate`),
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

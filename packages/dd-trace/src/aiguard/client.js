@@ -31,7 +31,7 @@ function executeRequest (body, opts) {
     const postData = JSON.stringify(body)
     const url = new URL(opts.url)
     request(postData, {
-      url: url.href,
+      url,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
