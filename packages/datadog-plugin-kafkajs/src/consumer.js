@@ -64,7 +64,8 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
   start (ctx) {
     if (!this.config.dsmEnabled) return
     const { topic, message, groupId, clusterId } = ctx.extractedArgs || ctx
-    const headers = convertToTextMap(message?.headers)
+    // bindStart already parsed the same message's headers for APM context extraction.
+    const headers = ctx.dsmHeaders ?? convertToTextMap(message?.headers)
     if (!headers) return
 
     const { span } = ctx.currentStore
@@ -82,6 +83,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
     let childOf
     const headers = convertToTextMap(message?.headers)
+    ctx.dsmHeaders = headers
     if (headers) {
       childOf = this.tracer.extract('text_map', headers)
     }
