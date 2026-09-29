@@ -1060,6 +1060,7 @@ function testEndHandler ({
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
+    results.length > 1 &&
     !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
