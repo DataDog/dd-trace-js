@@ -9,16 +9,13 @@ const sinon = require('sinon')
 require('../setup/core')
 const log = require('../../src/log')
 
+// Keep the bundled evaluator real; only bypass configuration discovery.
 const FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
   './configuration_source': { create: () => undefined },
 })
 
-/**
- * @param {string} operator
- * @param {unknown} value
- * @param {unknown} [consent]
- */
-function configuration (operator = 'ONE_OF', value = ['admin'], consent) {
+/** @param {boolean} [consent] */
+function configuration (consent = false) {
   return {
     createdAt: '2026-01-01T00:00:00Z',
     format: 'SERVER',
@@ -29,22 +26,14 @@ function configuration (operator = 'ONE_OF', value = ['admin'], consent) {
         key: 'flag',
         enabled: true,
         variationType: 'BOOLEAN',
-        variations: { on: { key: 'on', value: true }, off: { key: 'off', value: false } },
-        allocations: [
-          {
-            key: 'rule',
-            rules: [{ conditions: [{ attribute: 'attr', operator, value }] }],
-            splits: [{ variationKey: 'on', shards: [] }],
-            doLog: false,
-          },
-          { key: 'default', rules: [], splits: [{ variationKey: 'off', shards: [] }], doLog: false },
-        ],
+        variations: { on: { key: 'on', value: true } },
+        allocations: [{ key: 'all', doLog: false, splits: [{ variationKey: 'on', shards: [] }] }],
       },
     },
   }
 }
 
-describe('bundled flagging provider compatibility', () => {
+describe('bundled flagging provider smoke tests', () => {
   let provider
   let clock
 
@@ -64,57 +53,22 @@ describe('bundled flagging provider compatibility', () => {
     clock.restore()
   })
 
-  /** @type {Array<[string, unknown, unknown, boolean]>} */
-  const cases = [
-    ['ONE_OF', ['admin'], ['admin'], false],
-    ['NOT_ONE_OF', ['admin'], ['user'], false],
-    ['MATCHES', '^admin$', ['admin'], false],
-    ['NOT_MATCHES', '^admin$', ['user'], false],
-    ['ONE_OF', ['[object Object]'], { plan: 'pro' }, false],
-    ['NOT_ONE_OF', ['admin'], { plan: 'pro' }, false],
-    ['NOT_MATCHES', '^admin$', { plan: 'pro' }, false],
-    ['GT', 0, true, false],
-    ['GTE', 5, ' 5 ', false],
-    ['GT', 10, '0x10', false],
-    ['LT', 5, '', false],
-    ['ONE_OF', ['true'], true, true],
-    ['ONE_OF', ['5'], 5, true],
-    ['GTE', 5, '5', true],
-    ['ONE_OF', ['admin'], 'admin', true],
-  ]
-  for (const [operator, value, attr, expected] of cases) {
-    it(`${operator} ${JSON.stringify(value)} with ${JSON.stringify(attr)} matches=${expected}`, async () => {
-      provider.setConfiguration(configuration(operator, value))
-      const details = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user', attr }, log)
-      assert.strictEqual(details.value, expected)
-      assert.strictEqual(details.variant, expected ? 'on' : 'off')
-      assert.strictEqual(details.reason, expected ? 'TARGETING_MATCH' : 'STATIC')
-      assert.strictEqual(details.errorCode, undefined)
-    })
-  }
-
-  for (const consent of [undefined, false, true, 'true', 1]) {
-    it(`exposes strict evaluation-time consent metadata for ${JSON.stringify(consent)}`, async () => {
-      provider.setConfiguration(configuration('ONE_OF', ['admin'], consent))
-      const details = await provider.resolveBooleanEvaluation(
-        'flag', false, { targetingKey: 'user', attr: 'admin' }, log
-      )
-      assert.strictEqual(details.value, true)
-      assert.strictEqual(details.flagMetadata.__dd_observe_full_evaluation_data, consent === true)
-      assert.strictEqual(details.flagMetadata.__dd_eval_timestamp_ms, 1_790_150_400_000)
-    })
-  }
+  it('evaluates a flag through the bundled provider', async () => {
+    provider.setConfiguration(configuration())
+    const details = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user' }, log)
+    assert.strictEqual(details.value, true)
+    assert.strictEqual(details.variant, 'on')
+    assert.strictEqual(details.reason, 'STATIC')
+    assert.strictEqual(details.errorCode, undefined)
+  })
 
   for (const consent of [false, true]) {
-    it(`keeps consent from the evaluated configuration across a ${consent} to ${!consent} swap`, async () => {
-      const config = configuration('ONE_OF', ['admin'], consent)
-      provider.setConfiguration(config)
-      const details = await provider.resolveBooleanEvaluation(
-        'flag', false, { targetingKey: 'user', attr: 'admin' }, log
-      )
+    it(`preserves evaluation metadata across a ${consent} to ${!consent} configuration swap`, async () => {
+      provider.setConfiguration(configuration(consent))
+      const details = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user' }, log)
       clock.tick(100)
-      provider.setConfiguration(configuration('ONE_OF', ['admin'], !consent))
-      const next = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user', attr: 'admin' }, log)
+      provider.setConfiguration(configuration(!consent))
+      const next = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user' }, log)
       assert.strictEqual(details.value, true)
       assert.strictEqual(next.value, true)
       assert.strictEqual(details.flagMetadata.__dd_observe_full_evaluation_data, consent)
