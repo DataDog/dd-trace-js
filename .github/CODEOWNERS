@@ -250,6 +250,7 @@
 /integration-tests/cypress-typescript.config.ts @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
+/integration-tests/playwright-failure-media.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.ts @DataDog/dd-trace-js @DataDog/ci-app-libraries
 /integration-tests/vite.config.mjs @DataDog/dd-trace-js @DataDog/ci-app-libraries

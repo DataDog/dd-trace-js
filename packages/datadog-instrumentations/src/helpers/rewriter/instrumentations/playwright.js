@@ -3,6 +3,14 @@
 // Playwright keeps several hook targets in private local classes/functions.
 // Keep these rewrites limited to bundled internals that addHook cannot wrap.
 module.exports = [
+  ...[
+    ['>=1.38.0 <1.60.0', 'lib/common/config.js'],
+    ['>=1.60.0', 'lib/common/index.js'],
+  ].map(([versionRange, filePath]) => ({
+    module: { name: 'playwright', versionRange, filePath },
+    functionQuery: { className: 'FullProjectInternal', methodName: 'constructor', kind: 'Sync' },
+    channelName: 'FullProjectInternal',
+  })),
   {
     module: {
       name: '@playwright/test',
