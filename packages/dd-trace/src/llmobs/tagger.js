@@ -505,10 +505,13 @@ class LLMObsTagger {
     }
 
     if (Array.isArray(template)) {
-      for (const message of template) {
-        if (typeof message !== 'object' || !message.role || !message.content) {
+      for (const item of template) {
+        const valid = item?.type === 'placeholder'
+          ? typeof item.name === 'string'
+          : typeof item?.role === 'string' && typeof item?.content === 'string'
+        if (!valid) {
           this.#handleFailure(
-            'Prompt chat template must be an array of objects with role and content properties.', 'invalid_prompt'
+            'Prompt chat template must contain messages or message placeholders.', 'invalid_prompt'
           )
           return
         }
@@ -532,7 +535,9 @@ class LLMObsTagger {
     if (typeof template === 'string') {
       finalTemplate = template
     } else if (Array.isArray(template)) {
-      finalChatTemplate = template.map(message => ({ role: message.role, content: message.content }))
+      finalChatTemplate = template.map(item => item.type === 'placeholder'
+        ? { type: 'placeholder', name: item.name }
+        : { role: item.role, content: item.content })
     }
 
     const validatedPrompt = {}

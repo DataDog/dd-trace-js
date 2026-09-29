@@ -69,6 +69,7 @@ const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatch
 const filterForShardCh = tracingChannel('orchestrion:playwright:filterForShard')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
+const lastRunTestIdCh = tracingChannel('orchestrion:playwright:lastRunTestId')
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
@@ -76,6 +77,7 @@ const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomati
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
 
 const testToCtx = new WeakMap()
+const originalTestIdsByRetry = new WeakMap()
 const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
@@ -475,6 +477,7 @@ function deepCloneSuite (suite, filterTest, tags = [], configureCopiedTest) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
+        originalTestIdsByRetry.set(copiedTest, originalTestIdsByRetry.get(entry) ?? entry.id)
         if (configureCopiedTest) {
           configureCopiedTest(copiedTest, entry)
         }
@@ -915,6 +918,7 @@ function testEndHandler ({
   testDuration,
   testResultStatus,
   expectedStatus = test.expectedStatus,
+  hasNonRetriableError,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -1087,6 +1091,8 @@ function testEndHandler ({
     if (testCtx) {
       testFinishCh.publish({
         testStatus,
+        isExpectedFailure: testResultStatus === 'failed' && expectedStatus === 'failed',
+        hasNonRetriableError,
         steps: testResult?.steps || [],
         isRetry: testResult?.retry > 0,
         error,
@@ -1278,7 +1284,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       videos.push(attachment)
     }
   })
-  worker.on('testEnd', ({ testId, status, errors, annotations, duration, expectedStatus }) => {
+  worker.on('testEnd', ({ testId, status, errors, annotations, duration, expectedStatus, hasNonRetriableError }) => {
     const test = getTestByTestId(dispatcher, testId)
     if (!test) return
 
@@ -1300,6 +1306,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
         testDuration: duration,
         testResultStatus: status,
         expectedStatus,
+        hasNonRetriableError,
       }
     )
     const testResult = test.results.at(-1)
@@ -1406,6 +1413,8 @@ function dispatcherHook (dispatcherExport) {
             annotations: params.annotations,
             testStatus: STATUS_TO_TEST_STATUS[testResult.status],
             testResultStatus: testResult.status,
+            expectedStatus: params.expectedStatus,
+            hasNonRetriableError: params.hasNonRetriableError,
             error: testResult.error,
             isTimeout,
             shouldCreateTestSpan: true,
@@ -1914,6 +1923,14 @@ pageGotoCh.subscribe({
   },
 })
 
+// Retry clones exist only after discovery, so persist their original IDs for --last-failed.
+lastRunTestIdCh.subscribe({
+  end (ctx) {
+    const originalId = originalTestIdsByRetry.get(ctx.arguments[0])
+    if (originalId !== undefined) ctx.result = originalId
+  },
+})
+
 reporterErrorCh.subscribe((error) => {
   recordReporterError(error)
 })
@@ -1984,6 +2001,12 @@ snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreensh
 saveAutomaticVideoCh.subscribe({ start: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  tracingChannel('orchestrion:@playwright/test:Multiplexer_onError').subscribe({
+    start (ctx) {
+      recordReporterError(ctx.arguments[0])
+    },
+  })
+
   addHook({
     name: '@playwright/test',
     file: 'lib/runner.js',
@@ -2672,6 +2695,8 @@ function instrumentWorkerMainMethods (workerMain) {
 
     await getChannelPromise(testFinishCh, {
       testStatus: STATUS_TO_TEST_STATUS[status],
+      isExpectedFailure: status === 'failed' && testInfo.expectedStatus === 'failed',
+      hasNonRetriableError: testInfo._hasNonRetriableError,
       retryTestId,
       deferFinalStatus: test._ddDeferFinalStatus,
       steps: steps.filter(step => step.testId === testId),
