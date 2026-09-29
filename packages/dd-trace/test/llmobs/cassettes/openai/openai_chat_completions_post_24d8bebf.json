@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "http://172.18.0.1:9911/chat/completions",
+    "headers": {
+      "Content-Length": "321",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "Linux",
+      "x-stainless-arch": "x64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.12.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "600",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-4o-mini\",\n  \"temperature\": 1,\n  \"top_p\": 1,\n  \"frequency_penalty\": 0,\n  \"presence_penalty\": 0,\n  \"n\": 1,\n  \"stream\": true,\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a parity assistant.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Stream a short reply.\"\n    }\n  ]\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "content-type": "text/event-stream",
+      "Date": "Tue, 08 Sep 2026 17:16:47 GMT",
+      "Connection": "keep-alive",
+      "Keep-Alive": "timeout=5",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "data: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Streamed\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" parity.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"chatcmpl-stub-stream\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"gpt-4o-mini\",\"system_fingerprint\":\"fp_stub\",\"choices\":[],\"usage\":{\"prompt_tokens\":9,\"completion_tokens\":3,\"total_tokens\":12}}\n\ndata: [DONE]\n\n"
+  }
+}

@@ -7,6 +7,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const MODEL = 'langchain.request.model'
 const PROVIDER = 'langchain.request.provider'
 const TYPE = 'langchain.request.type'
+const STREAM = 'langchain.request.stream'
 
 const LangChainHandler = require('./handlers/default')
 const LangChainLanguageModelHandler = require('./handlers/language_models')
@@ -18,6 +19,14 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
   static id = 'langchain'
   static operation = 'invoke'
   static system = 'langchain'
+  static stream = false
+  /** @type {string | undefined} */
+  static lcType
+
+  /** @returns {typeof BaseLangChainTracingPlugin} */
+  get #cls () {
+    return /** @type {typeof BaseLangChainTracingPlugin} */ (this.constructor)
+  }
 
   constructor () {
     super(...arguments)
@@ -42,7 +51,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     // TODO(bengl): All this renaming is just so we don't have to change the existing handlers
     ctx.args = ctx.arguments
     ctx.instance = ctx.self
-    const type = ctx.type = this.constructor.lcType
+    const type = ctx.type = this.#cls.lcType
 
     // Runnable interfaces have an `lc_namespace` property
     const ns = ctx.self.lc_namespace || (
@@ -75,6 +84,7 @@ class BaseLangChainTracingPlugin extends TracingPlugin {
     if (provider) tags[PROVIDER] = provider
     if (model) tags[MODEL] = model
     if (type) tags[TYPE] = type
+    if (this.#cls.stream) tags[STREAM] = 'true'
 
     span.addTags(tags)
 
@@ -149,6 +159,72 @@ class VectorStoreSimilaritySearchWithScorePlugin extends BaseLangChainTracingPlu
   static prefix = 'tracing:orchestrion:@langchain/core:VectorStore_similaritySearchWithScore'
 }
 
+// `_streamIterator` is a sync generator method: the span starts when the iterator is created and is
+// finished by the matching `:next` plugin once the iterator is exhausted, returned, or throws.
+class BaseLangChainStreamTracingPlugin extends BaseLangChainTracingPlugin {
+  static stream = true
+
+  end () {}
+
+  asyncEnd () {}
+}
+
+class BaseLangChainStreamNextTracingPlugin extends TracingPlugin {
+  static id = 'langchain'
+
+  bindStart (ctx) {
+    return ctx.currentStore
+  }
+
+  error (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    if (!ctx.error?.is_bubble_up) span.setTag('error', ctx.error)
+    span.finish()
+  }
+
+  asyncEnd (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    if (ctx.result?.done === true || ctx.method === 'return') span.finish()
+  }
+}
+
+class BaseChatModelStreamPlugin extends BaseLangChainStreamTracingPlugin {
+  static id = 'langchain_chat_model_stream'
+  static lcType = 'chat_model'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseChatModel_streamIterator'
+}
+
+class BaseChatModelStreamNextPlugin extends BaseLangChainStreamNextTracingPlugin {
+  static id = 'langchain_chat_model_stream_next'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseChatModel_streamIterator:next'
+}
+
+class BaseLLMStreamPlugin extends BaseLangChainStreamTracingPlugin {
+  static id = 'langchain_llm_stream'
+  static lcType = 'llm'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseLLM_streamIterator'
+}
+
+class BaseLLMStreamNextPlugin extends BaseLangChainStreamNextTracingPlugin {
+  static id = 'langchain_llm_stream_next'
+  static prefix = 'tracing:orchestrion:@langchain/core:BaseLLM_streamIterator:next'
+}
+
+class RunnableSequenceStreamPlugin extends BaseLangChainStreamTracingPlugin {
+  static id = 'langchain_rs_stream'
+  static lcType = 'chain'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_streamIterator'
+}
+
+class RunnableSequenceStreamNextPlugin extends BaseLangChainStreamNextTracingPlugin {
+  static id = 'langchain_rs_stream_next'
+  static prefix = 'tracing:orchestrion:@langchain/core:RunnableSequence_streamIterator:next'
+}
+
 module.exports = [
   RunnableSequenceInvokePlugin,
   RunnableSequenceBatchPlugin,
@@ -159,4 +235,10 @@ module.exports = [
   ToolInvokePlugin,
   VectorStoreSimilaritySearchPlugin,
   VectorStoreSimilaritySearchWithScorePlugin,
+  BaseChatModelStreamPlugin,
+  BaseChatModelStreamNextPlugin,
+  BaseLLMStreamPlugin,
+  BaseLLMStreamNextPlugin,
+  RunnableSequenceStreamPlugin,
+  RunnableSequenceStreamNextPlugin,
 ]
