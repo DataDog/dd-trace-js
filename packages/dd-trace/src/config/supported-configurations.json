@@ -2063,7 +2063,7 @@
     ],
     "DD_TEST_FAILURE_VIDEOS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true",
         "namespace": "testOptimization"
