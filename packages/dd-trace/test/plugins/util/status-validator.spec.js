@@ -106,8 +106,6 @@ describe('plugins/util/status-validator', () => {
       assert.deepStrictEqual(errorCodes(validate, [200, 399, 400, 499, 500, 599]), [400, 499, 500, 599])
     })
 
-    // The conventions treat a code the client could not interpret the same as a 5xx, so the range
-    // stays open above it, matching the server validator.
     it('should keep a status above 599 an error', () => {
       const validate = getClientStatusValidator({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
 

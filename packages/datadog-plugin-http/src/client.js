@@ -154,10 +154,7 @@ class HttpClientPlugin extends ClientPlugin {
   }
 }
 
-/**
- * @param {Record<string, unknown>} options
- * @returns {string | undefined}
- */
+/** @param {Record<string, unknown>} options */
 function getRedactedAuth (options) {
   if (typeof options.auth === 'string' && options.auth) return 'REDACTED:REDACTED'
 }

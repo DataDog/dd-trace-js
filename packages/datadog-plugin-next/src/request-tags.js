@@ -12,7 +12,7 @@ function isWebRequest (req) {
 }
 
 /**
- * Capture request data that Next.js does not publish through web.addRequestTags.
+ * `NextPlugin` bypasses `web.addRequestTags`; record equivalent request metadata for OTel semantics.
  *
  * @param {{ setTag: (key: string, value: unknown) => void }} span
  * @param {Record<string, unknown>} config
@@ -34,8 +34,6 @@ function addOtelRequestTags (span, config, req) {
   }
 
   span.setTag('http.url', obfuscateQs(config, url))
-  // `web.addRequestTags` records this on the shared path; without it the conversion has no
-  // `user_agent.original` to emit.
   if (userAgent !== undefined) span.setTag('http.useragent', userAgent)
   if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
 }

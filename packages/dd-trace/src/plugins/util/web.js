@@ -162,9 +162,8 @@ const web = {
     const currentRoute = spanContext.getTag(HTTP_ROUTE)
     const publishedRoute = context.paths.length > 1 ? context.paths.join('') : context.paths[0]
     context.paths = [path]
-    // Flag-only: this mutates the live span, which the default path must not do. A downstream
-    // request can sample from inside the route handler, so the route and resource have to be
-    // readable before finish. Overwrite only what this context published, so an upstream route still wins.
+    // Publish before finish because downstream requests can trigger sampling inside the handler.
+    // Replace only values this context owns, so an upstream route still wins.
     if (currentRoute === undefined || currentRoute === publishedRoute) {
       context.span.setTag(HTTP_ROUTE, path)
       if (ownsResource(spanContext)) {
@@ -456,7 +455,7 @@ function addRequestTags (context, spanType) {
   // other HTTP attributes, which are renamed centrally in span_format) it is set
   // here directly when OTel semantics are enabled.
   if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-    // Establish ownership before propagation can sample.
+    // Claim the resource before propagation can sample it.
     if (ownsResource(spanContext)) {
       setInstrumentationHttpResource(span, otelHttpResourceName(req.method))
     }

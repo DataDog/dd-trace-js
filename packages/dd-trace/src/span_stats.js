@@ -106,7 +106,6 @@ class SpanAggStats {
  * then the numeric one in `metrics`. Zero when none of them is usable.
  *
  * @param {import('./span_format').FormattedSpan} span
- * @returns {string | number}
  */
 function httpStatusCode (span) {
   const legacyStatus = span.meta[HTTP_STATUS_CODE]

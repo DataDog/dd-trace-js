@@ -22,8 +22,7 @@ function isNotClientErrorCode (code) {
   return code < 400 || code >= 500
 }
 
-// Under OTel semantics a client 5xx is an error, unlike the Datadog default, and so is any code
-// above the range: the conventions treat a code the client could not interpret as a 5xx.
+// OTel treats client 5xx responses and unrecognized codes above 599 as errors.
 /** @type {StatusValidator} */
 function isNotOtelClientErrorCode (code) {
   return code < 400

@@ -92,8 +92,6 @@ describe('Plugin', function () {
 
     assert.strictEqual(tags['http.url'], 'http://example.com:8080/products/42?token=secret')
     assert.strictEqual(tags['network.peer.address'], '192.0.2.1')
-    // The shared `web.addRequestTags` path records this, so the Next path has to as well or the
-    // conversion emits no `user_agent.original`.
     assert.strictEqual(tags['http.useragent'], 'test-agent/1.0')
   })
 

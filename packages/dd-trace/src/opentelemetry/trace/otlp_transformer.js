@@ -82,9 +82,6 @@ const EXCLUDED_META_KEYS = new Set([
 // DD-only error tags that should not appear as attributes when OTel trace semantics are enabled.
 const DD_ERROR_META_KEYS = new Set(['error.message'])
 
-// Typed as ints by the semantic conventions but carried in `meta`, since the agent protocol is
-// all strings. Promoted back here rather than duplicated into `metrics`, which would emit the
-// attribute twice with two types. Same approach as DataDog/dd-trace-go#4888.
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
@@ -228,6 +225,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         if (EXCLUDED_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+          // Agent protocol stores these attributes as strings; OTLP requires integers.
           if (isCanonicalIntegerAttribute(value)) {
             attributes.push({ key, value: { intValue: Number(value) } })
           }

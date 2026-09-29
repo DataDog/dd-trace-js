@@ -88,8 +88,7 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(meta['http.request.method'], 'GET')
       assert.strictEqual(meta['url.full'], 'http://localhost:8080/u?x=1')
       assert.strictEqual(meta['server.address'], 'localhost')
-      // Every attribute goes out as a `meta` string on the agent protocol; the OTLP
-      // transformer is what restores the int typing.
+      // Datadog format stores HTTP status and server port as strings; OTLP restores integers.
       assert.strictEqual(meta['http.response.status_code'], '200')
       assert.strictEqual(meta['server.port'], '8080')
       assert.ok(!('http.response.status_code' in metrics))
@@ -346,11 +345,6 @@ describe('http-otel-semantics', () => {
       })
     }
 
-    // Whether an HTTP status makes the span an error is decided at capture time,
-    // from the configured error-status ranges (see status-validator.js). Trace
-    // stats run after this transform and consume that same decision. The transform only derives
-    // `error.type` from the decision the span already carries, and never changes
-    // `error` itself.
     it('derives error.type from the error the span already carries', () => {
       const errored = run(
         {
@@ -397,8 +391,6 @@ describe('http-otel-semantics', () => {
     })
 
     it('still renames what a hook left behind after stripping the method and URL', () => {
-      // The marker proves instrumentation touched this span, so the status and user agent
-      // captured at finish must not keep their Datadog names.
       const span = run(
         {
           'span.kind': 'server',
@@ -424,8 +416,6 @@ describe('http-otel-semantics', () => {
     })
 
     it('keeps a canonical numeric attribute when no derived replacement exists', () => {
-      // A hook can drop the Datadog tag and supply the OTel one directly. Nothing is derived then,
-      // so dropping the metric would lose the attribute altogether.
       const span = run({ 'span.kind': 'server', 'http.method': 'GET' }, { 'http.response.status_code': 204 })
 
       assert.strictEqual(span.metrics['http.response.status_code'], 204)
@@ -433,8 +423,6 @@ describe('http-otel-semantics', () => {
     })
 
     it('drops a numeric copy of a derived attribute so OTLP cannot carry it twice', () => {
-      // A hook setting a numeric value lands in `metrics`, while the attribute is derived into
-      // `meta` from the Datadog key. Exporting both would emit the attribute twice.
       const span = run(
         {
           'span.kind': 'server',
@@ -452,8 +440,6 @@ describe('http-otel-semantics', () => {
     })
 
     it('does not blame a status a hook replaced after validation', () => {
-      // Capture time rejected 500 and recorded it; the hook then answered 200. The marker no
-      // longer matches the reported status, so 200 is not the cause.
       const span = run(
         {
           'span.kind': 'server',
@@ -471,9 +457,6 @@ describe('http-otel-semantics', () => {
     })
 
     it('does not blame the status for an error the application recorded itself', () => {
-      // A request hook can mark a span as an error while the response status stays inside the
-      // validator's accepted range. Capture time leaves the status-error marker off in that
-      // case, so the status must not be reported as the cause.
       for (const kind of ['server', 'client']) {
         for (const status of ['404', '500']) {
           const span = run(
@@ -518,8 +501,6 @@ describe('http-otel-semantics', () => {
     })
 
     it('emits the status code verbatim, without reparsing it', () => {
-      // `span_format` already stringified the status, so whatever it holds is passed
-      // straight through rather than being parsed into a number.
       const { meta } = run({
         'span.kind': 'client',
         'http.method': 'GET',

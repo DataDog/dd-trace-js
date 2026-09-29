@@ -90,7 +90,7 @@ describe('Plugin', () => {
                   'http.request.method_original': 'PROPFIND',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
-                  // Every attribute leaves on the agent protocol as a `meta` string.
+                  // This test reuses the mock Datadog Agent, which encodes HTTP status and port as strings.
                   'http.response.status_code': '200',
                   'server.port': String(port),
                 },
@@ -180,9 +180,6 @@ describe('Plugin', () => {
         })
 
         it('marks a 5xx client response as an error, unlike the Datadog default', done => {
-          // OTel treats a client 5xx as an error, so the flag widens the default
-          // client error range to 400-599. The decision is made at capture time so
-          // the span, the trace stats and the exported payload all agree.
           const app = express()
           app.get('/broken', (req, res) => {
             res.status(503).send()

@@ -46,7 +46,8 @@ function hasCiValidationEnvironment () {
 }
 
 /**
- * Whether the tracer uses OTLP for APM spans. Test Optimization and the Electron SDK have no OTLP trace exporter.
+ * Whether the tracer effectively uses OTLP for APM spans.
+ * Test Optimization and Electron do not support OTLP even when `OTEL_TRACES_EXPORTER` is `otlp`.
  *
  * @param {import('./config')} config
  */

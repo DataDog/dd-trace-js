@@ -95,8 +95,6 @@ class NextPlugin extends ServerPlugin {
       integrationName: this.constructor.id,
     })
 
-    // Next.js does not publish these through `web.addRequestTags`, so the shared conversion
-    // has nothing to derive `url.*`, `server.*` and `network.peer.address` from.
     if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) addOtelRequestTags(span, this.config, req)
 
     this.stampIntegrationService(span, serviceName)
