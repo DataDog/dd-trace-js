@@ -156,13 +156,13 @@ function toFlatScalarValue (value) {
   }
   if (!isPlainObject(value)) return
 
-  let numbers = null
-  for (const [key, item] of Object.entries(value)) {
+  const entries = Object.entries(value)
+  if (entries.length === 0) return null
+  for (const [, item] of entries) {
     if (!isFiniteNumber(item)) return
-    numbers ??= {}
-    numbers[key] = item
   }
-  return numbers
+  // Built from entries so a key such as `__proto__` becomes an own property rather than setting the prototype.
+  return Object.fromEntries(entries)
 }
 
 /**
@@ -215,7 +215,7 @@ function buildToolParameters (parameters) {
   if (!isPlainObject(parameters)) return null
 
   const { specs, required } = toolParameterSpecs(parameters)
-  let flattened
+  const flattened = []
   for (const [param, spec] of Object.entries(specs)) {
     /** @type {AgentToolParameter} */
     const entry = {}
@@ -226,10 +226,10 @@ function buildToolParameters (parameters) {
     }
     if (required?.has(param)) entry.required = true
     if (entry.type === undefined && entry.required === undefined) continue
-    flattened ??= {}
-    flattened[param] = entry
+    flattened.push([param, entry])
   }
-  return flattened
+  // Built from entries so a parameter named `__proto__` becomes an own property rather than setting the prototype.
+  return flattened.length > 0 ? Object.fromEntries(flattened) : undefined
 }
 
 /**

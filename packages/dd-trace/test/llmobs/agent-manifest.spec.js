@@ -126,6 +126,15 @@ describe('agent manifest', () => {
         )
       })
 
+      it('keeps a logit_bias key named __proto__', () => {
+        const modelSettings = JSON.parse('{ "logit_bias": { "__proto__": 1, "50256": -100 } }')
+
+        assert.deepStrictEqual(
+          manifestOf({ modelSettings }),
+          JSON.parse('{ "model_settings": { "logit_bias": { "__proto__": 1, "50256": -100 } } }')
+        )
+      })
+
       it('treats unset values as declaring nothing', () => {
         assert.strictEqual(
           manifestOf({ modelSettings: { tool_choice: '', seed: null, stop_sequences: [], logit_bias: {} } }),
@@ -241,6 +250,19 @@ describe('agent manifest', () => {
           tools: [{ name: 'describe', parameters: { properties: { type: 'object' } } }],
         })
       })
+
+      const protoParameters = [
+        ['a mapping', '{ "__proto__": { "type": "string" } }'],
+        ['a JSON Schema object', '{ "type": "object", "properties": { "__proto__": { "type": "string" } } }'],
+      ]
+      for (const [label, json] of protoParameters) {
+        it(`keeps a parameter named __proto__ in ${label}`, () => {
+          assert.deepStrictEqual(
+            manifestOf({ tools: [{ name: 'lookup', parameters: JSON.parse(json) }] }),
+            JSON.parse('{ "tools": [{ "name": "lookup", "parameters": { "__proto__": { "type": "string" } } }] }')
+          )
+        })
+      }
 
       it('drops schema-library instances rather than reading their fields', () => {
         class ZodObject {
