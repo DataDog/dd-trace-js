@@ -3980,6 +3980,11 @@ describe('webdriverio instrumentation', () => {
           earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
+          flakyTests: {
+            webdriverio: {
+              'first.spec.js': ['first test'],
+            },
+          },
           isCodeCoverageEnabled: true,
           isCoverageReportUploadEnabled: true,
           isDiEnabled: true,
@@ -4125,11 +4130,21 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
       assert.strictEqual(secondWorker.sentMessages[0].content.configuration.isDynamicAtrEnabled, true)
       assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.dynamicAtrBuckets, [1, 2, 3, 4, 5])
+      assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.flakyTests, {
+        mocha: {
+          'first.spec.js': ['first test'],
+        },
+      })
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
         dynamicAtrBuckets: [1, 2, 3, 4, 5],
         earlyFlakeDetectionFaultyThreshold: 30,
         earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
+        flakyTests: {
+          mocha: {
+            'first.spec.js': ['first test'],
+          },
+        },
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
         isDiEnabled: true,
