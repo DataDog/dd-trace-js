@@ -415,6 +415,8 @@ class LLMObsTagger {
       template,
       contextVariables,
       queryVariables,
+      promptUuid,
+      promptVersionUuid,
     } = prompt
 
     if (strictValidation) {
@@ -429,6 +431,8 @@ class LLMObsTagger {
       }
     }
 
+    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
+    const replacesPrompt = id != null || version != null || template != null
     const finalPromptId = id ?? `${mlApp}_${DEFAULT_PROMPT_NAME}`
     const finalCtxVariablesKeys = contextVariables ?? ['context']
     const finalQueryVariablesKeys = queryVariables ?? ['question']
@@ -471,6 +475,16 @@ class LLMObsTagger {
       return
     }
 
+    if (promptUuid != null && typeof promptUuid !== 'string') {
+      this.#handleFailure('Prompt UUID must be a string.', 'invalid_prompt')
+      return
+    }
+
+    if (promptVersionUuid != null && typeof promptVersionUuid !== 'string') {
+      this.#handleFailure('Prompt version UUID must be a string.', 'invalid_prompt')
+      return
+    }
+
     // validate prompt tags
     if (tags && (typeof tags !== 'object' || tags instanceof Map)) {
       this.#handleFailure('Prompt tags must be an non-Map object.', 'invalid_prompt')
@@ -491,10 +505,13 @@ class LLMObsTagger {
     }
 
     if (Array.isArray(template)) {
-      for (const message of template) {
-        if (typeof message !== 'object' || !message.role || !message.content) {
+      for (const item of template) {
+        const valid = item?.type === 'placeholder'
+          ? typeof item.name === 'string'
+          : typeof item?.role === 'string' && typeof item?.content === 'string'
+        if (!valid) {
           this.#handleFailure(
-            'Prompt chat template must be an array of objects with role and content properties.', 'invalid_prompt'
+            'Prompt chat template must contain messages or message placeholders.', 'invalid_prompt'
           )
           return
         }
@@ -518,21 +535,32 @@ class LLMObsTagger {
     if (typeof template === 'string') {
       finalTemplate = template
     } else if (Array.isArray(template)) {
-      finalChatTemplate = template.map(message => ({ role: message.role, content: message.content }))
+      finalChatTemplate = template.map(item => item.type === 'placeholder'
+        ? { type: 'placeholder', name: item.name }
+        : { role: item.role, content: item.content })
     }
 
     const validatedPrompt = {}
-    if (finalPromptId) validatedPrompt.id = finalPromptId
+    if (finalPromptId && (!currentPrompt || replacesPrompt)) validatedPrompt.id = finalPromptId
     if (version) validatedPrompt.version = version
+    if (promptUuid) validatedPrompt.prompt_uuid = promptUuid
+    if (promptVersionUuid) validatedPrompt.prompt_version_uuid = promptVersionUuid
     if (variables) validatedPrompt.variables = variables
     if (finalTemplate) validatedPrompt.template = finalTemplate
     if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
     if (tags) validatedPrompt.tags = tags
-    if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
-    if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    if (finalCtxVariablesKeys && (!currentPrompt || replacesPrompt || contextVariables != null)) {
+      validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
+    }
+    if (finalQueryVariablesKeys && (!currentPrompt || replacesPrompt || queryVariables != null)) {
+      validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+    }
 
-    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
     if (currentPrompt) {
+      if (replacesPrompt) {
+        if (promptUuid == null) currentPrompt.prompt_uuid = undefined
+        if (promptVersionUuid == null) currentPrompt.prompt_version_uuid = undefined
+      }
       Object.assign(currentPrompt, validatedPrompt)
     } else {
       this._setTag(span, INPUT_PROMPT, validatedPrompt)

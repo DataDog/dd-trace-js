@@ -3919,6 +3919,9 @@ declare namespace tracer {
        */
       experiments: Experiments,
 
+      /** Prompt Management API. */
+      prompts: Prompts,
+
       /**
        * Enable LLM Observability tracing.
        *
@@ -4070,8 +4073,180 @@ declare namespace tracer {
       flush (): void
     }
 
+    interface Prompts {
+      /** Resolve an exact, environment-targeted, or latest managed prompt. */
+      getPrompt (promptId: string, options?: GetPromptOptions): Promise<ManagedPrompt>
+      /** Refresh the prompt selected by the current environment. */
+      refreshPrompt (promptId: string): Promise<ManagedPrompt | undefined>
+      /** Clear the in-memory and/or persistent prompt caches. */
+      clearPromptCache (options?: ClearPromptCacheOptions): void
+      /** Create a text or chat prompt and its first version. */
+      createPrompt (
+        promptId: string,
+        template: string | PromptTemplateItem[],
+        options?: CreatePromptOptions
+      ): Promise<PromptResponse>
+      /** Add a text or chat version to an existing prompt. */
+      createPromptVersion (
+        promptId: string,
+        template: string | PromptTemplateItem[],
+        options?: CreatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Update prompt metadata. */
+      updatePrompt (promptId: string, options: UpdatePromptOptions): Promise<PromptResponse>
+      /** Update prompt-version metadata or environment assignments. */
+      updatePromptVersion (
+        promptId: string,
+        version: number,
+        options: UpdatePromptVersionOptions
+      ): Promise<PromptVersionResponse>
+      /** Delete a prompt. */
+      deletePrompt (promptId: string): Promise<DeletedPromptResponse>
+      /** List prompts. */
+      listPrompts (): Promise<PromptResponse[]>
+      /** List versions for a prompt. */
+      listPromptVersions (promptId: string): Promise<PromptVersionResponse[]>
+    }
+
+    interface PromptTemplateMessage {
+      role: string,
+      content: string
+    }
+
+    /** Provider fields on expanded messages; authored templates remain text-only. */
+    interface FormattedPromptMessage extends PromptTemplateMessage {
+      // The inherited content type stays string for compatibility; tool-only payloads can omit it or contain null.
+      tool_calls?: PromptToolCall[] | null,
+      tool_results?: PromptToolResult[] | null,
+      tool_call_id?: string | null
+    }
+
+    interface PromptToolCall {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      arguments?: unknown,
+      function?: {
+        name: string,
+        arguments: string
+      } | null
+    }
+
+    interface PromptToolResult {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      result?: unknown
+    }
+
+    interface PromptMessagePlaceholder {
+      type: 'placeholder',
+      name: string
+    }
+
+    type PromptTemplateItem = PromptTemplateMessage | PromptMessagePlaceholder
+
+    type PromptFallbackValue =
+      | string
+      | PromptTemplateItem[]
+      | { template: string | PromptTemplateItem[], version?: string, config?: Record<string, JSONType> }
+    type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
+
+    interface GetPromptOptions {
+      version?: number,
+      fallback?: PromptFallback,
+      targetingKey?: string,
+      attributes?: Record<string, string | number | boolean>
+    }
+
+    interface ClearPromptCacheOptions {
+      hot?: boolean,
+      warm?: boolean
+    }
+
+    interface CreatePromptOptions {
+      title?: string,
+      description?: string,
+      userVersion?: string,
+      envIds?: string[],
+      config?: Record<string, JSONType>
+    }
+
+    interface CreatePromptVersionOptions {
+      description?: string,
+      userVersion?: string,
+      envIds?: string[],
+      config?: Record<string, JSONType>
+    }
+
+    interface UpdatePromptOptions {
+      title?: string,
+      description?: string
+    }
+
+    interface UpdatePromptVersionOptions {
+      description?: string,
+      envIds?: string[]
+    }
+
+    // Preserve released output types; placeholder entries and null/omitted tool content are not fully described here.
+    interface ManagedPrompt {
+      readonly id: string,
+      readonly version: string,
+      readonly source: 'registry' | 'cache' | 'fallback' | 'ff' | 'resolve',
+      readonly template: string | ReadonlyArray<Readonly<PromptTemplateMessage>>,
+      readonly config: Readonly<Record<string, ReadonlyJSONType>>,
+      readonly promptUuid?: string,
+      readonly promptVersionUuid?: string,
+      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
+      toAnnotation (variables?: Record<string, unknown>): Prompt
+    }
+
+    interface PromptResponse {
+      id?: string,
+      prompt_id?: string,
+      title?: string,
+      description?: string,
+      created_at?: string,
+      source?: string,
+      num_versions?: number,
+      in_registry?: boolean,
+      created_from?: string,
+      author?: string,
+      ml_app?: string,
+      ml_apps?: string[],
+      last_version_created_at?: string,
+      extracted_from?: string,
+      config?: Record<string, JSONType>
+    }
+
+    interface PromptVersionResponse {
+      id?: string,
+      prompt_uuid?: string,
+      prompt_id?: string,
+      template?: string | PromptTemplateMessage[],
+      version?: number,
+      user_version?: string,
+      created_at?: string,
+      version_created_at?: string,
+      author?: string,
+      description?: string,
+      ml_app?: string,
+      config?: Record<string, JSONType>
+    }
+
+    interface DeletedPromptResponse {
+      id?: string,
+      prompt_id?: string,
+      deleted_at?: string
+    }
+
     /** JSON-serializable value accepted by LLMObs Experiments. */
     type JSONType = string | number | boolean | null | JSONType[] | { [key: string]: JSONType }
+
+    type ReadonlyJSONType = string | number | boolean | null | ReadonlyArray<ReadonlyJSONType> | { readonly [key: string]: ReadonlyJSONType }
 
     /**
      * A task run over each dataset record during an experiment.
@@ -4673,6 +4848,12 @@ declare namespace tracer {
        * A template string or chat message template list.
        */
       template?: string | Message[]
+
+      /** Internal Datadog prompt identity. */
+      promptUuid?: string,
+
+      /** Internal Datadog prompt-version identity. */
+      promptVersionUuid?: string
     }
 
     interface ToolDefinition {

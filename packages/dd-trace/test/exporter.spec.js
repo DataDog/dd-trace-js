@@ -93,7 +93,7 @@ describe('exporter', () => {
       return {
         OTEL_TRACES_EXPORTER: 'otlp',
         isCiVisibility: false,
-        experimental: {},
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
         getOrigin: () => 'env_var',
         ...overrides,
       }
@@ -115,7 +115,7 @@ describe('exporter', () => {
     })
 
     it('should not select OTLP for Electron', () => {
-      const electronConfig = config({ experimental: { exporter: 'electron' } })
+      const electronConfig = config({ tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' } })
       assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(electronConfig), false)
     })
 

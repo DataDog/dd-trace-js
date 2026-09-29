@@ -580,7 +580,7 @@ class VitestPlugin extends CiPlugin {
       requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
       onDone,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags)) {
@@ -589,12 +589,11 @@ class VitestPlugin extends CiPlugin {
       }
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
-      if (isExpectedEmptySession) {
+      if (testSessionEmptyReason) {
         setExpectedEmptyTestSessionTags(
           this.testSessionSpan,
           this.testModuleSpan,
-          'No tests were executed',
-          'zero_tests'
+          testSessionEmptyReason
         )
       }
       if (error) {

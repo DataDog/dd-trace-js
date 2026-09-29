@@ -83,6 +83,7 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   'WEBSITE_RESOURCE_GROUP',
   // CI-visibility runner detection (test plugins, ci-visibility exporters)
   'CUCUMBER_WORKER_ID',
+  'JEST_JASMINE',
   'JEST_WORKER_ID',
   'MOCHA_WORKER_ID',
   'TINYPOOL_WORKER_ID',
@@ -319,14 +320,10 @@ function useAgentExporterForOtelSemantics (initializedTracer) {
   const { _config: config, _processor: processor } = datadogTracer
 
   // Mirrors `opentracing/tracer.js`; any other exporter already posts to the mock agent.
-  const usesOtlpExporter = config.OTEL_TRACES_EXPORTER === 'otlp' &&
-    !config.isCiVisibility &&
-    config.experimental.exporter !== 'electron'
-
-  if (!usesOtlpExporter) return
-
   const getExporter = require('../../src/exporter')
-  const Exporter = getExporter(config.experimental.exporter)
+  if (!getExporter.usesOtlpTraceExporter(config)) return
+
+  const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
   const exporter = new Exporter(config, datadogTracer._prioritySampler)
 
   datadogTracer._exporter = exporter

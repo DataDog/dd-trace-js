@@ -35,7 +35,7 @@ class DatadogTracer {
       const { createOtlpTraceExporter } = require('../opentelemetry/trace')
       this._exporter = createOtlpTraceExporter(config)
     } else {
-      const Exporter = getExporter(config.experimental.exporter)
+      const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
       this._exporter = new Exporter(config, this._prioritySampler)
     }
 
@@ -46,7 +46,7 @@ class DatadogTracer {
     }
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
     this._url = this._exporter._url
-    this._enableGetRumData = config.experimental.enableGetRumData
+    this._enableGetRumData = config.rum.DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),

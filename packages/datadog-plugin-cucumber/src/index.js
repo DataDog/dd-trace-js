@@ -73,7 +73,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       isParallel,
-      isExpectedEmptySession,
+      testSessionEmptyReason,
       error,
       onDone,
     }) => {
@@ -118,12 +118,11 @@ class CucumberPlugin extends CiPlugin {
 
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
-      if (isExpectedEmptySession) {
+      if (testSessionEmptyReason) {
         setExpectedEmptyTestSessionTags(
           this.testSessionSpan,
           this.testModuleSpan,
-          'No scenarios were executed',
-          'zero_tests'
+          testSessionEmptyReason
         )
       }
       if (error) {

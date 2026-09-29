@@ -42,7 +42,11 @@ const pluginClasses = {}
 // during instrumentation initialization (e.g. re-requires in bundler contexts)
 // are captured and populate pluginClasses correctly.
 loadChannel.subscribe(({ name }) => {
-  maybeEnable(plugins[name])
+  try {
+    maybeEnable(plugins[name])
+  } catch (error) {
+    log.error('Error activating plugin %s', name, error)
+  }
 })
 
 // instrument everything that needs Plugin System V2 instrumentation
@@ -87,11 +91,15 @@ module.exports = class PluginManager {
     this._configsByName = {}
 
     this._loadedSubscriber = ({ name }) => {
-      const Plugin = plugins[name]
+      try {
+        const Plugin = plugins[name]
 
-      if (!Plugin || typeof Plugin !== 'function') return
+        if (!Plugin || typeof Plugin !== 'function') return
 
-      this.loadPlugin(Plugin.id)
+        this.loadPlugin(Plugin.id)
+      } catch (error) {
+        log.error('Error activating plugin %s', name, error)
+      }
     }
 
     loadChannel.subscribe(this._loadedSubscriber)
@@ -118,10 +126,21 @@ module.exports = class PluginManager {
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
-    this._pluginsByName[name].configure({
+    const config = {
       ...this.#getSharedConfig(name),
       ...pluginConfig,
-    })
+    }
+    const plugin = this._pluginsByName[name]
+    try {
+      plugin.configure(config)
+    } catch (error) {
+      try {
+        plugin.configure({ enabled: false })
+      } catch (disableError) {
+        log.error('Error disabling plugin %s after failed activation', name, disableError)
+      }
+      throw error
+    }
   }
 
   // TODO: merge config instead of replacing
@@ -196,7 +215,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
-      experimental,
+      tracing,
       DD_TRACE_RESOURCE_RENAMING_ENABLED,
     } = tracerConfig
 
@@ -219,7 +238,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
-      experimental,
+      tracing,
       resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 

@@ -31,6 +31,7 @@ const { storage } = require('./storage')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 const { createExperiments } = require('./experiments')
+const PromptManager = require('./prompts/manager')
 
 // communicating with writer
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -45,12 +46,17 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  #promptManager
+
+  #getOpenFeatureProvider
+
   /**
    * @param {import('../tracer')} tracer - Tracer instance
    * @param {import('./index')} llmobsModule - LLMObs module instance
    * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {() => object} getOpenFeatureProvider - Lazy getter for the tracer's existing OpenFeature provider
    */
-  constructor (tracer, llmobsModule, config) {
+  constructor (tracer, llmobsModule, config, getOpenFeatureProvider = () => {}) {
     super(tracer)
 
     /** @type {import('../config/config-base')} */
@@ -58,6 +64,7 @@ class LLMObs extends NoopLLMObs {
 
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
+    this.#getOpenFeatureProvider = getOpenFeatureProvider
   }
 
   get enabled () {
@@ -71,6 +78,15 @@ class LLMObs extends NoopLLMObs {
    */
   get experiments () {
     return createExperiments(this._config, this)
+  }
+
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    this.#promptManager ??= new PromptManager(this._config, this.#getOpenFeatureProvider)
+    return this.#promptManager
   }
 
   enable (options = {}) {

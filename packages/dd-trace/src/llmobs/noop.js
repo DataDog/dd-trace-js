@@ -1,5 +1,7 @@
 'use strict'
 
+const NoopPrompts = require('./prompts/noop')
+
 let NoopExperiments
 
 class NoopLLMObs {
@@ -14,6 +16,14 @@ class NoopLLMObs {
   get experiments () {
     NoopExperiments ??= require('./experiments/noop')
     return new NoopExperiments('LLM Observability is not enabled')
+  }
+
+  /**
+   * Prompt Management API.
+   * @returns {import('../../../../index').llmobs.Prompts}
+   */
+  get prompts () {
+    return new NoopPrompts()
   }
 
   enable (options) {}

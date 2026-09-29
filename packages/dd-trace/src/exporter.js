@@ -90,7 +90,7 @@ function usesOtlpTraceExporter (config) {
 
   return config.OTEL_TRACES_EXPORTER === 'otlp' &&
     !config.isCiVisibility &&
-    config.experimental?.exporter !== exporters.ELECTRON &&
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== exporters.ELECTRON &&
     (!otlpExporterWasForced || !requiresLambdaLogExporter())
 }
 
