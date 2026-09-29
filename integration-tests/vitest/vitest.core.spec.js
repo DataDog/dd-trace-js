@@ -3521,3 +3521,67 @@ describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.1
     assert.strictEqual(code, 0, testOutput)
   })
 })
+
+// Keep the legacy fork transport covered independently of the broad oldest/latest matrix.
+// Runtime EFD suite admission starts at Vitest 4, which requires Node.js >=20.
+const describeTransport = NODE_MAJOR >= 20 ? describe : describe.skip
+
+for (const version of ['4.0.5', 'latest']) {
+  describeTransport(`vitest@${version} EFD worker transport`, () => {
+    useSandbox([`vitest@${version}`], true)
+
+    for (const pool of ['forks', 'threads']) {
+      it(`retries a passing test without unhandled IPC errors in ${pool}`, async function () {
+        this.timeout(60_000)
+        const receiver = await new FakeCiVisIntake().start()
+        let childProcess
+        let output = ''
+        try {
+          receiver.setSettings({
+            known_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+          })
+          receiver.setKnownTests({ vitest: {} })
+          childProcess = exec('./node_modules/.bin/vitest run', {
+            cwd: sandboxCwd(),
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/efd-suite-admission-first.mjs',
+              POOL_CONFIG: pool,
+            },
+          })
+          childProcess.stdout.on('data', data => { output += data })
+          childProcess.stderr.on('data', data => { output += data })
+
+          const [[code, signal]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const tests = payloads.flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test').map(event => event.content)
+                assert.strictEqual(tests.length, 3, output)
+                assert.ok(tests.every(test => test.meta[TEST_STATUS] === 'pass'), output)
+                const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+                assert.strictEqual(retries.length, 2, output)
+                assert.ok(retries.every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd), output)
+              }
+            ),
+          ])
+          assert.strictEqual(signal, null, output)
+          assert.strictEqual(code, 0, output)
+          assert.doesNotMatch(output, /Unhandled (?:Errors|Rejection)|Unable to deserialize/)
+        } finally {
+          childProcess?.kill()
+          await receiver.stop()
+        }
+      })
+    }
+  })
+}
