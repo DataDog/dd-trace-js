@@ -100,6 +100,9 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
               const cacheReadTokens = usage.cache_read_input_tokens
               if (cacheCreationTokens) responseUsage.cache_creation_input_tokens = cacheCreationTokens
               if (cacheReadTokens) responseUsage.cache_read_input_tokens = cacheReadTokens
+
+              const serverToolUse = usage.server_tool_use
+              if (serverToolUse) responseUsage.server_tool_use = serverToolUse
             }
 
             break
@@ -242,6 +245,13 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       metrics.cacheWrite5mTokens = cacheWriteTokens
       metrics.cacheWrite1hTokens = 0
     }
+
+    // Read the usage counter, not server_tool_use blocks: dynamic filtering nests searches under code
+    // execution, and `response_inclusion: "excluded"` drops the blocks while the searches are still billed.
+    // Failed searches aren't billed and are already excluded. web_fetch_requests is skipped because web
+    // fetch has no per-call price.
+    const webSearchRequests = usage.server_tool_use?.web_search_requests
+    if (webSearchRequests > 0) metrics.webSearchCount = webSearchRequests
 
     this._tagger.tagMetrics(span, metrics)
   }

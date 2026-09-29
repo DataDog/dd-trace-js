@@ -16,6 +16,7 @@ const {
   extractContentParts,
   hasMultimodalInputs,
   getModelProviderAndClient,
+  getServerToolUsageMetrics,
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -147,6 +148,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
       if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
+
+    Object.assign(metrics, getServerToolUsageMetrics(response))
 
     return metrics
   }

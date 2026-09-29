@@ -1,0 +1,55 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "Content-Length": "214",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.22.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "600",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-4.1-mini\",\n  \"input\": \"What was a positive news story from today? Answer in one sentence.\",\n  \"tools\": [\n    {\n      \"type\": \"web_search\"\n    }\n  ],\n  \"max_output_tokens\": 200,\n  \"stream\": false\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Fri, 25 Sep 2026 14:42:46 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a40acc07df816e0d-BOS",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "3644",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999665",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_ef59782fe76a4843a454828b205a3940",
+      "set-cookie": "__cf_bm=MUabtgfd2pXpwyGlUKJGKdxdpSjAagp4DlQKLNlCg2U-1790347362.5369968-1.0.1.1-9WmG8gn1g46KUtzkn26oDhHOjTNsMs9W8cyd7nm6tg3VyNqsh.NqASP_nyLFqhEsdjZlaUGvjycuGSnChGXvvBqZLlc_bC1woEFRBy451iFS4oj966kikSRDHYB4nHDb; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Fri, 25 Sep 2026 15:12:46 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"resp_0ac8a31f8fa61cdd016ab68863336087d1865645ef2efb8834\",\n  \"object\": \"response\",\n  \"created_at\": 1790347363,\n  \"status\": \"completed\",\n  \"access_programs\": null,\n  \"background\": false,\n  \"billing\": {\n    \"payer\": \"developer\"\n  },\n  \"completed_at\": 1790347366,\n  \"error\": null,\n  \"frequency_penalty\": 0.0,\n  \"incomplete_details\": null,\n  \"instructions\": null,\n  \"max_output_tokens\": 200,\n  \"max_tool_calls\": null,\n  \"model\": \"gpt-4.1-mini-2025-04-14\",\n  \"moderation\": null,\n  \"output\": [\n    {\n      \"id\": \"ws_0ac8a31f8fa61cdd016ab68865825c87d18976c4721dab7978\",\n      \"type\": \"web_search_call\",\n      \"status\": \"completed\",\n      \"action\": {\n        \"type\": \"search\",\n        \"queries\": [\n          \"positive news stories today\"\n        ],\n        \"query\": \"positive news stories today\"\n      }\n    },\n    {\n      \"id\": \"msg_0ac8a31f8fa61cdd016ab688663ea887d1be23241d4e5cee0c\",\n      \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"annotations\": [\n            {\n              \"type\": \"url_citation\",\n              \"end_index\": 286,\n              \"start_index\": 141,\n              \"title\": \"It's officially Dolly Parton Day, with parades, pink lights and book drives - ABC News\",\n              \"url\": \"https://abcnews.com/amp/Entertainment/wireStory/officially-dolly-parton-day-parades-pink-lights-book-136743623?utm_source=openai\"\n            }\n          ],\n          \"logprobs\": [],\n          \"text\": \"Today, communities worldwide are celebrating Dolly Parton Day, honoring the late singer's legacy with parades, pink lights, and book drives. ([abcnews.com](https://abcnews.com/amp/Entertainment/wireStory/officially-dolly-parton-day-parades-pink-lights-book-136743623?utm_source=openai)) \"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": \"in_memory\",\n  \"reasoning\": {\n    \"context\": null,\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\": 1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tool_usage\": {\n    \"image_gen\": {\n      \"input_tokens\": 0,\n      \"input_tokens_details\": {\n        \"image_tokens\": 0,\n        \"text_tokens\": 0\n      },\n      \"output_tokens\": 0,\n      \"output_tokens_details\": {\n        \"image_tokens\": 0,\n        \"text_tokens\": 0\n      },\n      \"total_tokens\": 0\n    },\n    \"web_search\": {\n      \"num_requests\": 1\n    }\n  },\n  \"tools\": [\n    {\n      \"type\": \"web_search\",\n      \"return_token_budget\": \"default\",\n      \"search_content_types\": [\n        \"text\"\n      ],\n      \"search_context_size\": \"medium\",\n      \"user_location\": {\n        \"type\": \"approximate\",\n        \"city\": null,\n        \"country\": \"US\",\n        \"region\": null,\n        \"timezone\": null\n      }\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 8174,\n    \"input_tokens_details\": {\n      \"cache_write_tokens\": 0,\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 86,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 8260\n  },\n  \"user\": null,\n  \"metadata\": {}\n}"
+  }
+}

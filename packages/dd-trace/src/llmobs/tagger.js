@@ -37,6 +37,8 @@ const {
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
   REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  WEB_SEARCH_COUNT_METRIC_KEY,
+  STORAGE_SEARCH_COUNT_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
@@ -334,6 +336,12 @@ class LLMObsTagger {
           break
         case 'reasoningOutputTokens':
           processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY
+          break
+        case 'webSearchCount':
+          processedKey = WEB_SEARCH_COUNT_METRIC_KEY
+          break
+        case 'storageSearchCount':
+          processedKey = STORAGE_SEARCH_COUNT_METRIC_KEY
           break
       }
 
