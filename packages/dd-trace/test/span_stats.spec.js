@@ -175,15 +175,21 @@ describe('SpanAggKey', () => {
 
     const key = new SpanAggKey(span)
 
-    assert.strictEqual(key.statusCode, '500')
+    assert.strictEqual(key.statusCode, 500)
   })
 
   it('should skip statuses only a coercion would accept, as the OTLP exporter does', () => {
-    for (const status of ['1e2', '0x10', ' 200 ', '1.5', '-1']) {
+    for (const status of ['1e2', '0x10', ' 200 ', '1.5', '0200', '+1', '-0']) {
       const key = new SpanAggKey({ ...basicSpan, meta: { [HTTP_STATUS_CODE]: status }, metrics: {} })
 
       assert.strictEqual(key.statusCode, 0, `status ${JSON.stringify(status)} must not be aggregated`)
     }
+  })
+
+  it('should preserve a signed integer status without applying HTTP range validation', () => {
+    const span = { ...basicSpan, meta: { [HTTP_STATUS_CODE]: '-1' }, metrics: {} }
+
+    assert.strictEqual(new SpanAggKey(span).statusCode, -1)
   })
 
   it('should preserve Datadog-first HTTP status precedence', () => {
@@ -198,7 +204,7 @@ describe('SpanAggKey', () => {
       },
     }
 
-    assert.strictEqual(new SpanAggKey(span).statusCode, '201')
+    assert.strictEqual(new SpanAggKey(span).statusCode, 201)
   })
 
   it('should prefer OTel meta status over the metric fallback', () => {
@@ -213,7 +219,7 @@ describe('SpanAggKey', () => {
       },
     }
 
-    assert.strictEqual(new SpanAggKey(span).statusCode, '202')
+    assert.strictEqual(new SpanAggKey(span).statusCode, 202)
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {

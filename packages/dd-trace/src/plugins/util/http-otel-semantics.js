@@ -61,19 +61,19 @@ const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
 // IPv6 literals arrive bracketed (URL.hostname / out.host = `[::1]`); OTel
 // `server.address` is the bare address.
-const UNSIGNED_INTEGER = /^\d+$/
 const INT_VALUED_OTEL_ATTRIBUTES = new Set([HTTP_RESPONSE_STATUS_CODE, SERVER_PORT])
 
 /**
- * Accept only unsigned decimal integers that can be serialized without coercion or precision loss.
+ * Convert decimal strings unchanged by numeric round-trip, or numbers, without precision loss.
  *
  * @param {unknown} value
  */
-function isCanonicalIntegerAttribute (value) {
-  // `Number.isSafeInteger` rather than `isInteger`: a longer digit string becomes Infinity, which
-  // `JSON.stringify` writes as `intValue: null`, and anything past 2^53 is silently rounded.
-  if (typeof value === 'number') return Number.isSafeInteger(value) && value >= 0
-  return typeof value === 'string' && UNSIGNED_INTEGER.test(value) && Number.isSafeInteger(Number(value))
+function toSafeInteger (value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : undefined
+  if (typeof value !== 'string') return
+
+  const integer = Number(value)
+  return Number.isSafeInteger(integer) && String(integer) === value ? integer : undefined
 }
 
 /**
@@ -313,7 +313,7 @@ module.exports = {
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
   INT_VALUED_OTEL_ATTRIBUTES,
-  isCanonicalIntegerAttribute,
+  toSafeInteger,
   isInstrumentationOwnedResource,
   otelHttpResourceName,
   setInstrumentationHttpResource,

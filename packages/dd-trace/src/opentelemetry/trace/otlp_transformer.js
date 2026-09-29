@@ -8,7 +8,7 @@ const { eventTimeNano } = require('../../encode/tags-processors')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const {
   INT_VALUED_OTEL_ATTRIBUTES,
-  isCanonicalIntegerAttribute,
+  toSafeInteger,
 } = require('../../plugins/util/http-otel-semantics')
 
 const { protoSpanKind } = getProtobufTypes()
@@ -226,9 +226,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
         if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
           // Agent protocol stores these attributes as strings; OTLP requires integers.
-          if (isCanonicalIntegerAttribute(value)) {
-            attributes.push({ key, value: { intValue: Number(value) } })
-          }
+          const integer = toSafeInteger(value)
+          if (integer !== undefined) attributes.push({ key, value: { intValue: integer } })
           continue
         }
         attributes.push({ key, value: { stringValue: value } })
@@ -238,13 +237,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     // Add metrics as numeric attributes
     if (span.metrics) {
       for (const [key, value] of Object.entries(span.metrics)) {
-        if (
-          this.#otelTraceSemanticsEnabled &&
-          INT_VALUED_OTEL_ATTRIBUTES.has(key) &&
-          !isCanonicalIntegerAttribute(value)
-        ) {
-          continue
-        }
         if (Number.isInteger(value)) {
           attributes.push({ key, value: { intValue: value } })
         } else {

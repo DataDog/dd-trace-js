@@ -663,10 +663,9 @@ describe('OpenTelemetry Traces', () => {
       })
 
       it('omits a malformed int-typed OTel attribute', () => {
-        // `Number` turns each of these into an integer, '' and ' ' into a plausible 0.
-        // 9007199254740991 is Number.MAX_SAFE_INTEGER; one past it rounds, and a longer digit
-        // string becomes Infinity, which JSON.stringify writes as `intValue: null`.
-        for (const status of ['bogus', '', ' ', '0x10', '1e2', '1.5', '-1', '9007199254740992', '9'.repeat(400)]) {
+        for (const status of [
+          'bogus', '', ' ', '0x10', '1e2', '1.5', '0200', '+1', '-0', '9007199254740992', '9'.repeat(400),
+        ]) {
           const transformer = new OtlpTraceTransformer({}, true)
           const span = createMockSpan({ meta: { 'http.response.status_code': status }, metrics: {} })
 
@@ -692,18 +691,19 @@ describe('OpenTelemetry Traces', () => {
         assert.deepStrictEqual(port, { key: 'server.port', value: { intValue: 9007199254740991 } })
       })
 
-      it('omits a numeric int-typed attribute that is not an unsigned integer', () => {
-        // `Number.isInteger(-1)` is true, but a negative port or status is malformed, and `meta`
-        // and trace metrics both reject it.
+      it('preserves signed integers without applying field-specific range validation', () => {
         const transformer = new OtlpTraceTransformer({}, true)
-        const span = createMockSpan({ meta: {}, metrics: { 'server.port': -1, 'http.response.status_code': -1 } })
+        const span = createMockSpan({
+          meta: { 'http.response.status_code': '-1' },
+          metrics: { 'server.port': -1 },
+        })
 
         const decoded = decodePayload(transformer.transformSpans([span]))
         const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+        const byKey = Object.fromEntries(attributes.map(({ key, value }) => [key, value]))
 
-        for (const key of ['server.port', 'http.response.status_code']) {
-          assert.strictEqual(attributes.find((attribute) => attribute.key === key), undefined, `${key} must be omitted`)
-        }
+        assert.deepStrictEqual(byKey['http.response.status_code'], { intValue: -1 })
+        assert.deepStrictEqual(byKey['server.port'], { intValue: -1 })
       })
 
       it('does not promote the int-typed keys when OTel semantics are disabled', () => {
