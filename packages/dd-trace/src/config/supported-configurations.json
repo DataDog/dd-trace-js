@@ -2055,7 +2055,7 @@
     ],
     "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true",
         "namespace": "testOptimization"
