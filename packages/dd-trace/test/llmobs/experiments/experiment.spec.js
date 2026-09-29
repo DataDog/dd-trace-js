@@ -121,7 +121,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
         super('exact_match')
       }
 
-      evaluate (context) {
+      async evaluate (context) {
         recordContext = context
         return new EvaluatorResult({
           value: context.outputData === context.expectedOutput,
@@ -138,7 +138,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
         super('match_count')
       }
 
-      evaluate (context) {
+      async evaluate (context) {
         summaryContext = context
         return context.evaluationResults.exact_match.filter(Boolean).length
       }

@@ -94,6 +94,8 @@ class MultiEvaluatorResult {
 
 /**
  * Base class for reusable record-level evaluators.
+ *
+ * Subclasses may implement evaluate() synchronously or asynchronously.
  */
 class BaseEvaluator {
   /**
@@ -113,6 +115,8 @@ class BaseEvaluator {
 
 /**
  * Base class for reusable summary evaluators.
+ *
+ * Subclasses may implement evaluate() synchronously or asynchronously.
  */
 class BaseSummaryEvaluator {
   /**
@@ -130,24 +134,7 @@ class BaseSummaryEvaluator {
   }
 }
 
-/**
- * Base class for reusable asynchronous record-level evaluators.
- *
- * JavaScript evaluators may return a Promise directly, so this class is an API-compatible alias of BaseEvaluator.
- */
-class BaseAsyncEvaluator extends BaseEvaluator {}
-
-/**
- * Base class for reusable asynchronous summary evaluators.
- *
- * JavaScript evaluators may return a Promise directly, so this class is an API-compatible alias of
- * BaseSummaryEvaluator.
- */
-class BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
-
 module.exports = {
-  BaseAsyncEvaluator,
-  BaseAsyncSummaryEvaluator,
   BaseEvaluator,
   BaseSummaryEvaluator,
   EvaluatorContext,

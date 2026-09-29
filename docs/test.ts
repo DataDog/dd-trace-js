@@ -757,7 +757,7 @@ llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: '
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
 
 class ExampleEvaluator extends llmobs.BaseEvaluator {
-  evaluate (context: InstanceType<typeof llmobsTypes.EvaluatorContext>) {
+  async evaluate (context: InstanceType<typeof llmobsTypes.EvaluatorContext>) {
     return context.outputData
   }
 }
