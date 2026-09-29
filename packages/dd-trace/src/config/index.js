@@ -349,8 +349,13 @@ class Config extends ConfigBase {
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
+      const remoteOptions = { ...options }
+      // DD_TRACE_OTEL_SEMANTICS_ENABLED is startup-only. Changing it after tracer creation would make HTTP
+      // conversion disagree with the active exporter and OTLP transformer.
+      delete remoteOptions.DD_TRACE_OTEL_SEMANTICS_ENABLED
+
       // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
+      this.#applyEnvs(getEnvironmentVariables(remoteOptions, true), 'remote_config')
     }
 
     this.#applyCalculated()

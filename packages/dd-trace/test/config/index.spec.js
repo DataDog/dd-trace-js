@@ -5633,6 +5633,25 @@ rules:
   })
 
   describe('remote config application', () => {
+    it('should ignore OTel semantics changes because the export pipeline is configured at startup', () => {
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true' })
+
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'default')
+    })
+
+    it('should not disable startup OTel semantics through remote config', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const config = getConfig()
+
+      config.setRemoteConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'false' })
+
+      assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
+      assert.strictEqual(config.getOrigin('DD_TRACE_OTEL_SEMANTICS_ENABLED'), 'env_var')
+    })
+
     it('should restore tracked origins when an individual RC option falls back to code', () => {
       const config = getConfig({ sampleRate: 0.5, logInjection: true })
 
