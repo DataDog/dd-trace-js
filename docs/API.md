@@ -588,6 +588,14 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
+Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
+When `DD_TEST_FAILURE_SCREENSHOTS_ENABLED` or `DD_TEST_FAILURE_VIDEOS_ENABLED` is unset, Playwright and Cypress must
+be configured to capture the corresponding media. Explicitly setting a flag to `true` also enables its capture in
+Playwright (1.38.0 or later) and Cypress. Playwright uses `only-on-failure` screenshots and `retain-on-failure` videos
+unless the project already captures failures; existing capture options are preserved. Cypress enables
+`screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
+framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
+
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.
