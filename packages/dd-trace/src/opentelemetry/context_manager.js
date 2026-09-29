@@ -93,8 +93,7 @@ class ContextManager {
   }
 
   bind (context, target) {
-    // Per the OTel ContextManager contract, only functions are wrapped. Other targets (e.g. the promise returned by
-    // `@opentelemetry/instrumentation-pg` for `Pool.connect()`) must be returned untouched, or callers break.
+    // Per the OTel contract, only functions are wrapped; other targets are returned as-is.
     if (typeof target !== 'function') return target
 
     const self = this
