@@ -4,6 +4,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
 const { getSegment } = require('../../dd-trace/src/util')
+const { getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const {
   INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
@@ -43,7 +44,11 @@ class WSServerPlugin extends TracingPlugin {
     const url = req.url
     const indexOfParam = url.indexOf('?')
     const route = indexOfParam === -1 ? url : url.slice(0, indexOfParam)
-    const uri = `${protocol}//${host}${route}`
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const requestTarget = otelSemantics
+      ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, url)
+      : route
+    const uri = `${protocol}//${host}${requestTarget}`
     const resourceName = `${options.method} ${route}`
 
     ctx.args = { options }
@@ -60,7 +65,7 @@ class WSServerPlugin extends TracingPlugin {
       'resource.name': resourceName,
       'span.kind': 'server',
     }
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    if (otelSemantics) {
       const httpResource = otelHttpResourceName(options.method)
       meta['resource.name'] = httpResource
       meta[INSTRUMENTATION_HTTP_RESOURCE] = httpResource

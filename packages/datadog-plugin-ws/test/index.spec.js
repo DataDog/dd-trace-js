@@ -624,7 +624,7 @@ describe('Plugin', () => {
       })
 
       describe('with OTel semantics enabled', () => {
-        const connectClient = (path = `/${route}?active=true`) => {
+        const connectClient = (path = `/${route}?active=true&password=secret`) => {
           client = new WebSocket(`ws://localhost:${clientPort}${path}`)
           return client
         }
@@ -634,6 +634,7 @@ describe('Plugin', () => {
           await agent.load(['ws'], [{
             service: 'some',
             traceWebsocketMessagesEnabled: true,
+            queryStringObfuscation: 'password=[^&]*',
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -658,7 +659,7 @@ describe('Plugin', () => {
           await agent.close()
         })
 
-        it('uses the OTel HTTP server resource for the connection span', () => {
+        it('uses the OTel HTTP server resource and obfuscated query attributes', () => {
           wsServer.on('connection', ws => ws.close())
           connectClient()
 
@@ -668,6 +669,7 @@ describe('Plugin', () => {
               resource: 'GET',
               meta: {
                 'http.request.method': 'GET',
+                'url.query': 'active=true&<redacted>',
               },
             })
           })
