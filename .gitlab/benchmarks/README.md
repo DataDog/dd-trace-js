@@ -18,7 +18,7 @@ GitLab CI configuration for the benchmarks that run on the
   `build-benchmark-ci-images`.
 - `node-express-realworld-parallel` and `node-hapi-redis-parallel` stages: included in the root
   `.gitlab-ci.yml` from
-  [apm-sdks-benchmarks](https://gitlab.ddbuild.io/DataDog/apm-reliability/apm-sdks-benchmarks).
+  [apm-sdks-benchmarks](https://github.com/DataDog/apm-sdks-benchmarks/tree/main/.gitlab).
     - Change them there.
 
 ## Marking a benchmark as flaky
