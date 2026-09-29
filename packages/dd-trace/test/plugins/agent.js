@@ -308,8 +308,8 @@ function unformatSpanEvents (span) {
 }
 
 /**
- * Restore the Datadog exporter so mock-agent assertions work when the flag selects OTLP.
- * `SpanProcessor` applies semantics before export. Call before `setUrl`.
+ * Plugin tests inspect spans through the mock Datadog Agent, which cannot decode OTLP payloads.
+ * Replace only the exporter; `SpanProcessor` still applies OTel semantics. Call before `setUrl`.
  *
  * @param {import('../../src/index')} initializedTracer
  */
