@@ -15,15 +15,24 @@
  *       "metrics": {
  *         "process.internal_duration_ms.median": <ms>,
  *         "process.internal_duration_ms.std_err": <ms>,
- *         "process.rss_bytes.median": <bytes>
+ *         "process.rss_bytes.median": <bytes>,
+ *         "process.iteration_wall_ms.median": <ms>
  *       }
  *     }
  *   ]
  *
- * Duration is wall-clock per iteration; the memory metric is process RSS
- * (`process.memoryUsage().rss`), the cross-language analog of Python's
- * psutil RSS and .NET's `runtime.dotnet.mem.committed`. Medians are used for
- * robustness against outliers, matching the Python/.NET gate.
+ * The gated `process.internal_duration_ms` is produce+consume time only
+ * (`phases.produceMs + phases.consumeMs`), per iteration -- see
+ * `kafka_throughput.js` for what that excludes (topic creation, client
+ * connect, consumer-group join, client close). Those steps swing tens of ms
+ * between runs, several times DSM's cost, so they used to drown it. The
+ * whole-iteration wall time is still reported as
+ * `process.iteration_wall_ms.median`, for context only, not gated.
+ *
+ * The memory metric is process RSS (`process.memoryUsage().rss`), the
+ * cross-language analog of Python's psutil RSS and .NET's
+ * `runtime.dotnet.mem.committed`. Medians are used for robustness against
+ * outliers, matching the Python/.NET gate.
  */
 
 const fs = require('fs')
@@ -56,6 +65,7 @@ async function main () {
   }
 
   const durationsMs = []
+  const iterationWallMs = []
   const rssBytes = []
   const produceMs = []
   const consumeMs = []
@@ -63,7 +73,8 @@ async function main () {
   for (let i = 0; i < count; i++) {
     const start = process.hrtime.bigint()
     const phases = await runBenchmark(runId)
-    durationsMs.push(Number(process.hrtime.bigint() - start) / 1e6)
+    iterationWallMs.push(Number(process.hrtime.bigint() - start) / 1e6)
+    durationsMs.push(phases.produceMs + phases.consumeMs)
     rssBytes.push(process.memoryUsage().rss)
     produceMs.push(phases.produceMs)
     consumeMs.push(phases.consumeMs)
@@ -73,6 +84,7 @@ async function main () {
   const durationMedian = median(durationsMs)
   const durationStdErr = stdErr(durationsMs)
   const rssMedian = median(rssBytes)
+  const iterationWallMedian = median(iterationWallMs)
   const produceMedian = median(produceMs)
   const consumeMedian = median(consumeMs)
 
@@ -83,6 +95,8 @@ async function main () {
         'process.internal_duration_ms.median': durationMedian,
         'process.internal_duration_ms.std_err': durationStdErr,
         'process.rss_bytes.median': rssMedian,
+        // Whole-iteration wall time, incl. setup/teardown -- context only, not gated.
+        'process.iteration_wall_ms.median': iterationWallMedian,
         // Diagnostic breakdown (not gated) -- localizes DSM cost by phase.
         'phase.produce_ms.median': produceMedian,
         'phase.consume_ms.median': consumeMedian
@@ -93,10 +107,11 @@ async function main () {
   fs.writeFileSync(outputPath, JSON.stringify(result, null, 2))
 
   console.log(
-    `Duration median: ${durationMedian.toFixed(3)} ms (± ${durationStdErr.toFixed(3)}) | ` +
+    `Duration (produce+consume) median: ${durationMedian.toFixed(3)} ms (± ${durationStdErr.toFixed(3)}) | ` +
     `RSS median: ${(rssMedian / 1_000_000).toFixed(2)} MB | ` +
     `produce median: ${produceMedian.toFixed(3)} ms | ` +
     `consume+commit median: ${consumeMedian.toFixed(3)} ms | ` +
+    `iteration wall median (incl. setup/teardown, not gated): ${iterationWallMedian.toFixed(3)} ms | ` +
     `runs: ${count} (warmup ${warmup})`
   )
 }

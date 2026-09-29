@@ -21,6 +21,15 @@
  *     callback with `autoCommit: false`, manually committing offsets after
  *     each message to mirror the synchronous per-message commit in Python.
  *
+ * `runWorker`'s returned `produceMs`/`consumeMs` are the only timed region:
+ * topic creation, producer/consumer connect, and the consumer-group join are
+ * setup and run before either phase starts. `consumer.run()` awaits kafkajs's
+ * internal `joinAndSync()` before scheduling the fetch loop, so calling it
+ * here -- while the topic is still empty -- joins the group and receives the
+ * partition assignment without consuming anything, the same way Java's
+ * `joinGroup()` polls an empty topic before producing. Consumer/producer
+ * disconnect also stay untimed.
+ *
  * The workload:
  *   - `NUM_WORKERS` (default 1) workers, each with its own topic/consumer
  *     group. Single-worker by default: Node's single event loop means extra
@@ -73,8 +82,39 @@ async function runWorker (kafka, topic, groupId) {
   await consumer.connect()
   await consumer.subscribe({ topic, fromBeginning: true })
 
+  let consumed = 0
+  let consumeStart
+  let consumeMs = 0
+  let resolveConsumed
+  let rejectConsumed
+  const consumedPromise = new Promise((resolve, reject) => {
+    resolveConsumed = resolve
+    rejectConsumed = reject
+  })
+
   try {
-    // Phase 1: produce all messages, then a single flush-equivalent send.
+    // Setup: join the consumer group and receive the partition assignment
+    // before anything is produced -- the topic is still empty, so this polls
+    // no records, matching Java's joinGroup(). Not timed.
+    await consumer.run({
+      autoCommit: false,
+      eachMessage: async ({ topic: msgTopic, partition, message }) => {
+        try {
+          await consumer.commitOffsets([
+            { topic: msgTopic, partition, offset: (Number(message.offset) + 1).toString() }
+          ])
+          consumed++
+          if (consumed >= MESSAGE_COUNT) {
+            consumeMs = Number(process.hrtime.bigint() - consumeStart) / 1e6
+            resolveConsumed()
+          }
+        } catch (err) {
+          rejectConsumed(err)
+        }
+      }
+    })
+
+    // Phase 1 (timed): produce all messages, then a single flush-equivalent send.
     const headers = buildHeaders()
     const messages = []
     for (let i = 0; i < MESSAGE_COUNT; i++) {
@@ -88,36 +128,21 @@ async function runWorker (kafka, topic, groupId) {
     await producer.send({ topic, messages, acks: -1 })
     const produceMs = Number(process.hrtime.bigint() - produceStart) / 1e6
 
-    // Phase 2: consume and commit all messages synchronously (one at a time,
-    // matching the Python/`.NET` per-message commit).
-    let consumed = 0
-    let consumeStart
-    let consumeMs = 0
-
-    await new Promise((resolve, reject) => {
-      consumeStart = process.hrtime.bigint()
-      consumer.run({
-        autoCommit: false,
-        eachMessage: async ({ topic: msgTopic, partition, message }) => {
-          try {
-            await consumer.commitOffsets([
-              { topic: msgTopic, partition, offset: (Number(message.offset) + 1).toString() }
-            ])
-            consumed++
-            if (consumed >= MESSAGE_COUNT) {
-              consumeMs = Number(process.hrtime.bigint() - consumeStart) / 1e6
-              resolve()
-            }
-          } catch (err) {
-            reject(err)
-          }
-        }
-      }).catch(reject)
-
-      setTimeout(() => {
+    // Phase 2 (timed): consume and commit all messages synchronously (one at
+    // a time, matching the Python/.NET per-message commit). The group is
+    // already joined, so this measures fetch + per-message commit only.
+    let timeoutHandle
+    consumeStart = process.hrtime.bigint()
+    const timeout = new Promise((resolve, reject) => {
+      timeoutHandle = setTimeout(() => {
         reject(new Error(`Failed to consume ${MESSAGE_COUNT} messages on topic ${topic} within timeout (got ${consumed})`))
       }, 30000)
     })
+    try {
+      await Promise.race([consumedPromise, timeout])
+    } finally {
+      clearTimeout(timeoutHandle)
+    }
 
     if (consumed !== MESSAGE_COUNT) {
       throw new Error(`Consumed ${consumed}/${MESSAGE_COUNT} messages on topic ${topic}`)
