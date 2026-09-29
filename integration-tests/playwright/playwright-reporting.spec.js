@@ -1,9 +1,13 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
+
+const { Channel, tracingChannel } = require('dc-polyfill')
+const proxyquire = require('proxyquire').noPreserveCache()
 const satisfies = require('semifies')
+const sinon = require('sinon')
 
 const {
   sandboxCwd,
@@ -77,6 +81,92 @@ function assertRequestErrorTag (events, tag) {
     assert.strictEqual(event.content.meta[tag], 'true', `${eventType} should have ${tag} tag`)
   }
 }
+
+describe('Playwright failure media configuration', () => {
+  afterEach(() => sinon.restore())
+
+  const cases = []
+  for (const screenshot of [undefined, false, true]) {
+    for (const video of [undefined, false, true]) {
+      cases.push({ screenshot, video, pluginEnabled: true })
+    }
+  }
+  cases.push({ screenshot: true, video: true, pluginEnabled: false })
+
+  for (const { screenshot, video, pluginEnabled } of cases) {
+    const flags = `screenshots=${screenshot}, videos=${video}, plugin=${pluginEnabled}`
+    it(`only enables capture for explicit flags (${flags})`, () => {
+      const env = { ...process.env }
+      delete env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      if (screenshot !== undefined) env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = String(screenshot)
+      if (video !== undefined) env.DD_TEST_FAILURE_VIDEOS_ENABLED = String(video)
+      sinon.stub(process, 'env').value(env)
+
+      // Isolate the instrumentation's subscriptions without registering hooks in the test runner.
+      const channels = new Map()
+      const tracingChannels = new Map()
+      proxyquire('../../packages/datadog-instrumentations/src/playwright', {
+        './helpers/instrument': {
+          '@noCallThru': true,
+          addHook () {},
+          /** @param {string} name */
+          channel (name) {
+            if (!channels.has(name)) channels.set(name, new Channel(name))
+            return channels.get(name)
+          },
+          /** @param {string} name */
+          tracingChannel (name) {
+            if (!tracingChannels.has(name)) {
+              const events = {}
+              for (const event of ['start', 'end', 'asyncStart', 'asyncEnd', 'error']) {
+                events[event] = new Channel(`${name}:${event}`)
+              }
+              tracingChannels.set(name, tracingChannel(events))
+            }
+            return tracingChannels.get(name)
+          },
+        },
+      })
+      if (pluginEnabled) channels.get('ci:playwright:library-configuration').subscribe(() => {})
+
+      const screenshotEnabled = screenshot === true && pluginEnabled
+      const videoEnabled = video === true && pluginEnabled
+      const projects = [
+        [{}, {
+          ...(screenshotEnabled && { screenshot: 'only-on-failure' }),
+          ...(videoEnabled && { video: 'retain-on-failure' }),
+        }],
+        [{ screenshot: 'off', video: 'off' }, {
+          screenshot: screenshotEnabled ? 'only-on-failure' : 'off',
+          video: videoEnabled ? 'retain-on-failure' : 'off',
+        }],
+        [{
+          screenshot: { mode: 'off', fullPage: true },
+          video: { mode: 'on-first-retry', size: { width: 320, height: 240 } },
+        }, {
+          screenshot: { mode: screenshotEnabled ? 'only-on-failure' : 'off', fullPage: true },
+          video: {
+            mode: videoEnabled ? 'retain-on-failure' : 'on-first-retry', size: { width: 320, height: 240 },
+          },
+        }],
+        [{ screenshot: 'on', video: 'on' }, { screenshot: 'on', video: 'on' }],
+        [{
+          screenshot: { mode: 'on', fullPage: true },
+          video: { mode: 'on', size: { width: 320, height: 240 } },
+        }, {
+          screenshot: { mode: 'on', fullPage: true },
+          video: { mode: 'on', size: { width: 320, height: 240 } },
+        }],
+      ]
+      for (const [use, expected] of projects) {
+        const project = { use }
+        tracingChannels.get('orchestrion:playwright:FullProjectInternal').end.publish({ self: { project } })
+        assert.deepStrictEqual(project.use, expected)
+      }
+    })
+  }
+})
 
 const unboundRunnerExportContext = !PLAYWRIGHT_VERSION || PLAYWRIGHT_VERSION === 'latest'
   ? context
@@ -1653,17 +1743,9 @@ versions.forEach((version) => {
         assert.ok(getTestOutput().includes(`FAILURE_MEDIA_CONFIG=${JSON.stringify(expectedConfig)}`), getTestOutput())
       })
 
-      // Resolve all project configurations without starting workers or browsers for each flag combination.
-      const captureCases = []
-      for (const screenshot of [undefined, false, true]) {
-        for (const video of [undefined, false, true]) {
-          captureCases.push({ screenshot, video, pluginEnabled: true })
-        }
-      }
-      captureCases.push({ screenshot: true, video: true, pluginEnabled: false })
-      for (const { screenshot, video, pluginEnabled } of captureCases) {
-        const flags = `screenshots=${screenshot}, videos=${video}, plugin=${pluginEnabled}`
-        const name = `resolves capture configuration (${flags})`
+      // The flag matrix is covered above without child processes; verify the real config hook in two runs.
+      for (const pluginEnabled of [true, false]) {
+        const name = `resolves capture configuration (plugin=${pluginEnabled})`
         it(name, async (receiver, run) => {
           let output = ''
           const payloads = []
@@ -1673,8 +1755,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
-              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: screenshot?.toString(),
-              DD_TEST_FAILURE_VIDEOS_ENABLED: video?.toString(),
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
               DD_TRACE_PLAYWRIGHT_ENABLED: pluginEnabled.toString(),
             },
           })
@@ -1685,8 +1767,8 @@ versions.forEach((version) => {
           const configLine = output.split('\n').find(line => line.startsWith('FAILURE_MEDIA_CONFIG='))
           assert.ok(configLine, output)
           const projects = JSON.parse(configLine.slice('FAILURE_MEDIA_CONFIG='.length))
-          const capturesScreenshot = screenshot === true && pluginEnabled
-          const capturesVideo = video === true && pluginEnabled
+          const capturesScreenshot = pluginEnabled
+          const capturesVideo = pluginEnabled
           assert.deepStrictEqual(projects, [
             {
               name: 'unset',
