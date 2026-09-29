@@ -571,6 +571,14 @@ describe('tagger', () => {
         })
       })
 
+      it('keeps a custom metric named after an Object.prototype member', () => {
+        tagger._register(span)
+        tagger.tagMetrics(span, { constructor: 1, toString: 2 })
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.metrics': { constructor: 1, toString: 2 },
+        })
+      })
+
       it('throws for non-number entries', () => {
         const metrics = {
           a: 1,
