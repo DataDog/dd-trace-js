@@ -159,8 +159,7 @@ class HttpClientPlugin extends ClientPlugin {
  * @returns {string | undefined}
  */
 function getRedactedAuth (options) {
-  if (typeof options.auth !== 'string' || !options.auth) return
-  return options.auth.includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
+  if (typeof options.auth === 'string' && options.auth) return 'REDACTED:REDACTED'
 }
 
 function addResponseHeaders (res, span, config) {
