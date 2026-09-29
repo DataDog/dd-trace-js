@@ -41,14 +41,6 @@ declare const BaseSummaryEvaluator: {
   new (name?: string): tracer.llmobs.BaseSummaryEvaluator
 }
 
-declare const BaseAsyncEvaluator: {
-  new (name?: string): tracer.llmobs.BaseAsyncEvaluator
-}
-
-declare const BaseAsyncSummaryEvaluator: {
-  new (name?: string): tracer.llmobs.BaseAsyncSummaryEvaluator
-}
-
 declare const RemoteEvaluatorError: {
   new (message: string, options?: {
     status?: string
@@ -62,6 +54,7 @@ declare const RemoteEvaluator: {
     transformFn?: (context: tracer.llmobs.EvaluatorContext) => Record<string, tracer.llmobs.JSONType>
   }): tracer.llmobs.RemoteEvaluator
 }
+
 
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
@@ -3978,8 +3971,6 @@ declare namespace tracer {
        * `DD_API_KEY` / `DD_APP_KEY` to be set.
        */
       experiments: Experiments,
-      BaseAsyncEvaluator: typeof BaseAsyncEvaluator,
-      BaseAsyncSummaryEvaluator: typeof BaseAsyncSummaryEvaluator,
       BaseEvaluator: typeof BaseEvaluator,
       BaseSummaryEvaluator: typeof BaseSummaryEvaluator,
       EvaluatorContext: typeof EvaluatorContext,
@@ -4332,23 +4323,17 @@ declare namespace tracer {
     /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
     interface RemoteEvaluator extends BaseEvaluator {}
 
-    /** Base class for reusable record-level evaluators. */
+    /** Base class for reusable synchronous or asynchronous record-level evaluators. */
     interface BaseEvaluator {
       name: string
       evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
-    /** Base class for reusable summary evaluators. */
+    /** Base class for reusable synchronous or asynchronous summary evaluators. */
     interface BaseSummaryEvaluator {
       name: string
       evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
-
-    /** Base class for reusable asynchronous record-level evaluators. */
-    interface BaseAsyncEvaluator extends BaseEvaluator {}
-
-    /** Base class for reusable asynchronous summary evaluators. */
-    interface BaseAsyncSummaryEvaluator extends BaseSummaryEvaluator {}
 
     /**
      * A task run over each dataset record during an experiment.

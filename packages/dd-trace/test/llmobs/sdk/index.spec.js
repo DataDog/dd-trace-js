@@ -95,8 +95,6 @@ describe('sdk', () => {
 
     it('exposes class-based evaluator primitives and remote evaluators', () => {
       for (const name of [
-        'BaseAsyncEvaluator',
-        'BaseAsyncSummaryEvaluator',
         'BaseEvaluator',
         'BaseSummaryEvaluator',
         'EvaluatorContext',

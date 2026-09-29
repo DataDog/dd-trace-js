@@ -28,14 +28,6 @@ class NoopLLMObs {
     return new NoopPrompts()
   }
 
-  get BaseAsyncEvaluator () {
-    return evaluatorTypes.BaseAsyncEvaluator
-  }
-
-  get BaseAsyncSummaryEvaluator () {
-    return evaluatorTypes.BaseAsyncSummaryEvaluator
-  }
-
   get BaseEvaluator () {
     return evaluatorTypes.BaseEvaluator
   }
