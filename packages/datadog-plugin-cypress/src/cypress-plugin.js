@@ -94,6 +94,7 @@ const {
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -857,6 +858,12 @@ class CypressPlugin {
 
     const testOptimizationConfig = getConfig().testOptimization
     this.rumFlushWaitMillis = testOptimizationConfig.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    if (getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED', true) === true) {
+      cypressConfig.screenshotOnRunFailure = true
+    }
+    if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true) {
+      cypressConfig.video = true
+    }
     this.warnIfMisconfiguredTestFailureScreenshots(cypressConfig, tracer, testOptimizationConfig)
     this.warnIfMisconfiguredTestFailureVideos(cypressConfig, tracer, testOptimizationConfig)
 
