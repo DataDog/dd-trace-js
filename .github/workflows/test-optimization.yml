@@ -537,6 +537,7 @@ jobs:
           - vitest.tia
           - vitest.test-management
           - vitest.advanced
+          - vitest.efd-transport
           - vitest.msw
           - vitest.no-worker-init
         # TIA is the only Vitest spec whose two supported versions exceed the CI time budget when run together.
