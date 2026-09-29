@@ -36,14 +36,19 @@ class HttpClientPlugin extends ClientPlugin {
     const host = options.port ? `${hostname}:${options.port}` : hostname
     const base = `${protocol}//${host}`
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const otelHostname = otelSemantics ? formatHostnameForUrl(hostname) : hostname
+    const otelHost = otelSemantics && options.port ? `${otelHostname}:${options.port}` : host
     const redactedAuth = otelSemantics ? getRedactedAuth(options) : undefined
-    const otelBase = redactedAuth ? `${protocol}//${redactedAuth}@${host}` : base
+    let otelBase = base
+    if (otelSemantics) {
+      otelBase = redactedAuth ? `${protocol}//${redactedAuth}@${otelHost}` : `${protocol}//${otelHost}`
+    }
     // A URL object (e.g. from the fetch integration) carries the query in
     // `options.search`, not `options.path`; keep it so url.full retains the query.
     const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
     const path = pathname ? stripQueryAndFragment(pathname) : '/'
     const uri = `${base}${path}`
-    const otelUri = redactedAuth ? `${otelBase}${path}` : uri
+    const otelUri = otelSemantics ? `${otelBase}${path}` : uri
 
     const allowed = this.config.filter(uri)
 
@@ -152,6 +157,10 @@ class HttpClientPlugin extends ClientPlugin {
   configure (config) {
     return super.configure(normalizeClientConfig(config))
   }
+}
+
+function formatHostnameForUrl (hostname) {
+  return hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname
 }
 
 /** @param {Record<string, unknown>} options */

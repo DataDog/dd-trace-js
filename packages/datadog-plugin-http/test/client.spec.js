@@ -30,7 +30,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
 
     describe(pluginToBeLoaded, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -43,7 +43,7 @@ describe('Plugin', () => {
         } else {
           server = require('node:http').createServer(app)
         }
-        server.listen(0, 'localhost', () => {
+        server.listen(0, hostname, () => {
           listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
@@ -108,6 +108,25 @@ describe('Plugin', () => {
             })
             req.end()
           })
+        })
+
+        it('brackets an IPv6 literal in url.full', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['url.full'], `${protocol}://[::1]:${port}/user`)
+              assert.strictEqual(span.meta['server.address'], '::1')
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://[::1]:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          }, '::1')
         })
 
         it('redacts credentials in url.full', done => {
