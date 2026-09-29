@@ -8,6 +8,8 @@ const { isTrue } = require('./util')
 
 module.exports = function getExporter (name) {
   switch (name) {
+    case exporters.LLMOBS:
+      return require('./exporters/llmobs')
     case exporters.ELECTRON:
       return require('./exporters/electron')
     case exporters.LOG:

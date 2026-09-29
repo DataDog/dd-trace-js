@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 require('./setup/core')
 const AgentExporter = require('../src/exporters/agent')
+const LLMObsExporter = require('../src/exporters/llmobs')
 const LogExporter = require('../src/exporters/log')
 const ElectronExporter = require('../src/exporters/electron')
 const { DATADOG_MINI_AGENT_PATH } = require('../src/constants')
@@ -29,6 +30,13 @@ describe('exporter', () => {
     const Exporter = createExporter()
 
     assert.strictEqual(Exporter, AgentExporter)
+  })
+
+  it('should create an LLMObsExporter when configured', () => {
+    const createExporter = require('../src/exporter')
+    const Exporter = createExporter('llmobs')
+
+    assert.strictEqual(Exporter, LLMObsExporter)
   })
 
   it('should create an LogExporter when in Lambda environment', () => {

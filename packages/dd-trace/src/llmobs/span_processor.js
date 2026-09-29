@@ -2,8 +2,10 @@
 
 const util = require('node:util')
 
+const { AUTO_REJECT } = require('../../../../ext/priority')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
+const LLMObsExporter = require('../exporters/llmobs')
 const {
   ERROR_MESSAGE,
   ERROR_TYPE,
@@ -38,6 +40,7 @@ const {
   SAMPLE_RATE,
   SAMPLING_DECISION,
   TRACE_ID,
+  LLMOBS_META_STRUCT_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
@@ -93,6 +96,11 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
+  /** @type {Map<import('../opentracing/span'), object>} */
+  #cachedEvents = new Map()
+
+  #destroyer
+
   /** @type {import('../config/config-base')} */
   #config
 
@@ -104,6 +112,9 @@ class LLMObsSpanProcessor {
 
   constructor (config) {
     this.#config = config
+
+    this.#destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   setUserSpanProcessor (userSpanProcessor) {
@@ -137,18 +148,18 @@ class LLMObsSpanProcessor {
         site: mlObsTags[ROUTING_SITE],
       }
 
-      const enqueued = this.#writer.append(formattedEvent, routing)
+      const metaStructTags = {
+        mlApp: mlObsTags[ML_APP],
+        sampleRate: mlObsTags[SAMPLE_RATE],
+        samplingDecision: mlObsTags[SAMPLING_DECISION],
+      }
 
-      // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
-      // gen_ai.* spans, the parent-chain walk stops at any span carrying this
-      // tag, preserving this span as the immediate LLMObs parent. Set only
-      // when the writer actually buffered the event — format may have dropped
-      // it (user processor returned null), thrown, or the writer may have
-      // dropped it silently when its buffer is full. Leaving this tag off in
-      // those cases avoids dd-go reparenting OTel children under a span that
-      // has no corresponding LLMObs event.
-      if (enqueued) {
-        span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+      const trace = span.context()._trace
+      const useApmIntake = span.tracer()._exporter instanceof LLMObsExporter
+      if (!useApmIntake || this.#config.DD_TRACE_ENABLED === false || !trace || trace.record === false) {
+        this.#appendToWriter(span, formattedEvent, routing)
+      } else {
+        this.#cachedEvents.set(span, { event: formattedEvent, metaStructTags, routing })
       }
     } catch (e) {
       // this should be a rare case
@@ -159,6 +170,59 @@ class LLMObsSpanProcessor {
         Span won't be sent to LLM Observability: ${e.message}
       `)
     }
+  }
+
+  /**
+   * Routes cached events once the APM processor has finalized whether the trace chunk can be exported.
+   * @param {{
+   *   spans: import('../opentracing/span')[],
+   *   willExport: boolean,
+   * }} trace
+   */
+  processTrace ({ spans, willExport }) {
+    for (const span of spans) {
+      const cached = this.#cachedEvents.get(span)
+      if (!cached) continue
+
+      try {
+        const { event, metaStructTags, routing } = cached
+        if (this.#shouldAttachMetaStruct(span, routing, event, willExport)) {
+          this.#attachMetaStruct(span, event, metaStructTags)
+          this.#cachedEvents.delete(span)
+        } else {
+          this.#cachedEvents.delete(span)
+          this.#appendToWriter(span, event, routing)
+        }
+      } catch {
+        this.#cachedEvents.delete(span)
+        try {
+          this.#appendToWriter(span, cached.event, cached.routing)
+        } catch (appendError) {
+          this.#logAppendError(appendError)
+        }
+      }
+    }
+  }
+
+  /** Routes events still awaiting an APM decision through the traditional LLMObs writer. */
+  processPending () {
+    for (const [span, cached] of this.#cachedEvents) {
+      this.#cachedEvents.delete(span)
+
+      try {
+        this.#appendToWriter(span, cached.event, cached.routing)
+      } catch (error) {
+        this.#logAppendError(error)
+      }
+    }
+  }
+
+  destroy () {
+    if (!this.#destroyer) return
+
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+    this.processPending()
+    this.#destroyer = undefined
   }
 
   format (span) {
@@ -320,6 +384,121 @@ class LLMObsSpanProcessor {
   }
 
   /**
+   * @param {import('../opentracing/span')} span
+   * @param {{ apiKey?: string, site?: string }} routing
+   * @param {object} event
+   * @param {boolean} willExport
+   */
+  #shouldAttachMetaStruct (span, routing, event, willExport) {
+    const priority = span.context()._sampling?.priority
+    const predictedDrop = priority != null && priority <= AUTO_REJECT
+
+    return willExport &&
+      !predictedDrop &&
+      !routing.apiKey &&
+      !routing.site &&
+      !this.#hasRepeatedTagKeys(event.tags)
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ apiKey?: string, site?: string }} routing
+   */
+  #appendToWriter (span, event, routing) {
+    const enqueued = this.#writer.append(event, routing)
+    if (enqueued) span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+  }
+
+  /** @param {Error} error */
+  #logAppendError (error) {
+    logger.warn(`
+      Failed to append span to LLM Observability writer, likely due to an unserializable property.
+      Span won't be sent to LLM Observability: ${error.message}
+    `)
+  }
+
+  /**
+   * The meta_struct tag map cannot losslessly represent repeated tag keys.
+   * @param {string[]} tags
+   */
+  #hasRepeatedTagKeys (tags) {
+    const keys = new Set()
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      const key = tag.slice(0, separatorIndex)
+      if (keys.has(key)) return true
+      keys.add(key)
+    }
+    return false
+  }
+
+  /**
+   * @param {import('../opentracing/span')} span
+   * @param {object} event
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
+   */
+  #attachMetaStruct (span, event, metaStructTags) {
+    span.meta_struct ??= {}
+    span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(event, metaStructTags)
+  }
+
+  /**
+   * @param {object} event
+   * @param {{ mlApp?: string, sampleRate?: string, samplingDecision?: string }} metaStructTags
+   */
+  #formatMetaStruct (event, metaStructTags) {
+    const dd = {}
+    if (metaStructTags.sampleRate !== undefined) dd.sample_rate = metaStructTags.sampleRate
+    if (metaStructTags.samplingDecision !== undefined) dd.sampling_decision = metaStructTags.samplingDecision
+    if (event._dd?.scope !== undefined) dd.scope = event._dd.scope
+
+    const metaStruct = {
+      trace_id: event.trace_id,
+      tags: this.#stringArrayTagsToObjectTags(event.tags),
+      meta: this.#formatMetaStructMeta(event.meta),
+      metrics: event.metrics,
+      _dd: dd,
+    }
+
+    if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
+    if (event.name !== undefined) metaStruct.name = event.name
+    if (metaStructTags.mlApp) metaStruct.ml_app = metaStructTags.mlApp
+    if (event.session_id) metaStruct.session_id = event.session_id
+
+    return metaStruct
+  }
+
+  /** @param {object} eventMeta */
+  #formatMetaStructMeta (eventMeta) {
+    const meta = {}
+
+    for (const [key, value] of Object.entries(eventMeta)) {
+      if (key === 'span.kind') {
+        meta.span = { kind: value }
+      } else if (key === ERROR_MESSAGE) {
+        this.#getMetaStructError(meta).message = value
+      } else if (key === ERROR_TYPE) {
+        this.#getMetaStructError(meta).type = value
+      } else if (key === ERROR_STACK) {
+        this.#getMetaStructError(meta).stack = value
+      } else {
+        meta[key] = value
+      }
+    }
+
+    return meta
+  }
+
+  /** @param {object} meta */
+  #getMetaStructError (meta) {
+    if (!meta.error) meta.error = {}
+    return meta.error
+  }
+
+  /**
    * Writes the scalar `gen_ai.*` attributes onto the APM span, so model, provider, application,
    * conversation and token usage are searchable in APM. Message bodies stay off the APM span.
    *
@@ -454,6 +633,21 @@ class LLMObsSpanProcessor {
       } else {
         out.push(`${key}:${value ?? ''}`)
       }
+    }
+    return out
+  }
+
+  /**
+   * @param {string[]} tags
+   * @returns {Record<string, string>}
+   */
+  #stringArrayTagsToObjectTags (tags) {
+    const out = {}
+    for (const tag of tags) {
+      const separatorIndex = tag.indexOf(':')
+      if (separatorIndex === -1) continue
+
+      out[tag.slice(0, separatorIndex)] = tag.slice(separatorIndex + 1)
     }
     return out
   }

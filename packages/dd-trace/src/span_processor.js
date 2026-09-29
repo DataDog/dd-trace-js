@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const { AUTO_REJECT } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
@@ -8,6 +10,8 @@ const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 const { APM_TRACING_ENABLED_KEY } = require('./constants')
+
+const traceSampledCh = channel('dd-trace:trace:sampled')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -68,9 +72,18 @@ class SpanProcessor {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
+      const discard = this.#isDiscarded(spanContext)
+      const willExport = !discard && trace.isRecording !== false
+
+      if (traceSampledCh.hasSubscribers) {
+        traceSampledCh.publish({
+          spans: finished,
+          willExport,
+        })
+      }
+
       let isFirstSpanInChunk = true
       const stampApmDisabled = this._config.apmTracingEnabled === false
-      const discard = this.#isDiscarded(spanContext)
 
       for (const span of started) {
         if (span._duration === undefined) {
@@ -91,7 +104,7 @@ class SpanProcessor {
         }
       }
 
-      if (!discard && formatted.length !== 0 && trace.isRecording !== false) {
+      if (willExport && formatted.length !== 0) {
         this._exporter.export(formatted)
       }
 

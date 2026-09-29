@@ -36,6 +36,7 @@ describe('sdk', () => {
     sinon.spy(LLMObsSpanProcessor.prototype, 'process')
     sinon.spy(LLMObsSpanProcessor.prototype, 'format')
     sinon.spy(tracer._tracer._processor, 'process')
+    sinon.stub(tracer._tracer, 'flushAll')
 
     // stub writer functionality
     sinon.stub(LLMObsEvalMetricsWriter.prototype, 'append')
@@ -57,6 +58,7 @@ describe('sdk', () => {
     LLMObsSpanProcessor.prototype.process.resetHistory()
     LLMObsSpanProcessor.prototype.format.resetHistory()
     tracer._tracer._processor.process.resetHistory()
+    tracer._tracer.flushAll.resetHistory()
 
     LLMObsEvalMetricsWriter.prototype.append.resetHistory()
     LLMObsEvalMetricsWriter.prototype.flush.resetHistory()
@@ -2387,20 +2389,29 @@ describe('sdk', () => {
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
       sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.notCalled(tracer._tracer.flushAll)
       tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
-    it('flushes the evaluation writer and span writer', () => {
+    it('flushes the LLMObs writers before the APM exporter', () => {
       llmobs.flush()
 
-      sinon.assert.called(LLMObsEvalMetricsWriter.prototype.flush)
-      sinon.assert.called(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.calledOnce(LLMObsEvalMetricsWriter.prototype.flush)
+      sinon.assert.calledOnce(LLMObsSpanWriter.prototype.flush)
+      sinon.assert.calledOnce(tracer._tracer.flushAll)
+      sinon.assert.callOrder(
+        LLMObsSpanWriter.prototype.flush,
+        LLMObsEvalMetricsWriter.prototype.flush,
+        tracer._tracer.flushAll
+      )
     })
 
-    it('logs if there was an error flushing', () => {
+    it('flushes the APM exporter if an LLMObs writer throws', () => {
       LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
       llmobs.flush()
+
+      sinon.assert.calledOnce(tracer._tracer.flushAll)
     })
   })
 

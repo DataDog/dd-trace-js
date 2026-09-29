@@ -24,6 +24,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -84,6 +85,7 @@ describe('module', () => {
     logger = { debug: sinon.stub() }
 
     LLMObsSpanWriterSpy = sinon.stub().returns({
+      append: sinon.stub(),
       destroy: sinon.stub(),
       flush: sinon.stub(),
       setAgentless: sinon.stub(),
@@ -612,10 +614,12 @@ describe('module', () => {
         })
 
         it('configures the agent-proxy writers', () => {
-          llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test' } })
+          const config = { llmobs: { DD_LLMOBS_ML_APP: 'test' } }
+          llmobsModule.enable(config)
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+          sinon.assert.calledWith(fetchAgentInfoStub, config.url, sinon.match.func, { retry: false })
         })
       })
     })
@@ -700,6 +704,40 @@ describe('module', () => {
     sinon.assert.calledOnce(done)
   })
 
+  it('routes APM trace decisions to the span processor', () => {
+    llmobsModule.disable()
+    const processor = {
+      destroy: sinon.stub(),
+      processPending: sinon.stub(),
+      processTrace: sinon.stub(),
+      setWriter: sinon.stub(),
+    }
+    llmobsModuleProxyRequireMeta['./span_processor'] = sinon.stub().returns(processor)
+    loadLlmobsModule()
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_AGENTLESS_ENABLED: false } })
+    const decision = { spans: [], willExport: true }
+
+    traceSampledCh.publish(decision)
+
+    sinon.assert.calledOnceWithExactly(processor.processTrace, decision)
+  })
+
+  it('constructs the span processor before writers so pending events drain before writer shutdown', () => {
+    llmobsModule.disable()
+    const processor = {
+      destroy: sinon.stub(),
+      processPending: sinon.stub(),
+      setWriter: sinon.stub(),
+    }
+    const LLMObsSpanProcessorSpy = sinon.stub().returns(processor)
+    llmobsModuleProxyRequireMeta['./span_processor'] = LLMObsSpanProcessorSpy
+    loadLlmobsModule()
+
+    llmobsModule.enable({ llmobs: { DD_LLMOBS_ENABLED: true, DD_LLMOBS_AGENTLESS_ENABLED: false } })
+
+    sinon.assert.callOrder(LLMObsSpanProcessorSpy, LLMObsEvalMetricsWriterSpy, LLMObsSpanWriterSpy)
+  })
+
   it('removes all subscribers when disabling', () => {
     llmobsModule.enable({ llmobs: { DD_LLMOBS_ML_APP: 'test', DD_LLMOBS_AGENTLESS_ENABLED: false } })
 
@@ -708,6 +746,7 @@ describe('module', () => {
     assert.strictEqual(injectCh.hasSubscribers, false)
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(traceSampledCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
     sinon.assert.calledOnce(unregisterTelemetryFlusher)
   })
