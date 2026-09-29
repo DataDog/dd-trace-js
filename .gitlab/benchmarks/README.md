@@ -25,7 +25,9 @@ GitLab CI configuration for the benchmarks that run on the
 
 Add it to `FLAKY_BENCHMARKS_REGEX` in `.benchmarks` (the shared template in `gitlab-ci.yml`).
 
-The benchmark still runs and reports, but doesn't fail the gate.
+The benchmark still runs and reports, but doesn't fail performance quality gates:
+`check-big-regressions` (percentage-based) and the `*-check-slo-breaches` jobs of the
+apm-sdks-benchmarks suites (SLO-based).
 
 - The regex matches anywhere in the scenario name.
     - `debugger-line-probe-with-snapshot` quarantines every variant of that scenario.
