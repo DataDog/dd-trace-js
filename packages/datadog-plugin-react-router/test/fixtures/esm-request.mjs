@@ -1,5 +1,6 @@
 import { once } from 'node:events'
 import { createRequire } from 'node:module'
+import { takeCoverage } from 'node:v8'
 
 const require = createRequire(import.meta.url)
 const [tracerPath, registerPath, agentPort, host] = process.argv.slice(2)
@@ -94,4 +95,5 @@ try {
   server.close()
   await closed
 }
+if (process.env.NODE_V8_COVERAGE) takeCoverage()
 process.send(result)

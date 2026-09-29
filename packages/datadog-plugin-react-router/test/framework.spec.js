@@ -13,8 +13,11 @@ const semver = require('semver')
 
 if (semver.gte(process.versions.node, '22.22.3')) require('../../../register')
 
+const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { CLIENT } = require('../../../ext/kinds')
+const { HTTP_URL, SPAN_KIND } = require('../../../ext/tags')
 const execFileAsync = promisify(execFile)
 
 /**
@@ -200,10 +203,25 @@ describe('Plugin', () => {
 
       afterEach(() => tracer.use('react-router', false))
 
+      it('does not subscribe to every HTTP request', () => {
+        tracer.use('react-router', {})
+        assert.equal(incomingHttpRequestStart.hasSubscribers, false)
+      })
+
       it('sets the root route for a document request without a loader', async () => {
         tracer.use('react-router', {})
         const handleRequest = createRequestHandler(createBuild(), 'test')
         await assertHttpRoute(handleRequest)
+      })
+
+      it('sets the inbound route beneath an outbound client span', async () => {
+        tracer.use('react-router', {})
+        const handleRequest = createRequestHandler(createBuild(), 'test')
+        await assertHttpRoute(request => tracer.trace('test.outbound', span => {
+          span.setTag(HTTP_URL, 'https://upstream.test/path')
+          span.setTag(SPAN_KIND, CLIENT)
+          return handleRequest(request)
+        }))
       })
 
       it('sets the route for a nested absolute child path', async () => {

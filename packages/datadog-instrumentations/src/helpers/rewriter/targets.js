@@ -4,10 +4,12 @@
 const targets = require('./targets.json')
 const targetPatterns = require('./target-patterns.json').map(({ name, source, flags, sourceMatch }) => ({
   name,
+  prefix: `${name}/`,
   pattern: new RegExp(source, flags),
   sourceMatch,
 }))
-const rewriteTargetNames = new Set([...Object.values(targets), ...targetPatterns.map(({ name }) => name)])
+const rewriteTargetNames = new Set(Object.values(targets))
+for (const { name } of targetPatterns) rewriteTargetNames.add(name)
 
 const NODE_MODULES = '/node_modules/'
 
@@ -31,8 +33,8 @@ function getRewriteTarget (filename) {
   let moduleName = targets[modulePath]
   let sourceMatch
   if (!moduleName) {
-    for (const { name, pattern, sourceMatch: expectedSource } of targetPatterns) {
-      if (!modulePath.startsWith(`${name}/`) || !pattern.test(modulePath.slice(name.length + 1))) continue
+    for (const { name, prefix, pattern, sourceMatch: expectedSource } of targetPatterns) {
+      if (!modulePath.startsWith(prefix) || !pattern.test(modulePath.slice(prefix.length))) continue
       moduleName = name
       sourceMatch = expectedSource
       break
