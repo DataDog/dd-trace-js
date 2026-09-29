@@ -4398,9 +4398,6 @@ function onMessageWrapper (onMessage) {
 
 function sendWrapper (send) {
   return function (request) {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
-      return send.apply(this, arguments)
-    }
     const [type] = request
 
     // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
@@ -4416,6 +4413,11 @@ function sendWrapper (send) {
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
+      const flakyTests = config.testEnvironmentOptions?._ddFlakyTests
+      if (!isKnownTestsEnabled && !isTestManagementTestsEnabled &&
+        !isImpactedTestsEnabled && flakyTests === undefined) {
+        return send.apply(this, arguments)
+      }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
@@ -4426,6 +4428,9 @@ function sendWrapper (send) {
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
+          _ddFlakyTests: flakyTests === undefined
+            ? undefined
+            : { jest: { [testSuite]: flakyTests.jest?.[testSuite] || [] } },
           _ddTestManagementTests: suiteTestManagementTests,
           // TODO: figure out if we can reduce the size of the modified files object
           // Can we use `testSuite` (it'd have to be relative to repository root though)

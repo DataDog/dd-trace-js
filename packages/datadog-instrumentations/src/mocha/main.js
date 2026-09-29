@@ -1793,7 +1793,9 @@ addHook({
 
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
-      newWorkerArgs._ddFlakyTests = config.flakyTests
+      newWorkerArgs._ddFlakyTests = config.flakyTests === undefined
+        ? undefined
+        : { mocha: { [testPath]: config.flakyTests.mocha?.[testPath] || [] } }
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
       newWorkerArgs._ddIsDynamicAtrEnabled = config.isDynamicAtrEnabled
       newWorkerArgs._ddDynamicAtrBuckets = config.dynamicAtrBuckets
