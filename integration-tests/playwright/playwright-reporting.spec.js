@@ -1272,7 +1272,7 @@ versions.forEach((version) => {
         receiver,
         run,
         screenshotMode = 'only-on-failure',
-        isScreenshotUploadEnabled = true,
+        isScreenshotUploadEnabled,
         testOptimizationConfig = getCiVisAgentlessConfig(receiver.port),
         additionalEnvironment = {}
       ) {
@@ -1287,7 +1287,7 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-screenshots-${++screenshotRunId}`,
-              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled ? 'true' : undefined,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled?.toString(),
               DD_TRACE_DEBUG: 'true',
               DD_TRACE_LOG_LEVEL: 'warn',
               ...additionalEnvironment,
@@ -1300,7 +1300,7 @@ versions.forEach((version) => {
       }
 
       for (const screenshotMode of screenshotModes) {
-        it(`uploads only automatic failure screenshots with screenshot: '${screenshotMode}'`, async (receiver, run) => {
+        it(`uploads failure screenshots by default with screenshot: '${screenshotMode}'`, async (receiver, run) => {
           const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run, screenshotMode)
           const payloadsPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1358,7 +1358,7 @@ versions.forEach((version) => {
         })
       }
 
-      it('uploads a failed Playwright test video to the test-run media endpoint', async (receiver, run) => {
+      it('uploads a failed Playwright test video by default to the test-run media endpoint', async (receiver, run) => {
         let testOutput = ''
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1371,7 +1371,7 @@ versions.forEach((version) => {
               PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-videos-${++screenshotRunId}`,
               PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
-              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
             },
           }
         )
@@ -1408,6 +1408,38 @@ versions.forEach((version) => {
           error.message += `\nPlaywright output:\n${testOutput}`
           throw error
         })
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it('does not upload captured failure media when explicitly disabled', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          false,
+          getCiVisAgentlessConfig(receiver.port),
+          {
+            PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'false',
+          }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .find(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+            assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media).length, 0)
+          },
+          { hardTimeout: 60000 }
+        )
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
         assert.strictEqual(exitCode, 1)

@@ -1088,8 +1088,10 @@ moduleTypes.forEach(({
           return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
         }
 
-        onlyAgentlessIt('uploads failure screenshots to the v2 media endpoint', async function () {
-          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
+        onlyAgentlessIt('uploads failure screenshots by default to the v2 media endpoint', async function () {
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined,
+          })
 
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
@@ -1160,13 +1162,13 @@ moduleTypes.forEach(({
           ])
         })
 
-        onlyAgentlessIt('uploads one Cypress video for a failed test suite', async function () {
+        onlyAgentlessIt('uploads one Cypress video by default for a failed test suite', async function () {
           receiver.setMediaResponseDelay(500)
           const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
             CYPRESS_ENABLE_FAILURE_SCREENSHOTS: undefined,
             DD_TEST_FAILURE_SCREENSHOTS_ENABLED: undefined,
             CYPRESS_ENABLE_FAILURE_VIDEOS: 'true',
-            DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
           })
 
           const receiverPromise = receiver.gatherPayloadsUntilChildExit(
@@ -1216,6 +1218,32 @@ moduleTypes.forEach(({
             error.message += `\nCypress output:\n${getTestOutput()}`
             throw error
           })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+          assert.notStrictEqual(exitCode, 0)
+        })
+
+        onlyAgentlessIt('does not upload captured failure media when explicitly disabled', async function () {
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
+            CYPRESS_ENABLE_FAILURE_VIDEOS: 'true',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'false',
+          })
+          const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.includes('/media') || url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const failedTest = payloads
+                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                .flatMap(({ payload }) => payload.events)
+                .find(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+              assert.strictEqual(payloads.filter(({ media }) => media).length, 0)
+            },
+            { hardTimeout: 60000 }
+          )
 
           const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
           assert.notStrictEqual(exitCode, 0)

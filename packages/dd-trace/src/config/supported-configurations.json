@@ -2057,7 +2057,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null,
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],
@@ -2065,7 +2065,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null,
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],
