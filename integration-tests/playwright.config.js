@@ -8,12 +8,8 @@ const projects = [
     name: 'chromium',
     use: {
       ...devices['Desktop Chrome'],
-      screenshot: process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_OPTIONS
-        ? JSON.parse(process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_OPTIONS)
-        : process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_MODE || 'off',
-      video: process.env.PLAYWRIGHT_FAILURE_VIDEO_OPTIONS
-        ? JSON.parse(process.env.PLAYWRIGHT_FAILURE_VIDEO_OPTIONS)
-        : process.env.PLAYWRIGHT_FAILURE_VIDEO_MODE || 'off',
+      screenshot: process.env.PLAYWRIGHT_FAILURE_SCREENSHOT_MODE || 'off',
+      video: process.env.PLAYWRIGHT_FAILURE_VIDEO_MODE || 'off',
     },
   },
 ]
