@@ -7,6 +7,7 @@ const { getSegment } = require('../../dd-trace/src/util')
 const { getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const {
   INSTRUMENTATION_HTTP_RESOURCE,
+  NETWORK_PEER_ADDRESS,
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const {
@@ -69,6 +70,12 @@ class WSServerPlugin extends TracingPlugin {
       const httpResource = otelHttpResourceName(options.method)
       meta['resource.name'] = httpResource
       meta[INSTRUMENTATION_HTTP_RESOURCE] = httpResource
+
+      const userAgent = options.headers['user-agent']
+      if (userAgent !== undefined) meta['http.useragent'] = userAgent
+
+      const peerAddress = req.socket?.remoteAddress
+      if (peerAddress) meta[NETWORK_PEER_ADDRESS] = peerAddress
     }
 
     const span = this.startSpan(this.operationName(), {
