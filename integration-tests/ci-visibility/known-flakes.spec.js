@@ -9,7 +9,9 @@ const satisfies = require('../../vendor/dist/semifies')
 
 const { useSandbox, sandboxCwd, getCiVisAgentlessConfig, getCiVisEvpProxyConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { DD_MAJOR } = require('../../version')
+const { getLatestMochaSpecifier } = require('../mocha/versions')
+const { getLatestPlaywrightSpecifier } = require('../playwright/versions')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
 const directory = 'ci-visibility/known-flakes/'
 const frameworks = [
@@ -17,6 +19,7 @@ const frameworks = [
     name: 'mocha',
     dependency: 'mocha',
     oldest: DD_MAJOR >= 6 ? '8.0.0' : '5.2.0',
+    latest: getLatestMochaSpecifier(),
     minimumRetriesVersion: '6.0.0',
     file: 'mocha.js',
     args: ['node_modules/.bin/mocha', directory + 'mocha.js'],
@@ -34,6 +37,7 @@ const frameworks = [
     name: 'vitest',
     dependency: 'vitest',
     oldest: '1.6.0',
+    latest: NODE_MAJOR <= 18 ? '3.2.6' : 'latest',
     file: 'vitest.mjs',
     args: ['node_modules/vitest/vitest.mjs', 'run', '--config', directory + 'vitest.config.mjs'],
   },
@@ -41,6 +45,7 @@ const frameworks = [
     name: 'playwright',
     dependency: '@playwright/test',
     oldest: '1.18.0',
+    latest: getLatestPlaywrightSpecifier(),
     minimumRetriesVersion: '1.38.0',
     file: 'playwright.js',
     args: ['node_modules/@playwright/test/cli.js', 'test', '--config', directory + 'playwright.config.js'],
@@ -49,6 +54,10 @@ const frameworks = [
     name: 'cucumber',
     dependency: '@cucumber/cucumber',
     oldest: '7.0.0',
+    // Cucumber 12 dropped Node 18; Cucumber 13 requires Node 22, 24, or >=26.
+    latest: NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
+      ? 'latest'
+      : NODE_MAJOR <= 18 ? '11.3.0' : '12.2.0',
     minimumRetriesVersion: '8.0.0',
     file: 'retries.feature',
     args: ['node_modules/@cucumber/cucumber/bin/cucumber-js', directory + 'retries.feature',
@@ -66,7 +75,8 @@ describe('known-flakes-only Auto Test Retries', () => {
         satisfies(version, `>=${framework.minimumRetriesVersion}`)
         ? it
         : it.skip
-      const dependencies = [`${framework.dependency}@${version}`]
+      const dependencyVersion = version === 'latest' ? framework.latest || 'latest' : version
+      const dependencies = [`${framework.dependency}@${dependencyVersion}`]
       if (framework.name === 'jest') dependencies.push(`jest-circus@${version}`)
       useSandbox(dependencies, true)
 
