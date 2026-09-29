@@ -2,7 +2,6 @@
 
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { getRequest } = require('../../dd-trace/src/appsec/store')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
@@ -28,8 +27,6 @@ class ReactRouterPlugin extends WebPlugin {
   constructor (tracer, tracerConfig) {
     super(tracer, tracerConfig)
 
-    // HTTP carries the request in the active store only while this channel has subscribers.
-    this.addSub(incomingHttpRequestStart.name, () => {})
     this.addSub('tracing:orchestrion:react-router:matchServerRoutes:end', ctx => {
       this.#setRouteFromMatches(/** @type {RouteMatchContext} */ (ctx))
     })
@@ -49,11 +46,10 @@ class ReactRouterPlugin extends WebPlugin {
     const store = storage('legacy').getStore()
     const request = getRequest(store) ?? store?.req
     const span = /** @type {import('../../dd-trace/src/opentracing/span') | undefined} */ (
-      (request && web.root(request)) || store?.span
+      (request && web.root(request)) || web.rootFromSpan(store?.span)
     )
     if (!span) return
-    const httpUrl = span.context().getTag(HTTP_URL)
-    if (typeof httpUrl !== 'string') return
+    const httpUrl = /** @type {string} */ (span.context().getTag(HTTP_URL))
 
     let pathname
     try {

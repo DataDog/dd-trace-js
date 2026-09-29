@@ -65,16 +65,18 @@ describe('bundler rewriter', () => {
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-bundler-rewriter-'))
     const packageDirectory = path.join(directory, 'node_modules', 'unsupported')
     const filename = path.join(packageDirectory, 'index.js')
-    const source = 'module.exports = true\n'
+    const sources = ['module.exports = true\n', Buffer.from('module.exports = true\n')]
     const sourceMap = { mappings: '', version: 3 }
     fs.mkdirSync(packageDirectory, { recursive: true })
     fs.writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({ version: '1.0.0' }))
     const rewrite = createBundlerRewriter('/absolute/dc-polyfill.js')
 
-    assert.deepStrictEqual(
-      rewrite(source, filename, 'commonjs', { filePath: 'index.js', moduleName: 'unsupported' }, sourceMap),
-      { code: source, map: sourceMap }
-    )
+    for (const source of sources) {
+      assert.deepStrictEqual(
+        rewrite(source, filename, 'commonjs', { filePath: 'index.js', moduleName: 'unsupported' }, sourceMap),
+        { code: source, map: sourceMap }
+      )
+    }
   })
 
   it('skips transformation when a hashed target lacks its source marker', () => {

@@ -204,6 +204,21 @@ const web = {
     return context ? context.span : null
   },
 
+  /** @param {import('../../opentracing/span') | undefined} span */
+  rootFromSpan (span) {
+    if (!span) return
+
+    const started = span.context()._trace.started
+    while (span) {
+      const context = span.context()
+      if (context.getTag(SPAN_KIND) === SERVER && typeof context.getTag(HTTP_URL) === 'string') return span
+
+      const parentId = context._parentId
+      if (!parentId) return
+      span = started.find(parent => parent.context()._spanId === parentId)
+    }
+  },
+
   // Return the active span.
   active (req) {
     const context = contexts.get(req)

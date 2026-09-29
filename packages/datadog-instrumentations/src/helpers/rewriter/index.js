@@ -147,13 +147,13 @@ function createBundlerRewriter (dcModule) {
       const version = getVersion(filename, filePath)
       if (!version) return { code: content, map: sourceMap }
 
-      const source = getSourceText(content)
-      if (sourceMatch && !source.includes(sourceMatch)) return { code: content, map: sourceMap }
+      const matchedSource = sourceMatch ? getSourceText(content) : undefined
+      if (sourceMatch && !matchedSource.includes(sourceMatch)) return { code: content, map: sourceMap }
 
       const transformer = matcher.getTransformer(moduleName, version, filePath)
       if (!transformer) return { code: content, map: sourceMap }
 
-      return transformer.transform(source, moduleType, sourceMap)
+      return transformer.transform(matchedSource ?? getSourceText(content), moduleType, sourceMap)
     } catch (error) {
       log.error(error)
       return { code: content, map: sourceMap }

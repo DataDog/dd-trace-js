@@ -40,6 +40,10 @@ describe('rewriter targets', () => {
       getRewriteTarget('file:///app/node_modules/react-router/dist/development/chunk-invalid.mjs'),
       undefined
     )
+    assert.strictEqual(
+      getRewriteTarget('file:///app/node_modules/react-router-extra/dist/development/chunk-JG3XND5A.mjs'),
+      undefined
+    )
   })
 
   it('finds nested rewrite targets', () => {
