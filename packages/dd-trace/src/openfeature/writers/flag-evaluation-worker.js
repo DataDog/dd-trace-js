@@ -6,10 +6,33 @@ const port = /** @type {import('node:worker_threads').MessagePort} */ (parentPor
 // Bootstrap only the lifecycle registry, never the tracer or its preload entrypoints.
 globalThis[Symbol.for('dd-trace')] = { beforeExitHandlers: new Set() }
 
+const logWriter = require('../../log/writer')
 const { configureWorkerTelemetry } = require('./flag-evaluation-telemetry')
 const state = new Int32Array(workerData.state)
 configureWorkerTelemetry(state)
 const FlagEvaluationConsumer = require('./flag-evaluation-consumer')
+
+/** @param {'debug' | 'info' | 'warn' | 'error'} level */
+function forwardLog (level) {
+  /** @param {unknown} message */
+  return message => {
+    try {
+      port.postMessage({ type: 'log', level, message: message instanceof Error ? message.stack : String(message) })
+    } catch {
+      // Diagnostics are best-effort when the parent port is closing.
+    }
+  }
+}
+
+// Use the parent's effective settings, not a second environment-only configuration.
+// The custom logger itself stays in the parent isolate because functions cannot be cloned.
+const { enabled = false, level } = workerData.logging ?? {}
+logWriter.configure(enabled, level, {
+  debug: forwardLog('debug'),
+  info: forwardLog('info'),
+  warn: forwardLog('warn'),
+  error: forwardLog('error'),
+})
 
 /** @param {import('./flag-evaluations').SerializedFlagEvaluationRoute} route */
 function deserializeRoute (route) {

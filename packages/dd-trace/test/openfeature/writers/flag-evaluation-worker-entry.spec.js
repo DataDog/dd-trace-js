@@ -59,6 +59,8 @@ describe('flag evaluation worker entry point', () => {
       },
       './flag-evaluation-telemetry': telemetry,
       './flag-evaluation-consumer': Consumer,
+      // Loading the entry point in-process must not reconfigure the suite's logger.
+      '../../log/writer': { configure () {}, '@noCallThru': true },
     })
   })
 

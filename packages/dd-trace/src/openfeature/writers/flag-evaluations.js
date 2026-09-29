@@ -72,11 +72,13 @@ class FlagEvaluationsWriter {
   #routeId = 0
   #serializedRoute
   #context
+  #logging
   #failureReason = 'worker_failure'
 
   /** @param {import('../../config/config-base')} config */
   constructor (config) {
     this.#route = { url: /** @type {URL} */ (config.url), basePath: EVP_PROXY_PATH_V2 }
+    this.#logging = { enabled: config.debug === true, level: config.logLevel }
     this.#context = {
       service: typeof config.service === 'string' ? config.service : '',
       env: typeof config.env === 'string' ? config.env : undefined,
@@ -231,13 +233,18 @@ class FlagEvaluationsWriter {
         name: 'dd-flag-evaluation',
         execArgv,
         env,
-        workerData: { route: this.#serializedRoute, context: this.#context, state: this.#state.buffer },
+        workerData: {
+          route: this.#serializedRoute, context: this.#context, state: this.#state.buffer, logging: this.#logging,
+        },
       })
       this.#worker.on('error', error => this.#fail(
         error.code === 'MODULE_NOT_FOUND' || error.code === 'ERR_MODULE_NOT_FOUND' ? 'missing_module' : 'worker_error'
       ))
       this.#worker.on('messageerror', () => this.#fail('message_error'))
-      this.#worker.on('message', message => this.#onRouteMessage(message))
+      this.#worker.on('message', message => {
+        if (message?.type === 'log') this.#onLogMessage(message)
+        else this.#onRouteMessage(message)
+      })
       this.#worker.once('exit', () => this.#exited())
       this.#worker.unref?.()
       this.#periodic = setInterval(() => collectWorkerTelemetry(this.#state), FLAG_EVALUATION_FLUSH_INTERVAL)
@@ -245,6 +252,14 @@ class FlagEvaluationsWriter {
     } catch {
       this.#fail('startup_error')
     }
+  }
+
+  /** @param {{ level: string, message: string }} message */
+  #onLogMessage ({ level, message }) {
+    if (typeof message !== 'string') return
+    // Relay diagnostics without introducing new error-telemetry reports.
+    if (level === 'error') log.errorWithoutTelemetry('%s', message)
+    else if (level === 'debug' || level === 'info' || level === 'warn') log[level]('%s', message)
   }
 
   /** @param {{ type: 'route', id: number, status: 'fallback' | 'unavailable' }} message */

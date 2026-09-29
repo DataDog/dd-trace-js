@@ -69,6 +69,40 @@ describe('flag evaluation worker producer', () => {
     }
   }
 
+  it('passes effective logging settings without cloning the custom logger', () => {
+    writer.destroy()
+    writer = new Writer({
+      url: new URL('http://localhost:8126'),
+      service: 'test',
+      debug: true,
+      logLevel: 'error',
+      logger: { debug () {}, error () {} },
+    })
+    writer.setEnabled(true)
+    enqueue(64)
+    const data = structuredClone(workers[0].options.workerData)
+    assert.deepStrictEqual(data.logging, { enabled: true, level: 'error' })
+  })
+
+  it('relays worker diagnostics without adding error telemetry or accepting unknown levels', () => {
+    log.errorWithoutTelemetry = sinon.spy()
+    log.error = sinon.spy()
+    log.info = sinon.spy()
+    log.configure = sinon.spy()
+    writer.setEnabled(true)
+    enqueue(64)
+    for (const level of ['debug', 'info', 'warn', 'error', 'configure']) {
+      workers[0].emit('message', { type: 'log', level, message: 'delivery diagnostic' })
+    }
+    sinon.assert.calledOnceWithExactly(log.debug, '%s', 'delivery diagnostic')
+    sinon.assert.calledOnceWithExactly(log.info, '%s', 'delivery diagnostic')
+    sinon.assert.calledOnceWithExactly(log.warn, '%s', 'delivery diagnostic')
+    sinon.assert.calledOnceWithExactly(log.errorWithoutTelemetry, '%s', 'delivery diagnostic')
+    sinon.assert.notCalled(log.error)
+    sinon.assert.notCalled(log.configure)
+    assert.strictEqual(writer.getUnavailableReason(), undefined)
+  })
+
   it('retains hook evaluations until initial route discovery completes', () => {
     let onRoute
     const Hook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
