@@ -4732,8 +4732,8 @@ declare namespace tracer {
      * earlier annotation declared in place.
      */
     interface Agent {
-      /** The version of the agent. A number is reported as a string. */
-      version?: string | number,
+      /** The version of the agent. */
+      version?: string,
       /** The agent's name. Defaults to the agent span's name. */
       name?: string,
       /** The system instructions the agent runs with. */
@@ -4892,10 +4892,10 @@ declare namespace tracer {
       modelProvider?: string,
 
       /**
-       * The version of the agent, set as an `agent_version` tag. A number is reported as a string. Only used on
-       * `agent` spans, and wins over a version declared by an enclosing `annotationContext`.
+       * The version of the agent, set as an `agent_version` tag. Only used on `agent` spans, and wins over a
+       * version declared by an enclosing `annotationContext`.
        */
-      version?: string | number,
+      version?: string,
     }
 
     interface LLMObsNamedSpanOptions extends LLMObsSpanOptions {

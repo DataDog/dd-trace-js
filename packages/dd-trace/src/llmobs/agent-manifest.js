@@ -111,7 +111,6 @@ function buildAgentManifest (agent) {
  * @param {unknown} version
  */
 function toAgentVersion (version) {
-  if (typeof version === 'number') return Number.isFinite(version) ? String(version) : undefined
   return typeof version === 'string' && version !== '' ? version : undefined
 }
 

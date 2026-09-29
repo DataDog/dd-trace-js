@@ -847,8 +847,10 @@ const agentDeclaration: import('..').llmobs.Agent = {
 }
 llmobs.annotate({ agent: agentDeclaration })
 llmobs.annotationContext({ agent: agentDeclaration }, () => {})
-llmobs.annotate({ agent: { version: 2 } })
+llmobs.annotate({ agent: { version: '2.1.1' } })
 llmobs.trace({ kind: 'agent', name: 'travel_desk', version: '2.1.0' }, () => {})
+llmobs.wrap({ kind: 'agent', version: '2.1.0' }, () => {})
+// @ts-expect-error An agent version must be a string, so it is reported exactly as written.
 llmobs.wrap({ kind: 'agent', version: 2 }, () => {})
 
 
