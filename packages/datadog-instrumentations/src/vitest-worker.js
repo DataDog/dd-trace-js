@@ -543,8 +543,12 @@ function wrapVitestTestRunner (VitestTestRunner) {
     if (providedContext.flakyTests !== undefined &&
       isFlakyTestRetriesConfiguredForTask(providedContext, task) &&
       !isFlakyTestRetriesEnabledForTask(providedContext, task) &&
-      (task.retry?.__ddTestOptAtr || task.retry === providedContext.flakyTestRetriesCount)) {
+      task.retry?.__ddTestOptAtr) {
       disableFrameworkRetries(task)
+    }
+    if (task.retry?.__ddTestOptAtr && !providedContext.isDynamicAtrEnabled) {
+      // Vitest <4.1 only accepts numbers during execution; retain ownership until tasks have inherited retries.
+      task.retry = task.retry.count
     }
 
     if (isTestManagementTestsEnabled) {

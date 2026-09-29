@@ -100,6 +100,34 @@ describe('known-flakes-only Auto Test Retries', () => {
       if (framework.name === 'cucumber') {
         scenarios.push({ name: 'parallel', args: ['--parallel', '2'], retries: [3, 1, 2] })
       }
+      if (framework.name === 'vitest') {
+        for (const noWorker of requested === 'oldest' ? [false] : [false, true]) {
+          scenarios.push({
+            name: `native suite retries with an empty list (no worker init=${noWorker})`,
+            suiteRetries: true,
+            noWorker,
+            response: { data: [] },
+            retries: [1, 3, 1],
+          })
+        }
+        for (const perTestRetries of [0, 1, 2, 3]) {
+          scenarios.push({
+            name: `native per-test retries=${perTestRetries} with an empty list`,
+            perTestRetries,
+            response: { data: [] },
+            retries: [1, perTestRetries + 1, 1],
+          })
+          if (requested !== 'oldest') {
+            scenarios.push({
+              name: `native per-test retries=${perTestRetries} without worker init`,
+              perTestRetries,
+              noWorker: true,
+              response: { data: [] },
+              retries: [1, perTestRetries + 1, 1],
+            })
+          }
+        }
+      }
       if (framework.name === 'vitest' && requested !== 'oldest') {
         scenarios.push({ name: 'without worker init', noWorker: true, retries: [3, 1, 2] })
         scenarios.push({
@@ -169,6 +197,8 @@ describe('known-flakes-only Auto Test Retries', () => {
                 DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
                 DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: String(!!scenario.noWorker),
                 NATIVE_RETRIES: scenario.native ? '1' : '',
+                NATIVE_SUITE_RETRIES: scenario.suiteRetries ? 'true' : '',
+                PER_TEST_RETRIES: scenario.perTestRetries === undefined ? '' : String(scenario.perTestRetries),
               },
             })
             child.stdout.on('data', chunk => { output += chunk })
@@ -177,13 +207,15 @@ describe('known-flakes-only Auto Test Retries', () => {
               ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
                 const tests = payloads.flatMap(({ payload }) => payload.events)
                   .filter(event => event.type === 'test').map(event => event.content)
-                for (const [index, name] of ['known flaky failure', 'new failure', 'recovers'].entries()) {
+                const testNames = ['known flaky failure',
+                  scenario.suiteRetries ? 'native suite new failure' : 'new failure', 'recovers']
+                for (const [index, name] of testNames.entries()) {
                   const attempts = tests.filter(test => test.meta['test.name'] === name)
                   assert.strictEqual(attempts.length, scenario.retries[index], `${name}: ${output}`)
                   if (attempts.length === 1) {
                     assert.strictEqual(attempts[0].meta['test.is_retry'], undefined)
                     assert.strictEqual(attempts[0].meta['test.has_failed_all_retries'], undefined)
-                  } else if (!scenario.native) {
+                  } else if (!scenario.native && !scenario.suiteRetries && scenario.perTestRetries === undefined) {
                     const reason = scenario.efd
                       ? 'early_flake_detection'
                       : scenario.atf ? 'attempt_to_fix' : 'auto_test_retry'

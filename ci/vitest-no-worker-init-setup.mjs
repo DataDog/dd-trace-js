@@ -167,10 +167,13 @@ function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
         const isManagedProject = projectName
           ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
           : flakyTestRetriesConfiguration.includesUnnamedProject
-        if (isManagedProject &&
-          (task.retry?.__ddTestOptAtr || task.retry === flakyTestRetriesConfiguration.retryCount)) {
+        if (isManagedProject && task.retry?.__ddTestOptAtr) {
           task.retry = 0
         }
+      }
+      if (task.retry?.__ddTestOptAtr && !dynamicAtrRetryPolicy) {
+        // Vitest <4.1 requires a numeric ceiling after task-level overrides have been applied.
+        task.retry = task.retry.count
       }
       configureDynamicAtr(task)
       wrapRetryCondition(task)

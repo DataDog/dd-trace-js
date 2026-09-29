@@ -827,7 +827,7 @@ async function runMainProcessSetup (
     }
   }
 
-  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications, frameworkVersion)
+  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
   if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
@@ -1044,7 +1044,7 @@ function shouldUseBrowserReporter (frameworkVersion, testSpecifications) {
     testSpecifications.some(isBrowserTestSpecification)
 }
 
-function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
+function configureFlakyTestRetries (ctx, testSpecifications) {
   if (!isFlakyTestRetriesEnabled || (!isDynamicAtrEnabled && flakyTestRetriesCount <= 0)) return
 
   const maximumDynamicAtrRetries = dynamicAtrBuckets
@@ -1059,7 +1059,7 @@ function configureFlakyTestRetries (ctx, testSpecifications, frameworkVersion) {
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
-      config.retry = isDynamicAtrEnabled || (flakyTests !== undefined && satisfies(frameworkVersion, '>=4.1.0'))
+      config.retry = isDynamicAtrEnabled || flakyTests !== undefined
         ? { count: retryCount, __ddTestOptAtr: true }
         : retryCount
       configured = true

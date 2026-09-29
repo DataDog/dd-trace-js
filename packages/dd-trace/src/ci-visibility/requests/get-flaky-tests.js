@@ -14,11 +14,12 @@ const request = require('./request')
  */
 function getFlakyTests (configuration, done) {
   const {
-    url, isEvpProxy, evpProxyPrefix, isGzipCompatible, service, env, repositoryUrl, sha, branch,
+    url, isEvpProxy, evpProxyPrefix, isGzipCompatible, service, env, repositoryUrl, sha, branch, tag,
     osPlatform, osVersion, osArchitecture, runtimeName, runtimeVersion, custom,
   } = configuration
+  const effectiveBranch = branch || tag
   const cacheKey = buildCacheKey('flaky-tests', [
-    sha, branch, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
+    sha, effectiveBranch, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
     runtimeName, runtimeVersion, custom,
   ])
 
@@ -49,7 +50,7 @@ function getFlakyTests (configuration, done) {
           env,
           repository_url: repositoryUrl,
           sha,
-          branch,
+          branch: effectiveBranch,
           test_level: 'test',
           configurations: {
             'os.platform': osPlatform,
@@ -94,7 +95,21 @@ function getFlakyTests (configuration, done) {
       writeToCache(activeCacheKey, tests)
       callback(null, tests)
     })
-  }, done)
+  }, (err, tests) => {
+    if (err) return done(err)
+    // Cache hits bypass HTTP parsing, so validate the map once before sharing it with runners.
+    if (!isRecord(tests) || Object.values(tests).some(suites =>
+      !isRecord(suites) || Object.values(suites).some(names =>
+        !Array.isArray(names) || names.some(name => typeof name !== 'string')))) {
+      return done(new Error('Invalid cached flaky tests'))
+    }
+    done(null, tests)
+  })
+}
+
+/** @param {unknown} value */
+function isRecord (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 module.exports = getFlakyTests

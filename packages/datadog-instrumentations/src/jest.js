@@ -3754,6 +3754,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddTestCodeCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddFlakyTests',
   '_ddIsDynamicAtrEnabled',
   '_ddDynamicAtrBuckets',
   '_ddItrSkippingEnabledTags',
