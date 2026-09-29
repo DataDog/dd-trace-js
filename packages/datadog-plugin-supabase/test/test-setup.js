@@ -193,6 +193,11 @@ class SupabaseTestSetup {
   }
 
   /** @returns {Promise<object>} */
+  functionsClientInvokeUnknownMethod () {
+    return this.createSupabaseClient().functions.invoke('hello', { method: 'PROPFIND' })
+  }
+
+  /** @returns {Promise<object>} */
   postgrestBuilderThen () {
     return this.createSupabaseClient().from('items').select('*')
   }

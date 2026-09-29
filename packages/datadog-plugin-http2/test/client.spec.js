@@ -106,6 +106,27 @@ describe('Plugin', () => {
           })
         })
 
+        it('redacts credentials in url.full', done => {
+          const app = (stream, headers) => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            }).then(done).catch(done)
+
+            const client = http2.connect(`${protocol}://username:password@localhost:${port}`).on('error', done)
+            const req = client.request({ ':path': '/user' })
+            req.on('error', done)
+            req.end()
+          })
+        })
+
         it('sets error.type to the status code on a 5xx response', done => {
           const app = (stream, headers) => {
             stream.respond({ ':status': 503 })
