@@ -1,5 +1,7 @@
 'use strict'
 
+const { createHash } = require('node:crypto')
+
 const {
   FLAG_EVALUATION_DEGRADED_CAP,
   FLAG_EVALUATION_GLOBAL_CAP,
@@ -9,6 +11,9 @@ const { validatedContextEntries, snapshotFromEntries } = require('./flag-evaluat
 const { normalizeTargetingKey, optionalKey, protectedErrorCode } =
   require('./flag-evaluation-pii')
 const { recordDegraded, recordDropped } = require('./flag-evaluation-telemetry')
+
+// V8 hashes longer strings by length alone, making equal-length identities expensive to distinguish.
+const MAX_DIRECT_IDENTITY_LENGTH = 16_383
 
 /** @typedef {import('./flag-evaluation-context').ContextSnapshot} ContextSnapshot */
 /**
@@ -90,10 +95,14 @@ class FlagEvaluationAggregator {
     const variant = optionalKey(event.variant)
     const allocation = optionalKey(event.allocationKey)
     // Group by the raw key; the serializer independently hashes protected rows once per output bucket.
-    const fullKey = JSON.stringify([
+    const identity = JSON.stringify([
       flagKey, variant, allocation, event.runtimeDefault === true, error,
       targetingKey, contextEntries, consent,
     ])
+    // Keep digest keys separate from short JSON identities, which always start with '['.
+    const fullKey = identity.length > MAX_DIRECT_IDENTITY_LENGTH
+      ? '#' + createHash('sha256').update(identity).digest('base64')
+      : identity
     const existing = this.#full.get(fullKey)
     if (existing) {
       observeEntry(existing, event.timestamp, consent)

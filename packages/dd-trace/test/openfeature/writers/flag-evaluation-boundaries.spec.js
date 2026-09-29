@@ -23,6 +23,60 @@ const cases = [
 ]
 
 describe('flag evaluation independent privacy boundaries', () => {
+  describe('long aggregation identities', () => {
+    const event = {
+      flagKey: 'flag', variant: 'on', allocationKey: 'all', runtimeDefault: false, timestamp: 100,
+    }
+
+    for (const length of [16_383, 16_384]) {
+      it(`preserves protected counts and privacy at identity length ${length}`, () => {
+        const aggregator = new FlagEvaluationAggregator()
+        // These dimensions add 44 characters around the targeting key in the JSON identity.
+        const first = 'x'.repeat(length - 45) + 'a'
+        const second = 'x'.repeat(length - 45) + 'b'
+        for (const targetingKey of [first, second, first]) {
+          aggregator.add({ ...event, targetingKey, observeFullEvaluationData: false })
+        }
+        const { full, degraded } = aggregator.take()
+        assert.strictEqual(full.size, 2)
+        assert.strictEqual(degraded.size, 0)
+        for (const key of full.keys()) {
+          assert.ok(key.length <= 16_383, `lookup key has ${key.length} characters`)
+          assert.strictEqual(key.startsWith('['), length === 16_383)
+        }
+        const [payload] = [...iterateFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)]
+        const rows = JSON.parse(payload.encoded).flagEvaluations
+        assert.deepStrictEqual(rows.map(row => [row.targeting_key, row.evaluation_count]), [
+          ['sha256_' + createHash('sha256').update(first).digest('hex'), 2],
+          ['sha256_' + createHash('sha256').update(second).digest('hex'), 1],
+        ])
+        assert.ok(rows.every(row => row.context === undefined))
+        assert.strictEqual(payload.encoded.includes(first), false)
+        assert.strictEqual(payload.encoded.includes(second), false)
+      })
+    }
+
+    it('keeps distinct large consented contexts separate and retains their output', () => {
+      const aggregator = new FlagEvaluationAggregator()
+      const common = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`field_${i}`, 'v'.repeat(256)]))
+      const first = { ...common, request: 'request-a' }
+      const second = { ...common, request: 'request-b' }
+      for (const context of [first, second, first]) {
+        aggregator.add({ ...event, targetingKey: target, attrs: context, observeFullEvaluationData: true })
+      }
+      const { full, degraded } = aggregator.take()
+      assert.strictEqual(full.size, 2)
+      assert.strictEqual(degraded.size, 0)
+      for (const key of full.keys()) assert.ok(key.length <= 16_383, `lookup key has ${key.length} characters`)
+      const [payload] = [...iterateFlagEvaluationPayloads(full, degraded, { service: 'test' }, 300)]
+      const rows = JSON.parse(payload.encoded).flagEvaluations
+      assert.deepStrictEqual(rows.map(row => [row.targeting_key, row.context.evaluation, row.evaluation_count]), [
+        [target, first, 2],
+        [target, second, 1],
+      ])
+    })
+  })
+
   it('merges equivalent contexts while retaining an immutable snapshot of each distinct identity', () => {
     const aggregator = new FlagEvaluationAggregator()
     const first = { b: false, a: 1 }
