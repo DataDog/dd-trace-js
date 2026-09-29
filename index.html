@@ -368,7 +368,8 @@ duration-based retry policy applies.</p>
 duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
 determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
 and 5m, followed by a &gt;5m bucket. EFD retains its exclusive upper bounds.
-Requires Auto Test Retries to be enabled by the backend.</p>
+Requires Auto Test Retries to be enabled by the backend.
+For Mocha, dynamic ATR requires version 8 or newer. Older supported versions use the flat retry limit.</p>
 <p>Set <code>DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS</code> to a comma-separated list of five positive integers in <code>[1, 20]</code>
 overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and &gt;5m buckets
 respectively). When unset, empty, or invalid, the Early Flake Detection retry settings from the backend are
