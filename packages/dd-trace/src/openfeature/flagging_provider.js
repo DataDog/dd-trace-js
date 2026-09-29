@@ -68,13 +68,22 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.initController?.timeoutId?.unref?.()
 
     // Only observes the outcome for logging; `promise` itself is returned unmodified below.
-    // errorWithoutTelemetry avoids inflating telemetry volume for every routine init timeout.
+    // Guarded so a logger failure can never leave the derived promise unhandled.
     promise.then(
-      () => log.debug('Feature Flags: provider initialized successfully'),
-      (error) => log.errorWithoutTelemetry(
-        'Feature Flags: provider failed to initialize: %s',
-        error instanceof Error ? error.message : String(error)
-      )
+      () => {
+        try {
+          log.debug('Feature Flags: provider initialized successfully')
+        } catch { /* logging failure must not crash the process */ }
+      },
+      (error) => {
+        try {
+          // errorWithoutTelemetry avoids inflating telemetry volume for every routine init timeout.
+          log.errorWithoutTelemetry(
+            'Feature Flags: provider failed to initialize: %s',
+            error instanceof Error ? error.message : String(error)
+          )
+        } catch { /* logging failure must not crash the process */ }
+      }
     )
 
     return promise
