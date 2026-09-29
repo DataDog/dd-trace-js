@@ -84,7 +84,7 @@ function isCanonicalIntegerAttribute (value) {
 /**
  * Whether the instrumentation still owns a resource, and so may overwrite it.
  * `INSTRUMENTATION_HTTP_RESOURCE` holds the value the instrumentation last wrote, so anything
- * different came from application code and has to survive. An unset resource is unowned.
+ * different came from application code and has to survive. An unset resource can be claimed.
  *
  * @param {string | undefined} currentResource
  * @param {string | undefined} instrumentationResource

@@ -7,6 +7,7 @@ const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const {
   HTTP_STATUS_ERROR,
   INSTRUMENTATION_HTTP_RESOURCE,
+  isInstrumentationOwnedResource,
   otelHttpResourceName,
   setInstrumentationHttpResource,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
@@ -96,7 +97,7 @@ class NextPlugin extends ServerPlugin {
 
     // Next.js does not publish these through `web.addRequestTags`, so the shared conversion
     // has nothing to derive `url.*`, `server.*` and `network.peer.address` from.
-    addOtelRequestTags(span, this.config, req)
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) addOtelRequestTags(span, this.config, req)
 
     this.stampIntegrationService(span, serviceName)
 
@@ -129,7 +130,9 @@ class NextPlugin extends ServerPlugin {
     const error = ctx.error ?? span.context().getTag('error')
     const requestError = req.error || nextRequest?.error
 
-    if (nextRequest) addOtelRequestTags(span, this.config, nextRequest)
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && nextRequest) {
+      addOtelRequestTags(span, this.config, nextRequest)
+    }
 
     if (requestError) {
       // prioritize user-set errors from API routes
@@ -194,7 +197,7 @@ class NextPlugin extends ServerPlugin {
     if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
       resource = otelHttpResourceName(req.method, page)
       span.setTag(HTTP_ROUTE, page)
-      setInstrumentationHttpResource(span, resource)
+      setInstrumentationHttpResourceIfOwned(span, resource)
     } else {
       span.setTag(RESOURCE_NAME, resource)
     }
@@ -248,10 +251,24 @@ function setHttpParentRoute (span, page, isStatic, otelSemanticsEnabled, resourc
 
   span.setTag(HTTP_ROUTE, page)
   if (otelSemanticsEnabled) {
-    setInstrumentationHttpResource(span, resource)
+    setInstrumentationHttpResourceIfOwned(span, resource)
   } else {
     span.setTag(RESOURCE_NAME, resource)
   }
   nextParentRoutes.set(span, page)
+}
+
+/**
+ * @param {import('../../dd-trace/src/opentracing/span')} span
+ * @param {string} resource
+ */
+function setInstrumentationHttpResourceIfOwned (span, resource) {
+  const context = span.context()
+  if (isInstrumentationOwnedResource(
+    context.getTag(RESOURCE_NAME),
+    context.getTag(INSTRUMENTATION_HTTP_RESOURCE)
+  )) {
+    setInstrumentationHttpResource(span, resource)
+  }
 }
 module.exports = NextPlugin

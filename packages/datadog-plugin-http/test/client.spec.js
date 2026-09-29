@@ -110,6 +110,27 @@ describe('Plugin', () => {
           })
         })
 
+        it('redacts credentials in url.full', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://username:password@localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
         it('sets error.type to the status code on a 4xx client response', done => {
           const app = express()
           app.get('/bad', (req, res) => {

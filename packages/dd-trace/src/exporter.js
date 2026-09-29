@@ -35,9 +35,9 @@ module.exports = function getExporter (name) {
 }
 
 /**
- * Whether spans have to be written to the Lambda log for the Forwarder to pick up, which is the
- * case in a Lambda with neither the Datadog extension nor the mini agent. Nothing else can reach
- * the backend from there, so this transport must not be replaced.
+ * Whether default Datadog delivery writes spans to the Lambda log for the Forwarder because
+ * neither the Datadog extension nor the mini agent is present. Explicit OTLP configuration can
+ * still select a collector instead.
  *
  */
 function usesLambdaLogExporter () {
