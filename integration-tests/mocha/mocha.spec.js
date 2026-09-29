@@ -127,8 +127,9 @@ const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA
 const supportsMochaRetryEvents = mochaMajor >= 6
 // ATR needs the retry event introduced in Mocha 6.
 const retryEventsIt = supportsMochaRetryEvents ? it : it.skip
-// Reusing a runner requires cleanReferencesAfterRun, introduced in Mocha 7.2.
-const rerunIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=7.2.0') ? it : it.skip
+// Dynamic ATR requires Mocha 8; older versions retain fixed-count ATR.
+const supportsDynamicAtr = mochaMajor >= 8
+const dynamicAtrIt = supportsDynamicAtr ? it : it.skip
 // Global setup/teardown fixtures were introduced in Mocha 8.2.0.
 const globalFixturesIt = MOCHA_VERSION === 'latest' || satisfies(MOCHA_VERSION, '>=8.2.0') ? it : it.skip
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
@@ -244,6 +245,53 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     testOutput = ''
     await receiver.stop()
   })
+
+  for (const { mode, args, reason, exitCode: expectedExitCode } of [
+    { mode: 'skip-tests', args: '', reason: 'all_tests_skipped', exitCode: 0 },
+    { mode: 'skip-suite', args: '', reason: 'all_tests_skipped', exitCode: 0 },
+    { mode: 'mixed', args: '', reason: undefined, exitCode: 0 },
+    { mode: 'empty', args: '', reason: 'zero_tests', exitCode: 0 },
+    { mode: 'mixed', args: '--grep never-matches', reason: 'zero_tests', exitCode: 0 },
+    { mode: 'error', args: '', reason: undefined, exitCode: 1 },
+    { mode: 'empty', args: '--fail-zero', reason: undefined, exitCode: 1 },
+  ]) {
+    // --fail-zero was introduced in Mocha 9.1.0.
+    const emptySessionIt = args === '--fail-zero' &&
+      MOCHA_VERSION !== 'latest' && !satisfies(MOCHA_VERSION, '>=9.1.0')
+      ? it.skip
+      : it
+    emptySessionIt(`reports zero-execution sessions: ${mode} ${args}`, async () => {
+      receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+      childProcess = exec('node node_modules/mocha/bin/mocha ci-visibility/empty-session-tests.js ' + args, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          EMPTY_SESSION_MODE: mode,
+        },
+      })
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const type of ['test_session_end', 'test_module_end']) {
+            const event = events.find(event => event.type === type)?.content
+            assert.ok(event, testOutput)
+            const expectedStatus = expectedExitCode ? 'fail' : reason ? 'skip' : 'pass'
+            assert.strictEqual(event.meta[TEST_STATUS], expectedStatus, testOutput)
+            assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason, testOutput)
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+              ? 'All tests were skipped'
+              : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, expectedExitCode, testOutput)
+    })
+  }
 
   context('async global setup', () => {
     for (const entrypoint of ['cli', 'programmatic']) {
@@ -3534,8 +3582,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const testSession = events.find(event => event.type === 'test_session_end').content
           assert.strictEqual(tests.length, 0)
           assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
-          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'No tests were executed')
-          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+          assert.strictEqual(testSession.meta[TEST_SKIP_REASON], 'All tests were skipped')
+          assert.strictEqual(testSession.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
         })
 
       childProcess = exec(
@@ -5396,10 +5444,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('auto test retries', () => {
+    // Without dynamic ATR, the configured flat limit of four retries applies.
     const dynamicCases = [
-      { name: 'custom buckets', buckets: '1,3,3,3,3', attempts: 2 },
-      { name: 'backend buckets', buckets: '', attempts: 3 },
-      { name: 'malformed buckets', buckets: '1,,3,3,3', attempts: 3 },
+      { name: 'custom buckets', buckets: '1,3,3,3,3', attempts: supportsDynamicAtr ? 2 : 5 },
+      { name: 'backend buckets', buckets: '', attempts: supportsDynamicAtr ? 3 : 5 },
+      { name: 'malformed buckets', buckets: '1,,3,3,3', attempts: supportsDynamicAtr ? 3 : 5 },
       { name: 'disabled flag', buckets: '1,3,3,3,3', attempts: 5, enabled: false },
       { name: 'recovery', buckets: '1,3,3,3,3', attempts: 2, recover: true },
       { name: 'retry hook failure', buckets: '1,3,3,3,3', attempts: 2, hookFailure: 'beforeEach' },
@@ -5431,7 +5480,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     for (const parallel of [false, true]) {
       for (const scenario of dynamicCases) {
         const runTest = parallel ? parallelIt : retryEventsIt
-        runTest(`uses dynamic ATR ${scenario.name} (parallel=${parallel})`, async () => {
+        const retryMode = supportsDynamicAtr ? 'uses dynamic ATR' : 'uses fixed retries without dynamic ATR'
+        runTest(`${retryMode} ${scenario.name} (parallel=${parallel})`, async () => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             early_flake_detection: {
@@ -5480,8 +5530,76 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }
     }
 
+    for (const parallel of [false, true]) {
+      for (const durations of [[100, 6000], [6000, 100]]) {
+        const runTest = parallel ? parallelIt : dynamicAtrIt
+        runTest(`isolates dynamic ATR duplicate names: ${durations} (parallel=${parallel})`, async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+          childProcess = exec(runTestsCommand, {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify(['./test-flaky-test-retries/dynamic-atr-duplicates.js']),
+              DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: 'true',
+              DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '1,2,3,3,3',
+              DYNAMIC_ATR_DURATIONS: JSON.stringify(durations),
+              SHOULD_CHECK_RESULTS: '1',
+              ...(parallel ? { RUN_IN_PARALLEL: '1' } : {}),
+            },
+          })
+          childProcess.stdout.on('data', chunk => { testOutput += chunk })
+          childProcess.stderr.on('data', chunk => { testOutput += chunk })
+          const retryCounts = durations.map(duration => duration === 100 ? 1 : 2)
+          const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 5, testOutput)
+              for (const [index, retryCount] of retryCounts.entries()) {
+                const attempts = tests.filter(test => test.meta[ERROR_MESSAGE] === `declaration ${index}`)
+                assert.strictEqual(attempts.length, retryCount + 1, testOutput)
+                assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'))
+                assert.strictEqual(attempts.filter(test =>
+                  test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, retryCount)
+                assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+                assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+              }
+            }
+          )
+          const [[exitCode]] = await Promise.all([once(childProcess, 'close'), eventsPromise])
+          assert.strictEqual(exitCode, 1, testOutput)
+          const budgets = [...testOutput.matchAll(/RETRY_BUDGET (\[[^\n]+\])/g)].map(match => JSON.parse(match[1]))
+          const expectedBudgets = retryCounts.flatMap(count => [
+            [0, 3],
+            ...Array.from({ length: count }, (_, index) => [index + 1, count]),
+          ])
+          assert.deepStrictEqual(budgets, expectedBudgets, testOutput)
+        })
+      }
+    }
+
+    dynamicAtrIt('allows completed dynamic ATR worker tests to be garbage collected', async () => {
+      childProcess = exec('node --expose-gc ./ci-visibility/run-mocha-atr-gc.js', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          MOCHA_WORKER_ID: '0',
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk })
+      const [exitCode] = await once(childProcess, 'close')
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     for (const nativeRetries of [0, 1]) {
-      rerunIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
+      dynamicAtrIt(`restores ${nativeRetries} native retries after disabling dynamic ATR instrumentation`, async () => {
         receiver.setSettings({ flaky_test_retries_enabled: true })
         let output = ''
         childProcess = exec('node ./ci-visibility/run-mocha-atr-rerun.js', {

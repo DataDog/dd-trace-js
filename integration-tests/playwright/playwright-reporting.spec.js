@@ -2,6 +2,8 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const fs = require('node:fs/promises')
+const path = require('node:path')
 const { inspect } = require('node:util')
 const satisfies = require('semifies')
 
@@ -114,6 +116,228 @@ unboundRunnerExportContext(`playwright@${UNBOUND_RUNNER_EXPORT_VERSION} unbound 
   })
 })
 
+const legacyListingVersions = ['1.30.0', '1.31.0', '1.32.0', '1.33.0']
+for (const version of [oldest, ...legacyListingVersions, '1.55.1', '1.60.0', latest]) {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) continue
+  // Run intermediate-version regressions in the latest CI job.
+  if (PLAYWRIGHT_VERSION === 'latest' && version === oldest) continue
+
+  // Playwright versions below the release line's minimum are not instrumented.
+  const listingContext = version === latest || satisfies(version, `>=${oldest}`) ? describe : describe.skip
+  listingContext(`playwright@${version} test listing`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    this.timeout(60000)
+    useSandbox([`@playwright/test@${version}`])
+
+    const listingCases = [
+      ['lists matching tests', '--list --reporter=json --grep-invert @excluded', 0],
+      ['preserves listing errors', '--list --reporter=line --grep nonexistent-test-name', 1],
+    ]
+    // Keep execution controls on the existing matrix; extra legacy versions cover discovery flag layouts.
+    if (!legacyListingVersions.includes(version)) {
+      listingCases.push(['runs tests with the list reporter', '--reporter=list', 0])
+    }
+    for (const [name, args, exitCode] of listingCases) {
+      it(name, async (receiver, run) => {
+        let stdout = ''
+        let stderr = ''
+        const events = []
+        receiver.on('message', ({ url, payload }) => {
+          if (url.endsWith('/api/v2/citestcycle')) events.push(...payload.events)
+        })
+        const proc = run(`./node_modules/.bin/playwright test -c playwright.config.js ${args}`, {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        })
+        proc.stdout?.on('data', chunk => { stdout += chunk.toString() })
+        proc.stderr?.on('data', chunk => { stderr += chunk.toString() })
+        const [actualExitCode] = await once(proc, 'close')
+        const output = stdout + stderr
+        const isListing = args.startsWith('--list')
+        const isSuccessfulListing = isListing && exitCode === 0
+        const expectedTypes = isListing
+          ? ['test_module_end', 'test_session_end']
+          : ['test', 'test_module_end', 'test_session_end', 'test_suite_end']
+        assert.deepStrictEqual(
+          events.filter(event => event.type.startsWith('test')).map(event => ({
+            type: event.type,
+            status: event.content.meta[TEST_STATUS],
+            skipReason: event.content.meta[TEST_SKIP_REASON],
+            emptyReason: event.content.meta[TEST_SESSION_EMPTY_REASON],
+          })).sort((a, b) => a.type.localeCompare(b.type)),
+          expectedTypes.map(type => ({
+            type,
+            status: exitCode !== 0 ? 'fail' : (isListing ? 'skip' : 'pass'),
+            skipReason: isSuccessfulListing ? 'Test discovery only (--list)' : undefined,
+            emptyReason: isSuccessfulListing ? 'test_discovery' : undefined,
+          }))
+        )
+        assert.strictEqual(actualExitCode, exitCode, output)
+        if (args.startsWith('--list')) {
+          if (exitCode === 0) {
+            const report = JSON.parse(stdout)
+            assert.strictEqual(report.suites[0].specs[0].title, 'should report request error tags')
+            assert.deepStrictEqual(report.suites[0].specs[0].tests[0].results, [])
+          } else if (version === '1.18.0') {
+            // Playwright 1.18 returns before finalizing its list-mode reporter when no tests match.
+            assert.strictEqual(stdout, '')
+          } else if (version === '1.30.0') {
+            assert.match(output, /no tests found\./)
+          } else {
+            assert.match(output, /No tests found/)
+          }
+        } else {
+          assert.match(output, /1 passed/)
+        }
+      })
+    }
+  })
+}
+
+// --last-failed requires Playwright 1.44 or newer.
+const retryHistoryContext = PLAYWRIGHT_VERSION === 'oldest' ? describe.skip : describe
+
+retryHistoryContext(`playwright@${latest} SDK retry history`, function () {
+  const it = createParallelIt(global.it, { withReceiver: true })
+  this.timeout(60000)
+  useSandbox([`@playwright/test@${latest}`])
+
+  for (const feature of ['efd', 'attempt-to-fix']) {
+    it(`can select a test whose ${feature} repetition failed`, async (receiver, run) => {
+      // EFD also covers preserving distinct IDs for native repetitions.
+      const nativeRepeats = feature === 'efd' ? 2 : 1
+      const cwd = sandboxCwd()
+      const outputDir = `./test-results-retry-history-${feature}`
+      const historyFile = path.join(cwd, outputDir, '.last-run.json')
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: feature !== 'attempt-to-fix',
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: feature !== 'attempt-to-fix',
+        test_management: { enabled: feature === 'attempt-to-fix', attempt_to_fix_retries: 1 },
+      })
+      receiver.setKnownTests({ playwright: {} })
+      receiver.setTestManagementTests({
+        playwright: {
+          suites: {
+            'retry-history-test.js': {
+              tests: { 'fails only SDK repetitions': { properties: { attempt_to_fix: true } } },
+            },
+          },
+        },
+      })
+      const command = './node_modules/.bin/playwright test ' +
+        `-c playwright.config.js --workers=${nativeRepeats} --retries=0 --repeat-each=${nativeRepeats} --reporter=json`
+      const execute = async (args, traced) => {
+        let stdout = ''
+        let stderr = ''
+        const proc = run(`${command} ${args}`, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: traced ? '-r dd-trace/ci/init' : '',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            TEST_DIR: './ci-visibility/playwright-retry-history',
+            PLAYWRIGHT_OUTPUT_DIR: outputDir,
+            NATIVE_REPEAT_EACH: String(nativeRepeats),
+          },
+        })
+        proc.stdout?.on('data', data => { stdout += data.toString() })
+        proc.stderr?.on('data', data => { stderr += data.toString() })
+        let events = []
+        const eventsPromise = traced
+          ? receiver.gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            events = payloads.flatMap(({ payload }) => payload.events)
+          })
+          : undefined
+        const [[exitCode]] = await Promise.all([once(proc, 'close'), eventsPromise])
+        assert.ok(stdout.trim(), `Playwright exited with code ${exitCode} without a JSON report: ${stderr}`)
+        return { exitCode, report: JSON.parse(stdout), events }
+      }
+      const seed = await execute('', true)
+      const history = JSON.parse(await fs.readFile(historyFile, 'utf8'))
+      assert.strictEqual(seed.events.filter(event => event.type === 'test').length, 2 * nativeRepeats)
+      assert.strictEqual(seed.report.stats.expected, nativeRepeats)
+      assert.strictEqual(seed.report.stats.unexpected, nativeRepeats)
+      assert.strictEqual(new Set(history.failedTests).size, nativeRepeats)
+
+      // Exercise native history filtering without starting another set of workers.
+      const result = await execute('--last-failed --list', false)
+      assert.strictEqual(result.exitCode, 0, JSON.stringify(result.report.errors))
+      const specs = result.report.suites[0].specs
+      assert.deepStrictEqual(new Set(specs.map(({ id }) => id)), new Set(history.failedTests))
+      const selectedTests = specs.flatMap(({ tests }) => tests)
+      assert.deepStrictEqual(
+        selectedTests.map(({ results }) => results),
+        Array.from({ length: nativeRepeats }, () => [])
+      )
+    })
+  }
+})
+
+versions.forEach((version) => {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
+  describe(`playwright@${version} global errors`, function () {
+    const it = createParallelIt(global.it, { withReceiver: true })
+    this.timeout(60000)
+    useSandbox([`@playwright/test@${version}`])
+
+    for (const mode of ['collection', 'global-setup', 'web-server', 'global-teardown']) {
+      it(`preserves ${mode} errors on the session and module`, async (receiver, run) => {
+        const cwd = sandboxCwd()
+        let output = ''
+        const proc = run(
+          './node_modules/.bin/playwright test ' +
+          '-c ./ci-visibility/playwright-tests-global-error/playwright.config.js --project=chromium --shard=2/5',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+              PLAYWRIGHT_GLOBAL_ERROR_MODE: mode,
+            },
+          }
+        )
+        proc.stdout?.on('data', chunk => { output += chunk.toString() })
+        proc.stderr?.on('data', chunk => { output += chunk.toString() })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(({ type }) => type === 'test')
+            assert.strictEqual(tests.length, mode === 'global-teardown' ? 1 : 0)
+            for (const test of tests) assert.strictEqual(test.content.meta[TEST_STATUS], 'pass')
+            const expectedError = mode === 'web-server'
+              ? /Process from config.webServer was not able to start/
+              : new RegExp(`Synthetic ${mode} failure${mode === 'collection' ? ' 0' : ''}`)
+            for (const type of ['test_session_end', 'test_module_end']) {
+              const matching = events.filter(event => event.type === type)
+              assert.strictEqual(matching.length, 1, `expected one ${type}`)
+              const { content } = matching[0]
+              assert.strictEqual(content.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+              assert.match(content.meta[ERROR_MESSAGE], expectedError)
+              assert.strictEqual(content.error, 1)
+              if (mode !== 'web-server') assert.match(content.meta['error.stack'], expectedError)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'close'), eventsPromise])
+        assert.strictEqual(exitCode, 1, output)
+      })
+    }
+  })
+})
+
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
@@ -216,6 +440,37 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     }
 
+    for (const mode of ['skip-tests', 'skip-suite', 'mixed', 'error']) {
+      it(`reports zero-execution sessions: ${mode}`, async (receiver, run) => {
+        receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+        const proc = run('./node_modules/.bin/playwright test -c playwright.config.js', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-tests-empty-session',
+            EMPTY_SESSION_MODE: mode,
+          },
+        })
+        const reason = mode.startsWith('skip-') ? 'all_tests_skipped' : undefined
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            for (const type of ['test_session_end', 'test_module_end']) {
+              const event = events.find(event => event.type === type)?.content
+              assert.ok(event, `expected ${type}`)
+              assert.strictEqual(event.meta[TEST_STATUS], mode === 'error' ? 'fail' : reason ? 'skip' : 'pass')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], reason ? 'All tests were skipped' : undefined)
+            }
+          }
+        )
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, mode === 'error' ? 1 : 0)
+      })
+    }
+
     emptyShardTest('reports successful zero-test shards as skipped', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2',
@@ -248,7 +503,7 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     })
 
-    emptyShardTest('does not classify non-empty shards as empty', async (receiver, run) => {
+    emptyShardTest('reports a non-empty shard with skipped tests as all skipped', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=1/2',
         {
@@ -270,9 +525,9 @@ versions.forEach((version) => {
           for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(({ type }) => type === eventType)
             assert.ok(event, `expected ${eventType} event`)
-            assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
-            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'All tests were skipped')
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
           }
         }
       )
@@ -280,7 +535,7 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0)
     })
 
-    emptyShardTest('does not classify an empty discovery as an empty shard', async (receiver, run) => {
+    emptyShardTest('reports empty discovery separately from an empty shard', async (receiver, run) => {
       const proc = run(
         './node_modules/.bin/playwright test -c playwright.config.js --shard=2/2 ' +
         '--grep=does-not-exist --pass-with-no-tests',
@@ -303,9 +558,9 @@ versions.forEach((version) => {
           for (const eventType of ['test_session_end', 'test_module_end']) {
             const event = events.find(({ type }) => type === eventType)
             assert.ok(event, `expected ${eventType} event`)
-            assert.strictEqual(event.content.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], undefined)
-            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], undefined)
+            assert.strictEqual(event.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(event.content.meta[TEST_SKIP_REASON], 'No tests were detected')
+            assert.strictEqual(event.content.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
           }
         }
       )

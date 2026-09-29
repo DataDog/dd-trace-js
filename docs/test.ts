@@ -664,6 +664,11 @@ async function promptManagement () {
   })
   const messages = prompt.format({ name: 'Ada', count: 2 })
   const annotation = prompt.toAnnotation({ name: 'Ada', count: 2 })
+  const nestedConfig = prompt.config.model
+  if (nestedConfig && typeof nestedConfig === 'object' && !Array.isArray(nestedConfig)) {
+    // @ts-expect-error Returned configuration is immutable, including nested objects.
+    nestedConfig.temperature = 0.5
+  }
   if (typeof prompt.template !== 'string') {
     // @ts-expect-error Managed prompt templates are immutable.
     prompt.template[0].content = 'Changed'
@@ -673,6 +678,12 @@ async function promptManagement () {
   prompts.clearPromptCache({ hot: true, warm: false })
   await prompts.createPrompt('greeting', 'Hello {name}', { title: 'Greeting', envIds: [] })
   await prompts.createPromptVersion('greeting', 'Hello again {name}', { userVersion: '2', envIds: [] })
+  const placeholderTemplate = [
+    { role: 'system', content: 'Be concise' },
+    { type: 'placeholder' as const, name: 'history' }
+  ]
+  await prompts.createPrompt('chat', placeholderTemplate)
+  await prompts.createPromptVersion('chat', placeholderTemplate)
   await prompts.updatePrompt('greeting', { title: '', description: '' })
   await prompts.updatePromptVersion('greeting', 2, { description: '', envIds: [] })
   await prompts.deletePrompt('greeting')
