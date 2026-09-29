@@ -424,7 +424,7 @@ describe('http-otel-semantics', () => {
     })
 
     it('keeps a canonical numeric attribute when no derived replacement exists', () => {
-      // A hook can drop the legacy tag and supply the OTel one directly. Nothing is derived then,
+      // A hook can drop the Datadog tag and supply the OTel one directly. Nothing is derived then,
       // so dropping the metric would lose the attribute altogether.
       const span = run({ 'span.kind': 'server', 'http.method': 'GET' }, { 'http.response.status_code': 204 })
 
@@ -434,7 +434,7 @@ describe('http-otel-semantics', () => {
 
     it('drops a numeric copy of a derived attribute so OTLP cannot carry it twice', () => {
       // A hook setting a numeric value lands in `metrics`, while the attribute is derived into
-      // `meta` from the legacy key. Exporting both would emit the attribute twice.
+      // `meta` from the Datadog key. Exporting both would emit the attribute twice.
       const span = run(
         {
           'span.kind': 'server',

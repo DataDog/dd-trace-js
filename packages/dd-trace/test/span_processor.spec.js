@@ -419,7 +419,7 @@ describe('SpanProcessor', () => {
       }
     }
 
-    it('preserves legacy HTTP fields when Test Optimization disables requested OTel semantics', () => {
+    it('preserves Datadog HTTP fields when Test Optimization disables requested OTel semantics', () => {
       const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
       process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
 
@@ -449,7 +449,7 @@ describe('SpanProcessor', () => {
       }
     })
 
-    it('preserves legacy HTTP fields when Electron disables requested OTel semantics', () => {
+    it('preserves Datadog HTTP fields when Electron disables requested OTel semantics', () => {
       const previousValue = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
       process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
 
@@ -476,7 +476,7 @@ describe('SpanProcessor', () => {
       }
     })
 
-    it('preserves legacy HTTP fields when Lambda disables requested OTel semantics', () => {
+    it('preserves Datadog HTTP fields when Lambda disables requested OTel semantics', () => {
       const previousFunctionName = process.env.AWS_LAMBDA_FUNCTION_NAME
       const previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
       process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'

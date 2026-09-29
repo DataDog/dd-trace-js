@@ -322,7 +322,7 @@ function applyHttpOtelSemantics (formattedSpan) {
   // Built once `newMeta` is final. An int-typed OTel attribute is promoted from `meta` at export,
   // so a numeric copy a hook left in `metrics` would be exported a second time with its own
   // value. It is dropped only where a derived replacement actually exists, otherwise a hook that
-  // supplies the canonical attribute without its legacy counterpart would lose it entirely.
+  // supplies the canonical attribute without its Datadog counterpart would lose it entirely.
   const newMetrics = {}
   for (const key of Object.keys(metrics)) {
     if (key === NETWORK_DESTINATION_PORT) continue

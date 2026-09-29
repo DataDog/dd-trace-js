@@ -66,7 +66,7 @@ describe('azure-functions plugin', () => {
     'http://request-host:80/path?query=value',
     'https://secure-host:443/path?query=value',
   ]) {
-    it(`preserves legacy request input with semantics disabled for ${url}`, () => {
+    it(`preserves Datadog request input with semantics disabled for ${url}`, () => {
       const ctx = bindHttpStart(url, false)
       const req = web.patch.firstCall.args[0]
 

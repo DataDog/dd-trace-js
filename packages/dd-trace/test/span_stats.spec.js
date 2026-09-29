@@ -163,7 +163,7 @@ describe('SpanAggKey', () => {
     assert.strictEqual(key.endpoint, '/users/:id')
   })
 
-  it('should skip a malformed legacy HTTP status and use the OTel attribute', () => {
+  it('should skip a malformed Datadog HTTP status and use the OTel attribute', () => {
     const span = {
       ...basicSpan,
       meta: {
@@ -187,7 +187,7 @@ describe('SpanAggKey', () => {
     }
   })
 
-  it('should preserve legacy-first HTTP status precedence', () => {
+  it('should preserve Datadog-first HTTP status precedence', () => {
     const span = {
       ...basicSpan,
       meta: {
@@ -726,7 +726,7 @@ describe('SpanStatsProcessor', () => {
     assert.ok(otlpExporter.export.notCalled)
   })
 
-  it('should not call the legacy /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
+  it('should not call the Datadog /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
     exporter.export.resetHistory()
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor(config, otlpExporter)
