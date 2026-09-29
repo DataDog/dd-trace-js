@@ -689,3 +689,17 @@ function handle () {
   })
 }
 ```
+
+<h3 id="test-optimization-known-flakes">Retry only known flaky tests</h3>
+
+Set `DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES=true` to restrict Auto Test Retries to tests
+identified as flaky by Datadog. The default is `false`. Auto Test Retries must also be enabled
+for the test service, and `DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=false` still disables it.
+
+Tests are matched by module, suite, and name, independently of parameters. An empty flaky-test
+list disables Auto Test Retries for all tests. If the list cannot be fetched or parsed, regular
+Auto Test Retries apply. Early Flake Detection, Test Management, and user-configured framework
+retries retain their existing behavior.
+
+This option uses the existing Auto Test Retries integrations, including Mocha 6+, Playwright 1.38+,
+Cucumber 8+, and Cypress 12+ (subject to the tracer version's supported framework versions).

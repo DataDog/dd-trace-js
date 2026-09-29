@@ -3,6 +3,7 @@
 // Capture real timers at module load, before any test can install fake timers.
 const { performance } = require('perf_hooks')
 const { basename } = require('node:path')
+const { isKnownFlakyTest } = require('../../dd-trace/src/ci-visibility/known-flaky-tests')
 const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
@@ -73,6 +74,7 @@ const {
   getModifiedFilesFromDiff,
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
@@ -467,6 +469,9 @@ class CypressPlugin {
   isCodeCoverageEnabled = false
   isCoverageReportUploadEnabled = false
   isFlakyTestRetriesEnabled = false
+  /** @type {Record<string, Record<string, string[]>> | undefined} */
+  flakyTests = undefined
+  nativeRetryCount = 0
   flakyTestRetriesCount = 0
   isDynamicAtrEnabled = false
   dynamicAtrBuckets = undefined
@@ -563,6 +568,8 @@ class CypressPlugin {
     this.isCodeCoverageEnabled = false
     this.isCoverageReportUploadEnabled = false
     this.isFlakyTestRetriesEnabled = false
+    this.flakyTests = undefined
+    this.nativeRetryCount = 0
     this.flakyTestRetriesCount = 0
     this.isDynamicAtrEnabled = false
     this.dynamicAtrBuckets = undefined
@@ -871,6 +878,9 @@ class CypressPlugin {
     this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
+        if (libraryConfigurationResponse.libraryConfig?.flakyTestsError) {
+          this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_FLAKY_TESTS, value: 'true' })
+        }
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
           this._pendingRequestErrorTags.push({
@@ -890,6 +900,7 @@ class CypressPlugin {
               earlyFlakeDetectionFaultyThreshold,
               isFlakyTestRetriesEnabled,
               flakyTestRetriesCount,
+              flakyTests,
               isDynamicAtrEnabled,
               dynamicAtrBuckets,
               isKnownTestsEnabled,
@@ -908,6 +919,10 @@ class CypressPlugin {
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
+            this.flakyTests = flakyTests
+            this.nativeRetryCount = typeof this.cypressConfig.retries === 'number'
+              ? this.cypressConfig.retries
+              : this.cypressConfig.retries?.runMode ?? 0
             this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
             this.isDynamicAtrEnabled = isDynamicAtrEnabled ?? false
             this.dynamicAtrBuckets = dynamicAtrBuckets
@@ -930,6 +945,8 @@ class CypressPlugin {
               this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
             }
           } else {
+            this.flakyTests = undefined
+            this.nativeRetryCount = 0
             this.flakyTestRetriesCount = 0
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
@@ -1653,7 +1670,7 @@ class CypressPlugin {
           cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
-            this.isFlakyTestRetriesEnabled &&
+            this.isAtrEnabledForTest(spec.relative, testName) &&
             !finishedTest.isAttemptToFix &&
             !finishedTest.isEfdRetry
           if (attemptIndex > 0) {
@@ -1729,8 +1746,8 @@ class CypressPlugin {
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
-            flakyTestRetriesCount: this.flakyTestRetriesCount,
-            isDynamicAtrEnabled: this.isDynamicAtrEnabled,
+            flakyTestRetriesCount: this.isAtrEnabledForTest(spec.relative, testName) ? this.flakyTestRetriesCount : 0,
+            isDynamicAtrEnabled: this.isAtrEnabledForTest(spec.relative, testName) && this.isDynamicAtrEnabled,
           })
 
           let hasFailedAllAttempts = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
@@ -2034,6 +2051,14 @@ class CypressPlugin {
     if (finishPromises.length > 0) return Promise.all(finishPromises).then(() => null)
   }
 
+  /**
+   * @param {string} testSuite
+   * @param {string} testName
+   */
+  isAtrEnabledForTest (testSuite, testName) {
+    return this.isFlakyTestRetriesEnabled && isKnownFlakyTest(this.flakyTests, 'cypress', testSuite, testName)
+  }
+
   getTasks () {
     return {
       'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath, isTextTerminal: browserIsTextTerminal }) => {
@@ -2042,12 +2067,16 @@ class CypressPlugin {
         if (!isTextTerminal) {
           this.isFlakyTestRetriesEnabled = false
           this.isDynamicAtrEnabled = false
+          this.flakyTests = undefined
+          this.nativeRetryCount = 0
           this.flakyTestRetriesCount = 0
         }
         const suitePayload = {
           isEarlyFlakeDetectionEnabled:
             this.isEarlyFlakeDetectionEnabled && hasEfdRetries(this.earlyFlakeDetectionRetryPolicy),
           knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
+          flakyTestsForSuite: this.flakyTests === undefined ? null : this.flakyTests.cypress?.[testSuite] || [],
+          nativeRetryCount: this.nativeRetryCount,
           earlyFlakeDetectionSchedulingRetryCount: this.earlyFlakeDetectionRetryPolicy.schedulingRetryCount,
           isKnownTestsEnabled: this.isKnownTestsEnabled,
           isTestManagementEnabled: this.isTestManagementTestsEnabled,
@@ -2179,7 +2208,7 @@ class CypressPlugin {
         // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
         if (
           this.isDynamicAtrEnabled &&
-          this.isFlakyTestRetriesEnabled &&
+          this.isAtrEnabledForTest(testSuite, testName) &&
           !isAttemptToFix &&
           !isEfdRetry &&
           !isEfdManagedTest &&
@@ -2285,7 +2314,7 @@ class CypressPlugin {
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
         const dynamicAtrRetryCount = this.getDynamicAtrRetryCountForTest(testSuite, testId)
         const atrRetryCount = this.isDynamicAtrEnabled ? dynamicAtrRetryCount : this.flakyTestRetriesCount
-        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+        if (this.isAtrEnabledForTest(testSuite, testName) && !isAttemptToFix && !isEfdRetry &&
           atrRetryCount > 0 && testStatuses.length === atrRetryCount + 1 &&
           testStatuses.every(status => status === 'fail')) {
           this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')

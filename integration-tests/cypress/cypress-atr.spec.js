@@ -125,6 +125,60 @@ moduleTypes.forEach(({
     })
 
     context('flaky test retries', () => {
+      for (const scenario of [
+        { name: 'selective', names: ['flaky test retry eventually passes'], counts: [3, 1, 1] },
+        { name: 'empty', names: [], counts: [1, 1, 1] },
+        { name: 'unavailable', status: 403, names: [], counts: [3, 3, 1] },
+      ]) {
+        over12It(`applies ${scenario.name} known-flakes-only retries`, async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+          const specToRun = 'cypress/e2e/flaky-test-retries.js'
+          receiver.setFlakyTests({
+            data: scenario.names.map(name => ({
+              type: 'test',
+              attributes: {
+                configurations: { 'test.bundle': 'cypress' }, suite: specToRun, name,
+              },
+            })),
+          }, scenario.status || 200)
+          let output = ''
+          childProcess = exec(`${testCommand} --spec ${specToRun}`, {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+          const events = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              for (const [index, name] of ['eventually passes', 'never passes', 'always passes'].entries()) {
+                const attempts = tests.filter(test => test.meta[TEST_NAME] === `flaky test retry ${name}`)
+                assert.strictEqual(attempts.length, scenario.counts[index], output)
+                if (attempts.length === 1) {
+                  assert.strictEqual(attempts[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+                } else {
+                  assert.ok(attempts.slice(1).every(test => test.meta[TEST_RETRY_REASON] === 'auto_test_retry'))
+                }
+              }
+            })
+          const [[code]] = await Promise.all([once(childProcess, 'close'), events])
+          assert.ok(code > 0, output)
+        })
+      }
+
       it('retries flaky tests with object Cypress retries', async () => {
         receiver.setSettings({
           itr_enabled: false,

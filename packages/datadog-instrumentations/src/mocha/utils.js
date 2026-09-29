@@ -2,6 +2,7 @@
 
 const { performance } = require('node:perf_hooks')
 
+const { isKnownFlakyTest } = require('../../../dd-trace/src/ci-visibility/known-flaky-tests')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getEfdRetryCountForDuration,
@@ -503,6 +504,16 @@ function inheritDatadogPropertiesFromRetriedTest (test) {
   }
 }
 
+/**
+ * @param {object} test
+ * @param {object} config
+ */
+function isAtrEnabledForTest (test, config) {
+  return config?.isFlakyTestRetriesEnabled && isKnownFlakyTest(
+    config.flakyTests, 'mocha', getTestSuitePath(test.file, process.cwd()), test.fullTitle()
+  )
+}
+
 function runnableWrapper (RunnablePackage, libraryConfig) {
   const Runnable = RunnablePackage.Runnable ?? RunnablePackage
   shimmer.wrap(Runnable.prototype, 'run', run => function (...args) {
@@ -530,7 +541,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
           return onRunnableFinished.apply(this, arguments)
         }
       }
-    } else if (libraryConfig?.isFlakyTestRetriesEnabled) {
+    } else if (isAtrEnabledForTest(test, libraryConfig)) {
       if (!originalRetriesByTest.has(test)) {
         const originalRetries = originalRetriesByTest.get(test._retriedTest) ?? test.retries()
         originalRetriesByTest.set(test, originalRetries)
@@ -726,7 +737,7 @@ function getTestFinishInfo (test, status, config, error) {
   const originalTest = test._retriedTest || test
   if (
     config.isDynamicAtrEnabled &&
-    config.isFlakyTestRetriesEnabled &&
+    isAtrEnabledForTest(test, config) &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry &&
     !dynamicAtrRetryCountByTest.has(originalTest) &&
@@ -755,7 +766,7 @@ function getTestFinishInfo (test, status, config, error) {
   // Mocha aborts native retries on hook failure, even when the retry budget is not exhausted.
   const isTerminalHookFailure = test._ddHookFailed && !isDatadogManagedRetryTest(test, config)
   const isLastAtrAttempt = isTerminalHookFailure || getIsLastRetry(test) ||
-    (config.isFlakyTestRetriesEnabled && status === 'pass')
+    (isAtrEnabledForTest(test, config) && status === 'pass')
 
   // Needed for the getFinalStatus call. This is because EFD does NOT tag as
   // EFD retry the first run of the test. It only tags as retries the clones
@@ -778,18 +789,18 @@ function getTestFinishInfo (test, status, config, error) {
   }
 
   // ATR: mark terminal attempts when every executed attempt failed.
-  if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
+  if (isAtrEnabledForTest(test, config) && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
     isLastAtrAttempt && testStatuses.every(status => status === 'fail')) {
     hasFailedAllRetries = true
   }
 
   const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
-  const isAtrRetry = config.isFlakyTestRetriesEnabled &&
+  const isAtrRetry = isAtrEnabledForTest(test, config) &&
     !test._ddIsAttemptToFix &&
     !test._ddIsEfdRetry
   const isFinalAttempt = isTerminalHookFailure || status !== 'fail' || test._currentRetry >= test._retries
 
-  const { isFlakyTestRetriesEnabled } = config
+  const isFlakyTestRetriesEnabled = isAtrEnabledForTest(test, config)
   const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
 
   const finalStatus = getFinalStatus({
@@ -1091,7 +1102,7 @@ function getOnTestRetryHandler (config) {
   return function (test, err) {
     const isFirstAttempt = test._currentRetry === 0
     const isDynamicAtrTest = config.isDynamicAtrEnabled &&
-      config.isFlakyTestRetriesEnabled &&
+      isAtrEnabledForTest(test, config) &&
       !test._ddIsAttemptToFix &&
       !isEarlyFlakeDetectionTest(test, config)
     if (isDynamicAtrTest && isFirstAttempt) {
@@ -1105,7 +1116,7 @@ function getOnTestRetryHandler (config) {
       test._retries = dynamicCount
     }
 
-    if (config.isFlakyTestRetriesEnabled && getAfterEachHooks(test).length) {
+    if (isAtrEnabledForTest(test, config) && getAfterEachHooks(test).length) {
       // Mocha queues retries before afterEach; a hook failure can still cancel the retry.
       test._ddPendingRetry = () => publishTestRetry(test, err, config)
       return
@@ -1127,7 +1138,7 @@ function publishTestRetry (test, err, config) {
   if (ctx) {
     const willBeRetried = test._currentRetry < test._retries
     const isAtrRetry = !isFirstAttempt &&
-      config.isFlakyTestRetriesEnabled &&
+      isAtrEnabledForTest(test, config) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
     const promises = {}

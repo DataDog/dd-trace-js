@@ -10,6 +10,7 @@ const {
   getDynamicAtrBuckets,
   isDynamicAtrEnabled,
 } = require('../dynamic-atr-retries')
+const getFlakyTests = require('../requests/get-flaky-tests')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getCachePath, withCache, writeToCache } = require('../requests/fs-cache')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
@@ -364,9 +365,25 @@ class CiVisibilityExporter extends BufferingExporter {
    * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
    *
    * @param {TestConfiguration} testConfiguration
-   * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} callback
+   * @param {(error: Error | null, libraryConfig?: Readonly<Record<string, unknown>>) => void} done
    */
-  getLibraryConfiguration (testConfiguration, callback) {
+  getLibraryConfiguration (testConfiguration, done) {
+    const callback = (err, libraryConfig) => {
+      if (err || !libraryConfig.isFlakyTestRetriesEnabled ||
+        !this._config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES) {
+        return done(err, libraryConfig)
+      }
+      if (this._isTestOptimizationCacheOnly) {
+        return done(null, Object.freeze({
+          ...libraryConfig,
+          flakyTestsError: this._getCacheOnlyError('flaky tests').message,
+        }))
+      }
+      getFlakyTests(this.getRequestConfiguration(testConfiguration), (error, flakyTests) => {
+        if (error) log.error('Flaky tests could not be fetched: %s', error.message)
+        done(null, Object.freeze({ ...libraryConfig, flakyTests, flakyTestsError: error?.message }))
+      })
+    }
     const { repositoryUrl } = testConfiguration
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {

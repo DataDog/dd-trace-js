@@ -614,6 +614,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": [
       {
         "implementation": "A",

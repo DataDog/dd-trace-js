@@ -1339,6 +1339,9 @@ function configureCoordinator (state, response) {
     : undefined
   configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
   configuration.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+  configuration.flakyTests = libraryConfig.flakyTests === undefined
+    ? undefined
+    : { mocha: getMochaFrameworkData(libraryConfig.flakyTests) || {} }
   configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   configuration.isDiEnabled = libraryConfig.isDiEnabled
   configuration.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled === true

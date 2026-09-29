@@ -7,6 +7,7 @@ const realClearTimeout = clearTimeout
 const { performance } = require('node:perf_hooks')
 const satisfies = require('../../../vendor/dist/semifies')
 
+const { isKnownFlakyTest } = require('../../dd-trace/src/ci-visibility/known-flaky-tests')
 const shimmer = require('../../datadog-shimmer')
 const {
   EMPTY_EFD_RETRY_POLICY,
@@ -115,6 +116,7 @@ let earlyFlakeDetectionRetryPolicy = EMPTY_EFD_RETRY_POLICY
 let isEarlyFlakeDetectionFaulty = false
 let earlyFlakeDetectionFaultyThreshold = 0
 let isFlakyTestRetriesEnabled = false
+let flakyTests
 let flakyTestRetriesCount = 0
 let isDynamicAtrEnabled = false
 let dynamicAtrBuckets
@@ -435,6 +437,13 @@ function shouldSkipEfdRetryTest (test) {
   }
   const retryCount = test._ddEfdRetryCount ?? efdRetryCountByTestKey.get(getTestEfdKey(test))
   return shouldSkipEfdRetry(test._ddEfdRetryIndex, retryCount)
+}
+
+/** @param {object} test */
+function isAtrEnabledForTest (test) {
+  return isFlakyTestRetriesEnabled && isKnownFlakyTest(
+    flakyTests, 'playwright', getTestSuitePath(test._requireFile, rootDir), getTestFullname(test)
+  )
 }
 
 function getTestProperties (test) {
@@ -981,7 +990,7 @@ function testEndHandler ({
   const testProperties = getTestProperties(test)
   if (
     isDynamicAtrEnabled &&
-    isFlakyTestRetriesEnabled &&
+    isAtrEnabledForTest(test) &&
     !testProperties.attemptToFix &&
     !test._ddIsEfdRetry &&
     !isEfdManagedTest &&
@@ -1054,7 +1063,7 @@ function testEndHandler ({
   const atrRetryCount = isDynamicAtrEnabled
     ? dynamicAtrRetryCountByTestKey.get(dynamicAtrTestKey) ?? test.retries
     : flakyTestRetriesCount
-  if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+  if (isAtrEnabledForTest(test) && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
     !willRetry && testResultStatus !== expectedStatus &&
@@ -1071,7 +1080,7 @@ function testEndHandler ({
       ? test.id ?? test._id
       : undefined
     const isAtrRetry = testResult?.retry > 0 &&
-      isFlakyTestRetriesEnabled &&
+      isAtrEnabledForTest(test) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1334,7 +1343,7 @@ function onDispatcherCreateWorker (dispatcher, worker) {
       worker[kDdPlaywrightFailureVideos].push(videos)
     }
     const isAtrRetry = testResult?.retry > 0 &&
-      isFlakyTestRetriesEnabled &&
+      isAtrEnabledForTest(test) &&
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
@@ -1443,6 +1452,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
   return async function (config, options) {
     // A later run must not inherit ATR settings when configuration fails or the plugin is disabled.
     isFlakyTestRetriesEnabled = false
+    flakyTests = undefined
     flakyTestRetriesCount = 0
     isDynamicAtrEnabled = false
     dynamicAtrBuckets = undefined
@@ -1505,6 +1515,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
         earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
         isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+        flakyTests = libraryConfig.flakyTests
         flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
         isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
         dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
@@ -2170,7 +2181,7 @@ function applyRetriesToTests (
 }
 
 function processRootSuite (createRootSuiteReturnValue) {
-  if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
+  if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled && flakyTests === undefined) {
     return createRootSuiteReturnValue
   }
 
@@ -2185,6 +2196,15 @@ function processRootSuite (createRootSuiteReturnValue) {
   }
 
   const allTests = rootSuite.allTests()
+
+  if (flakyTests !== undefined) {
+    const projects = [...automaticRetryProjects]
+    for (const test of allTests) {
+      if (!isAtrEnabledForTest(test) && hasAutomaticRetries(test, projects)) {
+        test.retries = 0
+      }
+    }
+  }
 
   if (isTestManagementTestsEnabled) {
     const fileSuitesWithManagedTestsToProjects = new Map()

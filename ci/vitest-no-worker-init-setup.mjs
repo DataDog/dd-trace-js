@@ -161,6 +161,17 @@ function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
         task.repeats = earlyFlakeDetectionRetries
         task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
       }
+      if (providedContext.flakyTests !== undefined && flakyTestRetriesConfiguration &&
+        !providedContext.flakyTests[testSuite]?.includes(testName)) {
+        const projectName = task.file.projectName
+        const isManagedProject = projectName
+          ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
+          : flakyTestRetriesConfiguration.includesUnnamedProject
+        if (isManagedProject &&
+          (task.retry?.__ddTestOptAtr || task.retry === flakyTestRetriesConfiguration.retryCount)) {
+          task.retry = 0
+        }
+      }
       configureDynamicAtr(task)
       wrapRetryCondition(task)
     }

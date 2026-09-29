@@ -844,6 +844,34 @@ for (const version of versions) {
           }, {}, 1)
         })
 
+        for (const empty of [false, true]) {
+          it(`restricts ATR to known flaky tests (empty=${empty})`, async () => {
+            receiver.setSettings({ flaky_test_retries_enabled: true })
+            receiver.setFlakyTests({
+              data: empty
+                ? []
+                : [{
+                    type: 'test',
+                    attributes: {
+                      configurations: { 'test.bundle': 'webdriverio' },
+                      suite: 'atr.e2e.js',
+                      name: 'WebdriverIO ATR passes on retry',
+                    },
+                  }],
+            })
+            await runScenario('atrBoth', 1, payloads => {
+              const tests = getEvents(payloads).filter(event => event.type === 'test').map(event => event.content)
+              const recovered = tests.filter(test => test.meta[TEST_SUITE] === 'atr.e2e.js')
+              const excluded = tests.filter(test => test.meta[TEST_SUITE] === 'atr-always-fail.e2e.js')
+              assert.strictEqual(recovered.length, empty ? 1 : 2)
+              assert.strictEqual(excluded.length, 1)
+              assert.strictEqual(excluded[0].meta[TEST_STATUS], 'fail')
+              assert.strictEqual(excluded[0].meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+              assert.strictEqual(excluded[0].meta[TEST_IS_RETRY], undefined)
+            }, { DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true', DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2' }, 1)
+          })
+        }
+
         it('retries recoverable and exhausted ATR failures', async () => {
           receiver.setSettings({
             flaky_test_retries_count: 2,
