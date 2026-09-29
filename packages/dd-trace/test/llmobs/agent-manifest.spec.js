@@ -47,7 +47,7 @@ describe('agent manifest', () => {
     })
 
     const versions = [
-      ['1.0.0', '1.0.0'], [2, '2'], [0, '0'], ['', undefined], [Infinity, undefined], [Number.NaN, undefined],
+      ['1.0.0', '1.0.0'], ['1.10', '1.10'], ['0', '0'], ['', undefined], [2, undefined], [0, undefined],
       [{}, undefined],
     ]
     for (const [version, expected] of versions) {

@@ -1010,11 +1010,11 @@ describe('sdk', () => {
         assert.ok(emittedTags('agent').includes('agent_version:2.1.0'))
       })
 
-      it('reports a numeric version on an agent span started with wrap', () => {
-        const agentFn = llmobs.wrap({ kind: 'agent', name: 'agent', version: 0 }, () => {})
+      it('reports the version on an agent span started with wrap', () => {
+        const agentFn = llmobs.wrap({ kind: 'agent', name: 'agent', version: '1.10' }, () => {})
         agentFn()
 
-        assert.ok(emittedTags('agent').includes('agent_version:0'))
+        assert.ok(emittedTags('agent').includes('agent_version:1.10'))
       })
 
       it('reports the version on a decorated agent method', () => {
@@ -1059,7 +1059,7 @@ describe('sdk', () => {
         assert.ok(!emittedTags('agent').includes('agent_version:1.0.0'))
       })
 
-      for (const version of ['', Number.NaN, { major: 1 }]) {
+      for (const version of ['', 1.1, 0, { major: 1 }]) {
         it(`ignores an unreportable version (${inspect(version)})`, () => {
           llmobs.trace({ kind: 'agent', name: 'agent', version }, () => {})
 
@@ -1830,14 +1830,14 @@ describe('sdk', () => {
         })
       })
 
-      it('lets a nested block replace the version with a numeric zero', () => {
+      it('keeps the outer version when a nested block declares a non-string one', () => {
         llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
-          llmobs.annotationContext({ agent: { version: 0 } }, () => {
+          llmobs.annotationContext({ agent: { version: 2, name: 'inner_agent' } }, () => {
             llmobs.trace({ kind: 'agent', name: 'agent' }, () => {})
           })
         })
 
-        assert.ok(emittedEvent('agent').tags.includes('agent_version:0'))
+        assert.ok(emittedEvent('agent').tags.includes('agent_version:1.0.0'))
       })
 
       it('lets a direct annotation override the context declaration on a nested agent span', () => {
