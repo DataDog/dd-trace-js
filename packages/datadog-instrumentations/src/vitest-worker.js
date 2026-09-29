@@ -4,6 +4,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
 const { fileURLToPath } = require('node:url')
+const { deserialize } = require('node:v8')
 const { isMainThread, parentPort } = require('node:worker_threads')
 
 const { channel } = require('dc-polyfill')
@@ -412,6 +413,14 @@ function finishEfdSuiteAdmissionRequest (requestId, allowed) {
  * @param {unknown} message
  */
 function handleEfdSuiteAdmissionResponse (message) {
+  // Older Vitest 4 forks serialize parent messages explicitly; newer forks and threads send plain values.
+  if (Buffer.isBuffer(message) || (message?.type === 'Buffer' && Array.isArray(message.data))) {
+    try {
+      message = deserialize(Buffer.from(message))
+    } catch {
+      return
+    }
+  }
   if (!Array.isArray(message) || message[0] !== VITEST_WORKER_EFD_SUITE_ADMISSION_RESPONSE_CODE) return
 
   const { allowed, requestId } = message[1] || {}
