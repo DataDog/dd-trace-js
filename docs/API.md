@@ -602,6 +602,7 @@ duration, instead of the flat per-test retry limit. When enabled, the number of 
 determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
 and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
 Requires Auto Test Retries to be enabled by the backend.
+For Mocha, dynamic ATR requires version 8 or newer. Older supported versions use the flat retry limit.
 
 Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
 overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets

@@ -3,6 +3,19 @@
 module.exports = [
   {
     module: {
+      name: '@wdio/config',
+      versionRange: '>=9.0.0',
+      filePath: 'build/node/index.js',
+    },
+    functionQuery: {
+      className: 'ConfigParser',
+      methodName: 'shard',
+      kind: 'Sync',
+    },
+    channelName: 'ConfigParser_shard',
+  },
+  {
+    module: {
       name: '@wdio/cli',
       versionRange: '>=9.0.0',
       filePath: 'build/index.js',
