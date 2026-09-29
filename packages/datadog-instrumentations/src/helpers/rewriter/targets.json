@@ -76,6 +76,8 @@
   "jasmine-core/lib/jasmine-core/jasmine.js": "jasmine-core",
   "mercurius/index.js": "mercurius",
   "playwright-core/lib/coreBundle.js": "playwright-core",
+  "playwright/lib/common/config.js": "playwright",
+  "playwright/lib/common/index.js": "playwright",
   "playwright/lib/index.js": "playwright",
   "playwright/lib/runner/index.js": "playwright",
   "postgres/cjs/src/connection.js": "postgres",

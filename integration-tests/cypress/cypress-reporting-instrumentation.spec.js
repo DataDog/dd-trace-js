@@ -2725,6 +2725,34 @@ moduleTypes.forEach(({
       }
     }
 
+    for (const screenshot of [undefined, false, true]) {
+      for (const video of [undefined, false, true]) {
+        for (const captureEnabled of [false, true]) {
+          const description = `screenshots=${screenshot}, videos=${video}, capture=${captureEnabled}`
+          it(`only enables failure media capture for explicit flags (${description})`, async () => {
+            const env = { ...process.env }
+            delete env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+            delete env.DD_TEST_FAILURE_VIDEOS_ENABLED
+            if (screenshot !== undefined) env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = String(screenshot)
+            if (video !== undefined) env.DD_TEST_FAILURE_VIDEOS_ENABLED = String(video)
+            sinon.stub(process, 'env').value(env)
+            const config = {
+              screenshotOnRunFailure: captureEnabled,
+              video: captureEnabled,
+              retries: { openMode: 0, runMode: 0 },
+              version: '12.0.0',
+            }
+            const tracer = { _tracer: { _config: { isServiceUserProvided: false } } }
+
+            const result = await cypressPlugin.init(tracer, config)
+
+            assert.strictEqual(result.screenshotOnRunFailure, screenshot === true || captureEnabled)
+            assert.strictEqual(result.video, video === true || captureEnabled)
+          })
+        }
+      }
+    }
+
     it('restores user retries before requesting configuration for a subsequent run', async () => {
       const cypressConfig = { retries: { openMode: 1, runMode: 2 }, version: '12.0.0' }
       cypressPlugin.cypressConfig = cypressConfig

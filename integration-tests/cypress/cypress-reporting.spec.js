@@ -1223,6 +1223,55 @@ moduleTypes.forEach(({
           assert.notStrictEqual(exitCode, 0)
         })
 
+        const captureCases = [
+          { name: 'enables both captures when explicitly true', screenshot: true, video: true },
+          { name: 'enables only screenshots when videos are false', screenshot: true, video: false },
+          { name: 'enables only videos when screenshots are false', screenshot: false, video: true },
+          { name: 'leaves disabled capture unchanged when unset' },
+          { name: 'leaves disabled capture unchanged when false', screenshot: false, video: false },
+        ]
+        if (type === 'commonJS') {
+          captureCases.push({
+            name: 'enables both captures with the manual plugin', screenshot: true, video: true, manual: true,
+          })
+        }
+        for (const { name, screenshot, video, manual } of captureCases) {
+          onlyAgentlessIt(name, async function () {
+            const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
+              CYPRESS_ENABLE_FAILURE_SCREENSHOTS: undefined,
+              CYPRESS_ENABLE_FAILURE_VIDEOS: undefined,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: screenshot?.toString(),
+              DD_TEST_FAILURE_VIDEOS_ENABLED: video?.toString(),
+              CYPRESS_ENABLE_MANUAL_PLUGIN: manual?.toString(),
+            })
+            const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.includes('/media') || url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .find(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+                assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+                assert.strictEqual(
+                  failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], screenshot ? 'true' : undefined
+                )
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], video ? 'true' : undefined)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+                const screenshots = payloads.filter(({ media }) => media?.contentType === 'image/png')
+                const videos = payloads.filter(({ media }) => media?.contentType === 'video/mp4')
+                assert.strictEqual(screenshots.length, screenshot ? 1 : 0)
+                assert.strictEqual(videos.length, video ? 1 : 0)
+              },
+              { hardTimeout: 60000 }
+            )
+
+            const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+            assert.notStrictEqual(exitCode, 0, getTestOutput())
+          })
+        }
+
         onlyAgentlessIt('does not upload captured failure media when explicitly disabled', async function () {
           const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js', {
             DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
