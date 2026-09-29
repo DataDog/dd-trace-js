@@ -485,6 +485,45 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
+  it('should keep the no-op proxy when Lambda disables OTel semantics without an explicit OTLP endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
+  it('should keep the no-op proxy when Lambda OTel semantics has only empty OTLP endpoints', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = ''
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = ''
+
+    delete require.cache[require.resolve('../../src/index')]
+    const indexFile = require('../../src/index')
+    const noop = require('../../src/noop/proxy')
+    assert.strictEqual(indexFile, noop)
+  })
+
+  it('should keep the real proxy when Lambda OTel semantics has an explicit OTLP endpoint', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+
+    for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+      process.env[key] = 'http://collector:4318'
+      delete require.cache[require.resolve('../../src/index')]
+      const indexFile = require('../../src/index')
+      const proxy = require('../../src/proxy')
+      assert.strictEqual(indexFile, proxy, key)
+      delete process.env[key]
+    }
+  })
+
   it('should keep the real proxy when agentless mode disables the OTel trace exporter', () => {
     process.env.DD_AGENTLESS_ENABLED = 'true'
     process.env.OTEL_TRACES_EXPORTER = 'none'
