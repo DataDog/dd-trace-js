@@ -32,6 +32,7 @@ const {
   PARENT_ID_KEY,
   PARENT_AGENT_NAME,
   PARENT_AGENT_SPAN_ID,
+  PARENT_AGENT_VERSION,
   SESSION_ID,
   NAME,
   INPUT_PROMPT,
@@ -394,11 +395,13 @@ class LLMObsSpanProcessor {
     if (existingTags) tags = { ...tags, ...existingTags }
 
     const mlObsTags = LLMObsTagger.tagMap.get(span)
-    // Resolved here because a span can become an agent after registration. A declared version wins over a
-    // user tag of the same name, matching dd-trace-py.
-    if (mlObsTags?.[SPAN_KIND] === 'agent' && mlObsTags[AGENT_VERSION]) {
-      tags[AGENT_VERSION_TAG_KEY] = mlObsTags[AGENT_VERSION]
-    }
+    // Resolved here because a span can become an agent after registration. An agent reports its own version and
+    // any other span the version of the agent it ran under, matching dd-trace-java. Either wins over a user tag of
+    // the same name.
+    const agentVersion = mlObsTags?.[SPAN_KIND] === 'agent'
+      ? mlObsTags[AGENT_VERSION]
+      : mlObsTags?.[PARENT_AGENT_VERSION]
+    if (agentVersion) tags[AGENT_VERSION_TAG_KEY] = agentVersion
 
     return tags
   }

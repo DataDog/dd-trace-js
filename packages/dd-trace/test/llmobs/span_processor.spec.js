@@ -350,6 +350,25 @@ describe('span processor', () => {
         assert.ok(!payload.tags.some(tag => tag.startsWith('agent_version:')))
       })
 
+      it('emits the version of the agent a non-agent span ran under', () => {
+        processor.process(makeSpan({
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.parent_agent_version': '1.0.0',
+          '_ml_obs.tags': { agent_version: 'from_tags' },
+        }))
+        const { tags } = writer.append.getCall(0).firstArg
+
+        assert.ok(tags.includes('agent_version:1.0.0'))
+        assert.ok(!tags.includes('agent_version:from_tags'))
+      })
+
+      it('does not emit the enclosing agent version on an agent span without its own', () => {
+        processor.process(makeSpan({ '_ml_obs.parent_agent_version': '1.0.0' }))
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.ok(!payload.tags.some(tag => tag.startsWith('agent_version:')))
+      })
+
       it('emits the declared version over a user tag of the same name', () => {
         processor.process(makeSpan({
           '_ml_obs.agent_version': '1.0.0',

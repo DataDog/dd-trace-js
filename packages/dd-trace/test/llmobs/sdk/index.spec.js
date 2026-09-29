@@ -989,16 +989,55 @@ describe('sdk', () => {
         assert.ok(emittedTags('run').includes('agent_version:2.1.0'))
       })
 
-      it('does not report the version on child spans', () => {
-        llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
-          llmobs.trace({ kind: 'agent', name: 'inner' }, () => {})
+      function hasNoVersion (name) {
+        return !emittedTags(name).some(tag => tag.startsWith('agent_version:'))
+      }
+
+      it('reports the version on the spans the agent runs', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
+            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+          })
           llmobs.trace({ kind: 'tool', name: 'tool' }, () => {})
         })
 
-        assert.ok(emittedTags('outer').includes('agent_version:1.0.0'))
-        for (const name of ['inner', 'tool']) {
-          assert.ok(!emittedTags(name).some(tag => tag.startsWith('agent_version:')))
+        for (const name of ['agent', 'step', 'llm', 'tool']) {
+          assert.ok(emittedTags(name).includes('agent_version:1.0.0'), name)
         }
+      })
+
+      it('reports a nested agent version on the spans that nested agent runs', () => {
+        llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'agent', name: 'inner', version: '2.0.0' }, () => {
+            llmobs.trace({ kind: 'llm', name: 'inner_llm' }, () => {})
+          })
+          llmobs.trace({ kind: 'llm', name: 'outer_llm' }, () => {})
+        })
+
+        assert.ok(emittedTags('inner_llm').includes('agent_version:2.0.0'))
+        assert.ok(emittedTags('outer_llm').includes('agent_version:1.0.0'))
+      })
+
+      it('does not report an outer version on a nested agent without one, or on the spans it runs', () => {
+        llmobs.trace({ kind: 'agent', name: 'outer', version: '1.0.0' }, () => {
+          llmobs.trace({ kind: 'agent', name: 'inner' }, () => {
+            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+          })
+        })
+
+        assert.ok(hasNoVersion('inner'))
+        assert.ok(hasNoVersion('llm'))
+      })
+
+      it('reports an annotated version on the spans started after the annotation', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
+          llmobs.trace({ kind: 'tool', name: 'before' }, () => {})
+          llmobs.annotate({ agent: { version: '1.0.1' } })
+          llmobs.trace({ kind: 'tool', name: 'after' }, () => {})
+        })
+
+        assert.ok(hasNoVersion('before'))
+        assert.ok(emittedTags('after').includes('agent_version:1.0.1'))
       })
 
       it('wins over the version declared by an enclosing annotation context', () => {
@@ -1701,6 +1740,19 @@ describe('sdk', () => {
         const workflow = emittedEvent('workflow')
         assert.ok(!workflow.tags.some(tag => tag.startsWith('agent_version:')))
         assert.strictEqual(workflow.meta.metadata, undefined)
+      })
+
+      it('emits the context version on the spans an agent in the block runs', () => {
+        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, () => {
+            llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
+              llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+            })
+          })
+        })
+
+        assert.ok(emittedEvent('llm').tags.includes('agent_version:1.0.0'))
+        assert.ok(!emittedEvent('workflow').tags.some(tag => tag.startsWith('agent_version:')))
       })
 
       it('emits the manifest and version on the span event', () => {
