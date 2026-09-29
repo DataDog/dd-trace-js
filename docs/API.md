@@ -24,18 +24,31 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
-<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Counts</h2>
+<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
 
-Feature Flagging collects aggregated evaluation telemetry by default. Set
+The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
 `DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
 flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
 
+Privacy consent comes from `observeFullEvaluationData` in the flag configuration used for each evaluation:
+
+- Unless it is literally `true`, valid targeting keys are sent as unsalted SHA-256 hashes and evaluation context is omitted.
+  Hashing is pseudonymization, not anonymity: a predictable targeting key can still be guessed and hashed.
+- With consent, events may include the raw targeting key and a bounded, flattened evaluation-context snapshot.
+- When aggregation reaches its identity-level limits, degraded rows omit targeting keys and context even with consent.
+- Events may include approved error codes, but never free-form evaluation error messages.
+
 The background worker starts with the first evaluation batch. Partial batches are scheduled after 20 ms
-when the application event loop can run; explicit flush and graceful shutdown bypass that delay.
-Graceful shutdown attempts to drain pending
-evaluations for up to five seconds. Diagnostic counters already recorded by the worker are collected before
-instrumentation telemetry's final send; counters produced during the subsequent drain may miss that send.
-Neither evaluation delivery nor diagnostic telemetry is guaranteed on abrupt termination or a frozen runtime.
+when the application event loop can run. There is no public flush API for these events. Internal flush signals and
+graceful shutdown bypass the batching delay. On Node.js `beforeExit`, shutdown attempts to drain pending evaluations
+for up to five seconds. Diagnostic counters already recorded by the worker are collected before instrumentation
+telemetry's final send; counters produced during the subsequent drain may miss that send. Delivery is best-effort:
+`process.exit()`, terminating signals, crashes, and frozen runtimes can prevent the drain and lose pending events.
+
+The worker requires its JavaScript file and dependencies to be available at runtime. Bundling `dd-trace` into a single
+file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep `dd-trace`
+external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
+are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 

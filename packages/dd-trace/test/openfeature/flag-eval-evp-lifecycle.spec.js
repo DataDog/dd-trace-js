@@ -235,10 +235,9 @@ describe('FlaggingProvider EVP lifecycle', () => {
     })
   }
 
-  it('never buffers unavailable evaluations or revives the writer after close', async () => {
+  it('does not revive the writer after close', async () => {
     const client = await register()
     resolve(true, true)
-    await client.getBooleanValue('before-route', false)
     enable()
     await client.getBooleanValue('accepted', false)
     provider.onClose()

@@ -212,6 +212,7 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
     }
   }
 
+  /** @param {string} reason */
   #discardBuffered (reason) {
     this.#cancelImmediate()
     const count = this.#queue.length + this.#aggregator.clear() + this.#pendingCount

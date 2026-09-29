@@ -69,6 +69,32 @@ describe('flag evaluation worker producer', () => {
     }
   }
 
+  it('retains hook evaluations until initial route discovery completes', () => {
+    let onRoute
+    const Hook = proxyquire('../../../src/openfeature/writers/flag-eval-evp-hook', {
+      './flag-evaluations': Writer,
+      './util': {
+        setExposureDeliveryStrategy: (config, callback) => { onRoute = callback },
+      },
+    })
+    const hook = new Hook({ url: new URL('http://localhost:8126'), service: 'test' })
+    try {
+      hook.finally({ flagKey: 'before-route', context: { targetingKey: 'customer' } }, {
+        flagKey: 'before-route', value: true, variant: 'on', flagMetadata: {},
+      })
+      assert.strictEqual(workers.length, 0)
+
+      onRoute(true, { url: new URL('http://localhost:8126'), basePath: '' })
+
+      assert.strictEqual(workers.length, 1)
+      const events = workers[0].messages.filter(message => message.type === 'batch').flatMap(message => message.events)
+      assert.deepStrictEqual(events.map(event => event.flagKey), ['before-route'])
+      assert.strictEqual(dropped('unavailable'), 0)
+    } finally {
+      hook.destroy()
+    }
+  })
+
   it('queues within the existing capacity while discovery is pending, then drains bounded messages', () => {
     assert.strictEqual(writer.getUnavailableReason(), undefined)
     enqueue(4096)
