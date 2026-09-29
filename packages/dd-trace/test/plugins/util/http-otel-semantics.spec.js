@@ -222,7 +222,7 @@ describe('http-otel-semantics', () => {
       )
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'http://user@h/p' }).meta['url.full'],
-        'http://REDACTED@h/p'
+        'http://REDACTED:REDACTED@h/p'
       )
       // userinfo extends to the last '@' in the authority — redact all of it.
       assert.strictEqual(
