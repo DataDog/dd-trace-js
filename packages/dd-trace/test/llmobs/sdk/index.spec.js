@@ -1985,6 +1985,40 @@ describe('sdk', () => {
         })
       })
 
+      it('reports the version on integration llm and tool spans under a versioned agent', () => {
+        const pluginTagger = createPluginTagger()
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, agent => {
+          for (const kind of ['llm', 'tool']) {
+            const span = tracer._tracer.startSpan(`plugin.${kind}`, { childOf: agent })
+            pluginTagger.registerLLMObsSpan(span, { kind, parent: agent, integration: 'test' })
+            span.finish()
+          }
+        })
+
+        assert.ok(emittedEvent('plugin.llm').tags.includes('agent_version:1.0.0'))
+        assert.ok(emittedEvent('plugin.tool').tags.includes('agent_version:1.0.0'))
+      })
+
+      it('reports the context version on the llm and tool spans of an integration agent', () => {
+        const pluginTagger = createPluginTagger()
+        llmobs.annotationContext({ agent: { version: '1.0.0' } }, () => {
+          llmobs.trace({ kind: 'workflow', name: 'workflow' }, workflow => {
+            const agent = tracer._tracer.startSpan('claude_agent_sdk.query', { childOf: workflow })
+            pluginTagger.registerLLMObsSpan(agent, { kind: 'agent', parent: workflow, integration: 'test' })
+            for (const kind of ['llm', 'tool']) {
+              const span = tracer._tracer.startSpan(`plugin.${kind}`, { childOf: agent })
+              pluginTagger.registerLLMObsSpan(span, { kind, parent: agent, integration: 'test' })
+              span.finish()
+            }
+            agent.finish()
+          })
+        })
+
+        for (const name of ['claude_agent_sdk.query', 'plugin.llm', 'plugin.tool']) {
+          assert.ok(emittedEvent(name).tags.includes('agent_version:1.0.0'), name)
+        }
+      })
+
       it('emits the context declaration on a span promoted to an agent after registration', () => {
         const pluginTagger = createPluginTagger()
         llmobs.annotationContext({ agent: { version: '1.0.0', name: 'travel_desk' } }, () => {
