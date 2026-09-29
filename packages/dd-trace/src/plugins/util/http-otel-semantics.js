@@ -90,8 +90,7 @@ function isCanonicalIntegerAttribute (value) {
  * @param {string | undefined} instrumentationResource
  */
 function isInstrumentationOwnedResource (currentResource, instrumentationResource) {
-  if (!currentResource) return true
-  return currentResource === instrumentationResource
+  return !currentResource || currentResource === instrumentationResource
 }
 
 function stripIpv6Brackets (host) {
@@ -112,6 +111,9 @@ function stripIpv6Brackets (host) {
  * parts. Structural fields (scheme, address, path) are read from the raw URL;
  * the port is explicit or inferred from the scheme. The query comes from the
  * already-obfuscated URL so configured query-string obfuscation is preserved.
+ *
+ * TODO: Replace both parameters with one already-obfuscated URL. All production callers pass the
+ * same value for both.
  *
  * @param {string} rawUrl full request URL (`scheme://host[:port]/path?query`)
  * @param {string} obfuscatedUrl same URL with its query string obfuscated
@@ -313,12 +315,7 @@ function applyHttpOtelSemantics (formattedSpan) {
   // The marker holds the status that failed validation. Comparing it to the current status means
   // a hook that rewrites the status afterwards no longer has it reported as the cause.
   const statusCausedError = status !== undefined && meta[HTTP_STATUS_ERROR] === status
-  if (
-    status !== undefined &&
-    formattedSpan.error &&
-    newMeta[ERROR_TYPE] === undefined &&
-    statusCausedError
-  ) {
+  if (formattedSpan.error && newMeta[ERROR_TYPE] === undefined && statusCausedError) {
     newMeta[ERROR_TYPE] = status
   }
 

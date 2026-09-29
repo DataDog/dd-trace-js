@@ -424,37 +424,31 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    // Checking if OTel semantics can be enabled, since it requires OTLP exporting.
-
-    // Electron exporter does not support OTLP.
-    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
-        this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.ELECTRON) {
-      log.warn(
-        'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
-      )
-      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
-    }
-
-    // Lambda Extension and mini-agent support OTLP, but it's disabled by default;
-    // we'll only enable OTel semantics if an explicit OTLP endpoint is configured.
+    // Disable OTel semantics when the active trace transport cannot export OTLP.
     const awsLambdaFuncName = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
-    const hasOtlpTraceEndpoint = this.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
-      this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined
-    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && awsLambdaFuncName !== undefined && !hasOtlpTraceEndpoint) {
-      log.warn(
-        'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
-      )
-      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
-    }
-
-    // Test Optimization does not support OTLP export.
-    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && this.isCiVisibility) {
-      log.warn('Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false')
-      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
-    }
-
     if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+      const hasOtlpTraceEndpoint = this.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
+        this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined
+      let warning
+
+      if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.ELECTRON) {
+        // The Electron SDK has no OTLP trace exporter.
+        warning = 'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      } else if (awsLambdaFuncName !== undefined && !hasOtlpTraceEndpoint) {
+        // Lambda Extension and mini-agent OTLP receivers are optional. An explicit endpoint signals
+        // user intent to use OTLP.
+        warning = 'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      } else if (this.isCiVisibility) {
+        // Test Optimization has no OTLP trace exporter.
+        warning = 'Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      }
+
+      if (warning) {
+        log.warn(warning)
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      } else {
+        setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+      }
     }
 
     if (!this.DD_TRACE_OTEL_SEMANTICS_ENABLED &&

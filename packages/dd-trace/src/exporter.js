@@ -31,20 +31,12 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/test-worker')
   }
 
-  return usesLambdaLogExporter() ? require('./exporters/log') : require('./exporters/agent')
-}
-
-/**
- * Whether default Datadog delivery writes spans to the Lambda log for the Forwarder because
- * neither the Datadog extension nor the mini agent is present. Explicit OTLP configuration can
- * still select a collector instead.
- *
- */
-function usesLambdaLogExporter () {
-  if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') === undefined) return false
-
-  return !fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) &&
-    !fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
+  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
+  const usingAgent = inAWSLambda && (
+    fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
+    fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
+  )
+  return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
 }
 
 function hasCiValidationEnvironment () {
@@ -54,46 +46,14 @@ function hasCiValidationEnvironment () {
 }
 
 /**
- * Whether the OTLP export that OTel semantics mode forces has to yield to the Lambda log
- * transport: true in a Lambda that can only reach the backend through its log, and only while the
- * caller has not pointed OTLP at a collector of their own.
- *
- */
-function requiresLambdaLogExporter () {
-  if (!usesLambdaLogExporter()) return false
-
-  // Config later fills in a default trace endpoint, so read the environment to distinguish an
-  // endpoint supplied by the user from that calculated value.
-  return !getEnvironmentVariable('OTEL_EXPORTER_OTLP_ENDPOINT') &&
-    !getEnvironmentVariable('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT')
-}
-
-/**
- * Whether OTLP is the effective trace exporter.
+ * Whether the tracer uses OTLP for APM spans. Test Optimization and the Electron SDK have no OTLP trace exporter.
  *
  * @param {import('./config')} config
  */
 function usesOtlpTraceExporter (config) {
-  // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
-  // exporter when the tracer is running in Test Optimization mode. Test spans
-  // (test_session/test_module/ test_suite/test) belong on the citestcycle
-  // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
-  // vars set in their environment (e.g. for a separate telemetry integration)
-  // silently lose all test spans. The same applies to the Electron exporter:
-  // spans must reach the Electron SDK's span-processing pipeline, not an OTLP endpoint,
-  // because the SDK does not support OTLP export.
-  // A Lambda without the extension or the mini agent reaches the backend only by writing spans
-  // to its log for the Forwarder, so the OTLP export implicitly selected by OTel semantics must
-  // yield to that transport. An explicit OTEL_TRACES_EXPORTER=otlp still uses the standard OTLP
-  // endpoint when the user did not configure one.
-  const otlpExporterWasForced = config.getOrigin?.('OTEL_TRACES_EXPORTER') === 'calculated'
-
   return config.OTEL_TRACES_EXPORTER === 'otlp' &&
     !config.isCiVisibility &&
-    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== exporters.ELECTRON &&
-    (!otlpExporterWasForced || !requiresLambdaLogExporter())
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== exporters.ELECTRON
 }
 
-module.exports.usesLambdaLogExporter = usesLambdaLogExporter
-module.exports.requiresLambdaLogExporter = requiresLambdaLogExporter
 module.exports.usesOtlpTraceExporter = usesOtlpTraceExporter
