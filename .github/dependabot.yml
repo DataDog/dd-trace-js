@@ -159,6 +159,9 @@ updates:
       - dependency-name: "jest-docblock"
         # 30.0.0 onwards only supports Node.js 18.14.x and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "jsonpath-plus"
+        # Major updates require Node.js 22 and above
+        update-types: ["version-update:semver-major"]
       - dependency-name: "https-proxy-agent"
         # 8.0.0 onwards only supports Node.js 22 and above
         update-types: ["version-update:semver-major"]
