@@ -100,21 +100,7 @@ async function runAutoTestRetries ({ framework, out, options }) {
       })
     }
 
-    if (run.result.exitCode !== 0) {
-      return failWithDebugRerun({
-        command: scenario.runCommand,
-        fixtureConfig,
-        diagnosis: getAutoTestRetriesFailureDiagnosis(framework, evidence),
-        evidence,
-        framework,
-        options,
-        out,
-        outDir,
-        scenarioName,
-      })
-    }
-
-    if (tests.length < 2 || autoTestRetryEvents.length === 0) {
+    if ((run.result.exitCode !== 0) || tests.length < 2 || autoTestRetryEvents.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
         fixtureConfig,

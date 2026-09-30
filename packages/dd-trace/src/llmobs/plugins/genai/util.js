@@ -84,8 +84,7 @@ function determineRole (candidate, parts = []) {
  * @param {string} role
  */
 function normalizeRole (role) {
-  if (role === ROLES.MODEL) return ROLES.ASSISTANT
-  if (role === ROLES.ASSISTANT) return ROLES.ASSISTANT
+  if ((role === ROLES.MODEL) || (role === ROLES.ASSISTANT)) return ROLES.ASSISTANT
   if (role === ROLES.USER) return ROLES.USER
   if (role === ROLES.REASONING) return ROLES.REASONING
   return ROLES.USER // default

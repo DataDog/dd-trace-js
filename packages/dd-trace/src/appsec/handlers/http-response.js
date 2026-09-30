@@ -11,8 +11,11 @@ const { storedResponseHeaders, copyHeadersOmitting } = require('./http-shared')
 const responseAnalyzedSet = new WeakSet()
 
 function onResponseBody ({ req, res, body }) {
-  if (!body || typeof body !== 'object') return
-  if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE
+  ) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({

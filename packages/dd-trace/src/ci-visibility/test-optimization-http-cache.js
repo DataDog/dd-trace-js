@@ -317,8 +317,7 @@ class TestOptimizationHttpCache {
       const lines = fs.readFileSync(runfilesManifest, 'utf8').split('\n')
       for (const line of lines) {
         const separatorIndex = line.indexOf(RUNFILES_MANIFEST_SEPARATOR)
-        if (separatorIndex <= 0) continue
-        if (line.slice(0, separatorIndex) !== manifestFile) continue
+        if ((separatorIndex <= 0) || (line.slice(0, separatorIndex) !== manifestFile)) continue
 
         const resolvedPath = line.slice(separatorIndex + 1).trim()
         if (resolvedPath) return resolvedPath

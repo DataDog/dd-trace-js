@@ -291,8 +291,7 @@ function getRum () {
  * @param {object|undefined} rum
  */
 function getIsRumActive (rum) {
-  if (!rum) return false
-  if (typeof rum.getInternalContext !== 'function') return false
+  if (!rum || (typeof rum.getInternalContext !== 'function')) return false
 
   try {
     return !!rum.getInternalContext()
@@ -582,15 +581,9 @@ function getFinalAttemptIndex (task) {
 function switchQuarantinedFinalFailure (task, attemptIndex) {
   const testSuite = getTestSuite(task)
   const testName = getTestName(task)
-  if (
-    !quarantinedTests[testSuite]?.[testName] ||
+  if (!quarantinedTests[testSuite]?.[testName] ||
     attemptToFixTests[testSuite]?.[testName] ||
-    task.result?.state !== 'fail'
-  ) {
-    return
-  }
-
-  if (attemptIndex < getFinalAttemptIndex(task)) {
+    task.result?.state !== 'fail' || (attemptIndex < getFinalAttemptIndex(task))) {
     return
   }
 
@@ -760,8 +753,11 @@ function getEarlyFlakeDetectionSuiteCandidate (suite) {
 
     const testSuite = getTestSuite(task)
     const testName = getTestName(task)
-    if (attemptToFixTests[testSuite]?.[testName] || disabledTests[testSuite]?.[testName]) continue
-    if (!isEarlyFlakeDetectionTest(testSuite, testName)) continue
+    if (
+      attemptToFixTests[testSuite]?.[testName] ||
+      disabledTests[testSuite]?.[testName] ||
+      !isEarlyFlakeDetectionTest(testSuite, testName)
+    ) continue
 
     candidate ||= {
       hasNewTest: false,

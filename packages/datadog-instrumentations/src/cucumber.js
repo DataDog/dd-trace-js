@@ -495,8 +495,12 @@ function finishParallelSuiteIfDone (testFileAbsolutePath) {
   const finished = pickleResultByFile[testFileAbsolutePath]
   const expectedPickles = pickleByFile[testFileAbsolutePath]
 
-  if (!finished || !expectedPickles || finished.length !== expectedPickles.length) return
-  if (finishedParallelSuites.has(testFileAbsolutePath)) return
+  if (
+    !finished ||
+    !expectedPickles ||
+    finished.length !== expectedPickles.length ||
+    finishedParallelSuites.has(testFileAbsolutePath)
+  ) return
 
   finishedParallelSuites.add(testFileAbsolutePath)
   testSuiteFinishCh.publish({
@@ -510,8 +514,12 @@ function maybeRecordFinalParallelEfdStatus ({ pickleId, testFileAbsolutePath, te
   const testStatuses = newTestsByTestFullname.get(testFullname)
   const finished = pickleResultByFile[testFileAbsolutePath]
 
-  if (efdRetryCount === undefined || !testStatuses || !finished) return
-  if (testStatuses.length !== efdRetryCount + 1) return
+  if (
+    efdRetryCount === undefined ||
+    !testStatuses ||
+    !finished ||
+    testStatuses.length !== efdRetryCount + 1
+  ) return
 
   finished.push(getTestStatusFromRetries(testStatuses))
   newTestsByTestFullname.delete(testFullname)

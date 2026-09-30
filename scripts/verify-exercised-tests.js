@@ -201,8 +201,7 @@ function formatEnvValue (name, value) {
  */
 function unwrapLiteralEnvValue (maybe) {
   const s = String(maybe ?? '').trim()
-  if (!s) return null
-  if (s.includes('${{')) return null
+  if (!s || s.includes('${{')) return null
   return stripOuterQuotes(s)
 }
 
@@ -521,8 +520,7 @@ const localActionFileCache = new Map()
  * @returns {string|null}
  */
 function resolveLocalActionFile (repoRoot, uses) {
-  if (typeof uses !== 'string') return null
-  if (!uses.startsWith('./')) return null
+  if ((typeof uses !== 'string') || !uses.startsWith('./')) return null
 
   const cached = localActionFileCache.get(uses)
   if (cached !== undefined) return cached
@@ -986,9 +984,11 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   if (Array.isArray(extra)) keys.push(...extra)
 
   for (const key of keys) {
-    if (scriptPrefixes.has(`test:${key}`)) return true
-    if (scriptPrefixes.has(`test:trace:${key}`)) return true
-    if (scriptPrefixes.has(`test:integration:${key}`)) return true
+    if (
+      scriptPrefixes.has(`test:${key}`) ||
+      scriptPrefixes.has(`test:trace:${key}`) ||
+      scriptPrefixes.has(`test:integration:${key}`)
+    ) return true
   }
 
   return false

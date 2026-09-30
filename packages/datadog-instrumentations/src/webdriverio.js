@@ -289,8 +289,7 @@ async function preloadRumNavigation () {
   try {
     const browser = this
     const testExecutionId = getRumTestExecutionId(browser)
-    if (!canCorrelateRumBrowser(browser)) return
-    if (!rumRunnerBrowsers.has(browser)) return
+    if (!canCorrelateRumBrowser(browser) || !rumRunnerBrowsers.has(browser)) return
 
     retainRumBrowser(browser)
     if (!testExecutionId) return
@@ -363,9 +362,7 @@ async function handleRumNavigation (context) {
       log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
     }
     const testExecutionId = getRumTestExecutionId(browser, isRumActive)
-    if (sampledOut) return
-
-    if (!testExecutionId) {
+    if (sampledOut || !testExecutionId) {
       return
     }
     if (!isRumActive && browser.isBidi) return

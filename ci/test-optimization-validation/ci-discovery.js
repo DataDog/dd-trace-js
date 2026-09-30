@@ -83,8 +83,12 @@ function getManifestWorkflowLocations (manifest) {
 
 function getFrameworkCiDiscoveryContradiction (framework, manifest) {
   const ciDiscovery = manifest?.ciDiscovery
-  if (!ciDiscovery || !Array.isArray(ciDiscovery.staticFound) || ciDiscovery.staticFound.length === 0) return null
-  if (!frameworkClaimsNoCi(framework)) return null
+  if (
+    !ciDiscovery ||
+    !Array.isArray(ciDiscovery.staticFound) ||
+    ciDiscovery.staticFound.length === 0 ||
+    !frameworkClaimsNoCi(framework)
+  ) return null
 
   return {
     reason: 'CI workflow files were found by validator static diagnosis, but this manifest entry says no CI ' +

@@ -107,8 +107,7 @@ class NextPlugin extends ServerPlugin {
     const { req, res, nextRequest = {} } = ctx
     const store = ctx.currentStore ?? storage('legacy').getStore()
 
-    if (!store) return
-    if (reusedNextRequestStores.has(store)) return
+    if (!store || reusedNextRequestStores.has(store)) return
 
     const span = store.span
     const error = ctx.error ?? span.context().getTag('error')

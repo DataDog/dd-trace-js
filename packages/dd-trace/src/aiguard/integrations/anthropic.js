@@ -87,8 +87,7 @@ function onMessagesIntercept (ctx) {
       null,
       'AIGuard: unable to decode Anthropic response body: %s'
     )
-    if (outputMessages === null) return body
-    if (!outputMessages.length) return body
+    if ((outputMessages === null) || !outputMessages.length) return body
 
     outputEvaluation ??= evaluate(ctx, aiguard, [[...inputMessages, ...outputMessages]], opts)
     return outputEvaluation.then(() => body)

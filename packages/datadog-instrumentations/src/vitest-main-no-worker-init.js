@@ -659,8 +659,7 @@ function createMainProcessReporter (reporterState) {
     },
 
     onTaskUpdate (packs, events) {
-      if (!isReporterActive()) return
-      if (!events) return
+      if (!isReporterActive() || !events) return
 
       for (const event of events) {
         if (event[1] === 'test-retried') {
@@ -685,8 +684,7 @@ function createMainProcessReporter (reporterState) {
     },
 
     onFinished (files) {
-      if (!isReporterActive()) return
-      if (!files) return
+      if (!isReporterActive() || !files) return
 
       for (const file of files) {
         const testModule = createTestModuleFromFile(file)

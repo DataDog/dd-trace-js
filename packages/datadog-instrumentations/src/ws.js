@@ -291,10 +291,7 @@ function dataLength (data) {
   if (data instanceof Blob) {
     return data.size
   }
-  if (ArrayBuffer.isView(data)) {
-    return data.byteLength
-  }
-  if (data instanceof ArrayBuffer) {
+  if (ArrayBuffer.isView(data) || (data instanceof ArrayBuffer)) {
     return data.byteLength
   }
   let total = 0

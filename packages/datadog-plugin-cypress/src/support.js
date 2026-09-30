@@ -52,10 +52,7 @@ Cypress.on('command:end', (command) => {
   if (name === 'task' && args && typeof args[0] === 'string' && args[0].startsWith('dd:')) {
     return
   }
-  if (INTERNAL_CYPRESS_COMMANDS.has(name)) {
-    return
-  }
-  if (entry == null) {
+  if (INTERNAL_CYPRESS_COMMANDS.has(name) || (entry == null)) {
     return
   }
   const err = command.get('err')

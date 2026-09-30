@@ -1556,8 +1556,7 @@ function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
   let updated = false
   for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
     const startLine = statementLocation?.start?.line
-    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
-    if (fileCoverage.data.s[statementId] > 0) continue
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine) || (fileCoverage.data.s[statementId] > 0)) continue
 
     fileCoverage.data.s[statementId] = 1
     updated = true
@@ -1850,27 +1849,23 @@ function isTiaSupported (testFramework) {
 }
 
 function isEarlyFlakeDetectionSupported (testFramework, frameworkVersion) {
-  return testFramework === 'playwright'
-    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_EFD[testFramework])
-    : true
+  return testFramework !== 'playwright' ||
+    satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_EFD[testFramework])
 }
 
 function isImpactedTestsSupported (testFramework, frameworkVersion) {
-  return testFramework === 'playwright'
-    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_IMPACTED_TESTS[testFramework])
-    : true
+  return testFramework !== 'playwright' ||
+    satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_IMPACTED_TESTS[testFramework])
 }
 
 function isQuarantineSupported (testFramework, frameworkVersion) {
-  return testFramework === 'playwright'
-    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE[testFramework])
-    : true
+  return testFramework !== 'playwright' ||
+    satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE[testFramework])
 }
 
 function isDisableSupported (testFramework, frameworkVersion) {
-  return testFramework === 'playwright'
-    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE[testFramework])
-    : true
+  return testFramework !== 'playwright' ||
+    satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE[testFramework])
 }
 
 function isAttemptToFixSupported (testFramework, frameworkVersion) {
@@ -1882,9 +1877,8 @@ function isAttemptToFixSupported (testFramework, frameworkVersion) {
 }
 
 function isFailedTestReplaySupported (testFramework, frameworkVersion) {
-  return testFramework === 'playwright'
-    ? satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY[testFramework])
-    : true
+  return testFramework !== 'playwright' ||
+    satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY[testFramework])
 }
 
 function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = {}) {
@@ -2252,8 +2246,7 @@ function recordTestManagementExecution (execution, executions = testManagementEx
  * }} execution
  */
 function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
-  if (!execution?.testName) return
-  if (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false) return
+  if (!execution?.testName || (getValueFromEnvSources('DD_TEST_MANAGEMENT_REPORT_ENABLED') === false)) return
 
   const { testSuite, testName, status, isDisabled, isQuarantined } = execution
   const identity = getTestOptimizationIdentity(testSuite, testName)

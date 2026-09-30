@@ -882,8 +882,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     wrapConcurrentTestFunction (target, methodName, state) {
       let concurrentTest = target?.[methodName]
-      if (typeof concurrentTest !== 'function') return
-      if (this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
+      if ((typeof concurrentTest !== 'function') || this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
 
       const originalConcurrentTest = getOriginalConcurrentTest(concurrentTest)
       if (originalConcurrentTest !== concurrentTest) {
@@ -2556,10 +2555,7 @@ function getTestEnvironment (pkg, jestVersion) {
     const wrappedTestEnvironment = getWrappedEnvironment(pkg.default, jestVersion)
     return new Proxy(pkg, {
       get (target, prop) {
-        if (prop === 'default') {
-          return wrappedTestEnvironment
-        }
-        if (prop === 'TestEnvironment') {
+        if ((prop === 'default') || (prop === 'TestEnvironment')) {
           return wrappedTestEnvironment
         }
         return target[prop]
@@ -4384,10 +4380,7 @@ function sendWrapper (send) {
       // In here we modify the `config.testEnvironmentOptions` to include the known tests for the suite.
       // This way the suite only knows about the tests that are part of it.
       const args = request.at(-1)
-      if (args.length > 1) {
-        return send.apply(this, arguments)
-      }
-      if (!args[0]?.config) {
+      if ((args.length > 1) || !args[0]?.config) {
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args

@@ -450,8 +450,7 @@ function getRunnerInputError (args, environment, projectRoot, repositoryRoot, co
  * @returns {{error?: string, runnerIndex: number, tokens: string[]}|undefined} parsed invocation
  */
 function getFrameworkInvocation (command, framework) {
-  if (CONTROL_PATTERN.test(String(command || ''))) return
-  if (command === `direct ${framework} binary`) return
+  if (CONTROL_PATTERN.test(String(command || '')) || (command === `direct ${framework} binary`)) return
   const tokens = tokenizeCommand(command)
   const executable = getRunnerExecutableName(framework)
   const runnerIndex = tokens.findIndex(token => {

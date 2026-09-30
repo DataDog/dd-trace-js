@@ -85,9 +85,7 @@ addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', vers
 
 addHook({ name: 'redis', versions: ['>=2.6 <4'] }, redis => {
   shimmer.wrap(redis.RedisClient.prototype, 'internal_send_command', internalSendCommand => function (options) {
-    if (!startCh.hasSubscribers) return internalSendCommand.apply(this, arguments)
-
-    if (!options.callback) return internalSendCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers || !options.callback) return internalSendCommand.apply(this, arguments)
 
     const ctx = getStartCtx(this, options.command, options.args)
     return startCh.runStores(ctx, () => {

@@ -90,8 +90,7 @@ function finishOpenChildSpans (executeSpan) {
   if (!trace?.started) return
 
   for (const span of trace.started) {
-    if (span === executeSpan) continue
-    if (span._integrationName !== AwsDurableExecutionSdkJsHandlerPlugin.id) continue
+    if ((span === executeSpan) || (span._integrationName !== AwsDurableExecutionSdkJsHandlerPlugin.id)) continue
     if (span._duration === undefined) {
       span.finish()
     }

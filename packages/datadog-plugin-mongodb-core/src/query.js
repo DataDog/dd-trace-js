@@ -181,10 +181,7 @@ function canStringifyDirectWalk (value, depth) {
         child._bsontype !== undefined ||
         isRegExp(child) ||
         isMap(child) ||
-        typeof child.toJSON === 'function') {
-      return false
-    }
-    if (!canStringifyDirectWalk(child, depth + 1)) return false
+        typeof child.toJSON === 'function' || !canStringifyDirectWalk(child, depth + 1)) return false
   }
   return true
 }

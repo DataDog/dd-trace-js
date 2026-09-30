@@ -292,7 +292,7 @@ function getIsTestIsolationEnabled (cypressConfig) {
     // If we can't read testIsolation config parameter, we default to allowing retries
     return true
   }
-  return cypressConfig.testIsolation === undefined ? true : cypressConfig.testIsolation
+  return (cypressConfig.testIsolation === undefined) || cypressConfig.testIsolation
 }
 
 function getLibraryConfiguration (tracer, testConfiguration) {
@@ -1519,11 +1519,7 @@ class CypressPlugin {
       : undefined
     const testSpan = this.activeTestSpan || lastFailedTestSpan
 
-    if (!testSpan) {
-      return
-    }
-
-    if (!isFailureScreenshotForUpload(details)) {
+    if (!testSpan || !isFailureScreenshotForUpload(details)) {
       return
     }
 

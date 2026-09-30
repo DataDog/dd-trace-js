@@ -228,7 +228,7 @@ class LLMObsPlugin extends TracingPlugin {
       (!this._llmobsEnabled && !this.constructor.emitsGenAiApmTags)
 
     if (disabled) {
-      config = typeof config === 'boolean' ? false : { ...config, enabled: false } // override to false
+      config = !(typeof config === 'boolean') && { ...config, enabled: false } // override to false
     }
     super.configure(config)
   }

@@ -174,9 +174,13 @@ class Kinesis extends BaseAwsSdkPlugin {
 
   responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
     const { streamName } = kwargs
-    if (!this.config.dsmEnabled) return
-    if (operation !== 'getRecords') return
-    if (!response || !response.Records || !response.Records[0]) return
+    if (
+      !this.config.dsmEnabled ||
+      operation !== 'getRecords' ||
+      !response ||
+      !response.Records ||
+      !response.Records[0]
+    ) return
 
     // Only attribute payloadSize to the span when there is a single record.
     span = response.Records.length > 1 ? null : span

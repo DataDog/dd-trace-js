@@ -169,9 +169,7 @@ function parseResponseBody (rawBody, headers, isBase64Encoded) {
   // A handler that answered with the payload itself needs no parsing, and no content type either.
   if (typeof rawBody === 'object') return rawBody
 
-  if (typeof rawBody !== 'string') return
-
-  if (!isJsonContentType(headers?.['content-type'])) return
+  if ((typeof rawBody !== 'string') || !isJsonContentType(headers?.['content-type'])) return
 
   if (isOverSizeCap(rawBody, isBase64Encoded)) {
     log.debug('[ASM] Lambda response body larger than %d bytes, skipping schema extraction',

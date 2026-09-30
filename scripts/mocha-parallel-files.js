@@ -289,8 +289,7 @@ async function main () {
    * @param {Error & { code?: string }} error
    */
   const onPipeError = (error) => {
-    if (!error || error.code !== 'EPIPE') return
-    if (interrupted) return
+    if (!error || error.code !== 'EPIPE' || interrupted) return
     interrupted = true
     for (const child of liveChildren) {
       child.kill('SIGTERM')

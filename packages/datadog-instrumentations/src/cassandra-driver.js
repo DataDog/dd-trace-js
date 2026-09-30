@@ -74,10 +74,7 @@ const isValid = (args) => {
 addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }, (cassandra) => {
   shimmer.wrap(cassandra.Client.prototype, '_innerExecute', _innerExecute =>
     function (query, params, execOptions, callback) {
-      if (!startCh.hasSubscribers) {
-        return _innerExecute.apply(this, arguments)
-      }
-      if (!isValid(arguments)) {
+      if (!startCh.hasSubscribers || !isValid(arguments)) {
         return _innerExecute.apply(this, arguments)
       }
 
@@ -175,8 +172,5 @@ function wrapCallback (finishCh, errorCh, ctx, callback) {
 }
 
 function isRequestValid (exec, args, length) {
-  if (!exec) return false
-  if (args.length !== length || typeof args[length - 1] !== 'function') return false
-
-  return true
+  return !!exec && args.length === length && typeof args[length - 1] === 'function'
 }

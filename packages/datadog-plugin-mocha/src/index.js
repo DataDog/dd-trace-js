@@ -986,10 +986,7 @@ class MochaPlugin extends CiPlugin {
   #startWebdriverioJasmineTest (result, specs, currentSuite) {
     const state = this._webdriverioJasmineState
     const currentStore = storage('legacy').getStore()
-    if (!state || !result?.id) {
-      return currentStore
-    }
-    if (state.completedTestStatuses.has(result.id)) {
+    if (!state || !result?.id || state.completedTestStatuses.has(result.id)) {
       return currentStore
     }
 

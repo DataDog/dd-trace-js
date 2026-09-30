@@ -26,8 +26,7 @@ class ExpressCodeOriginForSpansPlugin extends Plugin {
 
     // Route added handling: compute and cache tags
     const handleRouteAdded = ({ topOfStackFunc, layer }) => {
-      if (!layer) return
-      if (layerTags.has(layer)) return
+      if (!layer || layerTags.has(layer)) return
       layerTags.set(layer, entryTags(topOfStackFunc))
     }
 
