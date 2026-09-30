@@ -7,6 +7,7 @@ const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
 const { describe, it } = require('mocha')
+const satisfies = require('../../vendor/dist/semifies')
 
 const { useSandbox, sandboxCwd, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
@@ -30,7 +31,12 @@ describe('known-flakes shared worker payloads', () => {
       useSandbox([`${dependency}@${version}`], true)
       const suites = ['first', 'second'].map(file => directory + file + (framework === 'vitest' ? '.js' : '.feature'))
 
-      for (const pool of framework === 'vitest' ? ['forks', 'threads'] : ['parallel']) {
+      const pools = framework === 'vitest' ? ['forks', 'threads'] : ['parallel']
+      // No-worker-init needs the setup and reporter APIs added in Vitest 3.2.6.
+      if (framework === 'vitest' && (version === 'latest' || satisfies(version, '>=3.2.6'))) {
+        pools.push('no-worker-init')
+      }
+      for (const pool of pools) {
         for (const scenario of ['selective', 'empty', 'unavailable']) {
           it(`${scenario} list with ${pool}`, async () => {
             const receiver = await new FakeCiVisIntake().start()
@@ -49,7 +55,8 @@ describe('known-flakes shared worker payloads', () => {
               ].map(attributes => ({ type: 'test', attributes }))
               receiver.setFlakyTests({ data: scenario === 'empty' ? [] : data }, scenario === 'unavailable' ? 403 : 200)
               const args = framework === 'vitest'
-                ? ['node_modules/vitest/vitest.mjs', 'run', '--config', directory + 'vitest.config.mjs', '--pool', pool]
+                ? ['node_modules/vitest/vitest.mjs', 'run', '--config', directory + 'vitest.config.mjs',
+                    '--pool', pool === 'no-worker-init' ? 'forks' : pool]
                 : ['node_modules/@cucumber/cucumber/bin/cucumber-js', ...suites,
                     '--require', 'ci-visibility/known-flakes/cucumber-worker-steps.js', '--parallel', '2']
               child = spawn(process.execPath, args, {
@@ -63,6 +70,7 @@ describe('known-flakes shared worker payloads', () => {
                   DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true',
                   DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
                   DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: String(pool === 'no-worker-init'),
                 },
               })
               child.stdout.on('data', chunk => { output += chunk })

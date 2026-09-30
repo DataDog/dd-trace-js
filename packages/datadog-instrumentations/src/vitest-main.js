@@ -929,15 +929,15 @@ async function runMainProcessSetup (
     }
   }
 
-  if (flakyTestRetriesConfiguration) {
-    let workerFlakyTests
-    if (flakyTests !== undefined) {
-      workerFlakyTests = { vitest: {} }
-      for (const file of testFilepaths) {
-        const testSuite = getNormalizedTestSuitePath(file, repositoryRoot)
-        workerFlakyTests.vitest[testSuite] = flakyTests.vitest?.[testSuite] || []
-      }
+  let workerFlakyTests
+  if (flakyTests !== undefined) {
+    workerFlakyTests = { vitest: {} }
+    for (const file of testFilepaths) {
+      const testSuite = getNormalizedTestSuitePath(file, repositoryRoot)
+      workerFlakyTests.vitest[testSuite] = flakyTests.vitest?.[testSuite] || []
     }
+  }
+  if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTests: workerFlakyTests,
@@ -959,6 +959,7 @@ async function runMainProcessSetup (
       knownTestsBySuite,
       modifiedFiles,
       repositoryRoot,
+      flakyTests: workerFlakyTests?.vitest,
       flakyTestRetriesConfiguration,
       testManagementTests,
       testManagementTestsBySuite,

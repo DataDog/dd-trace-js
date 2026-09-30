@@ -907,6 +907,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   }
   let skippableSuitesResponse
   resetSuiteSkippingRunState()
+  // A failed configuration request must not reuse a previous run's flaky-test filter.
+  config.flakyTests = undefined
 
   const onReceivedSkippableSuites = (response) => {
     const {

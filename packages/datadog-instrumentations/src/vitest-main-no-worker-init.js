@@ -350,6 +350,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
     testManagementTestsBySuite,
     testPropertiesByFilepath,
     testSessionConfiguration,
+    flakyTests,
     flakyTestRetriesConfiguration,
   } = setupData
   const { earlyFlakeDetectionRetryPolicy, dynamicAtrBuckets } = state
@@ -376,7 +377,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
       isEfdSuiteAdmissionEnabled: state.isEfdSuiteAdmissionEnabled,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionActive(state),
       dynamicAtrRetryPolicy,
-      flakyTests: state.flakyTests === undefined ? undefined : state.flakyTests.vitest || {},
+      flakyTests,
       flakyTestRetriesConfiguration,
       isRumCorrelationEnabled: !canRaceRumCorrelation(ctx, testSpecifications),
       knownTests: knownTestsBySuite || {},

@@ -5444,6 +5444,50 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('auto test retries', () => {
+    for (const selective of [false, true]) {
+      retryEventsIt(`clears a stale flaky list after a settings error (selective=${selective})`, async () => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        receiver.setSettingsResponseStatusCodes([200, 403])
+        receiver.setFlakyTests({
+          data: selective
+            ? [{
+                type: 'test',
+                attributes: {
+                  configurations: { 'test.bundle': 'mocha' },
+                  suite: 'ci-visibility/known-flakes/mocha-repeated.js',
+                  name: 'repeated runs listed failure',
+                },
+              }]
+            : [],
+        })
+        childProcess = fork('./ci-visibility/run-mocha-known-flakes-rerun.js', {
+          cwd,
+          stdio: 'pipe',
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+          },
+        })
+        childProcess.stdout.on('data', chunk => { testOutput += chunk })
+        childProcess.stderr.on('data', chunk => { testOutput += chunk })
+        childProcess.once('message', () => childProcess.send('run again'))
+        const events = receiver.gatherPayloadsUntilChildExit(childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const tests = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test').map(event => event.content)
+            for (const [name, count] of [
+              ['repeated runs listed failure', selective ? 6 : 4],
+              ['repeated runs unlisted failure', 4],
+            ]) {
+              assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === name).length, count, testOutput)
+            }
+          })
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), events])
+        assert.strictEqual(exitCode, 1, testOutput)
+      })
+    }
+
     for (const parallel of [false, true]) {
       for (const hookAttempt of [0, 1, undefined]) {
         const runTest = parallel ? parallelIt : retryEventsIt
