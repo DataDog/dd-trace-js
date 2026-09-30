@@ -70,6 +70,53 @@ describe('Jest session errors', () => {
     assert.strictEqual(error.stack, 'SyntaxError: Invalid setup')
   })
 
+  for (const field of ['name', 'type', 'message', 'stack']) {
+    it(`ignores non-string ${field} values without invoking custom coercion`, () => {
+      const invalidValues = [undefined, null, 42, true, Symbol('invalid'), [], {
+        toString () { assert.fail('Error fields must not invoke user-defined coercion') },
+      }]
+      for (const value of invalidValues) {
+        const input = { ...original, [field]: value }
+        if (field === 'type') delete input.name
+        const error = getSessionError(results([input]), false)
+        const name = field === 'name' || field === 'type' ? 'Error' : original.name
+        const message = field === 'message' ? '' : original.message
+        assert.strictEqual(error.name, name)
+        assert.strictEqual(error.message, `Failed test suites: 1. Failed tests: 0\n\n${name}: ${message} (1 suite)`)
+        assert.strictEqual(error.stack, field === 'stack' ? `${name}: ${message}` : original.stack)
+      }
+    })
+  }
+
+  it('uses a valid serialized type when the name is malformed', () => {
+    const error = getSessionError(results([{ ...original, name: 42, type: '\u001b[31mSyntaxError\u001b[0m' }]))
+    assert.strictEqual(error.name, 'SyntaxError')
+    assert.match(error.message, /SyntaxError: Setup failed/)
+  })
+
+  it('keeps the summary when all error fields are malformed', () => {
+    const error = getSessionError(results([{ name: {}, type: true, message: 42, stack: [] }]))
+    assert.strictEqual(error.name, 'Error')
+    assert.strictEqual(error.message, 'Failed test suites: 1. Failed tests: 0')
+  })
+
+  for (const field of ['name', 'type']) {
+    it(`preserves ${field} at the limit and bounds it at the first rejected size`, () => {
+      const input = { message: 'Setup failed', stack: original.stack, [field]: 'x'.repeat(MAX_LENGTH) }
+      assert.strictEqual(getSessionError(results([input])).name, input[field])
+      input[field] += 'x'
+      const error = getSessionError(results([input]))
+      assert.strictEqual(error.name, `${'x'.repeat(MAX_LENGTH - 3)}...`)
+      assert.strictEqual(error.stack, original.stack)
+    })
+  }
+
+  it('does not split surrogate pairs when truncating an error type', () => {
+    const error = getSessionError(results([{ ...original, name: '😀'.repeat(MAX_LENGTH) }]))
+    assert.strictEqual(error.name, `${'😀'.repeat(Math.floor((MAX_LENGTH - 3) / 2))}...`)
+    assert.ok(error.name.length <= MAX_LENGTH)
+  })
+
   for (const field of ['message', 'stack']) {
     it(`preserves ${field} at the limit and labels truncation at the first rejected size`, () => {
       const input = { name: 'Error', message: 'x', stack: 'x' }
