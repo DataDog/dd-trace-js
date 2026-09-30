@@ -449,7 +449,7 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addSub('ci:cucumber:is-modified-test', ({
-      scenarios,
+      gherkinNodes,
       testFileAbsolutePath,
       modifiedFiles,
       stepIds,
@@ -457,11 +457,11 @@ class CucumberPlugin extends CiPlugin {
       setIsModified,
     }) => {
       const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
-      for (const scenario of scenarios) {
+      for (const gherkinNode of gherkinNodes) {
         const isModified = isModifiedTest(
           testScenarioPath,
-          scenario.location.line,
-          scenario.steps.at(-1).location.line,
+          gherkinNode.location.line,
+          gherkinNode.steps.at(-1)?.location.line ?? gherkinNode.location.line,
           modifiedFiles,
           'cucumber'
         )

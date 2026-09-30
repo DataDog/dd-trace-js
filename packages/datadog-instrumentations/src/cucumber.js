@@ -1418,14 +1418,25 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
     if (isImpactedTestsEnabled) {
       const setIsModified = (receivedIsModified) => { isModified = receivedIsModified }
-      const scenarios = []
+      const gherkinNodes = []
       const featureChildren = gherkinDocument.feature?.children
       if (featureChildren) {
+        let featureBackground
         for (const child of featureChildren) {
+          if (child.background) {
+            featureBackground = child.background
+            continue
+          }
           const children = child.rule?.children ?? [child]
+          let ruleBackground
+          for (const { background } of children) {
+            if (background) ruleBackground = background
+          }
           for (const { scenario } of children) {
             if (scenario && pickle.astNodeIds.includes(scenario.id)) {
-              scenarios.push(scenario)
+              if (featureBackground) gherkinNodes.push(featureBackground)
+              if (ruleBackground) gherkinNodes.push(ruleBackground)
+              gherkinNodes.push(scenario)
             }
           }
         }
@@ -1433,7 +1444,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       const stepIds = testCase?.testSteps?.flatMap(testStep => testStep.stepDefinitionIds)
 
       isModifiedCh.publish({
-        scenarios,
+        gherkinNodes,
         testFileAbsolutePath: gherkinDocument.uri,
         modifiedFiles,
         stepIds,
