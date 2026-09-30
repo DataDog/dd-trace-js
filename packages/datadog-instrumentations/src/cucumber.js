@@ -256,7 +256,15 @@ function configureParallelWorkerWorldParameters (options) {
   }
 
   options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-  options.worldParameters._ddFlakyTests = flakyTests
+  let workerFlakyTests
+  if (flakyTests !== undefined) {
+    workerFlakyTests = { cucumber: {} }
+    for (const file of Object.keys(pickleByFile)) {
+      const testSuite = getTestSuitePath(file, process.cwd())
+      workerFlakyTests.cucumber[testSuite] = flakyTests.cucumber?.[testSuite] || []
+    }
+  }
+  options.worldParameters._ddFlakyTests = workerFlakyTests
   options.worldParameters._ddNativeRetryCount = nativeRetryCount
   options.worldParameters._ddNumTestRetries = numTestRetries
   options.worldParameters._ddIsDynamicAtrEnabled = isDynamicAtrEnabled

@@ -828,17 +828,6 @@ async function runMainProcessSetup (
   }
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
-  if (flakyTestRetriesConfiguration) {
-    setProvidedContext(ctx, {
-      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
-      _ddFlakyTests: flakyTests,
-      _ddFlakyTestRetriesCount: flakyTestRetriesCount,
-      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
-      _ddDynamicAtrBuckets: dynamicAtrBuckets,
-      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
-      _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
-    }, 'Could not send library configuration to workers.')
-  }
 
   if (isKnownTestsEnabled) {
     const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
@@ -938,6 +927,26 @@ async function runMainProcessSetup (
         _ddTestPropertiesByFilepath: testPropertiesByFilepath,
       }, 'Could not send test properties to workers so some Test Optimization features will not work.')
     }
+  }
+
+  if (flakyTestRetriesConfiguration) {
+    let workerFlakyTests
+    if (flakyTests !== undefined) {
+      workerFlakyTests = { vitest: {} }
+      for (const file of testFilepaths) {
+        const testSuite = getNormalizedTestSuitePath(file, repositoryRoot)
+        workerFlakyTests.vitest[testSuite] = flakyTests.vitest?.[testSuite] || []
+      }
+    }
+    setProvidedContext(ctx, {
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddFlakyTests: workerFlakyTests,
+      _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
+      _ddDynamicAtrBuckets: dynamicAtrBuckets,
+      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
+      _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+    }, 'Could not send library configuration to workers.')
   }
 
   if (shouldInstallNoWorkerInit || shouldInstallBrowserReporter) {
