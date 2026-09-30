@@ -291,7 +291,7 @@ function getRum () {
  * @param {object|undefined} rum
  */
 function getIsRumActive (rum) {
-  if (!rum || (typeof rum.getInternalContext !== 'function')) return false
+  if (typeof rum?.getInternalContext !== 'function') return false
 
   try {
     return !!rum.getInternalContext()

@@ -84,8 +84,7 @@ function getManifestWorkflowLocations (manifest) {
 function getFrameworkCiDiscoveryContradiction (framework, manifest) {
   const ciDiscovery = manifest?.ciDiscovery
   if (
-    !ciDiscovery ||
-    !Array.isArray(ciDiscovery.staticFound) ||
+    !Array.isArray(ciDiscovery?.staticFound) ||
     ciDiscovery.staticFound.length === 0 ||
     !frameworkClaimsNoCi(framework)
   ) return null

@@ -156,7 +156,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   responseExtract (params, operation, response) {
     if (operation !== 'getRecords') return
     if (params.Limit && params.Limit !== 1) return
-    if (!response || !response.Records || !response.Records[0]) return
+    if (!response?.Records?.[0]) return
 
     const record = response.Records[0]
 
@@ -177,9 +177,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     if (
       !this.config.dsmEnabled ||
       operation !== 'getRecords' ||
-      !response ||
-      !response.Records ||
-      !response.Records[0]
+      !response?.Records?.[0]
     ) return
 
     // Only attribute payloadSize to the span when there is a single record.

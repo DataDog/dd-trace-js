@@ -125,8 +125,7 @@ function getGeneratedTestContent ({ framework, moduleSystem, scenarioId, stateFi
 function getGeneratedTestContractError (framework) {
   const strategy = framework.generatedTestStrategy
   if (
-    !strategy ||
-    !['planned', 'verified'].includes(strategy.status) ||
+    !['planned', 'verified'].includes(strategy?.status) ||
     !['cucumber', 'cypress', 'jest', 'mocha', 'playwright', 'vitest'].includes(framework.framework)
   ) return
   if (!['commonjs', 'esm'].includes(strategy.moduleSystem)) {
