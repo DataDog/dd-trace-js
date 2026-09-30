@@ -86,7 +86,32 @@ describe('Jest session errors', () => {
         assert.strictEqual(error.stack, field === 'stack' ? `${name}: ${message}` : original.stack)
       }
     })
+
+    it(`skips errors with throwing ${field} accessors while preserving other suite errors`, () => {
+      const input = { ...original }
+      if (field === 'type') delete input.name
+      Object.defineProperty(input, field, {
+        get () { throw new Error('Cannot read setup error field') },
+      })
+
+      const fallback = getSessionError(results([input]))
+      assert.strictEqual(fallback.name, 'Error')
+      assert.strictEqual(fallback.message, 'Failed test suites: 1. Failed tests: 0')
+
+      const mixed = getSessionError(results([original, input, original]))
+      assert.strictEqual(mixed.name, original.name)
+      assert.strictEqual(mixed.message, 'Failed test suites: 3. Failed tests: 0\n\nTypeError: Setup failed (2 suites)')
+      assert.strictEqual(mixed.stack, original.stack)
+    })
   }
+
+  it('keeps the summary for revoked error proxies', () => {
+    const { proxy, revoke } = Proxy.revocable(original, {})
+    revoke()
+    const error = getSessionError(results([proxy]))
+    assert.strictEqual(error.name, 'Error')
+    assert.strictEqual(error.message, 'Failed test suites: 1. Failed tests: 0')
+  })
 
   it('uses a valid serialized type when the name is malformed', () => {
     const error = getSessionError(results([{ ...original, name: 42, type: '\u001b[31mSyntaxError\u001b[0m' }]))

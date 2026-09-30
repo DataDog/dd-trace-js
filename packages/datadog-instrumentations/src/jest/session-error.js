@@ -4,6 +4,7 @@ const { stripVTControlCharacters } = require('node:util')
 
 const { MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION: MAX_LENGTH } =
   require('../../../dd-trace/src/encode/tags-processors')
+const log = require('../../../dd-trace/src/log')
 
 /**
  * @typedef {{ name?: unknown, type?: unknown, message?: unknown, stack?: unknown }} SuiteError
@@ -30,9 +31,15 @@ function getSessionError (results = {}, hasExecutedTests = results.numPassedTest
   const groups = new Map()
   for (const { testExecError } of results.testResults) {
     if (!testExecError) continue
-    const name = sanitizeErrorField(testExecError.name) || sanitizeErrorField(testExecError.type) || 'Error'
-    const message = sanitizeErrorField(testExecError.message)
-    const stack = sanitizeErrorField(testExecError.stack)
+    let name, message, stack
+    try {
+      name = sanitizeErrorField(testExecError.name) || sanitizeErrorField(testExecError.type) || 'Error'
+      message = sanitizeErrorField(testExecError.message)
+      stack = sanitizeErrorField(testExecError.stack)
+    } catch {
+      log.debug('Skipping unreadable Jest suite execution error in the test session summary')
+      continue
+    }
     if (!message && !stack) continue
     const key = JSON.stringify([name, message, stack])
     const group = groups.get(key)
