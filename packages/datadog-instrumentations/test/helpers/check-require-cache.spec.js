@@ -8,9 +8,11 @@ const Module = require('node:module')
 const { describe, it } = require('mocha')
 
 const {
+  checkForPotentialConflicts,
   checkForRequiredModules,
   flushFrameworkWarnings,
   flushLoadOrderWarnings,
+  flushStartupLogs,
 } = require('../../src/helpers/check-require-cache')
 
 describe('check-require-cache', () => {
@@ -102,6 +104,33 @@ describe('check-require-cache', () => {
       assert.ok(warnings.some(message => message.includes("Package 'bullmq' was loaded before dd-trace")))
     } finally {
       delete require.cache[modulePath]
+    }
+  })
+
+  it('reports each conflicting package only once', () => {
+    const modulePaths = [
+      path.join('/app', 'node_modules', '@sentry', 'node', 'index.js'),
+      path.join('/app', 'node_modules', '@sentry', 'node', 'client.js'),
+      path.join('/app', 'node_modules', 'unrelated-package', 'index.js'),
+    ]
+    const warnings = []
+
+    flushStartupLogs({ warn: () => {} })
+    for (const modulePath of modulePaths) {
+      require.cache[modulePath] = new Module(modulePath)
+    }
+
+    try {
+      checkForPotentialConflicts()
+      flushStartupLogs({ warn: message => warnings.push(message) })
+
+      assert.deepStrictEqual(warnings.filter(message => message.includes("Package '@sentry/node'")), [
+        "Warning: Package '@sentry/node' may cause conflicts with dd-trace.",
+      ])
+      assert.ok(warnings.includes('Warning: Packages were loaded that may conflict with dd-trace.'))
+      assert.ok(warnings.every(message => !message.includes('unrelated-package')))
+    } finally {
+      for (const modulePath of modulePaths) delete require.cache[modulePath]
     }
   })
 

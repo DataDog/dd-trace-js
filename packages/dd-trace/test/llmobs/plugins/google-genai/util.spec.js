@@ -1,11 +1,27 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 
-const { extractMetrics, formatOutputMessages } = require('../../../../src/llmobs/plugins/genai/util')
+const {
+  extractMetrics,
+  formatInputMessages,
+  formatOutputMessages,
+} = require('../../../../src/llmobs/plugins/genai/util')
 
 describe('google-genai llmobs util', () => {
+  it('maps model and assistant input roles to assistant', () => {
+    const contents = [
+      { role: 'model', parts: [{ text: 'first' }] },
+      { role: 'assistant', parts: [{ text: 'second' }] },
+    ]
+
+    assert.deepStrictEqual(formatInputMessages(contents), [
+      { role: 'assistant', content: 'first' },
+      { role: 'assistant', content: 'second' },
+    ])
+  })
+
   describe('extractMetrics', () => {
     it('derives totalTokens from prompt and candidate counts when totalTokenCount is absent', () => {
       const metrics = extractMetrics({ usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 7 } })

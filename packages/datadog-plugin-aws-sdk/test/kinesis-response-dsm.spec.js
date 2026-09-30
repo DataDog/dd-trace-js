@@ -27,6 +27,16 @@ function record (data = { id: 1 }) {
   return { Data: Buffer.from(JSON.stringify(data)) }
 }
 
+describe('Kinesis plugin responseExtract', () => {
+  it('ignores responses without records', () => {
+    const plugin = buildPlugin(() => {})
+
+    for (const response of [undefined, {}, { Records: [] }]) {
+      assert.strictEqual(plugin.responseExtract({}, 'getRecords', response), undefined)
+    }
+  })
+})
+
 describe('Kinesis plugin responseExtractDSMContext', () => {
   it('decodes every record of a mixed batch, so one without a context starts a new pathway', () => {
     const decoded = []
@@ -42,5 +52,16 @@ describe('Kinesis plugin responseExtractDSMContext', () => {
     )
 
     assert.deepStrictEqual(decoded, [datadog, undefined, undefined])
+  })
+
+  it('ignores responses without records', () => {
+    const decoded = []
+    const plugin = buildPlugin(carrier => { decoded.push(carrier) })
+
+    for (const response of [undefined, {}, { Records: [] }]) {
+      assert.strictEqual(plugin.responseExtractDSMContext('getRecords', {}, response, null), undefined)
+    }
+
+    assert.deepStrictEqual(decoded, [])
   })
 })

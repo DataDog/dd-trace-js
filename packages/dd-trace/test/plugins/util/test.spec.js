@@ -58,6 +58,11 @@ const {
   TEST_BROWSER_VERSION,
   TEST_IS_RUM_ACTIVE,
   DD_CAPABILITIES_TEST_IMPACT_ANALYSIS,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
   getTestLineStart,
   getFileAndLineNumberFromError,
 } = require('../../../src/plugins/util/test')
@@ -145,6 +150,23 @@ describe('library capabilities', () => {
       })[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS],
       undefined
     )
+  })
+
+  it('enables Playwright capabilities starting with version 1.38.0', () => {
+    const versionedCapabilities = [
+      DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+      DD_CAPABILITIES_IMPACTED_TESTS,
+      DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+      DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+      DD_CAPABILITIES_FAILED_TEST_REPLAY,
+    ]
+
+    for (const [version, expected] of [['1.37.9', undefined], ['1.38.0', '1']]) {
+      const tags = getLibraryCapabilitiesTags('playwright', version)
+      for (const capability of versionedCapabilities) {
+        assert.strictEqual(tags[capability], expected, `${capability} at Playwright ${version}`)
+      }
+    }
   })
 })
 

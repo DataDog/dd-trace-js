@@ -269,4 +269,18 @@ describe('kafkajs commit walk', () => {
       kafka_cluster_id: 'c1',
     })
   })
+
+  it('producer does not commit offsets without DSM or a valid response', () => {
+    const setOffset = sinon.spy()
+    const plugin = new KafkajsProducerPlugin({ setOffset }, {})
+    plugin.config = { dsmEnabled: false }
+
+    plugin.commit({ result: [{ topicName: 'topic', partition: 0, offset: '5' }] })
+    sinon.assert.notCalled(setOffset)
+
+    plugin.config.dsmEnabled = true
+    plugin.commit({})
+    plugin.commit({ result: 'invalid' })
+    sinon.assert.notCalled(setOffset)
+  })
 })

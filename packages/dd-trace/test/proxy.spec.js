@@ -589,6 +589,19 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(flare.send, task)
       })
 
+      it('ignores unrelated and incomplete tracer flare tasks', () => {
+        proxy.init()
+
+        const handleAgentTask = handlers.get('AGENT_TASK')
+        handleAgentTask('unapply', { task_type: 'tracer_flare', args: {} })
+        handleAgentTask('apply', undefined)
+        handleAgentTask('apply', { task_type: 'other', args: {} })
+        handleAgentTask('apply', { task_type: 'tracer_flare' })
+
+        sinon.assert.notCalled(flare.enable)
+        sinon.assert.notCalled(flare.send)
+      })
+
       it('should cleanup flares when the config is removed', () => {
         const conf = {
           config: {
