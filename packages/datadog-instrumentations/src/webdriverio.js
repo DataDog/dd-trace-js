@@ -1558,11 +1558,20 @@ function handleConfigurationRequest (state, workerRecord, message) {
   initializeCoordinator(state, (configuration) => {
     updateEarlyFlakeDetectionFaultyState(state, files)
     startWorkerSuites(workerRecord, files)
+    let workerConfiguration = configuration
+    if (configuration.flakyTests !== undefined) {
+      const flakyTests = { mocha: {} }
+      for (const file of files) {
+        const testSuite = getTestSuitePath(normalizeFile(file), process.cwd())
+        flakyTests.mocha[testSuite] = configuration.flakyTests.mocha[testSuite] || []
+      }
+      workerConfiguration = { ...configuration, flakyTests }
+    }
     sendWorkerMessage(workerRecord, {
       origin: 'datadog',
       name: CONFIGURATION_RESPONSE,
       content: {
-        configuration,
+        configuration: workerConfiguration,
         requestId,
       },
     })
