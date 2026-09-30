@@ -4,6 +4,7 @@ let attempts = 0
 let conditionCalls = 0
 
 test('stops conditional retries before quarantining', {
+  repeats: 1,
   retry: {
     count: 2,
     condition: () => {
@@ -17,6 +18,6 @@ test('stops conditional retries before quarantining', {
 })
 
 afterAll(() => {
-  expect(attempts).toBe(1)
-  expect(conditionCalls).toBe(1)
+  expect(attempts).toBe(2)
+  expect(conditionCalls).toBe(2)
 })
