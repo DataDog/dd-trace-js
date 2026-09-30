@@ -73,14 +73,6 @@ variables:
     - when: on_success
       allow_failure: false
 
-"llm validation (candidate-absent)":
-  rules:
-    - *skip_llm_validation_on_release
-    - if: '$LLMVAL_CANDIDATE_ABSENT_ENABLED == "true"'
-      when: always
-      allow_failure: true
-    - when: never
-
 llm validation definitions:
   extends: llm validation
   variables:
