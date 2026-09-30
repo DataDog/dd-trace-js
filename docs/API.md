@@ -614,6 +614,14 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
+Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
+When `DD_TEST_FAILURE_SCREENSHOTS_ENABLED` or `DD_TEST_FAILURE_VIDEOS_ENABLED` is unset, Playwright and Cypress must
+be configured to capture the corresponding media. Explicitly setting a flag to `true` also enables its capture in
+Playwright (1.38.0 or later) and Cypress. Playwright uses `only-on-failure` screenshots and `retain-on-failure` videos
+unless the project already captures failures; existing capture options are preserved. Cypress enables
+`screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
+framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
+
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.
@@ -628,6 +636,7 @@ duration, instead of the flat per-test retry limit. When enabled, the number of 
 determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
 and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
 Requires Auto Test Retries to be enabled by the backend.
+For Mocha, dynamic ATR requires version 8 or newer. Older supported versions use the flat retry limit.
 
 Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
 overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets

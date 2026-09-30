@@ -2064,17 +2064,17 @@
     ],
     "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": null,
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],
     "DD_TEST_FAILURE_VIDEOS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": null,
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],

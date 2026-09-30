@@ -269,6 +269,41 @@ describe(`cucumber@${version} commonJS`, () => {
     await receiver.stop()
   })
 
+  for (const [args, reason] of [
+    ['--dry-run', 'all_tests_skipped'],
+    ['--dry-run --parallel 2', 'all_tests_skipped'],
+    ['--tags @no-matching-scenarios', 'zero_tests'],
+    ['', undefined],
+  ]) {
+    it(`reports zero-execution sessions: ${args || 'executed scenarios'}`, async () => {
+      receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+      childProcess = exec(`./node_modules/.bin/cucumber-js ci-visibility/features/farewell.feature ${args}`, {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          for (const type of ['test_session_end', 'test_module_end']) {
+            const event = events.find(event => event.type === type)?.content
+            assert.ok(event, testOutput)
+            assert.strictEqual(event.meta[TEST_STATUS], reason ? 'skip' : 'pass', testOutput)
+            assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], reason)
+            assert.strictEqual(event.meta[TEST_SKIP_REASON], reason === 'all_tests_skipped'
+              ? 'All tests were skipped'
+              : reason === 'zero_tests' ? 'No tests were detected' : undefined)
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+  }
+
   it('sends telemetry with test_session metric when telemetry is enabled', async () => {
     receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
 
@@ -1404,8 +1439,8 @@ describe(`cucumber@${version} commonJS`, () => {
               assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
               for (const event of [testSession, testModule]) {
                 assert.strictEqual(event.meta[TEST_STATUS], 'skip')
-                assert.strictEqual(event.meta[TEST_SKIP_REASON], 'No scenarios were executed')
-                assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'zero_tests')
+                assert.strictEqual(event.meta[TEST_SKIP_REASON], 'All tests were skipped')
+                assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], 'all_tests_skipped')
               }
             })
 
@@ -3912,13 +3947,17 @@ describe(`cucumber@${version} commonJS`, () => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.find(event => event.type === 'test').content
             const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
 
             if (isDisabling) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+            }
+            for (const event of [testSession, testModule]) {
+              assert.strictEqual(event.meta[TEST_STATUS], isDisabling ? 'skip' : 'fail')
+              assert.strictEqual(event.meta[TEST_SESSION_EMPTY_REASON], isDisabling ? 'all_tests_skipped' : undefined)
+              assert.strictEqual(event.meta[TEST_SKIP_REASON], isDisabling ? 'All tests were skipped' : undefined)
             }
 
             assert.strictEqual(tests.resource, 'ci-visibility/features-test-management/disabled.feature.Say disabled')
@@ -4567,7 +4606,7 @@ describe(`cucumber@${version} commonJS`, () => {
       )
     })
 
-    // Modify `impacted-test.feature` to mark it as impacted
+    // Modify feature files to mark their scenarios or backgrounds as impacted
     before(() => {
       execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
       fs.writeFileSync(
@@ -4577,8 +4616,29 @@ describe(`cucumber@${version} commonJS`, () => {
         When the greeter says impacted test
         Then I should have heard "impactedd test"`
       )
-      execSync('git add ci-visibility/features-impacted-test/impacted-test.feature', { cwd, stdio: 'ignore' })
-      execSync('git commit -m "modify impacted-test.feature"', { cwd, stdio: 'ignore' })
+      for (const filename of ['feature-background', 'rule-background']) {
+        const featurePath = path.join(cwd, `ci-visibility/features-impacted-background/${filename}.feature`)
+        const feature = fs.readFileSync(featurePath, 'utf8')
+        fs.writeFileSync(featurePath, feature.replace(
+          'When the greeter says impacted test',
+          'Given the greeter says impacted test'
+        ))
+      }
+      for (const [filename, original, modified] of [
+        ['feature-background-docstring', 'original content', 'changed content'],
+        ['rule-background-datatable', '| message  | original |', '| message  | changed  |'],
+        ['removed-feature-background',
+          '  Background: The greeter has spoken\n    When the greeter says impacted test\n', ''],
+        ['removed-rule-background',
+          '    Background: The greeter has spoken\n      When the greeter says impacted test\n', ''],
+      ]) {
+        const featurePath = path.join(cwd, `ci-visibility/features-impacted-background/${filename}.feature`)
+        const feature = fs.readFileSync(featurePath, 'utf8')
+        fs.writeFileSync(featurePath, feature.replace(original, modified))
+      }
+      execSync('git add ci-visibility/features-impacted-test/impacted-test.feature ' +
+        'ci-visibility/features-impacted-background/*.feature', { cwd, stdio: 'ignore' })
+      execSync('git commit -m "modify impacted test features"', { cwd, stdio: 'ignore' })
     })
 
     after(() => {
@@ -4702,6 +4762,78 @@ describe(`cucumber@${version} commonJS`, () => {
 
         await runImpactedTest({ isModified: true })
       })
+
+      for (const [filename, expectedModification] of [
+        ['feature-background', {
+          'Top-level scenario': true,
+          'Scenario inside a rule': true,
+        }],
+        ['feature-background-docstring', {
+          'Top-level scenario': true,
+          'Scenario inside a rule': true,
+        }],
+        ['rule-background', {
+          'Scenario inside the changed rule': true,
+          'Scenario inside the unchanged rule': false,
+        }],
+        ['rule-background-datatable', {
+          'Scenario inside the changed rule': true,
+          'Scenario inside the unchanged rule': false,
+        }],
+        ['removed-feature-background', {
+          'Top-level scenario': true,
+          'Scenario inside a rule': true,
+        }],
+        ['removed-rule-background', {
+          'Scenario inside the changed rule': true,
+          'Scenario inside the unchanged rule': false,
+        }],
+      ]) {
+        it(`detects scenarios impacted by ${filename}`, async () => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          childProcess = exec(
+            `./node_modules/.bin/cucumber-js ci-visibility/features-impacted-background/${filename}.feature ` +
+            '--require ci-visibility/features-impacted-test/support/steps.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                GITHUB_BASE_REF: '',
+              },
+            }
+          )
+          let output = ''
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+
+          const [payloadResult, exitResult] = await Promise.allSettled([
+            receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              payloads => {
+                const tests = payloads.flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .map(event => event.content)
+                assert.strictEqual(tests.length, Object.keys(expectedModification).length)
+                for (const test of tests) {
+                  const isModified = expectedModification[test.meta[TEST_NAME]]
+                  assert.notStrictEqual(isModified, undefined, `Unexpected test: ${test.meta[TEST_NAME]}`)
+                  if (isModified) {
+                    assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+                  } else {
+                    assert.ok(!(TEST_IS_MODIFIED in test.meta))
+                  }
+                }
+              }
+            ),
+            once(childProcess, 'close'),
+          ])
+
+          assert.strictEqual(exitResult.value[0], 0, output)
+          if (payloadResult.status === 'rejected') throw payloadResult.reason
+        })
+      }
 
       it('should not be detected as impacted if disabled', async () => {
         receiver.setSettings({ impacted_tests_enabled: false })

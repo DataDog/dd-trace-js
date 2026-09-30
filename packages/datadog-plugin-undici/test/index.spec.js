@@ -45,6 +45,7 @@ describe('Plugin', () => {
   describe('undici-fetch', () => {
     withVersions('undici', 'undici', NODE_MAJOR < 20 ? '<7.11.0' : '*', (version, moduleName, resolvedVersion) => {
       const hasNativeDiagnostics = satisfies(resolvedVersion, '>=4.7.0 <5.0.0 || >=5.1.0')
+      const hasNativeUpgradeCompletion = satisfies(resolvedVersion, '>=6.29.0 <7.0.0 || >=7.30.0 <8.0.0 || >=8.11.0')
 
       /**
        * @param {import('express').Application} app
@@ -246,8 +247,10 @@ describe('Plugin', () => {
             socket.destroy()
             await Promise.all([tracePromise, client.close()])
 
-            assert.strictEqual(fallbackMessages.length, 1)
-            assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            assert.strictEqual(fallbackMessages.length, hasNativeUpgradeCompletion ? 0 : 1)
+            if (!hasNativeUpgradeCompletion) {
+              assert.strictEqual(fallbackMessages[0].statusCode, 101)
+            }
             assert.strictEqual(requestHookCalls, 1)
           } finally {
             upgradeChannel.unsubscribe(fallbackSubscriber)
@@ -323,8 +326,10 @@ describe('Plugin', () => {
             })
             await Promise.all([tracePromise, client.close()])
 
-            assert.strictEqual(fallbackMessages.length, 1)
-            assert.strictEqual(fallbackMessages[0].error, expectedError)
+            assert.strictEqual(fallbackMessages.length, hasNativeUpgradeCompletion ? 0 : 1)
+            if (!hasNativeUpgradeCompletion) {
+              assert.strictEqual(fallbackMessages[0].error, expectedError)
+            }
           } finally {
             upgradeChannel.unsubscribe(fallbackSubscriber)
           }
@@ -701,6 +706,183 @@ describe('Plugin', () => {
           })
         }
       })
+      describe('with fetch instrumentation', () => {
+        let tracer
+        let url
+        let requests
+
+        beforeEach(async () => {
+          tracer = await agent.load(['undici', 'fetch'])
+          fetch = require(`../../../versions/undici@${version}`, {}).get()
+          requests = []
+          appListener = require('node:http').createServer((request, response) => {
+            requests.push(request)
+            if (request.url === '/error') {
+              response.destroy()
+              return
+            }
+            if (request.url === '/redirect') {
+              response.writeHead(302, { location: '/' })
+            }
+            response.end()
+          })
+          appListener.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = (/** @type {import('node:net').AddressInfo} */ (appListener.address())).port
+          url = `http://localhost:${port}`
+        })
+
+        const cases = [
+          { name: 'built-in fetch', request: url => globalThis.fetch(url), component: 'fetch' },
+          {
+            name: 'built-in fetch with Request input',
+            request: url => globalThis.fetch(new globalThis.Request(url)),
+            component: 'fetch',
+          },
+          {
+            name: 'built-in fetch redirects',
+            request: url => globalThis.fetch(`${url}/redirect`),
+            component: 'fetch',
+            requestCount: 2,
+          },
+          { name: 'undici.fetch', request: url => fetch.fetch(url), component: 'undici' },
+          { name: 'undici.request', request: url => fetch.request(url), component: 'undici', nativeOnly: true },
+          {
+            name: 'built-in fetch with fetch tracing disabled',
+            request: url => globalThis.fetch(url),
+            component: 'undici',
+            config: { enabled: false },
+          },
+          {
+            name: 'built-in fetch with undici tracing disabled',
+            request: url => globalThis.fetch(url),
+            component: 'fetch',
+            undiciDisabled: true,
+          },
+          {
+            name: 'built-in fetch with propagation blocked',
+            request: url => globalThis.fetch(url),
+            component: 'fetch',
+            config: { propagationBlocklist: [/.*/] },
+            propagation: false,
+          },
+          {
+            name: 'built-in fetch with recording blocked',
+            request: url => globalThis.fetch(url),
+            config: { blocklist: [/.*/] },
+          },
+        ]
+
+        for (const testCase of cases) {
+          const { name, request, component, config, nativeOnly, requestCount = 1, propagation = true } = testCase
+          it(`should trace and propagate only once for ${name}`, async function () {
+            if (nativeOnly && !satisfies(resolvedVersion, '>=4.7.0')) {
+              // undici.request diagnostics are unavailable before undici 4.7.0.
+              this.skip()
+              return
+            }
+            if (config) tracer.use('fetch', config)
+            if (testCase.undiciDisabled) tracer.use('undici', false)
+
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+              const clients = spans.filter(span => span.meta['span.kind'] === 'client')
+              assert.strictEqual(clients.length, component ? 1 : 0)
+              assert.strictEqual(spans.length, component ? 2 : 1)
+              assert.strictEqual(requests.length, requestCount)
+
+              const headers = {}
+              if (component) {
+                const [client] = clients
+                const parent = spans.find(span => span.name === 'parent')
+                assert.strictEqual(client.parent_id, parent.span_id)
+                assert.strictEqual(client.meta.component, component)
+                assert.strictEqual(client.meta['http.status_code'], '200')
+                headers['x-datadog-trace-id'] = client.trace_id.toString()
+                headers['x-datadog-parent-id'] = client.span_id.toString()
+                headers['x-datadog-sampling-priority'] = '1'
+                headers['x-datadog-tags'] = /.+/
+                const spanId = client.span_id.toString(16).padStart(16, '0')
+                headers.traceparent = new RegExp(`^00-[\\da-f]{32}-${spanId}-01$`)
+                headers.tracestate = /.+/
+              }
+
+              for (const req of requests) {
+                const propagated = {}
+                for (let i = 0; i < req.rawHeaders.length; i += 2) {
+                  const key = req.rawHeaders[i].toLowerCase()
+                  if (!/trace|datadog/.test(key)) continue
+                  assert.strictEqual(propagated[key], undefined, `duplicate header: ${key}`)
+                  propagated[key] = req.rawHeaders[i + 1]
+                }
+
+                if (!propagation) {
+                  assert.deepStrictEqual(propagated, {})
+                } else if (component) {
+                  assert.deepStrictEqual(Object.keys(propagated).sort(), Object.keys(headers).sort())
+                  for (const [key, value] of Object.entries(headers)) {
+                    if (value instanceof RegExp) {
+                      assert.match(propagated[key], value)
+                    } else {
+                      assert.strictEqual(propagated[key], value)
+                    }
+                  }
+                }
+              }
+            })
+
+            const requestPromise = tracer.trace('parent', async () => {
+              const response = await request(url)
+              if (response.body?.dump) {
+                await response.body.dump()
+              } else {
+                await response.arrayBuffer()
+              }
+            })
+            await Promise.all([tracePromise, requestPromise])
+          })
+        }
+
+        for (const component of ['fetch', 'undici']) {
+          it(`should record only one client error for ${component} fetch failures`, async () => {
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const spans = traces.flat()
+              const clients = spans.filter(span => span.meta['span.kind'] === 'client')
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(clients.length, 1)
+              assert.strictEqual(clients[0].meta.component, component)
+              assert.strictEqual(clients[0].error, 1)
+              assert.ok(clients[0].meta[ERROR_MESSAGE])
+            })
+            const requestPromise = assert.rejects(() => tracer.trace('parent', () => {
+              return component === 'fetch' ? globalThis.fetch(`${url}/error`) : fetch.fetch(`${url}/error`)
+            }), { name: 'TypeError', message: 'fetch failed' })
+            await Promise.all([tracePromise, requestPromise])
+          })
+        }
+
+        it('should not suppress a subsequent undici fetch in the caller context', async () => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat()
+            const clients = spans.filter(span => span.meta['span.kind'] === 'client')
+            const parent = spans.find(span => span.name === 'parent')
+            assert.strictEqual(spans.length, 3)
+            assert.deepStrictEqual(clients.map(span => span.meta.component).sort(), ['fetch', 'undici'])
+            for (const client of clients) {
+              assert.strictEqual(client.parent_id, parent.span_id)
+            }
+          })
+          const requestPromise = tracer.trace('parent', async parent => {
+            const response = await globalThis.fetch(url)
+            await response.arrayBuffer()
+            assert.strictEqual(tracer.scope().active(), parent)
+            const undiciResponse = await fetch.fetch(url)
+            await undiciResponse.arrayBuffer()
+          })
+          await Promise.all([tracePromise, requestPromise])
+        })
+      })
+
       describe('with service configuration', () => {
         let config
 

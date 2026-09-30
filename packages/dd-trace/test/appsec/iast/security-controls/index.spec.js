@@ -110,6 +110,21 @@ describe('IAST Security Controls', () => {
       return module
     }
 
+    it('ignores a failed module load without exports', () => {
+      const filename = require.resolve('./resources/custom_input_validator')
+      const conf = `INPUT_VALIDATOR:COMMAND_INJECTION:${filename}:validate`
+      securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
+
+      // RITM now publishes an end event even when require() throws, so load-stack
+      // subscribers can unwind. Such events have no module exports; IAST must
+      // ignore them rather than treating them as successfully loaded modules.
+      const payload = { filename }
+      moduleLoadEndChannel.publish(payload)
+
+      assert.equal(Object.hasOwn(payload, 'module'), false)
+      sinon.assert.notCalled(addSecureMark)
+    })
+
     it('should hook a module only once', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
