@@ -1060,7 +1060,8 @@ function testEndHandler ({
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
-    results.length > 1 &&
+    // Serial suites can add skipped results before a test's first execution.
+    results.some((result, index) => index < results.length - 1 && result.status !== 'skipped') &&
     !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
