@@ -51,7 +51,7 @@ describe('WebdriverIO WebAssembly video worker', () => {
   })
 
   it('accepts the 16 megapixel boundary and downscales before encoding', async () => {
-    const video = await encode([PNG.sync.write(new PNG({ width: 4096, height: 4096 }))])
+    const video = await encode([PNG.sync.write(new PNG({ width: 4096, height: 4096 }), { filterType: 0 })])
     assert.ok(video.byteLength > 0)
   })
 

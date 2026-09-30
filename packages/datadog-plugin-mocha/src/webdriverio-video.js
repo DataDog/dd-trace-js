@@ -27,21 +27,27 @@ const encodingQueue = []
  * @param {(error?: Error) => void} onDone
  */
 function encodeVideo (workerData, onDone) {
+  let worker
+  let timeout
   const complete = error => {
-    encodingQueue.shift()
+    const index = encodingQueue.indexOf(start)
+    if (index === -1) return
+    encodingQueue.splice(index, 1)
     // Defer the next start so repeated Worker constructor failures cannot recurse through the queue.
     if (encodingQueue.length) queueMicrotask(encodingQueue[0])
     onDone(error)
   }
   const start = () => {
+    // A queued start may have been cancelled before its microtask runs.
+    if (worker || !encodingQueue.includes(start)) return
     try {
-      const worker = new Worker(join(__dirname, 'webdriverio-video-worker.js'), {
+      worker = new Worker(join(__dirname, 'webdriverio-video-worker.js'), {
         execArgv: [],
         env: { NODE_OPTIONS: '' },
         workerData,
       })
       let encodingError
-      const timeout = setTimeout(() => {
+      timeout = setTimeout(() => {
         encodingError = new Error('WebdriverIO video encoding timed out')
         // Even if termination rejects, keep the slot and files until the worker actually exits.
         worker.terminate().catch(error => { encodingError = error })
@@ -53,11 +59,27 @@ function encodeVideo (workerData, onDone) {
         complete(encodingError)
       })
     } catch (error) {
-      complete(error)
+      // Let the caller retain its cancellation callback even when Worker construction throws.
+      queueMicrotask(() => complete(error))
     }
   }
   encodingQueue.push(start)
   if (encodingQueue.length === 1) start()
+  return () => {
+    const index = encodingQueue.indexOf(start)
+    if (index === -1) return
+    if (worker) {
+      clearTimeout(timeout)
+      // Shutdown must not wait for a worker that cannot terminate. Keep its slot until exit.
+      worker.unref?.()
+      worker.terminate().catch(error => {
+        log.error('Error stopping WebdriverIO video encoder: %s', error.message)
+      })
+    } else {
+      encodingQueue.splice(index, 1)
+      if (index === 0 && encodingQueue.length) queueMicrotask(encodingQueue[0])
+    }
+  }
 }
 
 // Like wdio-video-reporter, collect WebDriver screenshots and encode only failed attempts.
@@ -74,6 +96,9 @@ class WebdriverioVideo {
   #onCapture
   #error
   #onResult
+  #cancelEncoding
+  #finished = false
+  #onDone
 
   /** @param {object} browser - WebdriverIO browser or multiremote browser */
   constructor (browser) {
@@ -98,7 +123,7 @@ class WebdriverioVideo {
     this.#capturing = true
     let completed = false
     const complete = (error, screenshots) => {
-      if (completed) return
+      if (completed || this.#finished) return
       completed = true
       clearTimeout(this.#captureTimeout)
       this.#capturing = false
@@ -183,6 +208,7 @@ class WebdriverioVideo {
    */
   finish (failed, upload, onDone) {
     if (this.#stopped) return
+    this.#onDone = onDone
     if (failed) this.capture()
     this.#stopped = true
     clearInterval(this.#interval)
@@ -197,6 +223,13 @@ class WebdriverioVideo {
     }
     if (this.#capturing) this.#onCapture = finish
     else finish()
+  }
+
+  /** Cancels a finishing attempt at the worker's final-flush deadline. */
+  cancel () {
+    if (this.#finished) return
+    this.#cancelEncoding?.()
+    this.#cleanup(VIDEO_UPLOAD_RESULT_ERROR, this.#onDone)
   }
 
   /**
@@ -214,12 +247,14 @@ class WebdriverioVideo {
     const filePath = join(this.#directory, `${index}.webm`)
     let completed = false
     const next = error => {
-      if (completed) return
+      if (completed || this.#finished) return
       completed = true
       if (error) log.error('Error uploading WebdriverIO failure video: %s', error.message)
       this.#encode(index + 1, upload, hasError || Boolean(error), onDone)
     }
-    encodeVideo({ directory: this.#directory, index, frames: this.#frames[index], filePath }, error => {
+    const workerData = { directory: this.#directory, index, frames: this.#frames[index], filePath }
+    this.#cancelEncoding = encodeVideo(workerData, error => {
+      if (this.#finished) return
       if (error) return next(error)
       try {
         upload(filePath, index, next)
@@ -234,6 +269,9 @@ class WebdriverioVideo {
    * @param {(result?: string) => void} onDone
    */
   #cleanup (result, onDone) {
+    this.#finished = true
+    clearTimeout(this.#captureTimeout)
+    this.#onCapture = undefined
     try {
       rmSync(this.#directory, { recursive: true, force: true })
     } catch (error) {

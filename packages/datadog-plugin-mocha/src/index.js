@@ -15,6 +15,7 @@ const {
 const {
   getDynamicAtrRetryCount,
 } = require('../../dd-trace/src/ci-visibility/dynamic-atr-retries')
+const { FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -248,6 +249,9 @@ function getJasmineFailureFile (result, specs) {
 
 class MochaPlugin extends CiPlugin {
   static id = 'mocha'
+
+  #pendingWebdriverioVideos = new Set()
+  #webdriverioVideoFlushTimer
 
   constructor (...args) {
     super(...args)
@@ -703,7 +707,11 @@ class MochaPlugin extends CiPlugin {
       for (const span of this._webdriverioVideos.keys()) {
         this.#finishWebdriverioMedia(span, 'skip', () => {})
       }
-      const flush = () => this.tracer._exporter.flush(onDone)
+      const flush = () => {
+        clearTimeout(this.#webdriverioVideoFlushTimer)
+        this.#webdriverioVideoFlushTimer = undefined
+        this.tracer._exporter.flush(onDone)
+      }
       if (this._pendingWebdriverioMediaUploads === 0) {
         flush()
         return
@@ -712,6 +720,12 @@ class MochaPlugin extends CiPlugin {
         sendWebdriverioWorkerMessage({ name: VIDEO_UPLOAD_FLUSH })
       }
       this._webdriverioMediaUploadCallbacks.push(flush)
+      if (this.#pendingWebdriverioVideos.size) {
+        this.#webdriverioVideoFlushTimer ??= setTimeout(() => {
+          for (const video of this.#pendingWebdriverioVideos) video.cancel()
+        }, FINAL_FLUSH_TIMEOUT)
+        this.#webdriverioVideoFlushTimer.unref?.()
+      }
     })
 
     this.addSub('ci:mocha:test:finish', ({
@@ -1570,6 +1584,7 @@ class MochaPlugin extends CiPlugin {
     if (!video) return status === 'fail' && this.#startWebdriverioScreenshotUpload(span, onDone)
 
     this._webdriverioVideos.delete(span)
+    this.#pendingWebdriverioVideos.add(video)
     this._pendingWebdriverioMediaUploads++
     const traceId = span.context().toTraceId()
     const capturedAtMs = Date.now()
@@ -1590,6 +1605,7 @@ class MochaPlugin extends CiPlugin {
       if (isWebdriverioWorker) requestWebdriverioVideoUpload(options, callback)
       else this.tracer._exporter.uploadTestVideo(options, callback)
     }, result => {
+      this.#pendingWebdriverioVideos.delete(video)
       setVideoUploadTags(span, result)
       complete()
     })

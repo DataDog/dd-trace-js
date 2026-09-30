@@ -2712,6 +2712,7 @@ describe('webdriverio instrumentation', () => {
 
   for (const uploadError of [undefined, new Error('video upload failed')]) {
     it(`finishes and tags Jasmine video attempts after upload ${uploadError ? 'failure' : 'success'}`, () => {
+      const clock = sinon.useFakeTimers()
       const originalBrowser = globalThis.browser
       globalThis.browser = { takeScreenshot: () => PNG_SCREENSHOT }
       const recorder = { capture: sinon.spy(), finish: sinon.spy() }
@@ -2765,15 +2766,107 @@ describe('webdriverio instrumentation', () => {
         assert.strictEqual(tags[TEST_FAILURE_VIDEO_UPLOAD_ERROR], uploadError ? 'true' : undefined)
         assert.strictEqual(tags[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadError ? 'true' : undefined)
         assert.strictEqual(tags[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadError ? undefined : 'true')
+        clock.tick(FINAL_FLUSH_TIMEOUT)
         sinon.assert.calledOnce(exporter.flush)
       } finally {
         // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
         plugin.configure(false)
         if (originalBrowser === undefined) delete globalThis.browser
         else globalThis.browser = originalBrowser
+        clock.restore()
       }
     })
   }
+
+  it('bounds queued video encoders and pending uploads at worker shutdown', async () => {
+    const clock = sinon.useFakeTimers()
+    const originalBrowser = globalThis.browser
+    globalThis.browser = Object.assign(new EventEmitter(), {
+      takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
+    })
+    const workers = []
+    const directories = []
+    const Worker = sinon.spy(() => {
+      const worker = Object.assign(new EventEmitter(), {
+        terminate: sinon.stub().resolves(),
+        unref: sinon.spy(),
+      })
+      workers.push(worker)
+      return worker
+    })
+    const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
+      'node:worker_threads': { Worker },
+      'node:fs': {
+        mkdtempSync: prefix => {
+          const directory = fs.mkdtempSync(prefix)
+          directories.push(directory)
+          return directory
+        },
+      },
+    })
+    const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+      './webdriverio-video': createVideo,
+      '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+    })
+    const exporter = {
+      canUploadTestVideos: () => true,
+      uploadTestVideo: sinon.spy(),
+      flush: sinon.spy(onDone => onDone()),
+    }
+    const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+      Plugin,
+      exporter,
+      testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true },
+    })
+    const onDone = sinon.spy()
+    try {
+      const file = path.join(process.cwd(), 'video-shutdown.spec.js')
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const result = {
+          ...createJasmineResult(`video-${attempt}`, file, 'failed'),
+          failedExpectations: [{ message: 'failed' }],
+        }
+        reportJasmineSpecStarted(result, file)
+        channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+          arguments: [result],
+          self: { _specs: [file] },
+        })
+      }
+      await clock.tickAsync(0)
+      workers[0].emit('exit', 0)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(exporter.uploadTestVideo)
+      // Time spent running tests must not consume the final-flush deadline.
+      await clock.tickAsync(10_000)
+      channel('ci:mocha:worker:finish').publish({ onDone })
+      await clock.tickAsync(FINAL_FLUSH_TIMEOUT - 1)
+      sinon.assert.notCalled(exporter.flush)
+      workers[1].emit('exit', 1)
+      await clock.tickAsync(0)
+      sinon.assert.calledThrice(Worker)
+      await clock.tickAsync(1)
+      sinon.assert.calledOnce(workers[2].terminate)
+      sinon.assert.calledOnce(workers[2].unref)
+      sinon.assert.calledOnce(exporter.flush)
+      sinon.assert.calledOnce(onDone)
+      assert.ok(directories.every(directory => !fs.existsSync(directory)))
+      assert.ok(spans.every(span => span.context()._isFinished))
+      assert.ok(spans.every(span => span.context().getTags()[TEST_FAILURE_VIDEO_UPLOAD_ERROR] === 'true'))
+      workers[2].emit('exit', 0)
+      exporter.uploadTestVideo.firstCall.args[1]()
+      await clock.tickAsync(FINAL_FLUSH_TIMEOUT)
+      sinon.assert.calledThrice(Worker)
+      sinon.assert.calledOnce(exporter.uploadTestVideo)
+      sinon.assert.calledOnce(onDone)
+    } finally {
+      // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+      plugin.configure(false)
+      if (originalBrowser === undefined) delete globalThis.browser
+      else globalThis.browser = originalBrowser
+      clock.restore()
+      for (const directory of directories) fs.rmSync(directory, { recursive: true, force: true })
+    }
+  })
 
   it('shares the response dispatcher for screenshots and videos and releases it on disconnect', () => {
     const clock = sinon.useFakeTimers()

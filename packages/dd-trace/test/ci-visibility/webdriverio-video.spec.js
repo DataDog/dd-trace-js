@@ -199,6 +199,93 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
+  for (const stage of ['capture', 'queue', 'encoding', 'upload']) {
+    it(`cancels during ${stage} without uploading or completing again`, async () => {
+      const worker = Object.assign(new EventEmitter(), {
+        terminate: sinon.stub().rejects(new Error('termination failed')),
+        unref: sinon.spy(),
+      })
+      encode.callsFake(() => worker)
+      browser.takeScreenshot.resolves([PNG, PNG])
+      /** @type {((value: string) => void)|undefined} */
+      let captured
+      if (stage === 'capture') browser.takeScreenshot.callsFake(() => new Promise(resolve => { captured = resolve }))
+      if (stage === 'queue') {
+        start().finish(true, () => {}, () => {})
+        await clock.tickAsync(0)
+      }
+      const recorder = start()
+      const upload = sinon.spy()
+      const complete = sinon.spy()
+      recorder.finish(true, upload, complete)
+      await clock.tickAsync(0)
+      if (stage === 'upload') {
+        worker.emit('exit', 0)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnce(upload)
+      }
+      recorder.cancel()
+      recorder.cancel()
+      sinon.assert.calledOnceWithExactly(complete, 'error')
+      assert.strictEqual(fs.existsSync(directories.at(-1)), false)
+      if (stage === 'encoding') {
+        sinon.assert.calledOnce(worker.terminate)
+        sinon.assert.calledOnce(worker.unref)
+      }
+      if (stage === 'capture') {
+        assert.ok(captured)
+        captured(PNG)
+      } else if (stage === 'upload') upload.firstCall.args[2]()
+      else worker.emit('exit', 0)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(complete)
+      assert.strictEqual(encode.callCount, stage === 'capture' ? 0 : 1)
+      assert.strictEqual(upload.callCount, stage === 'upload' ? 1 : 0)
+      assert.strictEqual(fs.existsSync(directories.at(-1)), false)
+    })
+  }
+
+  it('does not start a cancelled encoder whose queue microtask is already scheduled', async () => {
+    const workers = []
+    encode.callsFake(() => {
+      const worker = new EventEmitter()
+      workers.push(worker)
+      return worker
+    })
+    const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+    const complete = sinon.spy()
+    for (let index = 0; index < 3; index++) start().finish(true, upload, complete)
+    await clock.tickAsync(0)
+    workers[0].emit('exit', 0)
+    recorders[1].cancel()
+    await clock.tickAsync(0)
+    sinon.assert.calledTwice(encode)
+    assert.strictEqual(encode.lastCall.args[1].workerData.directory, directories[2])
+    workers[1].emit('exit', 0)
+    await clock.tickAsync(0)
+    sinon.assert.calledTwice(upload)
+    sinon.assert.calledThrice(complete)
+    assert.ok(directories.every(directory => !fs.existsSync(directory)))
+  })
+
+  it('cancels a failed worker startup without removing the next queued attempt', async () => {
+    encode.onFirstCall().throws(new Error('worker startup failed'))
+    const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+    const complete = sinon.spy()
+    const first = start()
+    const second = start()
+    await clock.tickAsync(0)
+    browser.takeScreenshot.returns({ then: callback => callback(PNG) })
+    first.finish(true, upload, complete)
+    second.finish(true, upload, complete)
+    first.cancel()
+    await clock.tickAsync(0)
+    sinon.assert.calledTwice(encode)
+    sinon.assert.calledOnce(upload)
+    assert.deepStrictEqual(complete.args, [['error'], ['uploaded']])
+    assert.ok(directories.every(directory => !fs.existsSync(directory)))
+  })
+
   it('uses the standard screenshot command for mixed Classic and BiDi multiremote sessions', async () => {
     const classic = { takeScreenshot: sinon.stub().resolves(PNG) }
     const bidi = {
