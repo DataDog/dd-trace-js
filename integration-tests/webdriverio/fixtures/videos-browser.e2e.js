@@ -14,7 +14,10 @@ describe('WebdriverIO browser videos', () => {
   })
 
   it('records navigation, commands, idle periods and the failed page', async () => {
-    for (const [color, text] of [['red', 'START'], ['lime', 'NAVIGATED'], ['blue', 'FAILURE']]) {
+    for (const [color, text, width, height] of /** @type {const} */ ([
+      ['red', 'START', 1001, 801], ['lime', 'NAVIGATED', 1203, 903], ['blue', 'FAILURE', 801, 701],
+    ])) {
+      await browser.setWindowSize(width, height)
       const html = `<body style="background:${color};color:white;font:48px sans-serif">
         <h1>${text}</h1><button onclick="this.textContent='Clicked'">Click me</button></body>`
       // Each navigation replaces the document, as in a real browser test.

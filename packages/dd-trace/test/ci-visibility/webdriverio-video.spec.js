@@ -3,18 +3,19 @@
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const fs = require('node:fs')
-const { dirname } = require('node:path')
+const { dirname, join } = require('node:path')
 
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF1cAAAAASUVORK5CYII='
 
 describe('WebdriverIO video recording', () => {
   let clock
   let createVideo
   let browser
   let encode
+  let checkFfmpeg
   let log
   let directories
   let recorders
@@ -25,13 +26,14 @@ describe('WebdriverIO video recording', () => {
     recorders = []
     browser = Object.assign(new EventEmitter(), { takeScreenshot: sinon.stub().resolves(PNG) })
     encode = sinon.stub().callsFake(() => {
-      const worker = new EventEmitter()
-      queueMicrotask(() => worker.emit('exit', 0))
-      return worker
+      const encoder = new EventEmitter()
+      queueMicrotask(() => encoder.emit('close', 0))
+      return encoder
     })
+    checkFfmpeg = sinon.stub().returns({ status: 0 })
     log = { error: sinon.spy(), warn: sinon.spy() }
     createVideo = proxyquire('../../../datadog-plugin-mocha/src/webdriverio-video', {
-      'node:worker_threads': { Worker: encode },
+      'node:child_process': { spawn: encode, spawnSync: checkFfmpeg },
       'node:fs': {
         mkdtempSync: prefix => {
           const directory = fs.mkdtempSync(prefix)
@@ -79,9 +81,14 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(index, 0)
     assert.strictEqual(fs.readdirSync(dirname(filePath)).length, 4)
     assert.strictEqual(browser.listenerCount('result'), 0)
-    assert.match(encode.firstCall.args[0], /webdriverio-video-worker\.js$/)
-    assert.deepStrictEqual(encode.firstCall.args[1].execArgv, [])
-    assert.strictEqual(encode.firstCall.args[1].env.NODE_OPTIONS, '')
+    assert.strictEqual(encode.firstCall.args[0], 'ffmpeg')
+    assert.deepStrictEqual(encode.firstCall.args[2], { windowsHide: true, stdio: 'ignore' })
+    const args = encode.firstCall.args[1]
+    assert.strictEqual(args[args.indexOf('-i') + 1], join(directories[0], '0-%d.png'))
+    assert.strictEqual(args[args.indexOf('-c:v') + 1], 'libvpx')
+    assert.strictEqual(args[args.indexOf('-framerate') + 1], '2')
+    assert.strictEqual(args[args.indexOf('-vf') + 1], 'scale=2:2,setsar=1')
+    assert.strictEqual(args.at(-1), filePath)
     uploaded()
     sinon.assert.calledOnceWithExactly(complete, 'uploaded')
     assert.strictEqual(fs.existsSync(dirname(filePath)), false)
@@ -138,7 +145,7 @@ describe('WebdriverIO video recording', () => {
       sinon.assert.calledThrice(browser.takeScreenshot)
       second.finish(true, upload, complete)
       await clock.tickAsync(0)
-      assert.deepStrictEqual(encode.args.map(([, { workerData }]) => workerData.frames), [1, 2])
+      assert.deepStrictEqual(encode.args.map(([, args]) => Number(args[args.indexOf('-frames:v') + 1])), [1, 2])
       sinon.assert.calledTwice(upload)
       assert.deepStrictEqual(complete.args, [['uploaded'], ['uploaded']])
     })
@@ -169,15 +176,15 @@ describe('WebdriverIO video recording', () => {
     await clock.tickAsync(500)
     sinon.assert.calledThrice(first.takeScreenshot)
     sinon.assert.calledThrice(second.takeScreenshot)
-    assert.deepStrictEqual(encode.args.map(([, { workerData }]) => workerData.frames), [1, 1])
+    assert.deepStrictEqual(encode.args.map(([, args]) => Number(args[args.indexOf('-frames:v') + 1])), [1, 1])
   })
 
   it('keeps capture, encoding deadlines and queue progress independent of replaced global clocks', async () => {
-    const workers = []
+    const encoders = []
     encode.callsFake(() => {
-      const worker = Object.assign(new EventEmitter(), { terminate: sinon.stub().resolves() })
-      workers.push(worker)
-      return worker
+      const encoder = Object.assign(new EventEmitter(), { kill: sinon.stub().returns(true) })
+      encoders.push(encoder)
+      return encoder
     })
     const timerNames = /** @type {const} */ ([
       'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask',
@@ -196,11 +203,11 @@ describe('WebdriverIO video recording', () => {
       const second = start()
       second.finish(true, upload, complete)
       await clock.tickAsync(30_000)
-      sinon.assert.calledOnce(workers[0].terminate)
-      workers[0].emit('exit', 1)
+      sinon.assert.calledOnceWithExactly(encoders[0].kill, 'SIGKILL')
+      encoders[0].emit('close', 1)
       await clock.tickAsync(0)
       sinon.assert.calledTwice(encode)
-      workers[1].emit('exit', 0)
+      encoders[1].emit('close', 0)
       sinon.assert.calledOnce(upload)
       assert.deepStrictEqual(complete.args, [['error'], ['uploaded']])
       for (const replacement of replacements) sinon.assert.notCalled(replacement)
@@ -211,8 +218,8 @@ describe('WebdriverIO video recording', () => {
 
   for (const outcome of ['resolve', 'reject', 'timeout', 'cancel']) {
     it(`releases a retry after capture ${outcome} without waiting for encoding or upload`, async () => {
-      const worker = new EventEmitter()
-      encode.callsFake(() => worker)
+      const encoder = new EventEmitter()
+      encode.callsFake(() => encoder)
       const recorder = start()
       await clock.tickAsync(0)
       /** @type {(() => void)|undefined} */
@@ -238,7 +245,7 @@ describe('WebdriverIO video recording', () => {
       } else {
         sinon.assert.calledOnce(encode)
         sinon.assert.notCalled(uploaded)
-        worker.emit('exit', 0)
+        encoder.emit('close', 0)
         sinon.assert.calledOnce(upload)
         sinon.assert.notCalled(uploaded)
         upload.firstCall.args[2]()
@@ -253,11 +260,11 @@ describe('WebdriverIO video recording', () => {
   }
 
   it('serializes encoders across failed attempts without waiting for uploads', async () => {
-    const workers = []
+    const encoders = []
     encode.callsFake(() => {
-      const worker = new EventEmitter()
-      workers.push(worker)
-      return worker
+      const encoder = new EventEmitter()
+      encoders.push(encoder)
+      return encoder
     })
     const upload = sinon.spy()
     const complete = sinon.spy()
@@ -270,8 +277,8 @@ describe('WebdriverIO video recording', () => {
 
     for (let attempt = 0; attempt < 3; attempt++) {
       assert.strictEqual(encode.callCount, attempt + 1)
-      assert.strictEqual(encode.lastCall.args[1].workerData.directory, directories[attempt])
-      workers[attempt].emit('exit', 0)
+      assert.strictEqual(dirname(encode.lastCall.args[1].at(-1)), directories[attempt])
+      encoders[attempt].emit('close', 0)
       await clock.tickAsync(0)
     }
     sinon.assert.calledThrice(upload)
@@ -284,13 +291,13 @@ describe('WebdriverIO video recording', () => {
     sinon.assert.calledThrice(complete)
   })
 
-  for (const failure of ['worker error', 'nonzero exit', 'startup throw', 'timeout', 'termination rejection']) {
+  for (const failure of ['encoder error', 'nonzero exit', 'startup throw', 'timeout', 'failed kill']) {
     it(`releases the encoder queue after ${failure}`, async () => {
-      const workers = []
+      const encoders = []
       encode.callsFake(() => {
-        const worker = Object.assign(new EventEmitter(), { terminate: sinon.stub().resolves() })
-        workers.push(worker)
-        return worker
+        const encoder = Object.assign(new EventEmitter(), { kill: sinon.stub().returns(true) })
+        encoders.push(encoder)
+        return encoder
       })
       if (failure === 'startup throw') encode.onFirstCall().throws(new Error(failure))
       const complete = sinon.spy()
@@ -302,22 +309,22 @@ describe('WebdriverIO video recording', () => {
 
       if (failure !== 'startup throw') {
         sinon.assert.calledOnce(encode)
-        if (failure === 'worker error') workers[0].emit('error', new Error(failure))
-        if (failure === 'termination rejection') workers[0].terminate.rejects(new Error('termination failed'))
-        if (failure === 'timeout' || failure === 'termination rejection') {
+        if (failure === 'encoder error') encoders[0].emit('error', new Error(failure))
+        if (failure === 'failed kill') encoders[0].kill.returns(false)
+        if (failure === 'timeout' || failure === 'failed kill') {
           await clock.tickAsync(30_000)
-          sinon.assert.calledOnce(workers[0].terminate)
+          sinon.assert.calledOnceWithExactly(encoders[0].kill, 'SIGKILL')
         }
-        // Errors and termination requests do not release memory until the worker exits.
+        // Errors and kill requests do not release the slot until the encoder closes.
         sinon.assert.calledOnce(encode)
         sinon.assert.notCalled(complete)
         assert.ok(directories.every(directory => fs.existsSync(directory)))
-        workers[0].emit('exit', 1)
+        encoders[0].emit('close', 1)
         await clock.tickAsync(0)
       }
       sinon.assert.calledTwice(encode)
       sinon.assert.calledOnceWithExactly(complete, 'error')
-      workers.at(-1).emit('exit', 0)
+      encoders.at(-1).emit('close', 0)
       await clock.tickAsync(0)
       sinon.assert.calledOnce(upload)
       assert.deepStrictEqual(complete.args, [['error'], ['uploaded']])
@@ -340,11 +347,11 @@ describe('WebdriverIO video recording', () => {
 
   for (const stage of ['capture', 'queue', 'encoding', 'upload']) {
     it(`cancels during ${stage} without uploading or completing again`, async () => {
-      const worker = Object.assign(new EventEmitter(), {
-        terminate: sinon.stub().rejects(new Error('termination failed')),
+      const encoder = Object.assign(new EventEmitter(), {
+        kill: sinon.stub().returns(false),
         unref: sinon.spy(),
       })
-      encode.callsFake(() => worker)
+      encode.callsFake(() => encoder)
       browser.takeScreenshot.resolves([PNG, PNG])
       /** @type {((value: string) => void)|undefined} */
       let captured
@@ -359,7 +366,7 @@ describe('WebdriverIO video recording', () => {
       recorder.finish(true, upload, complete)
       await clock.tickAsync(0)
       if (stage === 'upload') {
-        worker.emit('exit', 0)
+        encoder.emit('close', 0)
         await clock.tickAsync(0)
         sinon.assert.calledOnce(upload)
       }
@@ -368,14 +375,14 @@ describe('WebdriverIO video recording', () => {
       sinon.assert.calledOnceWithExactly(complete, 'error')
       assert.strictEqual(fs.existsSync(directories.at(-1)), false)
       if (stage === 'encoding') {
-        sinon.assert.calledOnce(worker.terminate)
-        sinon.assert.calledOnce(worker.unref)
+        sinon.assert.calledOnceWithExactly(encoder.kill, 'SIGKILL')
+        sinon.assert.calledOnce(encoder.unref)
       }
       if (stage === 'capture') {
         assert.ok(captured)
         captured(PNG)
       } else if (stage === 'upload') upload.firstCall.args[2]()
-      else worker.emit('exit', 0)
+      else encoder.emit('close', 0)
       await clock.tickAsync(0)
       sinon.assert.calledOnce(complete)
       assert.strictEqual(encode.callCount, stage === 'capture' ? 0 : 1)
@@ -385,11 +392,11 @@ describe('WebdriverIO video recording', () => {
   }
 
   it('does not start a cancelled encoder whose queue microtask is already scheduled', async () => {
-    const workers = []
+    const encoders = []
     encode.callsFake(() => {
-      const worker = new EventEmitter()
-      workers.push(worker)
-      return worker
+      const encoder = new EventEmitter()
+      encoders.push(encoder)
+      return encoder
     })
     const upload = sinon.spy((filePath, index, uploaded) => uploaded())
     const complete = sinon.spy()
@@ -398,20 +405,20 @@ describe('WebdriverIO video recording', () => {
       await clock.tickAsync(0)
     }
     await clock.tickAsync(0)
-    workers[0].emit('exit', 0)
+    encoders[0].emit('close', 0)
     recorders[1].cancel()
     await clock.tickAsync(0)
     sinon.assert.calledTwice(encode)
-    assert.strictEqual(encode.lastCall.args[1].workerData.directory, directories[2])
-    workers[1].emit('exit', 0)
+    assert.strictEqual(dirname(encode.lastCall.args[1].at(-1)), directories[2])
+    encoders[1].emit('close', 0)
     await clock.tickAsync(0)
     sinon.assert.calledTwice(upload)
     sinon.assert.calledThrice(complete)
     assert.ok(directories.every(directory => !fs.existsSync(directory)))
   })
 
-  it('cancels a failed worker startup without removing the next queued attempt', async () => {
-    encode.onFirstCall().throws(new Error('worker startup failed'))
+  it('cancels a failed encoder startup without removing the next queued attempt', async () => {
+    encode.onFirstCall().throws(new Error('encoder startup failed'))
     const upload = sinon.spy((filePath, index, uploaded) => uploaded())
     const complete = sinon.spy()
     const first = start()
@@ -476,6 +483,7 @@ describe('WebdriverIO video recording', () => {
     ['rejection', () => Promise.reject(new Error('session closed'))],
     ['synchronous throw', () => { throw new Error('session closed') }],
     ['missing screenshot', () => Promise.resolve(undefined)],
+    ['truncated PNG', () => Promise.resolve(Buffer.from(PNG, 'base64').subarray(0, 8).toString('base64'))],
     ['invalid PNG', () => Promise.resolve(Buffer.from('not PNG').toString('base64'))],
     ['empty multiremote result', () => Promise.resolve([])],
   ]) {
@@ -540,7 +548,8 @@ describe('WebdriverIO video recording', () => {
         }
 
         sinon.assert.calledOnce(encode)
-        assert.strictEqual(encode.firstCall.args[1].workerData.frames, finalCapture ? 1 : 2)
+        const args = encode.firstCall.args[1]
+        assert.strictEqual(Number(args[args.indexOf('-frames:v') + 1]), finalCapture ? 1 : 2)
         sinon.assert.calledOnceWithExactly(complete, 'uploaded')
         sinon.assert.calledOnce(log.error)
         resolveCapture?.(PNG)
@@ -566,7 +575,7 @@ describe('WebdriverIO video recording', () => {
     const complete = sinon.spy()
     recorder.finish(true, upload, complete)
     await clock.tickAsync(0)
-    const frames = encode.args.map(([, { workerData }]) => [workerData.index, workerData.frames])
+    const frames = encode.args.map(([, args], index) => [index, Number(args[args.indexOf('-frames:v') + 1])])
     assert.deepStrictEqual(frames, [[0, 1], [1, 1]])
     sinon.assert.calledTwice(upload)
     sinon.assert.calledOnceWithExactly(complete, 'uploaded')
@@ -578,12 +587,12 @@ describe('WebdriverIO video recording', () => {
       const error = new Error(failure)
       if (failure === 'encoding error') {
         encode.callsFake(() => {
-          const worker = new EventEmitter()
+          const encoder = new EventEmitter()
           queueMicrotask(() => {
-            worker.emit('error', error)
-            worker.emit('exit', 1)
+            encoder.emit('error', error)
+            encoder.emit('close', 1)
           })
-          return worker
+          return encoder
         })
       }
       if (failure === 'encoding throw') encode.throws(error)
@@ -597,25 +606,86 @@ describe('WebdriverIO video recording', () => {
   }
 
   it('terminates a hung encoder before removing its files', async () => {
-    const worker = Object.assign(new EventEmitter(), { terminate: sinon.stub().resolves() })
-    encode.returns(worker)
+    const encoder = Object.assign(new EventEmitter(), { kill: sinon.stub().returns(true) })
+    encode.returns(encoder)
     const recorder = start()
     const complete = sinon.spy()
     recorder.finish(true, () => assert.fail('unexpected upload'), complete)
     await clock.tickAsync(29_999)
-    sinon.assert.notCalled(worker.terminate)
+    sinon.assert.notCalled(encoder.kill)
     await clock.tickAsync(1)
-    sinon.assert.calledOnce(worker.terminate)
+    sinon.assert.calledOnceWithExactly(encoder.kill, 'SIGKILL')
     sinon.assert.notCalled(complete)
     assert.strictEqual(fs.existsSync(directories[0]), true)
-    worker.emit('exit', 1)
+    encoder.emit('close', 1)
     sinon.assert.calledOnceWithExactly(complete, 'error')
     assert.strictEqual(fs.existsSync(directories[0]), false)
+  })
+
+  for (const failure of ['missing executable', 'nonzero status', 'startup throw']) {
+    it(`disables recording safely after FFmpeg preflight ${failure}`, () => {
+      if (failure === 'missing executable') checkFfmpeg.returns({ error: new Error('ENOENT'), status: null })
+      if (failure === 'nonzero status') checkFfmpeg.returns({ status: 1 })
+      if (failure === 'startup throw') checkFfmpeg.throws(new Error('startup failed'))
+      assert.strictEqual(start(), undefined)
+      sinon.assert.notCalled(browser.takeScreenshot)
+      sinon.assert.notCalled(encode)
+      assert.deepStrictEqual(directories, [])
+      sinon.assert.calledOnce(failure === 'startup throw' ? log.error : log.warn)
+      if (failure !== 'startup throw') {
+        assert.strictEqual(start(), undefined)
+        sinon.assert.calledOnce(checkFfmpeg)
+        sinon.assert.calledOnce(log.warn)
+      }
+    })
+  }
+
+  it('checks FFmpeg only once per WDIO process with a bounded preflight', () => {
+    start()
+    start()
+    sinon.assert.calledOnceWithExactly(checkFfmpeg, 'ffmpeg', ['-version'], {
+      timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',
+    })
+  })
+
+  for (const [width, height, accepted] of /** @type {const} */ ([
+    [4096, 4096, true], [16 * 1024 * 1024 + 1, 1, false], [0, 1, false], [1, 0, false],
+  ])) {
+    it(`validates ${width}x${height} PNG dimensions before encoding`, async () => {
+      const frame = Buffer.from(PNG, 'base64')
+      frame.writeUInt32BE(width, 16)
+      frame.writeUInt32BE(height, 20)
+      browser.takeScreenshot.resolves(frame.toString('base64'))
+      const complete = sinon.spy()
+      start().finish(true, (filePath, index, uploaded) => uploaded(), complete)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnceWithExactly(complete, accepted ? 'uploaded' : 'error')
+      assert.strictEqual(encode.callCount, accepted ? 1 : 0)
+      if (accepted) {
+        const args = encode.firstCall.args[1]
+        assert.strictEqual(args[args.indexOf('-vf') + 1], 'scale=720:720,setsar=1')
+      }
+    })
+  }
+
+  it('preserves the first frame size across odd dimensions and viewport changes', async () => {
+    const frame = Buffer.from(PNG, 'base64')
+    frame.writeUInt32BE(3, 16)
+    frame.writeUInt32BE(5, 20)
+    browser.takeScreenshot.onFirstCall().resolves(frame.toString('base64'))
+    const recorder = start()
+    await clock.tickAsync(0)
+    recorder.finish(true, (filePath, index, uploaded) => uploaded(), () => {})
+    await clock.tickAsync(0)
+    const args = encode.firstCall.args[1]
+    assert.strictEqual(args[args.indexOf('-vf') + 1], 'scale=2:4,setsar=1')
+    assert.strictEqual(args[args.indexOf('-frames:v') + 1], '2')
   })
 
   it('does no work before the browser exists', () => {
     assert.strictEqual(createVideo(undefined), undefined)
     sinon.assert.notCalled(encode)
+    sinon.assert.notCalled(checkFfmpeg)
     assert.deepStrictEqual(directories, [])
   })
 })

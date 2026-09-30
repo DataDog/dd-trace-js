@@ -598,8 +598,10 @@ framework's capture settings. The flags operate independently. Only automatic fa
 
 For WebdriverIO 9 and later with the Mocha or Jasmine adapter, explicitly set
 `DD_TEST_FAILURE_VIDEOS_ENABLED=true` to record and upload failure videos automatically.
-Recording uses a bundled WebAssembly encoder; no FFmpeg installation or WebdriverIO video reporter is required.
-Encoding runs in a separate worker thread and only for failed attempts.
+Install [FFmpeg](https://ffmpeg.org/download.html) with the `libvpx` encoder and make the `ffmpeg` executable
+available on the WDIO worker's `PATH`. Check the installation with `ffmpeg -version` and `ffmpeg -encoders`.
+No WebdriverIO video reporter or additional dd-trace npm dependency is required. Encoding runs in a separate
+process and only for failed attempts. If FFmpeg is unavailable, recording is disabled and a warning is logged.
 
 WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
 [wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results

@@ -144,7 +144,7 @@ const webdriverFixtureModulePaths = ['index.js', 'node.js'].map(file => path.joi
   file
 ))
 const execFileAsync = promisify(execFile)
-const PNG_SCREENSHOT = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64')
+const PNG_SCREENSHOT = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII='
 
 /**
  * Waits for a rewriter completion callback in unit tests.
@@ -2882,18 +2882,18 @@ describe('webdriverio instrumentation', () => {
     globalThis.browser = Object.assign(new EventEmitter(), {
       takeScreenshot: sinon.stub().resolves(PNG_SCREENSHOT),
     })
-    const workers = []
+    const encoders = []
     const directories = []
-    const Worker = sinon.spy(() => {
-      const worker = Object.assign(new EventEmitter(), {
-        terminate: sinon.stub().resolves(),
+    const spawn = sinon.spy(() => {
+      const encoder = Object.assign(new EventEmitter(), {
+        kill: sinon.stub().returns(true),
         unref: sinon.spy(),
       })
-      workers.push(worker)
-      return worker
+      encoders.push(encoder)
+      return encoder
     })
     const createVideo = proxyquire('../../datadog-plugin-mocha/src/webdriverio-video', {
-      'node:worker_threads': { Worker },
+      'node:child_process': { spawn, spawnSync: () => ({ status: 0 }) },
       'node:fs': {
         mkdtempSync: prefix => {
           const directory = fs.mkdtempSync(prefix)
@@ -2933,7 +2933,7 @@ describe('webdriverio instrumentation', () => {
         await clock.tickAsync(0)
       }
       await clock.tickAsync(0)
-      workers[0].emit('exit', 0)
+      encoders[0].emit('close', 0)
       await clock.tickAsync(0)
       sinon.assert.calledOnce(exporter.uploadTestVideo)
       // Time spent running tests must not consume the final-flush deadline.
@@ -2941,21 +2941,21 @@ describe('webdriverio instrumentation', () => {
       channel('ci:mocha:worker:finish').publish({ onDone })
       await clock.tickAsync(FINAL_FLUSH_TIMEOUT - 1)
       sinon.assert.notCalled(exporter.flush)
-      workers[1].emit('exit', 1)
+      encoders[1].emit('close', 1)
       await clock.tickAsync(0)
-      sinon.assert.calledThrice(Worker)
+      sinon.assert.calledThrice(spawn)
       await clock.tickAsync(1)
-      sinon.assert.calledOnce(workers[2].terminate)
-      sinon.assert.calledOnce(workers[2].unref)
+      sinon.assert.calledOnce(encoders[2].kill)
+      sinon.assert.calledOnce(encoders[2].unref)
       sinon.assert.calledOnce(exporter.flush)
       sinon.assert.calledOnce(onDone)
       assert.ok(directories.every(directory => !fs.existsSync(directory)))
       assert.ok(spans.every(span => span.context()._isFinished))
       assert.ok(spans.every(span => span.context().getTags()[TEST_FAILURE_VIDEO_UPLOAD_ERROR] === 'true'))
-      workers[2].emit('exit', 0)
+      encoders[2].emit('close', 0)
       exporter.uploadTestVideo.firstCall.args[1]()
       await clock.tickAsync(FINAL_FLUSH_TIMEOUT)
-      sinon.assert.calledThrice(Worker)
+      sinon.assert.calledThrice(spawn)
       sinon.assert.calledOnce(exporter.uploadTestVideo)
       sinon.assert.calledOnce(onDone)
       sinon.assert.notCalled(fakeTimeout)

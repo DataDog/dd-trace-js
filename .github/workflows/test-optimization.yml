@@ -270,7 +270,7 @@ jobs:
       - name: Clear uploaded instrumentation JUnit reports
         if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
         run: rm -f ./*.xml
-      - name: Install video decoder for integration assertions
+      - name: Install FFmpeg for video recording and validation
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Use installed Chrome and ChromeDriver
         if: matrix.spec == 'webdriverio'

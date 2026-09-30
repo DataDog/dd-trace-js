@@ -1,10 +1,10 @@
 'use strict'
 
+const { spawn, spawnSync } = require('node:child_process')
 const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { clearInterval, clearTimeout, setInterval, setTimeout } = require('node:timers')
-const { Worker } = require('node:worker_threads')
 
 const {
   VIDEO_UPLOAD_RESULT_ERROR,
@@ -15,6 +15,7 @@ const log = require('../../dd-trace/src/log')
 const CAPTURE_INTERVAL_MS = 500
 const CAPTURE_TIMEOUT_MS = 5000
 const ENCODING_TIMEOUT_MS = 30_000
+const MAX_PIXELS = 16 * 1024 * 1024
 const MAX_FRAME_BYTES = 200 * 1024 * 1024
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const { queueMicrotask } = globalThis
@@ -22,49 +23,54 @@ const captureOwners = new WeakMap()
 // A local timeout does not cancel the WebDriver request; keep its slot until it actually settles.
 const pendingCaptures = new WeakSet()
 
+let ffmpegAvailable
+
 /** @type {Array<() => void>} */
 const encodingQueue = []
 
 /**
  * Runs one encoder at a time across all attempts in this WDIO process. Uploads do not hold the slot.
  *
- * @param {{ directory: string, index: number, frames: number, filePath: string }} workerData
+ * @param {{ directory: string, index: number, frames: number, filePath: string, size: number[] }} recording
  * @param {(error?: Error) => void} onDone
  */
-function encodeVideo (workerData, onDone) {
-  let worker
+function encodeVideo (recording, onDone) {
+  let encoder
   let timeout
   const complete = error => {
     const index = encodingQueue.indexOf(start)
     if (index === -1) return
     encodingQueue.splice(index, 1)
-    // Defer the next start so repeated Worker constructor failures cannot recurse through the queue.
+    // Defer the next start so repeated process startup failures cannot recurse through the queue.
     if (encodingQueue.length) queueMicrotask(encodingQueue[0])
     onDone(error)
   }
   const start = () => {
     // A queued start may have been cancelled before its microtask runs.
-    if (worker || !encodingQueue.includes(start)) return
+    if (encoder || !encodingQueue.includes(start)) return
     try {
-      worker = new Worker(join(__dirname, 'webdriverio-video-worker.js'), {
-        execArgv: [],
-        env: { NODE_OPTIONS: '' },
-        workerData,
-      })
+      const { directory, index, frames, filePath, size: [width, height] } = recording
+      encoder = spawn('ffmpeg', [
+        '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
+        '-threads', '1', '-framerate', '2', '-i', join(directory, `${index}-%d.png`),
+        '-frames:v', String(frames), '-an', '-c:v', 'libvpx', '-deadline', 'realtime',
+        '-threads', '1', '-filter_threads', '1', '-pix_fmt', 'yuv420p',
+        '-vf', `scale=${width}:${height},setsar=1`, filePath,
+      ], { windowsHide: true, stdio: 'ignore' })
       let encodingError
       timeout = setTimeout(() => {
         encodingError = new Error('WebdriverIO video encoding timed out')
-        // Even if termination rejects, keep the slot and files until the worker actually exits.
-        worker.terminate().catch(error => { encodingError = error })
+        // A kill request does not release the slot until the process actually closes.
+        encoder.kill('SIGKILL')
       }, ENCODING_TIMEOUT_MS)
-      worker.once('error', error => { encodingError = error })
-      worker.once('exit', code => {
+      encoder.once('error', error => { encodingError = error })
+      encoder.once('close', code => {
         clearTimeout(timeout)
         if (code !== 0) encodingError ||= new Error(`WebdriverIO video encoder exited with code ${code}`)
         complete(encodingError)
       })
     } catch (error) {
-      // Let the caller retain its cancellation callback even when Worker construction throws.
+      // Let the caller retain its cancellation callback even when process startup throws.
       queueMicrotask(() => complete(error))
     }
   }
@@ -73,13 +79,11 @@ function encodeVideo (workerData, onDone) {
   return () => {
     const index = encodingQueue.indexOf(start)
     if (index === -1) return
-    if (worker) {
+    if (encoder) {
       clearTimeout(timeout)
-      // Shutdown must not wait for a worker that cannot terminate. Keep its slot until exit.
-      worker.unref?.()
-      worker.terminate().catch(error => {
-        log.error('Error stopping WebdriverIO video encoder: %s', error.message)
-      })
+      // Shutdown must not wait for a process that cannot terminate. Keep its slot until close.
+      encoder.unref?.()
+      if (!encoder.kill('SIGKILL')) log.error('Error stopping WebdriverIO video encoder')
     } else {
       encodingQueue.splice(index, 1)
       if (index === 0 && encodingQueue.length) queueMicrotask(encodingQueue[0])
@@ -88,11 +92,12 @@ function encodeVideo (workerData, onDone) {
 }
 
 // Like wdio-video-reporter, collect WebDriver screenshots and encode only failed attempts.
-// Encoding runs in a worker with vendored WebAssembly, without an external executable.
+// Encoding uses a customer-installed FFmpeg executable, isolated from the WDIO test process.
 class WebdriverioVideo {
   #browser
   #directory
   #frames = []
+  #sizes = []
   #bytes = 0
   #capturing = false
   #stopped = false
@@ -200,8 +205,21 @@ class WebdriverioVideo {
     for (let index = 0; index < frames.length; index++) {
       if (typeof frames[index] !== 'string') throw new Error('WebdriverIO returned an invalid video frame')
       const frame = Buffer.from(frames[index], 'base64')
-      if (!frame.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+      if (frame.length < 24 || !frame.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
         throw new Error('WebdriverIO returned an invalid PNG video frame')
+      }
+      const width = frame.readUInt32BE(16)
+      const height = frame.readUInt32BE(20)
+      if (!width || !height || width * height > MAX_PIXELS) {
+        throw new Error('WebdriverIO video frame exceeds the 16 megapixel limit or has invalid dimensions')
+      }
+      if (!this.#sizes[index]) {
+        // Keep a fixed, even output size across viewport changes.
+        const scale = Math.min(1, 1280 / width, 720 / height)
+        this.#sizes[index] = [
+          Math.max(2, Math.floor(width * scale / 2) * 2),
+          Math.max(2, Math.floor(height * scale / 2) * 2),
+        ]
       }
       if (this.#bytes + frame.length > MAX_FRAME_BYTES) {
         throw new Error('WebdriverIO video frames exceeded the 200 MiB recording limit')
@@ -277,8 +295,10 @@ class WebdriverioVideo {
       if (error) log.error('Error uploading WebdriverIO failure video: %s', error.message)
       this.#encode(index + 1, upload, hasError || Boolean(error), onDone)
     }
-    const workerData = { directory: this.#directory, index, frames: this.#frames[index], filePath }
-    this.#cancelEncoding = encodeVideo(workerData, error => {
+    const recording = {
+      directory: this.#directory, index, frames: this.#frames[index], filePath, size: this.#sizes[index],
+    }
+    this.#cancelEncoding = encodeVideo(recording, error => {
       if (this.#finished) return
       if (error) return next(error)
       try {
@@ -318,6 +338,16 @@ class WebdriverioVideo {
 function createWebdriverioVideo (browser) {
   if (typeof browser?.takeScreenshot !== 'function') return
   try {
+    if (ffmpegAvailable === undefined) {
+      const result = spawnSync('ffmpeg', ['-version'], {
+        timeout: 5000, killSignal: 'SIGKILL', windowsHide: true, stdio: 'ignore',
+      })
+      ffmpegAvailable = !result.error && result.status === 0
+      if (!ffmpegAvailable) {
+        log.warn('WebdriverIO failure video recording requires FFmpeg on PATH with the libvpx encoder.')
+      }
+    }
+    if (!ffmpegAvailable) return
     return new WebdriverioVideo(browser)
   } catch (error) {
     log.error('Error starting WebdriverIO video recording: %s', error.message)

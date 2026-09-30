@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { exec, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
-const { mkdirSync, writeFileSync } = require('node:fs')
+const { mkdirSync, symlinkSync, writeFileSync } = require('node:fs')
 const http = require('node:http')
 const { join } = require('node:path')
 
@@ -462,7 +462,7 @@ for (const version of versions) {
       const videoEnv = { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' }
 
       before(() => {
-        // FFmpeg is only an independent decoder in these assertions, never used by the recorder.
+        // The customer-provided executable records videos and validates their uploaded bytes.
         execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' })
       })
 
@@ -537,6 +537,26 @@ for (const version of versions) {
             })
           })
         }
+
+        it(`keeps ${framework} test results and screenshots when FFmpeg is missing`, async () => {
+          const nodeOnlyPath = join(cwd, `node-only-${framework}`)
+          mkdirSync(nodeOnlyPath)
+          symlinkSync(process.execPath, join(nodeOnlyPath, process.platform === 'win32' ? 'node.exe' : 'node'))
+          await runScenario('videos', 1, ({ media, tests }) => {
+            const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assertFailureScreenshotUploaded(failed, media)
+            assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+          }, 1, {
+            framework,
+            env: {
+              ...videoEnv,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              // Keep Node available even when it shares an installation directory with FFmpeg.
+              PATH: nodeOnlyPath,
+            },
+          })
+        })
 
         it(`keeps ${framework} screenshot and video outcomes independent`, async () => {
           receiver.setMediaResponseStatusCode(400)
