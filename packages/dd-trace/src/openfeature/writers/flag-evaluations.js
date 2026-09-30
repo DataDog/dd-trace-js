@@ -25,11 +25,18 @@ const permissionFlags = new Set([
   '--allow-addons', '--allow-child-process', '--allow-fs-read', '--allow-fs-write',
   '--allow-ffi', '--allow-inspector', '--allow-net', '--allow-openssl-store', '--allow-wasi', '--allow-worker',
 ])
+const networkFlags = new Set([
+  '--dns-result-order', '--network-family-autoselection', '--enable-network-family-autoselection',
+  '--network-family-autoselection-attempt-timeout',
+])
+const flagsWithValues = new Set([
+  '--allow-fs-read', '--allow-fs-write', '--dns-result-order', '--network-family-autoselection-attempt-timeout',
+])
 
 /** @param {string} [nodeOptions] */
-function getPermissionArgs (nodeOptions = '') {
+function getWorkerArgs (nodeOptions = '') {
   // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection also supports Node 18.
-  if (!process.permission) return []
+  const permissionEnabled = Boolean(process.permission)
   const args = []
   let arg = ''
   let quoted = false
@@ -53,16 +60,16 @@ function getPermissionArgs (nodeOptions = '') {
   if (arg) args.push(arg)
   // Node processes environment options first, then command-line overrides.
   args.push(...process.execArgv)
-  const permissions = []
+  const workerArgs = []
   for (let i = 0; i < args.length; i++) {
     const flag = args[i].split('=')[0].replaceAll('_', '-').replace(/^--no-/, '--')
-    if (!permissionFlags.has(flag)) continue
-    permissions.push(args[i])
-    if ((flag === '--allow-fs-read' || flag === '--allow-fs-write') && !args[i].includes('=')) {
-      permissions.push(args[++i])
+    if (!networkFlags.has(flag) && !(permissionEnabled && permissionFlags.has(flag))) continue
+    workerArgs.push(args[i])
+    if (flagsWithValues.has(flag) && !args[i].includes('=')) {
+      workerArgs.push(args[++i])
     }
   }
-  return permissions
+  return workerArgs
 }
 
 /** @typedef {import('./flag-evaluation-consumer').FlagEvaluationRoute} FlagEvaluationRoute */
@@ -268,9 +275,9 @@ class FlagEvaluationsWriter {
     try {
       const { Worker } = require('node:worker_threads')
       // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
-      // Strip application preloads, but retain the parent's permission restrictions.
+      // Strip application preloads, but retain permission restrictions and DNS/address-selection settings.
       const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
-      const execArgv = getPermissionArgs(NODE_OPTIONS)
+      const execArgv = getWorkerArgs(NODE_OPTIONS)
       // PnP has no node_modules fallback: retain only its active resolver, not application preloads.
       // eslint-disable-next-line n/no-missing-require -- Yarn supplies this virtual module only in PnP applications.
       if (process.versions.pnp) execArgv.push('--require', require.resolve('pnpapi'))

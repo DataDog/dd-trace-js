@@ -164,6 +164,35 @@ describe('flag evaluation real worker processes', () => {
     })
   }
 
+  for (const source of ['command line', 'NODE_OPTIONS', 'both']) {
+    it(`preserves worker network options from ${source} without application preloads`, async function () {
+      this.timeout(15000)
+      const networkArgs = ['--dns-result-order', 'ipv4first']
+      const overridden = ['--dns-result-order=verbatim']
+      if (process.allowedNodeEnvironmentFlags.has('--network-family-autoselection')) {
+        networkArgs.push('--no-network-family-autoselection')
+        overridden.push('--network-family-autoselection')
+      }
+      if (process.allowedNodeEnvironmentFlags.has('--network-family-autoselection-attempt-timeout')) {
+        networkArgs.push('--network-family-autoselection-attempt-timeout', '123')
+        overridden.push('--network-family-autoselection-attempt-timeout=321')
+      }
+      const args = source === 'NODE_OPTIONS' ? [] : networkArgs
+      const options = source === 'command line' ? [] : source === 'both' ? overridden : networkArgs
+      const { stdout, stderr } = await exec(process.execPath, [
+        ...args, '--require', preload, fixture, 'network-options',
+      ], {
+        timeout: 10000,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' '),
+        },
+      })
+      assert.strictEqual(stderr, '')
+      assert.strictEqual(JSON.parse(stdout).delivered, 17)
+    })
+  }
+
   it('does not inherit application command-line or NODE_OPTIONS preloads', async function () {
     this.timeout(15000)
     const { stdout, stderr } = await exec(process.execPath, ['--require', preload, fixture, 'preload'], {

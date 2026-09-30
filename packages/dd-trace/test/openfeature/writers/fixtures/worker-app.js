@@ -33,6 +33,27 @@ if (mode === 'permissions') {
   }
 }
 
+if (mode === 'network-options') {
+  require('node:worker_threads').Worker = class extends Worker {
+    constructor (filename, options) {
+      super(`
+        const assert = require('node:assert/strict')
+        const dns = require('node:dns')
+        const net = require('node:net')
+        assert.strictEqual(dns.getDefaultResultOrder(), 'ipv4first')
+        if (process.allowedNodeEnvironmentFlags.has('--network-family-autoselection')) {
+          assert.strictEqual(net.getDefaultAutoSelectFamily(), false)
+        }
+        if (process.allowedNodeEnvironmentFlags.has('--network-family-autoselection-attempt-timeout')) {
+          assert.strictEqual(net.getDefaultAutoSelectFamilyAttemptTimeout(), 123)
+        }
+        require(${JSON.stringify(filename)})
+      `, { ...options, eval: true })
+      this.once('error', error => { throw error })
+    }
+  }
+}
+
 if (mode === 'nested' && isMainThread) {
   const worker = new Worker(__filename, { argv: ['nested-child'] })
   worker.once('error', error => { throw error })
