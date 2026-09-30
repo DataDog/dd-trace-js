@@ -8,7 +8,6 @@ const log = require('../../../dd-trace/src/log')
 
 /**
  * @typedef {{ name?: unknown, type?: unknown, message?: unknown, stack?: unknown }} SuiteError
- * @typedef {{ value: string, truncated: boolean }} ErrorField
  * @typedef {object} JestResults
  * @property {number} [numFailedTestSuites]
  * @property {number} [numFailedTests]
@@ -17,7 +16,7 @@ const log = require('../../../dd-trace/src/log')
  */
 
 /**
- * Includes suite execution errors when no tests ran, without mutating Jest's results.
+ * Includes complete, deduplicated setup errors only when all details fit.
  *
  * @param {JestResults} results
  * @param {boolean} hasExecutedTests
@@ -30,100 +29,64 @@ function getSessionError (results = {}, hasExecutedTests = results.numPassedTest
   if (hasExecutedTests || !results.testResults) return error
 
   const groups = new Map()
+  let size = 0
   for (const { testExecError } of results.testResults) {
     if (!testExecError) continue
     let name, message, stack
     try {
-      name = sanitizeErrorField(testExecError.name)
-      if (!name.value && !name.truncated) name = sanitizeErrorField(testExecError.type)
-      if (!name.value) name.value = 'Error'
-      message = sanitizeErrorField(testExecError.message)
-      stack = sanitizeErrorField(testExecError.stack)
+      name = readField(testExecError.name)
+      if (name === '') name = readField(testExecError.type)
+      message = readField(testExecError.message)
+      stack = readField(testExecError.stack)
     } catch {
       log.debug('Skipping unreadable Jest suite execution error in the test session summary')
       continue
     }
-    if (!message.value && !message.truncated && !stack.value && !stack.truncated) continue
-    const truncated = name.truncated || message.truncated || stack.truncated
-    // Matching prefixes cannot establish equality when the unseen tails may differ.
-    const key = JSON.stringify([name, message, stack]) + (truncated ? `:${groups.size}` : '')
+    if (name === undefined || message === undefined || stack === undefined) return omitDetails(error)
+    if (!message && !stack) continue
+    name ||= 'Error'
+    const key = JSON.stringify([name, message, stack])
     const group = groups.get(key)
     if (group) {
       group.count++
     } else {
+      // Retained text must fit across error.message and error.stack; also bound grouping memory.
+      size += name.length + message.length + stack.length
+      if (size > 2 * MAX_LENGTH) return omitDetails(error)
       groups.set(key, { name, message, stack, count: 1 })
     }
   }
   if (!groups.size) return error
 
-  // Worker completion order must not determine which errors survive the size limit.
   const errors = [...groups.keys()].sort().map(key => groups.get(key))
-  const messages = errors.map(({ name, message, count }) => ({
-    value: `${name.value}: ${message.value} (${count} suite${count === 1 ? '' : 's'})`,
-    truncated: name.truncated || message.truncated,
-  }))
-  error.message = fitErrors(summary, messages)
-  const name = errors.length === 1 ? errors[0].name : { value: 'Error', truncated: false }
-  error.name = name.truncated ? `${truncate(name.value, MAX_LENGTH - 3)}...` : name.value
-  error.stack = fitErrors('', errors.map(({ name, message, stack, count }) => {
-    const originalStack = stack.value || `${name.value}: ${message.value}`
-    return {
-      value: errors.length === 1 ? originalStack : `Affected suites: ${count}\n${originalStack}`,
-      truncated: stack.truncated || (!stack.value && (name.truncated || message.truncated)),
-    }
-  }))
+  let message = summary
+  let stack = ''
+  for (const { name, message: detail, stack: originalStack, count } of errors) {
+    message += `\n\n${name}: ${detail} (${count} suite${count === 1 ? '' : 's'})`
+    const prefix = errors.length === 1 ? '' : `Affected suites: ${count}\n`
+    stack += (stack ? '\n\n' : '') + prefix + (originalStack || `${name}: ${detail}`)
+    if (message.length > MAX_LENGTH || stack.length > MAX_LENGTH) return omitDetails(error)
+  }
+  error.name = errors.length === 1 ? errors[0].name : 'Error'
+  error.message = message
+  error.stack = stack
   return error
 }
 
 /**
+ * Returns undefined for oversized input before scanning or copying it.
  * @param {unknown} value
- * @returns {ErrorField}
  */
-function sanitizeErrorField (value) {
-  if (typeof value !== 'string') return { value: '', truncated: false }
-  const truncated = value.length > MAX_LENGTH
-  // Bound work and allocations before ANSI removal and grouping, not only the final output.
-  return { value: stripVTControlCharacters(truncated ? truncate(value, MAX_LENGTH) : value), truncated }
+function readField (value) {
+  if (typeof value !== 'string') return ''
+  if (value.length > MAX_LENGTH) return
+  return stripVTControlCharacters(value)
 }
 
-/**
- * @param {string} value
- * @param {number} length
- */
-function truncate (value, length) {
-  let truncated = value.slice(0, length)
-  // Do not split a UTF-16 surrogate pair at the field boundary.
-  if (/[\uD800-\uDBFF]$/.test(truncated)) truncated = truncated.slice(0, -1)
-  return truncated
-}
-
-/**
- * Reserves a truncation notice instead of relying on the encoder's blind truncation.
- *
- * @param {string} summary
- * @param {ErrorField[]} details
- */
-function fitErrors (summary, details) {
-  const totalLength = details.reduce((length, detail) => length + detail.value.length + 2, summary.length) -
-    (summary ? 0 : 2)
-  if (totalLength <= MAX_LENGTH && !details.some(detail => detail.truncated)) {
-    return [summary, ...details.map(detail => detail.value)].filter(Boolean).join('\n\n')
-  }
-
-  let output = summary
-  for (let i = 0; i < details.length; i++) {
-    const remaining = details.length - i - 1
-    const notice = '\n\n[Error details truncated. ' +
-      (remaining ? `${remaining} additional errors omitted. ` : '') +
-      'See suite events for full details.]'
-    const separator = output ? '\n\n' : ''
-    const available = MAX_LENGTH - output.length - separator.length - notice.length
-    if (details[i].truncated || details[i].value.length + (remaining ? 2 : 0) > available) {
-      return output + separator + truncate(details[i].value, available) + notice
-    }
-    output += separator + details[i].value
-  }
-  return output
+/** @param {Error} error */
+function omitDetails (error) {
+  error.message += '\n\nSetup error details exceed the size limit. See suite events for full details.'
+  return error
 }
 
 module.exports = { getSessionError }
