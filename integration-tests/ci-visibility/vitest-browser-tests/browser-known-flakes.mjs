@@ -1,4 +1,4 @@
-import { expect, inject, test } from 'vitest'
+import { describe, expect, inject, test } from 'vitest'
 
 test('receives only selected flaky suites', () => {
   const { flakyTests } = inject('_ddVitestWorkerSetup')
@@ -9,3 +9,8 @@ test('receives only selected flaky suites', () => {
 
 test('listed failure', () => { throw new Error('listed failure') })
 test('unlisted failure', () => { throw new Error('unlisted failure') })
+
+describe('nested', () => {
+  test('listed failure', () => { throw new Error('listed failure') })
+  test('unlisted failure', () => { throw new Error('unlisted failure') })
+})

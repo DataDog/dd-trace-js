@@ -131,6 +131,15 @@ describe('known-flakes-only Auto Test Retries', () => {
       if (framework.name === 'vitest' && requested !== 'oldest') {
         scenarios.push({ name: 'without worker init', noWorker: true, retries: [3, 1, 2] })
         scenarios.push({
+          name: 'large list without worker init',
+          noWorker: true,
+          retries: [3, 1, 2],
+          names: [
+            ...Array.from({ length: 10000 }, (_, index) => `generated flaky test ${index}`),
+            'known flaky failure', 'recovers',
+          ],
+        })
+        scenarios.push({
           name: 'empty without worker init', noWorker: true, response: { data: [] }, retries: [1, 1, 1],
         })
       }
@@ -171,7 +180,7 @@ describe('known-flakes-only Auto Test Retries', () => {
               },
             })
             receiver.setFlakyTests(scenario.response || {
-              data: ['known flaky failure', 'recovers'].map(name => ({
+              data: (scenario.names || ['known flaky failure', 'recovers']).map(name => ({
                 type: 'test', attributes: { configurations: { 'test.bundle': framework.name }, suite, name },
               })),
             }, scenario.status || 200)

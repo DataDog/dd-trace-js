@@ -276,7 +276,7 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
     assert.strictEqual(exitCode, 1, testOutput)
   })
 
-  for (const scenario of ['selective', 'empty', 'unavailable']) {
+  for (const scenario of ['selective', 'large selective', 'empty', 'unavailable']) {
     it(`scopes the ${scenario} flaky list to selected browser suites`, async () => {
       receiver.setSettings({ flaky_test_retries_enabled: true })
       const suite = 'ci-visibility/vitest-browser-tests/browser-known-flakes.mjs'
@@ -284,7 +284,11 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
         data: scenario === 'empty'
           ? []
           : [
+              ...scenario === 'large selective'
+                ? Array.from({ length: 10000 }, (_, index) => ({ suite, name: `generated flaky test ${index}` }))
+                : [],
               { suite, name: 'listed failure' },
+              { suite, name: 'nested listed failure' },
               { suite: 'unrelated.mjs', name: 'unrelated failure' },
             ].map(attributes => ({
               type: 'test', attributes: { ...attributes, configurations: { 'test.bundle': 'vitest' } },
@@ -293,8 +297,9 @@ describe(`vitest@${vitestVersion} Browser Mode${browserProviderDescription}`, fu
       const events = gatherEvents(events => {
         const tests = getEventContents(events, 'test')
         assert.strictEqual(getTestByName(tests, 'receives only selected flaky suites').meta[TEST_STATUS], 'pass')
-        for (const name of ['listed failure', 'unlisted failure']) {
-          const retried = scenario === 'unavailable' || (scenario === 'selective' && name === 'listed failure')
+        for (const name of ['listed failure', 'unlisted failure', 'nested listed failure', 'nested unlisted failure']) {
+          const retried = scenario === 'unavailable' ||
+            (scenario.includes('selective') && (name === 'listed failure' || name === 'nested listed failure'))
           assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === name).length, retried ? 3 : 1)
         }
       })

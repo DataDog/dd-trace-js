@@ -17,6 +17,7 @@ const earlyFlakeDetectionRetryPolicy = providedContext.earlyFlakeDetectionRetryP
 const earlyFlakeDetectionRetries = earlyFlakeDetectionRetryPolicy.schedulingRetryCount
 const dynamicAtrRetryPolicy = providedContext.dynamicAtrRetryPolicy
 const flakyTestRetriesConfiguration = providedContext.flakyTestRetriesConfiguration
+const flakyTestNamesBySuite = new Map()
 const isEfdSuiteAdmissionEnabled = providedContext.isEfdSuiteAdmissionEnabled === true
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
@@ -142,13 +143,18 @@ if (isNoWorkerInitActive) {
 function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
   const tasks = suite?.tasks
   if (tasks) {
+    const testSuite = getTestSuite(suite)
+    let flakyTestNames = flakyTestNamesBySuite.get(testSuite)
+    if (providedContext.flakyTests !== undefined && flakyTestRetriesConfiguration && !flakyTestNames) {
+      flakyTestNames = new Set(providedContext.flakyTests[testSuite])
+      flakyTestNamesBySuite.set(testSuite, flakyTestNames)
+    }
     for (const task of tasks) {
       if (task.type === 'suite') {
         applyExecutionChanges(task, isEfdSuiteAdmissionAllowed)
         continue
       }
 
-      const testSuite = getTestSuite(task)
       const testName = getTestName(task)
       if (attemptToFixTests[testSuite]?.[testName]) {
         task.retry = 0
@@ -161,8 +167,7 @@ function applyExecutionChanges (suite, isEfdSuiteAdmissionAllowed) {
         task.repeats = earlyFlakeDetectionRetries
         task.meta.__ddTestOptEfdRetries = earlyFlakeDetectionRetries
       }
-      if (providedContext.flakyTests !== undefined && flakyTestRetriesConfiguration &&
-        !providedContext.flakyTests[testSuite]?.includes(testName)) {
+      if (flakyTestNames && !flakyTestNames.has(testName)) {
         const projectName = task.file.projectName
         const isManagedProject = projectName
           ? flakyTestRetriesConfiguration.projectNames.includes(projectName)
