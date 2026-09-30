@@ -23,10 +23,7 @@ function create (config, applyConfiguration) {
     DD_FEATURE_FLAGS_ENABLED: enabled,
   } = config.featureFlags
 
-  if (!enabled) {
-    log.debug('Feature Flags: disabled')
-    return
-  }
+  if (!enabled) return
 
   if (source !== 'agentless') {
     log.debug('Feature Flags: configuration source is %s, not agentless; skipping agentless setup', source)
@@ -48,6 +45,7 @@ function create (config, applyConfiguration) {
       pollIntervalMs: Math.min(pollIntervalSeconds, MAX_POLL_INTERVAL_SECONDS) * 1000,
       requestTimeoutMs: requestTimeoutSeconds * 1000,
       apiKey: hasCustomEndpoint ? undefined : config.DD_API_KEY,
+      env: config.env,
     }, applyConfiguration)
   } catch (error) {
     log.error('Unable to configure Feature Flagging configuration source', error)

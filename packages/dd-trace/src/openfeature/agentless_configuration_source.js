@@ -21,6 +21,7 @@ const RETRY_JITTER = 0.2
  * @property {number} pollIntervalMs
  * @property {number} requestTimeoutMs
  * @property {string | undefined} apiKey
+ * @property {string | undefined} env
  */
 
 /**
@@ -223,7 +224,8 @@ class AgentlessConfigurationSource {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const flagCount = Object.keys(configuration.flags ?? {}).length
-      return `Feature Flags: agentless configuration applied successfully (${flagCount} flag(s))`
+      return 'Feature Flags: agentless configuration applied successfully ' +
+        `(${flagCount} flag(s), env=${this.#config.env ?? 'unset'})`
     })
   }
 

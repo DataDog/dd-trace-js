@@ -23,6 +23,7 @@ describe('FlaggingProvider', () => {
   let mockDebugLoggingHookClass
   let mockSpanEnrichmentHook
   let mockSpanEnrichmentHookClass
+  let debugChannel
 
   beforeEach(() => {
     mockTracer = {
@@ -72,11 +73,14 @@ describe('FlaggingProvider', () => {
     }
     mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
 
+    debugChannel = { hasSubscribers: true }
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
+      '../log/channels': { debugChannel },
       './configuration_source': configurationSource,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './debug-logging-hook': mockDebugLoggingHookClass,
@@ -154,6 +158,14 @@ describe('FlaggingProvider', () => {
 
     it('should not register DebugLoggingHook when debug logging is disabled', () => {
       mockConfig.debug = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      sinon.assert.notCalled(mockDebugLoggingHookClass)
+      assert.strictEqual(provider.hooks.length, 2)
+    })
+
+    it('should not register DebugLoggingHook when the debug channel has no subscribers', () => {
+      debugChannel.hasSubscribers = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       sinon.assert.notCalled(mockDebugLoggingHookClass)

@@ -4,6 +4,7 @@ const { channel } = require('dc-polyfill')
 
 const { DatadogNodeServerProvider } = require('../../../../vendor/dist/@datadog/openfeature-node-server')
 const log = require('../log')
+const { debugChannel } = require('../log/channels')
 const configurationSource = require('./configuration_source')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const DebugLoggingHook = require('./debug-logging-hook')
@@ -32,7 +33,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     })
 
     this.hooks.push(new EvalMetricsHook(config))
-    if (config.debug) {
+    if (config.debug && debugChannel.hasSubscribers) {
       this.hooks.push(new DebugLoggingHook())
     }
 
