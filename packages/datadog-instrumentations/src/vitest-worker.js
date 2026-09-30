@@ -48,6 +48,7 @@ const {
 
 const EFD_SUITE_ADMISSION_TIMEOUT_MS = 5000
 const logSubmissionFlushCh = channel('ci:log-submission:flush')
+const wrappedTestRunners = new WeakSet()
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -529,6 +530,11 @@ function wrapSuiteHookFn (hookType, fn, fallbackTask) {
 }
 
 function wrapVitestTestRunner (VitestTestRunner) {
+  // ESM hooks can expose the same runner through multiple module identities.
+  // Wrapping its lifecycle methods twice would report each retry twice.
+  if (wrappedTestRunners.has(VitestTestRunner)) return
+  wrappedTestRunners.add(VitestTestRunner)
+
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => async function (task) {
