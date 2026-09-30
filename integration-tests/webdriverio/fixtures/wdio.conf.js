@@ -41,6 +41,9 @@ const scenarioConfig = {
     capabilities: [{
       browserName: 'chrome',
       'wdio:enforceWebDriverClassic': process.env.WEBDRIVERIO_CLASSIC === 'true',
+      ...(process.env.WEBDRIVERIO_CHROMEDRIVER_BINARY
+        ? { 'wdio:chromedriverOptions': { binary: process.env.WEBDRIVERIO_CHROMEDRIVER_BINARY } }
+        : {}),
       'goog:chromeOptions': {
         ...(process.env.WEBDRIVERIO_CHROME_BINARY ? { binary: process.env.WEBDRIVERIO_CHROME_BINARY } : {}),
         args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1000,800'],

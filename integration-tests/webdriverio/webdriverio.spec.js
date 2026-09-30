@@ -472,6 +472,7 @@ for (const version of versions) {
           browserTest(`records playable ${framework} video in real Chrome (${protocol})`, async () => {
             await runScenario('videosBrowser', 0, ({ media, tests }) => {
               const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+              assert.ok(failed, 'expected a failed browser test; check WebdriverIO output for startup errors')
               assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
               assert.strictEqual(media.length, 1)
               const video = media[0].media

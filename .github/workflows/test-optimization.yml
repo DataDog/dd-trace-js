@@ -272,6 +272,13 @@ jobs:
         run: rm -f ./*.xml
       - name: Install video decoder for integration assertions
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Use installed Chrome and ChromeDriver
+        if: matrix.spec == 'webdriverio'
+        run: |
+          google-chrome --version
+          chromedriver --version
+          echo "WEBDRIVERIO_CHROME_BINARY=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          echo "WEBDRIVERIO_CHROMEDRIVER_BINARY=$(command -v chromedriver)" >> "$GITHUB_ENV"
       - id: webdriverio_integration
         run: npm run test:integration:webdriverio:coverage
         env:
