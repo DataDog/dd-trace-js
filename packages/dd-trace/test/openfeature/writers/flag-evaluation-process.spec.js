@@ -2,6 +2,8 @@
 
 const assert = require('node:assert/strict')
 const { execFile } = require('node:child_process')
+const { realpathSync } = require('node:fs')
+const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { promisify } = require('node:util')
 
@@ -103,6 +105,43 @@ describe('flag evaluation real worker processes', () => {
       const dropped = result.metrics.find(metric => metric.metric === 'flagevaluation.rows.dropped' &&
         metric.tags.includes('reason:worker_failure'))
       assert.strictEqual(dropped.points[0][1], expected)
+    })
+  }
+
+  for (const source of ['command line', 'NODE_OPTIONS', 'both']) {
+    it(`preserves worker permissions from ${source} while delivering events`, async function () {
+      this.timeout(15000)
+      const permissionFlag = process.allowedNodeEnvironmentFlags.has('--permission')
+        ? '--permission'
+        : '--experimental-permission'
+      if (!process.allowedNodeEnvironmentFlags.has(permissionFlag)) this.skip()
+      const root = realpathSync(join(__dirname, '../../../../..'))
+      const permissions = [permissionFlag, '--allow-worker', '--allow-fs-read', root]
+      if (process.allowedNodeEnvironmentFlags.has('--allow-net')) permissions.push('--allow-net')
+      // A space and an escaped quote exercise NODE_OPTIONS parsing without creating or reading a file.
+      const allowed = join(tmpdir(), 'ffe allowed "path"')
+      const extraPermission = '--allow-fs-read=' + allowed
+      const args = source === 'NODE_OPTIONS' ? [] : [...permissions, extraPermission]
+      const options = source === 'command line' ? [] : [...permissions, extraPermission]
+      if (source === 'both') {
+        // Split grants across sources; the command line must still override an environment grant.
+        options.push('--allow-child-process')
+        args.splice(0, args.length, '--no-allow-child-process')
+      }
+      const { stdout } = await exec(process.execPath, [
+        ...args, '--require', preload, fixture, 'permissions', allowed,
+      ], {
+        timeout: 10000,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' '),
+        },
+      })
+      const result = JSON.parse(stdout)
+      assert.strictEqual(result.accepted, 16)
+      assert.strictEqual(result.delivered, 17)
+      assert.ok(result.bodies.flatMap(({ body }) => body.flagEvaluations)
+        .some(row => row.flag.key === 'protected' && /^sha256_/.test(row.targeting_key)))
     })
   }
 

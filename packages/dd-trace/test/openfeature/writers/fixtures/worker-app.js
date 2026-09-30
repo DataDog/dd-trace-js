@@ -7,6 +7,32 @@ const { Worker, isMainThread } = require('node:worker_threads')
 const mode = process.argv[2]
 /** @typedef {import('../../../../src/config/config-base')} Config */
 /** @typedef {import('../../../../src/openfeature/writers/flag-evaluations').FlagEvaluationRoute} Route */
+if (mode === 'permissions') {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins -- The caller skips unsupported Node versions.
+  assert.ok(process.permission)
+  // Probe inside the real worker before loading its unchanged entrypoint with the writer's actual options.
+  require('node:worker_threads').Worker = class extends Worker {
+    constructor (filename, options) {
+      super(`
+        const assert = require('node:assert/strict')
+        const { statSync } = require('node:fs')
+        const { join } = require('node:path')
+        const { tmpdir } = require('node:os')
+        assert.ok(process.permission, 'worker must retain the permission model')
+        assert.strictEqual(process.permission.has('fs.read', ${JSON.stringify(process.argv[3])}), true)
+        assert.throws(() => statSync(join(tmpdir(), 'ffe-denied')), { code: 'ERR_ACCESS_DENIED' })
+        assert.strictEqual(process.permission.has('fs.write'), false)
+        assert.strictEqual(process.permission.has('child'), false)
+        if (process.allowedNodeEnvironmentFlags.has('--allow-net')) {
+          assert.strictEqual(process.permission.has('net'), true)
+        }
+        require(${JSON.stringify(filename)})
+      `, { ...options, eval: true })
+      this.once('error', error => { throw error })
+    }
+  }
+}
+
 if (mode === 'nested' && isMainThread) {
   const worker = new Worker(__filename, { argv: ['nested-child'] })
   worker.once('error', error => { throw error })

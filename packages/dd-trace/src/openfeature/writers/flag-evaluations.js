@@ -20,6 +20,50 @@ const flushCh = channel('ffe:writers:flush')
 const BATCH_SIZE = 64
 const CONSENT_BATCH_SIZE = 8
 const BATCH_DELAY_MS = 20
+const permissionFlags = new Set([
+  '--permission', '--experimental-permission', '--permission-audit',
+  '--allow-addons', '--allow-child-process', '--allow-fs-read', '--allow-fs-write',
+  '--allow-ffi', '--allow-inspector', '--allow-net', '--allow-openssl-store', '--allow-wasi', '--allow-worker',
+])
+
+/** @param {string} [nodeOptions] */
+function getPermissionArgs (nodeOptions = '') {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Feature detection also supports Node 18.
+  if (!process.permission) return []
+  const args = []
+  let arg = ''
+  let quoted = false
+  // Match Node's NODE_OPTIONS parsing: spaces delimit arguments; double quotes allow spaces,
+  // and backslashes escape the next character only inside double quotes (not shell quoting).
+  for (let i = 0; i < nodeOptions.length; i++) {
+    const char = nodeOptions[i]
+    if (char === '\\' && quoted) {
+      if (++i === nodeOptions.length) throw new Error('Invalid escape in NODE_OPTIONS')
+      arg += nodeOptions[i]
+    } else if (char === '"') {
+      quoted = !quoted
+    } else if (char === ' ' && !quoted) {
+      if (arg) args.push(arg)
+      arg = ''
+    } else {
+      arg += char
+    }
+  }
+  if (quoted) throw new Error('Unterminated quote in NODE_OPTIONS')
+  if (arg) args.push(arg)
+  // Node processes environment options first, then command-line overrides.
+  args.push(...process.execArgv)
+  const permissions = []
+  for (let i = 0; i < args.length; i++) {
+    const flag = args[i].split('=')[0].replaceAll('_', '-').replace(/^--no-/, '--')
+    if (!permissionFlags.has(flag)) continue
+    permissions.push(args[i])
+    if ((flag === '--allow-fs-read' || flag === '--allow-fs-write') && !args[i].includes('=')) {
+      permissions.push(args[++i])
+    }
+  }
+  return permissions
+}
 
 /** @typedef {import('./flag-evaluation-consumer').FlagEvaluationRoute} FlagEvaluationRoute */
 /** @typedef {import('./flag-evaluation-aggregation').FlagEvaluationEvent} FlagEvaluationEvent */
@@ -224,11 +268,12 @@ class FlagEvaluationsWriter {
     try {
       const { Worker } = require('node:worker_threads')
       // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
-      // Strip preloads so the worker cannot initialize the application tracer recursively.
+      // Strip application preloads, but retain the parent's permission restrictions.
       const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
+      const execArgv = getPermissionArgs(NODE_OPTIONS)
       // PnP has no node_modules fallback: retain only its active resolver, not application preloads.
       // eslint-disable-next-line n/no-missing-require -- Yarn supplies this virtual module only in PnP applications.
-      const execArgv = process.versions.pnp ? ['--require', require.resolve('pnpapi')] : []
+      if (process.versions.pnp) execArgv.push('--require', require.resolve('pnpapi'))
       this.#worker = new Worker(join(__dirname, 'flag-evaluation-worker.js'), {
         name: 'dd-flag-evaluation',
         execArgv,
