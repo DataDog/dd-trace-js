@@ -105,6 +105,18 @@ describe('bundled flagging provider smoke tests', () => {
     })
   }
 
+  for (const consent of ['true', 1]) {
+    it(`does not grant consent for ${JSON.stringify(consent)}`, async () => {
+      // Decoded configuration payloads can contain values outside the declared boolean type.
+      provider.setConfiguration({ ...configuration(), observeFullEvaluationData: consent })
+      const details = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user' }, log)
+      assert.strictEqual(details.value, true)
+      assert.strictEqual(details.variant, 'on')
+      assert.strictEqual(details.errorCode, undefined)
+      assert.strictEqual(details.flagMetadata.__dd_observe_full_evaluation_data, false)
+    })
+  }
+
   // Guard the bundled provider's stricter targeting rules without duplicating its full evaluator suite.
   for (const { name, operator, value, attr, variant, expected } of [
     {
