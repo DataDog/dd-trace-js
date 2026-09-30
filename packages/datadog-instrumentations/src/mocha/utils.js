@@ -1116,8 +1116,8 @@ function getOnTestRetryHandler (config) {
       test._retries = dynamicCount
     }
 
-    if (isAtrEnabledForTest(test, config) && getAfterEachHooks(test).length) {
-      // Mocha queues retries before afterEach; a hook failure can still cancel the retry.
+    if (config.isFlakyTestRetriesEnabled && getAfterEachHooks(test).length) {
+      // Mocha queues retries before afterEach; a hook failure can also cancel native retries of unlisted tests.
       test._ddPendingRetry = () => publishTestRetry(test, err, config)
       return
     }

@@ -5444,6 +5444,57 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('auto test retries', () => {
+    for (const parallel of [false, true]) {
+      for (const hookAttempt of [0, 1, undefined]) {
+        const runTest = parallel ? parallelIt : retryEventsIt
+        const hookResult = hookAttempt === undefined ? 'passing hooks' : `hook failure at attempt ${hookAttempt}`
+        runTest(`finalizes unlisted native retries with ${hookResult} (parallel=${parallel})`, async () => {
+          receiver.setSettings({ flaky_test_retries_enabled: true })
+          receiver.setFlakyTests({ data: [] })
+          childProcess = exec('node node_modules/mocha/bin/mocha --retries 3' +
+            (parallel ? ' --parallel --jobs 2' : '') +
+            ' ./ci-visibility/test-flaky-test-retries/dynamic-atr.js', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '4',
+              ...(hookAttempt === undefined
+                ? {}
+                : {
+                    DYNAMIC_ATR_HOOK_FAILURE: 'afterEach',
+                    DYNAMIC_ATR_FAIL_BODY: '1',
+                    DYNAMIC_ATR_HOOK_ATTEMPT: String(hookAttempt),
+                  }),
+            },
+          })
+          let output = ''
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+          const events = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, hookAttempt === undefined ? 4 : hookAttempt + 1, output)
+              const last = tests.at(-1)
+              assert.strictEqual(last.meta[TEST_FINAL_STATUS], 'fail')
+              assert.match(last.meta[ERROR_MESSAGE], hookAttempt === undefined
+                ? /test body failed/
+                : /retry afterEach failed/)
+              for (const [index, test] of tests.entries()) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(test.meta[TEST_IS_RETRY], index === 0 ? undefined : 'true')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], index === 0 ? undefined : TEST_RETRY_REASON_TYPES.ext)
+                assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], undefined)
+              }
+              assert.ok(tests.slice(0, -1).every(test => test.meta[TEST_FINAL_STATUS] === undefined))
+            })
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), events])
+          assert.strictEqual(exitCode, 1, output)
+        })
+      }
+    }
+
     // Without dynamic ATR, the configured flat limit of four retries applies.
     const dynamicCases = [
       { name: 'custom buckets', buckets: '1,3,3,3,3', attempts: supportsDynamicAtr ? 2 : 5 },
