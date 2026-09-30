@@ -111,6 +111,8 @@ updates:
         # Thus, we ignore them and update them manually.
       - dependency-name: "@opentelemetry/api"
       - dependency-name: "@opentelemetry/api-logs"
+      - dependency-name: "mocha"
+        update-types: ["version-update:semver-major"]
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -213,6 +215,8 @@ updates:
       - javascript
       - semver-patch
     ignore:
+      - dependency-name: "mocha"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
