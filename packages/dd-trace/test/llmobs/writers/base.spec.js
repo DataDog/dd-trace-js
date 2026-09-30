@@ -174,17 +174,20 @@ describe('BaseLLMObsWriter', () => {
     assert.strictEqual(writer._buffer.size, 16)
   })
 
-  it('sends each event on append when flushInterval is 0', () => {
-    options.config.flushInterval = 0
-    writer = new BaseLLMObsWriter(options)
-    writer.setAgentless(true)
-    writer.makePayload = (events) => ({ events })
+  describe('in standard AWS Lambda', () => {
+    useEnv({ AWS_LAMBDA_INITIALIZATION_TYPE: 'on-demand' })
 
-    writer.append({ foo: 'bar' })
+    it('sends each event on append', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(true)
+      writer.makePayload = (events) => ({ events })
 
-    sinon.assert.calledOnce(request)
-    assert.strictEqual(request.getCall(0).args[0], '{"events":[{"foo":"bar"}]}')
-    assert.strictEqual(writer._buffer.events.length, 0)
+      writer.append({ foo: 'bar' })
+
+      sinon.assert.calledOnce(request)
+      assert.strictEqual(request.getCall(0).args[0], '{"events":[{"foo":"bar"}]}')
+      assert.strictEqual(writer._buffer.events.length, 0)
+    })
   })
 
   it('does not append an event if the buffer is full', () => {

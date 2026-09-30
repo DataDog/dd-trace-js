@@ -4,7 +4,7 @@ const { URL, format } = require('node:url')
 const path = require('node:path')
 const request = require('../../exporters/common/request')
 const { getEnvironmentVariable } = require('../../config/helper')
-const { createServerlessDeliveryTracker } = require('../../serverless')
+const { createServerlessDeliveryTracker, IS_STANDARD_AWS_LAMBDA } = require('../../serverless')
 
 const logger = require('../../log')
 
@@ -118,8 +118,8 @@ class BaseLLMObsWriter {
 
     buffer.size += eventSize
     buffer.events.push(event)
-    // flushInterval is 0 in Lambda, where the sandbox can freeze before the periodic flush runs.
-    if (this._config.flushInterval === 0) this.flush()
+    // The standard Lambda sandbox can freeze before the periodic flush runs.
+    if (IS_STANDARD_AWS_LAMBDA) this.flush()
     return true
   }
 
