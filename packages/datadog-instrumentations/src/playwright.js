@@ -2198,6 +2198,7 @@ function processRootSuite (createRootSuiteReturnValue) {
   const allTests = rootSuite.allTests()
 
   if (flakyTests !== undefined) {
+    // This hook runs on Playwright >=1.38, whose tests use project IDs rather than legacy project indexes.
     const projects = [...automaticRetryProjects]
     for (const test of allTests) {
       if (!isAtrEnabledForTest(test) && hasAutomaticRetries(test, projects)) {

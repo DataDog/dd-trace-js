@@ -125,6 +125,46 @@ moduleTypes.forEach(({
     })
 
     context('flaky test retries', () => {
+      for (const globalRetries of [0, 1]) {
+        over12It(`preserves suite retries excluded by the flaky list (global=${globalRetries})`, async () => {
+          receiver.setSettings({ itr_enabled: false, flaky_test_retries_enabled: true })
+          receiver.setFlakyTests({ data: [] })
+          const specToRun = 'cypress/e2e/known-flakes-native-retries.js'
+          let output = ''
+          childProcess = exec(`${testCommand} --spec ${specToRun}`, {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RETRIES: String(globalRetries),
+              SPEC_PATTERN: specToRun,
+              DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES: 'true',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            },
+          })
+          childProcess.stdout.on('data', chunk => { output += chunk })
+          childProcess.stderr.on('data', chunk => { output += chunk })
+          const events = receiver.gatherPayloadsUntilChildExit(childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const tests = payloads.flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test').map(event => event.content)
+              for (const [name, attempts] of [
+                ['no override fails', globalRetries + 1],
+                ['numeric suite fails', 3],
+                ['numeric suite inherited fails', 3],
+                ['numeric suite zero suite fails', 1],
+                ['numeric suite zero test', 1],
+                ['numeric suite test override', 2],
+                ['object suite fails', 4],
+              ]) {
+                assert.strictEqual(tests.filter(test => test.meta[TEST_NAME] === name).length, attempts, output)
+              }
+            })
+          const [[code]] = await Promise.all([once(childProcess, 'close'), events])
+          assert.ok(code > 0, output)
+        })
+      }
+
       for (const scenario of [
         { name: 'selective', names: ['flaky test retry eventually passes'], counts: [3, 1, 1] },
         { name: 'empty', names: [], counts: [1, 1, 1] },

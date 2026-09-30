@@ -392,6 +392,7 @@ function configureTestRetries (test) {
 
   if (!isTextTerminal) return
   if (Array.isArray(flakyTestsForSuite) && !flakyTestsForSuite.includes(test.fullTitle())) {
+    // Cypress resolves inherited suite overrides into each test's unverifiedTestConfig before running it.
     const overrides = test._testConfig && (test._testConfig.unverifiedTestConfig || test._testConfig)
     const retries = overrides && overrides.retries
     test._retries = typeof retries === 'number'
