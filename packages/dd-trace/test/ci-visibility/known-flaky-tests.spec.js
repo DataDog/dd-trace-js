@@ -23,4 +23,24 @@ describe('known flaky test eligibility', () => {
     assert.strictEqual(isKnownFlakyTest(tests, 'jest', 'suite.js', 'other'), false)
     assert.strictEqual(isKnownFlakyTest(tests, 'constructor', 'prototype', 'test'), false)
   })
+
+  it('keeps serialized and frozen suite lists unchanged across repeated lookups', () => {
+    const tests = { mocha: { 'suite.js': Object.freeze(['first', 'last']) } }
+    const serialized = JSON.stringify(tests)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      assert.strictEqual(isKnownFlakyTest(tests, 'mocha', 'suite.js', 'last'), true)
+      assert.strictEqual(isKnownFlakyTest(tests, 'mocha', 'suite.js', 'missing'), false)
+    }
+    assert.strictEqual(JSON.stringify(tests), serialized)
+  })
+
+  it('uses replacement and deserialized lists without retaining old names', () => {
+    const tests = { mocha: { 'suite.js': ['old'] } }
+    assert.strictEqual(isKnownFlakyTest(tests, 'mocha', 'suite.js', 'old'), true)
+    tests.mocha['suite.js'] = ['new']
+    for (const configuration of [tests, JSON.parse(JSON.stringify(tests))]) {
+      assert.strictEqual(isKnownFlakyTest(configuration, 'mocha', 'suite.js', 'old'), false)
+      assert.strictEqual(isKnownFlakyTest(configuration, 'mocha', 'suite.js', 'new'), true)
+    }
+  })
 })
