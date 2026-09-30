@@ -114,14 +114,12 @@ if (isNoWorkerInitActive) {
     onTestFinished(() => {
       recordTestAttemptTiming(task, attemptIndex, attemptStart)
       recordRetryErrorCount(task)
-      if (
-        (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) &&
-        attemptIndex === getFinalAttemptIndex(task)
-      ) {
+      if (isEarlyFlakeDetectionTestAttempt || isQuarantinedTest ||
+        (isAttemptToFixTest && attemptIndex === getFinalAttemptIndex(task))) {
         if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt) {
-          recordTestOptimizationStatus(task, attemptIndex, true)
+          recordTestOptimizationStatus(task, attemptIndex, attemptIndex === getFinalAttemptIndex(task))
         }
-        switchQuarantinedFinalFailure(task, attemptIndex)
+        switchQuarantinedFinalFailure(task)
       }
       finishRumCorrelation(task, attemptIndex)
     })
@@ -134,7 +132,7 @@ if (isNoWorkerInitActive) {
       recordTestOptimizationStatus(task, attemptIndex)
     }
     if (!restoredEarlyFlakeDetectionResult) {
-      switchQuarantinedFinalFailure(task, attemptIndex)
+      switchQuarantinedFinalFailure(task)
     }
   })
 }
@@ -452,7 +450,9 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
   )
   task.meta.__ddTestOptEfdErrorCounts[attemptIndex] = task.result?.errors?.length || 0
 
-  if (attemptIndex === getEarlyFlakeDetectionRetryCountForTask(task) &&
+  // Vitest 5.0.3 retains failures across repeats. Defer EFD's overall failure until
+  // the last attempt, while keeping each attempt's actual outcome in the metadata.
+  if (attemptIndex < getEarlyFlakeDetectionRetryCountForTask(task) ||
     task.meta.__ddTestOptEfdStatuses.includes('pass')) {
     task.result.state = 'pass'
   }
@@ -525,7 +525,7 @@ function wrapRetryCondition (task) {
         shouldRetry = condition(error)
       }
 
-      if (!shouldRetry && (task.result?.repeatCount || 0) >= (task.repeats || 0)) {
+      if (!shouldRetry) {
         const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
         recordTestOptimizationStatus(task, attemptIndex)
         markQuarantinedFailure(task)
@@ -579,7 +579,7 @@ function getFinalAttemptIndex (task) {
   return attemptIndex + retriesRemaining + (repeatsRemaining * (retryLimit + 1))
 }
 
-function switchQuarantinedFinalFailure (task, attemptIndex) {
+function switchQuarantinedFinalFailure (task) {
   const testSuite = getTestSuite(task)
   const testName = getTestName(task)
   if (
@@ -590,7 +590,10 @@ function switchQuarantinedFinalFailure (task, attemptIndex) {
     return
   }
 
-  if (attemptIndex < getFinalAttemptIndex(task)) {
+  // Finish the retries in this repetition before suppressing its failure. A later
+  // repetition cannot undo a failure that Vitest has already aggregated.
+  const retryAttemptIndex = retryAttemptIndexByTask.get(task)?.index || 0
+  if (retryAttemptIndex < getRetryLimit(task)) {
     return
   }
 
