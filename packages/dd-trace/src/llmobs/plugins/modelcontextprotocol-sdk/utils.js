@@ -2,20 +2,13 @@
 
 /**
  * Formats tool call input as a JSON string.
- * @param {string} toolName - The name of the tool being called
  * @param {object} toolArguments - The arguments passed to the tool
  */
-function formatInput (toolName, toolArguments) {
-  if (!toolName && !toolArguments) return ''
-
-  if (toolArguments === undefined || toolArguments === null) {
-    return toolName || ''
-  }
-
+function formatInput (toolArguments) {
   try {
-    return JSON.stringify({ name: toolName, arguments: toolArguments })
+    return JSON.stringify(toolArguments ?? {})
   } catch {
-    return toolName || ''
+    return '{}'
   }
 }
 
