@@ -33,6 +33,33 @@ function configuration (consent = false) {
   }
 }
 
+/**
+ * @param {string} operator
+ * @param {unknown} value
+ */
+function ruleConfiguration (operator, value) {
+  return {
+    ...configuration(),
+    flags: {
+      flag: {
+        key: 'flag',
+        enabled: true,
+        variationType: 'BOOLEAN',
+        variations: { on: { key: 'on', value: true }, off: { key: 'off', value: false } },
+        allocations: [
+          {
+            key: 'rule',
+            doLog: false,
+            rules: [{ conditions: [{ attribute: 'attr', operator, value }] }],
+            splits: [{ variationKey: 'on', shards: [] }],
+          },
+          { key: 'default', doLog: false, splits: [{ variationKey: 'off', shards: [] }] },
+        ],
+      },
+    },
+  }
+}
+
 describe('bundled flagging provider smoke tests', () => {
   let provider
   let clock
@@ -75,6 +102,42 @@ describe('bundled flagging provider smoke tests', () => {
       assert.strictEqual(next.flagMetadata.__dd_observe_full_evaluation_data, !consent)
       assert.strictEqual(details.flagMetadata.__dd_eval_timestamp_ms, 1_790_150_400_000)
       assert.strictEqual(next.flagMetadata.__dd_eval_timestamp_ms, 1_790_150_400_100)
+    })
+  }
+
+  // Guard the bundled provider's stricter targeting rules without duplicating its full evaluator suite.
+  for (const { name, operator, value, attr, variant, expected } of [
+    {
+      name: 'matches a string attribute',
+      operator: 'ONE_OF',
+      value: ['admin'],
+      attr: 'admin',
+      variant: 'on',
+      expected: true,
+    },
+    {
+      name: 'does not match an array attribute under a negated operator',
+      operator: 'NOT_ONE_OF',
+      value: ['admin'],
+      attr: ['user'],
+      variant: 'off',
+      expected: false,
+    },
+    {
+      name: 'does not compare a boolean attribute as a number',
+      operator: 'GT',
+      value: 0,
+      attr: true,
+      variant: 'off',
+      expected: false,
+    },
+  ]) {
+    it(`${name} through the bundled provider`, async () => {
+      provider.setConfiguration(ruleConfiguration(operator, value))
+      const details = await provider.resolveBooleanEvaluation('flag', false, { targetingKey: 'user', attr }, log)
+      assert.strictEqual(details.variant, variant)
+      assert.strictEqual(details.value, expected)
+      assert.strictEqual(details.errorCode, undefined)
     })
   }
 })
