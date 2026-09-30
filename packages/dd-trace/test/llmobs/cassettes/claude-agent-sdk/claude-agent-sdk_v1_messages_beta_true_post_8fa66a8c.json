@@ -1,0 +1,66 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages?beta=true",
+    "headers": {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "claude-cli/2.1.285 (external, sdk-ts, agent-sdk/0.3.285)",
+      "X-Claude-Code-Session-Id": "4ee42444-d480-475d-91c0-62fd61c54c0e",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Package-Version": "0.127.0",
+      "X-Stainless-Retry-Count": "0",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v26.3.0",
+      "X-Stainless-Timeout": "600",
+      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advisor-tool-2026-03-01,effort-2025-11-24",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "anthropic-version": "2023-06-01",
+      "x-app": "cli",
+      "Connection": "keep-alive",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Content-Length": "1435"
+    },
+    "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<system-reminder>\\n# Environment\\nYou have been invoked in the following environment: \\n - Primary working directory: /private/tmp\\n - Is a git repository: false\\n - Platform: darwin\\n - Shell: unknown\\n - OS Version: Darwin 25.6.0\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\nYou are powered by the model named Sonnet 4.6. The exact model ID is claude-sonnet-4-6. Assistant knowledge cutoff is August 2025.\\n</system-reminder>\"},{\"type\":\"text\",\"text\":\"<system-reminder>\\nToday's date is 2026-09-30.\\n</system-reminder>\\n\"},{\"type\":\"text\",\"text\":\"Say hi in three words.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.285.b43; cc_entrypoint=sdk-ts;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\",\"cache_control\":{\"type\":\"ephemeral\"}},{\"type\":\"text\",\"text\":\"Follow instructions\\n\\nReply briefly\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"18963ffae58b0379b4bcc21e4a54fc7b9c7a87c69394f3dcdafd95eec8d8ed1f\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"4ee42444-d480-475d-91c0-62fd61c54c0e\\\"}\"},\"max_tokens\":32000,\"thinking\":{\"type\":\"adaptive\"},\"context_management\":{\"edits\":[{\"type\":\"clear_thinking_20251015\",\"keep\":\"all\"}]},\"output_config\":{\"effort\":\"medium\"},\"stream\":true}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 30 Sep 2026 18:54:50 GMT",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "Cache-Control": "no-cache",
+      "anthropic-ratelimit-input-tokens-limit": "40000000",
+      "anthropic-ratelimit-input-tokens-remaining": "40000000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-09-30T18:54:50Z",
+      "anthropic-ratelimit-output-tokens-limit": "6000000",
+      "anthropic-ratelimit-output-tokens-remaining": "6000000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-09-30T18:54:50Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19998",
+      "anthropic-ratelimit-requests-reset": "2026-09-30T18:54:50Z",
+      "anthropic-ratelimit-tokens-limit": "46000000",
+      "anthropic-ratelimit-tokens-remaining": "46000000",
+      "anthropic-ratelimit-tokens-reset": "2026-09-30T18:54:50Z",
+      "Server": "cloudflare",
+      "request-id": "req_011Cfa8cRXvCUiz9WuZwKHCH",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "anthropic-workspace-id": "wrkspc_016aTU2q5hNGVxQMc7MKHPqm",
+      "traceresponse": "00-a0d4385e203f5574627b32d51be11fd4-c05f7c86c65e4ba7-01",
+      "Content-Encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "cf-cache-status": "DYNAMIC",
+      "X-Robots-Tag": "none",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "CF-RAY": "a435703ac9974f77-EWR"
+    },
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011Cfa8cRnnrGh4SqM4NL6Q1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":180,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null,\"context_management\":null}   }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}               }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}         }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" there\"}          }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" friend\"}              }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}              }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0    }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":180,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":8,\"output_tokens_details\":{\"thinking_tokens\":0},\"iterations\":[{\"input_tokens\":180,\"output_tokens\":8,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]},\"context_management\":{\"applied_edits\":[]}           }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"  }\n\n"
+  }
+}

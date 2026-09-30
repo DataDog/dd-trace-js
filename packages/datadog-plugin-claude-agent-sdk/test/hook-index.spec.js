@@ -227,6 +227,7 @@ describe('claude-agent-sdk hook index instrumentation', () => {
         prompt: 'get weather',
         options: {
           model: 'claude-sonnet-4-6',
+          systemPrompt: 'Be concise',
           resume: 'session-123',
           maxTurns: 3,
           permissionMode: 'acceptEdits',
@@ -428,6 +429,9 @@ describe('claude-agent-sdk hook index instrumentation', () => {
     assert.equal(stepStart.ctx.stepIndex, 0)
     assert.equal(llmStart.ctx.model, 'claude-sonnet-4-6')
     assert.equal(llmStarts.length, 4)
+    for (const event of llmStarts) {
+      assert.equal(event.ctx.systemPrompt, event.ctx.parentToolUseId ? undefined : 'Be concise')
+    }
     assert.equal(toolStarts.length, 3)
 
     const agentTool = toolStarts.find(event => event.ctx.id === 'agent-tool').ctx

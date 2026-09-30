@@ -44,6 +44,7 @@ const chunkEmitTimes = new WeakMap()
  *   tools: Map<string, ToolState>,
  *   subagents: Map<string, Record<string, unknown>>,
  *   prompt?: string,
+ *   systemPrompt?: string | string[] | { type: string, prompt?: string | string[], append?: string },
  *   model?: string,
  *   resume?: string,
  *   maxTurns?: number,
@@ -235,6 +236,7 @@ function onQueryStart (ctx) {
   const prompt = queryArg.prompt
   const sessionCtx = {
     prompt: typeof prompt === 'string' ? prompt : undefined,
+    systemPrompt: options.systemPrompt,
     model: options.model,
     resume: options.resume,
     maxTurns: options.maxTurns,
@@ -451,6 +453,7 @@ function processStep (
     llmCh.traceSync(() => {}, {
       model,
       usage,
+      systemPrompt: parentToolUseId ? undefined : sessionCtx?.systemPrompt,
       startTime: stepStartTime,
       finishTime: chunkEmitTimes.get(chunks[messageEndIdx - 1]),
       chunks,

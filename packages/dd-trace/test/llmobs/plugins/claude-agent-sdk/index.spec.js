@@ -14,6 +14,7 @@ const { useEnv } = require('../../../../../../integration-tests/helpers')
 const PROMPT =
   'Spawn a subagent to get the weather in New York. ' +
   'After that subagent, do it again but for California, not in a subagent. Both should be in fahrenheit.'
+const SYSTEM_PROMPT = 'You are a helpful assistant. Use the available tools to answer the user.'
 
 describe('Plugin', () => {
   useEnv({
@@ -72,7 +73,7 @@ describe('Plugin', () => {
           allowedTools: ['mcp__local__fetch_weather'],
           disallowedTools: ['Monitor', 'PushNotification', 'RemoteTrigger'],
           settingSources: [],
-          systemPrompt: 'You are a helpful assistant. Use the available tools to answer the user.',
+          systemPrompt: SYSTEM_PROMPT,
           skills: [],
           agents: {
             'weather-fetcher': {
@@ -183,7 +184,7 @@ describe('Plugin', () => {
         name: 'claude-sonnet-4-6',
         modelName: 'claude-sonnet-4-6',
         modelProvider: 'anthropic',
-        inputMessages: [{ role: 'user', content: PROMPT }],
+        inputMessages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: PROMPT }],
         outputMessages: [
           { role: 'thinking', content: outerThinkingText },
           {
@@ -310,6 +311,7 @@ describe('Plugin', () => {
         modelName: 'claude-sonnet-4-6',
         modelProvider: 'anthropic',
         inputMessages: [
+          { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: PROMPT },
           { role: 'thinking', content: outerThinkingText },
           {
@@ -391,6 +393,7 @@ describe('Plugin', () => {
         modelName: 'claude-sonnet-4-6',
         modelProvider: 'anthropic',
         inputMessages: [
+          { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: PROMPT },
           { role: 'thinking', content: outerThinkingText },
           {
@@ -451,5 +454,85 @@ describe('Plugin', () => {
         tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
     })
+
+    for (const { name, systemPrompt, systemMessages, minVersion, preset } of [
+      {
+        name: 'a system prompt array',
+        systemPrompt: ['Follow instructions', '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__', 'Reply briefly'],
+        systemMessages: ['Follow instructions', 'Reply briefly'],
+      },
+      {
+        name: 'a custom system prompt object',
+        systemPrompt: { type: 'custom', prompt: 'You are a pirate.' },
+        systemMessages: ['You are a pirate.'],
+        minVersion: '>=0.3.0',
+      },
+      {
+        name: 'a preset with appended instructions',
+        systemPrompt: { type: 'preset', preset: 'claude_code', append: 'Reply briefly' },
+        systemMessages: ['Reply briefly'],
+        preset: true,
+      },
+      {
+        name: 'a preset without appended instructions',
+        systemPrompt: { type: 'preset', preset: 'claude_code' },
+        systemMessages: [],
+        preset: true,
+      },
+    ]) {
+      if (minVersion && !semifies(realVersion, minVersion)) continue
+
+      it(`captures ${name}`, async function () {
+        this.timeout(15000)
+        const prompt = 'Say hi in three words.'
+        const stream = client.query({
+          prompt,
+          options: {
+            model: 'claude-sonnet-4-6',
+            title: 'Claude Agent SDK system prompt test',
+            systemPrompt,
+            tools: [],
+            allowedTools: [],
+            disallowedTools: ['Monitor', 'PushNotification', 'RemoteTrigger'],
+            settingSources: [],
+            skills: [],
+            maxTurns: 1,
+            cwd: '/tmp',
+            pathToClaudeCodeExecutable,
+            env: {
+              ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
+              CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,
+              ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+              // Keep the preset's memory path stable across machines.
+              CLAUDE_CONFIG_DIR: '/tmp/claude-agent-sdk-config',
+            },
+          },
+        })
+
+        let result
+        for await (const message of stream) {
+          if (message.type === 'result') {
+            result = message
+            break
+          }
+        }
+        assert.ok(result, 'query completes')
+        assert.equal(result.is_error, false)
+
+        const { llmobsSpans } = await getEvents(3)
+        const llmSpans = llmobsSpans.filter(span => span.meta['span.kind'] === 'llm')
+        const agentSpans = llmobsSpans.filter(span => span.meta['span.kind'] === 'agent')
+        assert.equal(llmSpans.length, 1)
+        assert.equal(agentSpans.length, 1)
+        assert.deepStrictEqual(llmSpans[0].meta.input.messages, [
+          ...systemMessages.map(content => ({ role: 'system', content })),
+          { role: 'user', content: prompt },
+        ])
+        if (preset) {
+          assert.equal(agentSpans[0].meta.metadata.systemPromptPreset, 'claude_code')
+          assert.equal(agentSpans[0].meta.metadata.systemPromptAppend, systemPrompt.append)
+        }
+      })
+    }
   })
 })
