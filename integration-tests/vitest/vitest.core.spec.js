@@ -3589,7 +3589,12 @@ for (const version of ['4.0.5', 'latest']) {
 // Vitest 4's Vite loader can notify ESM hooks more than once for the same runner.
 // Keep this regression pinned even when the main suite advances to a newer major.
 // Vitest 4 requires Node >=20; jsdom 26 also supports that CI runtime.
-;(NODE_MAJOR >= 20 ? describe : describe.skip)('vitest@4.1.10 runner reuse', () => {
+let describeRunnerReuse = describe
+if (NODE_MAJOR < 20) {
+  describeRunnerReuse = describe.skip
+}
+
+describeRunnerReuse('vitest@4.1.10 runner reuse', () => {
   let cwd, receiver, childProcess, output
   useSandbox(['vitest@4.1.10', 'jsdom@26.1.0', '@testing-library/jest-dom@6.9.1'], true)
 
