@@ -1,9 +1,9 @@
 'use strict'
 
-const { execFile, spawnSync } = require('node:child_process')
 const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
+const { Worker } = require('node:worker_threads')
 
 const {
   VIDEO_UPLOAD_RESULT_ERROR,
@@ -16,10 +16,9 @@ const CAPTURE_TIMEOUT_MS = 5000
 const ENCODING_TIMEOUT_MS = 30_000
 const MAX_FRAME_BYTES = 200 * 1024 * 1024
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
-let ffmpegAvailable
 
 // Like wdio-video-reporter, collect WebDriver screenshots and encode only failed attempts.
-// This implementation uses Node APIs and an installed FFmpeg, without the reporter or its dependencies.
+// Encoding runs in a worker with vendored WebAssembly, without an external executable.
 class WebdriverioVideo {
   #browser
   #directory
@@ -40,6 +39,8 @@ class WebdriverioVideo {
     this.#onResult = /** @param {{command?: string, endpoint?: string}} event */ (event) => {
       const { command, endpoint } = event
       if (command === 'takeScreenshot' || endpoint?.endsWith('/screenshot')) return
+      // WDIO looks up the context before BiDi navigation. Capturing in that gap can block navigation.
+      if (command === 'getWindowHandle' || command === 'getWindowHandles') return
       this.capture()
     }
     browser.on?.('result', this.#onResult)
@@ -86,10 +87,10 @@ class WebdriverioVideo {
             if (error) return complete(error)
             frames[index] = frame
             if (--pending === 0) complete(undefined, frames)
-          }, () => completed)
+          })
         }
       } else {
-        this.#captureBrowser(this.#browser, complete, () => completed)
+        this.#captureBrowser(this.#browser, complete)
       }
     } catch (error) {
       complete(error)
@@ -97,24 +98,17 @@ class WebdriverioVideo {
   }
 
   /**
-   * @param {object} browser - A single session, whose isBidi property is a boolean
+   * @param {object} browser - A single WebDriver session, including sessions with BiDi enabled
    * @param {(error?: Error, frame?: string) => void} onDone
-   * @param {() => boolean} completed
    */
-  #captureBrowser (browser, onDone, completed) {
-    const capture = /** @param {string} [context] */ context => {
-      if (completed()) return
-      try {
-        const screenshot = context
-          ? browser.browsingContextCaptureScreenshot({ context, origin: 'viewport', format: { type: 'image/png' } })
-          : browser.takeScreenshot()
-        screenshot.then(result => onDone(undefined, context ? result.data : result), onDone)
-      } catch (error) {
-        onDone(error)
-      }
+  #captureBrowser (browser, onDone) {
+    try {
+      // Use the session's WebDriver screenshot command. Direct BiDi captures can lose their
+      // browsing context during concurrent navigation and never return a frame.
+      browser.takeScreenshot().then(result => onDone(undefined, result), onDone)
+    } catch (error) {
+      onDone(error)
     }
-    if (browser.isBidi) browser.getWindowHandle().then(capture, onDone)
-    else capture()
   }
 
   /** @param {string|string[]} screenshots - Base64 PNG screenshots, in session order */
@@ -175,13 +169,6 @@ class WebdriverioVideo {
       return this.#cleanup(hasError ? VIDEO_UPLOAD_RESULT_ERROR : VIDEO_UPLOAD_RESULT_UPLOADED, onDone)
     }
     const filePath = join(this.#directory, `${index}.webm`)
-    // execFile avoids shell interpretation of paths. VP8 WebM works with the existing media endpoint.
-    const args = [
-      '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
-      '-framerate', '2', '-i', join(this.#directory, `${index}-%d.png`),
-      '-an', '-c:v', 'libvpx', '-deadline', 'realtime', '-threads', '1', '-pix_fmt', 'yuv420p',
-      '-vf', 'scale=ceil(iw/2)*2:ceil(ih/2)*2', filePath,
-    ]
     let completed = false
     const next = error => {
       if (completed) return
@@ -190,13 +177,22 @@ class WebdriverioVideo {
       this.#encode(index + 1, upload, hasError || Boolean(error), onDone)
     }
     try {
-      execFile('ffmpeg', args, {
-        timeout: ENCODING_TIMEOUT_MS,
-        killSignal: 'SIGKILL',
-        windowsHide: true,
-        maxBuffer: 64 * 1024,
-      }, error => {
-        if (error) return next(error)
+      const worker = new Worker(join(__dirname, 'webdriverio-video-worker.js'), {
+        execArgv: [],
+        env: { NODE_OPTIONS: '' },
+        workerData: { directory: this.#directory, index, frames: this.#frames[index], filePath },
+      })
+      let encodingError
+      const timeout = setTimeout(() => {
+        encodingError = new Error('WebdriverIO video encoding timed out')
+        worker.terminate().catch(next)
+      }, ENCODING_TIMEOUT_MS)
+      worker.once('error', error => { encodingError = error })
+      worker.once('exit', code => {
+        clearTimeout(timeout)
+        if (encodingError || code !== 0) {
+          return next(encodingError || new Error(`WebdriverIO video encoder exited with code ${code}`))
+        }
         try {
           upload(filePath, index, next)
         } catch (error) {
@@ -223,25 +219,13 @@ class WebdriverioVideo {
 }
 
 /**
- * Creates a recorder only when an installed encoder and a browser are available.
+ * Creates a recorder when a browser is available. The encoder is loaded only for failed attempts.
  *
  * @param {object} browser
  * @returns {WebdriverioVideo|void}
  */
 function createWebdriverioVideo (browser) {
   if (typeof browser?.takeScreenshot !== 'function') return
-  if (ffmpegAvailable === undefined) {
-    try {
-      const result = spawnSync('ffmpeg', ['-version'], { timeout: 5000, windowsHide: true, stdio: 'ignore' })
-      ffmpegAvailable = !result.error && result.status === 0
-    } catch {
-      ffmpegAvailable = false
-    }
-    if (!ffmpegAvailable) {
-      log.warn('DD_TEST_FAILURE_VIDEOS_ENABLED is true, but WebdriverIO video recording requires FFmpeg on PATH.')
-    }
-  }
-  if (!ffmpegAvailable) return
   try {
     return new WebdriverioVideo(browser)
   } catch (error) {

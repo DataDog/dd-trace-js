@@ -32,6 +32,21 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  videosBrowser: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./videos-browser.e2e.js'],
+    hostname: undefined,
+    port: undefined,
+    capabilities: [{
+      browserName: 'chrome',
+      'wdio:enforceWebDriverClassic': process.env.WEBDRIVERIO_CLASSIC === 'true',
+      'goog:chromeOptions': {
+        ...(process.env.WEBDRIVERIO_CHROME_BINARY ? { binary: process.env.WEBDRIVERIO_CHROME_BINARY } : {}),
+        args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1000,800'],
+      },
+    }],
+  },
   videos: {
     injectGlobals: false,
     maxInstances: 1,

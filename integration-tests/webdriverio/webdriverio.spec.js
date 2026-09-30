@@ -3,7 +3,9 @@
 const assert = require('node:assert/strict')
 const { exec, execFileSync } = require('node:child_process')
 const { once } = require('node:events')
+const { mkdirSync, writeFileSync } = require('node:fs')
 const http = require('node:http')
+const { join } = require('node:path')
 
 const {
   getCiVisAgentlessConfig,
@@ -459,9 +461,49 @@ for (const version of versions) {
       const videoEnv = { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false' }
 
       before(() => {
-        // A real encoder validates the generated media, including the npm-packed recorder.
+        // FFmpeg is only an independent decoder in these assertions, never used by the recorder.
         execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' })
       })
+
+      for (const framework of ['mocha', 'jasmine']) {
+        for (const classic of [true, false]) {
+          const browserTest = process.env.WEBDRIVERIO_REAL_BROWSER === 'true' ? it : it.skip
+          const protocol = classic ? 'Classic' : 'BiDi'
+          browserTest(`records playable ${framework} video in real Chrome (${protocol})`, async () => {
+            await runScenario('videosBrowser', 0, ({ media, tests }) => {
+              const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+              assert.strictEqual(media.length, 1)
+              const video = media[0].media
+              assert.strictEqual(video.traceId, failed.trace_id.toString())
+              assert.strictEqual(video.contentType, 'video/webm')
+              // Decode every frame and inspect a pixel in the solid background below the text.
+              const pixels = execFileSync('ffmpeg', [
+                '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+                '-vf', 'crop=1:1:10:500:exact=1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+              ], { input: video.content })
+              const colors = []
+              for (let offset = 0; offset < pixels.length; offset += 3) {
+                const [red, green, blue] = pixels.subarray(offset, offset + 3)
+                let color
+                if (red > 200 && green < 40 && blue < 40) color = 'red'
+                if (green > 200 && red < 40 && blue < 40) color = 'green'
+                if (blue > 200 && red < 40 && green < 40) color = 'blue'
+                if (color && colors.at(-1) !== color) colors.push(color)
+              }
+              assert.deepStrictEqual(colors, ['red', 'green', 'blue'])
+              if (process.env.WEBDRIVERIO_VIDEO_ARTIFACTS) {
+                mkdirSync(process.env.WEBDRIVERIO_VIDEO_ARTIFACTS, { recursive: true })
+                writeFileSync(join(process.env.WEBDRIVERIO_VIDEO_ARTIFACTS,
+                  `${framework}-${classic ? 'classic' : 'bidi'}.webm`), video.content)
+              }
+            }, 1, {
+              framework,
+              env: { ...videoEnv, WEBDRIVERIO_CLASSIC: String(classic) },
+            })
+          })
+        }
+      }
 
       for (const framework of ['mocha', 'jasmine']) {
         for (const hook of ['', 'beforeEach', 'afterEach']) {

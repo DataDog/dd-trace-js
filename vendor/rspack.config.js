@@ -21,13 +21,19 @@ const include = new Set([
 ])
 
 const exclude = new Set([
+  '@jsquash/webp', // only the basic encoder is used by webdriverio-video
+  'mediabunny', // only WebM output is used by webdriverio-video
   'mutexify', // we only ever use `mutexify/promise`
+  'pngjs', // only synchronous decoding is used by webdriverio-video
 ])
 
 const difference = new Set([...include].filter(x => !exclude.has(x)))
 
 module.exports = {
-  entry: Object.fromEntries(difference.entries()),
+  entry: {
+    ...Object.fromEntries(difference.entries()),
+    'webdriverio-video': join(__dirname, 'webdriverio-video.mjs'),
+  },
   target: 'node',
   mode: 'production',
   // Using `hidden` removes the URL comment from source files since we don't
@@ -40,6 +46,13 @@ module.exports = {
     // ESM-only default exports being wrapped in a namespace by rspack's interop,
     // which would break patterns like `require('esquery').parse`.
     mainFields: ['main', 'module'],
+  },
+  module: {
+    rules: [{
+      test: /webp_enc\.js$/,
+      // The worker provides the bytes explicitly; no browser URL or extra asset is needed.
+      parser: { url: false },
+    }],
   },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
@@ -71,7 +84,15 @@ module.exports = {
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
       excludedPackageTest: packageName => !include.has(packageName),
-      renderLicenses: modules => modules[0].licenseText,
+      additionalChunkModules: {
+        'webdriverio-video': ['@jsquash/webp', 'mediabunny'].map(name => ({
+          name,
+          directory: join(__dirname, 'node_modules', name),
+        })),
+      },
+      renderLicenses: modules => modules.some(module => module.name === '@jsquash/webp')
+        ? modules.map(module => `${module.name}\n${module.licenseText}`).join('\n\n')
+        : modules[0].licenseText,
       stats: {
         warnings: false,
       },
@@ -82,6 +103,19 @@ module.exports = {
         {
           from: 'source-map/lib/mappings.wasm',
           to: 'source-map',
+        },
+        {
+          from: '@jsquash/webp/codec/enc/webp_enc.wasm',
+          to: 'webdriverio-video',
+        },
+        {
+          from: '@jsquash/webp/codec/LICENSE.codec.md',
+          to: 'webdriverio-video/libwebp/LICENSE',
+          toType: 'file',
+        },
+        {
+          from: join(__dirname, 'webdriverio-video.d.ts'),
+          to: 'webdriverio-video/index.d.ts',
         },
       ],
     }),

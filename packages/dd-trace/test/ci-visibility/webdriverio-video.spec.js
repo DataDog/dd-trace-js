@@ -15,7 +15,6 @@ describe('WebdriverIO video recording', () => {
   let createVideo
   let browser
   let encode
-  let probe
   let log
   let directories
   let recorders
@@ -25,13 +24,14 @@ describe('WebdriverIO video recording', () => {
     directories = []
     recorders = []
     browser = Object.assign(new EventEmitter(), { takeScreenshot: sinon.stub().resolves(PNG) })
-    probe = sinon.stub().returns({ status: 0 })
-    encode = sinon.stub().callsFake((command, args, options, callback) => {
-      callback()
+    encode = sinon.stub().callsFake(() => {
+      const worker = new EventEmitter()
+      queueMicrotask(() => worker.emit('exit', 0))
+      return worker
     })
     log = { error: sinon.spy(), warn: sinon.spy() }
     createVideo = proxyquire('../../../datadog-plugin-mocha/src/webdriverio-video', {
-      'node:child_process': { execFile: encode, spawnSync: probe },
+      'node:worker_threads': { Worker: encode },
       'node:fs': {
         mkdtempSync: prefix => {
           const directory = fs.mkdtempSync(prefix)
@@ -60,6 +60,8 @@ describe('WebdriverIO video recording', () => {
     const recorder = start()
     await clock.tickAsync(0)
     browser.emit('result', { command: 'takeScreenshot' })
+    browser.emit('result', { command: 'getWindowHandle' })
+    browser.emit('result', { command: 'getWindowHandles' })
     sinon.assert.calledOnce(browser.takeScreenshot)
     browser.emit('result', { command: 'elementClick' })
     browser.emit('result', { command: 'elementClick' })
@@ -77,9 +79,9 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(index, 0)
     assert.strictEqual(fs.readdirSync(dirname(filePath)).length, 4)
     assert.strictEqual(browser.listenerCount('result'), 0)
-    assert.strictEqual(encode.firstCall.args[0], 'ffmpeg')
-    assert.strictEqual(encode.firstCall.args[2].shell, undefined)
-    assert.strictEqual(encode.firstCall.args[2].timeout, 30_000)
+    assert.match(encode.firstCall.args[0], /webdriverio-video-worker\.js$/)
+    assert.deepStrictEqual(encode.firstCall.args[1].execArgv, [])
+    assert.strictEqual(encode.firstCall.args[1].env.NODE_OPTIONS, '')
     uploaded()
     sinon.assert.calledOnceWithExactly(complete, 'uploaded')
     assert.strictEqual(fs.existsSync(dirname(filePath)), false)
@@ -128,13 +130,12 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
-  it('captures mixed Classic and BiDi multiremote sessions using their own protocol', async () => {
+  it('uses the standard screenshot command for mixed Classic and BiDi multiremote sessions', async () => {
     const classic = { takeScreenshot: sinon.stub().resolves(PNG) }
     const bidi = {
       isBidi: true,
-      getWindowHandle: sinon.stub().resolves('window-1'),
-      browsingContextCaptureScreenshot: sinon.stub().resolves({ data: PNG }),
-      takeScreenshot: sinon.stub().throws(new Error('Classic screenshots are unavailable')),
+      browsingContextCaptureScreenshot: sinon.stub().throws(new Error('capture lost its context during navigation')),
+      takeScreenshot: sinon.stub().resolves(PNG),
     }
     Object.assign(browser, {
       isMultiremote: true,
@@ -149,32 +150,11 @@ describe('WebdriverIO video recording', () => {
     recorder.finish(true, upload, complete)
     await clock.tickAsync(0)
     sinon.assert.calledOnce(classic.takeScreenshot)
-    sinon.assert.notCalled(bidi.takeScreenshot)
+    sinon.assert.calledOnce(bidi.takeScreenshot)
     sinon.assert.notCalled(browser.takeScreenshot)
-    sinon.assert.calledOnceWithExactly(bidi.browsingContextCaptureScreenshot, {
-      context: 'window-1', origin: 'viewport', format: { type: 'image/png' },
-    })
+    sinon.assert.notCalled(bidi.browsingContextCaptureScreenshot)
     sinon.assert.calledTwice(upload)
     sinon.assert.calledOnceWithExactly(complete, 'uploaded')
-  })
-
-  it('does not start a late BiDi capture after its timeout', async () => {
-    /** @type {((value: string) => void)|undefined} */
-    let resolveContext
-    Object.assign(browser, {
-      isBidi: true,
-      getWindowHandle: () => new Promise(resolve => { resolveContext = resolve }),
-      browsingContextCaptureScreenshot: sinon.spy(),
-    })
-    const recorder = start()
-    const complete = sinon.spy()
-    recorder.finish(true, () => assert.fail('unexpected upload'), complete)
-    await clock.tickAsync(5000)
-    assert.ok(resolveContext)
-    resolveContext('window-1')
-    await clock.tickAsync(0)
-    sinon.assert.notCalled(browser.browsingContextCaptureScreenshot)
-    sinon.assert.calledOnceWithExactly(complete, 'error')
   })
 
   for (const bytes of [200 * 1024 * 1024, 200 * 1024 * 1024 + 1]) {
@@ -234,7 +214,16 @@ describe('WebdriverIO video recording', () => {
   for (const failure of ['encoding error', 'encoding throw', 'upload throw']) {
     it(`cleans up after ${failure}`, async () => {
       const error = new Error(failure)
-      if (failure === 'encoding error') encode.callsFake((command, args, options, callback) => callback(error))
+      if (failure === 'encoding error') {
+        encode.callsFake(() => {
+          const worker = new EventEmitter()
+          queueMicrotask(() => {
+            worker.emit('error', error)
+            worker.emit('exit', 1)
+          })
+          return worker
+        })
+      }
       if (failure === 'encoding throw') encode.throws(error)
       const recorder = start()
       const complete = sinon.spy()
@@ -245,19 +234,26 @@ describe('WebdriverIO video recording', () => {
     })
   }
 
-  it('warns once and creates no files when FFmpeg is unavailable', () => {
-    probe.returns({ error: Object.assign(new Error('missing'), { code: 'ENOENT' }), status: null })
-    assert.strictEqual(start(), undefined)
-    assert.strictEqual(start(), undefined)
-    sinon.assert.calledOnce(probe)
-    sinon.assert.calledOnce(log.warn)
-    sinon.assert.notCalled(browser.takeScreenshot)
-    assert.deepStrictEqual(directories, [])
+  it('terminates a hung encoder before removing its files', async () => {
+    const worker = Object.assign(new EventEmitter(), { terminate: sinon.stub().resolves() })
+    encode.returns(worker)
+    const recorder = start()
+    const complete = sinon.spy()
+    recorder.finish(true, () => assert.fail('unexpected upload'), complete)
+    await clock.tickAsync(29_999)
+    sinon.assert.notCalled(worker.terminate)
+    await clock.tickAsync(1)
+    sinon.assert.calledOnce(worker.terminate)
+    sinon.assert.notCalled(complete)
+    assert.strictEqual(fs.existsSync(directories[0]), true)
+    worker.emit('exit', 1)
+    sinon.assert.calledOnceWithExactly(complete, 'error')
+    assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
   it('does no work before the browser exists', () => {
     assert.strictEqual(createVideo(undefined), undefined)
-    sinon.assert.notCalled(probe)
+    sinon.assert.notCalled(encode)
     assert.deepStrictEqual(directories, [])
   })
 })

@@ -270,13 +270,14 @@ jobs:
       - name: Clear uploaded instrumentation JUnit reports
         if: "!cancelled() && steps.webdriverio_instrumentation_upload.outcome == 'success'"
         run: rm -f ./*.xml
-      - name: Install video encoder
+      - name: Install video decoder for integration assertions
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - id: webdriverio_integration
         run: npm run test:integration:webdriverio:coverage
         env:
           SPEC: ${{ matrix.spec }}
           WEBDRIVERIO_VERSION: ${{ matrix.webdriverio-version }}
+          WEBDRIVERIO_REAL_BROWSER: 'true'
       - uses: ./.github/actions/coverage
         with:
           flags: >-
