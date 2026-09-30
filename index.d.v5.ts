@@ -2137,8 +2137,9 @@ declare namespace tracer {
       /**
        * Whether to capture LLM Observability spans for this integration. When set to `false`,
        * the integration keeps emitting APM spans and propagating trace context, but no LLM
-       * Observability spans are produced. Useful when another integration already captures the
-       * same operation and the payloads would otherwise be stored twice.
+       * Observability spans and no basic `gen_ai.*` APM tags are produced. Useful when another
+       * integration already captures the same operation and the payloads would otherwise be
+       * stored twice.
        * @default true
        */
       llmobs?: boolean;
