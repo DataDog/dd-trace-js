@@ -167,6 +167,14 @@ moduleTypes.forEach(({
 
       for (const scenario of [
         { name: 'selective', names: ['flaky test retry eventually passes'], counts: [3, 1, 1] },
+        {
+          name: 'large selective',
+          names: [
+            ...Array.from({ length: 10000 }, (_, index) => `generated flaky test ${index}`),
+            'flaky test retry eventually passes',
+          ],
+          counts: [3, 1, 1],
+        },
         { name: 'empty', names: [], counts: [1, 1, 1] },
         { name: 'unavailable', status: 403, names: [], counts: [3, 3, 1] },
       ]) {

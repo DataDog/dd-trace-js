@@ -391,7 +391,7 @@ function configureTestRetries (test) {
   }
 
   if (!isTextTerminal) return
-  if (Array.isArray(flakyTestsForSuite) && !flakyTestsForSuite.includes(test.fullTitle())) {
+  if (flakyTestsForSuite && !flakyTestsForSuite.has(test.fullTitle())) {
     // Cypress resolves inherited suite overrides into each test's unverifiedTestConfig before running it.
     const overrides = test._testConfig && (test._testConfig.unverifiedTestConfig || test._testConfig)
     const retries = overrides && overrides.retries
@@ -487,11 +487,13 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
-      flakyTestsForSuite = suiteConfig.flakyTestsForSuite
+      flakyTestsForSuite = Array.isArray(suiteConfig.flakyTestsForSuite)
+        ? new Set(suiteConfig.flakyTestsForSuite)
+        : undefined
       nativeRetryCount = suiteConfig.nativeRetryCount
       isDynamicAtrEnabled = suiteConfig.isDynamicAtrEnabled
       isTextTerminal = suiteConfig.isTextTerminal
-      if ((isDynamicAtrEnabled || Array.isArray(flakyTestsForSuite)) && isTextTerminal) {
+      if ((isDynamicAtrEnabled || flakyTestsForSuite) && isTextTerminal) {
         // The first test event can precede this task, and an earlier user hook can skip our beforeEach.
         Cypress.mocha.getRootSuite().eachTest(configureTestRetries)
       }
