@@ -141,6 +141,30 @@ describe('Jest session errors', () => {
     }
   })
 
+  it('falls back to the generic summary when the results collection cannot be read or iterated', () => {
+    const { proxy, revoke } = Proxy.revocable([], {})
+    revoke()
+    const interrupted = {
+      * [Symbol.iterator] () {
+        yield { testExecError: original }
+        throw new Error('Cannot read the next suite result')
+      },
+    }
+    for (const input of [
+      { testResults: {} },
+      { testResults: proxy },
+      { testResults: interrupted },
+      { get testResults () { throw new Error('Cannot read suite results') } },
+    ]) {
+      input.numFailedTestSuites = 2
+      input.numFailedTests = 1
+      const error = getSessionError(input)
+      assert.strictEqual(error.name, 'Error')
+      assert.strictEqual(error.message, 'Failed test suites: 2. Failed tests: 1')
+      assert.doesNotMatch(error.stack, /Setup failed/)
+    }
+  })
+
   it('rejects oversized raw fields before ANSI removal and grouping', () => {
     for (const field of ['name', 'type', 'message', 'stack']) {
       const input = { ...original, [field]: `${'\u001b[31m'.repeat(MAX_LENGTH)}UNREAD TAIL` }

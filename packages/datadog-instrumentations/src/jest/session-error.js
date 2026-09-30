@@ -24,42 +24,47 @@ function getSessionError (results = {}) {
   const { numFailedTestSuites = 0, numFailedTests = 0 } = results
   const summary = `Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`
   const error = new Error(summary)
-  if (!results.testResults) return error
-
   const groups = new Map()
   let size = 0
-  for (const result of results.testResults) {
-    let name, message, stack
-    try {
-      const { testExecError } = result
-      if (testExecError && !result.numFailingTests) {
-        name = readField(testExecError.name)
-        if (name === '') name = readField(testExecError.type)
-        message = readField(testExecError.message)
-        stack = readField(testExecError.stack)
-      } else {
-        // Jest's report includes assertion failures, hook errors and any suite execution error.
-        name = 'Error'
-        message = readField(result.failureMessage)
-        stack = message
+  try {
+    const { testResults } = results
+    if (!testResults) return error
+    for (const result of testResults) {
+      let name, message, stack
+      try {
+        const { testExecError } = result
+        if (testExecError && !result.numFailingTests) {
+          name = readField(testExecError.name)
+          if (name === '') name = readField(testExecError.type)
+          message = readField(testExecError.message)
+          stack = readField(testExecError.stack)
+        } else {
+          // Jest's report includes assertion failures, hook errors and any suite execution error.
+          name = 'Error'
+          message = readField(result.failureMessage)
+          stack = message
+        }
+      } catch {
+        log.debug('Skipping unreadable Jest suite error in the test session summary')
+        continue
       }
-    } catch {
-      log.debug('Skipping unreadable Jest suite error in the test session summary')
-      continue
+      if (name === undefined || message === undefined || stack === undefined) return omitDetails(error)
+      if (!message && !stack) continue
+      name ||= 'Error'
+      const key = JSON.stringify([name, message, stack])
+      const group = groups.get(key)
+      if (group) {
+        group.count++
+      } else {
+        // Retained text must fit across error.message and error.stack; also bound grouping memory.
+        size += name.length + message.length + stack.length
+        if (size > 2 * MAX_LENGTH) return omitDetails(error)
+        groups.set(key, { name, message, stack, count: 1 })
+      }
     }
-    if (name === undefined || message === undefined || stack === undefined) return omitDetails(error)
-    if (!message && !stack) continue
-    name ||= 'Error'
-    const key = JSON.stringify([name, message, stack])
-    const group = groups.get(key)
-    if (group) {
-      group.count++
-    } else {
-      // Retained text must fit across error.message and error.stack; also bound grouping memory.
-      size += name.length + message.length + stack.length
-      if (size > 2 * MAX_LENGTH) return omitDetails(error)
-      groups.set(key, { name, message, stack, count: 1 })
-    }
+  } catch {
+    log.debug('Unable to read Jest results for the test session summary')
+    return error
   }
   if (!groups.size) return error
 
