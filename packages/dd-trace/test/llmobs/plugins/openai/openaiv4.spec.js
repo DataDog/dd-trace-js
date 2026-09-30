@@ -543,6 +543,48 @@ describe('integrations', () => {
           })
         })
 
+        it('keeps submitting chat completion spans after a streamed chat completion is aborted', async function () {
+          // openai v4 uses node-fetch, which still delivers already-buffered chunks after an abort
+          if (semifies(realVersion, '<5.0.0')) {
+            this.skip()
+          }
+
+          const request = {
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: 'You are a helpful assistant.' },
+              { role: 'user', content: 'Hello, OpenAI!' },
+            ],
+            temperature: 0.5,
+            stream: true,
+            max_tokens: 100,
+            n: 1,
+            user: 'dd-trace-test',
+            stream_options: { include_usage: true },
+          }
+
+          // Abort before reading: the SDK ends the stream quietly without delivering any chunk
+          const controller = new AbortController()
+          const abortedStream = await openai.chat.completions.create(request, { signal: controller.signal })
+          controller.abort()
+          for await (const part of abortedStream) {
+            assert.fail(`unexpected chunk after abort: ${inspect(part)}`)
+          }
+
+          const stream = await openai.chat.completions.create(request)
+          for await (const part of stream) {
+            assert.ok(part, 'Expected part to be truthy')
+          }
+
+          const { llmobsSpans } = await getEvents(2)
+          const [abortedSpan, nextSpan] = llmobsSpans
+
+          assert.strictEqual(abortedSpan.meta.input.messages[1].content, 'Hello, OpenAI!')
+          assert.deepStrictEqual(abortedSpan.meta.output.messages, [{ content: '', role: '' }])
+          assert.strictEqual(nextSpan.meta.output.messages[0].role, 'assistant')
+          assert.ok(nextSpan.meta.output.messages[0].content)
+        })
+
         it('submits a chat completion span with tools stream', async function () {
           if (semifies(realVersion, '<=4.16.0')) {
             this.skip()
@@ -1026,6 +1068,42 @@ describe('integrations', () => {
           },
           tags: { ml_app: 'test', integration: 'openai' },
         })
+      })
+
+      it('keeps submitting response spans after a streamed response is aborted', async function () {
+        // openai v4 uses node-fetch, which still delivers already-buffered chunks after an abort
+        if (semifies(realVersion, '<5.0.0')) {
+          this.skip()
+        }
+
+        const request = {
+          model: 'gpt-4o-mini',
+          input: 'Stream this please',
+          max_output_tokens: 50,
+          temperature: 0,
+          stream: true,
+        }
+
+        // Abort before reading: the SDK ends the stream quietly without delivering any chunk
+        const controller = new AbortController()
+        const abortedStream = await openai.responses.create(request, { signal: controller.signal })
+        controller.abort()
+        for await (const part of abortedStream) {
+          assert.fail(`unexpected chunk after abort: ${inspect(part)}`)
+        }
+
+        const stream = await openai.responses.create(request)
+        for await (const part of stream) {
+          assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+        }
+
+        const { llmobsSpans } = await getEvents(2)
+        const [abortedSpan, nextSpan] = llmobsSpans
+
+        assert.deepStrictEqual(abortedSpan.meta.input.messages, [{ role: 'user', content: 'Stream this please' }])
+        assert.deepStrictEqual(abortedSpan.meta.output.messages, [{ content: '', role: '' }])
+        assert.strictEqual(nextSpan.meta.output.messages[0].role, 'assistant')
+        assert.ok(nextSpan.meta.output.messages[0].content)
       })
 
       describe('prompts', function () {
