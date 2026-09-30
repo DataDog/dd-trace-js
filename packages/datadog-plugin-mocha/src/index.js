@@ -1,6 +1,7 @@
 'use strict'
 
 const { performance } = require('node:perf_hooks')
+const { clearTimeout, setTimeout } = require('node:timers')
 const { fileURLToPath } = require('node:url')
 
 const { channel } = require('dc-polyfill')
@@ -87,6 +88,11 @@ const {
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
+// Load the recorder and capture clocks before test code can replace globals with fake timers.
+const createWebdriverioVideo = require('./webdriverio-video')
+
+const dateNow = Date.now
+
 const jasmineAdapterRunAsyncEndCh = 'tracing:orchestrion:@wdio/jasmine-framework:JasmineAdapter_run:asyncEnd'
 const jasmineDoneCh = 'ci:webdriverio:jasmine:done'
 const jasmineExecuteAsyncEndCh = 'tracing:orchestrion:@wdio/utils:executeAsync:asyncEnd'
@@ -125,6 +131,19 @@ const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$
  * @property {string|undefined} parentSuiteId
  * @property {string|undefined} status
  */
+
+/**
+ * Waits for an attempt's final capture, bounded by its existing deadline, without waiting for encoding or upload.
+ *
+ * @param {ReturnType<typeof createWebdriverioVideo>} video
+ * @param {Promise<unknown>} [finishPromise]
+ */
+function waitForWebdriverioCapture (video, finishPromise) {
+  if (!video) return finishPromise
+  /** @type {Promise<void>} */
+  const captureWait = new Promise(resolve => video.waitForCapture(resolve))
+  return finishPromise ? Promise.all([finishPromise, captureWait]) : captureWait
+}
 
 /**
  * Normalizes a WebdriverIO Jasmine spec identifier to a filesystem path.
@@ -251,6 +270,7 @@ class MochaPlugin extends CiPlugin {
   static id = 'mocha'
 
   #pendingWebdriverioVideos = new Set()
+  #webdriverioCapture
   #webdriverioVideoFlushTimer
 
   constructor (...args) {
@@ -531,7 +551,13 @@ class MochaPlugin extends CiPlugin {
     this.addSub(jasmineReporterSpecDoneEndCh, (ctx) => {
       if (this.testFrameworkAdapter === WEBDRIVERIO_JASMINE_ADAPTER) {
         const result = ctx.result
-        const finishPromise = this.#finishWebdriverioJasmineTest(ctx.arguments?.[0], ctx.self?._specs)
+        const testResult = ctx.arguments?.[0]
+        const test = this._webdriverioJasmineState?.tests.get(testResult?.id)
+        const video = this._webdriverioVideos.get(test?.span)
+        const finishPromise = waitForWebdriverioCapture(
+          video,
+          this.#finishWebdriverioJasmineTest(testResult, ctx.self?._specs)
+        )
         if (finishPromise) {
           ctx.result = finishPromise.then(() => result)
         }
@@ -700,6 +726,15 @@ class MochaPlugin extends CiPlugin {
       this.activeTestSpan = span
 
       return ctx.currentStore
+    })
+
+    this.addSub('ci:mocha:after-each:finish', (ctx) => {
+      const context = /** @type {{isWaiting: boolean, onDone: () => void}} */ (ctx)
+      const video = this.#webdriverioCapture
+      this.#webdriverioCapture = undefined
+      if (!video) return
+      context.isWaiting = true
+      video.waitForCapture(context.onDone)
     })
 
     this.addSub('ci:mocha:worker:finish', ({ onDone } = {}) => {
@@ -909,6 +944,7 @@ class MochaPlugin extends CiPlugin {
             finishSpan()
           }
         }
+        const video = this._webdriverioVideos.get(span)
         const mediaStarted = this.#finishWebdriverioMedia(span, 'fail', () => {
           mediaFinished = true
           if (canFinishMedia) {
@@ -925,6 +961,9 @@ class MochaPlugin extends CiPlugin {
           if (promises) {
             promises.finishTestPromise = finishTestPromise
           }
+        }
+        if (video && promises) {
+          promises.finishTestPromise = waitForWebdriverioCapture(video, promises.finishTestPromise)
         }
         finishWhenReady()
       }
@@ -1566,9 +1605,9 @@ class MochaPlugin extends CiPlugin {
       : this.tracer._exporter?.canUploadTestVideos?.()
     if (!canUpload) return
 
-    const createVideo = require('./webdriverio-video')
     const browser = globalThis._wdioGlobals?.get?.('browser') || globalThis.browser
-    const video = createVideo(browser)
+    const video = createWebdriverioVideo(browser)
+    this.#webdriverioCapture = video
     if (video) this._webdriverioVideos.set(span, video)
   }
 
@@ -1587,7 +1626,7 @@ class MochaPlugin extends CiPlugin {
     this.#pendingWebdriverioVideos.add(video)
     this._pendingWebdriverioMediaUploads++
     const traceId = span.context().toTraceId()
-    const capturedAtMs = Date.now()
+    const capturedAtMs = dateNow()
     let pending = 2
     const complete = () => {
       if (--pending !== 0) return
@@ -1744,7 +1783,7 @@ class MochaPlugin extends CiPlugin {
     }
     const exporter = this.tracer?._exporter
     const traceId = span.context().toTraceId()
-    const capturedAtMs = Date.now()
+    const capturedAtMs = dateNow()
     let pendingUploads = screenshotList.length
     let hasUploadError = false
     const finishOne = (error) => {

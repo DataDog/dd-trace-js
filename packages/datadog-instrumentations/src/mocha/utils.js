@@ -26,6 +26,7 @@ const shimmer = require('../../../datadog-shimmer')
 const testStartCh = channel('ci:mocha:test:start')
 const testFinishCh = channel('ci:mocha:test:finish')
 const testDiWaitCh = channel('ci:mocha:test:di:wait')
+const testAfterEachFinishCh = channel('ci:mocha:after-each:finish')
 // after a test has failed, we'll publish to this channel
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
@@ -983,12 +984,17 @@ function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, h
     delete test._ddPendingRetry
     failedTestReplayPromise = pendingRetry()
   }
+  const continueAfterCapture = () => {
+    const context = { onDone: () => fn.apply(hookThis, args), isWaiting: false }
+    testAfterEachFinishCh.publish(context)
+    return context.isWaiting ? undefined : context.onDone()
+  }
   const continueAfterProbe = () => {
     const deferredHookEndPromise = finishDeferredHookEnd(test)
     if (deferredHookEndPromise) {
-      return deferredHookEndPromise.then(() => fn.apply(hookThis, args), () => fn.apply(hookThis, args))
+      return deferredHookEndPromise.then(continueAfterCapture, continueAfterCapture)
     }
-    return fn.apply(hookThis, args)
+    return continueAfterCapture()
   }
 
   if (failedTestReplayPromise) {

@@ -3,6 +3,7 @@
 const { mkdtempSync, rmSync, writeFileSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
+const { clearInterval, clearTimeout, setInterval, setTimeout } = require('node:timers')
 const { Worker } = require('node:worker_threads')
 
 const {
@@ -16,6 +17,10 @@ const CAPTURE_TIMEOUT_MS = 5000
 const ENCODING_TIMEOUT_MS = 30_000
 const MAX_FRAME_BYTES = 200 * 1024 * 1024
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+const { queueMicrotask } = globalThis
+const captureOwners = new WeakMap()
+// A local timeout does not cancel the WebDriver request; keep its slot until it actually settles.
+const pendingCaptures = new WeakSet()
 
 /** @type {Array<() => void>} */
 const encodingQueue = []
@@ -104,6 +109,7 @@ class WebdriverioVideo {
   constructor (browser) {
     this.#browser = browser
     this.#directory = mkdtempSync(join(tmpdir(), 'dd-trace-wdio-video-'))
+    captureOwners.set(browser, this)
     this.#onResult = /** @param {{command?: string, endpoint?: string}} event */ (event) => {
       const { command, endpoint } = event
       if (command === 'takeScreenshot' || endpoint?.endsWith('/screenshot')) return
@@ -119,7 +125,8 @@ class WebdriverioVideo {
 
   /** Captures at most one in-flight screenshot, including all multiremote sessions. */
   capture () {
-    if (this.#stopped || this.#capturing || this.#error) return
+    if (this.#stopped || this.#capturing || this.#error ||
+        pendingCaptures.has(this.#browser) || captureOwners.get(this.#browser) !== this) return
     this.#capturing = true
     let completed = false
     const complete = (error, screenshots) => {
@@ -129,7 +136,7 @@ class WebdriverioVideo {
       this.#capturing = false
       if (error) {
         log.error('Error capturing WebdriverIO video frame: %s', error.message)
-      } else {
+      } else if (captureOwners.get(this.#browser) === this) {
         try {
           this.#writeFrames(screenshots)
         } catch (error) {
@@ -148,17 +155,24 @@ class WebdriverioVideo {
       if (this.#browser.isMultiremote) {
         const names = this.#browser.instances
         if (!names.length) return complete(new Error('WebdriverIO returned no browser sessions'))
+        const browsers = names.map(name => this.#browser.getInstance(name))
         const frames = new Array(names.length)
         let pending = names.length
+        pendingCaptures.add(this.#browser)
         for (let index = 0; index < names.length; index++) {
-          this.#captureBrowser(this.#browser.getInstance(names[index]), (error, frame) => {
+          this.#captureBrowser(browsers[index], (error, frame) => {
+            if (--pending === 0) pendingCaptures.delete(this.#browser)
             if (error) return complete(error)
             frames[index] = frame
-            if (--pending === 0) complete(undefined, frames)
+            if (pending === 0) complete(undefined, frames)
           })
         }
       } else {
-        this.#captureBrowser(this.#browser, complete)
+        pendingCaptures.add(this.#browser)
+        this.#captureBrowser(this.#browser, (error, frame) => {
+          pendingCaptures.delete(this.#browser)
+          complete(error, frame)
+        })
       }
     } catch (error) {
       complete(error)
@@ -214,6 +228,7 @@ class WebdriverioVideo {
     clearInterval(this.#interval)
     this.#browser.removeListener?.('result', this.#onResult)
     const finish = () => {
+      if (this.#finished) return
       if (!failed) return this.#cleanup(undefined, onDone)
       if (this.#error || !this.#frames.length) {
         log.error('Error recording WebdriverIO failure video: %s', this.#error?.message || 'No frames captured')
@@ -223,6 +238,16 @@ class WebdriverioVideo {
     }
     if (this.#capturing) this.#onCapture = finish
     else finish()
+  }
+
+  /** @param {() => void} onDone - Releases a retry once this attempt's final capture settles. */
+  waitForCapture (onDone) {
+    if (!this.#capturing || this.#finished) return onDone()
+    const previous = this.#onCapture
+    this.#onCapture = () => {
+      previous?.()
+      onDone()
+    }
   }
 
   /** Cancels a finishing attempt at the worker's final-flush deadline. */
@@ -270,8 +295,11 @@ class WebdriverioVideo {
    */
   #cleanup (result, onDone) {
     this.#finished = true
+    if (captureOwners.get(this.#browser) === this) captureOwners.delete(this.#browser)
     clearTimeout(this.#captureTimeout)
+    const onCapture = this.#onCapture
     this.#onCapture = undefined
+    onCapture?.()
     try {
       rmSync(this.#directory, { recursive: true, force: true })
     } catch (error) {

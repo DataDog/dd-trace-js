@@ -117,6 +117,141 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
+  for (const outcome of ['resolve', 'reject', 'timeout']) {
+    it(`serializes pending screenshots across attempts after ${outcome}`, async () => {
+      const first = start()
+      await clock.tickAsync(0)
+      /** @type {(() => void)|undefined} */
+      let settle
+      browser.takeScreenshot.onSecondCall().callsFake(() => new Promise((resolve, reject) => {
+        settle = () => outcome === 'reject' ? reject(new Error('navigation interrupted')) : resolve(PNG)
+      }))
+      const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+      const complete = sinon.spy()
+      first.finish(true, upload, complete)
+      const second = start()
+      await clock.tickAsync(outcome === 'timeout' ? 5000 : 500)
+      sinon.assert.calledTwice(browser.takeScreenshot)
+      assert.ok(settle)
+      settle()
+      await clock.tickAsync(500)
+      sinon.assert.calledThrice(browser.takeScreenshot)
+      second.finish(true, upload, complete)
+      await clock.tickAsync(0)
+      assert.deepStrictEqual(encode.args.map(([, { workerData }]) => workerData.frames), [1, 2])
+      sinon.assert.calledTwice(upload)
+      assert.deepStrictEqual(complete.args, [['uploaded'], ['uploaded']])
+    })
+  }
+
+  it('keeps a multiremote capture locked until every session settles after a rejection', async () => {
+    const first = { takeScreenshot: sinon.stub().resolves(PNG) }
+    const second = { takeScreenshot: sinon.stub().resolves(PNG) }
+    /** @type {((value: string) => void)|undefined} */
+    let resolveCapture
+    first.takeScreenshot.onSecondCall().rejects(new Error('navigation interrupted'))
+    second.takeScreenshot.onSecondCall().callsFake(() => new Promise(resolve => { resolveCapture = resolve }))
+    Object.assign(browser, {
+      isMultiremote: true,
+      instances: ['first', 'second'],
+      getInstance: name => name === 'first' ? first : second,
+    })
+    const previous = start()
+    await clock.tickAsync(0)
+    const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+    previous.finish(true, upload, () => {})
+    start()
+    await clock.tickAsync(5000)
+    sinon.assert.calledTwice(first.takeScreenshot)
+    sinon.assert.calledTwice(second.takeScreenshot)
+    assert.ok(resolveCapture)
+    resolveCapture(PNG)
+    await clock.tickAsync(500)
+    sinon.assert.calledThrice(first.takeScreenshot)
+    sinon.assert.calledThrice(second.takeScreenshot)
+    assert.deepStrictEqual(encode.args.map(([, { workerData }]) => workerData.frames), [1, 1])
+  })
+
+  it('keeps capture, encoding deadlines and queue progress independent of replaced global clocks', async () => {
+    const workers = []
+    encode.callsFake(() => {
+      const worker = Object.assign(new EventEmitter(), { terminate: sinon.stub().resolves() })
+      workers.push(worker)
+      return worker
+    })
+    const timerNames = /** @type {const} */ ([
+      'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'queueMicrotask',
+    ])
+    const replacements = timerNames.map(name => {
+      return sinon.stub(globalThis, name).throws(new Error('test replaced the global clock'))
+    })
+    try {
+      const first = start()
+      await clock.tickAsync(500)
+      sinon.assert.calledTwice(browser.takeScreenshot)
+      const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+      const complete = sinon.spy()
+      first.finish(true, upload, complete)
+      await clock.tickAsync(0)
+      const second = start()
+      second.finish(true, upload, complete)
+      await clock.tickAsync(30_000)
+      sinon.assert.calledOnce(workers[0].terminate)
+      workers[0].emit('exit', 1)
+      await clock.tickAsync(0)
+      sinon.assert.calledTwice(encode)
+      workers[1].emit('exit', 0)
+      sinon.assert.calledOnce(upload)
+      assert.deepStrictEqual(complete.args, [['error'], ['uploaded']])
+      for (const replacement of replacements) sinon.assert.notCalled(replacement)
+    } finally {
+      for (const replacement of replacements) replacement.restore()
+    }
+  })
+
+  for (const outcome of ['resolve', 'reject', 'timeout', 'cancel']) {
+    it(`releases a retry after capture ${outcome} without waiting for encoding or upload`, async () => {
+      const worker = new EventEmitter()
+      encode.callsFake(() => worker)
+      const recorder = start()
+      await clock.tickAsync(0)
+      /** @type {(() => void)|undefined} */
+      let settle
+      browser.takeScreenshot.callsFake(() => new Promise((resolve, reject) => {
+        settle = () => outcome === 'reject' ? reject(new Error('capture failed')) : resolve(PNG)
+      }))
+      const uploaded = sinon.spy()
+      const upload = sinon.spy()
+      const captured = sinon.spy()
+      recorder.finish(true, upload, uploaded)
+      recorder.waitForCapture(captured)
+      sinon.assert.notCalled(captured)
+      assert.ok(settle)
+      if (outcome === 'cancel') recorder.cancel()
+      else if (outcome === 'timeout') await clock.tickAsync(5000)
+      else settle()
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(captured)
+      if (outcome === 'cancel') {
+        sinon.assert.notCalled(encode)
+        sinon.assert.calledOnceWithExactly(uploaded, 'error')
+      } else {
+        sinon.assert.calledOnce(encode)
+        sinon.assert.notCalled(uploaded)
+        worker.emit('exit', 0)
+        sinon.assert.calledOnce(upload)
+        sinon.assert.notCalled(uploaded)
+        upload.firstCall.args[2]()
+        sinon.assert.calledOnceWithExactly(uploaded, 'uploaded')
+      }
+      settle()
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(captured)
+      recorder.waitForCapture(captured)
+      sinon.assert.calledTwice(captured)
+    })
+  }
+
   it('serializes encoders across failed attempts without waiting for uploads', async () => {
     const workers = []
     encode.callsFake(() => {
@@ -126,7 +261,10 @@ describe('WebdriverIO video recording', () => {
     })
     const upload = sinon.spy()
     const complete = sinon.spy()
-    for (let attempt = 0; attempt < 3; attempt++) start().finish(true, upload, complete)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      start().finish(true, upload, complete)
+      await clock.tickAsync(0)
+    }
     await clock.tickAsync(0)
     sinon.assert.calledOnce(encode)
 
@@ -158,6 +296,7 @@ describe('WebdriverIO video recording', () => {
       const complete = sinon.spy()
       const upload = sinon.spy((filePath, index, uploaded) => uploaded())
       start().finish(true, upload, complete)
+      await clock.tickAsync(0)
       start().finish(true, upload, complete)
       await clock.tickAsync(0)
 
@@ -254,7 +393,10 @@ describe('WebdriverIO video recording', () => {
     })
     const upload = sinon.spy((filePath, index, uploaded) => uploaded())
     const complete = sinon.spy()
-    for (let index = 0; index < 3; index++) start().finish(true, upload, complete)
+    for (let index = 0; index < 3; index++) {
+      start().finish(true, upload, complete)
+      await clock.tickAsync(0)
+    }
     await clock.tickAsync(0)
     workers[0].emit('exit', 0)
     recorders[1].cancel()
@@ -273,10 +415,10 @@ describe('WebdriverIO video recording', () => {
     const upload = sinon.spy((filePath, index, uploaded) => uploaded())
     const complete = sinon.spy()
     const first = start()
-    const second = start()
     await clock.tickAsync(0)
     browser.takeScreenshot.returns({ then: callback => callback(PNG) })
     first.finish(true, upload, complete)
+    const second = start()
     second.finish(true, upload, complete)
     first.cancel()
     await clock.tickAsync(0)
@@ -388,6 +530,11 @@ describe('WebdriverIO video recording', () => {
           await clock.tickAsync(failure === 'timeout' ? 5000 : 0)
         } else {
           await clock.tickAsync(failure === 'timeout' ? 5000 : 500)
+          if (failure === 'timeout') {
+            sinon.assert.calledOnce(browser.takeScreenshot)
+            resolveCapture?.(PNG)
+            await clock.tickAsync(500)
+          }
           recorder.finish(true, upload, complete)
           await clock.tickAsync(0)
         }

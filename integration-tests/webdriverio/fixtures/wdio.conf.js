@@ -2,6 +2,7 @@
 
 const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
 const framework = process.env.WEBDRIVERIO_FRAMEWORK || 'mocha'
+let fakeClock
 
 const baseConfig = {
   runner: 'local',
@@ -21,6 +22,14 @@ const baseConfig = {
   services: [],
   framework,
   reporters: [],
+  before () {
+    if (process.env.WEBDRIVERIO_FAKE_DATE === 'true') {
+      fakeClock = require('@sinonjs/fake-timers').install({ toFake: ['Date'] })
+    }
+  },
+  after () {
+    fakeClock?.uninstall()
+  },
   jasmineOpts: {
     defaultTimeoutInterval: 10_000,
     random: false,

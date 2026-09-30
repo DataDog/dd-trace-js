@@ -288,6 +288,7 @@ for (const version of versions) {
       `@wdio/jasmine-framework@${version}`,
       `@wdio/local-runner@${version}`,
       `@wdio/mocha-framework@${version}`,
+      '@sinonjs/fake-timers@15.4.0',
     ], true, ['./integration-tests/webdriverio/fixtures/*'])
 
     before(async function () {
@@ -548,6 +549,19 @@ for (const version of versions) {
           }, 1, {
             framework,
             env: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true', DD_TEST_FAILURE_VIDEOS_ENABLED: 'true' },
+          })
+        })
+
+        it(`uploads ${framework} screenshots and videos when setup installs a zero-epoch fake Date`, async () => {
+          await runScenario('videos', 1, ({ media, tests }) => {
+            const failed = tests.find(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failed.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(failed.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+            assert.deepStrictEqual(media.map(({ media }) => media.contentType).sort(), ['image/png', 'video/webm'])
+            for (const { media: file } of media) assert.ok(Number(file.capturedAt) > 0)
+          }, 1, {
+            framework,
+            env: { ...videoEnv, DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true', WEBDRIVERIO_FAKE_DATE: 'true' },
           })
         })
       }

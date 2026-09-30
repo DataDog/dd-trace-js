@@ -16,6 +16,7 @@ describe('WebdriverIO videos', () => {
   })
 
   it('passes', async () => {
+    if (process.env.WEBDRIVERIO_FAKE_DATE === 'true') assert.strictEqual(Date.now(), 0)
     await browser.url('http://example.test/passing')
   })
 

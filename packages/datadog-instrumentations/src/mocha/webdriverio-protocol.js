@@ -1,5 +1,7 @@
 'use strict'
 
+const { clearTimeout, setTimeout } = require('node:timers')
+
 const {
   createWebdriverioWorkerMessage,
   WEBDRIVERIO_WORKER_ENV,
