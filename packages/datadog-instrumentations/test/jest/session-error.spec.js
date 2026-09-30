@@ -142,6 +142,42 @@ describe('Jest session errors', () => {
     assert.ok(error.name.length <= MAX_LENGTH)
   })
 
+  for (const field of ['name', 'type', 'message', 'stack']) {
+    it(`bounds raw ${field} input before removing control characters`, () => {
+      const input = { ...original, [field]: `start${'\u001b[31m'.repeat(MAX_LENGTH)}UNREAD TAIL` }
+      if (field === 'type') delete input.name
+      const error = getSessionError(results([input]))
+      assert.doesNotMatch(error.name + error.message + error.stack, /UNREAD TAIL/)
+      assert.match(field === 'stack' ? error.stack : error.message, /Error details truncated/)
+      if (field === 'name' || field === 'type') assert.strictEqual(error.name, 'start...')
+    })
+  }
+
+  it('preserves ANSI input at the raw limit and labels the first rejected size', () => {
+    const input = { ...original, stack: `start${'\u001b[31m'.repeat((MAX_LENGTH - 5) / 5)}` }
+    assert.strictEqual(getSessionError(results([input])).stack, 'start')
+    input.stack += 'x'
+    const error = getSessionError(results([input]))
+    assert.strictEqual(error.stack, 'start\n\n[Error details truncated. See suite events for full details.]')
+  })
+
+  it('keeps truncated errors separate when their visible prefixes match', () => {
+    const errors = ['first', 'second'].map(tail => ({ ...original, stack: `${'x'.repeat(MAX_LENGTH)}${tail}` }))
+    const error = getSessionError(results(errors))
+    const reversed = getSessionError(results([...errors].reverse()))
+    assert.strictEqual(error.name, 'Error')
+    assert.strictEqual(error.message.split('(1 suite)').length - 1, 2)
+    assert.match(error.stack, /1 additional errors omitted/)
+    assert.strictEqual(error.message, reversed.message)
+    assert.strictEqual(error.stack, reversed.stack)
+  })
+
+  it('labels truncation even when the retained prefix contains only control characters', () => {
+    const error = getSessionError(results([{ stack: `${'\u001b[31m'.repeat(MAX_LENGTH)}UNREAD TAIL` }]))
+    assert.match(error.stack, /Error details truncated/)
+    assert.doesNotMatch(error.stack, /UNREAD TAIL/)
+  })
+
   for (const field of ['message', 'stack']) {
     it(`preserves ${field} at the limit and labels truncation at the first rejected size`, () => {
       const input = { name: 'Error', message: 'x', stack: 'x' }
@@ -160,14 +196,14 @@ describe('Jest session errors', () => {
     })
   }
 
-  it('counts omitted distinct errors and bounds both fields for many large errors', () => {
+  it('counts omitted errors and bounds both fields for many large errors', () => {
     const errors = Array.from({ length: 100 }, (_, index) => ({
       name: 'Error', message: `${index}: ${'x'.repeat(MAX_LENGTH)}`, stack: `${index}: ${'y'.repeat(MAX_LENGTH)}`,
     }))
     const error = getSessionError(results(errors), false)
     for (const value of [error.message, error.stack]) {
       assert.strictEqual(value.length, MAX_LENGTH)
-      assert.match(value, /99 additional distinct errors omitted/)
+      assert.match(value, /99 additional errors omitted/)
     }
   })
 
@@ -178,7 +214,7 @@ describe('Jest session errors', () => {
   })
 
   it('reserves the separator when another error follows a nearly full field', () => {
-    const notice = '\n\n[Error details truncated. 2 additional distinct errors omitted. ' +
+    const notice = '\n\n[Error details truncated. 2 additional errors omitted. ' +
       'See suite events for full details.]'
     const error = getSessionError(results([
       { name: 'Error', message: 'a', stack: 'a'.repeat(MAX_LENGTH - notice.length - 'Affected suites: 1\n'.length) },
