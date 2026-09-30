@@ -638,6 +638,13 @@ function wrapVitestTestRunner (VitestTestRunner) {
   shimmer.wrap(VitestTestRunner.prototype, 'onAfterRunTask', onAfterRunTask => function (task) {
     const { isTestManagementTestsEnabled } = getProvidedContext()
 
+    // Vitest 5 aggregates failed repetitions into the final state. Preserve the last attempt's actual result.
+    if ((attemptToFixTasks.has(task) || efdRetryTasks.has(task)) &&
+        task.result.state === 'fail' && taskToCtx.get(task)?.status === 'pass' &&
+        (task.result.errors?.length ?? 0) === (taskToReportedErrorCount.get(task) ?? 0)) {
+      task.result.state = 'pass'
+    }
+
     if (isTestManagementTestsEnabled) {
       const isAttemptingToFix = attemptToFixTasks.has(task)
       const isQuarantined = quarantinedTasks.has(task)
@@ -760,7 +767,12 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    const lastExecutionStatus = task.result.state
+    let lastExecutionStatus = task.result.state
+    if (lastExecutionStatus === 'run' && numRepetition > 0) {
+      // Vitest 5 resets the state before each repetition but retains errors from earlier attempts.
+      const reportedErrorCount = taskToReportedErrorCount.get(task) ?? 0
+      lastExecutionStatus = (task.result.errors?.length ?? 0) > reportedErrorCount ? 'fail' : 'pass'
+    }
     const isAtf = attemptToFixTasks.has(task)
     const isEfd = efdRetryTasks.has(task)
     const shouldTrackStatuses = isEfd || isAtf
@@ -1116,14 +1128,14 @@ function getStartTestsWrapper (frameworkVersion) {
             isDisabled: disabledTasks.has(task),
             isQuarantined: quarantinedTasks.has(task),
           })
-        } else if (state === 'pass' && !isSwitchedStatus) {
+        } else if ((state === 'pass' && !isSwitchedStatus) || switchedStatus === 'pass') {
           if (testCtx) {
             const isSkippedByTestManagement =
               !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
             const promises = {}
             testPassCh.publish({
               task,
-              finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
+              finalStatus: isSkippedByTestManagement ? 'skip' : state,
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
               promises,
               ...testCtx.currentStore,

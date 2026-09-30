@@ -3586,86 +3586,95 @@ for (const version of ['4.0.5', 'latest']) {
   })
 }
 
-// Vitest 4's Vite loader can notify ESM hooks more than once for the same runner.
-// Keep this regression pinned even when the main suite advances to a newer major.
-// Vitest 4 requires Node >=20; jsdom 26 also supports that CI runtime.
-let describeRunnerReuse = describe
-if (NODE_MAJOR < 20) {
-  describeRunnerReuse = describe.skip
-}
-
-describeRunnerReuse('vitest@4.1.10 runner reuse', () => {
-  let cwd, receiver, childProcess, output
-  useSandbox(['vitest@4.1.10', 'jsdom@26.1.0', '@testing-library/jest-dom@6.9.1'], true)
-
-  before(() => {
-    cwd = sandboxCwd()
-    fs.writeFileSync(path.join(cwd, 'runner-setup.mjs'), "import '@testing-library/jest-dom/vitest'\n")
-  })
-  beforeEach(async () => {
-    output = ''
-    receiver = await new FakeCiVisIntake().start()
-  })
-  afterEach(async () => {
-    childProcess?.kill()
-    await receiver.stop()
-  })
-
-  for (const pool of ['forks', 'threads']) {
-    for (const feature of ['atr', 'efd', 'atf']) {
-      it(`reports each ${feature} attempt once with jsdom and ${pool}`, async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          tests_skipping: false,
-          code_coverage: false,
-          flaky_test_retries_enabled: feature === 'atr',
-          test_management: { enabled: feature === 'atf', attempt_to_fix_retries: 2 },
-          known_tests_enabled: feature === 'efd',
-          early_flake_detection: { enabled: feature === 'efd', slow_test_retries: { '5s': 2 } },
-        })
-        receiver.setKnownTests({ vitest: {} })
-        receiver.setTestManagementTests({
-          vitest: {
-            suites: {
-              'ci-visibility/vitest-tests/efd-retries.mjs': {
-                tests: { 'EFD retries': { properties: { attempt_to_fix: true } } },
-              },
-            },
-          },
-        })
-        childProcess = exec('./node_modules/.bin/vitest run --environment jsdom', {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
-            EFD_PASS_ATTEMPT: '2',
-            POOL_CONFIG: pool,
-            VITEST_SETUP_FILE: './runner-setup.mjs',
-          },
-        })
-        childProcess.stdout.on('data', data => { output += data })
-        childProcess.stderr.on('data', data => { output += data })
-        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
-          childProcess,
-          ({ url }) => url === '/api/v2/citestcycle',
-          payloads => {
-            const tests = payloads.flatMap(({ payload }) => payload.events)
-              .filter(event => event.type === 'test').map(event => event.content)
-              .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
-            const expected = feature === 'atr' ? ['fail', 'pass'] : ['fail', 'pass', 'fail']
-            assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expected, output)
-            assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
-            for (const test of tests.slice(1)) {
-              assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES[feature])
-            }
-          }
-        )
-        const [[code, signal]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
-        assert.strictEqual(signal, null, output)
-        assert.strictEqual(code, feature === 'atf' ? 1 : 0, output)
-      })
-    }
+// Vite's loader can notify ESM hooks more than once for the same runner.
+// Cover the original reproducer and the latest supported Vitest release.
+// Vitest 4 requires Node >=20; Vitest 5 requires Node >=22.
+for (const version of ['4.1.10', 'latest']) {
+  let describeRunnerReuse = describe
+  if (NODE_MAJOR < 20 || (version === 'latest' && NODE_MAJOR < 22)) {
+    describeRunnerReuse = describe.skip
   }
-})
+
+  describeRunnerReuse(`vitest@${version} runner reuse`, () => {
+    let cwd, receiver, childProcess, output
+    useSandbox([`vitest@${version}`, 'jsdom@26.1.0', '@testing-library/jest-dom@6.9.1'])
+
+    before(() => {
+      cwd = sandboxCwd()
+      fs.writeFileSync(path.join(cwd, 'runner-setup.mjs'), "import '@testing-library/jest-dom/vitest'\n")
+    })
+    beforeEach(async () => {
+      output = ''
+      receiver = await new FakeCiVisIntake().start()
+    })
+    afterEach(async () => {
+      childProcess?.kill()
+      await receiver.stop()
+    })
+
+    for (const pool of ['forks', 'threads']) {
+      for (const feature of ['atr', 'efd', 'atf']) {
+        for (const passAttempt of [2, 3]) {
+          const title = `reports each ${feature} attempt once when attempt ${passAttempt} passes with jsdom and ${pool}`
+          it(title, async () => {
+            receiver.setSettings({
+              itr_enabled: false,
+              tests_skipping: false,
+              code_coverage: false,
+              flaky_test_retries_enabled: feature === 'atr',
+              test_management: { enabled: feature === 'atf', attempt_to_fix_retries: 2 },
+              known_tests_enabled: feature === 'efd',
+              early_flake_detection: { enabled: feature === 'efd', slow_test_retries: { '5s': 2 } },
+            })
+            receiver.setKnownTests({ vitest: {} })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/efd-retries.mjs': {
+                    tests: { 'EFD retries': { properties: { attempt_to_fix: true } } },
+                  },
+                },
+              },
+            })
+            childProcess = exec('./node_modules/.bin/vitest run --environment jsdom', {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
+                EFD_PASS_ATTEMPT: String(passAttempt),
+                POOL_CONFIG: pool,
+                VITEST_SETUP_FILE: './runner-setup.mjs',
+              },
+            })
+            childProcess.stdout.on('data', data => { output += data })
+            childProcess.stderr.on('data', data => { output += data })
+            const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url === '/api/v2/citestcycle',
+              payloads => {
+                const tests = payloads.flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test').map(event => event.content)
+                  .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
+                const attempts = feature === 'atr' ? passAttempt : 3
+                const expected = Array.from({ length: attempts }, (_, index) => {
+                  return index + 1 === passAttempt ? 'pass' : 'fail'
+                })
+                assert.deepStrictEqual(tests.map(test => test.meta[TEST_STATUS]), expected, output)
+                assert.strictEqual(tests.at(-1).meta[TEST_FINAL_STATUS], feature === 'atf' ? 'fail' : 'pass')
+                assert.strictEqual(tests[0].meta[TEST_IS_RETRY], undefined)
+                for (const test of tests.slice(1)) {
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES[feature])
+                }
+              }
+            )
+            const [[code, signal]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+            assert.strictEqual(signal, null, output)
+            assert.strictEqual(code, feature === 'atf' ? 1 : 0, output)
+          })
+        }
+      }
+    }
+  })
+}
