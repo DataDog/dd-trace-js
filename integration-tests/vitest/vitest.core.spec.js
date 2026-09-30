@@ -3652,7 +3652,8 @@ for (const version of ['4.1.10', 'latest']) {
               childProcess,
               ({ url }) => url === '/api/v2/citestcycle',
               payloads => {
-                const tests = payloads.flatMap(({ payload }) => payload.events)
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events
                   .filter(event => event.type === 'test').map(event => event.content)
                   .sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
                 const attempts = feature === 'atr' ? passAttempt : 3
@@ -3665,6 +3666,23 @@ for (const version of ['4.1.10', 'latest']) {
                 for (const test of tests.slice(1)) {
                   assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                   assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES[feature])
+                }
+
+                const suites = events.filter(event => event.type === 'test_suite_end')
+                assert.strictEqual(suites.length, 1, output)
+                const suite = suites[0].content
+                assert.strictEqual(suite.meta[TEST_STATUS], feature === 'atf' ? 'fail' : 'pass')
+                if (feature === 'atf') {
+                  const failedAttempt = passAttempt === 3 ? tests[0] : tests.at(-1)
+                  for (const field of [ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK]) {
+                    assert.ok(failedAttempt.meta[field], output)
+                    assert.strictEqual(suite.meta[field], failedAttempt.meta[field], output)
+                  }
+                }
+                if (tests.at(-1).meta[TEST_STATUS] === 'pass') {
+                  for (const field of [ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK]) {
+                    assert.strictEqual(tests.at(-1).meta[field], undefined, output)
+                  }
                 }
               }
             )

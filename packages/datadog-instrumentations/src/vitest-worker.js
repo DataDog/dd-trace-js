@@ -1129,6 +1129,10 @@ function getStartTestsWrapper (frameworkVersion) {
             isQuarantined: quarantinedTasks.has(task),
           })
         } else if ((state === 'pass' && !isSwitchedStatus) || switchedStatus === 'pass') {
+          // Attempt-to-fix can pass its last attempt while an earlier failure still fails the suite.
+          if (switchedStatus === 'pass' && errors?.length) {
+            testSuiteError = testError
+          }
           if (testCtx) {
             const isSkippedByTestManagement =
               !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
