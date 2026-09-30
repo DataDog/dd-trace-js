@@ -23,12 +23,12 @@ function enable (rc, getOpenfeatureProxy, subscribe) {
    */
   const updateConfiguration = (action, conf) => {
     if (action === 'apply' || action === 'modify') {
+      getOpenfeatureProxy().setConfiguration(conf)
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
         const flagCount = Object.keys(conf?.flags ?? {}).length
         return `Feature Flags: remote_config configuration ${action} applied successfully (${flagCount} flag(s))`
       })
-      getOpenfeatureProxy().setConfiguration(conf)
     } else if (action === 'unapply') {
       log.debug('Feature Flags: remote_config configuration removed')
       getOpenfeatureProxy().setConfiguration(undefined)
