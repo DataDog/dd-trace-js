@@ -140,6 +140,7 @@ const BASE64_RE = /^(?:[A-Za-z\d+/]{4})*(?:[A-Za-z\d+/]{2}==|[A-Za-z\d+/]{3}=)?$
  */
 function waitForWebdriverioCapture (video, finishPromise) {
   if (!video) return finishPromise
+  // WDIO awaits its async framework hook, so bridge the recorder's callback before it can start the next attempt.
   /** @type {Promise<void>} */
   const captureWait = new Promise(resolve => video.waitForCapture(resolve))
   return finishPromise ? Promise.all([finishPromise, captureWait]) : captureWait

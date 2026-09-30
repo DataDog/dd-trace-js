@@ -204,6 +204,9 @@ class WebdriverioVideo {
     if (!frames.length) throw new Error('WebdriverIO returned no video frames')
     for (let index = 0; index < frames.length; index++) {
       if (typeof frames[index] !== 'string') throw new Error('WebdriverIO returned an invalid video frame')
+      if (Buffer.byteLength(frames[index], 'base64') > MAX_FRAME_BYTES - this.#bytes) {
+        throw new Error('WebdriverIO video frames exceeded the 200 MiB recording limit')
+      }
       const frame = Buffer.from(frames[index], 'base64')
       if (frame.length < 24 || !frame.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
         throw new Error('WebdriverIO returned an invalid PNG video frame')
@@ -220,9 +223,6 @@ class WebdriverioVideo {
           Math.max(2, Math.floor(width * scale / 2) * 2),
           Math.max(2, Math.floor(height * scale / 2) * 2),
         ]
-      }
-      if (this.#bytes + frame.length > MAX_FRAME_BYTES) {
-        throw new Error('WebdriverIO video frames exceeded the 200 MiB recording limit')
       }
       const frameNumber = this.#frames[index] || 0
       writeFileSync(join(this.#directory, `${index}-${frameNumber}.png`), frame)

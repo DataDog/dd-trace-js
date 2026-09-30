@@ -462,21 +462,44 @@ describe('WebdriverIO video recording', () => {
     sinon.assert.calledOnceWithExactly(complete, 'uploaded')
   })
 
-  for (const bytes of [200 * 1024 * 1024, 200 * 1024 * 1024 + 1]) {
-    it(`enforces the raw recording limit for ${bytes} bytes`, async () => {
-      const frame = Buffer.alloc(bytes)
-      Buffer.from(PNG, 'base64').copy(frame)
-      browser.takeScreenshot.resolves(frame.toString('base64'))
-      const recorder = start()
-      const complete = sinon.spy()
-      const upload = sinon.spy((filePath, index, callback) => callback())
-      recorder.finish(true, upload, complete)
-      await clock.tickAsync(0)
-      const accepted = bytes === 200 * 1024 * 1024
-      sinon.assert.calledOnceWithExactly(complete, accepted ? 'uploaded' : 'error')
-      assert.strictEqual(upload.callCount, accepted ? 1 : 0)
-      assert.strictEqual(fs.existsSync(directories[0]), false)
-    })
+  for (const capture of ['single', 'consecutive', 'multiremote']) {
+    for (const bytes of [200 * 1024 * 1024, 200 * 1024 * 1024 + 1]) {
+      it(`enforces the raw recording limit before decoding ${bytes} bytes across ${capture} captures`, async () => {
+        const firstFrame = Buffer.from(PNG, 'base64')
+        const frame = Buffer.alloc(bytes - (capture === 'single' ? 0 : firstFrame.length))
+        firstFrame.copy(frame)
+        const screenshot = frame.toString('base64')
+        browser.takeScreenshot.resolves(screenshot)
+        if (capture === 'consecutive') browser.takeScreenshot.onFirstCall().resolves(PNG)
+        if (capture === 'multiremote') {
+          const first = { takeScreenshot: sinon.stub().resolves(PNG) }
+          const second = { takeScreenshot: sinon.stub().resolves(screenshot) }
+          Object.assign(browser, {
+            isMultiremote: true,
+            instances: ['first', 'second'],
+            getInstance: name => name === 'first' ? first : second,
+          })
+        }
+        const decode = sinon.spy(Buffer, 'from')
+        try {
+          const recorder = start()
+          if (capture === 'consecutive') await clock.tickAsync(0)
+          const complete = sinon.spy()
+          const upload = sinon.spy((filePath, index, callback) => callback())
+          recorder.finish(true, upload, complete)
+          await clock.tickAsync(0)
+          const accepted = bytes === 200 * 1024 * 1024
+          sinon.assert.calledOnceWithExactly(complete, accepted ? 'uploaded' : 'error')
+          const decodedFrames = decode.args.filter(([value, encoding]) => value === screenshot && encoding === 'base64')
+          assert.strictEqual(decodedFrames.length, accepted ? 1 : 0, 'oversized frames must not be decoded')
+          assert.strictEqual(upload.callCount, accepted ? (capture === 'multiremote' ? 2 : 1) : 0)
+          assert.strictEqual(encode.callCount, upload.callCount)
+          assert.strictEqual(fs.existsSync(directories[0]), false)
+        } finally {
+          decode.restore()
+        }
+      })
+    }
   }
 
   for (const [name, screenshot] of [
