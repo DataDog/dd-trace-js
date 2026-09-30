@@ -1444,7 +1444,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
             if (scenario && pickle.astNodeIds.includes(scenario.id)) {
               if (!featureBackground) gherkinScopeRanges.push(featurePrefix)
               if (rule?.children?.length && !ruleBackground) {
-                const firstRuleChild = rule.children[0]
+                const firstRuleChild = rule.children.at(0)
                 const firstRuleNode = firstRuleChild.background ?? firstRuleChild.scenario
                 const firstRuleLine = firstRuleNode.tags?.[0]?.location.line ?? firstRuleNode.location.line
                 gherkinScopeRanges.push([rule.location.line, firstRuleLine - 1])
