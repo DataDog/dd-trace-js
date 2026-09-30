@@ -3601,7 +3601,6 @@ for (const version of ['4.1.10', 'latest']) {
 
     before(() => {
       cwd = sandboxCwd()
-      fs.writeFileSync(path.join(cwd, 'runner-setup.mjs'), "import '@testing-library/jest-dom/vitest'\n")
     })
     beforeEach(async () => {
       output = ''
@@ -3644,7 +3643,7 @@ for (const version of ['4.1.10', 'latest']) {
                 TEST_DIR: 'ci-visibility/vitest-tests/efd-retries.mjs',
                 EFD_PASS_ATTEMPT: String(passAttempt),
                 POOL_CONFIG: pool,
-                VITEST_SETUP_FILE: './runner-setup.mjs',
+                VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/runner-reuse-setup.mjs',
               },
             })
             childProcess.stdout.on('data', data => { output += data })
