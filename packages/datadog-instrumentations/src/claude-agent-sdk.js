@@ -529,7 +529,8 @@ function processChunks (chunks, agentCtx) {
   const sessionCtx = agentCtx.sessionCtx
   const getLifecycle = createStreamLookup(chunks)
 
-  const { type, subtype, ...rest } = chunks[0]
+  const initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init') || chunks[0]
+  const { type, subtype, ...rest } = initChunk
   Object.assign(agentCtx, rest)
   if (sessionCtx) {
     if (sessionCtx.sessionId) agentCtx.session_id = sessionCtx.sessionId
