@@ -30,10 +30,11 @@ function getSessionError (results = {}, hasExecutedTests = results.numPassedTest
 
   const groups = new Map()
   let size = 0
-  for (const { testExecError } of results.testResults) {
-    if (!testExecError) continue
+  for (const result of results.testResults) {
     let name, message, stack
     try {
+      const { testExecError } = result
+      if (!testExecError) continue
       name = readField(testExecError.name)
       if (name === '') name = readField(testExecError.type)
       message = readField(testExecError.message)

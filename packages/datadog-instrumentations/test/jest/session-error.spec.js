@@ -97,6 +97,24 @@ describe('Jest session errors', () => {
     }
   })
 
+  it('skips unreadable result entries while preserving valid errors from other suites', () => {
+    const unreadable = { get testExecError () { throw new Error('Cannot read suite execution error') } }
+    const { proxy, revoke } = Proxy.revocable({}, {})
+    revoke()
+    for (const entry of [unreadable, proxy, undefined, null]) {
+      const fallback = getSessionError({ ...results([undefined]), testResults: [entry] })
+      assert.strictEqual(fallback.name, 'Error')
+      assert.strictEqual(fallback.message, 'Failed test suites: 1. Failed tests: 0')
+
+      const input = results([original, undefined, original])
+      input.testResults[1] = entry
+      const mixed = getSessionError(input)
+      assert.strictEqual(mixed.name, original.name)
+      assert.strictEqual(mixed.message, 'Failed test suites: 3. Failed tests: 0\n\nTypeError: Setup failed (2 suites)')
+      assert.strictEqual(mixed.stack, original.stack)
+    }
+  })
+
   it('rejects oversized raw fields before ANSI removal and grouping', () => {
     for (const field of ['name', 'type', 'message', 'stack']) {
       const input = { ...original, [field]: `${'\u001b[31m'.repeat(MAX_LENGTH)}UNREAD TAIL` }
