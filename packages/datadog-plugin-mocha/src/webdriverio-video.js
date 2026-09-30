@@ -17,6 +17,49 @@ const ENCODING_TIMEOUT_MS = 30_000
 const MAX_FRAME_BYTES = 200 * 1024 * 1024
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 
+/** @type {Array<() => void>} */
+const encodingQueue = []
+
+/**
+ * Runs one encoder at a time across all attempts in this WDIO process. Uploads do not hold the slot.
+ *
+ * @param {{ directory: string, index: number, frames: number, filePath: string }} workerData
+ * @param {(error?: Error) => void} onDone
+ */
+function encodeVideo (workerData, onDone) {
+  const complete = error => {
+    encodingQueue.shift()
+    // Defer the next start so repeated Worker constructor failures cannot recurse through the queue.
+    if (encodingQueue.length) queueMicrotask(encodingQueue[0])
+    onDone(error)
+  }
+  const start = () => {
+    try {
+      const worker = new Worker(join(__dirname, 'webdriverio-video-worker.js'), {
+        execArgv: [],
+        env: { NODE_OPTIONS: '' },
+        workerData,
+      })
+      let encodingError
+      const timeout = setTimeout(() => {
+        encodingError = new Error('WebdriverIO video encoding timed out')
+        // Even if termination rejects, keep the slot and files until the worker actually exits.
+        worker.terminate().catch(error => { encodingError = error })
+      }, ENCODING_TIMEOUT_MS)
+      worker.once('error', error => { encodingError = error })
+      worker.once('exit', code => {
+        clearTimeout(timeout)
+        if (code !== 0) encodingError ||= new Error(`WebdriverIO video encoder exited with code ${code}`)
+        complete(encodingError)
+      })
+    } catch (error) {
+      complete(error)
+    }
+  }
+  encodingQueue.push(start)
+  if (encodingQueue.length === 1) start()
+}
+
 // Like wdio-video-reporter, collect WebDriver screenshots and encode only failed attempts.
 // Encoding runs in a worker with vendored WebAssembly, without an external executable.
 class WebdriverioVideo {
@@ -60,7 +103,7 @@ class WebdriverioVideo {
       clearTimeout(this.#captureTimeout)
       this.#capturing = false
       if (error) {
-        this.#error = error
+        log.error('Error capturing WebdriverIO video frame: %s', error.message)
       } else {
         try {
           this.#writeFrames(screenshots)
@@ -176,32 +219,14 @@ class WebdriverioVideo {
       if (error) log.error('Error uploading WebdriverIO failure video: %s', error.message)
       this.#encode(index + 1, upload, hasError || Boolean(error), onDone)
     }
-    try {
-      const worker = new Worker(join(__dirname, 'webdriverio-video-worker.js'), {
-        execArgv: [],
-        env: { NODE_OPTIONS: '' },
-        workerData: { directory: this.#directory, index, frames: this.#frames[index], filePath },
-      })
-      let encodingError
-      const timeout = setTimeout(() => {
-        encodingError = new Error('WebdriverIO video encoding timed out')
-        worker.terminate().catch(next)
-      }, ENCODING_TIMEOUT_MS)
-      worker.once('error', error => { encodingError = error })
-      worker.once('exit', code => {
-        clearTimeout(timeout)
-        if (encodingError || code !== 0) {
-          return next(encodingError || new Error(`WebdriverIO video encoder exited with code ${code}`))
-        }
-        try {
-          upload(filePath, index, next)
-        } catch (error) {
-          next(error)
-        }
-      })
-    } catch (error) {
-      next(error)
-    }
+    encodeVideo({ directory: this.#directory, index, frames: this.#frames[index], filePath }, error => {
+      if (error) return next(error)
+      try {
+        upload(filePath, index, next)
+      } catch (error) {
+        next(error)
+      }
+    })
   }
 
   /**

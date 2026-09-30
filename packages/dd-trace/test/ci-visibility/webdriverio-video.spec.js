@@ -117,6 +117,75 @@ describe('WebdriverIO video recording', () => {
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
+  it('serializes encoders across failed attempts without waiting for uploads', async () => {
+    const workers = []
+    encode.callsFake(() => {
+      const worker = new EventEmitter()
+      workers.push(worker)
+      return worker
+    })
+    const upload = sinon.spy()
+    const complete = sinon.spy()
+    for (let attempt = 0; attempt < 3; attempt++) start().finish(true, upload, complete)
+    await clock.tickAsync(0)
+    sinon.assert.calledOnce(encode)
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      assert.strictEqual(encode.callCount, attempt + 1)
+      assert.strictEqual(encode.lastCall.args[1].workerData.directory, directories[attempt])
+      workers[attempt].emit('exit', 0)
+      await clock.tickAsync(0)
+    }
+    sinon.assert.calledThrice(upload)
+    sinon.assert.notCalled(complete)
+    for (const [filePath, , uploaded] of upload.args) {
+      assert.strictEqual(fs.existsSync(dirname(filePath)), true)
+      uploaded()
+      assert.strictEqual(fs.existsSync(dirname(filePath)), false)
+    }
+    sinon.assert.calledThrice(complete)
+  })
+
+  for (const failure of ['worker error', 'nonzero exit', 'startup throw', 'timeout', 'termination rejection']) {
+    it(`releases the encoder queue after ${failure}`, async () => {
+      const workers = []
+      encode.callsFake(() => {
+        const worker = Object.assign(new EventEmitter(), { terminate: sinon.stub().resolves() })
+        workers.push(worker)
+        return worker
+      })
+      if (failure === 'startup throw') encode.onFirstCall().throws(new Error(failure))
+      const complete = sinon.spy()
+      const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+      start().finish(true, upload, complete)
+      start().finish(true, upload, complete)
+      await clock.tickAsync(0)
+
+      if (failure !== 'startup throw') {
+        sinon.assert.calledOnce(encode)
+        if (failure === 'worker error') workers[0].emit('error', new Error(failure))
+        if (failure === 'termination rejection') workers[0].terminate.rejects(new Error('termination failed'))
+        if (failure === 'timeout' || failure === 'termination rejection') {
+          await clock.tickAsync(30_000)
+          sinon.assert.calledOnce(workers[0].terminate)
+        }
+        // Errors and termination requests do not release memory until the worker exits.
+        sinon.assert.calledOnce(encode)
+        sinon.assert.notCalled(complete)
+        assert.ok(directories.every(directory => fs.existsSync(directory)))
+        workers[0].emit('exit', 1)
+        await clock.tickAsync(0)
+      }
+      sinon.assert.calledTwice(encode)
+      sinon.assert.calledOnceWithExactly(complete, 'error')
+      workers.at(-1).emit('exit', 0)
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(upload)
+      assert.deepStrictEqual(complete.args, [['error'], ['uploaded']])
+      assert.ok(directories.every(directory => !fs.existsSync(directory)))
+    })
+  }
+
   it('uploads each multiremote session and aggregates upload errors', async () => {
     browser.takeScreenshot.resolves([PNG, PNG])
     const recorder = start()
@@ -208,6 +277,65 @@ describe('WebdriverIO video recording', () => {
     resolveCapture(PNG)
     await clock.tickAsync(0)
     sinon.assert.calledOnce(complete)
+    assert.strictEqual(fs.existsSync(directories[0]), false)
+  })
+
+  for (const failure of ['rejection', 'synchronous throw', 'timeout']) {
+    for (const finalCapture of [false, true]) {
+      it(`${finalCapture ? 'preserves recorded frames' : 'resumes capture'} after ${failure}`, async () => {
+        /** @type {((value: string) => void)|undefined} */
+        let resolveCapture
+        const failingCapture = browser.takeScreenshot.onCall(finalCapture ? 1 : 0)
+        if (failure === 'rejection') failingCapture.rejects(new Error('navigation interrupted capture'))
+        if (failure === 'synchronous throw') failingCapture.throws(new Error('navigation interrupted capture'))
+        if (failure === 'timeout') {
+          failingCapture.callsFake(() => new Promise(resolve => { resolveCapture = resolve }))
+        }
+
+        const recorder = start()
+        const complete = sinon.spy()
+        const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+        if (finalCapture) {
+          await clock.tickAsync(0)
+          recorder.finish(true, upload, complete)
+          await clock.tickAsync(failure === 'timeout' ? 5000 : 0)
+        } else {
+          await clock.tickAsync(failure === 'timeout' ? 5000 : 500)
+          recorder.finish(true, upload, complete)
+          await clock.tickAsync(0)
+        }
+
+        sinon.assert.calledOnce(encode)
+        assert.strictEqual(encode.firstCall.args[1].workerData.frames, finalCapture ? 1 : 2)
+        sinon.assert.calledOnceWithExactly(complete, 'uploaded')
+        sinon.assert.calledOnce(log.error)
+        resolveCapture?.(PNG)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnce(upload)
+        assert.strictEqual(fs.existsSync(directories[0]), false)
+      })
+    }
+  }
+
+  it('preserves every multiremote recording when one session rejects its final capture', async () => {
+    const first = { takeScreenshot: sinon.stub().resolves(PNG) }
+    const second = { takeScreenshot: sinon.stub().resolves(PNG) }
+    first.takeScreenshot.onSecondCall().rejects(new Error('session closed'))
+    Object.assign(browser, {
+      isMultiremote: true,
+      instances: ['first', 'second'],
+      getInstance: name => name === 'first' ? first : second,
+    })
+    const recorder = start()
+    await clock.tickAsync(0)
+    const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+    const complete = sinon.spy()
+    recorder.finish(true, upload, complete)
+    await clock.tickAsync(0)
+    const frames = encode.args.map(([, { workerData }]) => [workerData.index, workerData.frames])
+    assert.deepStrictEqual(frames, [[0, 1], [1, 1]])
+    sinon.assert.calledTwice(upload)
+    sinon.assert.calledOnceWithExactly(complete, 'uploaded')
     assert.strictEqual(fs.existsSync(directories[0]), false)
   })
 
