@@ -350,7 +350,8 @@ class Config extends ConfigBase {
     // This happens when all remote configs are removed
     if (options !== null) {
       const remoteOptions = { ...options }
-      // Trace exporter and `OtlpTraceTransformer` depend on `DD_TRACE_OTEL_SEMANTICS_ENABLED` but don't support remote config
+      // Trace exporter and `OtlpTraceTransformer` are fixed at startup.
+      // Ignore remote semantics changes to keep transformation and export aligned.
       delete remoteOptions.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
       // Resolve aliases and drop configs this tracer version doesn't recognize
