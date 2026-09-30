@@ -460,8 +460,10 @@ class OpenAIAgentsIntegration {
    */
   #llmSpanParentAgentName (oaiSpan) {
     const traceInfo = this.#traceInfo.get(oaiSpan.traceId)
-    if (!traceInfo?.currentTopLevelAgentSpanId) return
-    if (!this.#hasUntracedPathToAncestor(oaiSpan.parentId, traceInfo.currentTopLevelAgentSpanId)) return
+    if (
+      !traceInfo?.currentTopLevelAgentSpanId ||
+      !this.#hasUntracedPathToAncestor(oaiSpan.parentId, traceInfo.currentTopLevelAgentSpanId)
+    ) return
     return traceInfo.currentTopLevelAgentName
   }
 

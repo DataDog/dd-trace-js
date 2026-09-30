@@ -102,8 +102,12 @@ function resolveWritableString (root, path) {
     }
   }
 
-  if (!node || typeof node !== 'object') return
-  if (!Object.hasOwn(node, terminal.name) || typeof node[terminal.name] !== 'string') return
+  if (
+    !node ||
+    typeof node !== 'object' ||
+    !Object.hasOwn(node, terminal.name) ||
+    typeof node[terminal.name] !== 'string'
+  ) return
   return { container: node, key: terminal.name }
 }
 

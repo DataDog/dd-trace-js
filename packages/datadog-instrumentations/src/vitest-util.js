@@ -299,7 +299,7 @@ function getVitestTestProperties (providedContext, testSuiteAbsolutePath, testNa
 
   return {
     testSuite: testProperties?.testSuite,
-    isNew: Array.isArray(knownTests) ? !knownTests.includes(testName) : false,
+    isNew: Array.isArray(knownTests) && !knownTests.includes(testName),
     isModified: testProperties?.isModified === true,
     isAttemptToFix: testManagementProperties.isAttemptToFix,
     isDisabled: testManagementProperties.isDisabled,

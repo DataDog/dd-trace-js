@@ -46,8 +46,7 @@ function getGeneratedCommand (framework, scenario) {
  * @returns {Array<[string, object]>} labeled direct-runner commands
  */
 function getFrameworkCommands (framework, requestedScenario = null) {
-  if (framework.status !== 'runnable') return []
-  if (requestedScenario === 'ci-wiring') return []
+  if ((framework.status !== 'runnable') || (requestedScenario === 'ci-wiring')) return []
 
   const commands = [['basic-reporting', getBasicCommand(framework)]]
   const fallbackTests = framework.validation.fallbackTests
@@ -99,8 +98,7 @@ function getManifestInputFiles (manifest, { includeLocal = true } = {}) {
     for (const framework of manifest.frameworks) {
       addExistingFile(files, framework.ciWiring?.configFile)
       addExistingFile(files, framework.project?.packageJson)
-      if (!includeLocal) continue
-      if (framework.status !== 'runnable') continue
+      if (!includeLocal || (framework.status !== 'runnable')) continue
       addExistingFile(files, framework.validation?.runner)
       addExistingFile(files, framework.validation?.testFile)
       const fallbackTests = framework.validation?.fallbackTests

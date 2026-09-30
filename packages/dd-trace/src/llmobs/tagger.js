@@ -114,8 +114,10 @@ class LLMObsTagger {
     integration,
     _decorator,
   } = {}) {
-    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
-    if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
+    if (
+      !this.#config.llmobs.DD_LLMOBS_ENABLED ||
+      !kind
+    ) return // do not register it in the map if it doesn't have an llmobs span kind
 
     const spanMlApp =
       mlApp ||

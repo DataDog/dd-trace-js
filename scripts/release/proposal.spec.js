@@ -27,8 +27,10 @@ describe('release proposal', () => {
      */
     function capture (command) {
       if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
-      if (command.includes('--format=sha --reverse v5.x master')) return FULL_SHA
-      if (command === `git rev-parse ${FULL_SHA}`) return FULL_SHA
+      if (
+        command.includes('--format=sha --reverse v5.x master') ||
+        command === `git rev-parse ${FULL_SHA}`
+      ) return FULL_SHA
       if (command.includes('--format=sha --reverse v5.x') && command.includes(FULL_SHA)) return FULL_SHA
       if (command === `git show -s --format=%s ${FULL_SHA}`) return 'chore(deps-dev): bump multer (#10253)'
       if (command === 'git log -1 --pretty=%B') return 'v5.127.0'
@@ -134,8 +136,10 @@ describe('release proposal', () => {
      */
     function capture (command) {
       if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
-      if (command.includes('--format=sha --reverse v5.x master')) return FULL_SHA
-      if (command === `git rev-parse ${FULL_SHA}`) return FULL_SHA
+      if (
+        command.includes('--format=sha --reverse v5.x master') ||
+        command === `git rev-parse ${FULL_SHA}`
+      ) return FULL_SHA
       if (command.includes('--format=sha --reverse v5.x') && command.includes(FULL_SHA)) return FULL_SHA
       if (command === `git show -s --format=%s ${FULL_SHA}`) return masterSubject
       if (command === 'git log -1 --pretty=%B') return 'v5.127.0'
@@ -193,8 +197,10 @@ describe('release proposal', () => {
      */
     function capture (command) {
       if (command === 'git rev-parse --abbrev-ref HEAD') return 'master'
-      if (command.includes('--format=sha --reverse v5.x master')) return FULL_SHA
-      if (command === `git rev-parse ${FULL_SHA}`) return FULL_SHA
+      if (
+        command.includes('--format=sha --reverse v5.x master') ||
+        command === `git rev-parse ${FULL_SHA}`
+      ) return FULL_SHA
       if (command.includes('--format=sha --reverse v5.x') && command.includes(FULL_SHA)) return FULL_SHA
       if (command === `git show -s --format=%s ${FULL_SHA}`) return 'fix(core): incoming change (#123)'
       if (command === 'git log -1 --pretty=%B') return 'v5.127.0'

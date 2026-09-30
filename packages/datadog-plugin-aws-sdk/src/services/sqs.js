@@ -202,8 +202,7 @@ class Sqs extends BaseAwsSdkPlugin {
    * @returns {Array<Record<string, string> | undefined> | undefined}
    */
   responseExtract (params, operation, response) {
-    if (operation !== 'receiveMessage') return
-    if (!response?.Messages?.length) return
+    if ((operation !== 'receiveMessage') || !response?.Messages?.length) return
 
     return response.Messages.map(message => this.parseMessageCarrier(message))
   }
@@ -261,9 +260,7 @@ class Sqs extends BaseAwsSdkPlugin {
    *   carriers are parsed here.
    */
   responseExtractDSMContext (operation, params, response, span, carriers) {
-    if (!this.config.dsmEnabled) return
-    if (operation !== 'receiveMessage') return
-    if (!response?.Messages?.length) return
+    if (!this.config.dsmEnabled || (operation !== 'receiveMessage') || !response?.Messages?.length) return
 
     const messages = response.Messages
     // Only attribute payloadSize to the span when there is a single message.

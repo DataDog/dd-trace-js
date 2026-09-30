@@ -72,11 +72,7 @@ function createWrapRequest (name) {
 
   return function wrapRequest (request) {
     return function (params, options, cb) {
-      if (!startCh.hasSubscribers) {
-        return request.apply(this, arguments)
-      }
-
-      if (!params) return request.apply(this, arguments)
+      if (!startCh.hasSubscribers || !params) return request.apply(this, arguments)
 
       const ctx = { params }
       return startCh.runStores(ctx, () => {

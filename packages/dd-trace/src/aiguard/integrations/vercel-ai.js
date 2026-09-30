@@ -73,8 +73,7 @@ function onModelIntercept (ctx) {
         null,
         'AIGuard: unable to decode the model result: %s'
       )
-      if (outputMessages === null) return result
-      if (!outputMessages.length) return result
+      if ((outputMessages === null) || !outputMessages.length) return result
 
       return evaluate(ctx, aiguard, [outputMessages], opts).then(() => result)
     }
@@ -112,8 +111,7 @@ function interceptStreamedResult (ctx, result, inputMessages) {
       null,
       'AIGuard: unable to decode the streamed model result: %s'
     )
-    if (outputMessages === null) return replayed
-    if (!outputMessages.length) return replayed
+    if ((outputMessages === null) || !outputMessages.length) return replayed
 
     return evaluate(ctx, aiguard, [outputMessages], opts).then(() => replayed)
   })

@@ -300,8 +300,7 @@ function configureEfdSuiteTracker (testFilepaths, repositoryRoot) {
  * @param {boolean} hasNewTest
  */
 function reserveEarlyFlakeDetectionSuite (testSuite, hasNewTest) {
-  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string') return false
-  if (isEarlyFlakeDetectionFaulty) return false
+  if (!isEfdSuiteAdmissionEnabled || typeof testSuite !== 'string' || isEarlyFlakeDetectionFaulty) return false
 
   if (hasNewTest) {
     suitesWithNewTests.add(testSuite)
@@ -1201,11 +1200,7 @@ function getSortWrapper (sort, frameworkVersion) {
 
 function getFinishWrapper (exitOrClose) {
   return async function () {
-    if (finishedSessionContexts.has(this)) {
-      return exitOrClose.apply(this, arguments)
-    }
-
-    if (!testSessionFinishCh.hasSubscribers) {
+    if (finishedSessionContexts.has(this) || !testSessionFinishCh.hasSubscribers) {
       return exitOrClose.apply(this, arguments)
     }
     finishedSessionContexts.add(this)
@@ -1758,8 +1753,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
 }
 
 async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker, files = result?.files) {
-  if (!testSuiteFinishCh.hasSubscribers) return
-  if (!Array.isArray(result?.files) || !Array.isArray(files)) return
+  if (!testSuiteFinishCh.hasSubscribers || !Array.isArray(result?.files) || !Array.isArray(files)) return
 
   const setupState = ctx && mainProcessSetupStates.get(ctx)
   if (

@@ -26,8 +26,7 @@ function isJavaScriptFile (absoluteFilePath) {
  * @param {number} testSourceLine
  */
 function shouldTrustInvocationDetailsLine (absoluteFilePath, testSourceLine) {
-  if (!Number.isInteger(testSourceLine) || testSourceLine < 1) return false
-  if (!isJavaScriptFile(absoluteFilePath)) return false
+  if (!Number.isInteger(testSourceLine) || testSourceLine < 1 || !isJavaScriptFile(absoluteFilePath)) return false
 
   return getCachedSourceMap(absoluteFilePath) === null
 }

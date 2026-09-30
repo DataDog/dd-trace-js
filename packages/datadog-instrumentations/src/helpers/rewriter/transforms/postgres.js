@@ -272,8 +272,11 @@ function findPostgresQueryIdentifier (program) {
 
   const declarations = query(program, 'VariableDeclarator[id.type="ObjectPattern"]')
   for (const declaration of declarations) {
-    if (declaration.init?.type !== 'CallExpression' || declaration.init.callee.name !== 'require') continue
-    if (declaration.init.arguments[0]?.value !== './query.js') continue
+    if (
+      declaration.init?.type !== 'CallExpression' ||
+      declaration.init.callee.name !== 'require' ||
+      declaration.init.arguments[0]?.value !== './query.js'
+    ) continue
 
     for (const property of declaration.id.properties) {
       if (property.type === 'Property' && property.key.name === 'Query' && property.value.type === 'Identifier') {

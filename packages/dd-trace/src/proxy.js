@@ -234,8 +234,7 @@ class Tracer extends NoopProxy {
         })
 
         rc.setProductHandler('AGENT_TASK', (action, conf) => {
-          if (action === 'unapply' || !conf) return
-          if (conf.task_type !== 'tracer_flare' || !conf.args) return
+          if (action === 'unapply' || conf?.task_type !== 'tracer_flare' || !conf.args) return
 
           this._flare.enable(config)
           this._flare.module.send(conf.args)

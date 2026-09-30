@@ -14,9 +14,7 @@ const connectionOptionsCache = new WeakMap()
 
 function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers) return sendCommand.call(this, command, stream)
-
-    if (!command?.promise) return sendCommand.call(this, command, stream)
+    if (!startCh.hasSubscribers || !command?.promise) return sendCommand.call(this, command, stream)
 
     const options = this.options || {}
     let connectionOptions = connectionOptionsCache.get(this)

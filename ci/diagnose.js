@@ -1743,9 +1743,7 @@ function readTextFiles (root, physicalRoot, files, maxTotalBytes) {
 
   for (const relativePath of files) {
     const file = getSafeScannedFile(root, physicalRoot, relativePath)
-    if (!file) continue
-
-    if (file.stat.size > MAX_TEXT_FILE_SIZE) continue
+    if (!file || (file.stat.size > MAX_TEXT_FILE_SIZE)) continue
     if (totalBytes + file.stat.size > maxTotalBytes) {
       textFiles.truncated = true
       break
@@ -1862,15 +1860,15 @@ function isTestSetupOrCiFile (file) {
   const relativePath = file.relativePath
   const basename = path.basename(relativePath)
 
-  if (isWorkflowFile(relativePath)) return true
-  if (basename === 'package.json') return true
-  if (/^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename)) return true
-  if (/^\.mocharc\./.test(basename)) return true
-  if (basename === 'cypress.json') return true
-  if (/setup|bootstrap/i.test(basename)) return true
-  if (relativePath.startsWith('cypress/support/')) return true
-
-  return false
+  return (
+    isWorkflowFile(relativePath) ||
+    basename === 'package.json' ||
+    /^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename) ||
+    /^\.mocharc\./.test(basename) ||
+    basename === 'cypress.json' ||
+    /setup|bootstrap/i.test(basename) ||
+    relativePath.startsWith('cypress/support/')
+  )
 }
 
 /**
@@ -2014,8 +2012,7 @@ function coerceVersion (rawVersion) {
  */
 function isAmbiguousRange (rawVersion) {
   const version = String(rawVersion || '').trim()
-  if (!version) return true
-  if (version.includes('||')) return true
+  if (!version || version.includes('||')) return true
   return /<=?\s*\d/.test(version)
 }
 

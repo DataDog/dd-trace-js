@@ -46,8 +46,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
   }
 
   start (ctx) {
-    if (!this.config.dsmEnabled) return
-    if (ctx.api !== 'publish' || !ctx.currentStore) return
+    if (!this.config.dsmEnabled || ctx.api !== 'publish' || !ctx.currentStore) return
     const { request } = ctx
     const messages = request.messages || []
     const topic = request.topic
@@ -119,7 +118,7 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       },
       metrics: {
         'pubsub.batch.message_count': messageCount,
-        'pubsub.batch': messageCount > 1 ? true : undefined,
+        'pubsub.batch': (messageCount > 1) || undefined,
       },
     }, ctx)
 

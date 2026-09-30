@@ -305,12 +305,12 @@ function isCleanupAuthorizationValid (filename, authorization) {
   try {
     const currentPhysicalRoot = fs.realpathSync(authorization.lexicalRoot)
     const rootStat = fs.statSync(currentPhysicalRoot, { bigint: true })
-    if (currentPhysicalRoot !== authorization.physicalRoot ||
-      rootStat.dev !== authorization.rootDevice || rootStat.ino !== authorization.rootInode) {
-      return false
-    }
-
-    if (authorization.physicalParent === undefined) return false
+    if (
+      currentPhysicalRoot !== authorization.physicalRoot ||
+      rootStat.dev !== authorization.rootDevice ||
+      rootStat.ino !== authorization.rootInode ||
+      authorization.physicalParent === undefined
+    ) return false
     const physicalParent = fs.realpathSync(path.dirname(filename))
     const parentStat = fs.statSync(physicalParent, { bigint: true })
     if (physicalParent !== authorization.physicalParent ||

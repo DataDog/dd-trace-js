@@ -220,7 +220,7 @@ function getGeneratedRuntimeFileStatus (strategy) {
       } catch {}
     }
   }
-  return expectsRuntimeFile ? false : undefined
+  return !expectsRuntimeFile && undefined
 }
 
 /**

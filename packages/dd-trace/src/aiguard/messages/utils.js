@@ -10,8 +10,7 @@ const IMAGE_FALLBACK = '[image]'
  * @returns {string|undefined|null}
  */
 function stringifyIfNeeded (value) {
-  if (value == null) return value
-  if (typeof value === 'string') return value
+  if ((value == null) || (typeof value === 'string')) return value
 
   try {
     return JSON.stringify(value)

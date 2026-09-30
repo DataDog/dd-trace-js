@@ -35,10 +35,7 @@ function getInterprocessTraceCode () {
   if (DD_PLAYWRIGHT_WORKER) {
     return PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
-    return VITEST_WORKER_TRACE_PAYLOAD_CODE
-  }
-  if (DD_VITEST_WORKER) {
+  if (getEnvironmentVariable('TINYPOOL_WORKER_ID') || DD_VITEST_WORKER) {
     return VITEST_WORKER_TRACE_PAYLOAD_CODE
   }
   return null
@@ -62,10 +59,7 @@ function getInterprocessLogsCode () {
   if (getEnvironmentVariable('MOCHA_WORKER_ID') === 'webdriverio') {
     return MOCHA_WORKER_LOGS_PAYLOAD_CODE
   }
-  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
-    return VITEST_WORKER_LOGS_PAYLOAD_CODE
-  }
-  if (getConfig().DD_VITEST_WORKER) {
+  if (getEnvironmentVariable('TINYPOOL_WORKER_ID') || getConfig().DD_VITEST_WORKER) {
     return VITEST_WORKER_LOGS_PAYLOAD_CODE
   }
   return null

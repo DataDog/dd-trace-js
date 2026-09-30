@@ -42,9 +42,11 @@ function wrapExecuteWithCallback (executeWithCallback) {
 function wrapProcess (process) {
   return function (...args) {
     const cb = args[0]
-    if (!ch.start.hasSubscribers || typeof cb !== 'function') return process.apply(this, args)
-
-    if (this[kTracingCallbackCommand]) return process.apply(this, args)
+    if (
+      !ch.start.hasSubscribers ||
+      typeof cb !== 'function' ||
+      this[kTracingCallbackCommand]
+    ) return process.apply(this, args)
 
     const ctx = getContext(this)
 

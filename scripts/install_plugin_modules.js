@@ -213,9 +213,7 @@ async function collectPeerDependencyFolders (rootFolder, parent = '') {
 
     // eslint-disable-next-line no-await-in-loop
     const folderStat = await lstat(current)
-    if (!folderStat.isDirectory()) continue
-    if (entry === 'node_modules') continue
-    if (!isGeneratedWorkspace(entry, parent)) continue
+    if (!folderStat.isDirectory() || (entry === 'node_modules') || !isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
       folders.push(...await collectPeerDependencyFolders(current, parent ? join(parent, entry) : entry))

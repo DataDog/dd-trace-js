@@ -332,8 +332,10 @@ function getActions (results) {
 function getActionPriority (result, localPasses) {
   if (result.evidence?.possibleLibraryBug) return 0
   if (result.scenario === 'ci-wiring' && localPasses.has(result.frameworkId)) return 0
-  if (result.evidence?.blockerCategory === 'EXECUTION_ENVIRONMENT_BLOCKED') return 1
-  if (result.evidence?.blockerCategory === 'VALIDATOR_LIMITATION') return 1
+  if (
+    result.evidence?.blockerCategory === 'EXECUTION_ENVIRONMENT_BLOCKED' ||
+    result.evidence?.blockerCategory === 'VALIDATOR_LIMITATION'
+  ) return 1
   if (result.scenario === 'ci-wiring') return 2
   return 3
 }

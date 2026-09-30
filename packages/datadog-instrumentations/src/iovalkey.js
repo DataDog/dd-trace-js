@@ -12,9 +12,7 @@ const errorCh = channel('apm:iovalkey:command:error')
 
 addHook({ name: 'iovalkey', versions: ['>=0.0.1'] }, Valkey => {
   shimmer.wrap(Valkey.prototype, 'sendCommand', sendCommand => function (command, stream) {
-    if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
-
-    if (!command?.promise) return sendCommand.apply(this, arguments)
+    if (!startCh.hasSubscribers || !command?.promise) return sendCommand.apply(this, arguments)
 
     const options = this.options || {}
     const connectionName = options.connectionName

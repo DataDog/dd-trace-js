@@ -786,6 +786,7 @@ export default [
       'unicorn/prefer-iterator-helpers': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
       'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-iterator-zip': 'off', // Iterator.zip is unavailable on the minimum supported Node.js version
       'unicorn/prefer-promise-try': 'off', // Promise.try (Node.js 24)
       'unicorn/prefer-promise-with-resolvers': 'off', // few | Promise.withResolvers (Node.js 22)
       'unicorn/prefer-set-methods': 'off', // Set methods (Node.js 22)

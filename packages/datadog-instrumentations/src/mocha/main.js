@@ -1200,8 +1200,7 @@ addHook({
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (runnerPackage, frameworkVersion) {
   const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
-  if (typeof Runner !== 'function') return
-  if (patched.has(Runner)) return
+  if ((typeof Runner !== 'function') || patched.has(Runner)) return
 
   patched.add(Runner)
   wrapRunnerEmit(Runner)
@@ -1584,10 +1583,7 @@ addHook({
   file: 'src/WorkerHandler.js',
 }, (workerHandlerPackage) => {
   shimmer.wrap(workerHandlerPackage.prototype, 'exec', exec => function (_, path) {
-    if (!testFinishCh.hasSubscribers) {
-      return exec.apply(this, arguments)
-    }
-    if (!path?.length) {
+    if (!testFinishCh.hasSubscribers || !path?.length) {
       return exec.apply(this, arguments)
     }
     const [testSuiteAbsolutePath] = path

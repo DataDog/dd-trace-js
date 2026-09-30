@@ -63,8 +63,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     const commitList = ctx.result
     const clusterId = ctx.clusterId
 
-    if (!this.config.dsmEnabled) return
-    if (!commitList || !Array.isArray(commitList)) return
+    if (!this.config.dsmEnabled || !commitList || !Array.isArray(commitList)) return
     for (const rawCommit of commitList) {
       const commit = this.transformProduceResponse(rawCommit, clusterId)
       this.tracer.setOffset(commit)

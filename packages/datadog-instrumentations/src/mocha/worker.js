@@ -443,8 +443,7 @@ addHook({
   filePattern: String.raw`lib/runner\.(?:c?js)$`,
 }, function (runnerPackage) {
   const Runner = runnerPackage.Runner ?? runnerPackage.default ?? runnerPackage
-  if (typeof Runner !== 'function') return
-  if (patchedRunners.has(Runner)) return
+  if ((typeof Runner !== 'function') || patchedRunners.has(Runner)) return
 
   patchedRunners.add(Runner)
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))

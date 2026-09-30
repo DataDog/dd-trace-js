@@ -102,8 +102,7 @@ module.exports = class PluginManager {
   loadPlugin (name) {
     const Plugin = pluginClasses[name]
 
-    if (!Plugin) return
-    if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
+    if (!Plugin || !this._tracerConfig) return // TODO: don't wait for tracer to be initialized
 
     // Check if this is a Test Optimization plugin and Test Optimization is not enabled
     if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this._tracerConfig.isCiVisibility) {
