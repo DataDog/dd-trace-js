@@ -29,14 +29,7 @@ const {
   PROPAGATED_PARENT_AGENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_NAME_KEY,
   ROOT_PARENT_ID,
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
-  INPUT_TOKENS_METRIC_KEY,
-  OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY,
-  REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  METRIC_KEY_ALIASES,
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
@@ -307,35 +300,8 @@ class LLMObsTagger {
   tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
-      let processedKey = key
-
       // processing these specifically for our metrics ingestion
-      switch (key) {
-        case 'inputTokens':
-          processedKey = INPUT_TOKENS_METRIC_KEY
-          break
-        case 'outputTokens':
-          processedKey = OUTPUT_TOKENS_METRIC_KEY
-          break
-        case 'totalTokens':
-          processedKey = TOTAL_TOKENS_METRIC_KEY
-          break
-        case 'cacheReadTokens':
-          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWriteTokens':
-          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWrite5mTokens':
-          processedKey = CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWrite1hTokens':
-          processedKey = CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'reasoningOutputTokens':
-          processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY
-          break
-      }
+      const processedKey = METRIC_KEY_ALIASES[key] ?? key
 
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
