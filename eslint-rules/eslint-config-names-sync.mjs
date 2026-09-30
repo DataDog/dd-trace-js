@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 
+// TypeScript 7 does not expose the compiler AST API needed by this rule.
 import ts from 'typescript'
 
 const require = createRequire(import.meta.url)
