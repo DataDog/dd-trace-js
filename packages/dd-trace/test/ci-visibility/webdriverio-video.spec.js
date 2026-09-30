@@ -291,6 +291,110 @@ describe('WebdriverIO video recording', () => {
     sinon.assert.calledThrice(complete)
   })
 
+  for (const capture of ['single', 'multiremote']) {
+    for (const release of ['completion', 'cancellation']) {
+      it(`drops excess ${capture} recordings from a full encoder queue and admits work after ${release}`, async () => {
+        const encoders = []
+        encode.callsFake(() => {
+          const encoder = new EventEmitter()
+          encoders.push(encoder)
+          return encoder
+        })
+        const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+        const complete = sinon.spy()
+        for (let attempt = 0; attempt < 33; attempt++) {
+          start().finish(true, upload, complete)
+          await clock.tickAsync(0)
+        }
+        sinon.assert.calledOnce(encode)
+        assert.ok(directories.every(directory => fs.existsSync(directory)))
+
+        if (capture === 'multiremote') {
+          Object.assign(browser, {
+            isMultiremote: true,
+            instances: ['first', 'second'],
+            getInstance: () => ({ takeScreenshot: sinon.stub().resolves(PNG) }),
+          })
+        }
+        const rejected = start()
+        const rejectedComplete = sinon.spy()
+        rejected.finish(true, upload, rejectedComplete)
+        await clock.tickAsync(0)
+        sinon.assert.calledOnceWithExactly(rejectedComplete, 'error')
+        assert.strictEqual(fs.existsSync(directories[33]), false)
+        sinon.assert.calledOnce(encode)
+        sinon.assert.notCalled(upload)
+        rejected.cancel()
+        sinon.assert.calledOnce(rejectedComplete)
+
+        if (release === 'completion') encoders[0].emit('close', 0)
+        else recorders[1].cancel()
+        await clock.tickAsync(0)
+        browser.isMultiremote = false
+        start().finish(true, upload, complete)
+        await clock.tickAsync(0)
+        assert.strictEqual(fs.existsSync(directories[34]), true)
+        sinon.assert.calledOnceWithExactly(complete, release === 'completion' ? 'uploaded' : 'error')
+
+        for (let index = release === 'completion' ? 1 : 0; index < encoders.length; index++) {
+          encoders[index].emit('close', 0)
+          await clock.tickAsync(0)
+        }
+        assert.strictEqual(complete.callCount, 34)
+        assert.strictEqual(upload.callCount, release === 'completion' ? 34 : 33)
+        assert.strictEqual(encode.callCount, upload.callCount)
+        assert.ok(directories.every(directory => !fs.existsSync(directory)))
+        sinon.assert.calledOnce(rejectedComplete)
+      })
+    }
+  }
+
+  for (const bytes of [200 * 1024 * 1024, 200 * 1024 * 1024 + 1]) {
+    it(`bounds retained encoder frames at ${bytes} bytes and releases the byte budget`, async () => {
+      const encoders = []
+      encode.callsFake(() => {
+        const encoder = new EventEmitter()
+        encoders.push(encoder)
+        return encoder
+      })
+      const upload = sinon.spy((filePath, index, uploaded) => uploaded())
+      const complete = sinon.spy()
+      const firstFrame = Buffer.alloc(100 * 1024 * 1024)
+      Buffer.from(PNG, 'base64').copy(firstFrame)
+      browser.takeScreenshot.resolves(firstFrame.toString('base64'))
+      start().finish(true, upload, complete)
+      await clock.tickAsync(0)
+
+      const secondFrame = Buffer.alloc(bytes - firstFrame.length)
+      firstFrame.copy(secondFrame)
+      browser.takeScreenshot.resolves(secondFrame.toString('base64'))
+      const second = start()
+      second.finish(true, upload, complete)
+      await clock.tickAsync(0)
+      const accepted = bytes === 200 * 1024 * 1024
+      assert.strictEqual(fs.existsSync(directories[1]), accepted)
+      assert.strictEqual(complete.callCount, accepted ? 0 : 1)
+      sinon.assert.calledOnce(encode)
+      sinon.assert.notCalled(upload)
+
+      if (accepted) second.cancel()
+      else encoders[0].emit('close', 0)
+      await clock.tickAsync(0)
+      start().finish(true, upload, complete)
+      await clock.tickAsync(0)
+      assert.strictEqual(fs.existsSync(directories[2]), true)
+
+      for (let index = accepted ? 0 : 1; index < encoders.length; index++) {
+        encoders[index].emit('close', 0)
+        await clock.tickAsync(0)
+      }
+      assert.deepStrictEqual(complete.args, [['error'], ['uploaded'], ['uploaded']])
+      sinon.assert.calledTwice(upload)
+      sinon.assert.calledTwice(encode)
+      assert.ok(directories.every(directory => !fs.existsSync(directory)))
+    })
+  }
+
   for (const failure of ['encoder error', 'nonzero exit', 'startup throw', 'timeout', 'failed kill']) {
     it(`releases the encoder queue after ${failure}`, async () => {
       const encoders = []

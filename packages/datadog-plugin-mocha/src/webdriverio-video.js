@@ -15,6 +15,7 @@ const log = require('../../dd-trace/src/log')
 const CAPTURE_INTERVAL_MS = 500
 const CAPTURE_TIMEOUT_MS = 5000
 const ENCODING_TIMEOUT_MS = 30_000
+const MAX_PENDING_ENCODINGS = 32
 const MAX_PIXELS = 16 * 1024 * 1024
 const MAX_FRAME_BYTES = 200 * 1024 * 1024
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
@@ -27,20 +28,28 @@ let ffmpegAvailable
 
 /** @type {Array<() => void>} */
 const encodingQueue = []
+let encodingBytes = 0
 
 /**
  * Runs one encoder at a time across all attempts in this WDIO process. Uploads do not hold the slot.
  *
- * @param {{ directory: string, index: number, frames: number, filePath: string, size: number[] }} recording
+ * @param {{ directory: string, index: number, frames: number, filePath: string,
+ * size: number[], bytes: number }} recording
  * @param {(error?: Error) => void} onDone
  */
 function encodeVideo (recording, onDone) {
+  // Include the active encoder and bound retained PNGs as well as the number of small recordings.
+  if (encodingQueue.length > MAX_PENDING_ENCODINGS || recording.bytes > MAX_FRAME_BYTES - encodingBytes) {
+    queueMicrotask(() => onDone(new Error('WebdriverIO video encoding queue is full')))
+    return
+  }
   let encoder
   let timeout
   const complete = error => {
     const index = encodingQueue.indexOf(start)
     if (index === -1) return
     encodingQueue.splice(index, 1)
+    encodingBytes -= recording.bytes
     // Defer the next start so repeated process startup failures cannot recurse through the queue.
     if (encodingQueue.length) queueMicrotask(encodingQueue[0])
     onDone(error)
@@ -74,6 +83,7 @@ function encodeVideo (recording, onDone) {
       queueMicrotask(() => complete(error))
     }
   }
+  encodingBytes += recording.bytes
   encodingQueue.push(start)
   if (encodingQueue.length === 1) start()
   return () => {
@@ -86,6 +96,7 @@ function encodeVideo (recording, onDone) {
       if (!encoder.kill('SIGKILL')) log.error('Error stopping WebdriverIO video encoder')
     } else {
       encodingQueue.splice(index, 1)
+      encodingBytes -= recording.bytes
       if (index === 0 && encodingQueue.length) queueMicrotask(encodingQueue[0])
     }
   }
@@ -296,7 +307,12 @@ class WebdriverioVideo {
       this.#encode(index + 1, upload, hasError || Boolean(error), onDone)
     }
     const recording = {
-      directory: this.#directory, index, frames: this.#frames[index], filePath, size: this.#sizes[index],
+      directory: this.#directory,
+      index,
+      frames: this.#frames[index],
+      filePath,
+      size: this.#sizes[index],
+      bytes: this.#bytes,
     }
     this.#cancelEncoding = encodeVideo(recording, error => {
       if (this.#finished) return
