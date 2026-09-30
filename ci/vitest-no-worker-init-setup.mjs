@@ -431,7 +431,10 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
     return
   }
 
-  if (!earlyFlakeDetectionRetriesByTask.has(task)) {
+  // onTestFinished runs before aroundEach fixture teardown. Select the budget
+  // when the next attempt records the completed attempt instead.
+  const isCompletedAttempt = attemptIndex < task.meta.__ddTestOptCurrentAttemptIndex
+  if (isCompletedAttempt && !earlyFlakeDetectionRetriesByTask.has(task)) {
     const retryCount = getEarlyFlakeDetectionRetryCount(task)
     earlyFlakeDetectionRetriesByTask.set(task, retryCount)
     task.repeats = retryCount
@@ -455,6 +458,10 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
   if (attemptIndex < getEarlyFlakeDetectionRetryCountForTask(task) ||
     task.meta.__ddTestOptEfdStatuses.includes('pass')) {
     task.result.state = 'pass'
+  } else if (isCompletedAttempt) {
+    // A zero retry budget cancels repeats after we suppressed the initial failure.
+    task.result.state = 'fail'
+    markQuarantinedFailure(task)
   }
 }
 
