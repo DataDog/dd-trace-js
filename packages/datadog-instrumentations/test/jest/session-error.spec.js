@@ -12,7 +12,7 @@ describe('Jest session errors', () => {
     message: 'Setup failed',
     stack: 'TypeError: Setup failed\n    at setup (setup.js:1:1)',
   })
-  const omitted = '\n\nSetup error details exceed the size limit. See suite events for full details.'
+  const omitted = '\n\nError details exceed the size limit. See test and suite events for full details.'
 
   function results (errors) {
     return {
@@ -48,18 +48,44 @@ describe('Jest session errors', () => {
     assert.match(error.stack, /other\.js/)
   })
 
-  it('keeps the generic summary when tests executed or no suite errors are available', () => {
-    for (const [input, executed] of [
-      [undefined, undefined],
-      [results([undefined, {}]), false],
-      [results([original]), true],
-      [{ ...results([original]), numPassedTests: 1 }, undefined],
-      [{ ...results([original]), numFailedTests: 1 }, undefined],
+  it('keeps the generic summary when no error details are available', () => {
+    for (const input of [
+      undefined,
+      results([undefined, {}]),
+      { ...results([undefined]), numPassedTests: 1 },
+      { ...results([undefined]), numFailedTests: 1 },
     ]) {
-      const error = getSessionError(input, executed)
+      const error = getSessionError(input)
       assert.strictEqual(error.name, 'Error')
       assert.strictEqual(error.message,
         `Failed test suites: ${input?.numFailedTestSuites || 0}. Failed tests: ${input?.numFailedTests || 0}`)
+    }
+  })
+
+  it('includes setup errors alongside executed tests and Jest failure reports', () => {
+    for (const testExecError of [undefined, { message: 'Teardown failed' }]) {
+      const input = { ...results([original]), numPassedTests: 1, numFailedTests: 1, numFailedTestSuites: 2 }
+      const failureMessage = '\u001b[31mAssertion failed\u001b[0m\n    at test (test.js:1:1)\nTeardown failed'
+      input.testResults.push({ numFailingTests: 1, failureMessage, testExecError })
+      const error = getSessionError(input)
+      assert.strictEqual(error.name, 'Error')
+      assert.strictEqual(error.message, 'Failed test suites: 2. Failed tests: 1\n\n' +
+        'Error: Assertion failed\n    at test (test.js:1:1)\nTeardown failed (1 suite)\n\n' +
+        'TypeError: Setup failed (1 suite)')
+      assert.match(error.stack, /at test \(test.js:1:1\)/)
+      assert.ok(error.stack.includes(original.stack))
+    }
+  })
+
+  it('bounds and safely reads Jest failure reports', () => {
+    for (const [entry, suffix] of [
+      [{ failureMessage: { toString () { assert.fail('Must not coerce failure messages') } } }, ''],
+      [{ get failureMessage () { throw new Error('Cannot read failure message') } }, ''],
+      [{ failureMessage: 'x'.repeat(MAX_LENGTH + 1) }, omitted],
+    ]) {
+      const input = { ...results([undefined]), numFailedTests: 1, testResults: [entry] }
+      const error = getSessionError(input)
+      assert.strictEqual(error.message, `Failed test suites: 1. Failed tests: 1${suffix}`)
     }
   })
 

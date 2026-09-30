@@ -11,22 +11,20 @@ const log = require('../../../dd-trace/src/log')
  * @typedef {object} JestResults
  * @property {number} [numFailedTestSuites]
  * @property {number} [numFailedTests]
- * @property {number} [numPassedTests]
- * @property {{ testExecError?: SuiteError }[]} [testResults]
+ * @property {{ testExecError?: SuiteError, failureMessage?: unknown, numFailingTests?: number }[]} [testResults]
  */
 
 /**
- * Includes complete, deduplicated setup errors only when all details fit.
+ * Includes complete, deduplicated suite errors only when all details fit.
  *
  * @param {JestResults} results
- * @param {boolean} hasExecutedTests
  * @returns {Error}
  */
-function getSessionError (results = {}, hasExecutedTests = results.numPassedTests > 0 || results.numFailedTests > 0) {
+function getSessionError (results = {}) {
   const { numFailedTestSuites = 0, numFailedTests = 0 } = results
   const summary = `Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`
   const error = new Error(summary)
-  if (hasExecutedTests || !results.testResults) return error
+  if (!results.testResults) return error
 
   const groups = new Map()
   let size = 0
@@ -34,13 +32,19 @@ function getSessionError (results = {}, hasExecutedTests = results.numPassedTest
     let name, message, stack
     try {
       const { testExecError } = result
-      if (!testExecError) continue
-      name = readField(testExecError.name)
-      if (name === '') name = readField(testExecError.type)
-      message = readField(testExecError.message)
-      stack = readField(testExecError.stack)
+      if (testExecError && !result.numFailingTests) {
+        name = readField(testExecError.name)
+        if (name === '') name = readField(testExecError.type)
+        message = readField(testExecError.message)
+        stack = readField(testExecError.stack)
+      } else {
+        // Jest's report includes assertion failures, hook errors and any suite execution error.
+        name = 'Error'
+        message = readField(result.failureMessage)
+        stack = message
+      }
     } catch {
-      log.debug('Skipping unreadable Jest suite execution error in the test session summary')
+      log.debug('Skipping unreadable Jest suite error in the test session summary')
       continue
     }
     if (name === undefined || message === undefined || stack === undefined) return omitDetails(error)
@@ -86,7 +90,7 @@ function readField (value) {
 
 /** @param {Error} error */
 function omitDetails (error) {
-  error.message += '\n\nSetup error details exceed the size limit. See suite events for full details.'
+  error.message += '\n\nError details exceed the size limit. See test and suite events for full details.'
   return error
 }
 

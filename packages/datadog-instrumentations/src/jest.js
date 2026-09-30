@@ -3344,7 +3344,7 @@ function getCliWrapper (isNewJestVersion) {
         status = testSessionEmptyReason ? 'skip' : 'pass'
       } else {
         status = 'fail'
-        error = getSessionError(result.results, hasExecutedTests)
+        error = getSessionError(result.results)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
