@@ -357,6 +357,13 @@ OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
 <h3 id="tracer-settings">Tracer settings</h3>
 <p>Options can be configured as a parameter to the <a href="./interfaces/tracer.html#init">init()</a> method or as environment variables. These are documented over on <a href="https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs">Configuring the Node.js Tracing Library</a>.</p>
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
+<p>Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
+When <code>DD_TEST_FAILURE_SCREENSHOTS_ENABLED</code> or <code>DD_TEST_FAILURE_VIDEOS_ENABLED</code> is unset, Playwright and Cypress must
+be configured to capture the corresponding media. Explicitly setting a flag to <code>true</code> also enables its capture in
+Playwright (1.38.0 or later) and Cypress. Playwright uses <code>only-on-failure</code> screenshots and <code>retain-on-failure</code> videos
+unless the project already captures failures; existing capture options are preserved. Cypress enables
+<code>screenshotOnRunFailure</code> or <code>video</code>. Setting either flag to <code>false</code> disables that upload without modifying the
+framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.</p>
 <p>Set <code>DD_CODE_COVERAGE_FLAGS</code> to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.</p>
