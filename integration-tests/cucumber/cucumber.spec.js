@@ -4742,57 +4742,67 @@ describe(`cucumber@${version} commonJS`, () => {
         await runImpactedTest({ isModified: true })
       })
 
-      it('detects an impacted scenario in a feature with a Background and Rule', async () => {
-        receiver.setSettings({ impacted_tests_enabled: true })
+      for (const [description, scenarioLines] of [
+        ['Background', [
+          '  Scenario: Say impacted test',
+          '    Then I should have heard "impacted test"',
+        ]],
+        ['Background and Rule', [
+          '  Rule: The greeting is repeated',
+          '    Scenario: Say impacted test',
+          '      Then I should have heard "impacted test"',
+        ]],
+      ]) {
+        it(`detects an impacted scenario in a feature with a ${description}`, async () => {
+          receiver.setSettings({ impacted_tests_enabled: true })
 
-        const featurePath = path.join(cwd, 'ci-visibility/features-impacted-test/impacted-test.feature')
-        const originalFeature = fs.readFileSync(featurePath, 'utf8')
-        try {
-          fs.writeFileSync(featurePath, [
-            'Feature: Impacted Test',
-            '  Background: The greeter has spoken',
-            '    When the greeter says impacted test',
-            '  Rule: The greeting is repeated',
-            '    Scenario: Say impacted test',
-            '      Then I should have heard "impacted test"',
-            '',
-          ].join('\n'))
+          const featurePath = path.join(cwd, 'ci-visibility/features-impacted-test/impacted-test.feature')
+          const originalFeature = fs.readFileSync(featurePath, 'utf8')
+          try {
+            fs.writeFileSync(featurePath, [
+              'Feature: Impacted Test',
+              '  Background: The greeter has spoken',
+              '    When the greeter says impacted test',
+              ...scenarioLines,
+              '',
+            ].join('\n'))
 
-          childProcess = exec(
-            './node_modules/.bin/cucumber-js ci-visibility/features-impacted-test/impacted-test.feature',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                GITHUB_BASE_REF: '',
-              },
-            }
-          )
-          let output = ''
-          childProcess.stdout.on('data', chunk => { output += chunk })
-          childProcess.stderr.on('data', chunk => { output += chunk })
-
-          const [payloadResult, exitResult] = await Promise.allSettled([
-            receiver.gatherPayloadsUntilChildExit(
-              childProcess,
-              ({ url }) => url.endsWith('/api/v2/citestcycle'),
-              payloads => {
-                const tests = payloads.flatMap(({ payload }) => payload.events)
-                  .filter(event => event.type === 'test')
-                  .map(event => event.content)
-                assert.strictEqual(tests.length, 1)
-                assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+            childProcess = exec(
+              './node_modules/.bin/cucumber-js ci-visibility/features-impacted-test/impacted-test.feature',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  GITHUB_BASE_REF: '',
+                },
               }
-            ),
-            once(childProcess, 'close'),
-          ])
+            )
+            let output = ''
+            childProcess.stdout.on('data', chunk => { output += chunk })
+            childProcess.stderr.on('data', chunk => { output += chunk })
 
-          assert.strictEqual(exitResult.value[0], 0, output)
-          if (payloadResult.status === 'rejected') throw payloadResult.reason
-        } finally {
-          fs.writeFileSync(featurePath, originalFeature)
-        }
-      })
+            const [payloadResult, exitResult] = await Promise.allSettled([
+              receiver.gatherPayloadsUntilChildExit(
+                childProcess,
+                ({ url }) => url.endsWith('/api/v2/citestcycle'),
+                payloads => {
+                  const tests = payloads.flatMap(({ payload }) => payload.events)
+                    .filter(event => event.type === 'test')
+                    .map(event => event.content)
+                  assert.strictEqual(tests.length, 1)
+                  assert.strictEqual(tests[0].meta[TEST_IS_MODIFIED], 'true')
+                }
+              ),
+              once(childProcess, 'close'),
+            ])
+
+            assert.strictEqual(exitResult.value[0], 0, output)
+            if (payloadResult.status === 'rejected') throw payloadResult.reason
+          } finally {
+            fs.writeFileSync(featurePath, originalFeature)
+          }
+        })
+      }
 
       it('should not be detected as impacted if disabled', async () => {
         receiver.setSettings({ impacted_tests_enabled: false })
