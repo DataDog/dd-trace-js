@@ -128,16 +128,35 @@ describe('flag evaluation real worker processes', () => {
         options.push('--allow-child-process')
         args.splice(0, args.length, '--no-allow-child-process')
       }
-      const { stdout } = await exec(process.execPath, [
-        ...args, '--require', preload, fixture, 'permissions', allowed,
-      ], {
-        timeout: 10000,
-        env: {
-          ...process.env,
-          NODE_OPTIONS: [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' '),
-        },
-      })
-      const result = JSON.parse(stdout)
+      const nodeOptions = [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' ')
+      // CI's node-preload hook re-injects coverage after exec receives its env. Its process.binding
+      // call is forbidden in permission mode, so opt out only this subprocess, after that hook runs.
+      // eslint-disable-next-line n/no-extraneous-require -- Only use node-preload's already-loaded spawn hook.
+      const spawnHooks = require.cache[require.resolve('process-on-spawn')]?.exports
+      /** @param {{ args: string[], env: Record<string, string | undefined> }} spawned */
+      const withoutCoverage = ({ args, env }) => {
+        if (args.includes(fixture) && args.includes('permissions')) {
+          env.NODE_OPTIONS = nodeOptions
+          env.NODE_V8_COVERAGE = ''
+        }
+      }
+      let output
+      spawnHooks?.addListener(withoutCoverage)
+      try {
+        output = await exec(process.execPath, [
+          ...args, '--require', preload, fixture, 'permissions', allowed,
+        ], {
+          timeout: 10000,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: nodeOptions,
+            NODE_V8_COVERAGE: '',
+          },
+        })
+      } finally {
+        spawnHooks?.removeListener(withoutCoverage)
+      }
+      const result = JSON.parse(output.stdout)
       assert.strictEqual(result.accepted, 16)
       assert.strictEqual(result.delivered, 17)
       assert.ok(result.bodies.flatMap(({ body }) => body.flagEvaluations)
