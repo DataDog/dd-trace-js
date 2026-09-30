@@ -32,6 +32,28 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  videos: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./videos.e2e.js'],
+  },
+  videosJasmineRetry: {
+    maxInstances: 1,
+    specs: ['./jasmine-retry.e2e.js'],
+  },
+  videosParallel: {
+    injectGlobals: false,
+    capabilities: [{ browserName: 'chrome' }, { browserName: 'firefox' }],
+    specs: ['./videos.e2e.js'],
+  },
+  videosMultiremote: {
+    injectGlobals: false,
+    capabilities: {
+      firstBrowser: { capabilities: { browserName: 'chrome' } },
+      secondBrowser: { capabilities: { browserName: 'firefox' } },
+    },
+    specs: ['./videos.e2e.js'],
+  },
   emptyShard: {
     specs: ['./first.e2e.js'],
     shard: { current: 2, total: 2 },

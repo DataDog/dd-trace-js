@@ -10,6 +10,7 @@ const { pathToFileURL } = require('node:url')
 const { promisify } = require('node:util')
 
 const MochaTest = require('mocha/lib/test')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const MochaPlugin = require('../../datadog-plugin-mocha/src')
@@ -30,6 +31,8 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   TEST_FAILURE_SCREENSHOT_UPLOADED,
   TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
+  TEST_FAILURE_VIDEO_UPLOADED,
+  TEST_FAILURE_VIDEO_UPLOAD_ERROR,
   TEST_HAS_DYNAMIC_NAME,
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
@@ -45,6 +48,11 @@ const {
   CONFIGURATION_REQUEST,
   CONFIGURATION_RESPONSE,
   requestWebdriverioScreenshotUpload,
+  requestWebdriverioVideoUpload,
+  VIDEO_UPLOAD,
+  VIDEO_UPLOAD_FLUSH,
+  VIDEO_UPLOAD_RESPONSE,
+  VIDEO_UPLOAD_TIMEOUT_MS,
   SCREENSHOT_UPLOAD_RESPONSE,
   SCREENSHOT_UPLOAD_TIMEOUT_MS,
   SUITE_FINISH,
@@ -2702,6 +2710,146 @@ describe('webdriverio instrumentation', () => {
     }
   })
 
+  for (const uploadError of [undefined, new Error('video upload failed')]) {
+    it(`finishes and tags Jasmine video attempts after upload ${uploadError ? 'failure' : 'success'}`, () => {
+      const originalBrowser = globalThis.browser
+      globalThis.browser = { takeScreenshot: () => PNG_SCREENSHOT }
+      const recorder = { capture: sinon.spy(), finish: sinon.spy() }
+      const createVideo = sinon.stub().returns(recorder)
+      const Plugin = proxyquire('../../datadog-plugin-mocha/src', {
+        './webdriverio-video': createVideo,
+        '../../dd-trace/src/config/helper': { getValueFromEnvSources: () => true },
+      })
+      const exporter = {
+        canUploadTestVideos: () => true,
+        canUploadTestScreenshots: () => true,
+        uploadTestVideo: sinon.spy(),
+        uploadTestScreenshot: sinon.spy(),
+        flush: sinon.spy(),
+      }
+      const { plugin, spans } = createJasminePlugin({ isTestFailureVideosEnabled: true }, {
+        Plugin,
+        exporter,
+        testOptimization: { DD_TEST_FAILURE_VIDEOS_ENABLED: true, DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      const file = path.join(process.cwd(), 'video.spec.js')
+      const result = {
+        ...createJasmineResult('video', file, 'failed'),
+        failedExpectations: [{ message: 'failed' }],
+      }
+      try {
+        reportJasmineSpecStarted(result, file)
+        channel('tracing:orchestrion:@wdio/jasmine-framework:JasmineReporter_specDone:end').publish({
+          arguments: [result],
+          self: { _specs: [file] },
+        })
+        sinon.assert.calledOnce(createVideo)
+        sinon.assert.calledOnce(recorder.finish)
+        assert.strictEqual(spans[0].context()._isFinished, false)
+        channel('ci:mocha:worker:finish').publish({ onDone: () => {} })
+        sinon.assert.notCalled(exporter.flush)
+        const [failed, upload, complete] = recorder.finish.firstCall.args
+        assert.strictEqual(failed, true)
+        upload('/tmp/attempt.webm', 0, () => {})
+        const options = exporter.uploadTestVideo.firstCall.args[0]
+        assert.strictEqual(options.traceId, spans[0].context().toTraceId())
+        assert.strictEqual(options.idempotencyKey, '1:webdriverio-failure-0.webm')
+        complete(uploadError ? 'error' : 'uploaded')
+        assert.strictEqual(spans[0].context()._isFinished, false)
+        sinon.assert.notCalled(exporter.flush)
+        const screenshotComplete = exporter.uploadTestScreenshot.firstCall.args[1]
+        screenshotComplete(uploadError ? undefined : new Error('screenshot upload failed'))
+        assert.strictEqual(spans[0].context()._isFinished, true)
+        const tags = spans[0].context().getTags()
+        assert.strictEqual(tags[TEST_FAILURE_VIDEO_UPLOADED], uploadError ? undefined : 'true')
+        assert.strictEqual(tags[TEST_FAILURE_VIDEO_UPLOAD_ERROR], uploadError ? 'true' : undefined)
+        assert.strictEqual(tags[TEST_FAILURE_SCREENSHOT_UPLOADED], uploadError ? 'true' : undefined)
+        assert.strictEqual(tags[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], uploadError ? undefined : 'true')
+        sinon.assert.calledOnce(exporter.flush)
+      } finally {
+        // @ts-expect-error CiPlugin's type omits the base plugin's supported boolean configuration.
+        plugin.configure(false)
+        if (originalBrowser === undefined) delete globalThis.browser
+        else globalThis.browser = originalBrowser
+      }
+    })
+  }
+
+  it('shares the response dispatcher for screenshots and videos and releases it on disconnect', () => {
+    const clock = sinon.useFakeTimers()
+    const originalConnected = process.connected
+    const originalSend = process.send
+    const initialMessageListeners = process.listenerCount('message')
+    const messages = []
+    const screenshotDone = sinon.spy()
+    const videoDone = sinon.spy()
+    process.connected = true
+    process.send = (message, onDone) => { messages.push(message); onDone(); return true }
+    try {
+      requestWebdriverioScreenshotUpload({}, screenshotDone)
+      requestWebdriverioVideoUpload({}, videoDone)
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners + 1)
+      process.emit('message', { name: VIDEO_UPLOAD_RESPONSE, content: messages[1].args.content }, undefined)
+      sinon.assert.calledOnceWithExactly(videoDone, undefined)
+      sinon.assert.notCalled(screenshotDone)
+      process.emit('disconnect')
+      sinon.assert.calledOnce(screenshotDone)
+      assert.match(screenshotDone.firstCall.args[0].message, /disconnected/)
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+      requestWebdriverioVideoUpload({}, videoDone)
+      clock.tick(VIDEO_UPLOAD_TIMEOUT_MS - 1)
+      sinon.assert.calledOnce(videoDone)
+      clock.tick(1)
+      sinon.assert.calledTwice(videoDone)
+      assert.match(videoDone.secondCall.args[0].message, /video upload timed out/)
+      assert.strictEqual(process.listenerCount('message'), initialMessageListeners)
+    } finally {
+      process.emit('disconnect')
+      if (originalConnected === undefined) Reflect.deleteProperty(process, 'connected')
+      else process.connected = originalConnected
+      if (originalSend === undefined) delete process.send
+      else process.send = originalSend
+      clock.restore()
+    }
+  })
+
+  it('bounds final video uploads per worker without aborting a running sibling', () => {
+    const clock = sinon.useFakeTimers()
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const videoUploadCh = channel('ci:webdriverio:video:upload')
+    const uploads = []
+    const onTestFinish = () => {}
+    const onUpload = request => uploads.push(request)
+    testFinishCh.subscribe(onTestFinish)
+    videoUploadCh.subscribe(onUpload)
+    try {
+      require('../src/webdriverio')
+      const runner = { config: { framework: 'mocha', rootDir: process.cwd() } }
+      const first = createWorker()
+      const second = createWorker()
+      registerWorker(runner, first, 'first.spec.js')
+      registerWorker(runner, second, 'second.spec.js')
+      first.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'first' } })
+      second.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'second' } })
+      assert.strictEqual(uploads.length, 2)
+      first.emit('message', { name: VIDEO_UPLOAD_FLUSH })
+      clock.tick(FINAL_FLUSH_TIMEOUT - 1)
+      assert.strictEqual(uploads[0].signal.aborted, false)
+      clock.tick(1)
+      assert.strictEqual(uploads[0].signal.aborted, true)
+      assert.strictEqual(uploads[1].signal.aborted, false)
+      assert.strictEqual(uploads[0].signal.reason.code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
+      first.emit('message', { name: VIDEO_UPLOAD, content: { requestId: 'late-encoder' } })
+      assert.strictEqual(uploads[2].signal.aborted, true)
+      second.emit('exit', { exitCode: 1 })
+      assert.strictEqual(uploads[1].signal.aborted, true)
+    } finally {
+      testFinishCh.unsubscribe(onTestFinish)
+      videoUploadCh.unsubscribe(onUpload)
+      clock.restore()
+    }
+  })
+
   it('allows the WebdriverIO screenshot IPC response to outlive the exporter upload deadline', () => {
     assert.strictEqual(SCREENSHOT_UPLOAD_TIMEOUT_MS, FINAL_FLUSH_TIMEOUT + 5000)
   })
@@ -4142,6 +4290,7 @@ describe('webdriverio instrumentation', () => {
         isSuitesSkippingEnabled: false,
         isTestDynamicInstrumentationEnabled: true,
         isTestFailureScreenshotsEnabled: false,
+        isTestFailureVideosEnabled: false,
         isTestManagementTestsEnabled: true,
         knownTests: {
           mocha: {
@@ -4871,11 +5020,12 @@ function createWorker () {
  * @param {object} [options]
  * @param {object} [options.exporter]
  * @param {object} [options.testOptimization]
+ * @param {typeof MochaPlugin} [options.Plugin]
  * @returns {{plugin: MochaPlugin, spans: object[]}}
  */
 function createJasminePlugin (libraryConfig, options = {}) {
-  const { exporter = {}, testOptimization = {} } = options
-  const plugin = new MochaPlugin({ _exporter: exporter }, { testOptimization })
+  const { exporter = {}, testOptimization = {}, Plugin = MochaPlugin } = options
+  const plugin = new Plugin({ _exporter: exporter }, { testOptimization })
   const spans = []
   sinon.stub(plugin, 'startTestSpan').callsFake(() => {
     const tags = { 'span.type': 'test' }

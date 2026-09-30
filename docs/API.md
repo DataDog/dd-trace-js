@@ -596,6 +596,20 @@ unless the project already captures failures; existing capture options are prese
 `screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
 framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
 
+For WebdriverIO 9 and later with the Mocha or Jasmine adapter, explicitly set
+`DD_TEST_FAILURE_VIDEOS_ENABLED=true` to record and upload failure videos automatically. Install FFmpeg
+with PNG decoding and the `libvpx` encoder and make `ffmpeg` available on `PATH` in the test workers.
+No WebdriverIO video reporter or additional dd-trace npm dependency is required. If FFmpeg is unavailable,
+dd-trace logs a warning and runs the tests without video recording.
+
+WebdriverIO recordings are screenshot sequences encoded as WebM, using the approach of
+[wdio-video-reporter](https://webdriver.io/docs/wdio-video-reporter/). They capture browser command results
+and sample idle periods every 500ms; browser dialogs and native UI outside screenshots are not recorded.
+Each failed attempt, including retries and test hook failures, gets its own upload. Passing and skipped
+attempts are discarded. Multiremote sessions produce separate videos for the same attempt.
+Temporary frames and videos are removed after completion. Raw frames are limited to 200 MiB per attempt;
+capture, encoding, or upload failures do not fail the test run.
+
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.
