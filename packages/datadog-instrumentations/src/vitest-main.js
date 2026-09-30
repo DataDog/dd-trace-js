@@ -1069,9 +1069,7 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
-      config.retry = isDynamicAtrEnabled || flakyTests !== undefined
-        ? { count: retryCount, __ddTestOptAtr: true }
-        : retryCount
+      config.retry = { count: retryCount, __ddTestOptAtr: true }
       configured = true
       if (projectName) {
         projectNames.push(projectName)
