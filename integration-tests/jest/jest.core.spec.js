@@ -2611,6 +2611,82 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 })
 
+describe(`jest@${JEST_VERSION} session setup errors`, () => {
+  let receiver
+  let childProcess
+
+  useSandbox([
+    `jest@${JEST_VERSION}`,
+    JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
+  ].filter(Boolean))
+
+  beforeEach(async () => {
+    receiver = await new FakeCiVisIntake().start()
+    receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+  })
+
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver.stop()
+  })
+
+  for (const mode of ['shared', 'shared-workers', 'shared-bail', 'distinct', 'hook', 'body']) {
+    it(`reports ${mode} failures on sessions and modules`, async () => {
+      let output = ''
+      const config = JSON.stringify({
+        testRegex: 'jest-session-errors/test-.*\\.js$',
+        testRunner: 'jest-circus/runner',
+        testEnvironment: 'node',
+        setupFilesAfterEnv: ['<rootDir>/ci-visibility/jest-session-errors/setup.js'],
+      })
+      const args = mode === 'shared-workers' ? '--maxWorkers=2' : '--runInBand'
+      const bail = mode === 'shared-bail' ? '--bail' : ''
+      childProcess = exec(`node node_modules/jest/bin/jest ${args} ${bail} --config '${config}'`, {
+        cwd: sandboxCwd(),
+        env: { ...getCiVisAgentlessConfig(receiver.port), JEST_SETUP_ERROR_MODE: mode },
+      })
+      childProcess.stdout.on('data', chunk => { output += chunk })
+      childProcess.stderr.on('data', chunk => { output += chunk })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          const hasExecutedTests = mode === 'hook' || mode === 'body'
+          assert.strictEqual(tests.length, hasExecutedTests ? 2 : 0, output)
+          for (const type of ['test_session_end', 'test_module_end']) {
+            const event = events.find(event => event.type === type)?.content
+            assert.ok(event, output)
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.match(event.meta[ERROR_MESSAGE], /^Failed test suites: 2\. Failed tests: /)
+            if (mode.startsWith('shared')) {
+              // Jest serializes worker errors with type "Error"; the original type remains in the stack.
+              assert.strictEqual(event.meta[ERROR_TYPE], mode === 'shared-workers' ? 'Error' : 'TypeError')
+              assert.match(event.meta[ERROR_MESSAGE], /Error: Test setup unavailable \(2 suites\)/)
+              assert.strictEqual(event.meta[ERROR_MESSAGE].split('Test setup unavailable').length - 1, 1)
+              assert.match(event.meta['error.stack'], /setup\.js/)
+              assert.doesNotMatch(event.meta['error.stack'], /at getSessionError/)
+            } else if (mode === 'distinct') {
+              assert.match(event.meta[ERROR_MESSAGE], /Cannot initialize test-first\.js/)
+              assert.match(event.meta[ERROR_MESSAGE], /Cannot initialize test-second\.js/)
+            } else {
+              assert.strictEqual(event.meta[ERROR_MESSAGE], 'Failed test suites: 2. Failed tests: 2')
+            }
+          }
+          if (!hasExecutedTests) {
+            const suites = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(suites.length, 2)
+            assert.ok(suites.every(event => event.content.meta['error.stack'].includes('setup.js')))
+          }
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1, output)
+    })
+  }
+})
+
 describe(`jest@${JEST_VERSION} with pino@7.6.4`, () => {
   let receiver
   let childProcess
