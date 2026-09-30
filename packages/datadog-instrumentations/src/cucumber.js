@@ -1419,21 +1419,36 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isImpactedTestsEnabled) {
       const setIsModified = (receivedIsModified) => { isModified = receivedIsModified }
       const gherkinNodes = []
-      const featureChildren = gherkinDocument.feature?.children
-      if (featureChildren) {
+      // Prefix ranges catch removed Backgrounds, which have no AST node in the target document.
+      const gherkinScopeRanges = []
+      const feature = gherkinDocument.feature
+      const featureChildren = feature?.children
+      if (featureChildren?.length) {
+        const firstFeatureChild = featureChildren[0]
+        const firstFeatureNode = firstFeatureChild.background ?? firstFeatureChild.rule ?? firstFeatureChild.scenario
+        const firstFeatureLine = firstFeatureNode.tags?.[0]?.location.line ?? firstFeatureNode.location.line
+        const featurePrefix = [feature.location.line, firstFeatureLine - 1]
         let featureBackground
         for (const child of featureChildren) {
           if (child.background) {
             featureBackground = child.background
             continue
           }
-          const children = child.rule?.children ?? [child]
+          const rule = child.rule
+          const children = rule?.children ?? [child]
           let ruleBackground
           for (const { background } of children) {
             if (background) ruleBackground = background
           }
           for (const { scenario } of children) {
             if (scenario && pickle.astNodeIds.includes(scenario.id)) {
+              if (!featureBackground) gherkinScopeRanges.push(featurePrefix)
+              if (rule?.children?.length && !ruleBackground) {
+                const firstRuleChild = rule.children[0]
+                const firstRuleNode = firstRuleChild.background ?? firstRuleChild.scenario
+                const firstRuleLine = firstRuleNode.tags?.[0]?.location.line ?? firstRuleNode.location.line
+                gherkinScopeRanges.push([rule.location.line, firstRuleLine - 1])
+              }
               if (featureBackground) gherkinNodes.push(featureBackground)
               if (ruleBackground) gherkinNodes.push(ruleBackground)
               gherkinNodes.push(scenario)
@@ -1445,6 +1460,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
       isModifiedCh.publish({
         gherkinNodes,
+        gherkinScopeRanges,
         testFileAbsolutePath: gherkinDocument.uri,
         modifiedFiles,
         stepIds,

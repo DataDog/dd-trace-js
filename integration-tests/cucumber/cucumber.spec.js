@@ -4624,6 +4624,18 @@ describe(`cucumber@${version} commonJS`, () => {
           'Given the greeter says impacted test'
         ))
       }
+      for (const [filename, original, modified] of [
+        ['feature-background-docstring', 'original content', 'changed content'],
+        ['rule-background-datatable', '| message  | original |', '| message  | changed  |'],
+        ['removed-feature-background',
+          '  Background: The greeter has spoken\n    When the greeter says impacted test\n', ''],
+        ['removed-rule-background',
+          '    Background: The greeter has spoken\n      When the greeter says impacted test\n', ''],
+      ]) {
+        const featurePath = path.join(cwd, `ci-visibility/features-impacted-background/${filename}.feature`)
+        const feature = fs.readFileSync(featurePath, 'utf8')
+        fs.writeFileSync(featurePath, feature.replace(original, modified))
+      }
       execSync('git add ci-visibility/features-impacted-test/impacted-test.feature ' +
         'ci-visibility/features-impacted-background/*.feature', { cwd, stdio: 'ignore' })
       execSync('git commit -m "modify impacted test features"', { cwd, stdio: 'ignore' })
@@ -4756,7 +4768,23 @@ describe(`cucumber@${version} commonJS`, () => {
           'Top-level scenario': true,
           'Scenario inside a rule': true,
         }],
+        ['feature-background-docstring', {
+          'Top-level scenario': true,
+          'Scenario inside a rule': true,
+        }],
         ['rule-background', {
+          'Scenario inside the changed rule': true,
+          'Scenario inside the unchanged rule': false,
+        }],
+        ['rule-background-datatable', {
+          'Scenario inside the changed rule': true,
+          'Scenario inside the unchanged rule': false,
+        }],
+        ['removed-feature-background', {
+          'Top-level scenario': true,
+          'Scenario inside a rule': true,
+        }],
+        ['removed-rule-background', {
           'Scenario inside the changed rule': true,
           'Scenario inside the unchanged rule': false,
         }],

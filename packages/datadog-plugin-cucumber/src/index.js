@@ -450,6 +450,7 @@ class CucumberPlugin extends CiPlugin {
 
     this.addSub('ci:cucumber:is-modified-test', ({
       gherkinNodes,
+      gherkinScopeRanges,
       testFileAbsolutePath,
       modifiedFiles,
       stepIds,
@@ -457,11 +458,25 @@ class CucumberPlugin extends CiPlugin {
       setIsModified,
     }) => {
       const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
+      for (const [startLine, endLine] of gherkinScopeRanges) {
+        if (isModifiedTest(testScenarioPath, startLine, endLine, modifiedFiles, 'cucumber')) {
+          setIsModified(true)
+          return
+        }
+      }
       for (const gherkinNode of gherkinNodes) {
+        const lastStep = gherkinNode.steps.at(-1)
+        let endLine = lastStep?.location.line ?? gherkinNode.location.line
+        if (lastStep?.dataTable?.rows.length) {
+          endLine = lastStep.dataTable.rows.at(-1).location.line
+        } else if (lastStep?.docString) {
+          const { content, location } = lastStep.docString
+          endLine = location.line + (content ? content.split('\n').length + 1 : 1)
+        }
         const isModified = isModifiedTest(
           testScenarioPath,
           gherkinNode.location.line,
-          gherkinNode.steps.at(-1)?.location.line ?? gherkinNode.location.line,
+          endLine,
           modifiedFiles,
           'cucumber'
         )
