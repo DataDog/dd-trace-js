@@ -3,7 +3,7 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 12,
+  "iterations": 3,
   "instructions": true,
   "variants": {
     "typical": {
@@ -14,6 +14,7 @@
       }
     },
     "typical-full": {
+      "iterations": 2,
       "env": {
         "VARIANT": "typical",
         "CONSENT": "true",
@@ -32,6 +33,7 @@
       }
     },
     "stress-full": {
+      "iterations": 1,
       "env": {
         "VARIANT": "stress",
         "CONSENT": "true",
