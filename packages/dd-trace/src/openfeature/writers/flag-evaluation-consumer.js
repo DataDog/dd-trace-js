@@ -67,6 +67,10 @@ class FlagEvaluationConsumer extends BaseFFEWriter {
       agentUrl: route.url,
       endpoint: joinEVPProxyPath(route.basePath, FLAG_EVALUATION_ENDPOINT),
       headers,
+      // Consent to send evaluation data never permits logging an echoed response body or error message.
+      formatError: (error, statusCode) => statusCode === undefined
+        ? `Transport error ${error.code ?? 'UNKNOWN'}`
+        : `HTTP status ${statusCode}`,
     })
     this.#setRoute({ ...route, headers })
     this.#onProcessed = onProcessed

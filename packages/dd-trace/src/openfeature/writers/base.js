@@ -20,6 +20,7 @@ const EVP_ORIGIN_HEADERS = {
  * @property {number} [payloadSizeLimit] - Maximum payload size in bytes
  * @property {number} [eventSizeLimit] - Maximum individual event size in bytes
  * @property {object} [headers] - Additional HTTP headers
+ * @property {(error: Error, statusCode?: number) => string} [formatError] - Optional delivery error redaction
  */
 
 /**
@@ -80,10 +81,14 @@ function shouldSwitchFutureRoute (statusCode) {
  */
 class BaseFFEWriter {
   #destroyer
+  #formatError
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
    */
-  constructor ({ interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers }) {
+  constructor ({
+    interval, timeout, config, endpoint, agentUrl, payloadSizeLimit, eventSizeLimit, headers, formatError,
+  }) {
+    this.#formatError = formatError
     this._interval = interval ?? 1000
     this._timeout = timeout ?? 5000
 
@@ -308,6 +313,7 @@ class BaseFFEWriter {
     // The request helper mutates headers. Concurrent envelopes must not share them.
     const requestOptions = { ...route.requestOptions, headers: { ...route.requestOptions.headers } }
     request(payload, requestOptions, (error, response, statusCode) => {
+      const errorMessage = error && (this.#formatError ? this.#formatError(error, statusCode) : error.message)
       if (fallbackRoute && isSafeToReplay(error, statusCode)) {
         log.debug(
           '%s switching from %s%s to direct intake after definitive rejection',
@@ -336,7 +342,7 @@ class BaseFFEWriter {
           this._fallbackRoute = undefined
           route.onFallback?.()
         }
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, errorMessage)
         onComplete?.(false)
         return
       }
@@ -369,7 +375,7 @@ class BaseFFEWriter {
       ) {
         route.onUnavailable()
         if (error) {
-          log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+          log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, errorMessage)
         } else {
           log.warn('Events request returned status %d', statusCode)
         }
@@ -378,7 +384,7 @@ class BaseFFEWriter {
       }
 
       if (error) {
-        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, error.message)
+        log.error('Failed to send events to %s%s: %s', route.url.href, route.endpoint, errorMessage)
       } else if (statusCode >= 200 && statusCode < 300) {
         log.debug('Successfully sent %d events', eventCount)
       } else {

@@ -32,7 +32,8 @@ describe('OpenFeature worker logging', () => {
       assert.strictEqual(failures.length, enabled ? 1 : 0)
       if (enabled) {
         assert.strictEqual(failures[0].level, 'error')
-        assert.ok(failures[0].message.includes('socket hang up'))
+        assert.ok(failures[0].message.includes('ECONNRESET'))
+        assert.strictEqual(failures[0].message.includes('socket hang up'), false)
       } else {
         assert.deepStrictEqual(logs, [])
       }

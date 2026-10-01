@@ -24,6 +24,27 @@ describe('flag evaluation flush retention', () => {
 })
 
 describe('flag evaluation real worker processes', () => {
+  for (const mode of ['direct', 'unavailable', 'fallback', 'protected', 'disabled', 'legacy']) {
+    it(`scopes delivery log privacy to flag evaluations (${mode})`, async function () {
+      this.timeout(10000)
+      const { stdout, stderr } = await exec(process.execPath, [
+        join(__dirname, 'fixtures/delivery-logging.js'), mode,
+      ], { timeout: 7000 })
+      assert.strictEqual(stderr, '')
+      const { logs, bodies } = JSON.parse(stdout)
+      assert.strictEqual(bodies.length, mode === 'fallback' ? 2 : 1)
+      const raw = bodies.join('')
+      const output = logs.join('\n')
+      assert.strictEqual(raw.includes('targeting-key-canary'), mode !== 'protected')
+      if (mode !== 'legacy') assert.strictEqual(raw.includes('context-value-canary'), mode !== 'protected')
+      for (const canary of ['response-body-canary', 'targeting-key-canary', 'context-value-canary']) {
+        assert.strictEqual(output.includes(canary), mode === 'legacy' && canary !== 'context-value-canary')
+      }
+      if (mode === 'disabled') assert.deepStrictEqual(logs, [])
+      else assert.match(output, mode === 'unavailable' ? /503/ : /400/)
+    })
+  }
+
   for (const mode of ['progress', 'fallback', 'unix', 'nested']) {
     it(`delivers protected and full counts (${mode})`, async function () {
       this.timeout(15000)

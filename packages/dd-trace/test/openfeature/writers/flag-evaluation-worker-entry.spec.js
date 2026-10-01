@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
+const { format } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -22,10 +23,12 @@ describe('flag evaluation worker entry point', () => {
   let port
   let requests
   let state
+  let log
 
   beforeEach(() => {
     clock = sinon.useFakeTimers()
     requests = []
+    log = { error: sinon.spy() }
     descriptor = Object.getOwnPropertyDescriptor(globalThis, ddTrace)
     Object.defineProperty(globalThis, ddTrace, { ...descriptor, writable: true })
     port = Object.assign(new EventEmitter(), { close: sinon.spy(), postMessage: sinon.spy() })
@@ -33,6 +36,7 @@ describe('flag evaluation worker entry point', () => {
     // Keep the real consumer and accounting; give the simulated isolate its own telemetry module.
     const telemetry = proxyquire(writers + 'flag-evaluation-telemetry', {})
     const Base = proxyquire(writers + 'base', {
+      '../../log': log,
       '../../exporters/common/request': (payload, options, callback) => {
         requests.push({ payload, options, callback })
       },
@@ -109,6 +113,33 @@ describe('flag evaluation worker entry point', () => {
     assert.strictEqual(requests.length, 0)
     assert.strictEqual(clock.countTimers(), 0)
   })
+
+  for (const fallback of [false, true]) {
+    for (const code of ['ECONNRESET', undefined]) {
+      it(`keeps transport error messages out of logs (code=${code}, fallback=${fallback})`, () => {
+        port.emit('message', {
+          type: 'enabled',
+          enabled: true,
+          route: {
+            id: 2,
+            url: 'http://localhost:8126/',
+            basePath: '',
+            onUnavailable: !fallback,
+            fallback: fallback ? { url: 'http://localhost:8127/', basePath: '' } : undefined,
+          },
+        })
+        post()
+        port.emit('message', { type: 'flush' })
+        requests[0].callback(Object.assign(new Error('transport-message-canary'), { code }))
+        sinon.assert.calledOnce(log.error)
+        const output = format(...log.error.firstCall.args)
+        assert.strictEqual(output.includes('transport-message-canary'), false)
+        assert.ok(output.includes(code ?? 'UNKNOWN'))
+        assert.strictEqual(requests.length, 1)
+        assertDeliveryDrops(2)
+      })
+    }
+  }
 
   for (const fallback of [false, true]) {
     for (const [result, replay, switchRoute] of [
