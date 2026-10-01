@@ -41,6 +41,10 @@ class EvalMetricsHook {
    */
   constructor (config) {
     this.#enabled = config.DD_METRICS_OTEL_ENABLED === true
+
+    if (!this.#enabled) {
+      log.debug('Feature Flags: evaluation metrics disabled; set %s=true to enable', 'DD_METRICS_OTEL_ENABLED')
+    }
   }
 
   /**
