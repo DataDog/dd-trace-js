@@ -51,20 +51,22 @@ discarding excess input. Protected-mode size variants and hostile inputs remain
 available on demand, rather than multiplying the end-to-end CI matrix. This keeps
 the current suite within six 24-core groups.
 
-To keep every variant within the one-minute runtime budget, `typical` and
-`scale-full` use three repetitions, `typical-full` uses two, and `stress-full`
-uses one. Per-repetition workloads, privacy checks, and startup-share assertions
-stay unchanged.
+All standard variants use five repetitions. To keep them within the one-minute
+runtime budget, `typical` uses 550,000 measured evaluations, `typical-full` uses
+450,000, `scale-full` uses the runtime-specific counts below, and `stress-full`
+uses 600 with 10 warmup evaluations. Privacy, delivery, and startup-share
+assertions stay unchanged.
 
-`scale-full` uses 20,000 measured evaluations on Node 20 and 40,000 on newer
+`scale-full` uses 13,000 measured evaluations on Node 20 and 26,000 on newer
 runtimes through the runner's existing `operations_by_node` setting. Node 20
 takes substantially longer per evaluation on both baseline and candidate:
 40,000 made the candidate's 12 repetitions take over 18 minutes, leaving too
 little of the 30-minute CI job for the baseline. At 20,000, Node 20 passed both
 CI sides and measured below 4% setup share in workspace checks. Newer runtimes
-need 40,000 to leave headroom below the unchanged 7% setup-share guard.
-Both sides use the same count for each runtime; 500 warmup evaluations,
-context dimensions, and all delivery/privacy checks stay unchanged.
+previously needed 40,000 to leave headroom below the unchanged 7% startup-share
+guard. The reduced counts retain the same 1:2 runtime ratio and 500 warmup
+evaluations. Both sides use the same count for each runtime; context dimensions
+and all delivery/privacy checks stay unchanged.
 
 Run the additional cases from this directory:
 

@@ -3,42 +3,40 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 3,
+  "iterations": 5,
   "instructions": true,
   "variants": {
     "typical": {
       "env": {
         "VARIANT": "typical",
         "CONSENT": "false",
-        "OPERATIONS": "1000000"
+        "OPERATIONS": "550000"
       }
     },
     "typical-full": {
-      "iterations": 2,
       "env": {
         "VARIANT": "typical",
         "CONSENT": "true",
-        "OPERATIONS": "1000000"
+        "OPERATIONS": "450000"
       }
     },
     "scale-full": {
       "operations_by_node": {
-        "20": "20000"
+        "20": "13000"
       },
       "env": {
         "VARIANT": "scale",
         "CONSENT": "true",
-        "OPERATIONS": "40000",
+        "OPERATIONS": "26000",
         "WARMUP": "500"
       }
     },
     "stress-full": {
-      "iterations": 1,
       "env": {
         "VARIANT": "stress",
         "CONSENT": "true",
-        "OPERATIONS": "2000",
-        "WARMUP": "50"
+        "OPERATIONS": "600",
+        "WARMUP": "10"
       }
     }
   }
