@@ -76,9 +76,11 @@ function generateFields (context, probabilityRate) {
   let randomValue = randomValueFor(context._traceId.toBigInt())
   const kept = priority >= AUTO_KEEP
 
-  if (kept && randomValue < thresholdValue) {
-    randomValue = thresholdValue
-  } else if (!kept && randomValue >= thresholdValue) {
+  if (kept) {
+    if (randomValue < thresholdValue) {
+      randomValue = thresholdValue
+    }
+  } else if (randomValue >= thresholdValue) {
     randomValue = thresholdValue > 0n ? thresholdValue - 1n : 0n
   }
 

@@ -918,8 +918,14 @@ class TextMapPropagator {
         const digit = decisionMaker.length === 2 && decisionMaker[0] === '-'
           ? decisionMaker.charCodeAt(1) - 48
           : -1
-        const mechanism = digit >= 0 && digit <= 9 ? digit : Math.abs(Number.parseInt(decisionMaker, 10))
-        if (Number.isInteger(mechanism)) spanContext._sampling.mechanism = mechanism
+        if (digit >= 0 && digit <= 9) {
+          spanContext._sampling.mechanism = digit
+        } else {
+          const mechanism = Math.abs(Number(decisionMaker))
+          if (Number.isInteger(mechanism) && mechanism >= 0) {
+            spanContext._sampling.mechanism = mechanism
+          }
+        }
       }
     }
 
