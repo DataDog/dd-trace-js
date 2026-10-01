@@ -1,17 +1,33 @@
 'use strict'
 
-const guard = require('../startup-guard')
 // eslint-disable-next-line import/order -- The startup guard must run before every other require.
+const guard = require('../startup-guard')
 const assert = require('node:assert/strict')
+
+const { channel } = require('dc-polyfill')
 
 const { getAllBaggageItems } = require('../../../packages/dd-trace/src/baggage')
 const id = require('../../../packages/dd-trace/src/id')
+const {
+  PROPAGATED_ML_APP_KEY,
+  PROPAGATED_PARENT_AGENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_NAME_KEY,
+  PROPAGATED_PARENT_ID_KEY,
+} = require('../../../packages/dd-trace/src/llmobs/constants/tags')
 const SpanContext = require('../../../packages/dd-trace/src/opentracing/span_context')
 const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/propagation/text_map')
+const TraceState = require('../../../packages/dd-trace/src/opentracing/propagation/tracestate')
 
 const { VARIANT } = process.env
 
 const OPERATIONS = Number(process.env.OPERATIONS)
+const WITH_TRACE_TAG_REPLACEMENTS = VARIANT === 'inject-replacements'
+
+/**
+ * @typedef {object} TraceTagInjection
+ * @property {Array<string | undefined>} [traceTagReplacements]
+ * @property {number} [optionalTraceTagCount]
+ */
 
 // Duck-typed config keeps the bench out of the full `Config` singleton (telemetry
 // registration, env reads). The propagator only reads the fields below.
@@ -51,6 +67,13 @@ const EXTRACT_CARRIER_DATADOG = {
   'x-datadog-tags': '_dd.p.dm=-1,_dd.p.tid=1234567890abcdef',
 }
 
+const TRACE_TAG_REPLACEMENTS = [
+  PROPAGATED_PARENT_ID_KEY, 'abcdef1234567890',
+  PROPAGATED_ML_APP_KEY, 'benchmark-app',
+  PROPAGATED_PARENT_AGENT_ID_KEY, '0123456789abcdef',
+  PROPAGATED_PARENT_AGENT_NAME_KEY, 'benchmark-agent',
+]
+
 const injectContext = new SpanContext({
   traceId: id('1234567890abcdef'),
   spanId: id('abcdef1234567890'),
@@ -61,7 +84,18 @@ const injectContext = new SpanContext({
     started: [],
     finished: [],
   },
+  tracestate: WITH_TRACE_TAG_REPLACEMENTS ? TraceState.fromString(EXTRACT_CARRIER_ASCII.tracestate) : undefined,
 })
+
+const injectCh = channel('dd-trace:span:inject')
+
+/** @param {TraceTagInjection} injection */
+function addTraceTagReplacements (injection) {
+  injection.traceTagReplacements = TRACE_TAG_REPLACEMENTS
+  injection.optionalTraceTagCount = 2
+}
+
+if (WITH_TRACE_TAG_REPLACEMENTS) injectCh.subscribe(addTraceTagReplacements)
 
 // Pre-flight: confirm the selected variant does real work; catches a silent
 // breakage where the duck-typed config is missing a field the propagator now reads.
@@ -81,10 +115,26 @@ if (VARIANT === 'extract') {
     '_dd.p.dm': '-1',
     '_dd.p.tid': '1234567890abcdef',
   })
-} else if (VARIANT === 'inject') {
+} else if (VARIANT === 'inject' || WITH_TRACE_TAG_REPLACEMENTS) {
   const sanityInjected = {}
   propagator.inject(injectContext, sanityInjected)
-  assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
+  if (WITH_TRACE_TAG_REPLACEMENTS) {
+    assert.strictEqual(
+      sanityInjected['x-datadog-tags'],
+      '_dd.p.dm=-1,_dd.p.tid=1234567890abcdef,' +
+      '_dd.p.llmobs_parent_id=abcdef1234567890,_dd.p.llmobs_ml_app=benchmark-app,' +
+      '_dd.p.llmobs_pagent_span_id=0123456789abcdef,_dd.p.llmobs_pagent_name=benchmark-agent'
+    )
+    assert.strictEqual(
+      sanityInjected.tracestate,
+      'dd=t.llmobs_pagent_name:benchmark-agent;t.llmobs_pagent_span_id:0123456789abcdef;' +
+      't.llmobs_ml_app:benchmark-app;t.llmobs_parent_id:abcdef1234567890;' +
+      't.tid:1234567890abcdef;t.dm:-1;s:1;p:abc,' +
+      'vendor1=k1:v1,vendor2=k1:v1;k2:v2,foo=bar'
+    )
+  } else {
+    assert.ok(sanityInjected.traceparent && sanityInjected['x-datadog-trace-id'], 'inject populated no headers')
+  }
 }
 
 guard.loopStart()
@@ -100,9 +150,10 @@ if (VARIANT === 'extract') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.extract(EXTRACT_CARRIER_DATADOG)
   }
-} else if (VARIANT === 'inject') {
+} else if (VARIANT === 'inject' || WITH_TRACE_TAG_REPLACEMENTS) {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     propagator.inject(injectContext, {})
   }
 }
 guard.done()
+if (WITH_TRACE_TAG_REPLACEMENTS) injectCh.unsubscribe(addTraceTagReplacements)
