@@ -1,7 +1,8 @@
 'use strict'
 
-// Loop timer and operations reporter. Call loopStart() immediately before the
-// measured loop and done() immediately after it.
+// Measured-loop boundary. Sirun excludes everything before loopStart() from its
+// timing and instruction metrics. A full GC immediately before the ready signal
+// gives every iteration a consistent post-warmup heap state.
 //
 //   const guard = require('../startup-guard')
 //   // ...requires, setup...
@@ -10,6 +11,7 @@
 //   guard.done()
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -18,17 +20,20 @@ let loopStartedAt
 let statsd
 
 function loopStart () {
-  loopStartedAt = process.hrtime.bigint()
-  if (process.env.SIRUN_READY_FD) {
-    require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD, 10), 'x')
-  } else {
-    process.stderr.write('sirun benchmark: SIRUN_READY_FD is not set, startup time will be included in measurements\n')
+  const readyFd = process.env.SIRUN_READY_FD
+  if (process.env.SIRUN_STATSD_PORT !== undefined) {
+    assert.ok(readyFd, 'SIRUN_READY_FD is required; install Sirun 0.1.12 or newer')
+    assert.strictEqual(typeof global.gc, 'function', 'Sirun benchmarks must run Node.js with --expose-gc')
   }
+
+  global.gc?.()
+  loopStartedAt = process.hrtime.bigint()
+  if (readyFd) fs.writeSync(Number.parseInt(readyFd, 10), 'x')
 }
 
 function done () {
   const end = process.hrtime.bigint()
-  assert.ok(loopStartedAt !== undefined, 'sirun benchmark: loopStart() was never called')
+  assert.ok(loopStartedAt !== undefined, 'measurement boundary: loopStart() was never called')
   const loop = Number(end - loopStartedAt)
 
   reportOps(loop)
