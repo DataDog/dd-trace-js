@@ -53,7 +53,7 @@ the current suite within six 24-core groups.
 
 All standard variants use five repetitions. To keep them within the one-minute
 runtime budget, `typical` uses 275,000 measured evaluations on Node 20 and 550,000
-on newer runtimes. `typical-full` uses 225,000 on Node 20 and 450,000 on newer
+on newer runtimes. `typical-full` uses 245,000 on Node 20 and 450,000 on newer
 runtimes. `stress-full` uses 600 with 10 warmup evaluations. Each run checks
 privacy, complete delivery, and a startup share no greater than 7%.
 

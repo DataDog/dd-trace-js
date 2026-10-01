@@ -18,7 +18,7 @@
     },
     "typical-full": {
       "operations_by_node": {
-        "20": "225000"
+        "20": "245000"
       },
       "env": {
         "VARIANT": "typical",
