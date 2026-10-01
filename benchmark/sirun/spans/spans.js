@@ -117,6 +117,4 @@ if (FINISH === 'now') {
     remaining -= size
   }
 }
-// Full-tracer load is a fixed ~90 ms here and the lightest variant can't grow its
-// loop past it without risking the span-allocation GC cliff, so use the relaxed ceiling.
-guard.done(0.15)
+guard.done()
