@@ -14,6 +14,7 @@
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
+const { prepareMeta } = require('./squash-affinity')
 
 const DIR = __dirname
 const SAMPLES = 6 // sirun iterations per variant for the overview (not the configured count)
@@ -89,6 +90,7 @@ for (const name of benches) {
   const meta = JSON.parse(fs.readFileSync(path.join(benchDir, 'meta.json'), 'utf8'))
   const configIters = meta.iterations || SAMPLES
   const overview = { ...meta, iterations: SAMPLES }
+  prepareMeta(overview, { enableAffinity: false })
   const tmpMeta = path.join(benchDir, 'meta-overview.json')
   fs.writeFileSync(tmpMeta, JSON.stringify(overview))
 

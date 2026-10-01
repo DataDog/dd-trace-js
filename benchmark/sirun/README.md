@@ -12,6 +12,9 @@ First, install sirun:
 cargo install --git https://github.com/DataDog/sirun.git --branch main
 ```
 
+CI installs the checksummed version pinned in `.sirun-version` before running
+benchmarks.
+
 Then, get into one of the directories alongside this file, and run the following:
 
 ```sh
