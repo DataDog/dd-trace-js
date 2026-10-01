@@ -24,6 +24,13 @@ best-effort formatted `console.warn` and `console.error` calls made with an acti
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 `DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
 
+<h2 id="ai-guard-proxy">AI Guard proxy</h2>
+
+Set `DD_PROXY_HTTPS` to a proxy URL to route AI Guard Evaluation API requests through that proxy. When set, it takes
+precedence over standard proxy variables and `NO_PROXY` for these requests. When unset, AI Guard uses the standard
+proxy and bypass settings. This setting applies only to HTTPS AI Guard endpoints; it does not change proxy selection
+for other tracer traffic or application requests.
+
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 
 LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:

@@ -13,6 +13,7 @@ export interface GeneratedConfig {
     DD_AI_GUARD_MAX_MESSAGES_LENGTH: number;
     DD_AI_GUARD_REDACTION_ENABLED: boolean;
     DD_AI_GUARD_TIMEOUT: number;
+    DD_PROXY_HTTPS: string | undefined;
   };
   apmTracingEnabled: boolean;
   appsec: {
@@ -809,6 +810,7 @@ export interface GeneratedEnvVarConfig {
   DD_PROFILING_UPLOAD_TIMEOUT: number;
   DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: boolean;
   DD_PROFILING_WALLTIME_ENABLED: boolean | undefined;
+  DD_PROXY_HTTPS: string | undefined;
   DD_REMOTE_CONFIG_ENABLED: boolean;
   DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: number;
   DD_REMOTE_CONFIGURATION_ENABLED: boolean;

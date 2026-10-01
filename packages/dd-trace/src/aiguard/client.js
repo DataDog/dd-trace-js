@@ -3,6 +3,7 @@
 const tracerVersion = require('../../../../package.json').version
 const { createAgents } = require('../exporters/common/agents')
 const request = require('../exporters/common/request')
+const log = require('../log')
 const { AIGuardClientError } = require('./errors')
 const { parseEvaluationResponse } = require('./evaluation')
 const TAGS = require('./tags')
@@ -23,14 +24,25 @@ function aiGuardHost (site) {
  * Sends a request to the AI Guard service.
  *
  * @param {object} body
- * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number }} opts
+ * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number,
+ *   httpsProxyUrl?: string, invalidProxyUrl?: boolean }} opts
  * @returns {Promise<{ status: number, body: unknown }>}
  */
 function executeRequest (body, opts) {
   return new Promise((resolve, reject) => {
+    if (opts.invalidProxyUrl) {
+      reject(new TypeError('Invalid DD_PROXY_HTTPS URL'))
+      return
+    }
+
     const postData = JSON.stringify(body)
     const url = new URL(opts.url)
-    request(postData, {
+    /**
+     * @type {import('node:http').RequestOptions & {
+     *   url: URL, httpsProxyUrl?: string, retry: boolean, includeErrorResponseBody: boolean
+     * }}
+     */
+    const requestOptions = {
       url,
       method: 'POST',
       headers: {
@@ -42,7 +54,10 @@ function executeRequest (body, opts) {
       signal: AbortSignal.timeout(opts.timeout),
       retry: false,
       includeErrorResponseBody: true,
-    }, (error, result, status) => {
+    }
+    if (opts.httpsProxyUrl) requestOptions.httpsProxyUrl = opts.httpsProxyUrl
+
+    request(postData, requestOptions, (error, result, status) => {
       if (status === undefined) {
         reject(error || new Error('AI Guard request completed without a status'))
         return
@@ -65,6 +80,8 @@ function executeRequest (body, opts) {
 class AIGuardClient {
   #headers
   #evaluateUrl
+  #httpsProxyUrl
+  #invalidProxyUrl
   #timeout
 
   /**
@@ -80,6 +97,25 @@ class AIGuardClient {
     }
     const endpoint = config.aiguard.DD_AI_GUARD_ENDPOINT || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
+    const proxyUrl = config.aiguard.DD_PROXY_HTTPS
+    if (proxyUrl) {
+      let evaluateUrl
+      try {
+        evaluateUrl = new URL(this.#evaluateUrl)
+      } catch {
+        // Leave invalid endpoint handling to executeRequest.
+      }
+      if (evaluateUrl?.protocol === 'https:') {
+        try {
+          const protocol = new URL(proxyUrl).protocol
+          if (protocol !== 'http:' && protocol !== 'https:') throw new TypeError('Unsupported proxy protocol')
+          this.#httpsProxyUrl = proxyUrl
+        } catch {
+          log.error('Invalid DD_PROXY_HTTPS URL for AI Guard')
+          this.#invalidProxyUrl = true
+        }
+      }
+    }
     this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT
   }
 
@@ -101,7 +137,13 @@ class AIGuardClient {
     }
     return executeRequest(
       payload,
-      { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout }
+      {
+        url: this.#evaluateUrl,
+        headers: this.#headers,
+        timeout: this.#timeout,
+        httpsProxyUrl: this.#httpsProxyUrl,
+        invalidProxyUrl: this.#invalidProxyUrl,
+      }
     )
       .then(response => this.#parseResponse(response))
       .catch(cause => {

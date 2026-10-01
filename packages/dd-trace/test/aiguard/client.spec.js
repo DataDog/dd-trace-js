@@ -7,6 +7,7 @@ const http = require('node:http')
 const https = require('node:https')
 const net = require('node:net')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -15,6 +16,7 @@ const sinon = require('sinon')
 const request = require('../../src/exporters/common/request')
 const { AIGuardClientError } = require('../../src/aiguard/errors')
 const TAGS = require('../../src/aiguard/tags')
+const log = require('../../src/log')
 
 const proxyVariables = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy',
   'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
@@ -33,6 +35,7 @@ describe('AI Guard client transport', () => {
   let endpoint
   let proxyUrl
   let client
+  let createClient
   let respond
   let rejectConnect
   let originalFetch
@@ -89,11 +92,12 @@ describe('AI Guard client transport', () => {
         request(data, { ...options, rejectUnauthorized: false }, callback)
       },
     })
-    client = new Client({
+    createClient = httpsProxyUrl => new Client({
       DD_API_KEY: 'test-api-key',
       DD_APP_KEY: 'test-app-key',
-      aiguard: { DD_AI_GUARD_ENDPOINT: endpoint, DD_AI_GUARD_TIMEOUT: 1000 },
+      aiguard: { DD_AI_GUARD_ENDPOINT: endpoint, DD_AI_GUARD_TIMEOUT: 1000, DD_PROXY_HTTPS: httpsProxyUrl },
     })
+    client = createClient()
   })
 
   afterEach(async () => {
@@ -133,9 +137,41 @@ describe('AI Guard client transport', () => {
 
   it('uses direct transport without relying on global fetch when no proxy is configured', async () => {
     const fetch = sinon.stub(global, 'fetch').throws(new Error('Application-owned fetch'))
+    const httpsRequest = sinon.spy(https, 'request')
     assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
     assert.deepEqual(connects, [])
     sinon.assert.notCalled(fetch)
+    const connectionOptions = /** @type {import('node:http').RequestOptions} */ (httpsRequest.firstCall.args[0])
+    assert.equal(Object.hasOwn(connectionOptions, 'httpsProxyUrl'), false)
+  })
+
+  it('uses DD_PROXY_HTTPS despite standard proxy and bypass settings', async () => {
+    process.env.HTTPS_PROXY = 'http://invalid.invalid:8080'
+    process.env.https_proxy = 'http://invalid.invalid:8080'
+    process.env.NO_PROXY = '127.0.0.1'
+    client = createClient(proxyUrl)
+
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+    assert.deepEqual(connects, [`127.0.0.1:${server.address().port}`])
+    assert.equal(received.length, 1)
+  })
+
+  it('does not apply DD_PROXY_HTTPS to application-owned requests', async () => {
+    client = createClient(proxyUrl)
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+
+    await new Promise((resolve, reject) => {
+      const req = https.request(`${endpoint}/application`, {
+        method: 'POST', rejectUnauthorized: false,
+      }, res => {
+        res.resume()
+        res.once('end', resolve)
+      })
+      req.once('error', reject)
+      req.end('{}')
+    })
+    assert.equal(connects.length, 1)
+    assert.equal(received[1].url, '/application')
   })
 
   for (const viaProxy of [false, true]) {
@@ -171,6 +207,13 @@ describe('AI Guard client transport', () => {
     assert.equal(connects.length, 1)
   })
 
+  it('uses the standard proxy when DD_PROXY_HTTPS is empty', async () => {
+    process.env.HTTPS_PROXY = proxyUrl
+    client = createClient('')
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+    assert.equal(connects.length, 1)
+  })
+
   it('reports an invalid proxy configuration as a client error', async () => {
     process.env.HTTPS_PROXY = 'http://['
     await assert.rejects(client.evaluate(messages, meta), error => {
@@ -179,6 +222,47 @@ describe('AI Guard client transport', () => {
       return true
     })
     assert.equal(received.length, 0)
+  })
+
+  it('reports an invalid DD_PROXY_HTTPS without falling back to HTTPS_PROXY', async () => {
+    process.env.HTTPS_PROXY = proxyUrl
+    const errorLog = sinon.stub(log, 'error')
+    const secret = 'http://user:pw@['
+    client = createClient(secret)
+    const causes = []
+    for (let i = 0; i < 2; i++) {
+      await assert.rejects(client.evaluate(messages, meta), error => {
+        assert.ok(error instanceof AIGuardClientError)
+        assert.equal(error.telemetryType, TAGS.ERROR_TYPE_CLIENT)
+        const cause = error.cause
+        assert.ok(cause instanceof Error)
+        causes.push(cause)
+        assert.equal(cause.message, 'Invalid DD_PROXY_HTTPS URL')
+        assert.equal('input' in cause, false)
+        assert.ok(!inspect(error).includes(secret))
+        return true
+      })
+    }
+    assert.notStrictEqual(causes[0], causes[1])
+    sinon.assert.calledOnceWithExactly(errorLog, 'Invalid DD_PROXY_HTTPS URL for AI Guard')
+    assert.equal(connects.length, 0)
+    assert.equal(received.length, 0)
+  })
+
+  it('ignores an invalid DD_PROXY_HTTPS for an HTTP endpoint', async () => {
+    let requests = 0
+    proxy.on('request', (req, res) => {
+      requests++
+      res.end(JSON.stringify(evaluation))
+    })
+    endpoint = `http://127.0.0.1:${proxy.address().port}`
+    const errorLog = sinon.stub(log, 'error')
+    client = createClient('http://[')
+
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+    assert.equal(requests, 1)
+    assert.deepEqual(connects, [])
+    sinon.assert.notCalled(errorLog)
   })
 
   it('prefers https_proxy over HTTPS_PROXY', async () => {
@@ -219,6 +303,16 @@ describe('AI Guard client transport', () => {
   it('reports a rejected proxy connection without retrying or falling back to direct traffic', async () => {
     process.env.HTTPS_PROXY = proxyUrl
     rejectConnect = true
+    await assert.rejects(client.evaluate(messages, meta), { name: 'AIGuardClientError' })
+    assert.equal(connects.length, 1)
+    assert.equal(received.length, 0)
+  })
+
+  it('does not fall back when the DD_PROXY_HTTPS connection is rejected', async () => {
+    process.env.HTTPS_PROXY = 'http://standard.invalid:8080'
+    client = createClient(proxyUrl)
+    rejectConnect = true
+
     await assert.rejects(client.evaluate(messages, meta), { name: 'AIGuardClientError' })
     assert.equal(connects.length, 1)
     assert.equal(received.length, 0)

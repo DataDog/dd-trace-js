@@ -105,6 +105,23 @@ describe('HTTPS proxy agent selection', () => {
     }
   })
 
+  it('uses an explicit proxy despite standard proxy and bypass settings', () => {
+    process.env.HTTPS_PROXY = 'http://standard.example:8202'
+    process.env.NO_PROXY = 'intake.example'
+    const directAgent = new https.Agent({ keepAlive: true, maxSockets: 4 })
+    const proxyUrl = 'http://dedicated.example:8202'
+    let agent
+
+    try {
+      agent = getHttpsProxyAgent('https://intake.example/path', directAgent, proxyUrl)
+      assert.notStrictEqual(agent, directAgent)
+      assert.strictEqual(getHttpsProxyAgent('https://other.example/path', directAgent, proxyUrl), agent)
+    } finally {
+      directAgent.destroy()
+      if (agent) agent.destroy()
+    }
+  })
+
   it('supports wrappers that instantiate http.ClientRequest for HTTPS targets', () => {
     process.env.HTTPS_PROXY = 'http://proxy.example:8202'
     const directAgent = new https.Agent()
@@ -195,6 +212,15 @@ describe('HTTPS proxy agent selection', () => {
 
     assert.throws(
       () => getHttpsProxyAgent('https://intake.example/path'),
+      { code: 'ERR_INVALID_URL' }
+    )
+  })
+
+  it('rejects an invalid explicit proxy URL without falling back to standard settings', () => {
+    process.env.HTTPS_PROXY = 'http://standard.example:8202'
+
+    assert.throws(
+      () => getHttpsProxyAgent('https://intake.example/path', undefined, 'http://['),
       { code: 'ERR_INVALID_URL' }
     )
   })

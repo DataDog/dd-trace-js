@@ -646,6 +646,7 @@ describe('Config', () => {
     const SENTINELS = {
       DD_API_KEY: 'SENTINEL_DD_API_KEY',
       DD_APP_KEY: 'SENTINEL_DD_APP_KEY',
+      DD_PROXY_HTTPS: 'http://SENTINEL_PROXY_USER:SENTINEL_PROXY_PASSWORD@proxy.example:8080',
       DD_FEATURE_FLAGS_CONFIGURATION_SOURCE_AGENTLESS_BASE_URL:
         'https://SENTINEL_FEATURE_FLAGS_BASE_URL.example',
       OTEL_EXPORTER_OTLP_HEADERS: 'dd-api-key=SENTINEL_OTLP_BASE',
@@ -1188,6 +1189,7 @@ describe('Config', () => {
         DD_AI_GUARD_REDACTION_ENABLED: true,
         DD_AI_GUARD_TIMEOUT: 10_000,
         DD_AI_GUARD_MAX_CONTENT_SIZE: 512 * 1024,
+        DD_PROXY_HTTPS: undefined,
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: false },
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
@@ -1500,6 +1502,7 @@ describe('Config', () => {
     process.env.DD_AI_GUARD_MAX_MESSAGES_LENGTH = '32'
     process.env.DD_AI_GUARD_REDACTION_ENABLED = 'false'
     process.env.DD_AI_GUARD_TIMEOUT = '2000'
+    process.env.DD_PROXY_HTTPS = 'http://proxy.example:8080'
     process.env.DD_API_SECURITY_ENABLED = 'true'
     process.env.DD_API_SECURITY_SAMPLE_DELAY = '25'
     process.env.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED = 'false'
@@ -1683,6 +1686,7 @@ describe('Config', () => {
         DD_AI_GUARD_MAX_MESSAGES_LENGTH: 32,
         DD_AI_GUARD_REDACTION_ENABLED: false,
         DD_AI_GUARD_TIMEOUT: 2000,
+        DD_PROXY_HTTPS: 'http://proxy.example:8080',
       },
       rum: { DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED: true },
       tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'log' },

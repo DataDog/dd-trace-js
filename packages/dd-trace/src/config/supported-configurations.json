@@ -1824,6 +1824,16 @@
         "default": null
       }
     ],
+    "DD_PROXY_HTTPS": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "namespace": "aiguard",
+        "default": null,
+        "sensitive": true,
+        "description": "Proxy URL for AI Guard Evaluation API requests, overriding standard proxy and bypass settings."
+      }
+    ],
     "DD_REMOTE_CONFIGURATION_ENABLED": [
       {
         "implementation": "A",
