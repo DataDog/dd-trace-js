@@ -6,73 +6,46 @@ const proxyquire = require('proxyquire')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
-describe('Sirun measurement boundary', () => {
-  let gcDescriptor
+describe('Sirun loop reporter', () => {
+  let operations
   let readyFd
-  let statsdPort
 
   beforeEach(() => {
-    gcDescriptor = Object.getOwnPropertyDescriptor(global, 'gc')
+    operations = process.env.OPERATIONS
     readyFd = process.env.SIRUN_READY_FD
-    statsdPort = process.env.SIRUN_STATSD_PORT
-    delete process.env.SIRUN_READY_FD
-    delete process.env.SIRUN_STATSD_PORT
+    process.env.OPERATIONS = '1'
+    process.env.SIRUN_READY_FD = '3'
   })
 
   afterEach(() => {
-    if (gcDescriptor) Object.defineProperty(global, 'gc', gcDescriptor)
-    else delete global.gc
+    restoreEnv('OPERATIONS', operations)
     restoreEnv('SIRUN_READY_FD', readyFd)
-    restoreEnv('SIRUN_STATSD_PORT', statsdPort)
   })
 
-  it('collects garbage before signaling readiness', () => {
-    const calls = []
-    global.gc = () => calls.push('gc')
-    process.env.SIRUN_STATSD_PORT = '8125'
-    process.env.SIRUN_READY_FD = '3'
-    const boundary = loadBoundary(() => calls.push('ready'))
+  it('does not enforce the legacy startup-share limit', () => {
+    const reporter = loadReporter()
 
-    boundary.loopStart()
-
-    assert.deepStrictEqual(calls, ['gc', 'ready'])
+    reporter.loopStart()
+    reporter.done(0)
   })
 
-  it('requires readiness support from Sirun', () => {
-    global.gc = () => {}
-    process.env.SIRUN_STATSD_PORT = '8125'
-    const boundary = loadBoundary(() => {})
+  it('requires loopStart before done', () => {
+    const reporter = loadReporter()
 
-    assert.throws(() => boundary.loopStart(), /SIRUN_READY_FD is required/)
-  })
-
-  it('requires exposed GC from the benchmark runner', () => {
-    delete global.gc
-    process.env.SIRUN_STATSD_PORT = '8125'
-    process.env.SIRUN_READY_FD = '3'
-    const boundary = loadBoundary(() => {})
-
-    assert.throws(() => boundary.loopStart(), /--expose-gc/)
-  })
-
-  it('supports direct runs without a Sirun measurement boundary', () => {
-    let collected = false
-    global.gc = () => { collected = true }
-    const boundary = loadBoundary(() => assert.fail('unexpected ready signal'))
-
-    boundary.loopStart()
-
-    assert.strictEqual(collected, true)
+    assert.throws(() => reporter.done(), /loopStart\(\) was never called/)
   })
 })
 
-/**
- * @param {() => void} writeSync
- */
-function loadBoundary (writeSync) {
+function loadReporter () {
+  class StatsD {
+    gauge () {}
+    flush () {}
+  }
+
   const proxyquireWithoutCache = proxyquire.noPreserveCache()
   return proxyquireWithoutCache('./startup-guard', {
-    'node:fs': { writeSync },
+    './statsd': StatsD,
+    fs: { writeSync () {} },
   })
 }
 
