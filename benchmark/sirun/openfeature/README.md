@@ -58,15 +58,10 @@ uses 600 with 10 warmup evaluations. Privacy, delivery, and startup-share
 assertions stay unchanged.
 
 `scale-full` uses 13,000 measured evaluations on Node 20 and 26,000 on newer
-runtimes through the runner's existing `operations_by_node` setting. Node 20
-takes substantially longer per evaluation on both baseline and candidate:
-40,000 made the candidate's 12 repetitions take over 18 minutes, leaving too
-little of the 30-minute CI job for the baseline. At 20,000, Node 20 passed both
-CI sides and measured below 4% setup share in workspace checks. Newer runtimes
-previously needed 40,000 to leave headroom below the unchanged 7% startup-share
-guard. The reduced counts retain the same 1:2 runtime ratio and 500 warmup
-evaluations. Both sides use the same count for each runtime; context dimensions
-and all delivery/privacy checks stay unchanged.
+runtimes through the runner's `operations_by_node` setting because Node 20 takes
+substantially longer per evaluation. Both comparison sides use the same count
+for each runtime. Every run uses 500 warmup evaluations and retains the same
+context dimensions, startup-share assertion, and delivery/privacy checks.
 
 Run the additional cases from this directory:
 
