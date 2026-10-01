@@ -123,8 +123,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
       async evaluate (context) {
         recordContext = context
-        return new EvaluatorResult({
-          value: context.outputData === context.expectedOutput,
+        return new EvaluatorResult(context.outputData === context.expectedOutput, {
           reasoning: 'The output matches the expected value.',
           assessment: 'pass',
           metadata: { source: 'class' },
@@ -140,8 +139,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
       async evaluate (context) {
         summaryContext = context
-        return new EvaluatorResult({
-          value: context.evaluationResults.exact_match.filter(Boolean).length,
+        return new EvaluatorResult(context.evaluationResults.exact_match.filter(Boolean).length, {
           reasoning: 'Counted the matching rows.',
           assessment: 'pass',
           metadata: { source: 'summary' },

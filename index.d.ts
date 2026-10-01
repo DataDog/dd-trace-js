@@ -29,7 +29,6 @@ declare const SummaryEvaluatorContext: {
 
 declare const EvaluatorResult: {
   new (value: tracer.llmobs.JSONType, options?: tracer.llmobs.EvaluatorResultOptions): tracer.llmobs.EvaluatorResult
-  new (options: tracer.llmobs.EvaluatorResultOptions & { value: tracer.llmobs.JSONType }): tracer.llmobs.EvaluatorResult
 }
 
 declare const MultiEvaluatorResult: {

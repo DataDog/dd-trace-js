@@ -8,6 +8,7 @@ const log = require('../../../src/log')
 const {
   BaseEvaluator,
   BaseSummaryEvaluator,
+  EvaluatorResult,
   MultiEvaluatorResult,
 } = require('../../../src/llmobs/experiments/evaluator')
 
@@ -52,6 +53,17 @@ describe('LLMObs Experiments util', () => {
   it('requires base evaluator subclasses to implement evaluate', () => {
     assert.throws(() => new BaseEvaluator().evaluate({}), /BaseEvaluator subclasses must implement evaluate/)
     assert.throws(() => new BaseSummaryEvaluator().evaluate({}), /BaseSummaryEvaluator subclasses must implement evaluate/)
+  })
+
+  it('preserves JSON object values in evaluator results', () => {
+    const value = { value: 1, unit: 'ms' }
+
+    const result = new EvaluatorResult(value)
+    const richResult = new EvaluatorResult(value, { reasoning: 'Latency measurement' })
+
+    assert.strictEqual(result.value, value)
+    assert.strictEqual(richResult.value, value)
+    assert.equal(richResult.reasoning, 'Latency measurement')
   })
 
   it('validates multi-evaluator result values', () => {
