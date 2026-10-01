@@ -64,6 +64,6 @@ guard.loopStart()
 for (let i = 0; i < operations; i++) {
   runRequest(false)
 }
-guard.done(0.1)
+guard.done()
 
 waf.dispose()
