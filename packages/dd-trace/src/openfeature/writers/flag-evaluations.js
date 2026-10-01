@@ -27,7 +27,7 @@ const permissionFlags = new Set([
 ])
 const networkFlags = new Set([
   '--dns-result-order', '--network-family-autoselection', '--enable-network-family-autoselection',
-  '--network-family-autoselection-attempt-timeout', '--max-http-header-size',
+  '--network-family-autoselection-attempt-timeout', '--max-http-header-size', '--insecure-http-parser',
   // TLS version defaults are worker-local; other TLS/OpenSSL options may reject worker execArgv.
   '--tls-min-v1.0', '--tls-min-v1.1', '--tls-min-v1.2', '--tls-min-v1.3',
   '--tls-max-v1.2', '--tls-max-v1.3',

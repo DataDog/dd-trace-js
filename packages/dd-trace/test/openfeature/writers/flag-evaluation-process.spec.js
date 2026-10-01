@@ -237,6 +237,30 @@ describe('flag evaluation real worker processes', () => {
     }
   }
 
+  const parserEnabled = '--insecure-http-parser'
+  const parserDisabled = '--no-insecure-http-parser'
+  for (const [name, args, options, failures] of [
+    ['default strict mode', [], [], 1],
+    ['command line', [parserEnabled], [], 0],
+    ['NODE_OPTIONS', [], [parserEnabled], 0],
+    ['command line disables NODE_OPTIONS', [parserDisabled], [parserEnabled], 1],
+    ['command line enables over NODE_OPTIONS', [parserEnabled], [parserDisabled], 0],
+  ]) {
+    it(`preserves HTTP parser mode (${name}) without application preloads`, async function () {
+      this.timeout(10000)
+      const { stdout } = await exec(process.execPath, [
+        ...args, '--require', preload, join(__dirname, 'fixtures/http-parser.js'),
+      ], {
+        timeout: 7000,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' '),
+        },
+      })
+      assert.deepStrictEqual(JSON.parse(stdout), { requests: 1, failures })
+    })
+  }
+
   it('does not inherit application command-line or NODE_OPTIONS preloads', async function () {
     this.timeout(15000)
     const { stdout, stderr } = await exec(process.execPath, ['--require', preload, fixture, 'preload'], {
