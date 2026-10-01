@@ -3,6 +3,7 @@
 const tracerVersion = require('../../../../package.json').version
 const { createAgents } = require('../exporters/common/agents')
 const request = require('../exporters/common/request')
+const log = require('../log')
 const { AIGuardClientError } = require('./errors')
 const { parseEvaluationResponse } = require('./evaluation')
 const TAGS = require('./tags')
@@ -24,11 +25,16 @@ function aiGuardHost (site) {
  *
  * @param {object} body
  * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number,
- *   httpsProxyUrl?: string }} opts
+ *   httpsProxyUrl?: string, proxyError?: Error }} opts
  * @returns {Promise<{ status: number, body: unknown }>}
  */
 function executeRequest (body, opts) {
   return new Promise((resolve, reject) => {
+    if (opts.proxyError) {
+      reject(opts.proxyError)
+      return
+    }
+
     const postData = JSON.stringify(body)
     const url = new URL(opts.url)
     request(postData, {
@@ -68,6 +74,7 @@ class AIGuardClient {
   #headers
   #evaluateUrl
   #httpsProxyUrl
+  #proxyError
   #timeout
 
   /**
@@ -83,7 +90,17 @@ class AIGuardClient {
     }
     const endpoint = config.aiguard.DD_AI_GUARD_ENDPOINT || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
-    this.#httpsProxyUrl = config.aiguard.DD_PROXY_HTTPS
+    const proxyUrl = config.aiguard.DD_PROXY_HTTPS
+    if (proxyUrl) {
+      try {
+        const protocol = new URL(proxyUrl).protocol
+        if (protocol !== 'http:' && protocol !== 'https:') throw new TypeError('Unsupported proxy protocol')
+        this.#httpsProxyUrl = proxyUrl
+      } catch {
+        log.error('Invalid DD_PROXY_HTTPS URL for AI Guard')
+        this.#proxyError = new TypeError('Invalid DD_PROXY_HTTPS URL')
+      }
+    }
     this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT
   }
 
@@ -105,7 +122,13 @@ class AIGuardClient {
     }
     return executeRequest(
       payload,
-      { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout, httpsProxyUrl: this.#httpsProxyUrl }
+      {
+        url: this.#evaluateUrl,
+        headers: this.#headers,
+        timeout: this.#timeout,
+        httpsProxyUrl: this.#httpsProxyUrl,
+        proxyError: this.#proxyError,
+      }
     )
       .then(response => this.#parseResponse(response))
       .catch(cause => {

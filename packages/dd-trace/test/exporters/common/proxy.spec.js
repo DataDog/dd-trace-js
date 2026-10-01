@@ -15,7 +15,6 @@ const { getHttpsProxyAgent } = require('../../../src/exporters/common/proxy')
 const httpsRequest = https.request
 const proxyEnvironmentNames = [
   'ALL_PROXY',
-  'DD_PROXY_NO_PROXY',
   'HTTPS_PROXY',
   'HTTP_PROXY',
   'NO_PROXY',
@@ -109,7 +108,6 @@ describe('HTTPS proxy agent selection', () => {
   it('uses an explicit proxy despite standard proxy and bypass settings', () => {
     process.env.HTTPS_PROXY = 'http://standard.example:8202'
     process.env.NO_PROXY = 'intake.example'
-    process.env.DD_PROXY_NO_PROXY = 'intake.example'
     const directAgent = new https.Agent({ keepAlive: true, maxSockets: 4 })
     const proxyUrl = 'http://dedicated.example:8202'
     let agent

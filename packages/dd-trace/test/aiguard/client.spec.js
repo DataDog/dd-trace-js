@@ -15,9 +15,10 @@ const sinon = require('sinon')
 const request = require('../../src/exporters/common/request')
 const { AIGuardClientError } = require('../../src/aiguard/errors')
 const TAGS = require('../../src/aiguard/tags')
+const log = require('../../src/log')
 
 const proxyVariables = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy',
-  'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy', 'DD_PROXY_NO_PROXY']
+  'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
 const ssl = path.join(__dirname, '../../../datadog-plugin-http/test/ssl')
 const messages = [{ role: 'user', content: 'Hello' }]
 const meta = { service: 'test', env: 'test' }
@@ -144,7 +145,6 @@ describe('AI Guard client transport', () => {
     process.env.HTTPS_PROXY = 'http://invalid.invalid:8080'
     process.env.https_proxy = 'http://invalid.invalid:8080'
     process.env.NO_PROXY = '127.0.0.1'
-    process.env.DD_PROXY_NO_PROXY = '127.0.0.1'
     client = createClient(proxyUrl)
 
     assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
@@ -203,6 +203,13 @@ describe('AI Guard client transport', () => {
     assert.equal(connects.length, 1)
   })
 
+  it('uses the standard proxy when DD_PROXY_HTTPS is empty', async () => {
+    process.env.HTTPS_PROXY = proxyUrl
+    client = createClient('')
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+    assert.equal(connects.length, 1)
+  })
+
   it('reports an invalid proxy configuration as a client error', async () => {
     process.env.HTTPS_PROXY = 'http://['
     await assert.rejects(client.evaluate(messages, meta), error => {
@@ -215,12 +222,22 @@ describe('AI Guard client transport', () => {
 
   it('reports an invalid DD_PROXY_HTTPS without falling back to HTTPS_PROXY', async () => {
     process.env.HTTPS_PROXY = proxyUrl
-    client = createClient('http://[')
-    await assert.rejects(client.evaluate(messages, meta), error => {
-      assert.ok(error instanceof AIGuardClientError)
-      assert.equal(error.telemetryType, TAGS.ERROR_TYPE_CLIENT)
-      return true
-    })
+    const errorLog = sinon.stub(log, 'error')
+    const secret = 'http://user:pw@['
+    client = createClient(secret)
+    for (let i = 0; i < 2; i++) {
+      await assert.rejects(client.evaluate(messages, meta), error => {
+        assert.ok(error instanceof AIGuardClientError)
+        assert.equal(error.telemetryType, TAGS.ERROR_TYPE_CLIENT)
+        const cause = error.cause
+        assert.ok(cause instanceof Error)
+        assert.equal(cause.message, 'Invalid DD_PROXY_HTTPS URL')
+        assert.equal('input' in cause, false)
+        assert.ok(!String(error.stack).includes(secret))
+        return true
+      })
+    }
+    sinon.assert.calledOnceWithExactly(errorLog, 'Invalid DD_PROXY_HTTPS URL for AI Guard')
     assert.equal(connects.length, 0)
     assert.equal(received.length, 0)
   })

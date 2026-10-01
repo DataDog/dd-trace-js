@@ -154,20 +154,28 @@ describe('request', function () {
     })
   })
 
-  it('passes an explicit HTTPS proxy URL to proxy selection', (done) => {
+  it('uses an explicit HTTPS proxy URL without forwarding it to ClientRequest', async () => {
     const options = {
       url: new URL('https://test:443/path'),
       method: 'POST',
-      httpsProxyUrl: 'http://dedicated.example:8202',
+      httpsProxyUrl: 'http://user:password@dedicated.example:8202',
     }
     nock('https://test:443').post('/path').reply(200, 'OK')
+    const requestSpy = sinon.spy(https, 'request')
 
-    request(Buffer.from(''), options, (error) => {
+    try {
+      await new Promise((resolve, reject) => {
+        request(Buffer.from(''), options, error => error ? reject(error) : resolve(undefined))
+      })
       sinon.assert.calledOnceWithExactly(
         getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent), options.httpsProxyUrl
       )
-      done(error)
-    })
+      const connectionOptions = requestSpy.firstCall.args[0]
+      assert.ok(typeof connectionOptions === 'object')
+      assert.equal(Object.hasOwn(connectionOptions, 'httpsProxyUrl'), false)
+    } finally {
+      requestSpy.restore()
+    }
   })
 
   it('reports proxy selection errors without starting a request', () => {

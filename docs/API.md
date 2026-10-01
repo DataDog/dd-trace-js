@@ -27,9 +27,9 @@ OpenTelemetry log exporter instead. Direct log submission takes precedence if bo
 <h2 id="ai-guard-proxy">AI Guard proxy</h2>
 
 Set `DD_PROXY_HTTPS` to a proxy URL to route AI Guard Evaluation API requests through that proxy. When set, it takes
-precedence over `HTTPS_PROXY`, `https_proxy`, other standard proxy variables, `NO_PROXY`, and `DD_PROXY_NO_PROXY` for
-these requests. When unset, AI Guard uses the standard proxy and bypass settings. This setting does not change proxy
-selection for other tracer traffic or application requests.
+precedence over standard proxy variables and `NO_PROXY` for these requests. When unset, AI Guard uses the standard
+proxy and bypass settings. This setting applies only to HTTPS AI Guard endpoints; it does not change proxy selection
+for other tracer traffic or application requests.
 
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 

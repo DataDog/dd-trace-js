@@ -95,17 +95,18 @@ function request (data, options, callback) {
 
   docker.inject(options.headers)
 
+  const { httpsProxyUrl, ...connectionOptions } = options
   let agent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
-  if (isSecure && (hasApiKey || options.httpsProxyUrl)) {
+  if (isSecure && (hasApiKey || httpsProxyUrl)) {
     try {
-      agent = getHttpsProxyAgent(options, agent, options.httpsProxyUrl)
+      agent = getHttpsProxyAgent(options, agent, httpsProxyUrl)
     } catch (error) {
       callback(error)
       return
     }
   }
 
-  const connectionOptions = { ...options, agent }
+  connectionOptions.agent = agent
 
   /**
    * @param {import('node:http').IncomingMessage} res
