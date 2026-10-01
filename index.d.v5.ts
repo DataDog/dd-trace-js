@@ -3,6 +3,9 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
+declare const baseEvaluatorBrand: unique symbol
+declare const baseSummaryEvaluatorBrand: unique symbol
+
 declare const EvaluatorContext: {
   new (options: {
     inputData: tracer.llmobs.JSONType
@@ -26,7 +29,6 @@ declare const SummaryEvaluatorContext: {
 
 declare const EvaluatorResult: {
   new (value: tracer.llmobs.JSONType, options?: tracer.llmobs.EvaluatorResultOptions): tracer.llmobs.EvaluatorResult
-  new (options: tracer.llmobs.EvaluatorResultOptions & { value: tracer.llmobs.JSONType }): tracer.llmobs.EvaluatorResult
 }
 
 declare const MultiEvaluatorResult: {
@@ -4277,7 +4279,7 @@ declare namespace tracer {
     interface EvaluatorContext {
       inputData: JSONType
       outputData: JSONType
-      expectedOutput: JSONType
+      expectedOutput?: JSONType
       metadata: Record<string, JSONType>
       spanId?: string
       traceId?: string
@@ -4322,15 +4324,21 @@ declare namespace tracer {
 
     /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
     interface RemoteEvaluator extends BaseEvaluator {}
+    interface ExperimentSummaryEvaluation extends EvaluatorResultOptions {
+      value: any
+      error: string | null
+    }
 
     /** Base class for reusable synchronous or asynchronous record-level evaluators. */
     interface BaseEvaluator {
+      readonly [baseEvaluatorBrand]: never
       name: string
       evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
 
     /** Base class for reusable synchronous or asynchronous summary evaluators. */
     interface BaseSummaryEvaluator {
+      readonly [baseSummaryEvaluatorBrand]: never
       name: string
       evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
     }
@@ -4451,7 +4459,7 @@ declare namespace tracer {
       /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
       hasError: boolean
       rows: ExperimentResultRow[]
-      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      summaryEvaluations: Record<string, ExperimentSummaryEvaluation>
     }
 
     interface ExperimentResult {
@@ -4459,7 +4467,7 @@ declare namespace tracer {
       /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
       /** Summary evaluator results from the first run, kept as a compatibility alias. */
-      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      summaryEvaluations: Record<string, ExperimentSummaryEvaluation>
       /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */

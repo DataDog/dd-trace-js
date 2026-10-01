@@ -767,6 +767,42 @@ const remoteEvaluator = new llmobs.RemoteEvaluator({
   transformFn: context => ({ span_input: context.inputData, span_output: context.outputData })
 })
 remoteEvaluator.name
+class ExampleSummaryEvaluator extends llmobs.BaseSummaryEvaluator {
+  async evaluate (context: InstanceType<typeof llmobsTypes.SummaryEvaluatorContext>) {
+    return context.outputs.length
+  }
+}
+
+function checkEvaluatorTypes (dataset: ReturnType<typeof llmobs.experiments.createDataset>) {
+  llmobs.experiments.experiment({
+    name: 'typed-experiment',
+    dataset,
+    task: input => input,
+    evaluators: [new ExampleEvaluator()],
+    summaryEvaluators: [new ExampleSummaryEvaluator()]
+  })
+  // @ts-expect-error Evaluator class instances must extend the exported base class.
+  llmobs.experiments.experiment({ name: 'structural', dataset, task: input => input, evaluators: [{ name: 'structural', evaluate: () => true }] })
+  // @ts-expect-error Row and summary evaluator base classes are nominally distinct.
+  llmobs.experiments.experiment({ name: 'wrong-kind', dataset, task: input => input, evaluators: [new ExampleSummaryEvaluator()] })
+}
+
+const contextWithoutExpected = new llmobs.EvaluatorContext({ inputData: null, outputData: null })
+// @ts-expect-error expectedOutput can be undefined when omitted from the constructor.
+const requiredExpectedOutput: Exclude<typeof contextWithoutExpected.expectedOutput, undefined> = contextWithoutExpected.expectedOutput
+
+type LocalExperiment = ReturnType<typeof llmobs.experiments.experiment>
+type LocalExperimentResult = Awaited<ReturnType<LocalExperiment['run']>>
+function inspectExperimentResult (result: LocalExperimentResult) {
+  result.summaryEvaluations.metric.reasoning
+  result.summaryEvaluations.metric.assessment
+  result.summaryEvaluations.metric.metadata
+  result.summaryEvaluations.metric.tags
+}
+
+checkEvaluatorTypes
+requiredExpectedOutput
+inspectExperimentResult
 
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)

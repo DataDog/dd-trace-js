@@ -54,21 +54,15 @@ class SummaryEvaluatorContext {
  */
 class EvaluatorResult {
   /**
-   * @param {unknown | {value: unknown, reasoning?: string, assessment?: string, metadata?: object, tags?: object}}
-   *   valueOrOptions
+   * @param {unknown} value
    * @param {{reasoning?: string, assessment?: string, metadata?: object, tags?: object}} [options]
    */
-  constructor (valueOrOptions, options = {}) {
-    const resultOptions = valueOrOptions !== null && typeof valueOrOptions === 'object' &&
-      Object.hasOwn(valueOrOptions, 'value') && arguments.length === 1
-      ? valueOrOptions
-      : { value: valueOrOptions, ...options }
-
-    this.value = resultOptions.value
-    this.reasoning = resultOptions.reasoning
-    this.assessment = resultOptions.assessment
-    this.metadata = resultOptions.metadata
-    this.tags = resultOptions.tags
+  constructor (value, options = {}) {
+    this.value = value
+    this.reasoning = options.reasoning
+    this.assessment = options.assessment
+    this.metadata = options.metadata
+    this.tags = options.tags
   }
 }
 
