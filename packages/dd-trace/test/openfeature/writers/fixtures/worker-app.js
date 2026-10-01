@@ -54,6 +54,25 @@ if (mode === 'network-options') {
   }
 }
 
+if (mode === 'tls-options') {
+  const tls = require('node:tls')
+  const expected = process.argv[3]
+  assert.strictEqual(tls.DEFAULT_MIN_VERSION, expected)
+  assert.strictEqual(tls.DEFAULT_MAX_VERSION, expected)
+  require('node:worker_threads').Worker = class extends Worker {
+    constructor (filename, options) {
+      super(`
+        const assert = require('node:assert/strict')
+        const tls = require('node:tls')
+        assert.strictEqual(tls.DEFAULT_MIN_VERSION, ${JSON.stringify(expected)})
+        assert.strictEqual(tls.DEFAULT_MAX_VERSION, ${JSON.stringify(expected)})
+        require(${JSON.stringify(filename)})
+      `, { ...options, eval: true })
+      this.once('error', error => { throw error })
+    }
+  }
+}
+
 if (mode === 'nested' && isMainThread) {
   const worker = new Worker(__filename, { argv: ['nested-child'] })
   worker.once('error', error => { throw error })

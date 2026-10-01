@@ -193,6 +193,29 @@ describe('flag evaluation real worker processes', () => {
     })
   }
 
+  for (const version of ['1.2', '1.3']) {
+    for (const source of ['command line', 'NODE_OPTIONS', 'both']) {
+      it(`preserves TLS ${version} bounds from ${source} without application preloads`, async function () {
+        this.timeout(15000)
+        const minimum = `--tls-min-v${version}`
+        const maximum = `--tls-max-v${version}`
+        const args = source === 'NODE_OPTIONS' ? [] : source === 'both' ? [maximum] : [minimum, maximum]
+        const options = source === 'command line' ? [] : source === 'both' ? [minimum] : [minimum, maximum]
+        const { stdout, stderr } = await exec(process.execPath, [
+          ...args, '--require', preload, fixture, 'tls-options', `TLSv${version}`,
+        ], {
+          timeout: 10000,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' '),
+          },
+        })
+        assert.strictEqual(stderr, '')
+        assert.strictEqual(JSON.parse(stdout).delivered, 17)
+      })
+    }
+  }
+
   it('does not inherit application command-line or NODE_OPTIONS preloads', async function () {
     this.timeout(15000)
     const { stdout, stderr } = await exec(process.execPath, ['--require', preload, fixture, 'preload'], {
