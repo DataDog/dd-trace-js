@@ -84,12 +84,10 @@ nvm install "${NODE_VERSION}"
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
-node ./verify-sirun-version.js
 CPU_AFFINITY="${CPUSET_START}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 VARIANT_TIMEOUT_SECONDS=${VARIANT_TIMEOUT_SECONDS:-75}
-export VARIANT_TIMEOUT_SECONDS
 
 # With BENCHMARKS_FROM=candidate the baseline runs this PR's benchmark code on
 # the older source. Skip a baseline failure only when the same variant passed on
@@ -161,7 +159,8 @@ function run_variant {
 
   cd "${D}"
   VARIANT_OUT=$(mktemp)
-  time node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}" || STATUS=$?
+  time timeout --kill-after=5s "${VARIANT_TIMEOUT_SECONDS}s" \
+    node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}" || STATUS=$?
   if [[ ${STATUS} -eq 0 ]]; then
     echo "${D}/${V} finished."
     if [[ -n "${RECORD_CANDIDATE_PASS}" ]]; then echo "${D}/${V}" >> "$CANDIDATE_PASSED_FILE"; fi

@@ -70,7 +70,8 @@ describe('Sirun measurement boundary', () => {
  * @param {() => void} writeSync
  */
 function loadBoundary (writeSync) {
-  return proxyquire.noPreserveCache()('./startup-guard', {
+  const proxyquireWithoutCache = proxyquire.noPreserveCache()
+  return proxyquireWithoutCache('./startup-guard', {
     'node:fs': { writeSync },
   })
 }
