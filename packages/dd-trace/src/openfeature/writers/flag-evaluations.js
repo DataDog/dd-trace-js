@@ -27,13 +27,14 @@ const permissionFlags = new Set([
 ])
 const networkFlags = new Set([
   '--dns-result-order', '--network-family-autoselection', '--enable-network-family-autoselection',
-  '--network-family-autoselection-attempt-timeout',
+  '--network-family-autoselection-attempt-timeout', '--max-http-header-size',
   // TLS version defaults are worker-local; other TLS/OpenSSL options may reject worker execArgv.
   '--tls-min-v1.0', '--tls-min-v1.1', '--tls-min-v1.2', '--tls-min-v1.3',
   '--tls-max-v1.2', '--tls-max-v1.3',
 ])
 const flagsWithValues = new Set([
   '--allow-fs-read', '--allow-fs-write', '--dns-result-order', '--network-family-autoselection-attempt-timeout',
+  '--max-http-header-size',
 ])
 
 /** @param {string} [nodeOptions] */
@@ -278,7 +279,7 @@ class FlagEvaluationsWriter {
     try {
       const { Worker } = require('node:worker_threads')
       // Intentionally use the tracer's supported-config filter (which retains non-DD/OTEL env).
-      // Strip application preloads, but retain permissions, DNS/address selection, and TLS version restrictions.
+      // Strip application preloads, but retain permissions and supported HTTP/TLS/network settings.
       const { NODE_OPTIONS, ...env } = getEnvironmentVariables()
       const execArgv = getWorkerArgs(NODE_OPTIONS)
       // PnP has no node_modules fallback: retain only its active resolver, not application preloads.

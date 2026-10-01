@@ -216,6 +216,27 @@ describe('flag evaluation real worker processes', () => {
     }
   }
 
+  for (const limit of [8192, 32768]) {
+    for (const source of ['command line', 'NODE_OPTIONS', 'both']) {
+      it(`preserves HTTP header limit ${limit} from ${source} without application preloads`, async function () {
+        this.timeout(15000)
+        const args = source === 'NODE_OPTIONS' ? [] : ['--max-http-header-size', String(limit)]
+        const options = source === 'command line' ? [] : [`--max-http-header-size=${source === 'both' ? 4096 : limit}`]
+        const { stdout, stderr } = await exec(process.execPath, [
+          ...args, '--require', preload, fixture, 'http-header-limit', String(limit),
+        ], {
+          timeout: 10000,
+          env: {
+            ...process.env,
+            NODE_OPTIONS: [...options, '--require', preload].map(arg => JSON.stringify(arg)).join(' '),
+          },
+        })
+        assert.strictEqual(stderr, '')
+        assert.strictEqual(JSON.parse(stdout).delivered, 17)
+      })
+    }
+  }
+
   it('does not inherit application command-line or NODE_OPTIONS preloads', async function () {
     this.timeout(15000)
     const { stdout, stderr } = await exec(process.execPath, ['--require', preload, fixture, 'preload'], {

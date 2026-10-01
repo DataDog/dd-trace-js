@@ -73,6 +73,21 @@ if (mode === 'tls-options') {
   }
 }
 
+if (mode === 'http-header-limit') {
+  const expected = Number(process.argv[3])
+  assert.strictEqual(require('node:http').maxHeaderSize, expected)
+  require('node:worker_threads').Worker = class extends Worker {
+    constructor (filename, options) {
+      super(`
+        const assert = require('node:assert/strict')
+        assert.strictEqual(require('node:http').maxHeaderSize, ${expected})
+        require(${JSON.stringify(filename)})
+      `, { ...options, eval: true })
+      this.once('error', error => { throw error })
+    }
+  }
+}
+
 if (mode === 'nested' && isMainThread) {
   const worker = new Worker(__filename, { argv: ['nested-child'] })
   worker.once('error', error => { throw error })
