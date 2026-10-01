@@ -25,13 +25,13 @@ function aiGuardHost (site) {
  *
  * @param {object} body
  * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number,
- *   httpsProxyUrl?: string, proxyError?: Error }} opts
+ *   httpsProxyUrl?: string, invalidProxyUrl?: boolean }} opts
  * @returns {Promise<{ status: number, body: unknown }>}
  */
 function executeRequest (body, opts) {
   return new Promise((resolve, reject) => {
-    if (opts.proxyError) {
-      reject(opts.proxyError)
+    if (opts.invalidProxyUrl) {
+      reject(new TypeError('Invalid DD_PROXY_HTTPS URL'))
       return
     }
 
@@ -74,7 +74,7 @@ class AIGuardClient {
   #headers
   #evaluateUrl
   #httpsProxyUrl
-  #proxyError
+  #invalidProxyUrl
   #timeout
 
   /**
@@ -98,7 +98,7 @@ class AIGuardClient {
         this.#httpsProxyUrl = proxyUrl
       } catch {
         log.error('Invalid DD_PROXY_HTTPS URL for AI Guard')
-        this.#proxyError = new TypeError('Invalid DD_PROXY_HTTPS URL')
+        this.#invalidProxyUrl = true
       }
     }
     this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT
@@ -127,7 +127,7 @@ class AIGuardClient {
         headers: this.#headers,
         timeout: this.#timeout,
         httpsProxyUrl: this.#httpsProxyUrl,
-        proxyError: this.#proxyError,
+        invalidProxyUrl: this.#invalidProxyUrl,
       }
     )
       .then(response => this.#parseResponse(response))

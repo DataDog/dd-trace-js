@@ -7,6 +7,7 @@ const http = require('node:http')
 const https = require('node:https')
 const net = require('node:net')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -225,18 +226,21 @@ describe('AI Guard client transport', () => {
     const errorLog = sinon.stub(log, 'error')
     const secret = 'http://user:pw@['
     client = createClient(secret)
+    const causes = []
     for (let i = 0; i < 2; i++) {
       await assert.rejects(client.evaluate(messages, meta), error => {
         assert.ok(error instanceof AIGuardClientError)
         assert.equal(error.telemetryType, TAGS.ERROR_TYPE_CLIENT)
         const cause = error.cause
         assert.ok(cause instanceof Error)
+        causes.push(cause)
         assert.equal(cause.message, 'Invalid DD_PROXY_HTTPS URL')
         assert.equal('input' in cause, false)
-        assert.ok(!String(error.stack).includes(secret))
+        assert.ok(!inspect(error).includes(secret))
         return true
       })
     }
+    assert.notStrictEqual(causes[0], causes[1])
     sinon.assert.calledOnceWithExactly(errorLog, 'Invalid DD_PROXY_HTTPS URL for AI Guard')
     assert.equal(connects.length, 0)
     assert.equal(received.length, 0)

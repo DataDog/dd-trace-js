@@ -171,7 +171,7 @@ describe('request', function () {
         getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent), options.httpsProxyUrl
       )
       const connectionOptions = requestSpy.firstCall.args[0]
-      assert.ok(typeof connectionOptions === 'object')
+      assert.strictEqual(connectionOptions.method, options.method)
       assert.equal(Object.hasOwn(connectionOptions, 'httpsProxyUrl'), false)
     } finally {
       requestSpy.restore()
