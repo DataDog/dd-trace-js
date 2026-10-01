@@ -1,16 +1,26 @@
 'use strict'
 
-const id = require('../id')
 const { storage } = require('../../../datadog-core') // TODO: noop storage?
+const createSpanContext = require('../opentracing/create-span-context')
 const NoopSpanContext = require('./span_context')
 
 const legacyStorage = storage('legacy')
+const noopProcessor = { sample () {} }
 
 class NoopSpan {
+  /**
+   * @param {import('../opentracing/tracer')} tracer
+   * @param {import('../opentracing/span_context') | null | undefined} parent
+   */
   constructor (tracer, parent) {
     this._store = legacyStorage.getHandle()
     this._noopTracer = tracer
-    this._noopContext = this._createContext(parent)
+    this._noopContext = /** @type {NoopSpanContext} */ (createSpanContext(
+      tracer._config, parent, undefined, tracer._traceId128BitGenerationEnabled, NoopSpanContext
+    ))
+    this._noopContext._noop = this
+    this._spanContext = this._noopContext
+    this._processor = noopProcessor
   }
 
   context () { return this._noopContext }
@@ -27,6 +37,12 @@ class NoopSpan {
   addLinks (links) { return this }
   addSpanPointer (ptrKind, ptrDir, ptrHash) { return this }
   /**
+   * @param {string} name
+   * @param {import('../../../../index').SpanEventAttributes | number} [attributesOrStartTime]
+   * @param {number} [startTime]
+   */
+  addEvent (name, attributesOrStartTime, startTime) { return this }
+  /**
    * @param {import('../../../../index').Exception} exception
    * @param {import('../../../../index').SpanEventAttributes} [attributes]
    */
@@ -34,24 +50,6 @@ class NoopSpan {
   log () { return this }
   logEvent () {}
   finish (finishTime) {}
-
-  _createContext (parent) {
-    const spanId = id()
-
-    return parent
-      ? new NoopSpanContext({
-        noop: this,
-        traceId: parent._traceId,
-        spanId,
-        parentId: parent._spanId,
-        baggageItems: { ...parent._baggageItems },
-      })
-      : new NoopSpanContext({
-        noop: this,
-        traceId: spanId,
-        spanId,
-      })
-  }
 }
 
 module.exports = NoopSpan
