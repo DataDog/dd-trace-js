@@ -14,20 +14,17 @@
 const fs = require('fs')
 const path = require('path')
 const { spawnSync } = require('child_process')
-const { VARIANT_TIMEOUT_MS } = require('./run-util')
 const { prepareMeta } = require('./squash-affinity')
-const { verifySirunVersion } = require('./verify-sirun-version')
 
 const DIR = __dirname
 const SAMPLES = 6 // sirun iterations per variant for the overview (not the configured count)
+const TIMEOUT_MS = 90_000
 // Optional comma-separated dir filter (argv[2]); when set, write to a scratch
 // file so a partial run does not clobber the committed overview.
 const only = process.argv[2] ? new Set(process.argv[2].split(',')) : null
 const OUT = only
   ? path.join(require('os').tmpdir(), 'overview-test.md')
   : path.join(DIR, 'benchmark-overview.md')
-
-verifySirunVersion()
 
 // Curated per-bench judgment the run cannot measure.
 const HIGH_MEANING = new Set([
@@ -114,7 +111,7 @@ for (const name of benches) {
     // sirun runs the variant's setup (client/server, service) when present, so
     // live benches measure too as long as the deps and ports are available.
     const res = spawnSync('sirun', ['meta-overview.json'],
-      { cwd: benchDir, env, timeout: VARIANT_TIMEOUT_MS, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+      { cwd: benchDir, env, timeout: TIMEOUT_MS, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
 
     if (res.status === 0 && res.stdout) {
       try {

@@ -12,9 +12,8 @@ First, install sirun:
 cargo install --git https://github.com/DataDog/sirun.git --branch main
 ```
 
-The runners require Sirun 0.1.12 or newer because benchmarks use its readiness
-file descriptor to exclude initialization from measurements. CI installs the
-version pinned in `.sirun-version` and verifies it before running benchmarks.
+CI installs the checksummed version pinned in `.sirun-version` before running
+benchmarks.
 
 Then, get into one of the directories alongside this file, and run the following:
 
@@ -29,6 +28,3 @@ Putting that all together, the following will run benchmarks, summarize them, an
 ```sh
 node ../run-all-variants.js | sirun --summarize | node ../means.js
 ```
-
-Each complete variant is limited to 75 seconds by default. Set
-`VARIANT_TIMEOUT_SECONDS` to adjust the limit for local investigation.
