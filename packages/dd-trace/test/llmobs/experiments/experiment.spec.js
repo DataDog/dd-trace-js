@@ -128,7 +128,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
           reasoning: 'The output matches the expected value.',
           assessment: 'pass',
           metadata: { source: 'class' },
-          tags: { evaluator: 'exact' },
+          tags: { evaluator: 'exact', project_name: 'wrong-project' },
         })
       }
     }
@@ -140,7 +140,13 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
       async evaluate (context) {
         summaryContext = context
-        return context.evaluationResults.exact_match.filter(Boolean).length
+        return new EvaluatorResult({
+          value: context.evaluationResults.exact_match.filter(Boolean).length,
+          reasoning: 'Counted the matching rows.',
+          assessment: 'pass',
+          metadata: { source: 'summary' },
+          tags: { evaluator: 'summary', project_name: 'wrong-project' },
+        })
       }
     }
 
@@ -170,7 +176,16 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     })
     assert.deepEqual(summaryContext.evaluationResults, { exact_match: [false] })
     assert.equal(result.rows[0].evaluations.exact_match, false)
-    assert.equal(result.summaryEvaluations.match_count.value, 0)
+    const expectedSummary = {
+      value: 0,
+      error: null,
+      reasoning: 'Counted the matching rows.',
+      assessment: 'pass',
+      metadata: { source: 'summary' },
+      tags: { evaluator: 'summary', project_name: 'wrong-project' },
+    }
+    assert.deepEqual(result.summaryEvaluations.match_count, expectedSummary)
+    assert.deepEqual(result.runs[0].summaryEvaluations.match_count, expectedSummary)
 
     const events = requests.find(request => request.method === 'postExperimentEvents').attributes
     const metric = events.metrics.find(item => item.label === 'exact_match')
@@ -178,13 +193,19 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(metric.reasoning, 'The output matches the expected value.')
     assert.deepEqual(metric.metadata, { source: 'class' })
     assert.deepEqual(metric.tags.filter(tag => tag === 'evaluator:exact'), ['evaluator:exact'])
-    assert.equal(metric.tags.includes('project_name:demo-project'), true)
+    for (const emittedMetric of events.metrics) {
+      assert.deepEqual(
+        emittedMetric.tags.filter(tag => tag.startsWith('project_name:')),
+        ['project_name:demo-project']
+      )
+    }
     assert.equal(events.spans[0].tags.includes('project_name:demo-project'), true)
   })
 
-  it('supports multiple metrics from a class evaluator', async () => {
+  it('supports multiple metrics from a class evaluator without a phantom base result', async () => {
     const { client: c, requests } = clientWithMockBackend()
     const dataset = new Dataset(c, 'demo').addRecord('input')
+    let summaryEvaluatorResults
 
     class DetailsEvaluator extends BaseEvaluator {
       evaluate () {
@@ -200,10 +221,54 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       dataset,
       task: input => input,
       evaluators: [new DetailsEvaluator()],
+      summaryEvaluators: {
+        inspect: (_inputs, _outputs, _expectedOutputs, evaluatorResults) => {
+          summaryEvaluatorResults = evaluatorResults
+          return true
+        },
+      },
     }).run()
 
+    assert.deepEqual(summaryEvaluatorResults, {
+      'DetailsEvaluator-length': [5],
+      'DetailsEvaluator-valid': [true],
+    })
     const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
-    assert.deepEqual(metrics.map(metric => metric.label), ['DetailsEvaluator-length', 'DetailsEvaluator-valid'])
+    assert.deepEqual(
+      metrics.filter(metric => metric.metric_source === 'custom').map(metric => metric.label),
+      ['DetailsEvaluator-length', 'DetailsEvaluator-valid']
+    )
+  })
+
+  it('rejects colliding generated evaluator labels', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'row-collision',
+        dataset,
+        task: input => input,
+        evaluators: {
+          details: () => new MultiEvaluatorResult({ length: 1 }),
+          'details-length': () => 2,
+        },
+      }).run(),
+      /Evaluator metric label 'details-length' was emitted more than once/
+    )
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'summary-collision',
+        dataset,
+        task: input => input,
+        summaryEvaluators: {
+          details: () => new MultiEvaluatorResult({ length: 1 }),
+          'details-length': () => 2,
+        },
+      }).run(),
+      /Summary evaluator metric label 'details-length' was emitted more than once/
+    )
   })
 
   it('preserves repeated record tags in fallback experiment spans', async () => {

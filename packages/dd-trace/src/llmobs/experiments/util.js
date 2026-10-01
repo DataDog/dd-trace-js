@@ -62,6 +62,7 @@ function generateRunId () {
 function validateEvaluatorName (name) {
   if (typeof name !== 'string') throw new TypeError('Evaluator name must be a string')
   if (name.length === 0) throw new Error('Evaluator name cannot be empty')
+  if (name === '__proto__') throw new Error("Evaluator name '__proto__' is reserved")
   if (!EVALUATOR_NAME_PATTERN.test(name)) {
     throw new Error(
       `Evaluator name '${name}' is invalid. Name must contain only alphanumeric characters, underscores, and hyphens.`

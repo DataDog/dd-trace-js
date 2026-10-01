@@ -100,6 +100,7 @@ function toMetric (
       experiment_id: experimentId,
       run_id: ids.runId,
       run_iteration: ids.runIteration,
+      project_name: userTags.project_name,
     }),
     experiment_id: experimentId,
   }
@@ -597,7 +598,6 @@ class Experiment {
     const metrics = []
     const evaluatorResults = {}
     let hasRowError = false
-    for (const [label] of this.#evaluators) evaluatorResults[label] = []
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i]
@@ -729,6 +729,9 @@ class Experiment {
     const evaluatorResults = await Promise.all(pending)
     for (const result of evaluatorResults) {
       for (const value of result.values) {
+        if (Object.hasOwn(evaluatorValues, value.label)) {
+          throw new Error(`Evaluator metric label '${value.label}' was emitted more than once`)
+        }
         if (value.metric !== null) metrics.push(value.metric)
         evaluatorValues[value.label] = value.value
       }
@@ -970,7 +973,6 @@ class Experiment {
     const summaryEvaluations = {}
     const timestampMs = Date.now()
     const pending = new Array(this.#summaryEvaluators.length)
-    let firstError
 
     for (let i = 0; i < this.#summaryEvaluators.length; i++) {
       const [label, evaluator] = this.#summaryEvaluators[i]
@@ -995,16 +997,14 @@ class Experiment {
       throw err
     }
     for (const result of results) {
-      if (result.error !== undefined) {
-        if (firstError === undefined) firstError = result.error
-        continue
-      }
       for (const value of result.values) {
+        if (Object.hasOwn(summaryEvaluations, value.label)) {
+          throw new Error(`Summary evaluator metric label '${value.label}' was emitted more than once`)
+        }
         summaryEvaluations[value.label] = value.evaluation
         options.metrics.push(value.metric)
       }
     }
-    if (firstError !== undefined) throw firstError
 
     return summaryEvaluations
   }
@@ -1061,7 +1061,7 @@ class Experiment {
           ),
         })
       }
-      return { values, error: undefined }
+      return { values }
     } catch (err) {
       if (options.throwOnErrors) throw err
       const msg = err.message ?? String(err)
@@ -1082,7 +1082,6 @@ class Experiment {
             { runId: options.runId, runIteration: options.runIteration }
           ),
         }],
-        error: undefined,
       }
     }
   }

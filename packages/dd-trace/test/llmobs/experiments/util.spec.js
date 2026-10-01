@@ -44,6 +44,7 @@ describe('LLMObs Experiments util', () => {
 
     assert.throws(() => validateEvaluatorName('bad name'), /invalid/)
     assert.throws(() => validateEvaluatorName('bad.name'), /invalid/)
+    assert.throws(() => validateEvaluatorName('__proto__'), /reserved/)
     assert.throws(() => validateEvaluatorName(''), /empty/)
     assert.throws(() => validateEvaluatorName(1), /must be a string/)
   })
@@ -56,6 +57,7 @@ describe('LLMObs Experiments util', () => {
   it('validates multi-evaluator result values', () => {
     assert.throws(() => new MultiEvaluatorResult(null), /must be an object/)
     assert.throws(() => new MultiEvaluatorResult([]), /must be an object/)
+    assert.throws(() => new MultiEvaluatorResult(JSON.parse('{"__proto__":true}'), false), /reserved/)
   })
 
   it('normalizes evaluator maps and arrays', () => {
