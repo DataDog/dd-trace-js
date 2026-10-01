@@ -1293,11 +1293,15 @@ describe('TextMapPropagator', () => {
       ['+5', 5],
       [' -5', 5],
       ['-1suffix', 1],
+      ['-1.5', 1],
+      ['-1e2', 1],
+      ['0x10', 0],
       ['-/', undefined],
       ['-:', undefined],
       ['-x', undefined],
       ['-', undefined],
       ['', undefined],
+      [' ', undefined],
     ]) {
       it(`preserves decision-maker parsing for ${JSON.stringify(value)}`, () => {
         textMap['x-datadog-tags'] = `_dd.p.dm=${value}`

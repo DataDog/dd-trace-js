@@ -921,7 +921,8 @@ class TextMapPropagator {
         if (digit >= 0 && digit <= 9) {
           spanContext._sampling.mechanism = digit
         } else {
-          const mechanism = Math.abs(Number(decisionMaker))
+          // Preserve integer-prefix parsing; Number() also turns empty values into zero.
+          const mechanism = Math.abs(Number.parseInt(decisionMaker, 10))
           if (Number.isInteger(mechanism) && mechanism >= 0) {
             spanContext._sampling.mechanism = mechanism
           }
