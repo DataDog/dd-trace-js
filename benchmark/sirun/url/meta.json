@@ -8,7 +8,14 @@
   "variants": {
     "endpoint-and-obfuscation": {
       "env": {
+        "MODE": "endpoint-and-obfuscation",
         "OPERATIONS": "2500000"
+      }
+    },
+    "client-query-schema": {
+      "env": {
+        "MODE": "client-query-schema",
+        "OPERATIONS": "500000"
       }
     }
   }
