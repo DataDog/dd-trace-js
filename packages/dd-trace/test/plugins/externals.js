@@ -99,7 +99,7 @@ module.exports = {
     },
     {
       name: '@aws-sdk/client-bedrock-runtime',
-      versions: ['>=3.422.0'],
+      versions: ['>=3.422.0', '>=3.785.0'],
     },
   ],
   bullmq: [
