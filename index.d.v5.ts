@@ -3,6 +3,46 @@ import { LookupFunction } from 'net';
 import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
+declare const baseEvaluatorBrand: unique symbol
+declare const baseSummaryEvaluatorBrand: unique symbol
+
+declare const EvaluatorContext: {
+  new (options: {
+    inputData: tracer.llmobs.JSONType
+    outputData: tracer.llmobs.JSONType
+    expectedOutput?: tracer.llmobs.JSONType
+    metadata?: Record<string, tracer.llmobs.JSONType>
+    spanId?: string
+    traceId?: string
+  }): tracer.llmobs.EvaluatorContext
+}
+
+declare const SummaryEvaluatorContext: {
+  new (options: {
+    inputs: tracer.llmobs.JSONType[]
+    outputs: tracer.llmobs.JSONType[]
+    expectedOutputs: tracer.llmobs.JSONType[]
+    evaluationResults: Record<string, tracer.llmobs.JSONType[]>
+    metadata?: Array<Record<string, tracer.llmobs.JSONType>>
+  }): tracer.llmobs.SummaryEvaluatorContext
+}
+
+declare const EvaluatorResult: {
+  new (value: tracer.llmobs.JSONType, options?: tracer.llmobs.EvaluatorResultOptions): tracer.llmobs.EvaluatorResult
+}
+
+declare const MultiEvaluatorResult: {
+  new (values: Record<string, tracer.llmobs.JSONType | tracer.llmobs.EvaluatorResult>, prefix?: boolean): tracer.llmobs.MultiEvaluatorResult
+}
+
+declare const BaseEvaluator: {
+  new (name?: string): tracer.llmobs.BaseEvaluator
+}
+
+declare const BaseSummaryEvaluator: {
+  new (name?: string): tracer.llmobs.BaseSummaryEvaluator
+}
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
@@ -3920,6 +3960,12 @@ declare namespace tracer {
        * `DD_API_KEY` / `DD_APP_KEY` to be set.
        */
       experiments: Experiments,
+      BaseEvaluator: typeof BaseEvaluator,
+      BaseSummaryEvaluator: typeof BaseSummaryEvaluator,
+      EvaluatorContext: typeof EvaluatorContext,
+      SummaryEvaluatorContext: typeof SummaryEvaluatorContext,
+      EvaluatorResult: typeof EvaluatorResult,
+      MultiEvaluatorResult: typeof MultiEvaluatorResult,
 
       /** Prompt Management API. */
       prompts: Prompts,
@@ -4250,6 +4296,66 @@ declare namespace tracer {
 
     type ReadonlyJSONType = string | number | boolean | null | ReadonlyArray<ReadonlyJSONType> | { readonly [key: string]: ReadonlyJSONType }
 
+    /** Context passed to a record-level class evaluator. */
+    interface EvaluatorContext {
+      inputData: JSONType
+      outputData: JSONType
+      expectedOutput?: JSONType
+      metadata: Record<string, JSONType>
+      spanId?: string
+      traceId?: string
+    }
+
+    /** Context passed to a summary class evaluator. */
+    interface SummaryEvaluatorContext {
+      inputs: JSONType[]
+      outputs: JSONType[]
+      expectedOutputs: JSONType[]
+      evaluationResults: Record<string, JSONType[]>
+      metadata: Array<Record<string, JSONType>>
+    }
+
+    interface EvaluatorResultOptions {
+      reasoning?: string
+      assessment?: 'pass' | 'fail'
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, JSONType>
+    }
+
+    /** A metric value with optional evaluation details. */
+    interface EvaluatorResult {
+      value: JSONType
+      reasoning?: string
+      assessment?: 'pass' | 'fail'
+      metadata?: Record<string, JSONType>
+      tags?: Record<string, JSONType>
+    }
+
+    /** A result that emits several named metrics from one evaluator invocation. */
+    interface MultiEvaluatorResult {
+      values: Record<string, JSONType | EvaluatorResult>
+      prefix: boolean
+    }
+
+    interface ExperimentSummaryEvaluation extends EvaluatorResultOptions {
+      value: any
+      error: string | null
+    }
+
+    /** Base class for reusable synchronous or asynchronous record-level evaluators. */
+    interface BaseEvaluator {
+      readonly [baseEvaluatorBrand]: never
+      name: string
+      evaluate (context: EvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+    }
+
+    /** Base class for reusable synchronous or asynchronous summary evaluators. */
+    interface BaseSummaryEvaluator {
+      readonly [baseSummaryEvaluatorBrand]: never
+      name: string
+      evaluate (context: SummaryEvaluatorContext): JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+    }
+
     /**
      * A task run over each dataset record during an experiment.
      */
@@ -4259,26 +4365,25 @@ declare namespace tracer {
       metadata?: Record<string, JSONType>
     ) => JSONType | Promise<JSONType>
 
-    /**
-     * Scores a single task output. The return type selects the metric:
-     * `boolean` -> boolean, `number` -> score, `string` -> categorical, anything else -> json.
-     */
-    type ExperimentEvaluator = (
+    /** Scores a single task output. */
+    type ExperimentEvaluatorFunction = (
       input: JSONType,
       output: JSONType,
       expectedOutput: JSONType
-    ) => JSONType | Promise<JSONType>
+    ) => JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
 
-    /**
-     * Scores all rows in an experiment run and emits a summary metric.
-     */
-    type ExperimentSummaryEvaluator = (
-      inputs: any[],
-      outputs: any[],
-      expectedOutputs: any[],
-      evaluatorResults: Record<string, any[]>,
-      metadata?: Array<Record<string, any>>
-    ) => any | Promise<any>
+    type ExperimentEvaluator = ExperimentEvaluatorFunction | BaseEvaluator
+
+    /** Scores all rows in an experiment run and emits a summary metric. */
+    type ExperimentSummaryEvaluatorFunction = (
+      inputs: JSONType[],
+      outputs: JSONType[],
+      expectedOutputs: JSONType[],
+      evaluatorResults: Record<string, JSONType[]>,
+      metadata?: Array<Record<string, JSONType>>
+    ) => JSONType | EvaluatorResult | MultiEvaluatorResult | Promise<JSONType | EvaluatorResult | MultiEvaluatorResult>
+
+    type ExperimentSummaryEvaluator = ExperimentSummaryEvaluatorFunction | BaseSummaryEvaluator
 
     interface DatasetRecord {
       id: string | null
@@ -4309,9 +4414,9 @@ declare namespace tracer {
       task: ExperimentTask
       /** Override the configured project for this experiment. */
       projectName?: string
-      /** Evaluators keyed by metric label, or named functions. */
+      /** Evaluators keyed by metric label, or named functions or class instances. */
       evaluators?: Record<string, ExperimentEvaluator> | ExperimentEvaluator[]
-      /** Summary evaluators keyed by metric label, or named functions. */
+      /** Summary evaluators keyed by metric label, or named functions or class instances. */
       summaryEvaluators?: Record<string, ExperimentSummaryEvaluator> | ExperimentSummaryEvaluator[]
       description?: string
       config?: Record<string, JSONType>
@@ -4367,7 +4472,7 @@ declare namespace tracer {
       /** Whether this run had a task, row-evaluator, or summary-evaluator error. */
       hasError: boolean
       rows: ExperimentResultRow[]
-      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      summaryEvaluations: Record<string, ExperimentSummaryEvaluation>
     }
 
     interface ExperimentResult {
@@ -4375,7 +4480,7 @@ declare namespace tracer {
       /** Rows from the first run, kept as a compatibility alias. */
       rows: ExperimentResultRow[]
       /** Summary evaluator results from the first run, kept as a compatibility alias. */
-      summaryEvaluations: Record<string, { value: any, error: string | null }>
+      summaryEvaluations: Record<string, ExperimentSummaryEvaluation>
       /** All experiment runs. */
       runs: ExperimentRun[]
       /** Dashboard URL for the experiment. */
