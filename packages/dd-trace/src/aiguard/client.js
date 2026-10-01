@@ -37,7 +37,7 @@ function executeRequest (body, opts) {
 
     const postData = JSON.stringify(body)
     const url = new URL(opts.url)
-    request(postData, {
+    const requestOptions = {
       url,
       method: 'POST',
       headers: {
@@ -45,12 +45,14 @@ function executeRequest (body, opts) {
         ...opts.headers,
       },
       agent: url.protocol === 'https:' ? httpsAgent : httpAgent,
-      httpsProxyUrl: opts.httpsProxyUrl,
       timeout: opts.timeout,
       signal: AbortSignal.timeout(opts.timeout),
       retry: false,
       includeErrorResponseBody: true,
-    }, (error, result, status) => {
+    }
+    if (opts.httpsProxyUrl) Object.assign(requestOptions, { httpsProxyUrl: opts.httpsProxyUrl })
+
+    request(postData, requestOptions, (error, result, status) => {
       if (status === undefined) {
         reject(error || new Error('AI Guard request completed without a status'))
         return

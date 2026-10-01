@@ -158,6 +158,7 @@ describe('request', function () {
     const options = {
       url: new URL('https://test:443/path'),
       method: 'POST',
+      headers: { 'DD-API-KEY': 'test-api-key' },
       httpsProxyUrl: 'http://user:password@dedicated.example:8202',
     }
     nock('https://test:443').post('/path').reply(200, 'OK')
@@ -170,7 +171,7 @@ describe('request', function () {
       sinon.assert.calledOnceWithExactly(
         getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent), options.httpsProxyUrl
       )
-      const connectionOptions = requestSpy.firstCall.args[0]
+      const connectionOptions = /** @type {import('node:http').RequestOptions} */ (requestSpy.firstCall.args[0])
       assert.strictEqual(connectionOptions.method, options.method)
       assert.equal(Object.hasOwn(connectionOptions, 'httpsProxyUrl'), false)
     } finally {

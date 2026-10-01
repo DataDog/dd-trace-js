@@ -137,9 +137,12 @@ describe('AI Guard client transport', () => {
 
   it('uses direct transport without relying on global fetch when no proxy is configured', async () => {
     const fetch = sinon.stub(global, 'fetch').throws(new Error('Application-owned fetch'))
+    const httpsRequest = sinon.spy(https, 'request')
     assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
     assert.deepEqual(connects, [])
     sinon.assert.notCalled(fetch)
+    const connectionOptions = /** @type {import('node:http').RequestOptions} */ (httpsRequest.firstCall.args[0])
+    assert.equal(Object.hasOwn(connectionOptions, 'httpsProxyUrl'), false)
   })
 
   it('uses DD_PROXY_HTTPS despite standard proxy and bypass settings', async () => {
