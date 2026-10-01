@@ -1006,10 +1006,12 @@ describe('with OpenTelemetry HTTP semantics', () => {
 
   before(() => {
     process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = 'width=[^&]*'
   })
 
   after(() => {
     delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    delete process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
   })
 
   createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
@@ -1021,6 +1023,20 @@ describe('with OpenTelemetry HTTP semantics', () => {
 
     after(async () => {
       await otelTestSetup.teardown()
+    })
+
+    it('preserves an obfuscated Storage query in url.full', async () => {
+      const assertion = meta.agent.assertFirstTraceSpan({
+        name: 'supabase.storage.request',
+        meta: {
+          'url.full': 'https://project.supabase.co/storage/v1/render/image/authenticated/files/avatar.png' +
+            '?<redacted>&height=200',
+        },
+      })
+
+      const result = await otelTestSetup.storageFileDownloadWithTransform()
+      assert.ifError(result.error)
+      await assertion
     })
 
     for (const { operationName, resource, method, run } of [

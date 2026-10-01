@@ -5,7 +5,11 @@ const {
   INSTRUMENTATION_HTTP_RESOURCE,
   otelHttpResourceName,
 } = require('../../dd-trace/src/plugins/util/http-otel-semantics')
-const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
+const {
+  extractPathFromUrl,
+  getQsObfuscator,
+  obfuscateQs,
+} = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const getHostname = require('./url')
 
@@ -58,15 +62,19 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
   bindStart (ctx) {
     const method = String(ctx.arguments?.[1] || 'GET').toUpperCase()
     const url = ctx.arguments?.[2]
+    const rawUrl = String(url)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     let resource = `${method} ${getStorageRoute(url)}`
     const meta = {
       component: 'supabase',
       'span.kind': 'client',
       'http.method': method,
-      'http.url': stripQueryAndFragment(String(url)),
+      'http.url': otelSemantics
+        ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, rawUrl)
+        : stripQueryAndFragment(rawUrl),
       'out.host': getHostname(url),
     }
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    if (otelSemantics) {
       resource = otelHttpResourceName(method)
       meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
     }

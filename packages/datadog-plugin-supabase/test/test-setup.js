@@ -86,6 +86,13 @@ class SupabaseTestSetup {
   }
 
   /** @returns {Promise<object>} */
+  storageFileDownloadWithTransform () {
+    return this.createSupabaseClient().storage.from('files').download('avatar.png', {
+      transform: { width: 100, height: 200 },
+    })
+  }
+
+  /** @returns {Promise<object>} */
   storageFileListError () {
     return this.createSupabaseClient({ fail: true }).storage.from('files').list()
   }
