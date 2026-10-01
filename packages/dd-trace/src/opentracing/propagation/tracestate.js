@@ -12,37 +12,88 @@ const WHITESPACE = /[ \t]/
  * @param {string} fieldSeparator Between entries.
  * @param {string} pairSeparator Between key and value within an entry.
  * @param {boolean} rejectValueTabs Drop entries whose value contains an internal tab.
+ * @param {boolean} [prioritizeDd] Keep dd first even when it follows the member limit.
  * @returns {[string, string][]} Entries in reverse of wire order.
  */
-function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs) {
-  const segments = value.split(fieldSeparator, MAX_LIST_MEMBERS)
-
-  // TODO: We should extract dd no matter at what position and move it to the front of the list.
-  // Extract up 31 additional entries.
+function parseEntries (value, fieldSeparator, pairSeparator, rejectValueTabs, prioritizeDd) {
+  /** @type {[string, string][]} */
   const entries = []
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index]
-    const splitIndex = segment.indexOf(pairSeparator)
-    if (splitIndex === -1) continue
-    const key = segment.slice(0, splitIndex).trim()
-    if (!key || WHITESPACE.test(key)) continue
-    // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
-    // Leading 0x20 is part of value; trailing whitespace is OWS.
-    const entryValue = segment.slice(splitIndex + 1).trimEnd()
-    if (!entryValue || rejectValueTabs && entryValue.includes('\t')) continue
-    entries.push([key, entryValue])
+  /** @type {[string, string] | undefined} */
+  let ddEntry
+  let start = 0
+  let memberCount = 0
+
+  while (start <= value.length && memberCount < MAX_LIST_MEMBERS) {
+    const separatorIndex = value.indexOf(fieldSeparator, start)
+    const end = separatorIndex === -1 ? value.length : separatorIndex
+    let splitIndex = start
+    while (splitIndex < end && value[splitIndex] !== pairSeparator) splitIndex++
+    const key = splitIndex > start && splitIndex < end ? value.slice(start, splitIndex).trim() : undefined
+    if (key && !WHITESPACE.test(key)) {
+      // W3C §3.3.1.3.2: value = 0*255(chr) nblk-chr; chr = %x20 / nblk-chr (no tab).
+      // Leading 0x20 is part of value; trailing whitespace is OWS.
+      const entryValue = value.slice(splitIndex + 1, end).trimEnd()
+      if (entryValue && (!rejectValueTabs || !entryValue.includes('\t'))) {
+        if (prioritizeDd && key === 'dd') {
+          ddEntry ??= [key, entryValue]
+        } else {
+          entries.push([key, entryValue])
+        }
+      }
+    }
+
+    memberCount++
+    if (separatorIndex === -1) {
+      start = value.length + 1
+      break
+    }
+    start = separatorIndex + fieldSeparator.length
   }
+
+  if (prioritizeDd && ddEntry === undefined && start < value.length) {
+    let position = value.indexOf('dd', start)
+    while (position !== -1) {
+      const segmentStart = value.lastIndexOf(',', position) + 1
+      const separatorIndex = value.indexOf(',', position)
+      const end = separatorIndex === -1 ? value.length : separatorIndex
+      let splitIndex = position + 2
+      while (splitIndex < end && value[splitIndex] !== '=') splitIndex++
+
+      if (splitIndex < end && value.slice(segmentStart, splitIndex).trim() === 'dd') {
+        const entryValue = value.slice(splitIndex + 1, end).trimEnd()
+        if (entryValue && !entryValue.includes('\t')) {
+          ddEntry = ['dd', entryValue]
+          break
+        }
+      }
+
+      if (separatorIndex === -1) break
+      position = value.indexOf('dd', separatorIndex + 1)
+    }
+  }
+
+  if (ddEntry && entries.length === MAX_LIST_MEMBERS) entries.pop()
   // Reverse so the Map's insertion order is reverse of wire order. `toString`
   // prepends as it iterates, which yields the original wire order back.
   entries.reverse()
+  if (ddEntry) entries.push(ddEntry)
   return entries
 }
 
-function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs) {
+/**
+ * @template T
+ * @param {new (entries?: [string, string][]) => T} Type
+ * @param {string | undefined} value
+ * @param {string} fieldSeparator
+ * @param {string} pairSeparator
+ * @param {boolean} rejectValueTabs
+ * @param {boolean} [prioritizeDd]
+ */
+function fromString (Type, value, fieldSeparator, pairSeparator, rejectValueTabs, prioritizeDd) {
   if (typeof value !== 'string' || !value.length) {
     return new Type()
   }
-  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs))
+  return new Type(parseEntries(value, fieldSeparator, pairSeparator, rejectValueTabs, prioritizeDd))
 }
 
 function toString (map, pairSeparator, fieldSeparator) {
@@ -157,8 +208,9 @@ class TraceState {
     return result
   }
 
+  /** @param {string | undefined} value */
   static fromString (value) {
-    return fromString(TraceState, value, ',', '=', true)
+    return fromString(TraceState, value, ',', '=', true, true)
   }
 
   toString () {

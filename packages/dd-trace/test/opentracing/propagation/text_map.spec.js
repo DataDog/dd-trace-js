@@ -1508,6 +1508,25 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(spanContext._tracestate.get('other'), 'bleh')
     })
 
+    it('should extract dd from an oversized tracestate and propagate it first', () => {
+      const other = Array.from({ length: 32 }, (_, index) => `k${index}=v${index}`)
+      const carrier = {
+        traceparent: '00-0000000000000000000000000000007b-0000000000000456-01',
+        tracestate: `${other.join(',')},dd=s:2;o:foo`,
+      }
+      config.tracePropagationStyle.extract = ['tracecontext']
+
+      const spanContext = propagator.extract(carrier)
+      const outboundCarrier = {}
+      propagator.inject(spanContext, outboundCarrier)
+
+      assert.strictEqual(spanContext._sampling.priority, USER_KEEP)
+      assert.strictEqual(spanContext._trace.origin, 'foo')
+      assert.strictEqual(spanContext._tracestate.size, 32)
+      assert.match(outboundCarrier.tracestate, /^dd=/)
+      assert.ok(!outboundCarrier.tracestate.includes('k31=v31'))
+    })
+
     it('should read tracecontext once while resolving multiple propagation styles', () => {
       for (const extract of [['datadog', 'tracecontext'], ['tracecontext', 'datadog']]) {
         let reads = 0
