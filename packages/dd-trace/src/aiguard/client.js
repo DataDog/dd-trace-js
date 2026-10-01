@@ -99,13 +99,21 @@ class AIGuardClient {
     this.#evaluateUrl = `${endpoint}/evaluate`
     const proxyUrl = config.aiguard.DD_PROXY_HTTPS
     if (proxyUrl) {
+      let evaluateUrl
       try {
-        const protocol = new URL(proxyUrl).protocol
-        if (protocol !== 'http:' && protocol !== 'https:') throw new TypeError('Unsupported proxy protocol')
-        this.#httpsProxyUrl = proxyUrl
+        evaluateUrl = new URL(this.#evaluateUrl)
       } catch {
-        log.error('Invalid DD_PROXY_HTTPS URL for AI Guard')
-        this.#invalidProxyUrl = true
+        // Leave invalid endpoint handling to executeRequest.
+      }
+      if (evaluateUrl?.protocol === 'https:') {
+        try {
+          const protocol = new URL(proxyUrl).protocol
+          if (protocol !== 'http:' && protocol !== 'https:') throw new TypeError('Unsupported proxy protocol')
+          this.#httpsProxyUrl = proxyUrl
+        } catch {
+          log.error('Invalid DD_PROXY_HTTPS URL for AI Guard')
+          this.#invalidProxyUrl = true
+        }
       }
     }
     this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT

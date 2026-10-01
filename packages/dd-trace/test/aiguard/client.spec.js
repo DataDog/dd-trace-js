@@ -249,6 +249,22 @@ describe('AI Guard client transport', () => {
     assert.equal(received.length, 0)
   })
 
+  it('ignores an invalid DD_PROXY_HTTPS for an HTTP endpoint', async () => {
+    let requests = 0
+    proxy.on('request', (req, res) => {
+      requests++
+      res.end(JSON.stringify(evaluation))
+    })
+    endpoint = `http://127.0.0.1:${proxy.address().port}`
+    const errorLog = sinon.stub(log, 'error')
+    client = createClient('http://[')
+
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+    assert.equal(requests, 1)
+    assert.deepEqual(connects, [])
+    sinon.assert.notCalled(errorLog)
+  })
+
   it('prefers https_proxy over HTTPS_PROXY', async () => {
     process.env.HTTPS_PROXY = 'http://invalid.invalid:8080'
     process.env.https_proxy = proxyUrl
