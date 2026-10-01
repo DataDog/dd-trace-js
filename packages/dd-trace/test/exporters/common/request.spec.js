@@ -154,11 +154,10 @@ describe('request', function () {
     })
   })
 
-  it('uses an explicit HTTPS proxy URL without forwarding it to ClientRequest', async () => {
+  it('uses an explicit HTTPS proxy URL without an API key or forwarding it to ClientRequest', async () => {
     const options = {
       url: new URL('https://test:443/path'),
       method: 'POST',
-      headers: { 'DD-API-KEY': 'test-api-key' },
       httpsProxyUrl: 'http://user:password@dedicated.example:8202',
     }
     nock('https://test:443').post('/path').reply(200, 'OK')

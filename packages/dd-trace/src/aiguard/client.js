@@ -37,6 +37,11 @@ function executeRequest (body, opts) {
 
     const postData = JSON.stringify(body)
     const url = new URL(opts.url)
+    /**
+     * @type {import('node:http').RequestOptions & {
+     *   url: URL, httpsProxyUrl?: string, retry: boolean, includeErrorResponseBody: boolean
+     * }}
+     */
     const requestOptions = {
       url,
       method: 'POST',
@@ -50,7 +55,7 @@ function executeRequest (body, opts) {
       retry: false,
       includeErrorResponseBody: true,
     }
-    if (opts.httpsProxyUrl) Object.assign(requestOptions, { httpsProxyUrl: opts.httpsProxyUrl })
+    if (opts.httpsProxyUrl) requestOptions.httpsProxyUrl = opts.httpsProxyUrl
 
     request(postData, requestOptions, (error, result, status) => {
       if (status === undefined) {

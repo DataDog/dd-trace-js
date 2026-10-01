@@ -97,7 +97,7 @@ function request (data, options, callback) {
 
   const httpsProxyUrl = options.httpsProxyUrl
   let agent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
-  if (hasApiKey && isSecure) {
+  if (isSecure && (hasApiKey || httpsProxyUrl)) {
     try {
       agent = getHttpsProxyAgent(options, agent, httpsProxyUrl)
     } catch (error) {
