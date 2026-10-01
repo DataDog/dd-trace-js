@@ -11,17 +11,21 @@ let proxyAgents
  *
  * @param {string|URL|object} url
  * @param {import('node:http').Agent|false} [directAgent]
+ * @param {string} [proxyUrlOverride]
  * @returns {import('node:http').Agent|false|undefined}
  */
-function getHttpsProxyAgent (url, directAgent) {
-  getProxyForUrl ??= require('../../../../../vendor/dist/proxy-from-env').getProxyForUrl
+function getHttpsProxyAgent (url, directAgent, proxyUrlOverride) {
+  let proxyUrl = proxyUrlOverride
+  if (!proxyUrl) {
+    getProxyForUrl ??= require('../../../../../vendor/dist/proxy-from-env').getProxyForUrl
 
-  const host = typeof url === 'string' ? undefined : url.host ?? url.hostname
-  const isUnbracketedIPv6 = typeof host === 'string' && host.includes(':') && isIPv6(host)
-  const target = typeof url === 'string'
-    ? url
-    : { protocol: url.protocol, host: isUnbracketedIPv6 ? `[${host}]` : host, port: url.port }
-  const proxyUrl = getProxyForUrl(target)
+    const host = typeof url === 'string' ? undefined : url.host ?? url.hostname
+    const isUnbracketedIPv6 = typeof host === 'string' && host.includes(':') && isIPv6(host)
+    const target = typeof url === 'string'
+      ? url
+      : { protocol: url.protocol, host: isUnbracketedIPv6 ? `[${host}]` : host, port: url.port }
+    proxyUrl = getProxyForUrl(target)
+  }
   if (!proxyUrl) return directAgent
 
   directAgent ??= require('node:https').globalAgent

@@ -149,7 +149,23 @@ describe('request', function () {
     nock('https://test:443').post('/path').reply(200, 'OK')
 
     request(Buffer.from(''), options, (error) => {
-      sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent))
+      sinon.assert.calledOnceWithExactly(getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent), undefined)
+      done(error)
+    })
+  })
+
+  it('passes an explicit HTTPS proxy URL to proxy selection', (done) => {
+    const options = {
+      url: new URL('https://test:443/path'),
+      method: 'POST',
+      httpsProxyUrl: 'http://dedicated.example:8202',
+    }
+    nock('https://test:443').post('/path').reply(200, 'OK')
+
+    request(Buffer.from(''), options, (error) => {
+      sinon.assert.calledOnceWithExactly(
+        getHttpsProxyAgent, options, sinon.match.instanceOf(https.Agent), options.httpsProxyUrl
+      )
       done(error)
     })
   })

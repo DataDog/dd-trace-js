@@ -23,7 +23,8 @@ function aiGuardHost (site) {
  * Sends a request to the AI Guard service.
  *
  * @param {object} body
- * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number }} opts
+ * @param {{ url: string, headers: Record<string, string|undefined>, timeout: number,
+ *   httpsProxyUrl?: string }} opts
  * @returns {Promise<{ status: number, body: unknown }>}
  */
 function executeRequest (body, opts) {
@@ -38,6 +39,7 @@ function executeRequest (body, opts) {
         ...opts.headers,
       },
       agent: url.protocol === 'https:' ? httpsAgent : httpAgent,
+      httpsProxyUrl: opts.httpsProxyUrl,
       timeout: opts.timeout,
       signal: AbortSignal.timeout(opts.timeout),
       retry: false,
@@ -65,6 +67,7 @@ function executeRequest (body, opts) {
 class AIGuardClient {
   #headers
   #evaluateUrl
+  #httpsProxyUrl
   #timeout
 
   /**
@@ -80,6 +83,7 @@ class AIGuardClient {
     }
     const endpoint = config.aiguard.DD_AI_GUARD_ENDPOINT || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
+    this.#httpsProxyUrl = config.aiguard.DD_PROXY_HTTPS
     this.#timeout = config.aiguard.DD_AI_GUARD_TIMEOUT
   }
 
@@ -101,7 +105,7 @@ class AIGuardClient {
     }
     return executeRequest(
       payload,
-      { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout }
+      { url: this.#evaluateUrl, headers: this.#headers, timeout: this.#timeout, httpsProxyUrl: this.#httpsProxyUrl }
     )
       .then(response => this.#parseResponse(response))
       .catch(cause => {

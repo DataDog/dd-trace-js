@@ -96,9 +96,9 @@ function request (data, options, callback) {
   docker.inject(options.headers)
 
   let agent = options.agent ?? (isSecure ? httpsAgent : httpAgent)
-  if (hasApiKey && isSecure) {
+  if (isSecure && (hasApiKey || options.httpsProxyUrl)) {
     try {
-      agent = getHttpsProxyAgent(options, agent)
+      agent = getHttpsProxyAgent(options, agent, options.httpsProxyUrl)
     } catch (error) {
       callback(error)
       return

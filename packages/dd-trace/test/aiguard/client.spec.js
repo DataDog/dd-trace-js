@@ -17,7 +17,7 @@ const { AIGuardClientError } = require('../../src/aiguard/errors')
 const TAGS = require('../../src/aiguard/tags')
 
 const proxyVariables = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy',
-  'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
+  'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy', 'DD_PROXY_NO_PROXY']
 const ssl = path.join(__dirname, '../../../datadog-plugin-http/test/ssl')
 const messages = [{ role: 'user', content: 'Hello' }]
 const meta = { service: 'test', env: 'test' }
@@ -33,6 +33,7 @@ describe('AI Guard client transport', () => {
   let endpoint
   let proxyUrl
   let client
+  let createClient
   let respond
   let rejectConnect
   let originalFetch
@@ -89,11 +90,12 @@ describe('AI Guard client transport', () => {
         request(data, { ...options, rejectUnauthorized: false }, callback)
       },
     })
-    client = new Client({
+    createClient = httpsProxyUrl => new Client({
       DD_API_KEY: 'test-api-key',
       DD_APP_KEY: 'test-app-key',
-      aiguard: { DD_AI_GUARD_ENDPOINT: endpoint, DD_AI_GUARD_TIMEOUT: 1000 },
+      aiguard: { DD_AI_GUARD_ENDPOINT: endpoint, DD_AI_GUARD_TIMEOUT: 1000, DD_PROXY_HTTPS: httpsProxyUrl },
     })
+    client = createClient()
   })
 
   afterEach(async () => {
@@ -136,6 +138,36 @@ describe('AI Guard client transport', () => {
     assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
     assert.deepEqual(connects, [])
     sinon.assert.notCalled(fetch)
+  })
+
+  it('uses DD_PROXY_HTTPS despite standard proxy and bypass settings', async () => {
+    process.env.HTTPS_PROXY = 'http://invalid.invalid:8080'
+    process.env.https_proxy = 'http://invalid.invalid:8080'
+    process.env.NO_PROXY = '127.0.0.1'
+    process.env.DD_PROXY_NO_PROXY = '127.0.0.1'
+    client = createClient(proxyUrl)
+
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+    assert.deepEqual(connects, [`127.0.0.1:${server.address().port}`])
+    assert.equal(received.length, 1)
+  })
+
+  it('does not apply DD_PROXY_HTTPS to application-owned requests', async () => {
+    client = createClient(proxyUrl)
+    assert.equal((await client.evaluate(messages, meta)).action, 'ALLOW')
+
+    await new Promise((resolve, reject) => {
+      const req = https.request(`${endpoint}/application`, {
+        method: 'POST', rejectUnauthorized: false,
+      }, res => {
+        res.resume()
+        res.once('end', resolve)
+      })
+      req.once('error', reject)
+      req.end('{}')
+    })
+    assert.equal(connects.length, 1)
+    assert.equal(received[1].url, '/application')
   })
 
   for (const viaProxy of [false, true]) {
@@ -181,6 +213,18 @@ describe('AI Guard client transport', () => {
     assert.equal(received.length, 0)
   })
 
+  it('reports an invalid DD_PROXY_HTTPS without falling back to HTTPS_PROXY', async () => {
+    process.env.HTTPS_PROXY = proxyUrl
+    client = createClient('http://[')
+    await assert.rejects(client.evaluate(messages, meta), error => {
+      assert.ok(error instanceof AIGuardClientError)
+      assert.equal(error.telemetryType, TAGS.ERROR_TYPE_CLIENT)
+      return true
+    })
+    assert.equal(connects.length, 0)
+    assert.equal(received.length, 0)
+  })
+
   it('prefers https_proxy over HTTPS_PROXY', async () => {
     process.env.HTTPS_PROXY = 'http://invalid.invalid:8080'
     process.env.https_proxy = proxyUrl
@@ -219,6 +263,16 @@ describe('AI Guard client transport', () => {
   it('reports a rejected proxy connection without retrying or falling back to direct traffic', async () => {
     process.env.HTTPS_PROXY = proxyUrl
     rejectConnect = true
+    await assert.rejects(client.evaluate(messages, meta), { name: 'AIGuardClientError' })
+    assert.equal(connects.length, 1)
+    assert.equal(received.length, 0)
+  })
+
+  it('does not fall back when the DD_PROXY_HTTPS connection is rejected', async () => {
+    process.env.HTTPS_PROXY = 'http://standard.invalid:8080'
+    client = createClient(proxyUrl)
+    rejectConnect = true
+
     await assert.rejects(client.evaluate(messages, meta), { name: 'AIGuardClientError' })
     assert.equal(connects.length, 1)
     assert.equal(received.length, 0)
