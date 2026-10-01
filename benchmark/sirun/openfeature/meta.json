@@ -7,6 +7,9 @@
   "instructions": true,
   "variants": {
     "typical": {
+      "operations_by_node": {
+        "20": "275000"
+      },
       "env": {
         "VARIANT": "typical",
         "CONSENT": "false",
@@ -14,6 +17,9 @@
       }
     },
     "typical-full": {
+      "operations_by_node": {
+        "20": "225000"
+      },
       "env": {
         "VARIANT": "typical",
         "CONSENT": "true",
@@ -22,13 +28,13 @@
     },
     "scale-full": {
       "operations_by_node": {
-        "20": "13000"
+        "20": "4000"
       },
       "env": {
         "VARIANT": "scale",
         "CONSENT": "true",
         "OPERATIONS": "26000",
-        "WARMUP": "500"
+        "WARMUP": "100"
       }
     },
     "stress-full": {

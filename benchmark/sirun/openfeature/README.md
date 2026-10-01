@@ -52,15 +52,15 @@ available on demand, rather than multiplying the end-to-end CI matrix. This keep
 the current suite within six 24-core groups.
 
 All standard variants use five repetitions. To keep them within the one-minute
-runtime budget, `typical` uses 550,000 measured evaluations, `typical-full` uses
-450,000, `scale-full` uses the runtime-specific counts below, and `stress-full`
-uses 600 with 10 warmup evaluations. Each run checks privacy, complete delivery,
-and a startup share no greater than 7%.
+runtime budget, `typical` uses 275,000 measured evaluations on Node 20 and 550,000
+on newer runtimes. `typical-full` uses 225,000 on Node 20 and 450,000 on newer
+runtimes. `stress-full` uses 600 with 10 warmup evaluations. Each run checks
+privacy, complete delivery, and a startup share no greater than 7%.
 
-`scale-full` uses 13,000 measured evaluations on Node 20 and 26,000 on newer
+`scale-full` uses 4,000 measured evaluations on Node 20 and 26,000 on newer
 runtimes through the runner's `operations_by_node` setting because Node 20 takes
 substantially longer per evaluation. The runner applies the selected count to
-both candidate and baseline. Every run uses 500 warmup evaluations and a context
+both candidate and baseline. Every run uses 100 warmup evaluations and a context
 with 256 additional fields.
 
 Run the additional cases from this directory:
