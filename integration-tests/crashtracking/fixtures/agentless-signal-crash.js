@@ -35,14 +35,8 @@ const testLibdatadogExtras = {
 }
 testLibdatadogExtras['@global'] = true
 
-function getAgentlessTelemetryUrl () {
-  return new URL(intakeUrl)
-}
-getAgentlessTelemetryUrl['@global'] = true
-
-// Initialize through the normal fixture while the global stubs are active. Runtime-global stubs
+// Initialize through the normal fixture while the global stub is active. Runtime-global stubs
 // bypass the module cache and split tracer singleton state across duplicate module instances.
 proxyquire('../signal-crash', {
   '@datadog/libdatadog-extras': testLibdatadogExtras,
-  '../../packages/dd-trace/src/telemetry/agentless-url': getAgentlessTelemetryUrl,
 })
