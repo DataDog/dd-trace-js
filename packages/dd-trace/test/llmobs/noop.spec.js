@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const Module = require('node:module')
 
 const { before, describe, it } = require('mocha')
 
@@ -82,6 +83,38 @@ describe('noop', () => {
 
   it('exposes the no-op experiments facade', () => {
     assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
+  })
+
+  it('loads evaluator constructors lazily', () => {
+    const noopPath = require.resolve('../../../dd-trace/src/llmobs/noop')
+    const cachedNoop = require.cache[noopPath]
+    const originalLoad = Module._load
+    const loaded = []
+
+    try {
+      delete require.cache[noopPath]
+      Module._load = function (request, parent, isMain) {
+        if (parent?.filename === noopPath) loaded.push(request)
+        return originalLoad.call(this, request, parent, isMain)
+      }
+
+      const FreshNoopLLMObs = require(noopPath)
+      const freshLLMObs = new FreshNoopLLMObs(null)
+
+      assert.equal(loaded.includes('./experiments/evaluator'), false)
+      assert.equal(loaded.includes('./experiments/remote-evaluator'), false)
+
+      assert.equal(typeof freshLLMObs.BaseEvaluator, 'function')
+      assert.equal(loaded.includes('./experiments/evaluator'), true)
+      assert.equal(loaded.includes('./experiments/remote-evaluator'), false)
+
+      assert.equal(typeof freshLLMObs.RemoteEvaluator, 'function')
+      assert.equal(loaded.includes('./experiments/remote-evaluator'), true)
+    } finally {
+      Module._load = originalLoad
+      delete require.cache[noopPath]
+      if (cachedNoop !== undefined) require.cache[noopPath] = cachedNoop
+    }
   })
 
   it('using "annotationContext" should not throw', () => {
