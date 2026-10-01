@@ -84,7 +84,7 @@ describe('OTLP consistent probability sampling', () => {
         assert.strictEqual(span.flags, 1)
         const state = TraceState.fromString(span.traceState)
         assert.strictEqual(state.get('ot'), `rv:ef284ace7a91e1;th:${threshold}`)
-        assert.match(state.get('dd'), new RegExp(`(?:^|;)p:${span.spanId}(?:;|$)`))
+        assert.strictEqual(state.get('dd'), undefined)
       }
     })
   }
@@ -121,13 +121,15 @@ describe('OTLP consistent probability sampling', () => {
     it(`preserves an inherited decision with ot=${ot}`, () => {
       config.sampler = { sampleRate: 0 }
       const tracer = new Tracer(config)
-      const parent = sampledParent(tracer, ot ? `congo=value,ot=${ot}` : 'congo=value')
+      const inherited = 'dd=s:2;p:0000000000000001,congo=value'
+      const parent = sampledParent(tracer, ot ? `${inherited},ot=${ot}` : inherited)
       tracer.startSpan('inherited', { childOf: parent }).finish()
 
       const [span] = exportedSpans()
       const state = TraceState.fromString(span.traceState)
       assert.strictEqual(state.get('ot'), ot)
       assert.strictEqual(state.get('congo'), 'value')
+      assert.strictEqual(state.get('dd'), 's:2;p:0000000000000001')
       assert.strictEqual(span.flags, 1)
     })
   }

@@ -7,11 +7,13 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
-const { formatTraceState } = require('./opentracing/propagation/tracecontext')
+const TraceState = require('./opentracing/propagation/tracestate')
 const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('./constants')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
+
+let otelSampling
 
 /**
  * Adds first-class OTLP trace context to a DD-formatted span.
@@ -22,7 +24,11 @@ const finishedSpans = new WeakSet()
  */
 function formatOtlpSpan (span, isFirstSpanInChunk, processTagsValue) {
   const formattedSpan = spanFormat(span, isFirstSpanInChunk, processTagsValue)
-  formattedSpan.trace_state = formatTraceState(span.context())
+  const context = span.context()
+  const traceState = context._tracestate?.clone() ?? new TraceState()
+  otelSampling ??= require('./otel-sampling')
+  otelSampling.updateOtelTraceState(context, traceState)
+  formattedSpan.trace_state = traceState.toString()
   return formattedSpan
 }
 
