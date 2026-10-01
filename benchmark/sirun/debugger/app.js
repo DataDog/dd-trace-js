@@ -15,6 +15,7 @@ const {
 } = require('./benchmark-state')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
+const STARTUP_GUARD_MAX_SHARE = Number(process.env.STARTUP_GUARD_MAX_SHARE)
 const TRACK_PROBE_OUTPUT = process.env.TRACK_PROBE_OUTPUT === 'true'
 const EXPECTED_CAPTURE_KIND = process.env.EXPECTED_CAPTURE_KIND
 const OUTPUT_TIMEOUT = 15_000
@@ -132,7 +133,7 @@ function validateMeasuredCaptureKinds (counts, completed) {
  */
 function finish () {
   clearInterval(keepAlive)
-  guard.done()
+  guard.done(STARTUP_GUARD_MAX_SHARE)
 }
 
 /**

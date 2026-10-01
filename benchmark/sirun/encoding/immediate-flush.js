@@ -97,6 +97,6 @@ for (let iteration = 0; iteration < OPERATIONS; iteration++) {
   writer.append(trace)
   writer.flush()
 }
-guard.done()
+guard.done(0.15)
 assert.equal(payloadCount, OPERATIONS)
 assert.equal(crossPayloadEncoderDisabled, false, 'cross-payload cache disabled during the measured loop')
