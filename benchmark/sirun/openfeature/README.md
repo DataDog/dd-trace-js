@@ -22,16 +22,16 @@ therefore setup cost and remains included in the startup-share guard.
 `SATURATED=true` disables admission pacing and periodic yields in the measured
 loop, exercising uninterrupted SDK evaluation and the actual shared input cap.
 It requires delivered counts plus input-capacity drops to equal attempted counts,
-rejects other drop reasons, and retains the same raw privacy checks. Example:
+rejects other drop reasons, and applies the raw privacy checks. Example:
 
 ```sh
 STARTUP_GUARD_REPORT=/dev/null SATURATED=true OPERATIONS=100000 WARMUP=0 node index.js
 ```
 
 Report mode is appropriate for short correctness smoke checks. Normal/CI runs
-retain the unchanged startup-share assertion; a one-operation run without report
-mode is expected to fail it. Final drain cannot dilute that guard because it is
-evaluated immediately after the measured evaluation loop.
+enforce a 7% startup-share ceiling; a one-operation run without report mode is
+expected to fail it. Final drain cannot dilute that guard because it is evaluated
+immediately after the measured evaluation loop.
 
 The standard variants cover protected and full consent using each revision's
 installed provider bundle. Historical master without EVP emits no rows and does
@@ -54,14 +54,14 @@ the current suite within six 24-core groups.
 All standard variants use five repetitions. To keep them within the one-minute
 runtime budget, `typical` uses 550,000 measured evaluations, `typical-full` uses
 450,000, `scale-full` uses the runtime-specific counts below, and `stress-full`
-uses 600 with 10 warmup evaluations. Privacy, delivery, and startup-share
-assertions stay unchanged.
+uses 600 with 10 warmup evaluations. Each run checks privacy, complete delivery,
+and a startup share no greater than 7%.
 
 `scale-full` uses 13,000 measured evaluations on Node 20 and 26,000 on newer
 runtimes through the runner's `operations_by_node` setting because Node 20 takes
-substantially longer per evaluation. Both comparison sides use the same count
-for each runtime. Every run uses 500 warmup evaluations and retains the same
-context dimensions, startup-share assertion, and delivery/privacy checks.
+substantially longer per evaluation. The runner applies the selected count to
+both candidate and baseline. Every run uses 500 warmup evaluations and a context
+with 256 additional fields.
 
 Run the additional cases from this directory:
 
@@ -73,7 +73,7 @@ for consent in false true; do
 done
 ```
 
-These direct runs retain the assertions but are not repeated Sirun measurements.
+These direct runs execute the assertions but are not repeated Sirun measurements.
 The focused snapshot microbenchmarks below still cover all four input shapes.
 
 CI compares the total PR change, including the provider upgrade. For a separate
