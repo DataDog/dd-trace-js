@@ -543,48 +543,6 @@ describe('integrations', () => {
           })
         })
 
-        it('keeps submitting chat completion spans after a streamed chat completion is aborted', async function () {
-          // openai v4 uses node-fetch, which still delivers already-buffered chunks after an abort
-          if (semifies(realVersion, '<5.0.0')) {
-            this.skip()
-          }
-
-          const request = {
-            model: 'gpt-3.5-turbo',
-            messages: [
-              { role: 'system', content: 'You are a helpful assistant.' },
-              { role: 'user', content: 'Hello, OpenAI!' },
-            ],
-            temperature: 0.5,
-            stream: true,
-            max_tokens: 100,
-            n: 1,
-            user: 'dd-trace-test',
-            stream_options: { include_usage: true },
-          }
-
-          // Abort before reading: the SDK ends the stream quietly without delivering any chunk
-          const controller = new AbortController()
-          const abortedStream = await openai.chat.completions.create(request, { signal: controller.signal })
-          controller.abort()
-          for await (const part of abortedStream) {
-            assert.fail(`unexpected chunk after abort: ${inspect(part)}`)
-          }
-
-          const stream = await openai.chat.completions.create(request)
-          for await (const part of stream) {
-            assert.ok(part, 'Expected part to be truthy')
-          }
-
-          const { llmobsSpans } = await getEvents(2)
-          const [abortedSpan, nextSpan] = llmobsSpans
-
-          assert.strictEqual(abortedSpan.meta.input.messages[1].content, 'Hello, OpenAI!')
-          assert.deepStrictEqual(abortedSpan.meta.output.messages, [{ content: '', role: '' }])
-          assert.strictEqual(nextSpan.meta.output.messages[0].role, 'assistant')
-          assert.ok(nextSpan.meta.output.messages[0].content)
-        })
-
         it('submits a chat completion span with tools stream', async function () {
           if (semifies(realVersion, '<=4.16.0')) {
             this.skip()
@@ -1104,6 +1062,139 @@ describe('integrations', () => {
         assert.deepStrictEqual(abortedSpan.meta.output.messages, [{ content: '', role: '' }])
         assert.strictEqual(nextSpan.meta.output.messages[0].role, 'assistant')
         assert.ok(nextSpan.meta.output.messages[0].content)
+      })
+
+      // Synthetic cases: the cassettes below are hand-authored streams that end before `response.completed`,
+      // as when the caller aborts mid-stream, so the partial response has to be rebuilt from the chunks received.
+      describe('streamed response that ends early', function () {
+        beforeEach(function () {
+          if (semifies(realVersion, '<4.87.0')) {
+            this.skip()
+          }
+        })
+
+        // openai_responses_post_832d0d1d.json ends after `response.created`
+        it('submits the input with an empty output when no output was streamed', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'Stop after the response is created',
+            stream: true,
+          })
+          for await (const part of stream) {
+            assert.ok(Object.hasOwn(part, 'type'), `Available keys: ${inspect(Object.keys(part))}`)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'Stop after the response is created' }],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+          assert.strictEqual(llmobsSpans[0].meta.output?.messages, undefined)
+        })
+
+        // openai_responses_post_bf8e2c9b.json ends after two text deltas
+        it('submits the text streamed before the stream ended', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'Stop partway through the text',
+            stream: true,
+          })
+          const parts = []
+          for await (const part of stream) {
+            parts.push(part)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'Stop partway through the text' }],
+            outputMessages: [{ role: 'assistant', content: 'Hello' }],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+
+          // the chunks delivered to the application are left untouched
+          const addedItem = parts.find(part => part.type === 'response.output_item.added').item
+          assert.deepStrictEqual(addedItem.content, [])
+        })
+
+        // openai_responses_post_d099df66.json ends after the tool call arguments, before the item is done
+        it('submits completed items and the tool call streamed before the stream ended', async () => {
+          const stream = await openai.responses.create({
+            model: 'gpt-4o-mini',
+            input: 'What is the weather in Paris?',
+            tools: [{
+              type: 'function',
+              name: 'get_weather',
+              description: 'Get the current weather for a city',
+              parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+            }],
+            stream: true,
+          })
+          const parts = []
+          for await (const part of stream) {
+            parts.push(part)
+          }
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'llm',
+            name: 'OpenAI.createResponse',
+            inputMessages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+            outputMessages: [
+              { role: 'assistant', content: 'Checking the weather.' },
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  tool_id: 'call_synthetic_c',
+                  name: 'get_weather',
+                  arguments: { city: 'Paris' },
+                  type: 'function_call',
+                }],
+              },
+            ],
+            modelName: 'gpt-4o-mini-2024-07-18',
+            modelProvider: 'openai',
+            metadata: {
+              stream: true,
+              temperature: 1,
+              top_p: 1,
+              tool_choice: 'auto',
+              truncation: 'disabled',
+              text: { format: { type: 'text' }, verbosity: 'medium' },
+            },
+            tags: { ml_app: 'test', integration: 'openai' },
+          })
+
+          // the chunks delivered to the application are left untouched
+          const toolCallItem = parts.find(part => part.item?.type === 'function_call').item
+          assert.strictEqual(toolCallItem.arguments, '')
+        })
       })
 
       describe('prompts', function () {

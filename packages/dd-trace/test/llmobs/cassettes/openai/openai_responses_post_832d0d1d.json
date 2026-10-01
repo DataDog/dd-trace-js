@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"input\":\"Stop after the response is created\",\"stream\":true}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "text/event-stream; charset=utf-8"
+    },
+    "body": "event: response.created\ndata: {\"type\": \"response.created\", \"sequence_number\": 0, \"response\": {\"id\": \"resp_synthetic_a\", \"object\": \"response\", \"created_at\": 1790812800, \"status\": \"in_progress\", \"error\": null, \"incomplete_details\": null, \"instructions\": null, \"max_output_tokens\": null, \"model\": \"gpt-4o-mini-2024-07-18\", \"output\": [], \"parallel_tool_calls\": true, \"previous_response_id\": null, \"reasoning\": {\"effort\": null, \"summary\": null}, \"store\": true, \"temperature\": 1.0, \"text\": {\"format\": {\"type\": \"text\"}, \"verbosity\": \"medium\"}, \"tool_choice\": \"auto\", \"tools\": [], \"top_p\": 1.0, \"truncation\": \"disabled\", \"usage\": null, \"user\": null, \"metadata\": {}}}\n\n"
+  }
+}

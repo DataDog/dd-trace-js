@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"input\":\"Stop partway through the text\",\"stream\":true}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "text/event-stream; charset=utf-8"
+    },
+    "body": "event: response.created\ndata: {\"type\": \"response.created\", \"sequence_number\": 0, \"response\": {\"id\": \"resp_synthetic_b\", \"object\": \"response\", \"created_at\": 1790812800, \"status\": \"in_progress\", \"error\": null, \"incomplete_details\": null, \"instructions\": null, \"max_output_tokens\": null, \"model\": \"gpt-4o-mini-2024-07-18\", \"output\": [], \"parallel_tool_calls\": true, \"previous_response_id\": null, \"reasoning\": {\"effort\": null, \"summary\": null}, \"store\": true, \"temperature\": 1.0, \"text\": {\"format\": {\"type\": \"text\"}, \"verbosity\": \"medium\"}, \"tool_choice\": \"auto\", \"tools\": [], \"top_p\": 1.0, \"truncation\": \"disabled\", \"usage\": null, \"user\": null, \"metadata\": {}}}\n\nevent: response.output_item.added\ndata: {\"type\": \"response.output_item.added\", \"sequence_number\": 1, \"output_index\": 0, \"item\": {\"id\": \"msg_synthetic_b\", \"type\": \"message\", \"status\": \"in_progress\", \"role\": \"assistant\", \"content\": []}}\n\nevent: response.content_part.added\ndata: {\"type\": \"response.content_part.added\", \"sequence_number\": 2, \"item_id\": \"msg_synthetic_b\", \"output_index\": 0, \"content_index\": 0, \"part\": {\"type\": \"output_text\", \"annotations\": [], \"text\": \"\"}}\n\nevent: response.output_text.delta\ndata: {\"type\": \"response.output_text.delta\", \"sequence_number\": 3, \"item_id\": \"msg_synthetic_b\", \"output_index\": 0, \"content_index\": 0, \"delta\": \"Hel\", \"logprobs\": []}\n\nevent: response.output_text.delta\ndata: {\"type\": \"response.output_text.delta\", \"sequence_number\": 4, \"item_id\": \"msg_synthetic_b\", \"output_index\": 0, \"content_index\": 0, \"delta\": \"lo\", \"logprobs\": []}\n\n"
+  }
+}
