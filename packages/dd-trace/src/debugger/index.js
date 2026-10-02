@@ -13,8 +13,8 @@ const {
   DEBUGGER_DIAGNOSTICS_V1,
   DEBUGGER_INPUT_DIRECT,
   DEBUGGER_INPUT_V2,
-  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS,
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
+  METRICS_FLUSH_INTERVAL_MS,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
 const { PauseDurationHistogram } = require('./pause-duration-histogram')
@@ -95,7 +95,7 @@ function start (config, rcInstance) {
   guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
   const pauseDurationBuffer = PauseDurationHistogram.createBuffer()
   pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
-  metricsFlushTimer = setInterval(flushMetrics, GUARDRAIL_METRICS_FLUSH_INTERVAL_MS)
+  metricsFlushTimer = setInterval(flushMetrics, METRICS_FLUSH_INTERVAL_MS)
   metricsFlushTimer.unref?.()
   dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushMetrics)
 

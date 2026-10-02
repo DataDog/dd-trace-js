@@ -13,7 +13,7 @@ module.exports = {
   // Guardrail counters and pause durations are aggregated in shared memory and only converted into telemetry metrics
   // at this interval, so the interval bounds the delay before they become visible, not the cost of recording them.
   // Tests wait on it, so it is shared rather than duplicated.
-  GUARDRAIL_METRICS_FLUSH_INTERVAL_MS: 10_000,
+  METRICS_FLUSH_INTERVAL_MS: 10_000,
 
   INSPECT_SEGMENT_GLOBAL_PROPERTY: 'debuggerInspectSegment',
 }
