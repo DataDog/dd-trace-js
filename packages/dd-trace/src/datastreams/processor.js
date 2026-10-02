@@ -331,10 +331,7 @@ class DataStreamsProcessor {
       )
     }
 
-    // Get propagation hash if enabled
-    const propagationHashValue = propagationHash.isEnabled() ? propagationHash.getHash() : null
-
-    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash, propagationHashValue)
+    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {

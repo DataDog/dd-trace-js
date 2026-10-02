@@ -27,32 +27,16 @@ describe('encoding', () => {
     assert.deepStrictEqual(hash, Buffer.from('67b0b35e65c0acfa', 'hex'))
   })
 
-  it('hash should include propagation hash when provided', () => {
+  it('hash should ignore any extra propagation-hash argument', () => {
+    // guards DSM2-335: the process-tags/container-tags propagation hash must not affect the
+    // pathway hash, since it is volatile per-process/per-pod metadata that inflates the
+    // cardinality DSM's stats are quota-limited on.
     const propagationHash = BigInt('0x123456789abcdef0')
     const hash1 = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash)
     const hash2 = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), null)
-    assert.notDeepStrictEqual(hash1, hash2, 'Hashes should differ with/without propagation hash')
-  })
-
-  it('hash should be consistent with same propagation hash', () => {
-    const propagationHash = BigInt('0x123456789abcdef0')
-    const hash1 = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash)
-    const hash2 = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash)
-    assert.deepStrictEqual(hash1, hash2, 'Same propagation hash should produce same pathway hash')
-  })
-
-  it('hash should differ with different propagation hashes', () => {
-    const propagationHash1 = BigInt('0x123456789abcdef0')
-    const propagationHash2 = BigInt('0xfedcba9876543210')
-    const hash1 = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash1)
-    const hash2 = computePathwayHash('test-service', 'test-env',
-      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash2)
-    assert.notDeepStrictEqual(hash1, hash2, 'Different propagation hashes should produce different pathway hashes')
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
+    assert.deepStrictEqual(hash1, hash2, 'Propagation hash should not affect the pathway hash')
   })
 
   it('encoding and decoding should be a no op', () => {
