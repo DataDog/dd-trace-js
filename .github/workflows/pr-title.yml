@@ -33,11 +33,10 @@ jobs:
             if (!m) return
             const newTitle = `revert: ${m[1]}`
             core.notice(`Auto-renaming PR title to: ${newTitle}`)
-            await github.rest.pulls.update({
-              ...context.repo,
-              pull_number: context.payload.pull_request.number,
-              title: newTitle,
-            })
+            await github.graphql(
+              'mutation($input: UpdatePullRequestInput!) { updatePullRequest(input: $input) { clientMutationId } }',
+              { input: { pullRequestId: context.payload.pull_request.node_id, title: newTitle } }
+            )
             core.setOutput('renamed', 'true')
 
       - name: Checkout base revision
@@ -124,22 +123,15 @@ jobs:
             const pr = context.payload.pull_request
             const next = parse(pr.title)
 
-            // Prefetch all existing repo labels once to avoid per-label API calls.
-            const repoLabels = new Set()
-            for await (const page of github.paginate.iterator(github.rest.issues.listLabelsForRepo, { ...context.repo, per_page: 100 })) {
-              for (const label of page.data) repoLabels.add(label.name)
-            }
-
-            // Returns the set of labels derived from a parsed title.
-            // Type and scope are only added if they exist in the repo.
+            /** @param {{ type?: string, scope?: string, breaking?: boolean }} parsed */
             const titledLabels = (parsed) => {
               const labels = new Set()
               if (!parsed.type) return labels
-              if (repoLabels.has(parsed.type)) labels.add(parsed.type)
+              labels.add(parsed.type)
               if (parsed.scope) {
                 for (const scope of parsed.scope.split(',')) {
                   const name = scope.trim()
-                  if (name && repoLabels.has(name)) labels.add(name)
+                  if (name) labels.add(name)
                 }
               }
               const semver = semverFor(parsed)
@@ -148,28 +140,66 @@ jobs:
             }
 
             const nextLabels = titledLabels(next)
-            const current = new Set((pr.labels || []).map(l => l.name))
+            const current = new Map()
+            for (const label of pr.labels || []) current.set(label.name, label.node_id)
+            const repoLabels = new Map(current)
+
+            const variables = { ...context.repo }
+            const declarations = ['$owner: String!', '$repo: String!']
+            const fields = []
+            const missing = []
+            for (const name of nextLabels) {
+              if (current.has(name)) continue
+              const key = `label${missing.length}`
+              missing.push(name)
+              variables[key] = name
+              declarations.push(`$${key}: String!`)
+              fields.push(`${key}: label(name: $${key}) { id }`)
+            }
+
+            if (missing.length) {
+              const { repository } = await github.graphql(
+                `query(${declarations.join(', ')}) { repository(owner: $owner, name: $repo) { ${fields.join(' ')} } }`,
+                variables
+              )
+              for (let index = 0; index < missing.length; index++) {
+                const id = repository[`label${index}`]?.id
+                if (id) repoLabels.set(missing[index], id)
+              }
+            }
+
+            const semver = semverFor(next)
+            if (semver && !repoLabels.has(semver)) throw new Error(`Missing repository label: ${semver}`)
+            for (const name of nextLabels) {
+              if (!repoLabels.has(name)) nextLabels.delete(name)
+            }
 
             // When the title changes, remove labels from the old title that no
             // longer apply so stale type/scope/semver labels don't linger.
             const titleChanged = context.payload.action === 'edited' &&
               context.payload.changes?.title?.from != null
-            const toRemove = new Set()
+            const desired = new Map(current)
             if (titleChanged) {
               const prev = parse(context.payload.changes.title.from)
               for (const label of titledLabels(prev)) {
-                if (!nextLabels.has(label)) toRemove.add(label)
+                if (!nextLabels.has(label)) desired.delete(label)
               }
             }
 
-            const desired = new Set([...current].filter(l => !toRemove.has(l)))
-            for (const label of nextLabels) desired.add(label)
+            for (const label of nextLabels) desired.set(label, repoLabels.get(label))
 
-            const unchanged = current.size === desired.size && [...current].every(l => desired.has(l))
-            if (!unchanged) {
-              await github.rest.issues.setLabels({
-                ...context.repo,
-                issue_number: pr.number,
-                labels: [...desired],
-              })
+            let changed = current.size !== desired.size
+            if (!changed) {
+              for (const label of current.keys()) {
+                if (!desired.has(label)) {
+                  changed = true
+                  break
+                }
+              }
+            }
+            if (changed) {
+              await github.graphql(
+                'mutation($input: UpdatePullRequestInput!) { updatePullRequest(input: $input) { clientMutationId } }',
+                { input: { pullRequestId: pr.node_id, labelIds: [...desired.values()] } }
+              )
             }
