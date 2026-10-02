@@ -7,7 +7,7 @@ const patchedClientConfigProtocols = new WeakSet()
 const patchedCommandPrototypes = new WeakSet()
 
 // Resource identifiers that already match the channel-suffix slug. Anything
-// else falls back to `'default'`. Hoisted out of the per-call hot path so we
+// else falls back to `'aws'`. Hoisted out of the per-call hot path so we
 // don't allocate a fresh Array literal + run `.includes` on every AWS send.
 const KNOWN_CHANNEL_SUFFIXES = new Set([
   'cloudwatchlogs',
@@ -320,7 +320,7 @@ function getChannelSuffix (name) {
   // some resource identifiers have spaces between ex: bedrock runtime
   name = String(name).replaceAll(' ', '')
   if (KNOWN_CHANNEL_SUFFIXES.has(name)) return name
-  return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'default'
+  return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'aws'
 }
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
