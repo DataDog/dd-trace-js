@@ -345,8 +345,10 @@ describe('debugger/index', () => {
       const hrtime = sinon.stub(process.hrtime, 'bigint')
       try {
         // A 15ms evaluation is within the configured 10ms budget only once the budget is raised
+        hrtime.returns(0n)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), true)
         hrtime.returns(15_000_000n)
-        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', 0n, true, 0n, false), true)
+        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', true, 0n, false), true)
         assert.strictEqual(
           sampler.takeConditionError('probe-1'),
           'Condition evaluation exceeded its time budget of 10ms (took 15.0ms)'
@@ -356,7 +358,10 @@ describe('debugger/index', () => {
         DynamicInstrumentation.configure(config)
         sampler.remove('probe-1')
 
-        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', 0n, true, 0n, false), true)
+        hrtime.returns(0n)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), true)
+        hrtime.returns(15_000_000n)
+        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', true, 0n, false), true)
         assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
       } finally {
         hrtime.restore()

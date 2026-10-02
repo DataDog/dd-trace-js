@@ -70,6 +70,12 @@ function installProbeSampler (guardrailMetrics, config) {
    * @type {Map<string, ProbeThrottle>}
    */
   const throttleByProbeId = new Map()
+  /**
+   * When the condition currently being evaluated started. V8 doesn't evaluate breakpoint conditions re-entrantly, and
+   * the conditions of probes at the same location are evaluated one after another, so one start time is enough. It is
+   * kept here rather than in the compiled condition so the condition can't shadow a variable of the paused frame.
+   */
+  let conditionStartNs = 0n
   const sampledProbeIndexes = new Int32Array(buffer)
   Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0)
   Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX, 0)
@@ -79,14 +85,6 @@ function installProbeSampler (guardrailMetrics, config) {
   let snapshotsSampledWithinTheLastSecond = 0
 
   ddTraceGlobal[Symbol.for(PROBE_SAMPLER_SYMBOL)] = {
-    /**
-     * The current monotonic time. Exposed so breakpoint conditions can time evaluations without depending on globals
-     * of the realm they run in.
-     */
-    now () {
-      return process.hrtime.bigint()
-    },
-
     /**
      * Decide if a probe without a condition should be sampled and store sampled probe indexes for the debugger worker.
      *
@@ -102,13 +100,17 @@ function installProbeSampler (guardrailMetrics, config) {
     },
 
     /**
-     * Decide if a probe's condition should be evaluated, or skipped because a recent evaluation error throttled it.
+     * Decide if a probe's condition should be evaluated, or skipped because a recent evaluation error throttled it. If
+     * it should be evaluated, this starts timing the evaluation against the evaluation time budget.
      *
      * @param {string} probeId - The probe id.
      * @param {boolean} isSnapshotProducingProbe - Whether this probe produces snapshots.
      */
     shouldEvaluateCondition (probeId, isSnapshotProducingProbe) {
-      return !isThrottled(probeId, undefined, isSnapshotProducingProbe)
+      const now = process.hrtime.bigint()
+      if (isThrottled(probeId, now, isSnapshotProducingProbe)) return false
+      conditionStartNs = now
+      return true
     },
 
     /**
@@ -117,14 +119,13 @@ function installProbeSampler (guardrailMetrics, config) {
      *
      * @param {number} probeIndex - The worker-side probe sampling index.
      * @param {string} probeId - The probe id.
-     * @param {bigint} startNs - The time at which the condition evaluation started.
      * @param {boolean} matched - Whether the condition evaluated to `true`.
      * @param {bigint} nsBetweenSampling - Minimum nanoseconds between samples for this probe.
      * @param {boolean} isSnapshotProducingProbe - Whether this probe counts toward the global snapshot sample limit.
      */
-    conditionEvaluated (probeIndex, probeId, startNs, matched, nsBetweenSampling, isSnapshotProducingProbe) {
+    conditionEvaluated (probeIndex, probeId, matched, nsBetweenSampling, isSnapshotProducingProbe) {
       const now = process.hrtime.bigint()
-      const elapsedNs = now - startNs
+      const elapsedNs = now - conditionStartNs
       if (elapsedNs > evaluationTimeoutNs) {
         return recordConditionError(probeIndex, probeId, now, describeTimeout(elapsedNs), true)
       }
@@ -132,7 +133,8 @@ function installProbeSampler (guardrailMetrics, config) {
     },
 
     /**
-     * Record that a probe's condition threw, throttle the probe, and request a pause if the error can be reported.
+     * Record that a probe's condition threw, throttle the probe, and request a pause if the error can be reported. A
+     * condition that exceeded the evaluation time budget before throwing is reported as a timeout instead.
      *
      * Error results bypass the per-probe and global rate limits: they are rate limited by the throttle instead, which
      * allows one error result per probe per window. If the shared buffer is full, the error is dropped but the throttle
@@ -143,7 +145,12 @@ function installProbeSampler (guardrailMetrics, config) {
      * @param {unknown} error - The value thrown by the condition.
      */
     conditionError (probeIndex, probeId, error) {
-      return recordConditionError(probeIndex, probeId, process.hrtime.bigint(), describeError(error), false)
+      const now = process.hrtime.bigint()
+      const elapsedNs = now - conditionStartNs
+      if (elapsedNs > evaluationTimeoutNs) {
+        return recordConditionError(probeIndex, probeId, now, describeTimeout(elapsedNs), true)
+      }
+      return recordConditionError(probeIndex, probeId, now, describeError(error), false)
     },
 
     /**

@@ -104,12 +104,13 @@ function compileProbeCondition (probe) {
     return `$dd_sampled = $dd_sampler.makeSampleDecision(${probe.samplingIndex}, ${id}, ${samplingArgs}) || $dd_sampled`
   }
 
-  // The condition is timed against the evaluation budget. A condition that throws or exceeds its budget is reported
-  // once per throttle window and skipped at probe entry in between.
+  // The sampler times the condition against the evaluation budget, from `shouldEvaluateCondition` until it either
+  // returns or throws. A condition that throws or exceeds its budget is reported once per throttle window and skipped
+  // at probe entry in between.
   return `if ($dd_sampler.shouldEvaluateCondition(${id}, ${producesSnapshot})) {
       try {
-        $dd_sampled = $dd_sampler.conditionEvaluated(${probe.samplingIndex}, ${id}, $dd_sampler.now(),
-          (${probe.condition}) === true, ${samplingArgs}) || $dd_sampled
+        $dd_sampled = $dd_sampler.conditionEvaluated(${probe.samplingIndex}, ${id}, (${probe.condition}) === true,
+          ${samplingArgs}) || $dd_sampled
       } catch ($dd_error) {
         $dd_sampled = $dd_sampler.conditionError(${probe.samplingIndex}, ${id}, $dd_error) || $dd_sampled
       }
