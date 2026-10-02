@@ -1339,6 +1339,9 @@ function configureCoordinator (state, response) {
     : undefined
   configuration.earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
   configuration.earlyFlakeDetectionRetryPolicy = libraryConfig.earlyFlakeDetectionRetryPolicy ?? EMPTY_EFD_RETRY_POLICY
+  configuration.flakyTests = libraryConfig.flakyTests === undefined
+    ? undefined
+    : { mocha: getMochaFrameworkData(libraryConfig.flakyTests) || {} }
   configuration.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   configuration.isDiEnabled = libraryConfig.isDiEnabled
   configuration.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled === true
@@ -1555,11 +1558,20 @@ function handleConfigurationRequest (state, workerRecord, message) {
   initializeCoordinator(state, (configuration) => {
     updateEarlyFlakeDetectionFaultyState(state, files)
     startWorkerSuites(workerRecord, files)
+    let workerConfiguration = configuration
+    if (configuration.flakyTests !== undefined) {
+      const flakyTests = { mocha: {} }
+      for (const file of files) {
+        const testSuite = getTestSuitePath(normalizeFile(file), process.cwd())
+        flakyTests.mocha[testSuite] = configuration.flakyTests.mocha[testSuite] || []
+      }
+      workerConfiguration = { ...configuration, flakyTests }
+    }
     sendWorkerMessage(workerRecord, {
       origin: 'datadog',
       name: CONFIGURATION_RESPONSE,
       content: {
-        configuration,
+        configuration: workerConfiguration,
         requestId,
       },
     })

@@ -3980,6 +3980,11 @@ describe('webdriverio instrumentation', () => {
           earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
           earlyFlakeDetectionFaultyThreshold: 30,
           flakyTestRetriesCount: 5,
+          flakyTests: {
+            webdriverio: {
+              'first.spec.js': ['first test'],
+            },
+          },
           isCodeCoverageEnabled: true,
           isCoverageReportUploadEnabled: true,
           isDiEnabled: true,
@@ -4125,11 +4130,21 @@ describe('webdriverio instrumentation', () => {
       assert.strictEqual(secondWorker.sentMessages[0].content.requestId, 'second-request')
       assert.strictEqual(secondWorker.sentMessages[0].content.configuration.isDynamicAtrEnabled, true)
       assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.dynamicAtrBuckets, [1, 2, 3, 4, 5])
+      assert.deepStrictEqual(secondWorker.sentMessages[0].content.configuration.flakyTests, {
+        mocha: {
+          'second.spec.js': [],
+        },
+      })
       assert.deepStrictEqual(firstWorker.sentMessages[0].content.configuration, {
         dynamicAtrBuckets: [1, 2, 3, 4, 5],
         earlyFlakeDetectionFaultyThreshold: 30,
         earlyFlakeDetectionRetryPolicy: createEfdRetryPolicy({ '5s': 5 }),
         flakyTestRetriesCount: 5,
+        flakyTests: {
+          mocha: {
+            'first.spec.js': ['first test'],
+          },
+        },
         isCodeCoverageEnabled: false,
         isCoverageReportUploadEnabled: false,
         isDiEnabled: true,
@@ -4227,6 +4242,80 @@ describe('webdriverio instrumentation', () => {
       }
     }
   })
+
+  for (const framework of ['mocha', 'jasmine']) {
+    for (const dataset of ['webdriverio', 'mocha', 'empty', 'missing framework', 'unavailable']) {
+      it(`scopes ${framework} worker flaky tests to requested files with ${dataset} data`, async () => {
+        const testFinishCh = channel('ci:mocha:test:finish')
+        const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+        const testSessionFinishCh = channel('ci:mocha:session:finish')
+        const suiteTests = {
+          'specs/first.spec.js': ['first test'],
+          'specs/second spec.js': ['second test'],
+          'other.spec.js': ['other test'],
+        }
+        const listed = dataset === 'webdriverio' || dataset === 'mocha'
+        const flakyTests = dataset === 'unavailable'
+          ? undefined
+          : dataset === 'empty' ? {} : { [listed ? dataset : 'jest']: suiteTests }
+
+        function onTestFinish () {}
+        function onLibraryConfiguration (request) {
+          request.onDone({ libraryConfig: { flakyTests, isFlakyTestRetriesEnabled: true } })
+        }
+        function onSessionFinish (event) {
+          event.onDone()
+        }
+
+        testFinishCh.subscribe(onTestFinish)
+        libraryConfigurationCh.subscribe(onLibraryConfiguration)
+        testSessionFinishCh.subscribe(onSessionFinish)
+
+        try {
+          require('../src/webdriverio')
+
+          const localRunner = { _config: { framework, rootDir: path.join(process.cwd(), 'specs') } }
+          const files = [
+            path.join(process.cwd(), 'specs/first.spec.js'),
+            pathToFileURL(path.join(process.cwd(), 'specs/second spec.js')).href,
+            path.join(process.cwd(), 'unlisted.spec.js'),
+          ]
+          const otherFile = path.join(process.cwd(), 'other.spec.js')
+          const worker = createWorker()
+          const otherWorker = createWorker()
+          registerWorker(localRunner, worker, files)
+          registerWorker(localRunner, otherWorker, otherFile)
+          requestConfiguration(worker, files, 'grouped-request')
+          requestConfiguration(otherWorker, otherFile, 'other-request')
+          requestConfiguration(worker, [], 'empty-request')
+          await new Promise(setImmediate)
+
+          assert.deepStrictEqual(worker.sentMessages[0].content.configuration.flakyTests,
+            flakyTests === undefined
+              ? undefined
+              : {
+                  mocha: {
+                    'specs/first.spec.js': listed ? ['first test'] : [],
+                    'specs/second spec.js': listed ? ['second test'] : [],
+                    'unlisted.spec.js': [],
+                  },
+                })
+          assert.deepStrictEqual(otherWorker.sentMessages[0].content.configuration.flakyTests,
+            flakyTests === undefined ? undefined : { mocha: { 'other.spec.js': listed ? ['other test'] : [] } })
+          assert.deepStrictEqual(worker.sentMessages[1].content.configuration.flakyTests,
+            flakyTests === undefined ? undefined : { mocha: {} })
+
+          worker.emit('exit', { exitCode: 0, retries: 0 })
+          otherWorker.emit('exit', { exitCode: 0, retries: 0 })
+          await finishLocalRunner(localRunner)
+        } finally {
+          testFinishCh.unsubscribe(onTestFinish)
+          libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+          testSessionFinishCh.unsubscribe(onSessionFinish)
+        }
+      })
+    }
+  }
 
   it('scopes test management summaries to each coordinator', async () => {
     const testFinishCh = channel('ci:mocha:test:finish')

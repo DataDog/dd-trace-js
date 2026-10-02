@@ -10,6 +10,7 @@ const { performance } = require('node:perf_hooks')
 const path = require('path')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
+const { isKnownFlakyTest } = require('../../dd-trace/src/ci-visibility/known-flaky-tests')
 const shimmer = require('../../datadog-shimmer')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
@@ -696,6 +697,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       this.isEarlyFlakeDetectionEnabled = this.testEnvironmentOptions._ddIsEarlyFlakeDetectionEnabled
       this.isFlakyTestRetriesEnabled = this.testEnvironmentOptions._ddIsFlakyTestRetriesEnabled
+      this.flakyTests = this.testEnvironmentOptions._ddFlakyTests
+      this.nativeRetryCount = Number(this.global[RETRY_TIMES]) || 0
       this.flakyTestRetriesCount = this.testEnvironmentOptions._ddFlakyTestRetriesCount
       this.isDynamicAtrEnabled = this.testEnvironmentOptions._ddIsDynamicAtrEnabled
       this.dynamicAtrBuckets = this.testEnvironmentOptions._ddDynamicAtrBuckets
@@ -749,6 +752,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             this.global[RETRY_TIMES] = this.flakyTestRetriesCount
           }
         }
+      }
+
+      if (this.flakyTests !== undefined) {
+        // Track jest.retryTimes() without replacing the framework's global retry ceiling.
+        let retryTimes = this.global[RETRY_TIMES]
+        Object.defineProperty(this.global, RETRY_TIMES, {
+          configurable: true,
+          get: () => retryTimes,
+          set: value => {
+            retryTimes = value
+            this.nativeRetryCount = Math.max(0, Number.parseInt(value, 10) || 0)
+          },
+        })
       }
 
       if (this.isTestManagementTestsEnabled) {
@@ -2233,8 +2249,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        const isKnownFlaky = isKnownFlakyTest(this.flakyTests, 'jest', this.testSuite, testName)
+        const isAtrExcluded = !isKnownFlaky && !isAttemptToFix && !efdCandidates.has(testName)
+        if (isAtrExcluded) dynamicAtrRetryCountByTest.set(event.test, this.nativeRetryCount)
+
         // ATR: set failedAllTests when all auto test retries were exhausted and every attempt failed
-        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
+        if (isKnownFlaky && this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
           // Dynamic ATR: after the first attempt, compute the duration-based retry budget.
           if (
             this.isDynamicAtrEnabled &&
@@ -2262,7 +2282,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
         // Dynamic ATR: use the per-test duration-based count instead of the global flat limit.
-        const dynamicAtrCount = this.isDynamicAtrEnabled && dynamicAtrRetryCountByTest.has(event.test)
+        const dynamicAtrCount = (this.isDynamicAtrEnabled || isAtrExcluded) &&
+          dynamicAtrRetryCountByTest.has(event.test)
           ? dynamicAtrRetryCountByTest.get(event.test)
           : undefined
         const effectiveMaxRetries = dynamicAtrCount === undefined ? numRetries : dynamicAtrCount
@@ -2284,7 +2305,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         // Quarantine must consume terminal failures before we save errors for Jest's final result.
-        if (dynamicAtrCount !== undefined && failedAllTests && event.test.errors?.length) {
+        if (dynamicAtrCount !== undefined &&
+          (failedAllTests || (isAtrExcluded && numTestExecutions > dynamicAtrCount)) && event.test.errors?.length) {
           dynamicAtrFinalErrorsByTest.set(event.test, event.test.errors)
         }
 
@@ -2332,7 +2354,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         let isAtrRetry = false
-        if (this.isFlakyTestRetriesEnabled && event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
+        if (isKnownFlaky && this.isFlakyTestRetriesEnabled &&
+          event.test?.invocations > 1 && !isAttemptToFix && !isEfdRetry) {
           isAtrRetry = true
         }
 
@@ -3518,7 +3541,8 @@ function jestAdapterWrapper (jestAdapter, jestVersion, isIitm, hookMeta) {
 
     wrapEnvironmentCustomHandleTestEvent(environment)
 
-    if (environment.isDynamicAtrEnabled && environment.isFlakyTestRetriesEnabled) {
+    if ((environment.isDynamicAtrEnabled || environment.flakyTests !== undefined) &&
+      environment.isFlakyTestRetriesEnabled) {
       // Register at run_start, after Circus installs its per-test reporter and snapshot handlers.
       dynamicAtrResultHandlerRegistrations.set(environment, () => {
         if (satisfies(jestVersion, '>=30.0.0')) {
@@ -3723,6 +3747,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddTestCodeCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddFlakyTests',
   '_ddIsDynamicAtrEnabled',
   '_ddDynamicAtrBuckets',
   '_ddItrSkippingEnabledTags',
@@ -4366,9 +4391,6 @@ function onMessageWrapper (onMessage) {
 
 function sendWrapper (send) {
   return function (request) {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
-      return send.apply(this, arguments)
-    }
     const [type] = request
 
     // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/workers/ChildProcessWorker.ts#L424
@@ -4384,6 +4406,11 @@ function sendWrapper (send) {
         return send.apply(this, arguments)
       }
       const [{ globalConfig, config, path: testSuiteAbsolutePath }] = args
+      const flakyTests = config.testEnvironmentOptions?._ddFlakyTests
+      if (!isKnownTestsEnabled && !isTestManagementTestsEnabled &&
+        !isImpactedTestsEnabled && flakyTests === undefined) {
+        return send.apply(this, arguments)
+      }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, globalConfig.rootDir || process.cwd())
       const suiteKnownTests = knownTests?.jest?.[testSuite] || []
 
@@ -4394,6 +4421,9 @@ function sendWrapper (send) {
         testEnvironmentOptions: {
           ...config.testEnvironmentOptions,
           _ddKnownTests: suiteKnownTests,
+          _ddFlakyTests: flakyTests === undefined
+            ? undefined
+            : { jest: { [testSuite]: flakyTests.jest?.[testSuite] || [] } },
           _ddTestManagementTests: suiteTestManagementTests,
           // TODO: figure out if we can reduce the size of the modified files object
           // Can we use `testSuite` (it'd have to be relative to repository root though)

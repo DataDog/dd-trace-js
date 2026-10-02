@@ -73,6 +73,7 @@ const activeRunFilesContexts = new WeakSet()
 const runErrorsByContext = new WeakMap()
 const typecheckPoolWorkerRequests = new WeakMap()
 let isFlakyTestRetriesEnabled = false
+let flakyTests
 let flakyTestRetriesCount = 0
 let isDynamicAtrEnabled = false
 let dynamicAtrBuckets
@@ -575,7 +576,7 @@ function getTestPropertiesByFilepath (
     const testProperties = { testSuite }
     const hasProperties = knownTestsBySuite !== undefined ||
       testManagementTestsBySuite !== undefined ||
-      impactedTestSuites !== undefined
+      impactedTestSuites !== undefined || flakyTests !== undefined
 
     if (knownTestsBySuite) {
       testProperties.knownTests = knownTestsBySuite[testSuite] || []
@@ -639,6 +640,7 @@ function wrapSessionFinish (ctx) {
 
 function resetLibraryConfig () {
   isFlakyTestRetriesEnabled = false
+  flakyTests = undefined
   flakyTestRetriesCount = 0
   isDynamicAtrEnabled = false
   dynamicAtrBuckets = undefined
@@ -657,6 +659,7 @@ function resetLibraryConfig () {
 
 function applyLibraryConfig (libraryConfig) {
   isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+  flakyTests = libraryConfig.flakyTests
   flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
   isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled
   dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
@@ -825,16 +828,6 @@ async function runMainProcessSetup (
   }
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
-  if (flakyTestRetriesConfiguration) {
-    setProvidedContext(ctx, {
-      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
-      _ddFlakyTestRetriesCount: flakyTestRetriesCount,
-      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
-      _ddDynamicAtrBuckets: dynamicAtrBuckets,
-      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
-      _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
-    }, 'Could not send library configuration to workers.')
-  }
 
   if (isKnownTestsEnabled) {
     const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
@@ -921,7 +914,7 @@ async function runMainProcessSetup (
     }
   }
 
-  if (shouldSendTestProperties) {
+  if (shouldSendTestProperties || flakyTests !== undefined) {
     testPropertiesByFilepath = getTestPropertiesByFilepath(
       await getCurrentTestFilepaths(),
       repositoryRoot,
@@ -936,6 +929,26 @@ async function runMainProcessSetup (
     }
   }
 
+  let workerFlakyTests
+  if (flakyTests !== undefined) {
+    workerFlakyTests = { vitest: {} }
+    for (const file of testFilepaths) {
+      const testSuite = getNormalizedTestSuitePath(file, repositoryRoot)
+      workerFlakyTests.vitest[testSuite] = flakyTests.vitest?.[testSuite] || []
+    }
+  }
+  if (flakyTestRetriesConfiguration) {
+    setProvidedContext(ctx, {
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddFlakyTests: workerFlakyTests,
+      _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddIsDynamicAtrEnabled: isDynamicAtrEnabled,
+      _ddDynamicAtrBuckets: dynamicAtrBuckets,
+      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
+      _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+    }, 'Could not send library configuration to workers.')
+  }
+
   if (shouldInstallNoWorkerInit || shouldInstallBrowserReporter) {
     const reporterTestSpecifications = shouldInstallNoWorkerInit
       ? testSpecifications
@@ -946,6 +959,7 @@ async function runMainProcessSetup (
       knownTestsBySuite,
       modifiedFiles,
       repositoryRoot,
+      flakyTests: workerFlakyTests?.vitest,
       flakyTestRetriesConfiguration,
       testManagementTests,
       testManagementTestsBySuite,
@@ -971,6 +985,7 @@ function getNoWorkerInitState () {
     isEarlyFlakeDetectionEnabled,
     isEarlyFlakeDetectionFaulty,
     isFlakyTestRetriesEnabled,
+    flakyTests,
     isDynamicAtrEnabled,
     dynamicAtrBuckets,
     isKnownTestsEnabled,
@@ -1054,7 +1069,7 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry || config.retry.__ddTestOptAtr) {
       // The serializable marker survives task inheritance and setup refreshes, unlike numeric retry counts.
-      config.retry = isDynamicAtrEnabled ? { count: retryCount, __ddTestOptAtr: true } : retryCount
+      config.retry = { count: retryCount, __ddTestOptAtr: true }
       configured = true
       if (projectName) {
         projectNames.push(projectName)
@@ -1069,6 +1084,7 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   return {
     includesUnnamedProject,
     projectNames,
+    retryCount,
   }
 }
 

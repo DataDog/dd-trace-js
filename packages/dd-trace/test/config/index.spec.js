@@ -1364,6 +1364,7 @@ describe('Config', () => {
       { name: 'DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT', value: null, origin: 'default' },
       { name: 'DD_CIVISIBILITY_FLAKY_RETRY_ENABLED', value: true, origin: 'default' },
+      { name: 'DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES', value: false, origin: 'default' },
       { name: 'DD_CIVISIBILITY_GIT_UPLOAD_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_ITR_ENABLED', value: true, origin: 'default' },
       { name: 'DD_CIVISIBILITY_MANUAL_API_ENABLED', value: true, origin: 'default' },
@@ -3994,6 +3995,7 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED
       delete process.env.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED
       delete process.env.DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT
+      delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
@@ -4144,6 +4146,14 @@ describe('Config', () => {
           const config = getConfig(options)
           assert.deepStrictEqual(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS, parsed)
           assert.strictEqual(getDynamicAtrBuckets(config.testOptimization.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS), null)
+        })
+      }
+      for (const value of [undefined, 'true', '1', 'false', '0']) {
+        it(`should parse known-flakes-only retries ${value}`, () => {
+          if (value !== undefined) process.env.DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES = value
+          const config = getConfig(options)
+          assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ONLY_KNOWN_FLAKES,
+            value === 'true' || value === '1')
         })
       }
       it('should enable flaky test retries by default', () => {

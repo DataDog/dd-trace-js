@@ -907,6 +907,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
   }
   let skippableSuitesResponse
   resetSuiteSkippingRunState()
+  // A failed configuration request must not reuse a previous run's flaky-test filter.
+  config.flakyTests = undefined
 
   const onReceivedSkippableSuites = (response) => {
     const {
@@ -1023,6 +1025,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+    config.flakyTests = libraryConfig.flakyTests
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
     config.isDynamicAtrEnabled = libraryConfig.isDynamicAtrEnabled && satisfies(frameworkVersion, '>=8.0.0')
     config.dynamicAtrBuckets = libraryConfig.dynamicAtrBuckets
@@ -1792,6 +1795,9 @@ addHook({
 
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
+      newWorkerArgs._ddFlakyTests = config.flakyTests === undefined
+        ? undefined
+        : { mocha: { [testPath]: config.flakyTests.mocha?.[testPath] || [] } }
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
       newWorkerArgs._ddIsDynamicAtrEnabled = config.isDynamicAtrEnabled
       newWorkerArgs._ddDynamicAtrBuckets = config.dynamicAtrBuckets
