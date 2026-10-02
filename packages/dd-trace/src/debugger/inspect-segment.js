@@ -87,25 +87,15 @@ function inspectSegment (value, isRedactedIdentifier) {
       return '[Value omitted: inspection may execute user code]'
     }
     if (!hasRedactedKey(keys, isRedactedIdentifier)) return inspect(value, segmentInspectOptions)
-
-    // Inspect a copy with the redacted values replaced. It keeps the prototype, so the constructor name is still shown.
-    const redacted = Object.create(Object.getPrototypeOf(value))
-    for (let i = 0; i < keys.length; i++) {
-      if (isRedactedKey(keys[i], isRedactedIdentifier)) {
-        Object.defineProperty(redacted, keys[i], redactedDescriptor)
-      } else {
-        const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(value, keys[i]))
-        if (descriptor.value === value) descriptor.value = redacted
-        Object.defineProperty(redacted, keys[i], descriptor)
-      }
-    }
-    return inspect(redacted, segmentInspectOptions)
   }
 
-  const truncated = {}
-  for (let i = 0; i < maxProperties; i++) {
+  // Inspect a plain object holding the rendered properties instead, with the values of redacted properties replaced.
+  // The copy doesn't keep the prototype, as built-ins like `URL` can't be inspected without their internal slots.
+  const copy = {}
+  const copiedCount = Math.min(propertyCount, maxProperties)
+  for (let i = 0; i < copiedCount; i++) {
     if (isRedactedKey(keys[i], isRedactedIdentifier)) {
-      Object.defineProperty(truncated, keys[i], redactedDescriptor)
+      Object.defineProperty(copy, keys[i], redactedDescriptor)
       continue
     }
     const descriptor = /** @type {PropertyDescriptor} */ (Object.getOwnPropertyDescriptor(value, keys[i]))
@@ -115,12 +105,14 @@ function inspectSegment (value, isRedactedIdentifier) {
     ) {
       return '[Value omitted: inspection may execute user code]'
     }
-    if (descriptor.value === value) descriptor.value = truncated
-    Object.defineProperty(truncated, keys[i], descriptor)
+    if (descriptor.value === value) descriptor.value = copy
+    Object.defineProperty(copy, keys[i], descriptor)
   }
 
+  const inspected = inspect(copy, segmentInspectOptions)
+  if (propertyCount <= maxProperties) return inspected
+
   const omitted = propertyCount - maxProperties
-  const inspected = inspect(truncated, segmentInspectOptions)
   return `${inspected.slice(0, -2)}, ... ${omitted} more ${omitted === 1 ? 'property' : 'properties'} }`
 }
 

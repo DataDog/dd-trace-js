@@ -121,22 +121,31 @@ describe('inspectSegment', function () {
 
   describe('redaction', function () {
     it('redacts the values of redacted properties', function () {
-      class User {
-        name = 'alice'
-        password = 'hunter2'
-      }
       const symbolKeyed = { name: 'alice', [Symbol('token')]: 'secret' }
-      function handler () {}
-      handler.apiKey = 'secret'
 
       assert.strictEqual(
         inspectSegment({ name: 'alice', password: 'hunter2' }),
         "{ name: 'alice', password: '{redacted}' }"
       )
-      assert.strictEqual(inspectSegment(new User()), "User { name: 'alice', password: '{redacted}' }")
       assert.strictEqual(inspectSegment(symbolKeyed), `{ name: 'alice', ${tokenSymbolKey}: '{redacted}' }`)
       assert.strictEqual(inspectSegment({ 'X-Auth-Token': 'secret' }), "{ 'X-Auth-Token': '{redacted}' }")
-      assert.strictEqual(inspectSegment(handler), "Function { apiKey: '{redacted}' }")
+    })
+
+    it('inspects a plain object copy of redacted objects that are not plain objects', function () {
+      class User {
+        name = 'alice'
+        password = 'hunter2'
+      }
+      function handler () {}
+      handler.apiKey = 'secret'
+      // Built-ins with internal slots can't be inspected through an object that only shares their prototype
+      const url = new URL('https://example.com/')
+      Object.assign(url, { token: 'secret' })
+
+      assert.strictEqual(inspectSegment(new User()), "{ name: 'alice', password: '{redacted}' }")
+      assert.strictEqual(inspectSegment(handler), "{ apiKey: '{redacted}' }")
+      // On Node.js 18, URLs also have an enumerable `Symbol(context)` property
+      assert.match(inspectSegment(url), /^\{ token: '\{redacted\}'(?: \}|, \[Symbol\(context\)\]: \[URLContext\] \})$/)
     })
 
     it('does not copy objects without redacted properties', function () {
@@ -156,6 +165,19 @@ describe('inspectSegment', function () {
       )
     })
 
+    it('omits redacted objects containing values whose inspection may run user code', function () {
+      const sideEffectfulValue = {
+        get [Symbol.toStringTag] () {
+          throw new Error('Symbol.toStringTag getter should not run')
+        },
+      }
+
+      assert.strictEqual(
+        inspectSegment({ password: 'hunter2', a: sideEffectfulValue }),
+        '[Value omitted: inspection may execute user code]'
+      )
+    })
+
     it('does not inspect the values of redacted properties when truncating objects', function () {
       const sideEffectfulValue = new Proxy({}, {})
       const value = { password: sideEffectfulValue, a: 1, b: 2, c: 3, d: 4, e: 5 }
@@ -167,6 +189,7 @@ describe('inspectSegment', function () {
     })
 
     it('preserves circular references when redacting objects', function () {
+      /** @type {{ circular: unknown, password: string }} */
       const value = { circular: undefined, password: 'hunter2' }
       value.circular = value
 
@@ -174,14 +197,14 @@ describe('inspectSegment', function () {
     })
 
     it('redacts the values of Map entries with redacted keys', function () {
-      const map = new Map([['name', 'alice'], ['password', 'hunter2'], [Symbol('token'), 'secret']])
+      const map = new Map().set('name', 'alice').set('password', 'hunter2').set(Symbol('token'), 'secret')
 
       assert.strictEqual(
         inspectSegment(map),
         "Map(3) { 'name' => 'alice', 'password' => '{redacted}', Symbol(token) => '{redacted}' }"
       )
       assert.strictEqual(
-        inspectSegment(new Map([['password', 'hunter2'], [1, 2], [3, 4], [5, 6], [7, 8]])),
+        inspectSegment(new Map().set('password', 'hunter2').set(1, 2).set(3, 4).set(5, 6).set(7, 8)),
         "Map(5) { 'password' => '{redacted}', 1 => 2, 3 => 4, ... 2 more items }"
       )
     })
@@ -190,7 +213,7 @@ describe('inspectSegment', function () {
       const key = { password: 'hunter2' }
 
       assert.strictEqual(
-        inspectSegment(new Map([[key, 'value'], [2, 'two']])),
+        inspectSegment(new Map().set(key, 'value').set(2, 'two')),
         "Map(2) { [Object] => 'value', 2 => 'two' }"
       )
     })
@@ -213,7 +236,7 @@ describe('inspectSegment', function () {
 
       assert.strictEqual(inspectSegment({ foo: 1, password: 'hunter2' }), "{ foo: '{redacted}', password: 'hunter2' }")
       assert.strictEqual(
-        inspectSegment(new Map([['foo', 1], ['password', 'hunter2']])),
+        inspectSegment(new Map().set('foo', 1).set('password', 'hunter2')),
         "Map(2) { 'foo' => '{redacted}', 'password' => 'hunter2' }"
       )
     })
