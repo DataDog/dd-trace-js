@@ -27,6 +27,11 @@ const ddTraceGlobal = /** @type {Record<symbol, SharedArrayBuffer | object | und
  * @property {string | undefined} error - A condition error not yet handed over to the worker
  */
 
+/**
+ * @typedef {object} ProbeSamplerConfig
+ * @property {{ DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: number }} dynamicInstrumentation
+ */
+
 let evaluationTimeoutNs = 0n
 
 module.exports = {
@@ -38,17 +43,18 @@ module.exports = {
 /**
  * Apply the evaluation time budget from the tracer configuration.
  *
- * @param {{ dynamicInstrumentation: { evaluationTimeoutMs: number } }} config - The tracer configuration.
+ * @param {ProbeSamplerConfig} config - The tracer configuration.
  */
 function configureProbeSampler (config) {
-  evaluationTimeoutNs = BigInt(config.dynamicInstrumentation.evaluationTimeoutMs) * 1_000_000n
+  evaluationTimeoutNs = BigInt(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS) *
+    1_000_000n
 }
 
 /**
  * Install the runtime sampler in the debuggee context.
  *
  * @param {import('./guardrail-metrics').GuardrailMetrics} guardrailMetrics - Counters for skipped probe hits.
- * @param {{ dynamicInstrumentation: { evaluationTimeoutMs: number } }} config - The tracer configuration.
+ * @param {ProbeSamplerConfig} config - The tracer configuration.
  * @returns {SharedArrayBuffer} The shared sampler buffer to pass to the debugger worker.
  */
 function installProbeSampler (guardrailMetrics, config) {

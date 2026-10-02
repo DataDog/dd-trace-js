@@ -108,7 +108,7 @@ describe('onPause', function () {
     send['@noCallThru'] = true
     sampledProbeIndexes = new Int32Array(installProbeSampler(
       new GuardrailMetrics(GuardrailMetrics.createBuffer()),
-      { dynamicInstrumentation: { evaluationTimeoutMs: 10 } }
+      { dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 10 } }
     ))
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })

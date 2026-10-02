@@ -38,7 +38,9 @@ const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
  */
 
 const EVALUATION_TIMEOUT_MS = 10
-const samplerConfig = { dynamicInstrumentation: { evaluationTimeoutMs: EVALUATION_TIMEOUT_MS } }
+const samplerConfig = {
+  dynamicInstrumentation: { DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: EVALUATION_TIMEOUT_MS },
+}
 
 /** @type {GuardrailMetrics} */
 let guardrailMetrics

@@ -73,7 +73,7 @@ describe('debugger/index', () => {
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
-        evaluationTimeoutMs: 10,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 10,
       },
       hostname: 'test-host',
       logLevel: 'info',
@@ -323,7 +323,7 @@ describe('debugger/index', () => {
         debug: false,
         dynamicInstrumentation: {
           enabled: true,
-          evaluationTimeoutMs: 10,
+          DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 10,
         },
         env: 'test-env',
         hostname: 'test-host',
@@ -352,7 +352,7 @@ describe('debugger/index', () => {
           'Condition evaluation exceeded its time budget of 10ms (took 15.0ms)'
         )
 
-        config.dynamicInstrumentation.evaluationTimeoutMs = 20
+        config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = 20
         DynamicInstrumentation.configure(config)
         sampler.remove('probe-1')
 

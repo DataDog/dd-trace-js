@@ -89,7 +89,7 @@ describe('Debugger worker config', () => {
             url: 'http://localhost:8126',
             dynamicInstrumentation: {
               DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: 15,
-              evaluationTimeoutMs: 50,
+              DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 50,
             },
           },
           parentThreadId: 42,
@@ -110,7 +110,7 @@ describe('Debugger worker config', () => {
       url: 'http://localhost:8126',
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: 30,
-        evaluationTimeoutMs: 20,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 20,
       },
     })
     assert.strictEqual(config.dynamicInstrumentation.captureTimeoutNs, 30_000_000n)

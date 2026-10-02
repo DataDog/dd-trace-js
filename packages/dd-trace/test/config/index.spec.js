@@ -1176,7 +1176,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
-        evaluationTimeoutMs: 50,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 50,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
       },
@@ -1672,7 +1672,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
-        evaluationTimeoutMs: 20,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 20,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo', 'bar'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a', 'b', 'c'],
@@ -2044,7 +2044,7 @@ describe('Config', () => {
       },
     })
 
-    assert.strictEqual(config.dynamicInstrumentation.evaluationTimeoutMs, 50)
+    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
     sinon.assert.calledWithExactly(
       log.warn,
       'Number must be finite: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS ' +
@@ -2349,7 +2349,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
-        evaluationTimeoutMs: 30,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
@@ -3025,7 +3025,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
-        evaluationTimeoutMs: 30,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes2.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo2', 'bar2'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a2', 'b2'],

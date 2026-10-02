@@ -28,5 +28,5 @@ function updateConfig (updates) {
   config.dynamicInstrumentation.captureTimeoutNs =
     BigInt(updates.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS) * 1_000_000n
   config.dynamicInstrumentation.evaluationTimeoutNs =
-    BigInt(updates.dynamicInstrumentation.evaluationTimeoutMs) * 1_000_000n
+    BigInt(updates.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS) * 1_000_000n
 }

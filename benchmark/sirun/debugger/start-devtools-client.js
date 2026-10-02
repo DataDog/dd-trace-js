@@ -73,6 +73,7 @@ assert.equal(
 const breakpoint = { sourceFile, line }
 // WARNING: Keep this fixture aligned with dd-trace's default config, apart from benchmark-specific overrides.
 const captureTimeoutMs = Number(process.env.DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS || '1000')
+const evaluationTimeoutMs = Number(process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS || '50')
 const redactedIdentifiers = []
 const redactionExcludedIdentifiers = []
 const config = {
@@ -84,7 +85,7 @@ const config = {
     DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: captureTimeoutMs,
     enabled: true,
     DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
-    evaluationTimeoutMs: Number(process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS || '50'),
+    DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: evaluationTimeoutMs,
     probeFile: undefined,
     DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
     redactedIdentifiers,

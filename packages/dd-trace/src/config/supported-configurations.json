@@ -824,6 +824,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.evaluationTimeoutMs"
         ],
