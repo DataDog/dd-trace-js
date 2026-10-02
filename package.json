@@ -176,7 +176,6 @@
     "packages/datadog-instrumentations/orchestrion.yml",
     "README.md",
     "register.js",
-    "types/**/*.d.ts",
     "vendor/dist/**/*.d.ts",
     "vendor/dist/**/*.js",
     "vendor/dist/**/*.wasm",

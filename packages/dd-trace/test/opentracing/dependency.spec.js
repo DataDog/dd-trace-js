@@ -22,12 +22,12 @@ describe('OpenTracing dependency', () => {
     const packageDirectory = path.join(fixture, 'node_modules', 'dd-trace')
 
     mkdirSync(path.join(packageDirectory, 'ext'), { recursive: true })
-    mkdirSync(path.join(packageDirectory, 'types'), { recursive: true })
+    mkdirSync(path.join(packageDirectory, 'packages', 'dd-trace', 'src', 'opentracing'), { recursive: true })
     copyFileSync(path.join(root, 'index.d.ts'), path.join(packageDirectory, 'index.d.ts'))
     copyFileSync(path.join(root, 'ext', 'formats.d.ts'), path.join(packageDirectory, 'ext', 'formats.d.ts'))
     copyFileSync(
-      path.join(root, 'types', 'opentracing.d.ts'),
-      path.join(packageDirectory, 'types', 'opentracing.d.ts')
+      path.join(root, 'packages', 'dd-trace', 'src', 'opentracing', 'types.d.ts'),
+      path.join(packageDirectory, 'packages', 'dd-trace', 'src', 'opentracing', 'types.d.ts')
     )
     writeFileSync(path.join(packageDirectory, 'package.json'), JSON.stringify({
       name: 'dd-trace',

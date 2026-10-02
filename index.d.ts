@@ -1,4 +1,4 @@
-/// <reference path="./types/opentracing.d.ts" />
+/// <reference path="./packages/dd-trace/src/opentracing/types.d.ts" />
 
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
