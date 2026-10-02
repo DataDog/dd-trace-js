@@ -1,7 +1,7 @@
 'use strict'
 
 const zlib = require('zlib')
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 
 const { NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const web = require('../plugins/util/web')

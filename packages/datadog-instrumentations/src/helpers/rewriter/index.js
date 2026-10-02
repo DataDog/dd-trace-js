@@ -212,7 +212,7 @@ function createMatcher (dcModule) {
 }
 
 /**
- * `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
+ * The vendored `dc-polyfill` is referenced from injected `require()` (CJS) and `import`
  * (ESM) statements that the transformer splices into the rewritten module.
  * `require()` accepts an absolute filesystem path; the ESM resolver rejects it
  * with `ERR_INVALID_MODULE_SPECIFIER` and needs a `file://` URL instead. Each
@@ -220,15 +220,15 @@ function createMatcher (dcModule) {
  * module type it is rewriting.
  *
  * @param {'cjs'|'esm'} moduleType
- * @returns {string|undefined} `undefined` when `dc-polyfill` cannot be resolved
+ * @returns {string|undefined} `undefined` when the vendored `dc-polyfill` cannot be resolved
  */
 function getDcPolyfillSpecifier (moduleType) {
   try {
-    const resolved = require.resolve('dc-polyfill')
+    const resolved = require.resolve('../../../../../vendor/dist/dc-polyfill')
 
     return moduleType === 'esm' ? pathToFileURL(resolved).href : resolved.replaceAll('\\', '/')
   } catch {
-    // The `dc-polyfill` module is unavailable for some reason (like bundling).
+    // The vendored `dc-polyfill` module is unavailable for some reason (like bundling).
     // Let's just keep the default of using `diagnostics-channel` as a fallback
     // which works for most Node versions.
   }

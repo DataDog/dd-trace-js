@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 
 const libraryConfigurationCh = channel('ci:playwright:library-configuration')
 const reporterErrorCh = channel('ci:playwright:reporter:error')

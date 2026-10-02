@@ -3,7 +3,7 @@
 const { errorMonitor } = require('events')
 const util = require('util')
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,

@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../../vendor/dist/dc-polyfill')
 
 const Plugin = require('../../plugins/plugin')
 const { storage } = require('../../../../datadog-core')

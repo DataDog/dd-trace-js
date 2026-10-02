@@ -2,7 +2,7 @@
 
 module.exports = `
 version: 1
-dc_module: dc-polyfill
+dc_module: ${JSON.stringify(require.resolve('../../../../vendor/dist/dc-polyfill'))}
 instrumentations:
   - module_name: "@langchain/core"
     version_range: ">=0.1.0"

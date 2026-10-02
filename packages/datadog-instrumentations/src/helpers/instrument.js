@@ -1,7 +1,7 @@
 'use strict'
 
 const { AsyncResource } = require('async_hooks')
-const dc = /** @type {typeof import('node:diagnostics_channel')} */ (require('dc-polyfill'))
+const dc = /** @type {typeof import('node:diagnostics_channel')} */ (require('../../../../vendor/dist/dc-polyfill'))
 const instrumentations = require('./instrumentations')
 const rewriterInstrumentations = require('./rewriter/instrumentations')
 

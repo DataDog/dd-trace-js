@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 
 const { isError } = require('../util')
 const logger = require('../log')

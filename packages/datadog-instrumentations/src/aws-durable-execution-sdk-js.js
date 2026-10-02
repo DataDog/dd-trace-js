@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel, tracingChannel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('../../../vendor/dist/dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
 const LAZY_DURABLE_PROMISE_METHODS = require('./aws-durable-execution-sdk-js-context-methods')

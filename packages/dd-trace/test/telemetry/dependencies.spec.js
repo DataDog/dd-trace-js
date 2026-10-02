@@ -28,7 +28,7 @@ describe('dependencies', () => {
       const subscribe = sinon.stub()
       const dc = { channel () { return { subscribe } } }
       const dependencies = proxyquire('../../src/telemetry/dependencies', {
-        'dc-polyfill': dc,
+        '../../../../vendor/dist/dc-polyfill': dc,
       })
 
       dependencies.start()

@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../vendor/dist/dc-polyfill')
 const uuid = require('../../../vendor/dist/crypto-randomuuid')
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')

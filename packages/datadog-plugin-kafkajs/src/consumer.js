@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = require('dc-polyfill')
+const dc = require('../../../vendor/dist/dc-polyfill')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { convertToTextMap, getKafkaMessageSize } = require('./utils')
 const afterStartCh = dc.channel('dd-trace:kafkajs:consumer:afterStart')
