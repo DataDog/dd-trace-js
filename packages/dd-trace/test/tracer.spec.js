@@ -381,6 +381,24 @@ describe('Tracer', () => {
           .catch(done)
       })
 
+      it('should preserve a false error tag on rejected promises', async () => {
+        const error = new Error('boom')
+
+        await assert.rejects(
+          () => tracer.trace('name', {}, span => {
+            span.setTag('error', false)
+            return Promise.reject(error)
+          }),
+          { message: error.message }
+        )
+
+        const trace = tracer._exporter.export.getCall(0).args[0][0]
+        assert.strictEqual(trace.error, 0)
+        assert.strictEqual(trace.meta[ERROR_TYPE], error.name)
+        assert.strictEqual(trace.meta[ERROR_MESSAGE], error.message)
+        assert.strictEqual(trace.meta[ERROR_STACK], error.stack)
+      })
+
       it('should not treat rejections as handled', done => {
         const err = new Error('boom')
 
