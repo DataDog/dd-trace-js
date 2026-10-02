@@ -1,8 +1,11 @@
 'use strict'
 
 const os = require('node:os')
-const pkg = require('../../../package.json')
 
+const { channel } = require('dc-polyfill')
+const { IS_AWS_LAMBDA_MICROVM } = require('./serverless')
+
+const pkg = require('../../../package.json')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const {
   MEASURED,
@@ -28,6 +31,12 @@ const {
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('./encode/tags-processors')
+
+const identityRefreshChannel = channel('datadog:identity:refresh')
+
+// Only one SpanStatsProcessor is ever live in a real process, so replacing the subscription on
+// construction is safe - it just keeps tests (which build several) from piling up listeners.
+let unsubscribeBucketReset = null
 
 class SpanAggStats {
   constructor (aggKey) {
@@ -228,6 +237,19 @@ class SpanStatsProcessor {
     if (this.enabled || this.otlpExporter) {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
       this.timer.unref?.()
+    }
+
+    if (IS_AWS_LAMBDA_MICROVM) {
+      unsubscribeBucketReset?.()
+      const onIdentityRefresh = () => {
+        // Legacy and OTLP span-stats exporters use different transports, so reset both at the same
+        // identity boundary.
+        this.buckets = new TimeBuckets(Boolean(this.otlpExporter))
+        this.exporter?.resetPendingState()
+        this.otlpExporter?.resetPendingState?.()
+      }
+      identityRefreshChannel.subscribe(onIdentityRefresh)
+      unsubscribeBucketReset = () => identityRefreshChannel.unsubscribe(onIdentityRefresh)
     }
   }
 
