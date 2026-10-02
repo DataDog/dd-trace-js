@@ -154,7 +154,7 @@
     "graphql-yoga": "5.24.1",
     "handlebars": "4.7.9",
     "hapi": "18.1.0",
-    "hono": "4.13.9",
+    "hono": "4.13.10",
     "ioredis": "6.0.0",
     "iovalkey": "0.4.0",
     "jest": "30.5.2",
