@@ -171,7 +171,9 @@ class WarmCache {
   #deserialize (data) {
     const validTemplate = typeof data?.template === 'string' || (
       Array.isArray(data?.template) && data.template.every(message => {
-        return message && typeof message.role === 'string' && typeof message.content === 'string'
+        return message && (message.type === 'placeholder'
+          ? typeof message.name === 'string'
+          : typeof message.role === 'string' && typeof message.content === 'string')
       })
     )
     if (
