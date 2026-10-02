@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+const { Worker: NativeWorker } = require('node:worker_threads')
 
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -12,6 +13,8 @@ require('../setup/mocha')
 
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/guardrail-metrics')
+const telemetryLogs = require('../../src/telemetry/logs')
+const logCollector = require('../../src/telemetry/logs/log-collector')
 const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 describe('debugger/index', () => {
@@ -98,6 +101,107 @@ describe('debugger/index', () => {
     if (DynamicInstrumentation.isStarted()) {
       DynamicInstrumentation.stop()
     }
+  })
+
+  describe('worker failure telemetry', () => {
+    let worker
+
+    beforeEach(() => {
+      logCollector.reset(10_000)
+      telemetryLogs.start({ telemetry: { DD_TELEMETRY_LOG_COLLECTION_ENABLED: true } })
+      DynamicInstrumentation.start(config, rc)
+      worker = Worker.lastCall.returnValue
+    })
+
+    afterEach(() => {
+      telemetryLogs.stop()
+      logCollector.reset()
+    })
+
+    it('should report the exit code with debug logging disabled', () => {
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      onExit(1)
+
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
+        '[debugger] worker thread exited unexpectedly exit_code=1')
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    for (const code of ['MODULE_NOT_FOUND', 'ERR_WORKER_OUT_OF_MEMORY', 'ERR_INSPECTOR_COMMAND', undefined]) {
+      it(`should report the error name and code ${code}`, () => {
+        const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+        const error = Object.assign(new TypeError('customer-secret'), { code })
+        onError(error)
+
+        const entries = logCollector.drain()
+        assert.ok(entries)
+        const [entry] = entries
+        assert.strictEqual(entry.message,
+          `[debugger] worker thread error name=TypeError code=${code ?? 'unknown'} reason=unknown`)
+        assert.ok(!entry.stack_trace.includes('customer-secret'))
+        assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      })
+    }
+
+    it('should report the reason of a fatal debugger error', () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      onError(Object.assign(new Error('Unexpected Debugger.paused reason: secret'), {
+        reason: 'unexpected_pause_reason',
+      }))
+
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
+        '[debugger] worker thread error name=Error code=unknown reason=unexpected_pause_reason')
+    })
+
+    it('should retain discriminants across a real worker failure', async () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      // Match the debugger worker's preload isolation, including under the CI coverage runner.
+      const { execArgv, env } = Worker.lastCall.args[1]
+      const failingWorker = new NativeWorker(`
+        throw Object.assign(new TypeError('customer-secret'), {
+          code: 'MODULE_NOT_FOUND', reason: 'unexpected_pause_reason'
+        })
+      `, { eval: true, execArgv, env })
+      failingWorker.on('error', onError)
+      failingWorker.once('exit', onExit)
+      const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
+
+      assert.strictEqual(exitCode, 1)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=TypeError code=MODULE_NOT_FOUND reason=unexpected_pause_reason',
+        '[debugger] worker thread exited unexpectedly exit_code=1',
+      ])
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    it('should report a rejected probe without terminating the worker', () => {
+      const ack = sinon.spy()
+      rc.setProductHandler.lastCall.args[1]('apply', { id: 'probe1' }, 'config-id', ack)
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      const error = new Error('Unsupported probe type: customer-secret')
+      onMessage({ ackId: 1, error, reason: 'unsupported_probe_type' })
+
+      sinon.assert.calledOnceWithExactly(ack, error)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
+        '[debugger] worker thread error name=Error code=unknown reason=unsupported_probe_type')
+    })
+
+    it('should not report intentional worker shutdown as an unexpected exit', () => {
+      DynamicInstrumentation.stop()
+
+      assert.strictEqual(logCollector.drain(), undefined)
+      sinon.assert.calledOnce(worker.removeAllListeners)
+    })
   })
 
   describe('isStarted', () => {
