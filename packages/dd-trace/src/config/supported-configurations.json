@@ -829,7 +829,7 @@
           "dynamicInstrumentation.evaluationTimeoutMs"
         ],
         "default": "50",
-        "transform": "validateFiniteNumber"
+        "allowed": "\\d+"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [

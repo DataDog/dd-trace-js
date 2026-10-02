@@ -2047,12 +2047,26 @@ describe('Config', () => {
     assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
     sinon.assert.calledWithExactly(
       log.warn,
-      'Number must be finite: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS ' +
-        '(source: env_var), picked default'
+      'Invalid value: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
     )
     sinon.assert.calledWithExactly(
       log.warn,
-      'Number must be finite: -Infinity for dynamicInstrumentation.evaluationTimeoutMs (source: code), picked default'
+      'Invalid value: -Infinity for dynamicInstrumentation.evaluationTimeoutMs (source: code), picked default'
+    )
+  })
+
+  it('should accept a zero dynamic instrumentation evaluation timeout and reject a negative one', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '0'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 0)
+    sinon.assert.notCalled(log.warn)
+
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '-1'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Invalid value: -1 for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
     )
   })
 
