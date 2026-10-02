@@ -30,7 +30,7 @@ describe('Plugin', () => {
     const protocol = pluginToBeLoaded.split(':')[1] || pluginToBeLoaded
 
     describe(pluginToBeLoaded, () => {
-      function server (app, listener) {
+      function server (app, listener, hostname = 'localhost') {
         let server
         if (pluginToBeLoaded === 'https') {
           process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
@@ -43,7 +43,7 @@ describe('Plugin', () => {
         } else {
           server = require('node:http').createServer(app)
         }
-        server.listen(0, 'localhost', () => {
+        server.listen(0, hostname, () => {
           listener((/** @type {import('net').AddressInfo} */ (server.address())).port)
         })
         return server
@@ -74,7 +74,7 @@ describe('Plugin', () => {
 
         it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
           const app = express()
-          app.get('/user', (req, res) => {
+          app.all('/user', (req, res) => {
             res.status(200).send()
           })
 
@@ -83,16 +83,16 @@ describe('Plugin', () => {
               // OpenTelemetry attribute names are present...
               assertObjectContains(span, {
                 type: 'http',
-                resource: 'GET',
+                resource: 'HTTP',
                 meta: {
                   'span.kind': 'client',
-                  'http.request.method': 'GET',
+                  'http.request.method': '_OTHER',
+                  'http.request.method_original': 'PROPFIND',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
-                },
-                metrics: {
-                  'http.response.status_code': 200,
-                  'server.port': port,
+                  // This test reuses the mock Datadog Agent, which encodes HTTP status and port as strings.
+                  'http.response.status_code': '200',
+                  'server.port': String(port),
                 },
               })
               // ...and the Datadog ones are absent.
@@ -103,7 +103,74 @@ describe('Plugin', () => {
               assert.ok(!Object.hasOwn(span.meta, 'error.type'))
             }).then(done).catch(done)
 
-            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+            const req = http.request(`${protocol}://localhost:${port}/user`, { method: 'PROPFIND' }, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('brackets an IPv6 literal in url.full', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['url.full'], `${protocol}://[::1]:${port}/user`)
+              assert.strictEqual(span.meta['server.address'], '::1')
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://[::1]:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          }, '::1')
+        })
+
+        it('redacts credentials in url.full', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://username:password@localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('uses both OTel placeholders for a colonless auth option', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(
+                span.meta['url.full'],
+                `${protocol}://REDACTED:REDACTED@localhost:${port}/user`
+              )
+            }).then(done).catch(done)
+
+            const req = http.request({
+              protocol: `${protocol}:`,
+              hostname: 'localhost',
+              port,
+              path: '/user',
+              auth: 'username',
+            }, res => {
               res.on('data', () => {})
             })
             req.end()
@@ -119,12 +186,33 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
-                meta: { 'error.type': '400' },
-                metrics: { 'http.response.status_code': 400 },
+                meta: { 'error.type': '400', 'http.response.status_code': '400' },
+                error: 1,
               })
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('marks a 5xx client response as an error, unlike the Datadog default', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'error.type': '503', 'http.response.status_code': '503' },
+                error: 1,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
               res.on('data', () => {})
             })
             req.end()
@@ -145,6 +233,42 @@ describe('Plugin', () => {
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+      })
+
+      describe('with OTel semantics and an explicit default client error range', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES = '400-499'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          delete process.env.DD_TRACE_HTTP_CLIENT_ERROR_STATUSES
+        })
+
+        it('does not mark a 5xx client response as an error', done => {
+          const app = express()
+          app.get('/broken', (req, res) => {
+            res.status(503).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'http.response.status_code': '503' },
+                error: 0,
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/broken`, res => {
               res.on('data', () => {})
             })
             req.end()

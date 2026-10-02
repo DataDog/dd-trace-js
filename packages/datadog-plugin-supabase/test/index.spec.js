@@ -1000,3 +1000,78 @@ createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
     })
   })
 })
+
+describe('with OpenTelemetry HTTP semantics', () => {
+  const otelTestSetup = new TestSetup()
+
+  before(() => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+    process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP = 'width=[^&]*'
+  })
+
+  after(() => {
+    delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    delete process.env.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
+  })
+
+  createIntegrationTestSuite('supabase', '@supabase/supabase-js', {
+    category: 'cloud-provider',
+  }, (meta) => {
+    before(async () => {
+      await otelTestSetup.setup(meta.mod)
+    })
+
+    after(async () => {
+      await otelTestSetup.teardown()
+    })
+
+    it('preserves an obfuscated Storage query in url.full', async () => {
+      const assertion = meta.agent.assertFirstTraceSpan({
+        name: 'supabase.storage.request',
+        meta: {
+          'url.full': 'https://project.supabase.co/storage/v1/render/image/authenticated/files/avatar.png' +
+            '?<redacted>&height=200',
+        },
+      })
+
+      const result = await otelTestSetup.storageFileDownloadWithTransform()
+      assert.ifError(result.error)
+      await assertion
+    })
+
+    for (const { operationName, resource, method, run } of [
+      {
+        operationName: 'supabase.storage.request',
+        resource: 'POST',
+        method: 'POST',
+        run: () => otelTestSetup.storageFileList(),
+      },
+      {
+        operationName: 'supabase.http.getuser',
+        resource: 'GET',
+        method: 'GET',
+        run: () => otelTestSetup.goTrueClientGetUser(),
+      },
+      {
+        operationName: 'supabase.http.invoke',
+        resource: 'HTTP',
+        method: '_OTHER',
+        run: () => otelTestSetup.functionsClientInvokeUnknownMethod(),
+      },
+    ]) {
+      it(`uses the OTel HTTP resource for ${operationName}`, async () => {
+        const assertion = meta.agent.assertFirstTraceSpan(span => {
+          assertObjectContains(span, {
+            name: operationName,
+            resource,
+            meta: { 'http.request.method': method },
+          })
+        })
+
+        const result = await run()
+        assert.ifError(result.error)
+        await assertion
+      })
+    }
+  })
+})

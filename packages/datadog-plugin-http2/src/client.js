@@ -9,6 +9,11 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const {
+  HTTP_STATUS_ERROR,
+  INSTRUMENTATION_HTTP_RESOURCE,
+  otelHttpResourceName,
+} = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const { getClientStatusValidator } = require('../../dd-trace/src/plugins/util/status-validator')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 
@@ -30,6 +35,8 @@ class Http2ClientPlugin extends ClientPlugin {
 
   bindStart (message) {
     const { authority, options, headers = {} } = message
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const hasAuth = otelSemantics && hasUrlAuth(authority)
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
     const pathname = path.split(/[?#]/, 1)[0]
@@ -37,23 +44,33 @@ class Http2ClientPlugin extends ClientPlugin {
     const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
     const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
-    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const otelBase = hasAuth
+      ? `${sessionDetails.protocol}//REDACTED:REDACTED@${sessionDetails.host}:${sessionDetails.port}`
+      : base
+    const otelUri = hasAuth ? `${otelBase}${pathname}` : uri
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
+    const meta = {
+      [COMPONENT]: this.constructor.id,
+      [SPAN_KIND]: CLIENT,
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      'http.url': otelSemantics ? buildClientHttpUrl(this.config, otelBase, path, otelUri) : uri,
+      'out.host': sessionDetails.host,
+    }
+    if (otelSemantics) {
+      const resource = otelHttpResourceName(method)
+      meta['resource.name'] = resource
+      meta[INSTRUMENTATION_HTTP_RESOURCE] = resource
+    }
+
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails }),
-      meta: {
-        [COMPONENT]: this.constructor.id,
-        [SPAN_KIND]: CLIENT,
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
-        'out.host': sessionDetails.host,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port, 10),
       },
@@ -108,6 +125,9 @@ class Http2ClientPlugin extends ClientPlugin {
 
     if (!this.config.validateStatus(status)) {
       storage('legacy').run(store, () => this.addError())
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        store.span.setTag(HTTP_STATUS_ERROR, String(status))
+      }
     }
 
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)
@@ -140,6 +160,11 @@ function extractSessionDetails (authority, options) {
   }
 
   return { protocol, port, host }
+}
+
+function hasUrlAuth (authority) {
+  if (typeof authority === 'string') authority = new URL(authority)
+  return Boolean(authority.username || authority.password)
 }
 
 function hasAmazonSignature (headers, path) {
