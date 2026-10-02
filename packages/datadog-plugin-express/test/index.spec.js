@@ -2018,6 +2018,61 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with disabled OPTIONS request tracing', () => {
+        before(() => {
+          process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
+          return agent.load(['express', 'http', 'router'], [{}, { client: false }, {}])
+        })
+
+        after(() => {
+          delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          express = require(`../../../versions/express@${version}`).get()
+        })
+
+        it('should not export CORS preflight traces but keep tracing other methods', async () => {
+          const app = express()
+          const preflight = sinon.spy((req, res) => {
+            res.set('access-control-allow-origin', '*')
+            res.status(204).end()
+          })
+
+          app.use((req, res, next) => {
+            if (req.method === 'OPTIONS') return preflight(req, res)
+            next()
+          })
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+
+          await Promise.all([
+            agent.assertNoTraces(() => {
+              throw new Error('OPTIONS requests should not be recorded.')
+            }, { timeoutMs: 100 }),
+            axios.options(`http://localhost:${port}/user`, { headers: { origin: 'http://example.com' } }),
+          ])
+
+          sinon.assert.calledOnce(preflight)
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assert.strictEqual(spans[0].name, 'express.request')
+              assert.strictEqual(spans[0].resource, 'GET /user')
+            }),
+            axios.get(`http://localhost:${port}/user`),
+          ])
+        })
+      })
     })
   })
 })
