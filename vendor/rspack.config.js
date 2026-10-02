@@ -38,6 +38,10 @@ module.exports = {
     // ESM-only default exports being wrapped in a namespace by rspack's interop,
     // which would break patterns like `require('esquery').parse`.
     mainFields: ['main', 'module'],
+    alias: {
+      './patch-channel-store-methods.js': join(__dirname, 'patches/dc-polyfill/patch-channel-store-methods.js'),
+      './patch-garbage-collection-bug.js': join(__dirname, 'patches/dc-polyfill/patch-garbage-collection-bug.js'),
+    },
   },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
