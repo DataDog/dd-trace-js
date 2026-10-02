@@ -83,6 +83,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('bundles a single copy of packages with a module export condition', () => {
+      execSync('node ./build-and-test-aws-sdk-v3.js', {
+        timeout,
+      })
+    })
+
     it('handles scoped node_modules', () => {
       execSync('node ./build-and-test-koa.mjs', {
         timeout,

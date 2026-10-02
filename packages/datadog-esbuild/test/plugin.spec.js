@@ -55,10 +55,13 @@ function loadBuiltinWrapper (initialOptions) {
   })
 }
 
-function captureOnResolve () {
+/**
+ * @param {object} [initialOptions]
+ */
+function captureOnResolve (initialOptions = {}) {
   let onResolve
   ddPlugin.setup({
-    initialOptions: {},
+    initialOptions,
     onEnd () {},
     /**
      * @param {object} options
@@ -85,6 +88,88 @@ describe('datadog-esbuild plugin', () => {
     })
 
     assert.strictEqual(result, undefined)
+  })
+
+  describe('packages with a module export condition', () => {
+    // Mirrors the `@smithy/core` export map: esbuild enables the `module`
+    // condition by default and resolves to `dist-es`, while Node.js resolves
+    // the hooked `dist-cjs/submodules/client/index.js` (see issue #10605).
+    const resolveDir = path.join(__dirname, 'resources/dual-format')
+    const packageDir = path.join(resolveDir, 'node_modules/@smithy/core')
+    const importer = path.join(resolveDir, 'node_modules/@aws-sdk/client-sqs/dist-cjs/index.js')
+
+    /**
+     * @param {string} specifier
+     * @param {object} [overrides]
+     */
+    function resolveArgs (specifier, overrides = {}) {
+      return {
+        path: specifier,
+        resolveDir,
+        kind: 'require-call',
+        namespace: 'file',
+        importer,
+        ...overrides,
+      }
+    }
+
+    it('still intercepts the hooked file', () => {
+      const onResolve = captureOnResolve({ platform: 'node' })
+
+      const result = onResolve(resolveArgs('@smithy/core/client'))
+
+      assert.strictEqual(result.path, path.join(packageDir, 'dist-cjs/submodules/client/index.js'))
+      assert.strictEqual(result.pluginData.pkgOfInterest, true)
+      assert.strictEqual(result.pluginData.version, '3.24.1')
+    })
+
+    it('keeps the other entry points on the same variant as the hooked file', () => {
+      const onResolve = captureOnResolve({ platform: 'node' })
+
+      const root = onResolve(resolveArgs('@smithy/core'))
+      const subpath = onResolve(resolveArgs('@smithy/core/schema'))
+
+      assert.deepStrictEqual(root, { path: path.join(packageDir, 'dist-cjs/index.js') })
+      assert.deepStrictEqual(subpath, { path: path.join(packageDir, 'dist-cjs/submodules/schema/index.js') })
+    })
+
+    it('keeps the other entry points on the same variant when imported from ESM', () => {
+      const onResolve = captureOnResolve({ platform: 'node', format: 'esm' })
+
+      const result = onResolve(resolveArgs('@smithy/core/schema', {
+        kind: 'import-statement',
+        importer: path.join(resolveDir, 'node_modules/@aws-sdk/client-sqs/dist-es/index.js'),
+      }))
+
+      assert.deepStrictEqual(result, { path: path.join(packageDir, 'dist-cjs/submodules/schema/index.js') })
+    })
+
+    it('leaves resolution to esbuild when it already picks the same variant', () => {
+      const onResolve = captureOnResolve({ platform: 'node', conditions: ['node'] })
+
+      const result = onResolve(resolveArgs('@smithy/core/schema'))
+
+      assert.strictEqual(result, undefined)
+    })
+
+    it('leaves resolution to esbuild for packages without instrumentation', () => {
+      const onResolve = captureOnResolve({ platform: 'node' })
+
+      const result = onResolve(resolveArgs('not-instrumented'))
+
+      assert.strictEqual(result, undefined)
+    })
+
+    it('leaves relative imports inside instrumented packages to esbuild', () => {
+      const onResolve = captureOnResolve({ platform: 'node' })
+
+      const result = onResolve(resolveArgs('./submodules/schema/index.js', {
+        resolveDir: path.join(packageDir, 'dist-cjs'),
+        importer: path.join(packageDir, 'dist-cjs/index.js'),
+      }))
+
+      assert.strictEqual(result, undefined)
+    })
   })
 
   describe('ESM wrappers', () => {
