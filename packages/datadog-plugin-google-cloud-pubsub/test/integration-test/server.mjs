@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
 import pubLib from '@google-cloud/pubsub'
-import id from './id.js'
+import id from 'dd-trace/packages/dd-trace/src/id.js'
 
 const pubsub = new pubLib.PubSub({ projectId: `test-project-${id()}` })
 const [topic] = await pubsub.createTopic(`test-topic-${id()}`)

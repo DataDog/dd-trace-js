@@ -16,7 +16,7 @@ withVersions('pug', 'pug', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'pug@${version}'`, 'express'], false,
+    useSandbox([`'pug@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
       ['./packages/datadog-plugin-pug/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {
