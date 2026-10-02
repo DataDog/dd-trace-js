@@ -73,6 +73,8 @@ describe('debugger/index', () => {
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['password'],
       },
       hostname: 'test-host',
       logLevel: 'info',
@@ -126,6 +128,16 @@ describe('debugger/index', () => {
       const secondWorker = Worker.lastCall
 
       assert.strictEqual(firstWorker, secondWorker)
+    })
+
+    it('should install a template value inspector honoring the redaction configuration', () => {
+      DynamicInstrumentation.start(config, rc)
+
+      const inspectSegment = globalThis[Symbol.for('dd-trace')].debuggerInspectSegment
+      assert.strictEqual(
+        inspectSegment({ foo: 1, password: 'hunter2', token: 'secret' }),
+        "{ foo: '{redacted}', password: 'hunter2', token: '{redacted}' }"
+      )
     })
 
     it('should set product handler for LIVE_DEBUGGING', () => {
@@ -322,6 +334,8 @@ describe('debugger/index', () => {
         debug: false,
         dynamicInstrumentation: {
           enabled: true,
+          DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],
+          DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['password'],
         },
         env: 'test-env',
         hostname: 'test-host',

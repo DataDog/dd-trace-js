@@ -35,9 +35,13 @@ describe('Dynamic Instrumentation PII redaction', function () {
     })
 
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS in log templates', async function () {
-      const message = await getLogMessage(t, ['foo', 'baz', 'secret'])
+      const message = await getLogMessage(t, ['foo', 'baz', 'secret', 'obj'])
 
-      assert.strictEqual(message, 'foo={redacted};baz=c;secret={redacted}')
+      assert.strictEqual(
+        message,
+        "foo={redacted};baz=c;secret={redacted};obj={ foo: '{redacted}', baz: 'c', secret: '{redacted}', " +
+          "password: '{redacted}' }"
+      )
     })
   })
 
@@ -64,9 +68,12 @@ describe('Dynamic Instrumentation PII redaction', function () {
     })
 
     it('should respect DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS in log templates', async function () {
-      const message = await getLogMessage(t, ['secret', 'password'])
+      const message = await getLogMessage(t, ['secret', 'password', 'obj'])
 
-      assert.strictEqual(message, 'secret=shh!;password={redacted}')
+      assert.strictEqual(
+        message,
+        "secret=shh!;password={redacted};obj={ foo: 'a', baz: 'c', secret: 'shh!', password: '{redacted}' }"
+      )
     })
   })
 })

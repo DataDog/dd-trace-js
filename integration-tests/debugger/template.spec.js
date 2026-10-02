@@ -188,6 +188,27 @@ describe('Dynamic Instrumentation', function () {
       }))
     })
 
+    it('should redact the values of redacted properties and Map entries', function (done) {
+      t.agent.on('debugger-input', ({ payload: [payload] }) => {
+        assert.strictEqual(
+          payload.message,
+          "user: { name: 'alice', password: '{redacted}' }, " +
+            "headers: Map(2) { 'content-type' => 'text/plain', 'authorization' => '{redacted}' }"
+        )
+        assert.strictEqual(payload.debugger.snapshot.evaluationErrors, undefined)
+        done()
+      })
+
+      t.agent.addRemoteConfig(t.generateRemoteConfig({
+        segments: [
+          { str: 'user: ' },
+          { dsl: 'user', json: { ref: 'user' } },
+          { str: ', headers: ' },
+          { dsl: 'headers', json: { ref: 'headers' } },
+        ],
+      }))
+    })
+
     it('should trim long messages', function (done) {
       t.agent.on('debugger-input', ({ payload }) => {
         assert.strictEqual(payload.length, 2)

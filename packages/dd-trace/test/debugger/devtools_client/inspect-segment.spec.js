@@ -7,7 +7,17 @@ const { describe, it } = require('mocha')
 
 require('../../setup/mocha')
 
-const inspectSegment = require('../../../src/debugger/inspect-segment')
+const createInspectSegment = require('../../../src/debugger/inspect-segment')
+const { createIsRedactedIdentifier } = require('../../../src/debugger/redaction')
+
+const inspectSegment = createInspectSegment(createIsRedactedIdentifier({
+  DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
+  DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
+}))
+
+// Whether symbol keys are wrapped in brackets differs between Node.js versions
+const tokenSymbolKey = inspect({ [Symbol('token')]: 0 }).slice(2, -5)
+const idSymbolKey = inspect({ [Symbol('id')]: 0 }).slice(2, -5)
 
 describe('inspectSegment', function () {
   it('limits collections and enumerable object properties', function () {
@@ -107,5 +117,105 @@ describe('inspectSegment', function () {
       inspectSegment(map),
       '<ref *1> Map(4) { [Circular *1] => [Circular *1], 1 => 2, 3 => 4, ... 1 more item }'
     )
+  })
+
+  describe('redaction', function () {
+    it('redacts the values of redacted properties', function () {
+      class User {
+        name = 'alice'
+        password = 'hunter2'
+      }
+      const symbolKeyed = { name: 'alice', [Symbol('token')]: 'secret' }
+      function handler () {}
+      handler.apiKey = 'secret'
+
+      assert.strictEqual(
+        inspectSegment({ name: 'alice', password: 'hunter2' }),
+        "{ name: 'alice', password: '{redacted}' }"
+      )
+      assert.strictEqual(inspectSegment(new User()), "User { name: 'alice', password: '{redacted}' }")
+      assert.strictEqual(inspectSegment(symbolKeyed), `{ name: 'alice', ${tokenSymbolKey}: '{redacted}' }`)
+      assert.strictEqual(inspectSegment({ 'X-Auth-Token': 'secret' }), "{ 'X-Auth-Token': '{redacted}' }")
+      assert.strictEqual(inspectSegment(handler), "Function { apiKey: '{redacted}' }")
+    })
+
+    it('does not copy objects without redacted properties', function () {
+      function handler () {}
+      handler.retries = 3
+
+      assert.strictEqual(inspectSegment({ name: 'alice', [Symbol('id')]: 1 }), `{ name: 'alice', ${idSymbolKey}: 1 }`)
+      assert.strictEqual(inspectSegment(handler), '[Function: handler] { retries: 3 }')
+    })
+
+    it('redacts the values of redacted properties when truncating objects', function () {
+      const value = { a: 1, password: 'hunter2', b: 2, c: 3, d: 4, token: 'secret' }
+
+      assert.strictEqual(
+        inspectSegment(value),
+        "{ a: 1, password: '{redacted}', b: 2, c: 3, d: 4, ... 1 more property }"
+      )
+    })
+
+    it('does not inspect the values of redacted properties when truncating objects', function () {
+      const sideEffectfulValue = new Proxy({}, {})
+      const value = { password: sideEffectfulValue, a: 1, b: 2, c: 3, d: 4, e: 5 }
+
+      assert.strictEqual(
+        inspectSegment(value),
+        "{ password: '{redacted}', a: 1, b: 2, c: 3, d: 4, ... 1 more property }"
+      )
+    })
+
+    it('preserves circular references when redacting objects', function () {
+      const value = { circular: undefined, password: 'hunter2' }
+      value.circular = value
+
+      assert.strictEqual(inspectSegment(value), "<ref *1> { circular: [Circular *1], password: '{redacted}' }")
+    })
+
+    it('redacts the values of Map entries with redacted keys', function () {
+      const map = new Map([['name', 'alice'], ['password', 'hunter2'], [Symbol('token'), 'secret']])
+
+      assert.strictEqual(
+        inspectSegment(map),
+        "Map(3) { 'name' => 'alice', 'password' => '{redacted}', Symbol(token) => '{redacted}' }"
+      )
+      assert.strictEqual(
+        inspectSegment(new Map([['password', 'hunter2'], [1, 2], [3, 4], [5, 6], [7, 8]])),
+        "Map(5) { 'password' => '{redacted}', 1 => 2, 3 => 4, ... 2 more items }"
+      )
+    })
+
+    it('only redacts Map entries keyed by strings or symbols', function () {
+      const key = { password: 'hunter2' }
+
+      assert.strictEqual(
+        inspectSegment(new Map([[key, 'value'], [2, 'two']])),
+        "Map(2) { [Object] => 'value', 2 => 'two' }"
+      )
+    })
+
+    it('preserves circular references when redacting Maps', function () {
+      const map = new Map()
+      map.set(map, map).set('password', 'hunter2')
+
+      assert.strictEqual(
+        inspectSegment(map),
+        "<ref *1> Map(2) { [Circular *1] => [Circular *1], 'password' => '{redacted}' }"
+      )
+    })
+
+    it('honors the configured redacted and excluded identifiers', function () {
+      const inspectSegment = createInspectSegment(createIsRedactedIdentifier({
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['password'],
+      }))
+
+      assert.strictEqual(inspectSegment({ foo: 1, password: 'hunter2' }), "{ foo: '{redacted}', password: 'hunter2' }")
+      assert.strictEqual(
+        inspectSegment(new Map([['foo', 1], ['password', 'hunter2']])),
+        "Map(2) { 'foo' => '{redacted}', 'password' => 'hunter2' }"
+      )
+    })
   })
 })

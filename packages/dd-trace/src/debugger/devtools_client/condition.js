@@ -7,6 +7,7 @@ module.exports = {
   templateRequiresEvaluation,
 }
 
+const { REDACTED_PLACEHOLDER } = require('../redaction')
 const { isRedactedIdentifier } = require('./snapshot/redaction')
 
 const identifierRegex = /^(@[\w$]+|[a-zA-Z_$][\w$]*)$/
@@ -43,7 +44,7 @@ const reservedWords = new Set([
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
 
 // What a dynamic template segment renders as when it references a redacted identifier and is therefore not evaluated.
-const REDACTED_SEGMENT = JSON.stringify('{redacted}')
+const REDACTED_SEGMENT = JSON.stringify(REDACTED_PLACEHOLDER)
 
 /**
  * @typedef {{ str: string, dsl?: undefined, json?: undefined }} StaticTemplateSegment
