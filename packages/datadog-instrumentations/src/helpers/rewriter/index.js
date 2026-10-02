@@ -43,6 +43,7 @@ let matcherEsm
 // string literals as this file's own inline map.
 // eslint-disable-next-line unicorn/no-useless-concat -- Keep the source-map marker non-contiguous.
 const SOURCE_MAP_PREFIX = '//# sourceMapping' + 'URL=data:application/json;base64,'
+const VENDORED_DC_MODULE = 'dd-trace/vendor/dist/dc-polyfill'
 
 /**
  * Loader hooks hand `file://` URLs to the rewriter while CommonJS and bundler
@@ -223,15 +224,25 @@ function createMatcher (dcModule) {
  * @returns {string|undefined} `undefined` when the vendored `dc-polyfill` cannot be resolved
  */
 function getDcPolyfillSpecifier (moduleType) {
-  try {
-    const resolved = require.resolve('../../../../../vendor/dist/dc-polyfill')
+  let resolved
 
-    return moduleType === 'esm' ? pathToFileURL(resolved).href : resolved.replaceAll('\\', '/')
+  try {
+    resolved = require.resolve('../../../../../vendor/dist/dc-polyfill')
   } catch {
-    // The vendored `dc-polyfill` module is unavailable for some reason (like bundling).
-    // Let's just keep the default of using `diagnostics-channel` as a fallback
-    // which works for most Node versions.
+    try {
+      // When this file is itself bundled, its relative filesystem layout no
+      // longer exists. The installed tracer remains resolvable from the
+      // application and owns the same vendored module.
+      resolved = require.resolve(VENDORED_DC_MODULE)
+    } catch {
+      // The vendored module is unavailable (for example, a standalone bundle
+      // without its node_modules). Fall back to diagnostics_channel, which
+      // works on runtimes with complete native support.
+      return
+    }
   }
+
+  return moduleType === 'esm' ? pathToFileURL(resolved).href : resolved.replaceAll('\\', '/')
 }
 
 /** @typedef {{ buffer: ArrayBuffer | SharedArrayBuffer, byteLength: number, byteOffset: number }} BufferView */
