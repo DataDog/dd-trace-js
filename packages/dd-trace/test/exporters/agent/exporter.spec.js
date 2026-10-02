@@ -8,7 +8,6 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 
 describe('Exporter', () => {
   let url
@@ -20,7 +19,6 @@ describe('Exporter', () => {
   let prioritySampler
   let span
   let writerOptions
-  let createServerlessDeliveryTracker
 
   beforeEach(() => {
     url = 'http://www.example.com:8126'
@@ -28,6 +26,7 @@ describe('Exporter', () => {
     span = {}
     writer = {
       append: sinon.spy(),
+      enableDeliveryTracking: sinon.spy(deliveryTracker => { writerOptions.deliveryTracker = deliveryTracker }),
       flush: sinon.spy(),
       setUrl: sinon.spy(),
     }
@@ -36,12 +35,36 @@ describe('Exporter', () => {
       writerOptions = options
       return writer
     })
-    createServerlessDeliveryTracker = sinon.stub()
-
     Exporter = proxyquire('../../../src/exporters/agent', {
       './writer': Writer,
-      '../../serverless': { createServerlessDeliveryTracker },
     })
+  })
+
+  it('does not enable delivery tracking without an OTel TracerProvider', () => {
+    exporter = new Exporter({ url, flushInterval }, prioritySampler)
+
+    assert.strictEqual(writerOptions.deliveryTracker, undefined)
+  })
+
+  it('enables delivery tracking after construction', () => {
+    exporter = new Exporter({ url, flushInterval }, prioritySampler)
+
+    exporter.enableDeliveryTracking()
+    exporter.enableDeliveryTracking()
+
+    sinon.assert.calledOnceWithExactly(writer.enableDeliveryTracking, sinon.match.object)
+  })
+
+  it('keeps serverless delivery tracking without an OTel TracerProvider', () => {
+    const deliveryTracker = {}
+    Exporter = proxyquire('../../../src/exporters/agent', {
+      '../../serverless': { createServerlessDeliveryTracker: () => deliveryTracker },
+      './writer': Writer,
+    })
+
+    exporter = new Exporter({ url, flushInterval }, prioritySampler)
+
+    assert.strictEqual(writerOptions.deliveryTracker, deliveryTracker)
   })
 
   it('should pass computed stats header through to writer', () => {
@@ -129,16 +152,13 @@ describe('Exporter', () => {
   })
 
   describe('flush', () => {
-    beforeEach(() => {
-      createServerlessDeliveryTracker.returns(new TelemetryDeliveryTracker())
-    })
-
     it('waits for trace exports already in flight', () => {
       const callbacks = []
       writer.flush = sinon.spy(done => {
         writerOptions.deliveryTracker.track(callback => callbacks.push(callback), done)
       })
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.export([span])
@@ -156,6 +176,7 @@ describe('Exporter', () => {
       writer.flushDirect = flushDirect
       writer.flush = sinon.spy(done => writerOptions.deliveryTracker.track(flushDirect, done))
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       // This is the path the encoder uses when it crosses its soft limit.
@@ -189,6 +210,7 @@ describe('Exporter', () => {
       })
       writer.flush.onSecondCall().throws(new Error('encode failed'))
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
       const flushed = sinon.spy()
 
       exporter.export([span])
@@ -199,18 +221,95 @@ describe('Exporter', () => {
       sinon.assert.calledOnce(flushed)
     })
 
-    it('waits for the boundary export without serverless retention', () => {
-      createServerlessDeliveryTracker.resetBehavior()
-      let complete
-      writer.flush = sinon.stub().callsFake(done => { complete = done })
+    it('reports a delivery failure when requested', () => {
+      const error = new Error('agent failed')
+      writer.flush = sinon.spy(done => {
+        writerOptions.deliveryTracker.track(complete => complete(error), done)
+      })
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
+      const flushed = sinon.spy()
+
+      exporter.flush(flushed, { reportErrors: true })
+
+      sinon.assert.calledOnceWithExactly(flushed, error)
+    })
+
+    it('does not report a delivery failure by default', () => {
+      writer.flush = sinon.spy(done => {
+        writerOptions.deliveryTracker.track(complete => complete(new Error('agent failed')), done)
+      })
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
+      const flushed = sinon.spy()
+
+      exporter.flush(flushed)
+
+      sinon.assert.calledOnceWithExactly(flushed, undefined)
+    })
+
+    it('supports a flush without a completion callback', () => {
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+
+      exporter.flush()
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('supports a tracked flush without a completion callback', () => {
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
+
+      exporter.flush()
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('aggregates a synchronous boundary failure with an in-flight failure', () => {
+      const inFlightError = new Error('in-flight request failed')
+      const boundaryError = new Error('boundary flush failed')
+      let completeInFlight
+      writer.flush = sinon.stub()
+      writer.flush.onFirstCall().callsFake(done => {
+        writerOptions.deliveryTracker.track(complete => { completeInFlight = complete }, done)
+      })
+      writer.flush.onSecondCall().callsFake(done => {
+        writerOptions.deliveryTracker.track(() => { throw boundaryError }, done)
+      })
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      exporter.enableDeliveryTracking()
+      const flushed = sinon.spy()
+
+      exporter.export([span])
+      exporter.flush(flushed, { reportErrors: true })
+      sinon.assert.notCalled(flushed)
+      completeInFlight(inFlightError)
+
+      sinon.assert.calledOnce(flushed)
+      const error = flushed.firstCall.firstArg
+      assert.ok(error instanceof AggregateError)
+      assert.deepStrictEqual(error.errors, [boundaryError, inFlightError])
+    })
+
+    it('reports a boundary flush failure when requested', () => {
+      const error = new Error('encode failed')
+      writer.flush = sinon.stub().throws(error)
+      exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
+      const flushed = sinon.spy()
+
+      exporter.flush(flushed, { reportErrors: true })
+
+      sinon.assert.calledOnceWithExactly(flushed, error)
+    })
+
+    it('does not report a boundary flush failure by default', () => {
+      writer.flush = sinon.stub().throws(new Error('encode failed'))
       exporter = new Exporter({ url, flushInterval: 0 }, prioritySampler)
       const flushed = sinon.spy()
 
       exporter.flush(flushed)
 
-      sinon.assert.notCalled(flushed)
-      complete()
-      sinon.assert.calledOnce(flushed)
+      sinon.assert.calledOnceWithExactly(flushed, undefined)
     })
   })
 

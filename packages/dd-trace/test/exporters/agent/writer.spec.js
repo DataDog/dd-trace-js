@@ -169,6 +169,21 @@ function describeWriter (protocolVersion) {
       })
     })
 
+    it('enables delivery tracking after construction', (done) => {
+      const deliveryTracker = { track: sinon.spy((flush, callback) => flush(callback)) }
+      writer = new Writer({ url, prioritySampler, protocolVersion })
+      writer.enableDeliveryTracking(deliveryTracker)
+
+      writer.flush(() => {
+        try {
+          sinon.assert.calledOnce(deliveryTracker.track)
+          done()
+        } catch (error) {
+          done(error)
+        }
+      })
+    })
+
     it('should flush its traces to the agent, and call callback', (done) => {
       const expectedData = Buffer.from('prefixed')
 
@@ -233,6 +248,26 @@ function describeWriter (protocolVersion) {
         )
         done()
       })
+    })
+
+    it('should suppress request errors by default', async () => {
+      request.yieldsAsync(new Error('agent unavailable'))
+      encoder.count.returns(1)
+
+      const flushError = await new Promise(resolve => writer.flush(resolve))
+
+      assert.strictEqual(flushError, undefined)
+    })
+
+    it('should report request errors when requested', (done) => {
+      const error = new Error('agent unavailable')
+      request.yieldsAsync(error)
+      encoder.count.returns(1)
+
+      writer.flush((flushError) => {
+        assert.strictEqual(flushError, error)
+        done()
+      }, { reportErrors: true })
     })
 
     it('should propagate terminal errors during a bounded Test Optimization flush', (done) => {

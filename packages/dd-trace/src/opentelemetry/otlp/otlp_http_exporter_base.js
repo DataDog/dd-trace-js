@@ -5,8 +5,9 @@ const https = require('node:https')
 const { URL } = require('node:url')
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
-const { createServerlessDeliveryTracker } = require('../../serverless')
 const { getHttpsProxyAgent } = require('../../exporters/common/proxy')
+const { createServerlessDeliveryTracker } = require('../../serverless')
+const TelemetryDeliveryTracker = require('../../serverless/telemetry-delivery-tracker')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { version: tracerVersion } = require('../../../../../package.json')
 
@@ -22,8 +23,8 @@ const legacyStorage = storage('legacy')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  #deliveryTracker
   #transport = https
-  #serverlessDeliveryTracker
 
   /**
    * Creates a new OtlpHttpExporterBase instance.
@@ -34,9 +35,12 @@ class OtlpHttpExporterBase {
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
+   * @param {boolean} [trackDeliveryInNormalProcesses] - Whether explicit flushes wait for active requests
    */
-  constructor (url, headers, timeout, protocol, signalType) {
-    this.#serverlessDeliveryTracker = createServerlessDeliveryTracker()
+  constructor (url, headers, timeout, protocol, signalType, trackDeliveryInNormalProcesses = true) {
+    this.#deliveryTracker = trackDeliveryInNormalProcesses
+      ? new TelemetryDeliveryTracker()
+      : createServerlessDeliveryTracker()
     this.protocol = protocol
     this.signalType = signalType
 
@@ -82,10 +86,11 @@ class OtlpHttpExporterBase {
    * @protected
    */
   sendPayload (payload, resultCallback) {
-    if (this.#serverlessDeliveryTracker) {
-      return this.#serverlessDeliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
+    if (this.#deliveryTracker) {
+      this.#deliveryTracker.track(done => this.#sendPayload(payload, resultCallback, done))
+    } else {
+      this.#sendPayload(payload, resultCallback)
     }
-    this.#sendPayload(payload, resultCallback)
   }
 
   #sendPayload (payload, resultCallback, done) {
@@ -102,7 +107,7 @@ class OtlpHttpExporterBase {
       if (completed) return
       completed = true
       resultCallback(result)
-      done?.()
+      done?.(result.error)
     }
 
     try {
@@ -150,12 +155,16 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Calls back once Vercel-tracked requests active at the flush boundary complete.
-   * @param {Function} [done]
+   * Calls back once requests active at the flush boundary complete.
+   * @param {(error?: Error) => void} [done]
+   * @param {{ reportErrors?: boolean }} [options]
    */
-  flush (done) {
-    if (this.#serverlessDeliveryTracker) return this.#serverlessDeliveryTracker.waitForIdle(done)
-    done?.()
+  flush (done, options) {
+    if (this.#deliveryTracker) {
+      this.#deliveryTracker.waitForIdle(done, options)
+    } else {
+      done?.()
+    }
   }
 
   /**

@@ -5,6 +5,7 @@ const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
 const log = require('../log')
+const { hasTracerProvider } = require('../opentelemetry/provider-state')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
 const Span = require('./span')
@@ -47,6 +48,7 @@ class DatadogTracer {
       const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
       this._exporter = new Exporter(config, this._prioritySampler)
     }
+    if (hasTracerProvider()) this._exporter.enableDeliveryTracking?.()
 
     let otlpStatsExporter
     if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {

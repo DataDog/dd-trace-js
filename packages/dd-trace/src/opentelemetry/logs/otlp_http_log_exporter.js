@@ -29,7 +29,8 @@ class OtlpHttpLogExporter extends OtlpHttpExporterBase {
    * @param {Attributes} resourceAttributes - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resourceAttributes) {
-    super(url, headers, timeout, protocol, 'logs')
+    // Normal log flush does not wait for transport delivery.
+    super(url, headers, timeout, protocol, 'logs', false)
     this.transformer = new OtlpTransformer(resourceAttributes, protocol)
   }
 
