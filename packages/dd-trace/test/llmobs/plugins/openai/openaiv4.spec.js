@@ -1064,8 +1064,9 @@ describe('integrations', () => {
         assert.ok(nextSpan.meta.output.messages[0].content)
       })
 
-      // Synthetic cases: the cassettes below are hand-authored streams that end before `response.completed`,
-      // as when the caller aborts mid-stream, so the partial response has to be rebuilt from the chunks received.
+      // The cassettes below were recorded through the testagent, then truncated before `response.completed`.
+      // The testagent buffers the full upstream response while recording, so a stream that ends early (as when the
+      // caller aborts mid-stream) cannot be recorded directly.
       describe('streamed response that ends early', function () {
         beforeEach(function () {
           if (semifies(realVersion, '<4.87.0')) {
@@ -1073,11 +1074,11 @@ describe('integrations', () => {
           }
         })
 
-        // openai_responses_post_832d0d1d.json ends after `response.created`
+        // openai_responses_post_0ad13443.json is truncated after `response.in_progress`
         it('submits the input with an empty output when no output was streamed', async () => {
           const stream = await openai.responses.create({
             model: 'gpt-4o-mini',
-            input: 'Stop after the response is created',
+            input: 'Say hello in one sentence',
             stream: true,
           })
           for await (const part of stream) {
@@ -1089,7 +1090,7 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createResponse',
-            inputMessages: [{ role: 'user', content: 'Stop after the response is created' }],
+            inputMessages: [{ role: 'user', content: 'Say hello in one sentence' }],
             modelName: 'gpt-4o-mini-2024-07-18',
             modelProvider: 'openai',
             metadata: {
@@ -1105,11 +1106,11 @@ describe('integrations', () => {
           assert.strictEqual(llmobsSpans[0].meta.output?.messages, undefined)
         })
 
-        // openai_responses_post_bf8e2c9b.json ends after two text deltas
+        // openai_responses_post_45a20fff.json is truncated after the third text delta
         it('submits the text streamed before the stream ended', async () => {
           const stream = await openai.responses.create({
             model: 'gpt-4o-mini',
-            input: 'Stop partway through the text',
+            input: 'Write a haiku about the ocean',
             stream: true,
           })
           const parts = []
@@ -1122,8 +1123,8 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createResponse',
-            inputMessages: [{ role: 'user', content: 'Stop partway through the text' }],
-            outputMessages: [{ role: 'assistant', content: 'Hello' }],
+            inputMessages: [{ role: 'user', content: 'Write a haiku about the ocean' }],
+            outputMessages: [{ role: 'assistant', content: 'Waves whisper' }],
             modelName: 'gpt-4o-mini-2024-07-18',
             modelProvider: 'openai',
             metadata: {
@@ -1142,11 +1143,11 @@ describe('integrations', () => {
           assert.deepStrictEqual(addedItem.content, [])
         })
 
-        // openai_responses_post_d099df66.json ends after the tool call arguments, before the item is done
+        // openai_responses_post_c17a3c24.json is truncated after the second tool call's arguments, before it is done
         it('submits completed items and the tool call streamed before the stream ended', async () => {
           const stream = await openai.responses.create({
             model: 'gpt-4o-mini',
-            input: 'What is the weather in Paris?',
+            input: 'What is the weather in Paris and Tokyo?',
             tools: [{
               type: 'function',
               name: 'get_weather',
@@ -1165,15 +1166,23 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'llm',
             name: 'OpenAI.createResponse',
-            inputMessages: [{ role: 'user', content: 'What is the weather in Paris?' }],
+            inputMessages: [{ role: 'user', content: 'What is the weather in Paris and Tokyo?' }],
             outputMessages: [
-              { role: 'assistant', content: 'Checking the weather.' },
               {
                 role: 'assistant',
                 tool_calls: [{
-                  tool_id: 'call_synthetic_c',
+                  tool_id: MOCK_STRING,
                   name: 'get_weather',
                   arguments: { city: 'Paris' },
+                  type: 'function_call',
+                }],
+              },
+              {
+                role: 'assistant',
+                tool_calls: [{
+                  tool_id: MOCK_STRING,
+                  name: 'get_weather',
+                  arguments: { city: 'Tokyo' },
                   type: 'function_call',
                 }],
               },
