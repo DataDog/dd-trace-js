@@ -68,12 +68,22 @@ test('all supported release lines derive their runtime matrix from unmodified pa
     assert.deepEqual(plan(pkg).node, major === 5 ? ['18', '20', '22', '24', '26'] : ['22', '24', '26'])
     assert.equal(pkg.engines.node, major === 5 ? '>=18' : '>=22')
   }
-  assert.deepEqual(plan({ version: '6.0.0', engines: { node: '>=24' }, nodeMaxMajor: 24 }).node, ['24'])
+  assert.deepEqual(plan({ version: '6.0.0', engines: { node: '>=24' }, nodeMaxMajor: 25 }).node, ['24'])
   assert.deepEqual(plan({ version: '6.0.0', engines: { node: '>=22.12.0' }, nodeMaxMajor: 27 }).node,
     ['22', '24', '26'])
   assert.throws(() => plan({ version: '8.0.0' }), /reviewed/)
   assert.throws(() => plan({ version: '6.0.0', engines: { node: '>=28' }, nodeMaxMajor: 28 }), /No compatible/)
 })
+
+for (const major of [5, 6, 7]) {
+  test(`v${major} treats nodeMaxMajor as the first unsupported runtime`, () => {
+    const pkg = { version: `${major}.0.0`, engines: { node: major === 5 ? '>=18' : '>=22' }, nodeMaxMajor: 26 }
+    const belowBoundary = major === 5 ? ['18', '20', '22', '24'] : ['22', '24']
+    assert.deepEqual(plan(pkg).node, belowBoundary)
+    assert.deepEqual(plan({ ...pkg, nodeMaxMajor: 27 }).node, [...belowBoundary, '26'])
+    assert.throws(() => plan({ ...pkg, engines: { node: '>=26' } }), /No compatible Lambda runtimes/)
+  })
+}
 
 test('CI mode refuses reduced coverage or an unreviewed control', () => {
   for (const args of [['--filter', 'promise'], ['--modes', 'normal'], ['--control', '5.126.0']]) {

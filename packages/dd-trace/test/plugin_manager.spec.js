@@ -475,6 +475,45 @@ describe('Plugin Manager', () => {
         assert.deepStrictEqual(instantiated, ['aws-lambda'])
         delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
       })
+
+      // DD_TRACE_DISABLED_PLUGINS is captured when plugin_manager is required, so the value has
+      // to exist before the outer `beforeEach` loads it — setting it inside the test is too late.
+      // A nested `before` runs ahead of an outer `beforeEach`, which is the same ordering this
+      // suite already relies on for AWS_LAMBDA_FUNCTION_NAME above.
+      for (const value of ['aws-lambda', 'lambda', 'http, lambda', ' aws-lambda ']) {
+        describe(`with DD_TRACE_DISABLED_PLUGINS=${JSON.stringify(value)}`, () => {
+          before(() => {
+            process.env.DD_TRACE_DISABLED_PLUGINS = value
+          })
+
+          after(() => {
+            delete process.env.DD_TRACE_DISABLED_PLUGINS
+          })
+
+          it('disables the plugin under either spelling', () => {
+            pm.configure(makeTracerConfig())
+
+            assert.deepStrictEqual(instantiated, [])
+            sinon.assert.notCalled(AwsLambda.prototype.configure)
+          })
+        })
+      }
+
+      describe('with DD_TRACE_DISABLED_PLUGINS naming a different plugin', () => {
+        before(() => {
+          process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six'
+        })
+
+        after(() => {
+          delete process.env.DD_TRACE_DISABLED_PLUGINS
+        })
+
+        it('leaves the aws-lambda plugin enabled', () => {
+          pm.configure(makeTracerConfig())
+
+          assert.deepStrictEqual(instantiated, ['aws-lambda'])
+        })
+      })
     })
 
     describe('without the load event', () => {

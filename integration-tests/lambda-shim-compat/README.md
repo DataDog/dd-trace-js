@@ -18,7 +18,8 @@ to each release line; each backport PR tests its own merge revision. Require the
 does not configure those repository settings.
 
 The runtime matrix is selected from the candidate's unmodified `engines.node` and `nodeMaxMajor`,
-using the five pinned runtime images in `assets/images.json`. With today's package metadata:
+using the five pinned runtime images in `assets/images.json`. `nodeMaxMajor` is exclusive, matching
+the tracer guardrails: that major and all newer majors are unsupported. With today's package metadata:
 
 | Candidate | Runtime majors | Released control |
 | --- | --- | --- |
@@ -110,6 +111,60 @@ Exit 2 means setup/identity/incomplete-run failure, never compatibility success.
 
 Read `report.md`, `summary.json`, `provenance.json`, and the individual `results-*.json` files.
 Do not recapture the shim, change assertions, or extend expectations merely to make a run green.
+
+## Actual backport validation — 2026-10-02
+
+Fetched the release branches and applied the current PR3 feature diff in separate worktrees.
+The source snapshot is `20bddf51` (PR3 `968b0b21` plus the local runtime-bound fix and
+plugin-disable regression tests), not a v7 checkout with a changed package version.
+
+| Release base | Local backport commit | Node runtimes | Candidate cases |
+| --- | --- | --- | --- |
+| v5.130.0 / `c8bc9be2` | `15b8a6eb` | 18.20.8, 20.20.2, 22.23.2, 24.20.0, 26.7.0 | 475 passing / 545 |
+| v6.19.0 / `ee31dc7d` | `fea8a4f9` | 22.23.2, 24.20.0, 26.7.0 | 285 passing / 327 |
+
+Both full, unfiltered linux/arm64 runs returned **PASS WITH KNOWN FAILURES**, with **zero
+new, changed, or unexpected failures**. Every runtime had 95/109 candidate passes versus
+83/109 released-control passes; the remaining 14 candidate failures matched the exact defects
+documented above and were freshly reproduced by the control. They are not passing cases.
+The frozen shim and expectations were not changed.
+
+The branches are `joey/migrate-datadog-lambda-pr3-v5` and `joey/migrate-datadog-lambda-pr3-v6`.
+Versions, engine bounds, dependency manifests and lockfiles remain those of the release bases.
+The only cherry-pick conflict was generated config types; regenerating from each target's
+merged schema resolved it without importing unrelated master settings. The Lambda implementation,
+facade, plugin manager and config wiring match the source snapshot.
+
+Reports, raw outputs, installed-source verification and provenance are retained beside the
+checkouts in `lambda-backport-v5-20261002/` and `lambda-backport-v6-20261002/`.
+Candidate tarball SHA-256 values:
+
+- v5: `40f23409f225023a9b65f7c87ad78ce22a1ed8062e244899b044d98be8a6d9b0`
+- v6: `7aa1b097a5177dae21244ea41110a37d9ab3ea9fb82e5c832003d9e7ee5d9a9a`
+
+On host Node 25.8.0, each backport passed 110 Lambda lifecycle tests, 58 plugin-manager tests,
+203 structure/instrumentation/plugin/utility tests and 23 harness tests. Config tests passed
+384 with 9 existing skips on v5, and 390 with 3 existing skips on v6. Generated-config verification,
+targeted lint and public type checks passed, including the v5 declaration surface substituted
+as `index.d.ts` in the compiler host to model the release type swap without editing the checkout.
+The complete v5 Lambda suite also passed all 110 tests on Node 18.20.8 in a disposable container
+copy. The initial read-only run reached 109 passes but blocked the packing fixture: that image's
+npm 10.8.2 runs `prepare` despite `--ignore-scripts`. Allowing preparation in the disposable copy
+resolved the setup failure without changing the real checkout, test assertions or timeout.
+
+An ad-hoc combined config/manager process hit six logger assertions on both the candidate and
+unchanged v5 base `c8bc9be2`: config tests invalidate the cached logger while the manager spec
+retains the old reference. The normal separate-process test layout passes. No assertion was
+weakened and no unrelated production change was included.
+
+The bundled strict compatibility skill was also run on v6/Node 22. It correctly returned failure
+for the same 14 legacy defects; its two mixed-layer signature differences contain random trace
+IDs, with the same lost-parent/root relationships in the raw payloads. That strict run is retained
+in `lambda-backport-v6-skill-20261002/`, not relabeled as a pass.
+
+These are **local backport artifacts**, packed on the host with `--ignore-scripts`, as requested by this gate.
+The branches have not been pushed, and this does not claim GitHub/amd64 CI or release approval.
+Backport PRs must still run their own required checks; any subsequent source change needs new evidence.
 
 ## Remaining release evidence
 

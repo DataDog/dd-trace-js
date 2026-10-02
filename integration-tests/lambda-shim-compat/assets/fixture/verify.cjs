@@ -24,8 +24,8 @@ for (const pkg of [tracer, shim]) {
     `${pkg.name}@${pkg.version} requires ${pkg.engines.node}; runtime is ${process.version}`)
 }
 if (tracer.nodeMaxMajor !== undefined) {
-  assert.ok(Number(process.versions.node.split('.')[0]) <= Number(tracer.nodeMaxMajor),
-    `Runtime exceeds dd-trace nodeMaxMajor=${tracer.nodeMaxMajor}`)
+  assert.ok(Number(process.versions.node.split('.')[0]) < Number(tracer.nodeMaxMajor),
+    `Runtime must be below dd-trace nodeMaxMajor=${tracer.nodeMaxMajor}`)
 }
 for (const [file, expected] of Object.entries(metadata.sourceHashes)) {
   const bytes = fs.readFileSync(path.join(root, 'dd-trace', file))

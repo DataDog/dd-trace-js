@@ -9,8 +9,9 @@ function plan (pkg) {
   const semver = require('semver')
   const major = semver.major(pkg.version)
   assert.ok([5, 6, 7].includes(major), `Choose a reviewed released control for tracer major ${major}`)
+  // Match tracer guardrails: nodeMaxMajor is the first unsupported major, not the last supported one.
   const node = Object.keys(images).filter(runtime =>
-    semver.intersects(`${runtime}.x`, pkg.engines.node) && Number(runtime) <= pkg.nodeMaxMajor)
+    semver.intersects(`${runtime}.x`, pkg.engines.node) && Number(runtime) < pkg.nodeMaxMajor)
   assert.ok(node.length, 'No compatible Lambda runtimes; update the pinned image inventory')
   return { node }
 }
