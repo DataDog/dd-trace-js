@@ -6,6 +6,7 @@ const realSetTimeout = setTimeout
 const { AsyncResource } = require('node:async_hooks')
 const { fileURLToPath } = require('node:url')
 
+const { createFinalFlushTimeoutError, FINAL_FLUSH_TIMEOUT } = require('../../dd-trace/src/ci-visibility/final-flush')
 const { EMPTY_EFD_RETRY_POLICY } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -30,6 +31,9 @@ const {
   SCREENSHOT_UPLOAD_RESPONSE,
   sendWebdriverioWorkerMessage,
   SUITE_FINISH,
+  VIDEO_UPLOAD,
+  VIDEO_UPLOAD_FLUSH,
+  VIDEO_UPLOAD_RESPONSE,
   WEBDRIVERIO_WORKER_ENV,
   WEBDRIVERIO_WORKER_EVENT,
   WEBDRIVERIO_WORKER_ORIGIN,
@@ -52,6 +56,8 @@ const logSubmissionFlushCh = channel('ci:log-submission:flush')
 const modifiedFilesCh = channel('ci:mocha:modified-files')
 const screenshotCapabilitiesCh = channel('ci:webdriverio:screenshot:capabilities')
 const screenshotUploadCh = channel('ci:webdriverio:screenshot:upload')
+const videoCapabilitiesCh = channel('ci:webdriverio:video:capabilities')
+const videoUploadCh = channel('ci:webdriverio:video:upload')
 const testManagementTestsCh = channel('ci:mocha:test-management-tests')
 const workerConfigurationCh = channel('ci:mocha:worker:configuration')
 const workerReportLogsCh = channel('ci:mocha:worker-report:logs')
@@ -957,6 +963,8 @@ function waitForRumTestStart (context) {
  * @property {boolean|undefined} hasTests
  * @property {number|undefined} exitCode
  * @property {number|undefined} retries
+ * @property {AbortController|undefined} videoController
+ * @property {ReturnType<typeof setTimeout>|undefined} videoFlushTimer
  */
 
 /**
@@ -1019,6 +1027,7 @@ function createWorkerConfiguration () {
     isItrEnabled: false,
     isKnownTestsEnabled: false,
     isTestFailureScreenshotsEnabled: false,
+    isTestFailureVideosEnabled: false,
     isSuitesSkippingEnabled: false,
     isTestDynamicInstrumentationEnabled: false,
     isTestManagementTestsEnabled: false,
@@ -1327,6 +1336,9 @@ function configureCoordinator (state, response) {
   const screenshotCapabilities = {}
   screenshotCapabilitiesCh.publish(screenshotCapabilities)
   configuration.isTestFailureScreenshotsEnabled = screenshotCapabilities.enabled === true
+  const videoCapabilities = {}
+  videoCapabilitiesCh.publish(videoCapabilities)
+  configuration.isTestFailureVideosEnabled = videoCapabilities.enabled === true
 
   configuration.repositoryRoot = repositoryRoot
   if (err || !libraryConfig) {
@@ -1687,23 +1699,42 @@ function handleWorkerMessage (state, workerRecord, message) {
     handleConfigurationRequest(state, workerRecord, message)
     return
   }
-  if (message.name === SCREENSHOT_UPLOAD) {
+  if (message.name === VIDEO_UPLOAD_FLUSH) {
+    const controller = workerRecord.videoController ??= new AbortController()
+    workerRecord.videoFlushTimer ??= setTimeout(() => {
+      controller.abort(createFinalFlushTimeoutError())
+    }, FINAL_FLUSH_TIMEOUT)
+    workerRecord.videoFlushTimer.unref?.()
+    return
+  }
+  if (message.name === SCREENSHOT_UPLOAD || message.name === VIDEO_UPLOAD) {
+    const isVideo = message.name === VIDEO_UPLOAD
+    const uploadCh = isVideo ? videoUploadCh : screenshotUploadCh
     const { requestId, ...content } = message.content || {}
     const respond = (error) => sendWorkerMessage(workerRecord, {
       origin: 'datadog',
-      name: SCREENSHOT_UPLOAD_RESPONSE,
+      name: isVideo ? VIDEO_UPLOAD_RESPONSE : SCREENSHOT_UPLOAD_RESPONSE,
       content: {
         error: error?.message,
         requestId,
       },
     })
-    if (!requestId || !screenshotUploadCh.hasSubscribers) {
-      respond(new Error('WebdriverIO screenshot upload is not available'))
+    if (!requestId || !uploadCh.hasSubscribers) {
+      respond(new Error('WebdriverIO media upload is not available'))
     } else {
       try {
-        screenshotUploadCh.publish({ ...content, onDone: respond })
+        let signal
+        if (isVideo) {
+          workerRecord.videoController ??= new AbortController()
+          signal = workerRecord.videoController.signal
+        }
+        uploadCh.publish({
+          ...content,
+          signal,
+          onDone: respond,
+        })
       } catch (error) {
-        log.error('WebdriverIO screenshot upload error: %s', error?.message || String(error))
+        log.error('WebdriverIO media upload error: %s', error?.message || String(error))
         respond(error)
       }
     }
@@ -1732,6 +1763,8 @@ function handleWorkerMessage (state, workerRecord, message) {
  * @param {object} exit
  */
 function handleWorkerExit (state, workerRecord, exit) {
+  clearTimeout(workerRecord.videoFlushTimer)
+  workerRecord.videoController?.abort(new Error('WebdriverIO worker exited during video upload'))
   state.activeWorkers--
   workerRecord.exitCode = exit.exitCode
   workerRecord.retries = exit.retries
@@ -1768,6 +1801,8 @@ function registerWorker (state, worker, specs) {
     hasTests: undefined,
     exitCode: undefined,
     retries: undefined,
+    videoController: undefined,
+    videoFlushTimer: undefined,
   }
   state.activeWorkers++
   if (state.activeWorkers > state.maxActiveWorkers) {

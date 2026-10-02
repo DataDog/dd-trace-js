@@ -2,6 +2,7 @@
 
 const scenario = process.env.WEBDRIVERIO_SCENARIO || 'parallel'
 const framework = process.env.WEBDRIVERIO_FRAMEWORK || 'mocha'
+let fakeClock
 
 const baseConfig = {
   runner: 'local',
@@ -21,6 +22,14 @@ const baseConfig = {
   services: [],
   framework,
   reporters: [],
+  before () {
+    if (process.env.WEBDRIVERIO_FAKE_DATE === 'true') {
+      fakeClock = require('@sinonjs/fake-timers').install({ toFake: ['Date'] })
+    }
+  },
+  after () {
+    fakeClock?.uninstall()
+  },
   jasmineOpts: {
     defaultTimeoutInterval: 10_000,
     random: false,
@@ -32,6 +41,46 @@ const baseConfig = {
 }
 
 const scenarioConfig = {
+  videosBrowser: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./videos-browser.e2e.js'],
+    hostname: undefined,
+    port: undefined,
+    capabilities: [{
+      browserName: 'chrome',
+      'wdio:enforceWebDriverClassic': process.env.WEBDRIVERIO_CLASSIC === 'true',
+      ...(process.env.WEBDRIVERIO_CHROMEDRIVER_BINARY
+        ? { 'wdio:chromedriverOptions': { binary: process.env.WEBDRIVERIO_CHROMEDRIVER_BINARY } }
+        : {}),
+      'goog:chromeOptions': {
+        ...(process.env.WEBDRIVERIO_CHROME_BINARY ? { binary: process.env.WEBDRIVERIO_CHROME_BINARY } : {}),
+        args: ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--window-size=1000,800'],
+      },
+    }],
+  },
+  videos: {
+    injectGlobals: false,
+    maxInstances: 1,
+    specs: ['./videos.e2e.js'],
+  },
+  videosJasmineRetry: {
+    maxInstances: 1,
+    specs: ['./jasmine-retry.e2e.js'],
+  },
+  videosParallel: {
+    injectGlobals: false,
+    capabilities: [{ browserName: 'chrome' }, { browserName: 'firefox' }],
+    specs: ['./videos.e2e.js'],
+  },
+  videosMultiremote: {
+    injectGlobals: false,
+    capabilities: {
+      firstBrowser: { capabilities: { browserName: 'chrome' } },
+      secondBrowser: { capabilities: { browserName: 'firefox' } },
+    },
+    specs: ['./videos.e2e.js'],
+  },
   emptyShard: {
     specs: ['./first.e2e.js'],
     shard: { current: 2, total: 2 },
