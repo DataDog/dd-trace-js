@@ -4438,12 +4438,12 @@ declare namespace tracer {
       /**
        * The input content associated with the span.
        */
-      input: { content: string, role?: string }[]
+      input: { content: JSONType, role?: string }[]
 
       /**
        * The output content associated with the span.
        */
-      output: { content: string, role?: string }[]
+      output: { content: JSONType, role?: string }[]
 
       /**
        * Get a tag from the span.
