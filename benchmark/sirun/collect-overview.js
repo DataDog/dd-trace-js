@@ -6,9 +6,9 @@
 
 // Local overview collector. For every variant of every bench it runs sirun a few
 // times, computes the per-iteration wall.time mean + stddev from sirun's raw
-// `iterations` array (wall.time is microseconds), reads the startup-share the
-// guard writes in report mode, and writes a markdown table. Numbers are local
-// (unpinned macOS) and meant as an overview, not the CI gate. Re-run with:
+// `iterations` array (wall.time is microseconds), and writes a markdown table.
+// Numbers are local (unpinned macOS) and meant as an overview, not the CI gate.
+// Re-run with:
 //   node collect-overview.js
 
 const fs = require('fs')
@@ -24,7 +24,6 @@ const only = process.argv[2] ? new Set(process.argv[2].split(',')) : null
 const OUT = only
   ? path.join(require('os').tmpdir(), 'overview-test.md')
   : path.join(DIR, 'benchmark-overview.md')
-const SG_FILE = path.join(require('os').tmpdir(), 'sg-overview.txt')
 
 // Curated per-bench judgment the run cannot measure.
 const HIGH_MEANING = new Set([
@@ -76,12 +75,12 @@ fs.writeFileSync(OUT,
   '# sirun benchmark overview\n\n' +
   `Local macOS, ${SAMPLES} samples/variant (overview-grade, not the CI gate). ` +
   'wall.time is microseconds in sirun; reported per-iteration in ms. ' +
-  '"total" = mean x configured iterations. "startup%" = load+setup share from the guard.\n\n' +
+  '"total" = mean x configured iterations.\n\n' +
   'Live client/server benches (appsec, appsec-iast, http, net, debugger) are network/scheduler ' +
   'noisy locally, so their stddev here is not meaningful -- CI with core pinning is authoritative. ' +
   'startup-time variants need /opt/insecure-bank-js (a CI-only clone) and show "error" locally.\n\n' +
-  '| bench | variant | category | meaning | inner loop | iters | per-iter ms | stddev% | total s | startup% |\n' +
-  '|---|---|---|---|---|---|---|---|---|---|\n')
+  '| bench | variant | category | meaning | inner loop | iters | per-iter ms | stddev% | total s |\n' +
+  '|---|---|---|---|---|---|---|---|---|\n')
 
 for (const name of benches) {
   if (only && !only.has(name)) continue
@@ -98,9 +97,7 @@ for (const name of benches) {
       ...process.env,
       SIRUN_VARIANT: variant,
       DD_TRACE_STARTUP_LOGS: 'false',
-      STARTUP_GUARD_REPORT: SG_FILE,
     }
-    try { fs.unlinkSync(SG_FILE) } catch {}
 
     const variantCfg = meta.variants?.[variant] || {}
     const variantIters = variantCfg.iterations || configIters
@@ -108,7 +105,6 @@ for (const name of benches) {
     let perIterMs = '-'
     let stddevPct = '-'
     let totalS = '-'
-    let startupPct = '-'
 
     // sirun runs the variant's setup (client/server, service) when present, so
     // live benches measure too as long as the deps and ports are available.
@@ -130,12 +126,10 @@ for (const name of benches) {
       perIterMs = res.signal === 'SIGTERM' ? 'timeout' : 'error'
     }
 
-    try { startupPct = (Number(fs.readFileSync(SG_FILE, 'utf8')) * 100).toFixed(1) } catch {}
-
     fs.appendFileSync(OUT,
       `| ${name} | ${variant} | ${categoryOf(name)} | ${meaningOf(name)} | ${inner} | ` +
-      `${variantIters} | ${perIterMs} | ${stddevPct} | ${totalS} | ${startupPct} |\n`)
-    console.log(`${name}/${variant} ${perIterMs}ms sd=${stddevPct}% ${totalS}s start=${startupPct}%`)
+      `${variantIters} | ${perIterMs} | ${stddevPct} | ${totalS} |\n`)
+    console.log(`${name}/${variant} ${perIterMs}ms sd=${stddevPct}% ${totalS}s`)
   }
 
   try { fs.unlinkSync(tmpMeta) } catch {}
