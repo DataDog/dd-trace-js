@@ -16,6 +16,8 @@ const {
   METADATA,
   COST_TAGS,
   TOOL_DEFINITIONS,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -182,8 +184,13 @@ class LLMObsSpanProcessor {
     }
 
     const llmObsSpan = new LLMObservabilitySpan(spanKind)
+    const isExperiment = spanKind === 'experiment'
+    const hasExperimentInput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_INPUT)
+    const hasExperimentOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_OUTPUT)
 
-    if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
+    if (hasExperimentInput) {
+      llmObsSpan.input = [{ role: '', content: mlObsTags[EXPERIMENT_INPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
       llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
     } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
@@ -194,7 +201,9 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
+    if (hasExperimentOutput) {
+      llmObsSpan.output = [{ role: '', content: mlObsTags[EXPERIMENT_OUTPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
     } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
@@ -226,34 +235,41 @@ class LLMObsSpanProcessor {
     const processedSpan = this.#runProcessor(llmObsSpan)
     if (processedSpan === undefined) return null
 
-    if (processedSpan.input) {
-      if (inputType === 'messages') {
-        input.messages = processedSpan.input
-      } else if (inputType === 'value') {
-        input.value = processedSpan.input[0].content
-      } else if (inputType === 'documents') {
-        input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+    if (isExperiment) {
+      const [processedInput] = processedSpan.input
+      const [processedOutput] = processedSpan.output
+      if (hasExperimentInput && processedInput !== undefined) meta.input = processedInput.content
+      if (hasExperimentOutput && processedOutput !== undefined) meta.output = processedOutput.content
+    } else {
+      if (processedSpan.input) {
+        if (inputType === 'messages') {
+          input.messages = processedSpan.input
+        } else if (inputType === 'value') {
+          input.value = processedSpan.input[0].content
+        } else if (inputType === 'documents') {
+          input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (processedSpan.output) {
-      if (outputType === 'messages') {
-        output.messages = processedSpan.output
-      } else if (outputType === 'value') {
-        output.value = processedSpan.output[0].content
-      } else if (outputType === 'documents') {
-        output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+      if (processedSpan.output) {
+        if (outputType === 'messages') {
+          output.messages = processedSpan.output
+        } else if (outputType === 'value') {
+          output.value = processedSpan.output[0].content
+        } else if (outputType === 'documents') {
+          output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (input) meta.input = input
-    if (output) meta.output = output
+      meta.input = input
+      meta.output = output
+    }
 
     const prompt = mlObsTags[INPUT_PROMPT]
     if (prompt && spanKind === 'llm') {
