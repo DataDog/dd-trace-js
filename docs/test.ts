@@ -712,6 +712,7 @@ llmobs.registerProcessor((llmobsSpan) => {
     llmobsSpan.input = llmobsSpan.input.map(input => {
       return {
         ...input,
+        content: { redacted: true },
       }
     })
   }
