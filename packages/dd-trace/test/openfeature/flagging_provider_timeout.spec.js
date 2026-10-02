@@ -48,6 +48,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     log = {
       debug: sinon.spy(),
       error: sinon.spy(),
+      errorWithoutTelemetry: sinon.spy(),
       warn: sinon.spy(),
     }
 
@@ -141,6 +142,7 @@ describe('FlaggingProvider Initialization Timeout', () => {
     // Verify initialization completed successfully
     assert.strictEqual(provider.initController.isInitializing(), false)
     assert.strictEqual(provider.getConfiguration(), ufc)
+    sinon.assert.calledWith(log.debug, 'Feature Flags: provider initialized successfully')
   })
 
   it('should call setError with timeout message after 30 seconds', async () => {
@@ -166,6 +168,30 @@ describe('FlaggingProvider Initialization Timeout', () => {
     const errorArg = setErrorSpy.firstCall.args[0]
     assert.ok(errorArg instanceof Error)
     assert.strictEqual(errorArg.message, 'Initialization timeout after 30000ms')
+
+    sinon.assert.calledOnceWithExactly(
+      log.errorWithoutTelemetry,
+      'Feature Flags: provider failed to initialize: %s',
+      'Initialization timeout after 30000ms'
+    )
+  })
+
+  it('logs a non-Error rejection reason without throwing', async () => {
+    const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+    const initPromise = provider.initialize()
+    initPromise.catch(() => {})
+
+    // setError() is a public provider method; its argument is not guaranteed to be an Error.
+    provider.setError('plain string failure')
+
+    await initPromise.catch(() => {})
+
+    sinon.assert.calledOnceWithExactly(
+      log.errorWithoutTelemetry,
+      'Feature Flags: provider failed to initialize: %s',
+      'plain string failure'
+    )
   })
 
   it('should allow recovery if configuration is set after timeout', async () => {
