@@ -1,0 +1,59 @@
+# How to configure:
+#
+# When no team is frozen, set `frozen-teams` to an empty string:
+# frozen-teams: ""
+#
+# When one or more teams are frozen, add them one per line with the @DataDog prefix:
+#
+# frozen-teams: |
+#   @DataDog/team-a
+#   @DataDog/team-b
+#
+# ----
+#
+# Events push, schedule and workflow_dispatch are used to warm the membership cache, to avoid any GH API call during PRs
+
+name: Team freeze guard
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+  push:
+    branches:
+      - master # default branch
+    paths:
+      - .github/workflows/team-freeze-guard.yml
+  schedule:
+    - cron: "0 12 * * *" # if team composition changes
+  workflow_dispatch: # force cache update
+
+concurrency:
+  # Serializes push/schedule/workflow_dispatch warm-up runs against each other so a
+  # slower run can never finish after a faster one and overwrite its fresher cache
+  # entry with a stale one. Each pull_request_target run gets its own group by PR
+  # number so PR evaluations are never queued behind cache warm-ups or each other.
+  group: >-
+    ${{ contains(fromJSON('["push","schedule","workflow_dispatch"]'), github.event_name)
+        && 'team-freeze-guard-cache-warmup'
+        || format('team-freeze-guard-pr-{0}', github.event.pull_request.number) }}
+  cancel-in-progress: false
+
+jobs:
+  team-freeze-guard:
+    name: Team freeze guard
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      actions: write # for team membership cache
+    steps:
+      - uses: DataDog/team-freeze-guard@d972736cb1c9ae781bdb3cf4564193eb27ee6339 # v0.0.6
+        with:
+          # subset of pattern defined here:
+          # .github/workflows/pr-title.yml#L22C85-L23C128
+          bypass-title-pattern: '^(revert(!)?: .+|(fix|test|ci)(\(([^)]+)\))?(!)?: .+)'
+          frozen-teams: ""

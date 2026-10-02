@@ -180,6 +180,13 @@ function getEvents (payloads) {
   return payloads
     .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
     .flatMap(({ payload }) => payload.events)
+    // Screenshot uploads can reorder exports; trace clocks can also overlap for very short attempts.
+    // Use retry/final-status tags to keep initial and final attempts at the ends of each test's sequence.
+    .sort(({ content: a }, { content: b }) => {
+      const retryOrder = Number(a.meta[TEST_IS_RETRY] === 'true') - Number(b.meta[TEST_IS_RETRY] === 'true')
+      const finalOrder = Number(TEST_FINAL_STATUS in a.meta) - Number(TEST_FINAL_STATUS in b.meta)
+      return retryOrder || finalOrder || (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)
+    })
 }
 
 /**

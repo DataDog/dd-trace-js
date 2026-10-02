@@ -94,6 +94,7 @@ const {
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const {
   SCREENSHOT_UPLOAD_RESULT_ERROR,
   SCREENSHOT_UPLOAD_RESULT_UPLOADED,
@@ -451,6 +452,8 @@ function getFinalStatus ({
 }
 
 class CypressPlugin {
+  #pendingTestSuiteSpans = new Map()
+
   _isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
@@ -548,6 +551,7 @@ class CypressPlugin {
    *
    */
   resetRunState () {
+    this.#pendingTestSuiteSpans.clear()
     this._isInit = false
     this.finishedTestsByFile = {}
     this.hasTestsReported = false
@@ -854,6 +858,12 @@ class CypressPlugin {
 
     const testOptimizationConfig = getConfig().testOptimization
     this.rumFlushWaitMillis = testOptimizationConfig.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    if (getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED', true) === true) {
+      cypressConfig.screenshotOnRunFailure = true
+    }
+    if (getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true) {
+      cypressConfig.video = true
+    }
     this.warnIfMisconfiguredTestFailureScreenshots(cypressConfig, tracer, testOptimizationConfig)
     this.warnIfMisconfiguredTestFailureVideos(cypressConfig, tracer, testOptimizationConfig)
 
@@ -1048,7 +1058,7 @@ class CypressPlugin {
       }
     }
 
-    return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
+    const testSuiteSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_suite`, {
       childOf: this.testModuleSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
@@ -1057,9 +1067,13 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    this.#pendingTestSuiteSpans.set(testSuite, testSuiteSpan)
+    return testSuiteSpan
   }
 
-  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
+  getTestSpan ({
+    testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined, startTime,
+  }) {
     const testSuiteTags = {
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
     }
@@ -1116,6 +1130,7 @@ class CypressPlugin {
 
     return this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test`, {
       childOf,
+      startTime,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         [ORIGIN_KEY]: CI_APP_ORIGIN,
@@ -1348,6 +1363,20 @@ class CypressPlugin {
   }
 
   afterRun (suiteStats, error) {
+    const pendingFinalizations = []
+    // Late manual initialization cannot intercept a later replacement of after:spec.
+    // Run results let us finalize the suites whose browser hooks already created spans.
+    if (this._isInit && suiteStats?.runs) {
+      for (const result of suiteStats.runs) {
+        const testSuiteSpan = this.#pendingTestSuiteSpans.get(result.spec?.relative)
+        if (!testSuiteSpan) continue
+        this.testSuiteSpan = testSuiteSpan
+        const endedAt = Date.parse(result.stats?.endedAt)
+        const finalization = this.afterSpec(result.spec, result, undefined,
+          Number.isFinite(endedAt) ? endedAt : undefined)
+        if (finalization) pendingFinalizations.push(finalization)
+      }
+    }
     const hasPendingVideoSpans = this.pendingVideoUploads.length > 0
     const videoUploadsPromise = this.uploadPendingTestSuiteVideos()
     if (!this._isInit) {
@@ -1358,7 +1387,11 @@ class CypressPlugin {
       }
       return
     }
-    const finalizationPromise = this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
+    // Recovered screenshot-only tests must finish before the run closes any remaining trace spans.
+    const finalizeRun = () => this.#finalizeRun(suiteStats, error, hasPendingVideoSpans)
+    const finalizationPromise = pendingFinalizations.length > 0
+      ? Promise.all(pendingFinalizations).then(finalizeRun)
+      : finalizeRun()
     if (videoUploadsPromise) {
       return Promise.all([videoUploadsPromise, finalizationPromise])
         .then(() => this.#flushExporter(false))
@@ -1503,7 +1536,7 @@ class CypressPlugin {
     }
   }
 
-  afterSpec (spec, results, error) {
+  afterSpec (spec, results, error, finishTime) {
     const { tests, stats, screenshots, video, error: resultError } = results || {}
     const cypressTests = tests || []
     if (cypressTests.length > 0 || stats?.tests > 0) this.hasTestsReported = true
@@ -1539,7 +1572,10 @@ class CypressPlugin {
         ? getTestSuitePath(spec.absolute, this.repositoryRoot)
         : spec.relative
 
-      const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+      // Recovered tests that never ran have no execution time; keep them at the recorded suite end.
+      const skippedTestSpan = this.getTestSpan({
+        testName: cypressTestName, testSuite: spec.relative, testSourceFile, startTime: finishTime,
+      })
       skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
 
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
@@ -1577,7 +1613,7 @@ class CypressPlugin {
         })
       }
 
-      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: this._now() })
+      testSpanFinishes.push({ testSpan: skippedTestSpan, finishTime: finishTime ?? this._now() })
     }
 
     // Make sure that reported test statuses are the same as Cypress reports.
@@ -1748,7 +1784,7 @@ class CypressPlugin {
       }
     }
 
-    const testSuiteFinishTime = this._now()
+    const testSuiteFinishTime = finishTime ?? this._now()
     const suiteError = error || resultError || latestError
     const suiteStatus = suiteError ||
       cypressTests.some(test => CYPRESS_STATUS_TO_TEST_STATUS[test.state] === 'fail')
@@ -1770,6 +1806,7 @@ class CypressPlugin {
       testSuiteSpan.setTag(TEST_STATUS, suiteStatus)
       if (suiteError) testSuiteSpan.setTag('error', suiteError)
       this.testSuiteSpan = null
+      this.#pendingTestSuiteSpans.delete(spec.relative)
     }
 
     let testSpansPromise
@@ -2033,7 +2070,8 @@ class CypressPlugin {
           rumTestExecutionIdCookieName: RUM_TEST_EXECUTION_ID_COOKIE_NAME,
         }
 
-        this.testSuiteSpan ||= this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
+        this.testSuiteSpan = this.#pendingTestSuiteSpans.get(testSuite) ||
+          this.getTestSuiteSpan({ testSuite, testSuiteAbsolutePath })
         return suitePayload
       },
       'dd:beforeEach': (test) => {

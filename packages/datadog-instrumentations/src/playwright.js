@@ -69,13 +69,16 @@ const dispatcherCreateWorkerCh = tracingChannel('orchestrion:playwright:Dispatch
 const filterForShardCh = tracingChannel('orchestrion:playwright:filterForShard')
 const processHostStartRunnerCh = tracingChannel('orchestrion:playwright:ProcessHost_startRunner')
 const createRootSuiteCh = tracingChannel('orchestrion:playwright:createRootSuite')
+const lastRunTestIdCh = tracingChannel('orchestrion:playwright:lastRunTestId')
 const artifactsRecorderScreenshotPathCh =
   tracingChannel('orchestrion:playwright:ArtifactsRecorder_createScreenshotAttachmentPath')
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
 const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomaticVideo')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
+const fullProjectInternalCh = tracingChannel('orchestrion:playwright:FullProjectInternal')
 
 const testToCtx = new WeakMap()
+const originalTestIdsByRetry = new WeakMap()
 const testSuiteToCtx = new Map()
 const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
@@ -89,6 +92,8 @@ const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 const isFailureVideoUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') === true
+const shouldEnableFailureScreenshots = getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED', true) === true
+const shouldEnableFailureVideos = getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true
 
 let applyRepeatEachIndex = null
 let reporterError
@@ -475,6 +480,7 @@ function deepCloneSuite (suite, filterTest, tags = [], configureCopiedTest) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
+        originalTestIdsByRetry.set(copiedTest, originalTestIdsByRetry.get(entry) ?? entry.id)
         if (configureCopiedTest) {
           configureCopiedTest(copiedTest, entry)
         }
@@ -1054,6 +1060,8 @@ function testEndHandler ({
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
+    // Serial suites can add skipped results before a test's first execution.
+    results.some((result, index) => index < results.length - 1 && result.status !== 'skipped') &&
     !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
@@ -1879,6 +1887,27 @@ dispatcherRunCh.subscribe({
   },
 })
 
+fullProjectInternalCh.subscribe({
+  end ({ self, error }) {
+    if (error || !libraryConfigurationCh.hasSubscribers) return
+
+    // Workers reload the config, so apply capture settings as each project is resolved in either process.
+    const { project } = self
+    if (shouldEnableFailureScreenshots && !isFailureScreenshotCaptureEnabled([project])) {
+      const screenshot = project.use.screenshot
+      project.use.screenshot = typeof screenshot === 'object' && screenshot !== null
+        ? { ...screenshot, mode: 'only-on-failure' }
+        : 'only-on-failure'
+    }
+    if (shouldEnableFailureVideos && !isFailureVideoCaptureEnabled([project])) {
+      const video = project.use.video
+      project.use.video = typeof video === 'object' && video !== null
+        ? { ...video, mode: 'retain-on-failure' }
+        : 'retain-on-failure'
+    }
+  },
+})
+
 dispatcherCreateWorkerCh.subscribe({
   end (ctx) {
     onDispatcherCreateWorker(ctx.self, ctx.result)
@@ -1917,6 +1946,14 @@ pageGotoCh.subscribe({
     // The Page.goto rewriter waits for this so tests closing immediately after navigation still get RUM tags.
     const rumDetectionPromise = handlePageGoto(ctx.self)
     ctx.resolveCallback = onDone => rumDetectionPromise.then(onDone, onDone)
+  },
+})
+
+// Retry clones exist only after discovery, so persist their original IDs for --last-failed.
+lastRunTestIdCh.subscribe({
+  end (ctx) {
+    const originalId = originalTestIdsByRetry.get(ctx.arguments[0])
+    if (originalId !== undefined) ctx.result = originalId
   },
 })
 
@@ -1990,6 +2027,12 @@ snapshotRecorderScreenshotPathCh.subscribe({ end: recordAutomaticFailureScreensh
 saveAutomaticVideoCh.subscribe({ start: recordAutomaticFailureVideoPath })
 
 if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
+  tracingChannel('orchestrion:@playwright/test:Multiplexer_onError').subscribe({
+    start (ctx) {
+      recordReporterError(ctx.arguments[0])
+    },
+  })
+
   addHook({
     name: '@playwright/test',
     file: 'lib/runner.js',

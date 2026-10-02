@@ -1920,6 +1920,18 @@ index 1234567..89abcde 100644
 
     assert.deepStrictEqual(getModifiedFilesFromDiff(diff), expected)
   })
+
+  it('should retain the anchor of a deletion-only hunk', () => {
+    const diff = `diff --git a/test/file.js b/test/file.js
+index 1234567..89abcde 100644
+--- a/test/file.js
++++ b/test/file.js
+@@ -2,2 +1,0 @@
+-deleted line 1
+-deleted line 2`
+
+    assert.deepStrictEqual(getModifiedFilesFromDiff(diff), { 'test/file.js': [1] })
+  })
 })
 
 describe('isModifiedTest', () => {
