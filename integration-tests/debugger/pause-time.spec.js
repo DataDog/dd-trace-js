@@ -1,20 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
 
 const { DDSketch } = require('../../vendor/dist/@datadog/sketches-js')
-const { METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', function () {
-  this.timeout(METRICS_FLUSH_INTERVAL_MS * 3)
-
   const t = setup({
-    testApp: 'target-app/basic.js',
-    dependencies: ['fastify'],
     env: {
       DD_TRACE_DEBUG: 'false',
-      DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
     },
   })
 
@@ -22,6 +17,7 @@ describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', funct
     it(`should send a pause duration sketch for a ${captureSnapshot ? 'snapshot' : 'log'} probe`, async function () {
       const probe = t.generateRemoteConfig({ captureSnapshot })
       const installed = t.waitForProbeStatus([probe.config.id], 'INSTALLED')
+      const exited = once(t.proc, 'exit')
       const received = t.agent.assertTelemetryReceived({
         requestType: 'sketches',
         namespace: 'live_debugger',
@@ -36,13 +32,22 @@ describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', funct
           assert.ok(durationMs > 0)
           assert.ok(Number.isFinite(durationMs))
         },
-        timeout: METRICS_FLUSH_INTERVAL_MS * 2,
       })
 
       t.agent.addRemoteConfig(probe)
       await Promise.all([
         received,
-        installed.then(() => t.request(t.breakpoint.url)),
+        exited,
+        installed.then(async () => {
+          // The worker records the pause duration before it reports the probe as emitting
+          await Promise.all([
+            t.waitForProbeStatus([probe.config.id], 'EMITTING'),
+            t.request(t.breakpoint.url),
+          ])
+          // Rather than waiting for the periodic flush, let the app send the recorded durations with its final
+          // telemetry
+          await t.request('/exit')
+        }),
       ])
     })
   }
