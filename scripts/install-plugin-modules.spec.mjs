@@ -78,17 +78,42 @@ describe('plugin fixture discovery', () => {
   })
 
   it('selects BullMQ and its Redis external through the installer entrypoint', () => {
-    const fixtureRoot = mkdtempSync(join(tmpdir(), 'dd-trace-plugin-installer-'))
-    try {
-      const scripts = join(fixtureRoot, 'scripts')
-      mkdirSync(scripts)
-      symlinkSync(join(root, 'packages'), join(fixtureRoot, 'packages'), 'junction')
-      symlinkSync(join(root, 'node_modules'), join(fixtureRoot, 'node_modules'), 'junction')
-      symlinkSync(join(root, 'scripts', 'helpers'), join(scripts, 'helpers'), 'junction')
-      copyFileSync(join(root, 'scripts', 'install_plugin_modules.js'), join(scripts, 'install_plugin_modules.js'))
+    withInstallerFixture({ PLUGINS: 'bullmq', PACKAGE_VERSION_RANGE: '5.66.0' }, fixtureRoot => {
+      const workspace = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json')))
+      assert.ok(workspace.workspaces.packages.includes('bullmq@5.66.0'))
+      assert.ok(workspace.workspaces.packages.includes('redis'))
+      const redis = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'redis', 'package.json')))
+      assert.match(redis.dependencies.redis, /^>=4/)
+    })
+  })
 
-      const preload = join(fixtureRoot, 'preload.cjs')
-      writeFileSync(preload, String.raw`
+  it('applies PACKAGE_VERSION_RANGE to the Supabase client external through the installer entrypoint', () => {
+    withInstallerFixture({ PLUGINS: 'supabase', PACKAGE_VERSION_RANGE: '2.115.0' }, fixtureRoot => {
+      const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'))).workspaces
+      assert.ok(packages.includes('@supabase/supabase-js@2.115.0'))
+      assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
+    })
+  })
+})
+
+/**
+ * Run the real installer entrypoint against a throwaway `versions/` tree with `yarn` stubbed out.
+ *
+ * @param {Record<string, string>} env
+ * @param {(fixtureRoot: string) => void} assertions
+ */
+function withInstallerFixture (env, assertions) {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), 'dd-trace-plugin-installer-'))
+  try {
+    const scripts = join(fixtureRoot, 'scripts')
+    mkdirSync(scripts)
+    symlinkSync(join(root, 'packages'), join(fixtureRoot, 'packages'), 'junction')
+    symlinkSync(join(root, 'node_modules'), join(fixtureRoot, 'node_modules'), 'junction')
+    symlinkSync(join(root, 'scripts', 'helpers'), join(scripts, 'helpers'), 'junction')
+    copyFileSync(join(root, 'scripts', 'install_plugin_modules.js'), join(scripts, 'install_plugin_modules.js'))
+
+    const preload = join(fixtureRoot, 'preload.cjs')
+    writeFileSync(preload, String.raw`
 const fs = require('node:fs')
 const path = require('node:path')
 const execPath = require.resolve(process.env.DD_INSTALLER_EXEC_PATH)
@@ -101,23 +126,17 @@ require.cache[execPath] = {
 }
 `)
 
-      execFileSync(process.execPath, ['--require', preload, join(scripts, 'install_plugin_modules.js')], {
-        env: {
-          ...process.env,
-          DD_INSTALLER_EXEC_PATH: join(root, 'scripts/helpers/exec.js'),
-          PLUGINS: 'bullmq',
-          PACKAGE_VERSION_RANGE: '5.66.0',
-        },
-        stdio: 'pipe',
-      })
+    execFileSync(process.execPath, ['--require', preload, join(scripts, 'install_plugin_modules.js')], {
+      env: {
+        ...process.env,
+        DD_INSTALLER_EXEC_PATH: join(root, 'scripts/helpers/exec.js'),
+        ...env,
+      },
+      stdio: 'pipe',
+    })
 
-      const workspace = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json')))
-      assert.ok(workspace.workspaces.packages.includes('bullmq@5.66.0'))
-      assert.ok(workspace.workspaces.packages.includes('redis'))
-      const redis = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'redis', 'package.json')))
-      assert.match(redis.dependencies.redis, /^>=4/)
-    } finally {
-      rmSync(fixtureRoot, { recursive: true, force: true })
-    }
-  })
-})
+    assertions(fixtureRoot)
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true })
+  }
+}
