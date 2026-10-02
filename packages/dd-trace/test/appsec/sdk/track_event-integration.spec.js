@@ -2,11 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const axios = require('axios')
 const { after, before, describe, it } = require('mocha')
 
 const { USER_KEEP } = require('../../../../../ext/priority')
 const agent = require('../../plugins/agent')
+const httpRequest = require('../../setup/helpers/http-client')
 
 describe('track_event - Integration with the tracer', () => {
   let http
@@ -54,7 +54,7 @@ describe('track_event - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.events.users.login.success.metakey'], 'metaValue')
         assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not track without user', (done) => {
@@ -65,7 +65,7 @@ describe('track_event - Integration with the tracer', () => {
       agent.assertSomeTraces(traces => {
         assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.success.track'], 'true')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not track without calling the sdk method', (done) => {
@@ -75,7 +75,7 @@ describe('track_event - Integration with the tracer', () => {
       agent.assertSomeTraces(traces => {
         assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.success.track'], 'true')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
   })
 
@@ -92,7 +92,7 @@ describe('track_event - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.metakey'], 'metaValue')
         assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should track valid non existing user', (done) => {
@@ -107,7 +107,7 @@ describe('track_event - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.metakey'], 'metaValue')
         assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not track without user', (done) => {
@@ -118,7 +118,7 @@ describe('track_event - Integration with the tracer', () => {
       agent.assertSomeTraces(traces => {
         assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.failure.track'], 'true')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not track without calling the sdk method', (done) => {
@@ -128,7 +128,7 @@ describe('track_event - Integration with the tracer', () => {
       agent.assertSomeTraces(traces => {
         assert.notStrictEqual(traces[0][0].meta['appsec.events.users.login.failure.track'], 'true')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
   })
 
@@ -143,7 +143,7 @@ describe('track_event - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.events.my-custom-event.metakey'], 'metaValue')
         assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not track invalid event name', (done) => {
@@ -155,7 +155,7 @@ describe('track_event - Integration with the tracer', () => {
       agent.assertSomeTraces(traces => {
         assert.notStrictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
   })
 })

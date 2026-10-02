@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 
-const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const appsec = require('../../../src/appsec')
@@ -11,6 +10,7 @@ const blocking = require('../../../src/appsec/blocking')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const { json } = require('../../../src/appsec/blocking/templates')
+const httpRequest = require('../../setup/helpers/http-client')
 
 describe('user_blocking - Integration with the tracer', () => {
   const config = getConfigFresh({
@@ -66,7 +66,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['usr.id'], 'testUser3')
         assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not set the user if user is already defined', (done) => {
@@ -81,7 +81,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['usr.id'], 'testUser')
         assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should return true if user is in the blocklist', (done) => {
@@ -94,7 +94,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
         assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should return true action if userID was matched before with trackUserLoginSuccessEvent()', (done) => {
@@ -107,7 +107,7 @@ describe('user_blocking - Integration with the tracer', () => {
       agent.assertSomeTraces(traces => {
         assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
   })
 
@@ -131,7 +131,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.blocked'], 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '403')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should set the proper tags even when not passed req and res', (done) => {
@@ -143,7 +143,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.blocked'], 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '403')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should not set the proper tags when response has already been sent', (done) => {
@@ -157,7 +157,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         assert.strictEqual(traces[0][0].metrics['_dd.appsec.block.failed'], 1)
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`)
+      httpRequest.get(`http://localhost:${port}/`)
     })
 
     it('should block using redirect data if it is configured', (done) => {
@@ -185,7 +185,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(traces[0][0].meta['appsec.blocked'], 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '302')
       }).then(done).catch(done)
-      axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
+      httpRequest.get(`http://localhost:${port}/`, { maxRedirects: 0 })
     })
 
     it('should block using json body but remove security_response_id template', async () => {
@@ -193,7 +193,7 @@ describe('user_blocking - Integration with the tracer', () => {
         const ret = tracer.appsec.blockRequest(req, res)
         assert.strictEqual(ret, true)
       }
-      const response = await axios.get(`http://localhost:${port}/`, { validateStatus: false })
+      const response = await httpRequest.get(`http://localhost:${port}/`, { validateStatus: false })
       assert.strictEqual(JSON.stringify(response.data), json.replace('[security_response_id]', ''))
     })
 
@@ -211,7 +211,7 @@ describe('user_blocking - Integration with the tracer', () => {
         const ret = tracer.appsec.blockRequest(req, res)
         assert.strictEqual(ret, true)
       }
-      const response = await axios.get(`http://localhost:${port}/`, { maxRedirects: 0, validateStatus: false })
+      const response = await httpRequest.get(`http://localhost:${port}/`, { maxRedirects: 0, validateStatus: false })
       assert.strictEqual(response.headers.location, '/redirected?should_ignore=')
     })
   })
