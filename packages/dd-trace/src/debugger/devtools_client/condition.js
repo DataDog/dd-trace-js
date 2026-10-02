@@ -3,8 +3,11 @@
 module.exports = {
   compile,
   compileSegments,
+  getSegmentRedactionErrors,
   templateRequiresEvaluation,
 }
+
+const { isRedactedIdentifier } = require('./snapshot/redaction')
 
 const identifierRegex = /^(@[\w$]+|[a-zA-Z_$][\w$]*)$/
 
@@ -39,6 +42,16 @@ const reservedWords = new Set([
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
 
+// What a dynamic template segment renders as when it references a redacted identifier and is therefore not evaluated.
+const REDACTED_SEGMENT = JSON.stringify('{redacted}')
+
+/**
+ * @typedef {{ str: string, dsl?: undefined, json?: undefined }} StaticTemplateSegment
+ * @typedef {{ str?: undefined, dsl: string, json: object }} DynamicTemplateSegment
+ * @typedef {StaticTemplateSegment|DynamicTemplateSegment} TemplateSegment
+ * @typedef {{ expr: string, message: string }} EvaluationError
+ */
+
 function templateRequiresEvaluation (segments) {
   if (segments === undefined) return false // There should always be segments, but just in case
   for (const { str } of segments) {
@@ -47,12 +60,29 @@ function templateRequiresEvaluation (segments) {
   return false
 }
 
+/**
+ * @param {TemplateSegment[]} segments - Template segments to compile into a JavaScript array expression.
+ */
 function compileSegments (segments) {
   let result = '['
   for (let i = 0; i < segments.length; i++) {
     const { str, dsl, json } = segments[i]
-    result += str === undefined
-      ? `(() => {
+    result += str === undefined ? compileSegment(dsl, json) : JSON.stringify(str)
+    if (i !== segments.length - 1) {
+      result += ','
+    }
+  }
+  return `${result}]`
+}
+
+/**
+ * @param {string} dsl - The original DSL expression.
+ * @param {object} json - The JSON expression AST.
+ */
+function compileSegment (dsl, json) {
+  if (findRedactedIdentifier(json) !== undefined) return REDACTED_SEGMENT
+
+  return `(() => {
           try {
             const result = ${compile(json)}
             return typeof result === 'string' ? result : $dd_inspectSegment(result)
@@ -60,12 +90,70 @@ function compileSegments (segments) {
             return { expr: ${JSON.stringify(dsl)}, message: \`\${e.name}: \${e.message}\` }
           }
         })()`
-      : JSON.stringify(str)
-    if (i !== segments.length - 1) {
-      result += ','
+}
+
+/**
+ * Get the evaluation errors for the dynamic template segments that are not evaluated because they reference a redacted
+ * identifier. The errors are the same every time the template is evaluated, so they are only computed once.
+ *
+ * @param {TemplateSegment[]} segments - Template segments to inspect.
+ * @returns {EvaluationError[]|undefined} The evaluation errors, if any segment references a redacted identifier.
+ */
+function getSegmentRedactionErrors (segments) {
+  let errors
+  for (const { str, dsl, json } of segments) {
+    if (str !== undefined) continue
+    const identifier = findRedactedIdentifier(json)
+    if (identifier !== undefined) {
+      errors ??= []
+      errors.push({ expr: dsl, message: `Could not evaluate the expression because '${identifier}' was redacted` })
     }
   }
-  return `${result}]`
+  return errors
+}
+
+/**
+ * Find the first redacted identifier referenced by an expression AST.
+ *
+ * @param {unknown} node - The JSON expression AST node to inspect.
+ * @returns {string|undefined} The redacted identifier, if one is referenced.
+ */
+function findRedactedIdentifier (node) {
+  if (node === null || typeof node !== 'object') return
+
+  // Expression nodes are single-key objects: the key is the operator, and the value is that operator's payload.
+  const [type, value] = Object.entries(node)[0]
+
+  // Root references and member/index keys are the only AST positions that name values being read.
+  if (type === 'ref') {
+    // A non-string `ref` is malformed. Leave it for `compile` to reject with a useful error.
+    return typeof value === 'string' && isRedactedIdentifier(value) ? value : undefined
+  } else if (type === 'getmember' || type === 'index') {
+    const key = findRedactedMemberKey(value[1])
+    if (key !== undefined) return key
+  }
+
+  // Other expression types can wrap redacted reads, e.g. substring(user.password, 0, 4), so walk their children.
+  if (!Array.isArray(value)) return findRedactedIdentifier(value)
+
+  let key
+  for (const child of value) {
+    key = findRedactedIdentifier(child)
+    if (key !== undefined) break
+  }
+  return key
+}
+
+/**
+ * @param {unknown} key - A member/index key expression.
+ * @returns {string|undefined} The redacted identifier, if the key references one.
+ */
+function findRedactedMemberKey (key) {
+  if (typeof key === 'string') {
+    return isRedactedIdentifier(key) ? key : undefined
+  }
+
+  return findRedactedIdentifier(key)
 }
 
 // TODO: Consider storing some of these functions that doesn't require closure access to the current scope on `process`

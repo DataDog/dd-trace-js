@@ -122,7 +122,14 @@ function normalizeName (name, isSymbol) {
   return name.toLowerCase().replaceAll(/[-_@$.]/g, '')
 }
 
+/**
+ * @param {string} name - The identifier name to check.
+ * @param {boolean} [isSymbol] - Whether the name is a `Symbol(...)` description.
+ */
+function isRedactedIdentifier (name, isSymbol) {
+  return REDACTED_IDENTIFIERS.has(normalizeName(name, isSymbol))
+}
+
 module.exports = {
-  REDACTED_IDENTIFIERS,
-  normalizeName,
+  isRedactedIdentifier,
 }
