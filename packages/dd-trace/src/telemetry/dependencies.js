@@ -2,7 +2,7 @@
 
 const path = require('path')
 const { fileURLToPath } = require('url')
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 const parse = require('../../../../vendor/dist/module-details-from-path')
 const requirePackageJson = require('../require-package-json')
 const { isTrue } = require('../../src/util')

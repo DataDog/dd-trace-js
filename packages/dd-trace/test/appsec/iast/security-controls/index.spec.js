@@ -36,7 +36,7 @@ describe('IAST Security Controls', () => {
       }
 
       securityControls = proxyquire('../../../../src/appsec/iast/security-controls', {
-        'dc-polyfill': {
+        '../../../../../../vendor/dist/dc-polyfill': {
           channel: name => channels[name],
         },
         './parser': {

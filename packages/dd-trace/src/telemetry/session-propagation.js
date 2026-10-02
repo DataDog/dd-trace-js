@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = /** @type {typeof import('diagnostics_channel')} */ (require('dc-polyfill'))
+const dc = /** @type {typeof import('diagnostics_channel')} */ (require('../../../../vendor/dist/dc-polyfill'))
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
 let subscribed = false

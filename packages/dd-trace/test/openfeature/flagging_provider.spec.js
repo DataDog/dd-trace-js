@@ -71,7 +71,7 @@ describe('FlaggingProvider', () => {
     mockEVPHookClass = sinon.stub().returns(mockEVPHook)
 
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
-      'dc-polyfill': {
+      '../../../../vendor/dist/dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,

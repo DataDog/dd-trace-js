@@ -1,7 +1,8 @@
 'use strict'
 
-const dc = require('dc-polyfill')
 const TaintedUtils = require('@datadog/native-iast-taint-tracking')
+
+const dc = require('../../../../../../vendor/dist/dc-polyfill')
 const { IAST_TRANSACTION_ID } = require('../iast-context')
 const iastTelemetry = require('../telemetry')
 const { REQUEST_TAINTED } = require('../telemetry/iast-metric')

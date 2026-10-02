@@ -1,7 +1,7 @@
 'use strict'
 
 const Module = require('module')
-const dc = require('dc-polyfill')
+const dc = require('../../../../vendor/dist/dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
 const { loadChannel } = require('./register.js')

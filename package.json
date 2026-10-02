@@ -183,7 +183,6 @@
     "version.js"
   ],
   "dependencies": {
-    "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "3.5.1",
     "opentracing": ">=0.14.7"
   },
@@ -221,6 +220,7 @@
     "bun": "1.4.2",
     "c8": "^12.0.0",
     "codeowners-audit": "^2.9.0",
+    "dc-polyfill": "^0.1.11",
     "eslint": "^10.11.0",
     "eslint-plugin-cypress": "^7.0.2",
     "eslint-plugin-import-x": "^4.16.2",

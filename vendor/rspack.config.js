@@ -4,8 +4,6 @@
 //       version with an instrumentation.
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
-// TODO: Vendor `dc-polyfill` and figure out why it fails the tests.
-
 const { join } = require('node:path')
 
 const { CopyRspackPlugin, SwcJsMinimizerRspackPlugin } = require('@rspack/core')
@@ -71,6 +69,9 @@ module.exports = {
     new LicenseWebpackPlugin({
       outputFilename: '[name]/LICENSE',
       excludedPackageTest: packageName => !include.has(packageName),
+      licenseFileOverrides: {
+        'dc-polyfill': 'LICENSE.txt',
+      },
       renderLicenses: modules => modules[0].licenseText,
       stats: {
         warnings: false,

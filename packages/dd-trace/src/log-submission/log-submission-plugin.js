@@ -3,7 +3,7 @@
 const { Writable } = require('node:stream')
 const { formatWithOptions } = require('node:util')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../vendor/dist/dc-polyfill')
 
 const { LOG } = require('../../../../ext/formats')
 const { SPAN_TYPE } = require('../../../../ext/tags')
