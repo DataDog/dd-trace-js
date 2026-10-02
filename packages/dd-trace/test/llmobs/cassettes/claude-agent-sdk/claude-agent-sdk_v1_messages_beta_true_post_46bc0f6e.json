@@ -1,0 +1,70 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages?beta=true",
+    "headers": {
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "claude-cli/2.1.113 (external, sdk-ts)",
+      "X-Claude-Code-Session-Id": "a13c3b2c-38b5-45d4-9118-752fe68c8006",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Package-Version": "0.81.0",
+      "X-Stainless-Retry-Count": "0",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v24.3.0",
+      "X-Stainless-Timeout": "600",
+      "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advisor-tool-2026-03-01,effort-2025-11-24",
+      "anthropic-dangerous-direct-browser-access": "true",
+      "anthropic-version": "2023-06-01",
+      "claude-code": "true",
+      "org-id": "2",
+      "provider": "anthropic",
+      "source": "claude-code",
+      "x-app": "cli",
+      "Connection": "keep-alive",
+      "Accept-Encoding": "gzip, deflate, br, zstd",
+      "Content-Length": "1258"
+    },
+    "body": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"<system-reminder>\\nAs you answer the user's questions, you can use the following context:\\n# currentDate\\nToday's date is 2026-09-30.\\n\\n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\\n</system-reminder>\\n\\n\"},{\"type\":\"text\",\"text\":\"Say hi in three words.\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.113.bcd; cc_entrypoint=sdk-ts; cch=e9fb9;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\",\"cache_control\":{\"type\":\"ephemeral\"}},{\"type\":\"text\",\"text\":\"Follow instructions\\n\\n__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__\\n\\nReply briefly\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"18963ffae58b0379b4bcc21e4a54fc7b9c7a87c69394f3dcdafd95eec8d8ed1f\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"a13c3b2c-38b5-45d4-9118-752fe68c8006\\\"}\"},\"max_tokens\":32000,\"thinking\":{\"type\":\"adaptive\"},\"context_management\":{\"edits\":[{\"type\":\"clear_thinking_20251015\",\"keep\":\"all\"}]},\"output_config\":{\"effort\":\"medium\"},\"stream\":true}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Wed, 30 Sep 2026 18:57:14 GMT",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "Cache-Control": "no-cache",
+      "anthropic-ratelimit-input-tokens-limit": "40000000",
+      "anthropic-ratelimit-input-tokens-remaining": "40000000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-09-30T18:57:13Z",
+      "anthropic-ratelimit-output-tokens-limit": "6000000",
+      "anthropic-ratelimit-output-tokens-remaining": "6000000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-09-30T18:57:13Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19998",
+      "anthropic-ratelimit-requests-reset": "2026-09-30T18:57:13Z",
+      "anthropic-ratelimit-tokens-limit": "46000000",
+      "anthropic-ratelimit-tokens-remaining": "46000000",
+      "anthropic-ratelimit-tokens-reset": "2026-09-30T18:57:13Z",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "request-id": "req_011Cfa8o227L71AE7aGdzyK7",
+      "traceresponse": "00-8a4c1dabbdcbfa36318fcce02ddb7261-424926fa30bd611f-01",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "anthropic-workspace-id": "wrkspc_016aTU2q5hNGVxQMc7MKHPqm",
+      "Content-Encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "Server": "cloudflare",
+      "X-Robots-Tag": "none",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "cf-cache-status": "DYNAMIC",
+      "CF-RAY": "a43573bd181442e4-EWR"
+    },
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011Cfa8o2epB79xEANVgdaX3\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":127,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\"},\"diagnostics\":null,\"context_management\":null}     }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}         }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}     }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" there\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"}      }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" hello\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}       }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0  }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":127,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":8,\"output_tokens_details\":{\"thinking_tokens\":0},\"iterations\":[{\"input_tokens\":127,\"output_tokens\":8,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]},\"context_management\":{\"applied_edits\":[]} }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"     }\n\n"
+  }
+}
