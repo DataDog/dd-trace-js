@@ -1,6 +1,6 @@
 'use strict'
 
-const dc = /** @type {typeof import('diagnostics_channel')} */ (require('dc-polyfill'))
+const dc = /** @type {typeof import('diagnostics_channel')} */ (require('../../../../vendor/dist/dc-polyfill'))
 const log = require('../log')
 
 // If the process lives for at least 30 seconds, it's considered long-lived

@@ -1,6 +1,8 @@
 'use strict'
 
-const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (require('dc-polyfill'))
+const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (
+  require('../../../vendor/dist/dc-polyfill')
+)
 
 const shimmer = require('../../datadog-shimmer')
 const { getSegment } = require('../../dd-trace/src/util')

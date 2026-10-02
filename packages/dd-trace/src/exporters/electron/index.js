@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../../vendor/dist/dc-polyfill')
 const { truncateSpan, normalizeSpan } = require('../../encode/tags-processors')
 
 const traceChannel = channel('datadog:apm:electron:export')

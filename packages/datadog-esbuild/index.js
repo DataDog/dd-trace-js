@@ -14,6 +14,7 @@ const { isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
+const DC_POLYFILL_PATH = require.resolve('../../vendor/dist/dc-polyfill')
 
 let rewriter
 
@@ -364,7 +365,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
           ${fileCode}
         })(module.exports, module);
         {
-          const dc = require('dc-polyfill');
+          const dc = require(${JSON.stringify(DC_POLYFILL_PATH)});
           const ch = dc.channel('${CHANNEL}');
           const mod = module.exports
           const payload = {

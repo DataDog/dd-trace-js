@@ -21,7 +21,7 @@ describe('esm', () => {
   let proc
 
   withVersions('light-my-request', 'light-my-request', (version, _, realVersion) => {
-    useSandbox([`'light-my-request@${version}'`], false, [
+    useSandbox([`'light-my-request@${version}'`, 'dc-polyfill@0.1.11'], false, [
       './packages/datadog-plugin-light-my-request/test/integration-test/*'])
 
     beforeEach(async () => {

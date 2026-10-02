@@ -1,7 +1,7 @@
 'use strict'
 
 const { inspect } = require('node:util')
-const { channel } = require('dc-polyfill')
+const { channel } = require('../../../../../vendor/dist/dc-polyfill')
 
 const commonRequest = require('../common/request')
 const { logIntegrations, logAgentError } = require('../../startup-log')
