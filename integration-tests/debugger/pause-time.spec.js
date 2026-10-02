@@ -3,9 +3,12 @@
 const assert = require('node:assert/strict')
 
 const { DDSketch } = require('../../vendor/dist/@datadog/sketches-js')
+const { GUARDRAIL_METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', function () {
+  this.timeout(GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 3)
+
   const t = setup({
     testApp: 'target-app/basic.js',
     dependencies: ['fastify'],
@@ -33,6 +36,7 @@ describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', funct
           assert.ok(durationMs > 0)
           assert.ok(Number.isFinite(durationMs))
         },
+        timeout: GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 2,
       })
 
       t.agent.addRemoteConfig(probe)

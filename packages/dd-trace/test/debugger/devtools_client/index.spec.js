@@ -12,6 +12,7 @@ require('../../setup/mocha')
 
 const { LARGE_OBJECT_SKIP_THRESHOLD } = require('../../../src/debugger/devtools_client/snapshot/constants')
 const { EVENT_TYPE, GuardrailMetrics, INCOMPLETE_REASON } = require('../../../src/debugger/guardrail-metrics')
+const { PauseDurationHistogram } = require('../../../src/debugger/pause-duration-histogram')
 const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
 const {
   CONDITION_ERROR_FLAG,
@@ -48,7 +49,7 @@ describe('onPause', function () {
    */
   /** @type {MockSession} */
   let session
-  /** @type {sinon.SinonSpy} */
+  /** @type {sinon.SinonStub} */
   let send
   /** @type {Function} */
   let onPaused
@@ -62,11 +63,11 @@ describe('onPause', function () {
   let sampledProbeIndexes
   /** @type {unknown} */
   let log
-  let parentPort
+  /** @type {PauseDurationHistogram} */
+  let pauseDurations
 
   beforeEach(async function () {
     ackEmitting = sinon.spy()
-    parentPort = { postMessage: sinon.spy() }
     refreshBreakpoints = sinon.stub().resolves()
     log = {
       error: sinon.spy(),
@@ -103,9 +104,11 @@ describe('onPause', function () {
       '@noCallThru': true,
     }
 
-    send = sinon.spy()
+    send = sinon.stub()
     send['@noCallThru'] = true
     sampledProbeIndexes = new Int32Array(installProbeSampler(new GuardrailMetrics(GuardrailMetrics.createBuffer())))
+    const pauseDurationBuffer = PauseDurationHistogram.createBuffer()
+    pauseDurations = new PauseDurationHistogram(pauseDurationBuffer)
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
     const loadStatus = proxyquire.noCallThru()
@@ -123,8 +126,7 @@ describe('onPause', function () {
     proxyquire('../../../src/debugger/devtools_client', {
       worker_threads: {
         ...workerThreads,
-        parentPort,
-        workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer },
+        workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer, pauseDurationBuffer },
       },
       './config': config,
       './session': session,
@@ -161,9 +163,11 @@ describe('onPause', function () {
     beforeEach(function () {
       hrtime = sinon.stub(process.hrtime, 'bigint').returns(1_000_000n)
       session.post.withArgs('Debugger.resume').callsFake(async () => {
-        sinon.assert.notCalled(parentPort.postMessage)
+        assertPauseDurations([])
         hrtime.returns(3_500_000n)
       })
+      // Recording the duration only after sending would include the time spent processing the pause after resuming
+      send.callsFake(() => { hrtime.returns(10_000_000n) })
     })
 
     afterEach(function () {
@@ -171,7 +175,7 @@ describe('onPause', function () {
     })
 
     for (const kind of ['log', 'snapshot', 'capture expressions', 'condition error', 'removed probe']) {
-      it(`should report milliseconds after resuming a ${kind}`, async function () {
+      it(`should record milliseconds after resuming a ${kind}`, async function () {
         const probe = genProcessedProbe('probe-1')
         if (kind === 'snapshot') {
           probe.captureSnapshot = true
@@ -193,8 +197,8 @@ describe('onPause', function () {
           params: { ...event.params, callFrames: [{ ...event.params.callFrames[0], scopeChain: [] }] },
         })
 
-        sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
-        if (kind !== 'removed probe') sinon.assert.callOrder(parentPort.postMessage, send)
+        if (kind !== 'removed probe') sinon.assert.called(send)
+        assertPauseDurations([2.5])
       })
     }
 
@@ -203,24 +207,24 @@ describe('onPause', function () {
       session.post.withArgs('Debugger.resume').returns(new Promise((resolve) => { completeResume = resolve }))
 
       const paused = onPaused(event)
-      sinon.assert.notCalled(parentPort.postMessage)
+      assertPauseDurations([])
       hrtime.returns(6_000_000n)
       completeResume()
       await paused
 
-      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 5 })
+      assertPauseDurations([5])
     })
 
-    it('should not report a completed pause if resume fails', async function () {
+    it('should not record a completed pause if resume fails', async function () {
       const error = new Error('resume failed')
       session.post.withArgs('Debugger.resume').rejects(error)
 
       await assert.rejects(onPaused(event), error)
 
-      sinon.assert.notCalled(parentPort.postMessage)
+      assertPauseDurations([])
     })
 
-    it('should report once when several probes share the pause', async function () {
+    it('should record once when several probes share the pause', async function () {
       const probes = [genProcessedProbe('probe-1'), genProcessedProbe('probe-2')]
       state.breakpointToProbes.set(breakpointId, new Map(probes.map(probe => [probe.id, probe])))
       for (const [i, probe] of probes.entries()) {
@@ -232,8 +236,27 @@ describe('onPause', function () {
       await onPaused(event)
 
       sinon.assert.calledTwice(send)
-      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
+      assertPauseDurations([2.5])
     })
+
+    /**
+     * Drain the pause durations recorded by the worker and compare them with the expected ones.
+     *
+     * @param {number[]} expectedMs - The expected durations in milliseconds, in ascending order.
+     */
+    function assertPauseDurations (expectedMs) {
+      /** @type {number[]} */
+      const recordedMs = []
+      pauseDurations.drain((durationMs, count) => {
+        for (let i = 0; i < count; i++) recordedMs.push(durationMs)
+      })
+      assert.strictEqual(recordedMs.length, expectedMs.length, `Unexpected pause durations: ${recordedMs}`)
+      for (const [i, durationMs] of recordedMs.entries()) {
+        // The histogram reports durations with a relative accuracy of 1%
+        assert.ok(Math.abs(durationMs - expectedMs[i]) <= expectedMs[i] * 0.01,
+          `Expected ${durationMs} to be ~${expectedMs[i]} ms`)
+      }
+    }
   })
 
   it('should not fail if there is no probe for at the breakpoint', async function () {
