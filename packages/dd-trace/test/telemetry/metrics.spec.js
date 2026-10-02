@@ -6,6 +6,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+// libdatadog's DDSketch cannot decode, so read its wire-compatible output with sketches-js.
 const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 require('../setup/core')
@@ -37,12 +38,12 @@ describe('metrics', () => {
     })
 
     it('should defer loading sketch encoder until a distribution is used', () => {
-      const Sketch = sinon.stub().returns({ accept: sinon.stub() })
+      const Sketch = sinon.stub().returns({ add: sinon.stub() })
       const loadSketchConstructor = sinon.stub().returns(Sketch)
       const sketchModule = {
         '@noCallThru': true,
       }
-      Object.defineProperty(sketchModule, 'LogCollapsingLowestDenseDDSketch', {
+      Object.defineProperty(sketchModule, 'DDSketch', {
         get: loadSketchConstructor,
       })
 
@@ -51,7 +52,7 @@ describe('metrics', () => {
         './send-data': {
           sendData,
         },
-        '../../../../vendor/dist/@datadog/sketches-js': sketchModule,
+        '@datadog/libdatadog': sketchModule,
       })
       proxyquire.preserveCache()
 
@@ -70,6 +71,34 @@ describe('metrics', () => {
       localMetrics.manager.namespace('test').distribution('other.duration').track(1)
       sinon.assert.calledOnce(loadSketchConstructor)
       sinon.assert.calledTwice(Sketch)
+    })
+
+    it('should not crash when the optional sketch encoder is unavailable', () => {
+      const notFound = Object.assign(new Error("Cannot find module '@datadog/libdatadog'"), {
+        code: 'MODULE_NOT_FOUND',
+      })
+      const sketchModule = { '@noCallThru': true }
+      Object.defineProperty(sketchModule, 'DDSketch', {
+        get () { throw notFound },
+      })
+
+      const loadMetrics = proxyquire.noPreserveCache()
+      const localMetrics = loadMetrics('../../src/telemetry/metrics', {
+        './send-data': {
+          sendData,
+        },
+        '@datadog/libdatadog': sketchModule,
+      })
+      proxyquire.preserveCache()
+
+      const metric = localMetrics.manager.namespace('test').distribution('duration')
+
+      metric.track(42)
+      metric.track(43)
+
+      assert.strictEqual(metric.pointCount, 0)
+      assert.strictEqual(metric.hasPoints(), false)
+      assert.strictEqual(metric.sketch, undefined)
     })
 
     it('should make namespaces', () => {
@@ -515,7 +544,7 @@ describe('metrics', () => {
 
       assert.strictEqual(metric.pointCount, 3)
       assert.strictEqual(metric.hasPoints(), true)
-      assert.strictEqual(metric.sketch.count, 3)
+      assert.strictEqual(metric.sketch.count(), 3)
     })
 
     it('should ignore invalid values', () => {
@@ -525,6 +554,7 @@ describe('metrics', () => {
       metric.track('100')
       metric.track(Number.NaN)
       metric.track(Number.POSITIVE_INFINITY)
+      metric.track(-1)
 
       assert.strictEqual(metric.pointCount, 0)
       assert.strictEqual(metric.hasPoints(), false)
@@ -553,7 +583,7 @@ describe('metrics', () => {
       metric.track(2)
 
       assert.notStrictEqual(metric.sketch, sketch)
-      assert.strictEqual(metric.sketch.count, 1)
+      assert.strictEqual(metric.sketch.count(), 1)
       assert.strictEqual(metric.pointCount, 1)
       assert.strictEqual(metric.hasPoints(), true)
     })
