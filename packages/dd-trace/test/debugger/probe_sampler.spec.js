@@ -668,6 +668,28 @@ describe('probe sampler', function () {
         assert.strictEqual(sampler.makeSampleDecision(7, 'probe-1', 0n, false), true)
       })
 
+      it('should keep a condition error recorded by a hit that raced the worker throttling the probe', function () {
+        installSampler()
+        const sampler = getSampler()
+
+        startCondition(sampler, 'probe-1')
+        sampler.conditionError(7, 'probe-1', new TypeError('boom'))
+        startCondition(sampler, 'probe-2', budgetNs + 1n)
+        sampler.conditionError(8, 'probe-2', new TypeError('boom'))
+        sampler.evaluationTimedOut('probe-1')
+        sampler.evaluationTimedOut('probe-2')
+
+        assert.strictEqual(sampler.takeConditionError('probe-1'), 'TypeError: boom')
+        assert.strictEqual(
+          sampler.takeConditionError('probe-2'),
+          'Condition evaluation exceeded its time budget of 10ms (took 10.0ms)'
+        )
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), false)
+        assert.deepStrictEqual(drainGuardrailMetrics(), [
+          ['events.skipped', ['event_type:log', 'reason:evaluationTimeout'], 1],
+        ])
+      })
+
       it('should forget the recorded error and throttle when a probe is removed', function () {
         installSampler()
         const sampler = getSampler()

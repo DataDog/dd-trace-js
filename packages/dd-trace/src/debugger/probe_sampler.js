@@ -177,7 +177,8 @@ function installProbeSampler (guardrailMetrics, config) {
       throttleByProbeId.set(probeId, {
         untilNs: process.hrtime.bigint() + CONDITION_ERROR_THROTTLE_NS,
         timedOut: true,
-        error: undefined,
+        // A hit that raced this request may have recorded a condition error that its pause has yet to report
+        error: throttleByProbeId.get(probeId)?.error,
       })
     },
 
