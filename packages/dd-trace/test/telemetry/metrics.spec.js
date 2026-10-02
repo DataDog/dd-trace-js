@@ -518,6 +518,33 @@ describe('metrics', () => {
       assert.strictEqual(metric.sketch.count, 3)
     })
 
+    it('should track a pre-aggregated count of a value', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      metric.track(100, 3)
+      metric.track(50, 1)
+
+      assert.strictEqual(metric.pointCount, 4)
+      assert.strictEqual(metric.hasPoints(), true)
+      assert.strictEqual(metric.sketch.count, 4)
+      // The value tracked three times dominates the upper quantiles
+      assert.ok(Math.abs(metric.sketch.getValueAtQuantile(0.5) - 100) < 1)
+      assert.ok(Math.abs(metric.sketch.getValueAtQuantile(0) - 50) < 1)
+    })
+
+    it('should match tracking a value once per observation', () => {
+      const ns = new metrics.Namespace('tracers')
+      const aggregated = ns.distribution('aggregated')
+      const individual = ns.distribution('individual')
+
+      aggregated.track(100, 3)
+      for (let i = 0; i < 3; i++) individual.track(100)
+
+      assert.strictEqual(aggregated.pointCount, individual.pointCount)
+      assert.deepStrictEqual(aggregated.sketch.toProto(), individual.sketch.toProto())
+    })
+
     it('should ignore invalid values', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name')
@@ -525,6 +552,20 @@ describe('metrics', () => {
       metric.track('100')
       metric.track(Number.NaN)
       metric.track(Number.POSITIVE_INFINITY)
+
+      assert.strictEqual(metric.pointCount, 0)
+      assert.strictEqual(metric.hasPoints(), false)
+      assert.strictEqual(metric.sketch, undefined)
+    })
+
+    it('should ignore a non-positive count', () => {
+      const ns = new metrics.Namespace('tracers')
+      const metric = ns.distribution('name')
+
+      // The sketch throws on a non-positive weight, so these must never reach it
+      metric.track(100, 0)
+      metric.track(100, -1)
+      metric.track(100, Number.NaN)
 
       assert.strictEqual(metric.pointCount, 0)
       assert.strictEqual(metric.hasPoints(), false)

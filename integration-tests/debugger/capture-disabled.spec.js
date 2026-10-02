@@ -5,7 +5,7 @@ const { once } = require('node:events')
 const { setTimeout: sleep } = require('node:timers/promises')
 const { inspect } = require('node:util')
 
-const { GUARDRAIL_METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
+const { SHARED_TELEMETRY_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
 
 // The probe is limited to one event per second, so two hits in quick succession skip the second one
@@ -19,7 +19,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('probe whose capture gets permanently disabled', function () {
-    this.timeout(GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 3)
+    this.timeout(SHARED_TELEMETRY_FLUSH_INTERVAL_MS * 3)
 
     it('should stop treating the probe as snapshot producing', async function () {
       const results = []
@@ -35,7 +35,7 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(skipped[0].points[0][1], 1)
         },
         requestType: 'generate-metrics',
-        timeout: GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 2,
+        timeout: SHARED_TELEMETRY_FLUSH_INTERVAL_MS * 2,
         resolveAtFirstSuccess: true,
         namespace: 'live_debugger',
       })

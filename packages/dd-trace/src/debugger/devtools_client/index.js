@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
-const { parentPort, workerData: { probeSamplerBuffer } } = require('worker_threads')
+const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
 const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
@@ -23,6 +23,7 @@ const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
 const config = require('./config')
 const log = require('./log')
+const pauseDurations = require('./pause-duration')
 
 require('./remote_config')
 
@@ -358,7 +359,7 @@ session.on('Debugger.paused', async ({ params }) => {
  */
 function reportPauseDuration (start) {
   const durationMs = Number(process.hrtime.bigint() - start) / 1_000_000
-  parentPort.postMessage({ type: 'thread-paused', durationMs })
+  pauseDurations.record(durationMs)
   log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: ~%d ms',
     durationMs)
 }

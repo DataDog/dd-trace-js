@@ -2,10 +2,14 @@
 
 const assert = require('node:assert/strict')
 
+const { SHARED_TELEMETRY_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { DDSketch } = require('../../vendor/dist/@datadog/sketches-js')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', function () {
+  // Durations are aggregated in shared memory and only drained into telemetry at the flush interval
+  this.timeout(SHARED_TELEMETRY_FLUSH_INTERVAL_MS * 3)
+
   const t = setup({
     testApp: 'target-app/basic.js',
     dependencies: ['fastify'],
@@ -22,6 +26,8 @@ describe('Dynamic Instrumentation/Live Debugger pause duration telemetry', funct
       const received = t.agent.assertTelemetryReceived({
         requestType: 'sketches',
         namespace: 'live_debugger',
+        timeout: SHARED_TELEMETRY_FLUSH_INTERVAL_MS * 2,
+        resolveAtFirstSuccess: true,
         fn: ({ payload }) => {
           const [series] = payload.payload.series
           assert.strictEqual(series.metric, 'execution.pause.duration')

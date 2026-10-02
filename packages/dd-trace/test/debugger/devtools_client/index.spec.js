@@ -62,11 +62,12 @@ describe('onPause', function () {
   let sampledProbeIndexes
   /** @type {unknown} */
   let log
-  let parentPort
+  /** @type {{ record: sinon.SinonSpy }} */
+  let pauseDurations
 
   beforeEach(async function () {
     ackEmitting = sinon.spy()
-    parentPort = { postMessage: sinon.spy() }
+    pauseDurations = { record: sinon.spy(), '@noCallThru': true }
     refreshBreakpoints = sinon.stub().resolves()
     log = {
       error: sinon.spy(),
@@ -123,9 +124,9 @@ describe('onPause', function () {
     proxyquire('../../../src/debugger/devtools_client', {
       worker_threads: {
         ...workerThreads,
-        parentPort,
         workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer },
       },
+      './pause-duration': pauseDurations,
       './config': config,
       './session': session,
       './state': state,
@@ -161,7 +162,7 @@ describe('onPause', function () {
     beforeEach(function () {
       hrtime = sinon.stub(process.hrtime, 'bigint').returns(1_000_000n)
       session.post.withArgs('Debugger.resume').callsFake(async () => {
-        sinon.assert.notCalled(parentPort.postMessage)
+        sinon.assert.notCalled(pauseDurations.record)
         hrtime.returns(3_500_000n)
       })
     })
@@ -193,8 +194,8 @@ describe('onPause', function () {
           params: { ...event.params, callFrames: [{ ...event.params.callFrames[0], scopeChain: [] }] },
         })
 
-        sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
-        if (kind !== 'removed probe') sinon.assert.callOrder(parentPort.postMessage, send)
+        sinon.assert.calledOnceWithExactly(pauseDurations.record, 2.5)
+        if (kind !== 'removed probe') sinon.assert.callOrder(pauseDurations.record, send)
       })
     }
 
@@ -203,12 +204,12 @@ describe('onPause', function () {
       session.post.withArgs('Debugger.resume').returns(new Promise((resolve) => { completeResume = resolve }))
 
       const paused = onPaused(event)
-      sinon.assert.notCalled(parentPort.postMessage)
+      sinon.assert.notCalled(pauseDurations.record)
       hrtime.returns(6_000_000n)
       completeResume()
       await paused
 
-      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 5 })
+      sinon.assert.calledOnceWithExactly(pauseDurations.record, 5)
     })
 
     it('should not report a completed pause if resume fails', async function () {
@@ -217,7 +218,7 @@ describe('onPause', function () {
 
       await assert.rejects(onPaused(event), error)
 
-      sinon.assert.notCalled(parentPort.postMessage)
+      sinon.assert.notCalled(pauseDurations.record)
     })
 
     it('should report once when several probes share the pause', async function () {
@@ -232,7 +233,7 @@ describe('onPause', function () {
       await onPaused(event)
 
       sinon.assert.calledTwice(send)
-      sinon.assert.calledOnceWithExactly(parentPort.postMessage, { type: 'thread-paused', durationMs: 2.5 })
+      sinon.assert.calledOnceWithExactly(pauseDurations.record, 2.5)
     })
   })
 
