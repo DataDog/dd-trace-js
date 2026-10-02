@@ -17,14 +17,12 @@ class SetCookiesHeaderInterceptor extends Plugin {
 
   _handleCookies (name, value, res) {
     if (name.toLowerCase() === 'set-cookie') {
-      let allCookies = value
-      if (typeof value === 'string') {
-        allCookies = [value]
-      }
+      const allCookies = Array.isArray(value) ? value : [value]
       const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
 
       let location
-      for (const cookieString of allCookies) {
+      for (const cookieValue of allCookies) {
+        const cookieString = String(cookieValue)
         if (!alreadyCheckedCookies.includes(cookieString)) {
           alreadyCheckedCookies.push(cookieString)
           const parsedCookie = this._parseCookie(cookieString, location)
