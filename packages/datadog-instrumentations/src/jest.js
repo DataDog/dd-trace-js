@@ -58,6 +58,7 @@ const {
   addCoverageBackfillUntestedFiles,
   getCoverageBackfillFiles,
 } = require('./jest/coverage-backfill')
+const { getSessionError } = require('./jest/session-error')
 const {
   getChannelPromise,
   publishWithCompletion,
@@ -109,6 +110,10 @@ const CHILD_MESSAGE_CALL = 1
 const FLUSH_TIMEOUT = FINAL_FLUSH_TIMEOUT + FINAL_FLUSH_FALLBACK_DELAY + 5000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
+const JEST_CIRCUS_TEST_RUNNER_PATH = /(?:^|[\\/])jest-circus(?:[\\/]|$)/
+const UNSUPPORTED_JEST_TEST_RUNNER_WARNING =
+  'dd-trace Test Optimization supports jest-circus; another test runner was detected; ' +
+  'suite and test events may be incomplete.'
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
@@ -248,6 +253,7 @@ const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0
 const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
+let hasWarnedUnsupportedJestTestRunner = false
 let isJestCoverageBackfillSupported = false
 let hasFinishedTestSession = false
 let jestEachBind
@@ -320,6 +326,20 @@ function warnDeprecatedJestVersion (frameworkVersion) {
     'dd-trace support for Jest<28.0.0 is deprecated and will be removed in dd-trace v6. ' +
       'Please upgrade Jest to >=28.0.0.'
   )
+}
+
+/** @param {object[]} configs resolved Jest project configurations */
+function warnIfUnsupportedJestTestRunner (configs) {
+  if (hasWarnedUnsupportedJestTestRunner || !testSessionConfigurationCh.hasSubscribers) return
+
+  const usesUnsupportedTestRunner = getEnvironmentVariable('JEST_JASMINE') === '1' ||
+    configs.some(config => !JEST_CIRCUS_TEST_RUNNER_PATH.test(config.testRunner))
+
+  if (usesUnsupportedTestRunner) {
+    hasWarnedUnsupportedJestTestRunner = true
+    // eslint-disable-next-line no-console
+    console.warn(UNSUPPORTED_JEST_TEST_RUNNER_WARNING)
+  }
 }
 
 function getTestEnvironmentOptions (config) {
@@ -2720,13 +2740,6 @@ function applySkippedCoverageToJestCoverageMap (coverageMap, rootDir) {
   )
 }
 
-function getSessionFinishError (results) {
-  const numFailedTestSuites = results?.numFailedTestSuites || 0
-  const numFailedTests = results?.numFailedTests || 0
-
-  return new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
-}
-
 function getTestSessionCoveragePayload (results, fallbackRootDir) {
   const payload = {}
   if (!shouldReportCodeCoverageLinesPct()) return payload
@@ -2828,7 +2841,7 @@ function getTestSessionFinishPayload (status, error, extra = {}) {
 async function finishBailTestSession (results, fallbackRootDir) {
   await waitForTestSessionFinish(getTestSessionFinishPayload(
     'fail',
-    getSessionFinishError(results),
+    getSessionError(results),
     getTestSessionCoveragePayload(results, fallbackRootDir)
   ))
 }
@@ -3151,8 +3164,8 @@ function getCliWrapper (isNewJestVersion) {
 
       const {
         results: {
-          numFailedTestSuites,
           numFailedTests,
+          numPassedTests,
           numRuntimeErrorTestSuites = 0,
           numTotalTests,
           numTotalTestSuites,
@@ -3323,16 +3336,19 @@ function getCliWrapper (isNewJestVersion) {
 
       // Determine session status after EFD and quarantine checks have potentially modified success
       let status, error
-      const isExpectedEmptySession = numTotalTests === 0 && numTotalTestSuites === 0
+      const hasExecutedTests = numPassedTests > 0 || numFailedTests > 0 || numSuppressedQuarantinedTests > 0
+      const testSessionEmptyReason = result.results.success && !hasExecutedTests
+        ? (numTotalTests > 0 || isSuitesSkipped ? 'all_tests_skipped' : 'zero_tests')
+        : undefined
       if (result.results.success) {
-        status = isExpectedEmptySession ? 'skip' : 'pass'
+        status = testSessionEmptyReason ? 'skip' : 'pass'
       } else {
         status = 'fail'
-        error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+        error = getSessionError(result.results)
       }
 
       await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
-        isExpectedEmptySession: result.results.success && isExpectedEmptySession,
+        testSessionEmptyReason,
         ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
       }))
 
@@ -3625,6 +3641,7 @@ addHook({
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
+  warnIfUnsupportedJestTestRunner(readConfigsResult.configs)
   repositoryRoot = getJestRepositoryRoot(readConfigsResult)
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
   const isCodeCoverageEnabledBecauseOfUs = shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled
