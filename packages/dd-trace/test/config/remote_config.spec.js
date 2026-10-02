@@ -139,6 +139,21 @@ describe('Tracing Remote Config', () => {
 
         sinon.assert.calledOnceWithExactly(config.setRemoteConfig, sdkConfig)
       })
+
+      it('should pass the DBM propagation mode to tracer configuration', () => {
+        enable(rc, config, onConfigUpdated)
+
+        const handler = batchHandlers.get('APM_TRACING')
+        const sdkConfig = { DD_DBM_PROPAGATION_MODE: 'service' }
+
+        const transaction = createTransaction([
+          { id: 'config-1', file: { sdk_config: sdkConfigPayload(sdkConfig) } },
+        ])
+
+        handler(transaction)
+
+        sinon.assert.calledOnceWithExactly(config.setRemoteConfig, sdkConfig)
+      })
     })
   })
 
