@@ -86,7 +86,10 @@ function start (config, rcInstance) {
 
   const debuggerGlobals = globalThis[Symbol.for('dd-trace')]
   debuggerGlobals.utilTypes = types
-  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
+  const createInspectSegment = require('./inspect-segment')
+  const { createIsRedactedIdentifier } = require('./redaction')
+  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] =
+    createInspectSegment(createIsRedactedIdentifier(config.dynamicInstrumentation))
 
   const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
   guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)

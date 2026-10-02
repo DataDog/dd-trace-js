@@ -322,6 +322,13 @@ session.on('Debugger.paused', async ({ params }) => {
             message += `{${result.message}}`
           }
         }
+        if (probe.templateRedactionErrors !== undefined) {
+          if (snapshot.evaluationErrors === undefined) {
+            snapshot.evaluationErrors = [...probe.templateRedactionErrors]
+          } else {
+            snapshot.evaluationErrors.push(...probe.templateRedactionErrors)
+          }
+        }
       }
     } else {
       message = probe.template

@@ -88,6 +88,9 @@ fastify.get('/:name', function (request) {
     abuf[i] = i
   }
   const tarr = new Uint8Array(abuf)
+  const secret = 'shh!'
+  const user = { name: 'alice', password: 'hunter2' }
+  const headers = new Map([['content-type', 'text/plain'], ['authorization', 'Bearer t0k3n']])
   /* eslint-enable no-unused-vars */
 
   return { hello: request.params.name } // BREAKPOINT: /foo
