@@ -326,15 +326,34 @@ const web = {
       // GET / POST / etc. case. Node's http module passes `req.method`
       // through unchanged, so all standard methods are uppercase; the
       // `toLowerCase` fallback covers any non-standard caller.
+      let headersModified = false
+      const hasStatusMessage = typeof statusMessage === 'string'
       if (req.method === 'OPTIONS' || req.method.toLowerCase() === 'options') {
-        headers = typeof statusMessage === 'string' ? headers : statusMessage
-        headers = { ...res.getHeaders(), ...headers }
+        headers = hasStatusMessage ? headers : statusMessage
+        const headersAreArray = Array.isArray(headers)
+        const headersAreTuples = headersAreArray && Array.isArray(headers[0])
+        const headersLookup = normalizeHeaderLookup(headers)
+        const mergedHeaders = { ...res.getHeaders(), ...headersLookup }
 
-        if (isOriginAllowed(req, headers)) {
-          addAllowHeaders(req, res, headers)
+        if (isOriginAllowed(req, mergedHeaders)) {
+          const allowedHeaders = computeAllowedHeaders(req, mergedHeaders)
+          if (allowedHeaders) {
+            headers = headersAreTuples
+              ? setTupleHeader(headers, 'access-control-allow-headers', allowedHeaders)
+              : headersAreArray
+                ? setFlatHeader(headers, 'access-control-allow-headers', allowedHeaders)
+                : setObjectHeader(headers, 'access-control-allow-headers', allowedHeaders)
+            headersModified = true
+          }
         }
       }
 
+      if (headersModified) {
+        if (hasStatusMessage) {
+          return writeHead.call(this, statusCode, statusMessage, headers)
+        }
+        return writeHead.call(this, statusCode, headers)
+      }
       return writeHead.apply(this, arguments)
     }
   },
@@ -362,7 +381,7 @@ function normalizeHeadersCarrier (headers) {
   return carrier
 }
 
-function addAllowHeaders (req, res, headers) {
+function computeAllowedHeaders (req, headers) {
   const allowHeaders = splitHeader(headers['access-control-allow-headers'])
   const requestHeaders = splitHeader(req.headers['access-control-request-headers'])
   const contextHeaders = [
@@ -383,9 +402,7 @@ function addAllowHeaders (req, res, headers) {
     }
   }
 
-  if (allowHeaders.length > 0) {
-    res.setHeader('access-control-allow-headers', uniq(allowHeaders).join(','))
-  }
+  return uniq(allowHeaders).join(',')
 }
 
 function isOriginAllowed (req, headers) {
@@ -395,8 +412,105 @@ function isOriginAllowed (req, headers) {
   return origin && (allowOrigin === '*' || allowOrigin === origin)
 }
 
-function splitHeader (str) {
-  return typeof str === 'string' ? str.split(',').map((header) => header.trim()) : []
+function splitHeader (value) {
+  if (typeof value === 'string') {
+    return value.split(',').map((header) => header.trim())
+  }
+
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const result = []
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+
+    for (const header of item.split(',')) {
+      result.push(header.trim())
+    }
+  }
+  return result
+}
+
+function normalizeHeaderLookup (headers) {
+  const result = Object.create(null)
+
+  if (Array.isArray(headers)) {
+    if (Array.isArray(headers[0])) {
+      for (const [key, value] of headers) {
+        result[key.toLowerCase()] = value
+      }
+    } else {
+      for (let i = 0; i < headers.length; i += 2) {
+        result[headers[i].toLowerCase()] = headers[i + 1]
+      }
+    }
+  } else if (headers) {
+    for (const key of Object.keys(headers)) {
+      result[key.toLowerCase()] = headers[key]
+    }
+  }
+
+  return result
+}
+
+function setFlatHeader (headers, name, value) {
+  const result = [...headers]
+  let headerFound = false
+
+  for (let i = 0; i < result.length; i += 2) {
+    if (result[i].toLowerCase() === name) {
+      result[i + 1] = value
+      headerFound = true
+    }
+  }
+
+  if (!headerFound) {
+    result.push(name, value)
+  }
+
+  return result
+}
+
+function setTupleHeader (headers, name, value) {
+  const result = [...headers]
+  let headerFound = false
+
+  for (let i = 0; i < result.length; i++) {
+    const [key] = result[i]
+    if (key.toLowerCase() === name) {
+      result[i] = [key, value]
+      headerFound = true
+    }
+  }
+
+  if (!headerFound) {
+    result.push([name, value])
+  }
+
+  return result
+}
+
+function setObjectHeader (headers, name, value) {
+  const result = Object.create(null)
+  let headerFound = false
+
+  if (headers) {
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase() === name) {
+        result[key] = value
+        headerFound = true
+      } else {
+        result[key] = headers[key]
+      }
+    }
+  }
+
+  if (!headerFound) {
+    result[name] = value
+  }
+
+  return result
 }
 
 function addRequestTags (context, spanType) {
