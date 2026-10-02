@@ -19,6 +19,16 @@ module.exports = {
    */
   EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024,
 
+  FLAG_EVALUATION_ENDPOINT: '/api/v2/flagevaluation',
+  FLAG_EVALUATION_FLUSH_INTERVAL: 10_000,
+  FLAG_EVALUATION_QUEUE_CAP: 4096,
+  FLAG_EVALUATION_GLOBAL_CAP: 131_072,
+  FLAG_EVALUATION_PER_FLAG_CAP: 10_000,
+  FLAG_EVALUATION_DEGRADED_CAP: 32_768,
+
+  // ECMAScript Date's maximum absolute time value, in milliseconds.
+  MAX_EVALUATION_TIMESTAMP_MS: 8_640_000_000_000_000,
+
   /**
    * @constant
    * @type {string} Channel name for exposure event submission

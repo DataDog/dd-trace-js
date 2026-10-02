@@ -64,6 +64,14 @@ variables:
   variables:
     LLMVAL_PLATFORM_PROJECT: "ddoghq/llm-validation-platform"
     LLMVAL_PLATFORM_REF: *llmval_platform_sha
+  rules:
+    - &skip_llm_validation_on_release
+      if: '$CI_COMMIT_REF_NAME =~ /^v\d+\.(x|\d+\.\d+-proposal)$/'
+      when: never
+    - if: '$CI_COMMIT_REF_NAME == $LLMVAL_BASE_REF'
+      when: never
+    - when: on_success
+      allow_failure: false
 
 llm validation definitions:
   extends: llm validation
@@ -71,6 +79,7 @@ llm validation definitions:
     LLMVAL_WATCH_PATHS: ".llm-validation/config.yaml .llm-validation/suites"
     LLMVAL_LEVEL: "minimum"
   rules:
+    - *skip_llm_validation_on_release
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       changes:
         - .llm-validation/config.yaml

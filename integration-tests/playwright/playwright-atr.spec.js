@@ -37,6 +37,100 @@ versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
 
+  // The v5 legacy framework does not support suite-level retry overrides.
+  const contextRetryLimits = satisfies(version, '>=1.38.0') || version === 'latest' ? describe : describe.skip
+
+  contextRetryLimits(`playwright@${version} retry exhaustion metadata`, function () {
+    this.timeout(60000)
+    const it = createParallelIt(global.it, { withReceiver: true })
+    useSandbox([`@playwright/test@${version}`])
+
+    for (const dynamic of [false, true]) {
+      it(`only marks exhausted retries after multiple executions (dynamic=${dynamic})`, async (receiver, run) => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        const proc = run('./node_modules/.bin/playwright test -c playwright.config.js --workers=1', {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-retry-limits',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+          },
+        })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            assert.strictEqual(tests.length, 6)
+            for (const [name, count] of [
+              ['default retries @smoke', 3],
+              ['suite retries 0 always fails @smoke', 1],
+              ['suite retries 1 always fails @smoke', 2],
+            ]) {
+              const attempts = tests.filter(test => test.meta[TEST_NAME] === name)
+              assert.strictEqual(attempts.length, count)
+              assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.strictEqual(attempts[0].meta[TEST_IS_RETRY], undefined)
+              assert.ok(attempts.slice(1).every(test => test.meta[TEST_IS_RETRY] === 'true'))
+              assert.ok(attempts.slice(1).every(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+              assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES], count > 1 ? 'true' : undefined)
+              assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === undefined))
+              assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+            }
+            const sessions = events.filter(event => event.type === 'test_session_end')
+            assert.strictEqual(sessions.length, 1)
+            assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
+            assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
+          })
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it(`ignores skipped serial results when counting executions (dynamic=${dynamic})`, async (receiver, run) => {
+        receiver.setSettings({ flaky_test_retries_enabled: true })
+        const proc = run('./node_modules/.bin/playwright test -c playwright.config.js --workers=1', {
+          cwd: sandboxCwd(),
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TEST_DIR: './ci-visibility/playwright-serial-retry-limits',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED: String(dynamic),
+            DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS: '2,2,2,2,2',
+          },
+        })
+        const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc, ({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            for (const firstAttempt of [1, 2]) {
+              const attempts = tests.filter(test =>
+                test.meta[TEST_NAME] === `starts on retry ${firstAttempt} later failure`)
+              assert.strictEqual(attempts.length, 3 - firstAttempt)
+              assert.ok(attempts.every(test => test.meta[TEST_STATUS] === 'fail'))
+              assert.strictEqual(attempts.at(-1).meta[TEST_FINAL_STATUS], 'fail')
+              assert.strictEqual(attempts.at(-1).meta[TEST_HAS_FAILED_ALL_RETRIES],
+                firstAttempt === 1 ? 'true' : undefined)
+              assert.ok(attempts.slice(0, -1).every(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === undefined))
+            }
+            const sessions = events.filter(event => event.type === 'test_session_end')
+            assert.strictEqual(sessions.length, 1)
+            assert.strictEqual(sessions[0].content.meta[TEST_STATUS], 'fail')
+            assert.ok(tests.every(test => test.test_session_id === sessions[0].content.test_session_id))
+          })
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+    }
+  })
+})
+
+versions.forEach((version) => {
+  if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
+  if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
+
   // TODO: Remove this once we drop suppport for v5
   const contextNewVersions = satisfies(version, '>=1.38.0') || version === 'latest' ? context : context.skip
 

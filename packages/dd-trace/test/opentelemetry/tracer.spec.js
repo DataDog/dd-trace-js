@@ -9,9 +9,14 @@ const api = require('@opentelemetry/api')
 
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP, USER_REJECT } = require('../../../../ext/priority')
+const { MANUAL_DROP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
+const {
+  SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_MECHANISM_AI_GUARD,
+} = require('../../src/constants')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
@@ -269,12 +274,91 @@ describe('OTel Tracer', () => {
       )
     }
 
+    for (const [name, ot, expected] of [
+      ['valid fields', 'rv:1234567890abcd;th:8;extra:value', 'rv:1234567890abcd;th:8;extra:value'],
+      ['invalid fields', 'rv:not-hex;th:not-hex', undefined],
+      ['invalid random value', 'rv:not-hex;th:8;extra:value', 'th:8;extra:value'],
+      ['invalid threshold', 'rv:1234567890abcd;th:not-hex', 'rv:1234567890abcd'],
+      ['threshold only', 'th:8', 'th:8'],
+      ['random value only', 'rv:1234567890abcd', 'rv:1234567890abcd'],
+      ['unknown fields', 'extra:value', 'extra:value'],
+      ['maximum-length member', `th:8;extra:${'x'.repeat(245)}`, `th:8;extra:${'x'.repeat(245)}`],
+    ]) {
+      for (const traceFlags of [api.TraceFlags.NONE, api.TraceFlags.SAMPLED]) {
+        it(`normalizes ${name} from a standard OTel parent with flags ${traceFlags}`, () => {
+          const otelTracer = new Tracer({}, {}, new TracerProvider())
+          const input = `vendor=value,ot=${ot}`
+          const traceState = api.createTraceState(input)
+          const parentContext = api.trace.setSpanContext(api.ROOT_CONTEXT, {
+            traceId: TRACE_ID,
+            spanId: SPAN_ID,
+            traceFlags,
+            traceState,
+            isRemote: true,
+          })
+          const span = otelTracer.startSpan('name', {}, parentContext)
+
+          try {
+            const childContext = span.spanContext()
+            assert.strictEqual(childContext.traceState.get('ot'), expected)
+            assert.strictEqual(childContext.traceState.get('vendor'), 'value')
+            assert.strictEqual(childContext.traceFlags, traceFlags)
+            assert.strictEqual(traceState.serialize(), input)
+
+            const carrier = {}
+            tracer.inject(span._ddSpan, 'text_map', carrier)
+            assert.strictEqual(api.createTraceState(carrier.tracestate).get('ot'), expected)
+          } finally {
+            span.end()
+          }
+        })
+      }
+    }
+
     it('writes sampling priority onto the wrapped Datadog context', () => {
       const spanContext = convert(1, 'other=bleh,dd=s:2;o:synthetics;t.dm:-4')
       assert.strictEqual(spanContext._ddContext._sampling.priority, USER_KEEP)
       assert.strictEqual(spanContext._ddContext._trace.origin, 'synthetics')
       assert.strictEqual(spanContext.traceFlags, 1)
     })
+
+    it('keeps unrelated Datadog tracestate fields out of span and trace tags', () => {
+      const spanContext = convert(
+        1,
+        'dd=s:2;p:76543210fedcba98;o:synthetics;t.dm:-4;t.foo:bar~baz;t.tid:0123456789abcdef'
+      )
+
+      assert.deepStrictEqual(spanContext._ddContext.getTags(), {})
+      assert.deepStrictEqual(spanContext._ddContext._trace.tags, {})
+      assert.strictEqual(
+        spanContext._ddContext._tracestate.get('dd'),
+        's:2;p:76543210fedcba98;o:synthetics;t.dm:-4;t.foo:bar~baz;t.tid:0123456789abcdef'
+      )
+    })
+
+    for (const [name, mechanism, setManualDrop] of [
+      ['single attributes', SAMPLING_MECHANISM_APPSEC, span => span.setAttribute(MANUAL_DROP, true)],
+      ['batch attributes', SAMPLING_MECHANISM_AI_GUARD, span => span.setAttributes({ [MANUAL_DROP]: true })],
+    ]) {
+      it(`preserves an inherited product force-keep before ${name}`, () => {
+        const otelTracer = new Tracer({}, {}, new TracerProvider())
+        const parent = api.trace.wrapSpanContext({
+          traceId: TRACE_ID,
+          spanId: SPAN_ID,
+          traceFlags: api.TraceFlags.SAMPLED,
+          traceState: api.createTraceState(`dd=s:2;t.dm:-${mechanism}`),
+          isRemote: true,
+        })
+        const parentContext = api.trace.setSpan(api.context.active(), parent)
+        const span = otelTracer.startSpan('name', {}, parentContext)
+
+        setManualDrop(span)
+
+        assert.strictEqual(span._ddSpan.context()._sampling.priority, USER_KEEP)
+        assert.strictEqual(span._ddSpan.context()._sampling.mechanism, mechanism)
+        span.end()
+      })
+    }
 
     it('preserves the existing _trace.started/finished/tags when writing origin', () => {
       const spanContext = convert(1, 'other=bleh,dd=s:1;o:foo')

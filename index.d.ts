@@ -217,6 +217,7 @@ interface Tracer extends opentracing.Tracer {
    *
    * @env DD_FEATURE_FLAGS_ENABLED
    * @env DD_FEATURE_FLAGS_CONFIGURATION_SOURCE
+   * @env DD_FLAGGING_EVALUATION_COUNTS_ENABLED
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -2080,8 +2081,9 @@ declare namespace tracer {
       /**
        * Whether to capture LLM Observability spans for this integration. When set to `false`,
        * the integration keeps emitting APM spans and propagating trace context, but no LLM
-       * Observability spans are produced. Useful when another integration already captures the
-       * same operation and the payloads would otherwise be stored twice.
+       * Observability spans and no basic `gen_ai.*` APM tags are produced. Useful when another
+       * integration already captures the same operation and the payloads would otherwise be
+       * stored twice.
        * @default true
        */
       llmobs?: boolean;
@@ -3949,13 +3951,13 @@ declare namespace tracer {
       /** Create a text or chat prompt and its first version. */
       createPrompt (
         promptId: string,
-        template: string | PromptTemplateMessage[],
+        template: string | PromptTemplateItem[],
         options?: CreatePromptOptions
       ): Promise<PromptResponse>
       /** Add a text or chat version to an existing prompt. */
       createPromptVersion (
         promptId: string,
-        template: string | PromptTemplateMessage[],
+        template: string | PromptTemplateItem[],
         options?: CreatePromptVersionOptions
       ): Promise<PromptVersionResponse>
       /** Update prompt metadata. */
@@ -3979,10 +3981,45 @@ declare namespace tracer {
       content: string
     }
 
+    /** Provider fields on expanded messages; authored templates remain text-only. */
+    interface FormattedPromptMessage extends PromptTemplateMessage {
+      // The inherited content type stays string for compatibility; tool-only payloads can omit it or contain null.
+      tool_calls?: PromptToolCall[] | null,
+      tool_results?: PromptToolResult[] | null,
+      tool_call_id?: string | null
+    }
+
+    interface PromptToolCall {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      arguments?: unknown,
+      function?: {
+        name: string,
+        arguments: string
+      } | null
+    }
+
+    interface PromptToolResult {
+      id?: string | null,
+      type?: string | null,
+      tool_id?: string | null,
+      name?: string | null,
+      result?: unknown
+    }
+
+    interface PromptMessagePlaceholder {
+      type: 'placeholder',
+      name: string
+    }
+
+    type PromptTemplateItem = PromptTemplateMessage | PromptMessagePlaceholder
+
     type PromptFallbackValue =
       | string
-      | PromptTemplateMessage[]
-      | { template: string | PromptTemplateMessage[], version?: string, config?: Record<string, JSONType> }
+      | PromptTemplateItem[]
+      | { template: string | PromptTemplateItem[], version?: string, config?: Record<string, JSONType> }
     type PromptFallback = PromptFallbackValue | (() => PromptFallbackValue)
 
     interface GetPromptOptions {
@@ -4022,6 +4059,7 @@ declare namespace tracer {
       envIds?: string[]
     }
 
+    // Preserve released output types; placeholder entries and null/omitted tool content are not fully described here.
     interface ManagedPrompt {
       readonly id: string,
       readonly version: string,
@@ -4030,7 +4068,7 @@ declare namespace tracer {
       readonly config: Readonly<Record<string, ReadonlyJSONType>>,
       readonly promptUuid?: string,
       readonly promptVersionUuid?: string,
-      format (variables?: Record<string, unknown>): string | PromptTemplateMessage[]
+      format (variables?: Record<string, unknown>): string | FormattedPromptMessage[]
       toAnnotation (variables?: Record<string, unknown>): Prompt
     }
 
@@ -4425,12 +4463,12 @@ declare namespace tracer {
       /**
        * The input content associated with the span.
        */
-      input: { content: string, role?: string }[]
+      input: { content: JSONType, role?: string }[]
 
       /**
        * The output content associated with the span.
        */
-      output: { content: string, role?: string }[]
+      output: { content: JSONType, role?: string }[]
 
       /**
        * Get a tag from the span.
