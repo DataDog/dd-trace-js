@@ -12,9 +12,35 @@ const POSTGRES_SIMPLE_DBM_QUERIES = '__ddTracePostgresSimpleDbmQueries'
 const POSTGRES_STATEMENT = 'this.string ?? (this.tagged && this.strings?.length !== 1 ? undefined : this.strings?.[0])'
 
 module.exports = {
+  postgresQueryAcquire,
   postgresQueryHandlers,
   postgresQueryLifecycle,
   postgresQueryPreparation,
+}
+
+/**
+ * @param {object} state
+ * @param {import('estree').Program} program
+ */
+function postgresQueryAcquire (state, program) {
+  const channelVariable = injectPostgresTracingChannel(state, program)
+  const executeFunctions = query(program, 'FunctionDeclaration[id.name="execute"]')
+  assert(executeFunctions.length === 1, 'postgresQueryAcquire: unexpected execute function count')
+
+  const execute = executeFunctions[0]
+  const queryParameter = execute.params[0]
+  assert(queryParameter?.type === 'Identifier', 'postgresQueryAcquire: execute query parameter changed')
+  assert(execute.body.type === 'BlockStatement', 'postgresQueryAcquire: execute body changed')
+
+  const body = execute.body.body
+  const executeIndex = body.findIndex(statement => statement.type === 'TryStatement')
+  assert(executeIndex !== -1, 'postgresQueryAcquire: execute try block changed')
+
+  body.splice(executeIndex, 0, ...parse(`
+    if (${channelVariable}.start.hasSubscribers) {
+      ${channelVariable}.start.publish({ query: ${queryParameter.name} });
+    }
+  `).body)
 }
 
 /**
@@ -154,6 +180,7 @@ function wrapPostgresHandler (handler, queryParameter, channelVariable) {
   assert(handler.body.type === 'BlockStatement', 'postgresQueryHandlers: handler body changed')
   assert(!handler.async && !handler.generator, 'postgresQueryHandlers: unsupported handler kind')
 
+  // Direct handoffs publish before the handler returns, so they record zero pool wait.
   const originalBody = handler.body.body
   const wrapperBody = parse(`
     function wrapper () {
@@ -167,12 +194,18 @@ function wrapPostgresHandler (handler, queryParameter, channelVariable) {
           __ddTraceContext.host = ${POSTGRES_OPTIONS}.host[0];
           __ddTraceContext.port = ${POSTGRES_OPTIONS}.port[0];
         }
-        return ${channelVariable}.start.runStores(__ddTraceContext, () => {});
+        const __ddTraceResult = ${channelVariable}.start.runStores(__ddTraceContext, () => {});
+        if (!__ddTraceContext.poolWaitFinished) {
+          __ddTraceContext.poolWaitStartMs = performance.now();
+        }
+        return __ddTraceResult;
       }
     }
   `).body[0].body.body
 
-  wrapperBody[0].consequent.body.at(-1).argument.arguments[1].body.body = originalBody
+  const tracingCalls = query(wrapperBody[0], 'CallExpression[callee.property.name="runStores"]')
+  assert(tracingCalls.length === 1, 'postgresQueryHandlers: runStores call changed')
+  tracingCalls[0].arguments[1].body.body = originalBody
   handler.body.body = [...wrapperBody, ...originalBody]
 }
 
