@@ -16,24 +16,16 @@ const DECIMAL_TRACE_ID_REGEX = /^\d+$/
 const HEX_TRACE_ID_REGEX = /^[0-9a-f]{32}$/i
 const MAX_UINT_64 = (1n << 64n) - 1n
 
-// LLM I/O is overwhelmingly ASCII (English prompts and code). Walk once
-// looking for the first non-ASCII char; if there is none, hand the input
-// straight back. Otherwise pick up the slow path from the byte that needed
-// escaping. ~5x faster on typical prompt strings than the per-char `+=`
-// loop the function used to do unconditionally.
+const NON_ASCII_REGEX = /[\u0080-\uFFFF]/g
+
+function escapeNonAscii (char) {
+  return String.raw`\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`
+}
+
+// Applied once to an already serialized payload: JSON.stringify emits non-ASCII
+// characters raw, while the intake expects them as \uXXXX escapes.
 function encodeUnicode (str = '') {
-  for (let index = 0; index < str.length; index++) {
-    if (str.charCodeAt(index) > 127) {
-      let result = str.slice(0, index)
-      // eslint-disable-next-line sonarjs/updated-loop-counter -- inner loop continues from outer position
-      for (; index < str.length; index++) {
-        const code = str.charCodeAt(index)
-        result += code > 127 ? String.raw`\u${code.toString(16).padStart(4, '0')}` : str[index]
-      }
-      return result
-    }
-  }
-  return str
+  return str.replaceAll(NON_ASCII_REGEX, escapeNonAscii)
 }
 
 function validateKind (kind) {
