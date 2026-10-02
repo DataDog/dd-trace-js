@@ -1,5 +1,9 @@
-This test initializes a tracer with the no-op scope manager. It then creates
-many spans, and depending on the variant, either finishes all of them as they
-are created, or later on once they're all created. Prior to creating any spans,
-it modifies the processor instance so that no span processing (or exporting) is
-done, and it simply stops storing the spans.
+This test initializes a tracer and creates many spans. Depending on the variant,
+it either finishes them immediately or in batches. Most variants use the no-op
+scope manager to isolate span construction; the `activate-*` pair instead uses
+the real scope manager to measure a complete activate/finish/restore lifecycle
+with the thread-context writer explicitly disabled or enabled.
+
+The processor is replaced before timing so no span processing or exporting is
+measured. Context-enabled results measure the writer on Linux runtimes using
+AsyncContextFrame; unsupported runtimes exercise its no-op fallback.
