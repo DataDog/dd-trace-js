@@ -16,7 +16,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'cookie-parser@${version}'`, 'express'], false,
+    useSandbox([`'cookie-parser@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
       ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

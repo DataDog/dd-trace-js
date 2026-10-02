@@ -14,7 +14,7 @@ const {
 describe('ESM', () => {
   let proc, agent
 
-  useSandbox(['process', 'express'], false,
+  useSandbox(['process', 'dc-polyfill@0.1.11', 'express'], false,
     ['./packages/datadog-plugin-process/test/integration-test/*'])
 
   const variants = varySandbox('server.mjs', {

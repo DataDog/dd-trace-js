@@ -25,7 +25,7 @@ withVersions('cookie', 'cookie', (version, _moduleName, resolvedVersion) => {
 
     let proc, agent
 
-    useSandbox([`'cookie@${version}'`, 'express'], false,
+    useSandbox([`'cookie@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
       ['./packages/datadog-plugin-cookie/test/integration-test/*'])
 
     const variants = varySandbox(isEsmOnly ? 'server-v2.mjs' : 'server.mjs', {

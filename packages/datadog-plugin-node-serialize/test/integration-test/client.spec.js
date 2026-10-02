@@ -16,7 +16,7 @@ withVersions('node-serialize', 'node-serialize', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'node-serialize@${version}'`, 'express'], false,
+    useSandbox([`'node-serialize@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
       ['./packages/datadog-plugin-node-serialize/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

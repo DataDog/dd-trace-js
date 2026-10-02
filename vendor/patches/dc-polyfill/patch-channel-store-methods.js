@@ -23,8 +23,9 @@ function defaultTransform (data) {
 }
 
 // dc-polyfill normally assigns a new store Map whenever a physical copy first
-// sees a channel. Keep the existing Map and make its reference stable so a
-// user copy loaded after the vendored copy cannot discard dd-trace's bindings.
+// sees a channel. Keep a non-empty Map so a user copy loaded after the vendored
+// copy cannot discard dd-trace's bindings. Node must still be able to clear an
+// empty Map when a channel becomes inactive.
 module.exports = function patchChannelStoreMethods (dc) {
   const seen = new WeakSet()
   const originalChannel = dc.channel
@@ -35,17 +36,24 @@ module.exports = function patchChannelStoreMethods (dc) {
     if (seen.has(channel)) return channel
 
     const descriptor = getOwnPropertyDescriptor(channel, '_stores')
+    let stores = descriptor?.value
     defineProperty(channel, '_stores', {
       configurable: true,
       enumerable: descriptor?.enumerable ?? true,
-      value: descriptor?.value ?? new Map(),
-      writable: false,
+      get () {
+        return stores
+      },
+      set (value) {
+        if (!stores || stores.size === 0) stores = value
+      },
     })
+    channel._stores ??= new Map()
     channel.bindStore = function (store, transform) {
+      this._stores ??= new Map()
       this._stores.set(store, transform)
     }
     channel.unbindStore = function (store) {
-      if (!this._stores.has(store)) return false
+      if (!this._stores?.has(store)) return false
       this._stores.delete(store)
       return true
     }
@@ -55,7 +63,7 @@ module.exports = function patchChannelStoreMethods (dc) {
         return apply(fn, thisArg, args)
       }
 
-      for (const [store, transform] of this._stores.entries()) {
+      for (const [store, transform] of this._stores?.entries() ?? []) {
         run = wrapStoreRun(store, data, run, transform)
       }
 
@@ -65,7 +73,7 @@ module.exports = function patchChannelStoreMethods (dc) {
     if (!getOwnPropertyDescriptor(channel, 'hasSubscribers')) {
       defineProperty(channel, 'hasSubscribers', {
         get () {
-          return getPrototypeOf(this).hasSubscribers || this._stores.size > 0
+          return getPrototypeOf(this).hasSubscribers || (this._stores?.size ?? 0) > 0
         },
       })
     }
