@@ -43,6 +43,21 @@ declare const BaseSummaryEvaluator: {
   new (name?: string): tracer.llmobs.BaseSummaryEvaluator
 }
 
+declare const RemoteEvaluatorError: {
+  new (message: string, options?: {
+    status?: string
+    backendError?: Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluatorError
+}
+
+declare const RemoteEvaluator: {
+  new (options: {
+    evalName: string
+    transformFn?: (context: tracer.llmobs.EvaluatorContext) => Record<string, tracer.llmobs.JSONType>
+  }): tracer.llmobs.RemoteEvaluator
+}
+
+
 /**
  * Tracer is the entry-point of the Datadog tracing implementation.
  */
@@ -3760,6 +3775,8 @@ declare namespace tracer {
       SummaryEvaluatorContext: typeof SummaryEvaluatorContext,
       EvaluatorResult: typeof EvaluatorResult,
       MultiEvaluatorResult: typeof MultiEvaluatorResult,
+      RemoteEvaluator: typeof RemoteEvaluator,
+      RemoteEvaluatorError: typeof RemoteEvaluatorError,
 
       /** Prompt Management API. */
       prompts: Prompts,
@@ -4140,6 +4157,14 @@ declare namespace tracer {
       prefix: boolean
     }
 
+    /** Error returned by a managed evaluator configured in Datadog. */
+    interface RemoteEvaluatorError extends Error {
+      status: string
+      backendError: Record<string, JSONType>
+    }
+
+    /** Evaluator that references an LLM-as-a-judge evaluator configured in Datadog. */
+    interface RemoteEvaluator extends BaseEvaluator {}
     interface ExperimentSummaryEvaluation extends EvaluatorResultOptions {
       value: any
       error: string | null

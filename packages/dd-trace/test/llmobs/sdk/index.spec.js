@@ -93,7 +93,7 @@ describe('sdk', () => {
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
     })
 
-    it('exposes class-based evaluator primitives and built-ins', () => {
+    it('exposes class-based evaluator primitives and remote evaluators', () => {
       for (const name of [
         'BaseEvaluator',
         'BaseSummaryEvaluator',
@@ -101,6 +101,8 @@ describe('sdk', () => {
         'SummaryEvaluatorContext',
         'EvaluatorResult',
         'MultiEvaluatorResult',
+        'RemoteEvaluator',
+        'RemoteEvaluatorError',
       ]) {
         assert.strictEqual(typeof llmobs[name], 'function')
       }

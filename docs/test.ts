@@ -769,6 +769,11 @@ class ExampleEvaluator extends llmobs.BaseEvaluator {
   }
 }
 
+const remoteEvaluator = new llmobs.RemoteEvaluator({
+  evalName: 'managed-judge',
+  transformFn: context => ({ span_input: context.inputData, span_output: context.outputData })
+})
+remoteEvaluator.name
 class ExampleSummaryEvaluator extends llmobs.BaseSummaryEvaluator {
   async evaluate (context: InstanceType<typeof llmobsTypes.SummaryEvaluatorContext>) {
     return context.outputs.length
