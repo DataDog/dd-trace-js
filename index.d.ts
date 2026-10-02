@@ -977,6 +977,16 @@ declare namespace tracer {
     dbmPropagationMode?: 'disabled' | 'service' | 'full' | 'dynamic_service'
 
     /**
+     * Transaction operations whose simple standalone SQL statements do not create database spans.
+     * Applies to the pg, mysql, mysql2, and mariadb integrations.
+     * `begin` also matches `START TRANSACTION`. Matching is case insensitive.
+     * Individual plugin configuration can override this setting.
+     * @default []
+     * @env DD_TRACE_DB_CLIENT_IGNORED_TRANSACTION_OPERATIONS
+     */
+    ignoredTransactionOperations?: string[]
+
+    /**
      * Whether to enable Data Streams Monitoring.
      * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
      * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
@@ -2089,6 +2099,16 @@ declare namespace tracer {
     }
 
     /** @hidden */
+    interface TransactionFilter {
+      /**
+       * Transaction operations whose simple standalone SQL statements do not create database spans.
+       * `begin` also matches `START TRANSACTION`.
+       * @default []
+       */
+      ignoredTransactionOperations?: string[];
+    }
+
+    /** @hidden */
     interface Http extends Instrumentation {
       /**
        * List of URLs/paths that should be instrumented.
@@ -3055,7 +3075,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mysql](https://github.com/mysqljs/mysql) module.
      */
-    interface mysql extends Instrumentation {
+    interface mysql extends Instrumentation, TransactionFilter {
       service?: string | ((params: any) => string);
     }
 
@@ -3147,7 +3167,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [pg](https://node-postgres.com/) module.
      */
-    interface pg extends DatabaseInstrumentation {
+    interface pg extends DatabaseInstrumentation, TransactionFilter {
       /**
        * The service name to be used for this plugin. If a function is used, it will be passed the connection parameters and its return value will be used as the service name.
        */
