@@ -96,7 +96,7 @@ describe('onPause', function () {
       parentThreadId,
       dynamicInstrumentation: {
         captureTimeoutNs: 15_000_000n, // Default value is 15ms
-        evaluationTimeoutNs: 10_000_000n, // Default value is 10ms
+        evaluationTimeoutNs: 10_000_000n, // The time budget tests assume 10ms rather than the 50ms default
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: [],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: [],
       },
