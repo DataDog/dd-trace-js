@@ -313,6 +313,7 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 }
 
 module.exports = {
+  isBareSpecifier,
   isESMFile,
   processModule,
 }

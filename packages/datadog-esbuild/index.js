@@ -10,7 +10,7 @@ const extractPackageAndModulePath = require('../datadog-instrumentations/src/hel
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
 const log = require('./src/log')
 const { createEsmResolver } = require('./src/resolver')
-const { isESMFile, processModule } = require('./src/utils')
+const { isBareSpecifier, isESMFile, processModule } = require('./src/utils')
 
 const ESM_INTERCEPTED_SUFFIX = '._dd_esbuild_intercepted'
 const INTERNAL_ESM_INTERCEPTED_PREFIX = '/_dd_esm_internal_/'
@@ -42,8 +42,14 @@ function addModuleOfInterest (name, file) {
 }
 
 const modulesOfInterest = new Set()
+// Third-party packages that have at least one hooked entry point.
+const instrumentedPackages = new Set()
 
 for (const [name, instrumentation] of Object.entries(instrumentations)) {
+  if (!builtinModules.has(name)) {
+    instrumentedPackages.add(name)
+  }
+
   for (const entry of instrumentation) {
     addModuleOfInterest(name, entry.file)
   }
@@ -217,9 +223,35 @@ ${build.initialOptions.banner.js}`
 
     const internal = builtins.has(args.path)
 
-    if (args.namespace === 'file' && (
-      modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
+    const moduleOfInterest = modulesOfInterest.has(args.path) ||
+      modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`)
+
+    if (
+      args.namespace === 'file' &&
+      !moduleOfInterest &&
+      !internal &&
+      instrumentedPackages.has(extracted.pkg) &&
+      isBareSpecifier(args.path)
     ) {
+      // Hooked files are resolved with Node.js semantics, but esbuild also
+      // enables the `module` export condition by default. A package that
+      // publishes a `module` variant next to its `node`/`require` variant
+      // (e.g. `@smithy/core` with `dist-es` and `dist-cjs`) would otherwise be
+      // bundled twice: the hooked file from one variant and every other entry
+      // point from the other, with both copies importing each other. Keep the
+      // whole package on the variant the hook was written against instead.
+      const bundlerPath = resolveLikeBundler(args.path, args.resolveDir, args.kind === 'import-statement', build)
+
+      if (bundlerPath !== undefined && bundlerPath !== fullPathToModule) {
+        log.debug('PIN: %s to %s instead of %s', args.path, fullPathToModule, bundlerPath)
+
+        return { path: fullPathToModule }
+      }
+
+      return
+    }
+
+    if (args.namespace === 'file' && moduleOfInterest) {
       // Internal module like http/fs is imported and the build output is ESM
       if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
         fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`
@@ -420,6 +452,49 @@ function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path.startsWith('file://')) {
     path = fileURLToPath(path)
   }
+  return resolveWithConditions(path, directory, conditions)
+}
+
+/**
+ * Resolves a bare specifier with the export conditions esbuild applies, so the
+ * result can be compared with the Node.js resolution of the same specifier.
+ *
+ * esbuild always enables `default`, `import` or `require`, and the platform
+ * condition. It also enables `module` unless `conditions` is configured.
+ *
+ * @param {string} path
+ * @param {string} directory
+ * @param {boolean} usesImportStatement
+ * @param {{ initialOptions: { conditions?: string[], platform?: string } }} build
+ * @returns {string | undefined} The resolved file, or `undefined` when the specifier cannot be resolved.
+ */
+function resolveLikeBundler (path, directory, usesImportStatement, build) {
+  const { conditions: customConditions, platform = 'browser' } = build.initialOptions
+  const conditions = new Set(customConditions ?? ['module'])
+
+  conditions.add(usesImportStatement ? 'import' : 'require')
+
+  if (platform === 'node' || platform === 'browser') {
+    conditions.add(platform)
+  }
+
+  let resolved
+
+  try {
+    resolved = resolveWithConditions(path, directory, conditions)
+  } catch {
+    // esbuild would fail to resolve it as well, so there is nothing to pin.
+  }
+
+  return resolved
+}
+
+/**
+ * @param {string} path
+ * @param {string} directory
+ * @param {Set<string>} [conditions] Defaults to the Node.js CommonJS conditions.
+ */
+function resolveWithConditions (path, directory, conditions) {
   return require.resolve(path, {
     paths: [directory],
     // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
