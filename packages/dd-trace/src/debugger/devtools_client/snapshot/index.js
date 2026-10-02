@@ -107,6 +107,13 @@ function isCollectable (scope) {
  */
 
 /**
+ * @typedef {object} RedactedCaptureExpression
+ * @property {string} name - The name of the expression
+ * @property {{ expr: string, message: string }} redactionError - Reported instead of evaluating the expression, as it
+ *   reads a redacted identifier
+ */
+
+/**
  * @typedef {object} CaptureExpressionResult
  * @property {() => Record<string, ReturnType<typeof processRemoteObject>>} processCaptureExpressions - Callback to
  *   process raw data into snapshot format
@@ -130,7 +137,8 @@ function isCollectable (scope) {
  * Collects raw data while paused, returns a callback to process after resume.
  *
  * @param {import('inspector').Debugger.CallFrame} callFrame - The call frame to evaluate expressions on
- * @param {CompiledCaptureExpression[]} expressions - The compiled expressions with precomputed capture limits
+ * @param {(CompiledCaptureExpression|RedactedCaptureExpression)[]} expressions - The compiled expressions with
+ *   precomputed capture limits
  * @param {bigint} [deadlineNs] - The deadline in nanoseconds. Defaults to {@link BIGINT_MAX}. If the deadline is
  *   reached, the snapshot will be truncated.
  * @returns {Promise<CaptureExpressionResult>} Raw results with deferred processing callback
@@ -148,7 +156,13 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
   let processedResult = null
 
   for (let i = 0; i < expressions.length; i++) {
-    const { name, expression, limits } = expressions[i]
+    const captureExpression = expressions[i]
+    if ('redactionError' in captureExpression) {
+      evaluationErrors.push(captureExpression.redactionError)
+      continue
+    }
+
+    const { name, expression, limits } = captureExpression
     const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
 
     try {

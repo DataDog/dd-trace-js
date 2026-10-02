@@ -3,6 +3,7 @@
 module.exports = {
   compile,
   compileSegments,
+  getRedactionError,
   getSegmentRedactionErrors,
   templateRequiresEvaluation,
 }
@@ -104,13 +105,26 @@ function getSegmentRedactionErrors (segments) {
   let errors
   for (const { str, dsl, json } of segments) {
     if (str !== undefined) continue
-    const identifier = findRedactedIdentifier(json)
-    if (identifier !== undefined) {
+    const error = getRedactionError(dsl, json)
+    if (error !== undefined) {
       errors ??= []
-      errors.push({ expr: dsl, message: `Could not evaluate the expression because '${identifier}' was redacted` })
+      errors.push(error)
     }
   }
   return errors
+}
+
+/**
+ * Get the evaluation error to report instead of evaluating an expression, because it reads a redacted identifier.
+ *
+ * @param {string} expr - The expression to report the error for.
+ * @param {object} json - The JSON expression AST.
+ * @returns {EvaluationError|undefined} The evaluation error, if the expression reads a redacted identifier.
+ */
+function getRedactionError (expr, json) {
+  const identifier = findRedactedIdentifier(json)
+  if (identifier === undefined) return
+  return { expr, message: `Could not evaluate the expression because '${identifier}' was redacted` }
 }
 
 /**

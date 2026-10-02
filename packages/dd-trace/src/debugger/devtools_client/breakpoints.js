@@ -4,7 +4,13 @@ const createMutex = require('../../../../../vendor/dist/mutexify/promise')
 const mutex = createMutex()
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
-const { compile, compileSegments, getSegmentRedactionErrors, templateRequiresEvaluation } = require('./condition')
+const {
+  compile,
+  compileSegments,
+  getRedactionError,
+  getSegmentRedactionErrors,
+  templateRequiresEvaluation,
+} = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
 const {
   compileBreakpointCondition,
@@ -129,6 +135,12 @@ async function addBreakpoint (probe) {
   if (probe.captureExpressions?.length > 0) {
     probe.compiledCaptureExpressions = []
     for (const captureExpr of probe.captureExpressions) {
+      const redactionError = getRedactionError(captureExpr.name, captureExpr.expr.json)
+      if (redactionError !== undefined) {
+        probe.compiledCaptureExpressions.push({ name: captureExpr.name, redactionError })
+        continue
+      }
+
       let expression
       try {
         expression = compile(captureExpr.expr.json)

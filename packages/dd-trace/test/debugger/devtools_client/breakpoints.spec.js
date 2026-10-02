@@ -664,6 +664,35 @@ describe('breakpoints', function () {
         ])
       })
 
+      it('should not compile capture expressions reading redacted identifiers', async function () {
+        await addProbe({
+          captureSnapshot: false,
+          captureExpressions: [
+            { name: 'a', expr: { dsl: 'a', json: { ref: 'a' } } },
+            { name: 'pw', expr: { dsl: 'user.password', json: { getmember: [{ ref: 'user' }, 'password'] } } },
+          ],
+        })
+
+        const probe = getInstalledProbe()
+
+        assert.deepStrictEqual(probe.compiledCaptureExpressions, [
+          {
+            name: 'a',
+            expression: 'a',
+            limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          },
+          {
+            name: 'pw',
+            redactionError: {
+              expr: 'pw',
+              message: "Could not evaluate the expression because 'password' was redacted",
+            },
+          },
+        ])
+        // The probe still produces snapshots, so it keeps the snapshot sampling rate
+        assert.strictEqual(probe.nsBetweenSampling, 1_000_000_000n)
+      })
+
       it('should handle capture expression compilation errors', async function () {
         await assert.rejects(
           addProbe({

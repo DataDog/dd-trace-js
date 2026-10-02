@@ -23,6 +23,7 @@ const {
 const {
   compile,
   compileSegments,
+  getRedactionError,
   getSegmentRedactionErrors,
   templateRequiresEvaluation,
 } = loadCondition()
@@ -207,6 +208,19 @@ describe('Expression language', function () {
 
       assert.strictEqual(compileSegments([{ dsl: 'foo', json: { ref: 'foo' } }]), '["{redacted}"]')
       assert.ok(compileSegments([{ dsl: 'password', json: { ref: 'password' } }]).includes('const result = password'))
+    })
+
+    describe('getRedactionError', function () {
+      it('should return undefined if the expression does not read a redacted identifier', function () {
+        assert.strictEqual(getRedactionError('name', { ref: 'name' }), undefined)
+      })
+
+      it('should return an evaluation error if the expression reads a redacted identifier', function () {
+        assert.deepStrictEqual(getRedactionError('pw', { getmember: [{ ref: 'user' }, 'password'] }), {
+          expr: 'pw',
+          message: "Could not evaluate the expression because 'password' was redacted",
+        })
+      })
     })
 
     describe('getSegmentRedactionErrors', function () {
