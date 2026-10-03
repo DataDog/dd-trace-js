@@ -1,0 +1,103 @@
+name: Lambda shim compatibility
+
+on:
+  pull_request:
+    branches: [master, v5.x, v6.x]
+  push:
+    branches: [master, v5.x, v6.x, mq-working-branch-master-*, mq-working-branch-v5.x-*, mq-working-branch-v6.x-*]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Do not use node/setup: its 18/20 legs widen engines.node in the checkout.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - run: yarn install --frozen-lockfile
+      - run: npm run test:lambda:compat:unit
+      - id: matrix
+        run: echo "matrix=$(node integration-tests/lambda-shim-compat/scripts/plan.cjs)" >> "$GITHUB_OUTPUT"
+      - name: Pack the actual PR or backport checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/lambda-package"
+          npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/lambda-package"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lambda-compat-package
+          path: ${{ runner.temp }}/lambda-package/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  compatibility:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: lambda-compat-package
+          path: ${{ runner.temp }}/lambda-package
+      - name: Compare with the real pre-migration shim and released control
+        env:
+          LAMBDA_COMPAT_NODE: ${{ matrix.node }}
+        run: |
+          packages=("$RUNNER_TEMP"/lambda-package/*.tgz)
+          test "${#packages[@]}" -eq 1
+          npm run test:lambda:compat -- --candidate "$GITHUB_WORKSPACE" \
+            --tarball "${packages[0]}" --runtimes "$LAMBDA_COMPAT_NODE" \
+            --output "$RUNNER_TEMP/lambda-compat" --platform linux/amd64 --ci
+      - name: Publish compatibility summary
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/lambda-compat/report.md" ]; then
+            cat "$RUNNER_TEMP/lambda-compat/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: lambda-compat-node${{ matrix.node }}
+          # Never upload node_modules or package-manager caches.
+          path: |
+            ${{ runner.temp }}/lambda-compat/*.json
+            ${{ runner.temp }}/lambda-compat/*.md
+            ${{ runner.temp }}/lambda-compat/*.log
+            ${{ runner.temp }}/lambda-compat/*/yarn.lock
+            ${{ runner.temp }}/lambda-compat/*/results-*.json
+            ${{ runner.temp }}/lambda-compat/*/layer-task/results-*.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  # Stable check name across the different v5/v6/master runtime matrices. Require this in branch rules.
+  lambda-shim-compat:
+    if: always()
+    needs: [prepare, compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          COMPAT_RESULT: ${{ needs.compatibility.result }}
+        run: test "$PREPARE_RESULT" = success && test "$COMPAT_RESULT" = success

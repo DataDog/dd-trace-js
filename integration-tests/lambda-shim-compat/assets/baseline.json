@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "captured": "2026-09-25",
+  "shim": {
+    "name": "datadog-lambda-js",
+    "version": "12.143.0",
+    "commit": "85fdb2ee2368e4ef03268277e01b9e99119ca4c1",
+    "artifact": "datadog-lambda-js-12.143.0.tgz",
+    "sha256": "95fab57dc432756ea8687b78deb8865734aaf1006fea2638786bf69f82029376",
+    "origin": "Packed compiled dist from the pre-migration PR842 checkout used in the 2026-09-25 compatibility audit; not repacked on each run.",
+    "peerRange": "^5.126.0 || ^6.15.0"
+  },
+  "control": {
+    "version": "6.15.0",
+    "lockfile": "control.yarn.lock",
+    "lockSha256": "5c9f00cfbc45417d40da4fec7cfc2092335ae36d5d25073fd412e27b66a15520"
+  },
+  "controlV5": {
+    "version": "5.126.0",
+    "resolutions": { "@aws-sdk/types": "3.965.0" },
+    "lockfile": "control-v5.yarn.lock",
+    "lockSha256": "2449ddcaa920fc2f3eb5347023f67800d43e1d2682ea104b3e99a578102990b8"
+  },
+  "limitations": [
+    "The frozen shim is a locally packed release-candidate checkout, not a separately downloaded published shim tarball.",
+    "Candidate dependencies resolve at install time; each generated lockfile is retained. Default control dependencies use the frozen lock.",
+    "Installation uses --ignore-scripts; optional native install behavior is not certified.",
+    "Runtime image IDs and architecture are recorded, not assumed immutable from tags.",
+    "No goldens, real AWS deployment/termination/HTTP streaming, Datadog ingestion, or AppSec/profiler certification."
+  ]
+}

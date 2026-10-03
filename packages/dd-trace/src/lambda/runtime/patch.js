@@ -2,9 +2,10 @@
 
 const path = require('path')
 
-const { datadog } = require('../handler')
+const { withTimeoutMonitor, wrapLambdaHandler } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
+const { isTrue } = require('../../util')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const {
   extractModuleNameAndHandlerPath,
@@ -18,14 +19,62 @@ function patchDatadogLambdaModule (datadogLambdaModule) {
   return datadogLambdaModule
 }
 
+/**
+ * Whether dd-trace creates the `aws.lambda` invocation span. Transitional, default off.
+ *
+ * While the pre-migration datadog-lambda-js still owns the invocation span, dd-trace must not
+ * create a second one: the released shim does not know
+ * `Symbol.for('dd-trace.lambda.wrapped')`, and dd-trace deliberately does not claim the shim's
+ * `_ddWrapped` marker, so both would wrap and export two root `aws.lambda` spans in two separate
+ * traces. Off preserves the pre-PR3 division of ownership — dd-trace's Lambda support was timeout
+ * monitoring only and never produced a span.
+ *
+ * Enabling it is for migration testing and knowingly double-spans against the old shim. The gate
+ * goes away once the shim delegates to `dd-trace/lambda` and the marker makes wrapping idempotent.
+ *
+ * Migration-internal knob: registered in supported-configurations.json (env access validation
+ * requires it) but intentionally not mapped to a customer-facing config option.
+ */
+function ddTraceOwnsInvocationSpan () {
+  return isTrue(getValueFromEnvSources('DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS'))
+}
+
+/**
+ * Composes the two independent concerns, innermost first.
+ *
+ * Timeout monitoring always applies; span creation is gated. The monitor has to sit *inside* the
+ * span-creating wrapper so the span is active when its timer fires.
+ *
+ * @param {Function} lambdaHandler Customer handler.
+ * @param {Record<string, unknown>} [config] Per-handler overrides.
+ * @returns {Function} Instrumented handler.
+ */
+function instrumentLambdaHandler (lambdaHandler, config) {
+  return ddTraceOwnsInvocationSpan() ? wrapLambdaHandler(lambdaHandler, config) : withTimeoutMonitor(lambdaHandler)
+}
+
 /** @param {Function} datadogHandler */
 function patchDatadogLambdaHandler (datadogHandler) {
-  return userHandler => datadogHandler(datadog(userHandler))
+  return function monitoredDatadog (userHandler, ...args) {
+    return datadogHandler.call(this, instrumentLambdaHandler(userHandler, args[0]), ...args)
+  }
 }
 
 /** @param {string} handlerPath */
 function patchLambdaModule (handlerPath) {
   return lambdaModule => {
+    const descriptor = Object.getOwnPropertyDescriptor(lambdaModule, handlerPath)
+    if (descriptor?.writable && typeof descriptor.value === 'function') {
+      const wrapped = patchLambdaHandler(descriptor.value)
+      // A cached wrapper may have been frozen by the caller. Reinstall it without shimmer
+      // trying to copy the original function's properties onto it again.
+      if (Object.isExtensible(wrapped)) {
+        shimmer.wrap(lambdaModule, handlerPath, () => wrapped)
+      } else {
+        Object.defineProperty(lambdaModule, handlerPath, { ...descriptor, value: wrapped })
+      }
+      return lambdaModule
+    }
     shimmer.wrap(lambdaModule, handlerPath, patchLambdaHandler)
     return lambdaModule
   }
@@ -33,7 +82,7 @@ function patchLambdaModule (handlerPath) {
 
 /** @param {Function} lambdaHandler */
 function patchLambdaHandler (lambdaHandler) {
-  return datadog(lambdaHandler)
+  return instrumentLambdaHandler(lambdaHandler)
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')

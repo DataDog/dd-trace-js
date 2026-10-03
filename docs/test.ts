@@ -28,6 +28,7 @@ import { HTTP, WEB } from '../ext/types'
 import * as opentracing from 'opentracing';
 import { metrics } from '@opentelemetry/api';
 import { IncomingMessage, OutgoingMessage } from 'http';
+import * as lambda from '../lambda';
 
 opentracing.initGlobalTracer(tracer);
 
@@ -304,6 +305,20 @@ tracer.use('anthropic', { llmobs: false });
 tracer.use('claude-agent-sdk');
 tracer.use('claude-agent-sdk', { llmobs: false });
 tracer.use('avsc');
+tracer.use('aws-lambda');
+const lambdaHandler = lambda.wrap(async (event: { value: string }) => event.value, {
+  captureLambdaPayload: true,
+  enhancedMetrics: false,
+});
+lambdaHandler({ value: 'ok' });
+lambda.sendDistributionMetric('example.metric', 1, 'tag:value');
+lambda.sendDistributionMetricWithDate('example.metric', 1, new Date(), 'tag:value');
+const lambdaTraceHeaders: Record<string, string> = lambda.getTraceHeaders();
+const initFailureReported: Promise<void> = lambda.reportInitFailure({
+  error: new Error('load failed'),
+  functionName: 'my-function',
+  startTime: Date.now(),
+});
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', { llmobs: false });
 tracer.use('aws-sdk', awsSdkOptions);
