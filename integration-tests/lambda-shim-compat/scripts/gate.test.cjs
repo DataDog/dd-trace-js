@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { test } = require('node:test')
 
 const { inspect } = require('../assets/fixture/assertions.cjs')
+const { select } = require('../assets/fixture/matrix.cjs')
 const { gate, expectedFailures } = require('./gate.cjs')
 const { plan } = require('./plan.cjs')
 const { parseArgs } = require('./run.cjs')
@@ -17,6 +18,34 @@ const report = rows => ({
   shimSha256: 'frozen-shim',
   fixtureSha256: 'same-fixtures',
   rows,
+})
+
+test('every exception in the full matrix belongs to the tracked legacy defect inventory', () => {
+  // Keep these IDs aligned with README.md#legacy-defect-register. A fix removes its entries,
+  // not its behavioral probes; adding cases to a broad gate predicate needs explicit review.
+  const tracked = {
+    'LEGACY-LAMBDA-001': ['normal/npm/repeat-wrap'],
+    'LEGACY-LAMBDA-002': [
+      'normal/redirect-esm/timeout-promise',
+      'normal/redirect-esm/timeout-callback',
+      'normal/redirect-esm/timeout-frozen',
+      'normal/layer-esm/timeout-promise',
+      'normal/layer-esm/timeout-callback',
+      'normal/layer-esm/timeout-frozen',
+      'layer-only/layer-esm/timeout-promise',
+      'layer-only/layer-esm/timeout-callback',
+      'layer-only/layer-esm/timeout-frozen',
+      'preload/redirect-esm/timeout-promise',
+      'preload/layer-esm/timeout-promise',
+    ],
+    'LEGACY-LAMBDA-003': ['normal/layer-cjs/custom-config', 'normal/layer-esm/custom-config'],
+  }
+  const actual = ['normal', 'layer-only', 'preload'].flatMap(mode => select(mode)
+    .filter(({ entry, scenario }) => expectedFailures(mode, entry, scenario))
+    .map(({ entry, scenario }) => `${mode}/${entry}/${scenario}`))
+  const expected = Object.values(tracked).flat()
+  assert.equal(new Set(expected).size, expected.length, 'A case must belong to exactly one tracked defect')
+  assert.deepEqual(actual.sort(), expected.sort())
 })
 
 test('only exact, freshly reproduced baseline failures are eligible', () => {

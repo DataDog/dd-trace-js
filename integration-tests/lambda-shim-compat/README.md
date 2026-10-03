@@ -67,29 +67,116 @@ The assertion collector checks independent contracts even after one fails. It co
 spans across **all** trace payloads, checks shim ownership, matches the active invocation, validates
 child parenting, and verifies that the timeout error is on the invocation rather than its child.
 
-CI mode reports `PASS WITH KNOWN FAILURES` only for these exact defects, reproduced by the released
-control in the same run. The machine-readable expectations are in `scripts/gate.cjs`:
-
-- **Explicit npm re-wrapping:** `datadog(datadog(handler))` returns a different wrapper and emits two
-  nested shim spans and two invocation metrics, with one handler call and one child. The timeout
-  monitor hides the shim's `_ddWrapped` marker when handing the wrapper back to the shim. Both
-  5.126.0 and 6.15.0 reproduce this. The exception pins counts, ownership and nesting; it cannot
-  permit two unrelated traces, an additional plugin span, or duplication in ordinary invocations.
-- **ESM timeout hooks:** `redirect-esm` and `layer-esm` promise/callback/frozen timeout cases never
-  flush their invocation or unfinished child in this harness. Both must be absent, while invocation
-  results, active context, and metrics still pass. Preloading the tracer does not repair these ESM
-  hook paths. Any partial/different flush or additional failure is red.
-- **Mixed-layer custom extraction:** only `normal/layer-{cjs,esm}/custom-config` loses the supplied
-  parent when the layer and task load separate tracer module copies. The emitted invocation is a
-  root with a different trace ID, but payload capture, active headers and child parenting work.
-  The equivalent pure-layer cases must pass. Random IDs are compared as explicit relationships,
-  not normalized away in raw output.
+CI mode reports `PASS WITH KNOWN FAILURES` only for the exact defects below, reproduced by the
+released control in the same run. Each exception in [gate.cjs](scripts/gate.cjs) links to a stable
+tracking ID here; [gate.test.cjs](scripts/gate.test.cjs) pins the complete affected-case inventory.
 
 These failures were present in the 2026-09-28 pre-CI audit and were rechecked against released
 controls while adding this gate. They remain defects, not successful compatibility cases. Fix them
 in their owning change, add regression coverage, and remove the corresponding expectation. If the
 control starts passing, a failing candidate is immediately red. Unknown shared failures and changed
 failure shapes are also red; aggregate pass counts never override an individual regression.
+
+### Legacy defect register
+
+These are repository-local follow-up records, **not GitHub issue numbers or assigned tickets**.
+All three are **OPEN** in the legacy pairing; closure in the final-preview pairing is **unverified**.
+The existing code-owner teams for this harness and Lambda core are `@DataDog/dd-trace-js`,
+`@DataDog/serverless-aws`, and `@DataDog/apm-serverless` (see [CODEOWNERS](../../.github/CODEOWNERS)).
+The component owners and roadmap checkpoints below route the work; they do not imply an accepted
+personal assignment or a shipped fix.
+
+| ID | Defect | Failing cases per runtime | Follow-up checkpoint |
+| --- | --- | ---: | --- |
+| [LEGACY-LAMBDA-001](#legacy-lambda-001) | Explicit npm re-wrapping duplicates spans/metrics | 1 | PR6 lifecycle follow-up; PR16 conversion proof |
+| [LEGACY-LAMBDA-002](#legacy-lambda-002) | ESM timeout hooks do not flush | 11 | PR6 loader/timeout follow-up; PR16 conversion proof |
+| [LEGACY-LAMBDA-003](#legacy-lambda-003) | Mixed-layer custom extraction loses its parent | 2 | PR8 extraction checkpoint; PR16 loader proof |
+
+The 2026-10-02 actual-backport runs below reproduce all **14** cases on both released controls
+and the supported v5/v6 candidates. This supports the narrow PR3 no-new-regression decision with
+`DD_TRACE_LAMBDA_WRAP_SHIM_HANDLERS` unset. It does not make these defects acceptable post-migration,
+prove safety for a changed failure shape, or authorize extending the exception list.
+
+### LEGACY-LAMBDA-001
+
+**Explicit npm re-wrapping — OPEN.** Component owner: dd-trace's npm hook/timeout-monitor seam
+(`packages/dd-trace/src/lambda/{handler.js,runtime/patch.js}`), coordinating with the shim's
+`datadog()` / `_ddWrapped` contract in `datadog-lambda-js/src/index.ts`.
+
+- Reproducer: `normal/npm/repeat-wrap`, which calls `datadog(datadog(handler))`.
+- Impact/evidence: wrapper identity changes; two nested shim-owned `aws.lambda` spans in **one**
+  trace, three spans total, and two enhanced invocation metrics, despite one handler call and one
+  child. The monitor hides the shim's marker when handing the wrapper back to the shim. This is
+  distinct from PR3's fixed two-root/two-trace double-owner defect, which is never allowed.
+- Follow-up: a separate lifecycle bug fix, not an incidental change in a mechanical port. Preserve
+  the shim's idempotency contract without making handlers mutable or adding a second timer.
+- Acceptance: repeated wrapping returns the same wrapper when `forceWrap` is not requested;
+  exactly one shim-owned invocation span, one correctly parented child, one invocation metric and
+  one handler call across **all** payloads. Add L1 siblings for frozen handlers, repeated hooks,
+  timeout monitoring, and explicit `forceWrap`; retain npm/layer and final-preview coverage.
+- Parity rows to reference in the shim's ledger: `Manual datadog(handler, config?) wrapping`,
+  `Exactly one wrapper when layer + NODE_OPTIONS both active`, and `one lifecycle owner`.
+
+### LEGACY-LAMBDA-002
+
+**ESM timeout hooks do not flush — OPEN.** Component owner: dd-trace's Lambda hook registration
+and timeout monitor, with the shim's `src/handler.mjs` / runtime loader owning ESM load ordering.
+
+- Reproducers: `normal/{redirect-esm,layer-esm}/{timeout-promise,timeout-callback,timeout-frozen}`
+  (6), `layer-only/layer-esm/{timeout-promise,timeout-callback,timeout-frozen}` (3), and
+  `preload/{redirect-esm,layer-esm}/timeout-promise` (2).
+- Impact/evidence: neither the invocation span nor its unfinished child is flushed. Handler
+  results, active context and metrics still pass. Preloading the tracer does not repair these
+  paths. The exact loader/hook failure mechanism still needs diagnosis; these process probes do
+  not establish actual AWS termination behavior.
+- Follow-up: trace loader registration, handler interception and monitor arming in the real ESM
+  entry paths; fix the owning seam separately from the mechanical lifecycle port.
+- Acceptance: every listed case flushes exactly one invocation and one unfinished child; only
+  the invocation carries `error.type="Impending Timeout"`. Preserve CJS/npm cases, callback and
+  frozen-handler behavior, metrics, and warm-container timer cleanup. Add L1 regression coverage;
+  extend the timeout RIE/golden coverage and verify actual termination through the L3 release gate.
+- Parity rows: `ESM handler loading`, `ESM loader registration + double-registration guard`, and
+  `timeout behavior (impending-timeout error, killAll, flush deadline)`.
+
+### LEGACY-LAMBDA-003
+
+**Mixed-layer custom extraction loses its parent — OPEN.** Component owner: the cross-repo
+loader/context seam. The shim selects/loads `DD_TRACE_EXTRACTOR` and resolves the tracer;
+dd-trace must consume the resulting context consistently when task and layer load separate copies.
+
+- Reproducers: `normal/{layer-cjs,layer-esm}/custom-config` (2). Equivalent pure-layer cases pass.
+- Impact/evidence: the invocation starts a new trace with parent zero instead of the fixture's
+  trace `1234` / parent `5678`. Payload capture, active headers and child parenting still work.
+  Separate tracer copies are present; pinpoint the context producer/consumer mismatch before
+  choosing a fix. Do not assume the custom extractor itself or async awaiting is the cause.
+- Follow-up: investigate during the PR8 extraction checkpoint and retain PR16 loader coverage;
+  keep any legacy behavior correction separate from the mechanical extractor port.
+- Acceptance: both mixed-layer paths preserve trace `1234` and parent `5678`, emit exactly one
+  invocation span with a correctly parented child, and retain payload/headers/metrics. Keep
+  npm/redirect and pure-layer coverage; add an awaited async-extractor regression and module-copy
+  identity checks. Removing the mixed-layer fixture is not a fix.
+- Parity rows: `DD_TRACE_EXTRACTOR module loading`, `custom extractor, awaited`, and
+  `extraction chain order + addTraceContextToXray`.
+
+### Closure and exception removal
+
+1. Reproduce the affected cases with the frozen shim and a freshly run control. The diagnostic
+   `--filter repeat-wrap`, `--filter timeout`, or `--filter custom-config` options select these
+   families; omit `--ci` for filtered runs. Record runtime, architecture, artifact hashes and raw
+   results. A filtered run is not full release evidence.
+2. Add the owning regression tests and run the full candidate/control matrix on actual v5/v6
+   backports. Every case associated with the closing ID must pass all assertions; a released
+   control may still fail. Keep unrelated known failures visible.
+3. In the fix change, remove only that ID's expectation from `scripts/gate.cjs` and its affected
+   entries from the inventory test. Keep the behavioral probes and assertions. Update this record
+   to **FIXED** with fixing commit/PR, backport/release references and passing report locations;
+   do not delete its historical ID.
+4. If the fix requires a new shim, retain the frozen baseline until a separate, explicit baseline
+   update/retirement decision. A final-preview pass alone cannot close the old-shim defect or
+   justify deleting its exception. Track legacy and migrated verification separately.
+5. At PR16, require all three contracts to pass with the actual final-preview shim and candidate
+   tracer before removing the transition gate. Do not carry these exceptions into that pairing.
+   Local process success does not replace candidate goldens, required CI or deployed release checks.
 
 ## Local use
 

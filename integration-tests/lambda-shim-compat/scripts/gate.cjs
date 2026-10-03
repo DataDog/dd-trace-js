@@ -7,12 +7,14 @@ const { compare } = require('./compare.cjs')
 
 /**
  * Narrow, observable baseline defects; both artifacts must exhibit this exact failure set today.
- * See README.md for evidence and removal criteria. These are NOT skipped test cases.
+ * See README.md#legacy-defect-register for ownership, evidence and removal criteria.
+ * These are NOT skipped test cases.
  * @param {string} mode
  * @param {string} entry
  * @param {string} scenario
  */
 function expectedFailures (mode, entry, scenario) {
+  // LEGACY-LAMBDA-001: README.md#legacy-lambda-001
   if (mode === 'normal' && entry === 'npm' && scenario === 'repeat-wrap') {
     return [
       { id: 'lambda.count', actual: 2, expected: 1 },
@@ -21,6 +23,7 @@ function expectedFailures (mode, entry, scenario) {
       { id: 'wrapper.identity', actual: false, expected: true },
     ]
   }
+  // LEGACY-LAMBDA-002: README.md#legacy-lambda-002
   if (entry.endsWith('esm') && ['timeout-promise', 'timeout-callback', 'timeout-frozen'].includes(scenario)) {
     return [
       { id: 'lambda.count', actual: 0, expected: 1 },
@@ -28,6 +31,7 @@ function expectedFailures (mode, entry, scenario) {
       { id: 'root.0', actual: false, expected: true },
     ]
   }
+  // LEGACY-LAMBDA-003: README.md#legacy-lambda-003
   if (mode === 'normal' && entry.startsWith('layer') && scenario === 'custom-config') {
     return [
       { id: 'trace.extracted.0', actual: false, expected: true },
