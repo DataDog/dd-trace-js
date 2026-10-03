@@ -1,17 +1,9 @@
 'use strict'
 
 const tracer = require('../../../..')
+const { AUTO_KEEP } = require('../../../../ext/priority')
+const { writeDatadogTraceId, writeDatadogParentId, writeDatadogSamplingPriority } = require('../carrier')
 const { wrapLambdaHandler } = require('./handler')
-
-// The original returns exactly these three keys (datadog-lambda-js
-// `src/trace/context/extractor.ts:24-26`). `tracer.inject` would additionally emit the configured
-// W3C and baggage carriers, so the surface is pinned rather than passed through: customers forward
-// this object to downstream services, and adding or dropping a key is a visible contract change.
-const DATADOG_TRACE_HEADERS = [
-  'x-datadog-trace-id',
-  'x-datadog-parent-id',
-  'x-datadog-sampling-priority',
-]
 
 /**
  * Wraps an AWS Lambda handler with the dd-trace Lambda invocation lifecycle.
@@ -33,13 +25,14 @@ function getTraceHeaders () {
   const span = tracer.scope().active()
   if (!span) return {}
 
-  const carrier = {}
-  tracer.inject(span, 'text_map', carrier)
-
+  // Ported from datadog-lambda-js's TraceContextService.currentTraceHeaders and
+  // SpanContextWrapper.sampleMode. This fixed Datadog carrier must not depend on the configured
+  // injection styles or force a sampling decision as tracer.inject() does.
+  const context = span.context()
   const headers = {}
-  for (const name of DATADOG_TRACE_HEADERS) {
-    if (carrier[name] !== undefined) headers[name] = carrier[name]
-  }
+  writeDatadogTraceId(headers, context.toTraceId())
+  writeDatadogParentId(headers, context.toSpanId())
+  writeDatadogSamplingPriority(headers, String(context._sampling?.priority ?? AUTO_KEEP))
   return headers
 }
 
