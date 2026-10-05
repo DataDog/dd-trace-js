@@ -4,7 +4,7 @@ const { randomUUID } = require('crypto')
 const { parentPort, workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
-const { INSPECT_SEGMENT_GLOBAL_PROPERTY } = require('../constants')
+const { INSPECT_SEGMENT_GLOBAL_PROPERTY, WORKER_ERROR_REASON } = require('../constants')
 const { EVENT_TYPE, INCOMPLETE_REASON } = require('../guardrail-metrics')
 const {
   CONDITION_ERROR_FLAG,
@@ -13,7 +13,7 @@ const {
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
-const { getTakeConditionErrorExpression } = require('./probe_sampler')
+const { getEvaluationTimedOutExpression, getTakeConditionErrorExpression } = require('./probe_sampler')
 const { breakpointToProbes, samplingIndexToProbe } = require('./state')
 const { refreshBreakpoints } = require('./breakpoints')
 const session = require('./session')
@@ -49,7 +49,9 @@ session.on('Debugger.paused', async ({ params }) => {
 
   if (params.reason !== 'other') {
     // This error should not be caught, and should exit the worker thread, effectively stopping the debugging session
-    throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
+    throw Object.assign(new Error(`Unexpected Debugger.paused reason: ${params.reason}`), {
+      reason: WORKER_ERROR_REASON.UNEXPECTED_PAUSE_REASON,
+    })
   }
 
   let maxReferenceDepth = 0
@@ -58,6 +60,7 @@ session.on('Debugger.paused', async ({ params }) => {
   let maxLength = 0
   let numberOfProbesWithSnapshots = 0
   let probesWithCaptureExpressions = false
+  let probesWithTemplates = false
   const probes = []
   // Expressions evaluated on the paused frame in one round trip, in the order of `probes`: the evaluated template for
   // probes whose template requires evaluation, and the recorded error for probes paused to report a condition error
@@ -125,6 +128,7 @@ session.on('Debugger.paused', async ({ params }) => {
       }
 
       if (probe.templateRequiresEvaluation) {
+        probesWithTemplates = true
         frameExpressions += `,${probe.template}`
       }
 
@@ -142,6 +146,7 @@ session.on('Debugger.paused', async ({ params }) => {
   const timestamp = Date.now()
 
   let evalResults
+  const evaluationStart = process.hrtime.bigint()
   const { result } = /** @type {EvaluateOnCallFrameResult} */ (
     await session.post('Debugger.evaluateOnCallFrame', {
       callFrameId: params.callFrames[0].callFrameId,
@@ -152,6 +157,10 @@ session.on('Debugger.paused', async ({ params }) => {
       includeCommandLineAPI: true,
     })
   )
+  // The templates of all probes at the location are evaluated together, so an exceeded budget is attributed to all of
+  // them. Evaluation can't be interrupted, so the budget is enforced by reporting and throttling after the fact.
+  const templatesTimedOut = probesWithTemplates &&
+    process.hrtime.bigint() - evaluationStart > config.dynamicInstrumentation.evaluationTimeoutNs
   if (result?.subtype === 'error') {
     log.error('[debugger:devtools_client] Error evaluating code on call frame: %s', result?.description)
     evalResults = []
@@ -180,13 +189,29 @@ session.on('Debugger.paused', async ({ params }) => {
       captureExpressionResults.set(probe.id, await evaluateCaptureExpressions(
         params.callFrames[0],
         probe.compiledCaptureExpressions,
-        start + config.dynamicInstrumentation.captureTimeoutNs
+        start + config.dynamicInstrumentation.captureTimeoutNs,
+        config.dynamicInstrumentation.evaluationTimeoutNs
       ))
     }
   }
 
   await session.post('Debugger.resume')
   reportPauseDuration(start)
+
+  // Ideally these throttles would be installed before resuming so a tight loop could not sample the probe again before
+  // the request is handled. That would keep the application paused for another inspector request even when the probe
+  // does not immediately run again, so we deliberately resume first. If the race occurs, the probe can perform one
+  // additional over-budget evaluation before the throttle takes effect, which is preferable to lengthening every
+  // timeout pause.
+  for (const probe of probes) {
+    // Condition errors are already throttled synchronously by the sampler; preserve that state and its classification.
+    if (conditionErrorProbes?.has(probe)) continue
+    if ((probe.templateRequiresEvaluation && templatesTimedOut) ||
+        captureExpressionResults?.get(probe.id)?.timedOut === true) {
+      // TODO: Batch all timed-out probes into a single Runtime.evaluate request.
+      throttleProbe(probe)
+    }
+  }
 
   const logger = {
     // We can safely use `location.file` from the first probe in the array, since all probes hit by `hitBreakpoints`
@@ -323,6 +348,18 @@ session.on('Debugger.paused', async ({ params }) => {
           }
         }
       }
+      if (templatesTimedOut) {
+        const error = {
+          expr: '',
+          message: 'Template evaluation exceeded its time budget of ' +
+            `${config.dynamicInstrumentation.evaluationTimeoutNs / 1_000_000n}ms`,
+        }
+        if (snapshot.evaluationErrors === undefined) {
+          snapshot.evaluationErrors = [error]
+        } else {
+          snapshot.evaluationErrors.push(error)
+        }
+      }
     } else {
       message = probe.template
     }
@@ -361,6 +398,19 @@ function reportPauseDuration (start) {
   parentPort.postMessage({ type: 'thread-paused', durationMs })
   log.debug('[debugger:devtools_client] Finished processing breakpoints - instrumented thread paused for: ~%d ms',
     durationMs)
+}
+
+/**
+ * Throttle a probe in the runtime sampler because its template or capture expressions exceeded the evaluation time
+ * budget. The result has already been reported, so this only stops the probe from being evaluated again for a while.
+ *
+ * @param {{ id: string }} probe - The probe to throttle.
+ */
+function throttleProbe (probe) {
+  log.debug('[debugger:devtools_client] Evaluation of probe %s exceeded its time budget; throttling probe', probe.id)
+  session.post('Runtime.evaluate', { expression: getEvaluationTimedOutExpression(probe.id) }).catch((err) => {
+    log.error('[debugger:devtools_client] Error throttling probe %s', probe.id, err)
+  })
 }
 
 function processDD (result) {

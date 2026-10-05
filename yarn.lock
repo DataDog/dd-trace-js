@@ -298,10 +298,10 @@
   dependencies:
     "@datadog/libdatadog-wasm" "0.21.0"
 
-"@datadog/native-appsec@11.0.2":
-  version "11.0.2"
-  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-11.0.2.tgz#98eacb74e065280953f877238e336960a770a754"
-  integrity sha512-Azs5fhwJx/BXHMnz+4PM2d9Is7Ik8uQPSM90nzvTCOcBYhSxuLhCY0EsDik/15CRknV9YoQrP1vmRrCVq3il5w==
+"@datadog/native-appsec@11.0.3":
+  version "11.0.3"
+  resolved "https://registry.yarnpkg.com/@datadog/native-appsec/-/native-appsec-11.0.3.tgz#25115f241b79db065e4760c3128364c8f04bd2ae"
+  integrity sha512-IlB4IuL42rWVHmigMrWhtYW38Q7rQd5iH2Yf7HRkL51mP2ODiD52rwdrbTsJl9nt2msMR8/fsoySIs4d02xzEA==
   dependencies:
     node-gyp-build "^3.9.0"
 
