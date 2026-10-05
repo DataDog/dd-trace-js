@@ -86,7 +86,10 @@ function start (config, rcInstance) {
 
   const debuggerGlobals = globalThis[Symbol.for('dd-trace')]
   debuggerGlobals.utilTypes = types
-  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] = require('./inspect-segment')
+  const createInspectSegment = require('./inspect-segment')
+  const { createIsRedactedIdentifier } = require('./redaction')
+  debuggerGlobals[INSPECT_SEGMENT_GLOBAL_PROPERTY] =
+    createInspectSegment(createIsRedactedIdentifier(config.dynamicInstrumentation))
 
   const guardrailMetricsBuffer = GuardrailMetrics.createBuffer()
   guardrailMetrics = new GuardrailMetrics(guardrailMetricsBuffer)
@@ -108,7 +111,8 @@ function start (config, rcInstance) {
     probeChannel.port2.postMessage({ action, probe, ackId })
   })
 
-  probeChannel.port2.on('message', ({ ackId, error }) => {
+  probeChannel.port2.on('message', ({ ackId, error, reason }) => {
+    if (error && reason !== undefined) logWorkerError(error, reason)
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
@@ -160,12 +164,14 @@ function start (config, rcInstance) {
     worker.on('message', (/** @type {{ type: string, durationMs: number }} */ { type, durationMs }) => {
       if (type === 'thread-paused') threadPausedMetric.track(durationMs)
     })
-    worker.on('error', (err) => log.error('[debugger] worker thread error', err))
+    worker.on('error', (err) => logWorkerError(err))
     worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
 
     worker.once('exit', (code) => {
       const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
-      log.error('[debugger] worker thread exited unexpectedly', error)
+      // Telemetry omits printf arguments, so the numeric exit code must be part of the message.
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+      log.error(() => `[debugger] worker thread exited unexpectedly exit_code=${code}`, error)
       cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     })
 
@@ -177,6 +183,24 @@ function start (config, rcInstance) {
     configChannel.port1.unref?.()
     configChannel.port2.unref?.()
   })
+}
+
+/**
+ * Failure metadata belongs in the telemetry message; exception messages remain in the redacted cause.
+ *
+ * @param {Error & { code?: unknown, reason?: unknown }} error - The worker failure
+ * @param {unknown} [reason] - Explicit reason preserved across a probe acknowledgement's structured clone
+ */
+function logWorkerError (error, reason = error.reason) {
+  // Telemetry omits printf arguments, so the failure metadata must be part of the message.
+  // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+  log.error(() => `[debugger] worker thread error name=${
+      typeof error.name === 'string' ? error.name : 'unknown'
+    } code=${
+      typeof error.code === 'string' ? error.code : 'unknown'
+    } reason=${
+      typeof reason === 'string' ? reason : 'unknown'
+    }`, error)
 }
 
 /**
