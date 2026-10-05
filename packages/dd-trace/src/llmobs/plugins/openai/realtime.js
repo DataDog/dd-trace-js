@@ -120,7 +120,13 @@ function buildMessage (role, side, maxAudioBytes) {
 }
 
 /**
- * @param {{ input_tokens?: number, output_tokens?: number, total_tokens?: number } | undefined} usage
+ * @param {{
+ *   input_tokens?: number, output_tokens?: number, total_tokens?: number,
+ *   input_token_details?: {
+ *     audio_tokens?: number, cached_tokens?: number, cached_tokens_details?: { audio_tokens?: number }
+ *   },
+ *   output_token_details?: { audio_tokens?: number }
+ * } | undefined} usage
  * @returns {Record<string, number> | undefined}
  */
 function usageMetrics (usage) {
@@ -139,7 +145,24 @@ function usageMetrics (usage) {
   }
   if (totalTokens != null) metrics.total_tokens = totalTokens
 
-  return metrics.total_tokens === undefined && metrics.input_tokens === undefined ? undefined : metrics
+  // These counts are subsets of the totals. Missing cached-audio details must
+  // remain absent so cost estimation does not mistake an unknown split for zero.
+  let hasMetrics = inputTokens != null || outputTokens != null || totalTokens != null
+  const inputDetails = usage.input_token_details
+  const counts = {
+    cache_read_input_tokens: inputDetails?.cached_tokens,
+    input_audio_tokens: inputDetails?.audio_tokens,
+    output_audio_tokens: usage.output_token_details?.audio_tokens,
+    cache_audio_read_tokens: inputDetails?.cached_tokens_details?.audio_tokens,
+  }
+  for (const [key, value] of Object.entries(counts)) {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+      metrics[key] = value
+      hasMetrics = true
+    }
+  }
+
+  return hasMetrics ? metrics : undefined
 }
 
 /**
