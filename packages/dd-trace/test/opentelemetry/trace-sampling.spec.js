@@ -11,6 +11,7 @@ const { TEXT_MAP } = require('../../../../ext/formats')
 const { getConfigFresh } = require('../helpers/config')
 const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
 const TraceState = require('../../src/opentracing/propagation/tracestate')
+const otelSampling = require('../../src/otel-sampling')
 
 describe('OTLP consistent probability sampling', () => {
   let config
@@ -143,6 +144,57 @@ describe('OTLP consistent probability sampling', () => {
   })
 
   for (const inherited of [false, true]) {
+    it(`builds sampling state once per chunk (${inherited ? 'inherited' : 'local'})`, () => {
+      config.sampler = { sampleRate: 1 }
+      const tracer = new Tracer(config)
+      const original = 'ot=rv:ef284ace7a91e1;th:8,congo=value'
+      const parent = inherited ? sampledParent(tracer, original) : undecidedParent(tracer)
+      const update = sinon.spy(otelSampling, 'updateOtelTraceState')
+      const root = tracer.startSpan('root', { childOf: parent })
+      for (let index = 0; index < 2; index++) {
+        tracer.startSpan('child', { childOf: root }).finish()
+      }
+
+      sinon.assert.notCalled(update)
+      root.finish()
+
+      sinon.assert.calledOnce(update)
+      const spans = exportedSpans()
+      assert.strictEqual(spans.length, 3)
+      for (const span of spans) {
+        const state = TraceState.fromString(span.traceState)
+        assert.strictEqual(state.get('ot'), inherited ? 'rv:ef284ace7a91e1;th:8' : 'rv:ef284ace7a91e1;th:0')
+        assert.strictEqual(state.get('congo'), inherited ? 'value' : undefined)
+        assert.strictEqual(span.flags, 1)
+      }
+      assert.strictEqual(parent._tracestate?.toString(), inherited ? original : undefined)
+    })
+
+    it(`updates sampling state after a partial flush (${inherited ? 'inherited' : 'local'})`, () => {
+      config.flushMinSpans = 1
+      config.sampler = { sampleRate: 1 }
+      const tracer = new Tracer(config)
+      const original = 'ot=rv:ef284ace7a91e1;th:8,congo=value'
+      const parent = inherited ? sampledParent(tracer, original) : undecidedParent(tracer)
+      const update = sinon.spy(otelSampling, 'updateOtelTraceState')
+      const root = tracer.startSpan('root', { childOf: parent })
+      tracer.startSpan('child', { childOf: root }).finish()
+
+      sinon.assert.calledOnce(update)
+      assert.strictEqual(TraceState.fromString(exportedSpans()[0].traceState).get('ot'),
+        inherited ? 'rv:ef284ace7a91e1;th:8' : 'rv:ef284ace7a91e1;th:0')
+      root.setTag('manual.keep', true)
+      root.finish()
+
+      sinon.assert.calledTwice(update)
+      const [span] = exportedSpans(1)
+      const state = TraceState.fromString(span.traceState)
+      assert.strictEqual(state.get('ot'), inherited ? 'rv:ef284ace7a91e1' : undefined)
+      assert.strictEqual(state.get('congo'), inherited ? 'value' : undefined)
+      assert.strictEqual(span.flags, 1)
+      assert.strictEqual(parent._tracestate?.toString(), inherited ? original : undefined)
+    })
+
     it(`does not export a threshold for a manual keep (${inherited ? 'inherited' : 'local'})`, () => {
       const tracer = new Tracer(config)
       const parent = inherited ? sampledParent(tracer, 'ot=rv:ef284ace7a91e1;th:8') : undefined
@@ -171,12 +223,37 @@ describe('OTLP consistent probability sampling', () => {
     })
   }
 
-  for (const sampler of [{ sampleRate: 0 }, { sampleRate: 1, rateLimit: 0 }]) {
+  it('builds empty sampling state once for a manually kept chunk', () => {
+    const tracer = new Tracer(config)
+    const update = sinon.spy(otelSampling, 'updateOtelTraceState')
+    const root = tracer.startSpan('manual')
+    root.setTag('manual.keep', true)
+    for (let index = 0; index < 2; index++) {
+      tracer.startSpan('child', { childOf: root }).finish()
+    }
+    root.finish()
+
+    sinon.assert.calledOnce(update)
+    const spans = exportedSpans()
+    assert.strictEqual(spans.length, 3)
+    for (const span of spans) {
+      assert.strictEqual(TraceState.fromString(span.traceState).size, 0)
+      assert.strictEqual(span.flags, 1)
+    }
+  })
+
+  for (const [sampler, traceId] of [
+    [{ sampleRate: 0 }, undefined],
+    [{ sampleRate: 1, rateLimit: 0 }, undefined],
+    [{ sampleRate: 0.1 }, '2'],
+  ]) {
     it(`does not export a rejected trace with ${JSON.stringify(sampler)}`, () => {
       config.sampler = sampler
       const tracer = new Tracer(config)
-      tracer.startSpan('rejected', { childOf: undecidedParent(tracer) }).finish()
+      const update = sinon.spy(otelSampling, 'updateOtelTraceState')
+      tracer.startSpan('rejected', { childOf: undecidedParent(tracer, traceId) }).finish()
 
+      sinon.assert.notCalled(update)
       sinon.assert.notCalled(sendPayload)
     })
   }
