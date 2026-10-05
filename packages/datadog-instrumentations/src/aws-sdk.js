@@ -4,6 +4,7 @@ const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 
 const patchedClientConfigProtocols = new WeakSet()
+const patchedClientPrototypes = new WeakSet()
 const patchedCommandPrototypes = new WeakSet()
 
 // Resource identifiers that already match the channel-suffix slug. Anything
@@ -323,15 +324,22 @@ function getChannelSuffix (name) {
   return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'aws'
 }
 
-addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
-  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
+/**
+ * @param {{ Client: { prototype: { send: Function } } }} smithy
+ */
+function instrumentSmithyClient (smithy) {
+  const proto = smithy.Client.prototype
+  // Smithy packages can re-export the same Client. Wrap each prototype once across all entry points.
+  if (!patchedClientPrototypes.has(proto)) {
+    shimmer.wrap(proto, 'send', wrapSmithySend)
+    patchedClientPrototypes.add(proto)
+  }
   return smithy
-})
+}
 
-addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, smithy => {
-  shimmer.wrap(smithy.Client.prototype, 'send', wrapSmithySend)
-  return smithy
-})
+addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, instrumentSmithyClient)
+
+addHook({ name: '@aws-sdk/smithy-client', versions: ['>=3'] }, instrumentSmithyClient)
 
 // `@aws-sdk/client-*` >= 3.1046.0 dropped `@smithy/smithy-client` and now
 // extends from `@smithy/core/client` directly. The `Client.send` contract is
@@ -341,10 +349,7 @@ addHook({
   name: '@smithy/core',
   file: 'dist-cjs/submodules/client/index.js',
   versions: ['>=3.24.0'],
-}, smithyCoreClient => {
-  shimmer.wrap(smithyCoreClient.Client.prototype, 'send', wrapSmithySend)
-  return smithyCoreClient
-})
+}, instrumentSmithyClient)
 
 addHook({ name: 'aws-sdk', versions: ['>=2.3.0'] }, AWS => {
   shimmer.wrap(AWS.config, 'setPromisesDependency', setPromisesDependency => {
