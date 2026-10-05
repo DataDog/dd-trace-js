@@ -625,7 +625,9 @@ describe('Plugin', () => {
 
       it('traces services without a dedicated plugin', async () => {
         const tracePromise = agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
+          const spans = traces.flat()
+          assert.strictEqual(spans.length, 1)
+          const [span] = spans
 
           assert.strictEqual(span.name, 'aws.request')
           assert.strictEqual(span.resource, 'getCallerIdentity')
@@ -633,15 +635,16 @@ describe('Plugin', () => {
           assert.strictEqual(span.meta['aws.service'], 'STS')
         })
 
-        const response = await client.send(new GetCallerIdentityCommand())
+        const [response] = await Promise.all([client.send(new GetCallerIdentityCommand()), tracePromise])
 
         assert.deepStrictEqual(response, { Account: '123456789012' })
-        await tracePromise
       })
 
       it('traces callback requests without a dedicated plugin', async () => {
         const tracePromise = agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
+          const spans = traces.flat()
+          assert.strictEqual(spans.length, 1)
+          const [span] = spans
 
           assert.strictEqual(span.name, 'aws.request')
           assert.strictEqual(span.service, 'test-aws-fallback')
@@ -654,6 +657,33 @@ describe('Plugin', () => {
 
         assert.deepStrictEqual(response, { Account: '123456789012' })
       })
+
+      for (const mode of ['promise', 'callback']) {
+        it(`traces failed ${mode} requests exactly once`, async () => {
+          const error = new Error('STS request failed')
+          class FailingCommand extends GetCallerIdentityCommand {
+            resolveMiddleware () {
+              return () => Promise.reject(error)
+            }
+          }
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const spans = traces.flat()
+            assert.strictEqual(spans.length, 1)
+            const [span] = spans
+            assert.strictEqual(span.name, 'aws.request')
+            assert.strictEqual(span.error, 1)
+            assert.strictEqual(span.meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(span.meta['aws.service'], 'STS')
+          })
+          const request = mode === 'promise'
+            ? client.send(new FailingCommand())
+            : new Promise((resolve, reject) => {
+              client.send(new FailingCommand(), (err, result) => err ? reject(err) : resolve(result))
+            })
+          await Promise.all([assert.rejects(request, error), tracePromise])
+        })
+      }
 
       it('honors the aws service configuration when disabled', async () => {
         const tracer = require('../../dd-trace')
