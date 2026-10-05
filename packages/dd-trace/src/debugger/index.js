@@ -17,7 +17,7 @@ const {
   INSPECT_SEGMENT_GLOBAL_PROPERTY,
 } = require('./constants')
 const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('./guardrail-metrics')
-const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
+const { configureProbeSampler, installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -97,7 +97,7 @@ function start (config, rcInstance) {
   guardrailMetricsTimer.unref?.()
   dc.subscribe(TELEMETRY_APP_CLOSING_CHANNEL, flushGuardrailMetrics)
 
-  const probeSamplerBuffer = installProbeSampler(guardrailMetrics)
+  const probeSamplerBuffer = installProbeSampler(guardrailMetrics, config)
 
   readProbeFile(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE, (probes) => {
     const action = 'apply'
@@ -196,6 +196,7 @@ function configure (config) {
     log.error('[debugger] Invalid DD_SITE for agentless Dynamic Instrumentation: %s', config.site)
     return
   }
+  configureProbeSampler(config)
   configChannel.port2.postMessage(debuggerConfig)
 }
 
