@@ -1,6 +1,6 @@
 import { performance } from 'perf_hooks'
 import ddTrace, { tracer, Tracer, TracerOptions, Span, SpanContext, SpanOptions, Scope, User } from '..';
-import type { PluginName, PluginOptions, plugins, llmobs as llmobsTypes } from '..';
+import type { PluginName, PluginOptions, plugins } from '..';
 import { opentelemetry } from '..';
 import { formats, kinds, priority, tags, types } from '../ext';
 import { BINARY, HTTP_HEADERS, LOG, TEXT_MAP } from '../ext/formats';
@@ -763,14 +763,19 @@ llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: '
 // export a span
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
 
-class ExampleEvaluator extends llmobs.BaseEvaluator {
-  async evaluate (context: InstanceType<typeof llmobsTypes.EvaluatorContext>) {
+class ExampleEvaluator extends llmobs.experiments.BaseEvaluator {
+  async evaluate (context: InstanceType<typeof llmobs.experiments.EvaluatorContext>) {
     return context.outputData
   }
 }
 
-class ExampleSummaryEvaluator extends llmobs.BaseSummaryEvaluator {
-  async evaluate (context: InstanceType<typeof llmobsTypes.SummaryEvaluatorContext>) {
+const remoteEvaluator = new llmobs.experiments.RemoteEvaluator({
+  evalName: 'managed-judge',
+  transformFn: context => ({ span_input: context.inputData, span_output: context.outputData })
+})
+remoteEvaluator.name
+class ExampleSummaryEvaluator extends llmobs.experiments.BaseSummaryEvaluator {
+  async evaluate (context: InstanceType<typeof llmobs.experiments.SummaryEvaluatorContext>) {
     return context.outputs.length
   }
 }
@@ -789,7 +794,9 @@ function checkEvaluatorTypes (dataset: ReturnType<typeof llmobs.experiments.crea
   llmobs.experiments.experiment({ name: 'wrong-kind', dataset, task: input => input, evaluators: [new ExampleSummaryEvaluator()] })
 }
 
-const contextWithoutExpected = new llmobs.EvaluatorContext({ inputData: null, outputData: null })
+const contextWithoutExpected = new llmobs.experiments.EvaluatorContext({ inputData: null, outputData: null })
+// @ts-expect-error Evaluator constructors are scoped to the experiments API.
+llmobs.BaseEvaluator
 // @ts-expect-error expectedOutput can be undefined when omitted from the constructor.
 const requiredExpectedOutput: Exclude<typeof contextWithoutExpected.expectedOutput, undefined> = contextWithoutExpected.expectedOutput
 
