@@ -25,6 +25,10 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
+/**
+ * @param {string} name
+ * @param {string} [file]
+ */
 function moduleOfInterestKey (name, file) {
   return file ? `${name}/${file}` : name
 }
@@ -120,6 +124,8 @@ module.exports.setup = function (build) {
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
+  const aliases = Object.keys(build.initialOptions.alias ?? {})
+  const resolving = {}
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
   if (DD_IAST_ENABLED) {
@@ -176,6 +182,8 @@ ${build.initialOptions.banner.js}`
   })
 
   build.onResolve({ filter: /.*/ }, args => {
+    if (args.pluginData === resolving) return
+
     if (externalModules.has(args.path)) {
       // Internal Node.js packages will still be instrumented via require()
       log.debug('EXTERNAL: %s', args.path)
@@ -217,9 +225,57 @@ ${build.initialOptions.banner.js}`
 
     const internal = builtins.has(args.path)
 
-    if (args.namespace === 'file' && (
-      modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
+    const moduleOfInterest = modulesOfInterest.has(args.path) ||
+      modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`)
+
+    if (
+      !moduleOfInterest &&
+      args.namespace === 'file' &&
+      args.pluginData === undefined &&
+      build.initialOptions.platform === 'node' &&
+      build.initialOptions.conditions === undefined &&
+      extracted.pkg === '@smithy/core' &&
+      (args.path === extracted.pkg || args.path.startsWith(`${extracted.pkg}/`))
     ) {
+      if (aliases.some(
+        /** @param {string} alias */
+        alias => args.path === alias || args.path.startsWith(`${alias}/`)
+      )) return
+
+      const options = {
+        importer: args.importer,
+        kind: args.kind,
+        namespace: args.namespace,
+        resolveDir: args.resolveDir,
+        pluginData: resolving,
+      }
+      if (args.with !== undefined) options.with = args.with
+
+      return build.resolve(args.path, options).then(
+        /**
+         * @param {{errors: object[], external: boolean, namespace: string, path: string,
+         *   pluginData?: unknown, warnings: object[]}} resolved
+         */
+        resolved => {
+          if (resolved.errors.length || resolved.external || resolved.namespace !== 'file' ||
+              resolved.pluginData !== undefined || resolved.path === fullPathToModule ||
+              extractPackageAndModulePath(resolved.path).pkgJson !== extracted.pkgJson) {
+            return resolved
+          }
+
+          // The hook uses Node's variant; resolve that file through esbuild to retain its metadata.
+          return build.resolve(fullPathToModule, options).then(
+            /** @param {{warnings: object[]}} selected */
+            selected => {
+              if (resolved.warnings.length) selected.warnings = [...resolved.warnings, ...selected.warnings]
+              return selected
+            }
+          )
+        }
+      )
+    }
+
+    if (args.namespace === 'file' && moduleOfInterest) {
       // Internal module like http/fs is imported and the build output is ESM
       if (internal && args.kind === 'import-statement' && esmBuild && !interceptedESMModules.has(fullPathToModule)) {
         fullPathToModule = `${INTERNAL_ESM_INTERCEPTED_PREFIX}${fullPathToModule}${ESM_INTERCEPTED_SUFFIX}`

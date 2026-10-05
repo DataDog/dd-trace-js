@@ -83,6 +83,10 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('keeps conditional package exports consistent without overriding resolver policies', () => {
+      execSync('node ./build-and-test-conditional-exports.js', { timeout })
+    })
+
     it('handles scoped node_modules', () => {
       execSync('node ./build-and-test-koa.mjs', {
         timeout,
