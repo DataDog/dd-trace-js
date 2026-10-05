@@ -265,6 +265,8 @@ describe('onPause', function () {
 
     assert(thrown instanceof Error)
     assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
+    assert.ok('reason' in thrown)
+    assert.strictEqual(thrown.reason, 'unexpected_pause_reason')
     sinon.assert.notCalled(session.post)
     sinon.assert.notCalled(ackEmitting)
     sinon.assert.notCalled(send)
@@ -301,6 +303,58 @@ describe('onPause', function () {
     const [, , , , , eventType, incompleteReasons] = send.firstCall.args
     assert.strictEqual(eventType, EVENT_TYPE.LOG)
     assert.strictEqual(incompleteReasons, 0)
+  })
+
+  describe('redacted template segments', function () {
+    const redactionError = {
+      expr: 'secret',
+      message: "Could not evaluate the expression because 'secret' was redacted",
+    }
+
+    /**
+     * @param {unknown[]} templateResult - The evaluated template segments returned by the paused thread.
+     */
+    function sampleTemplatedProbe (templateResult) {
+      const probe = genProcessedProbe('probe-1')
+      probe.templateRequiresEvaluation = true
+      probe.template = '["template"]'
+      probe.templateRedactionErrors = [redactionError]
+      sampleProbe(probe)
+
+      session.post = sinon.stub().callsFake((method) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          return Promise.resolve({ result: { value: [{}, templateResult] } })
+        }
+        return Promise.resolve({})
+      })
+
+      return probe
+    }
+
+    it('should report their evaluation errors', async function () {
+      sampleTemplatedProbe(['secret: ', '{redacted}'])
+
+      await onPaused(event)
+
+      sinon.assert.calledOnce(send)
+      assert.strictEqual(send.firstCall.args[0], 'secret: {redacted}')
+      assert.deepStrictEqual(send.firstCall.args[3].evaluationErrors, [redactionError])
+    })
+
+    it('should report their evaluation errors after those of the evaluated segments', async function () {
+      const runtimeError = { expr: 'foo', message: 'ReferenceError: foo is not defined' }
+      const probe = sampleTemplatedProbe(['secret: ', '{redacted}', ', foo: ', runtimeError])
+
+      await onPaused(event)
+      sampleProbe(probe)
+      await onPaused(event)
+
+      sinon.assert.calledTwice(send)
+      for (const { args } of send.getCalls()) {
+        assert.strictEqual(args[0], 'secret: {redacted}, foo: {ReferenceError: foo is not defined}')
+        assert.deepStrictEqual(args[3].evaluationErrors, [runtimeError, redactionError])
+      }
+    })
   })
 
   it('should send snapshot probe results as snapshot events with the enforced capture limits', async function () {

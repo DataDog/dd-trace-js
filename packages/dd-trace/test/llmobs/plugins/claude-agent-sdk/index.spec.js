@@ -108,8 +108,9 @@ describe('Plugin', () => {
 
       // Subagent prompt is determined by the LLM at the previous step.
       const subagentPrompt = is03
-        ? 'Fetch the current weather for New York (state code: NY) in fahrenheit and report back the result.'
-        : 'Please fetch the current weather for New York state (NY) in fahrenheit.'
+        ? 'Please fetch the current weather for New York (state code: NY) in fahrenheit.'
+        : 'Please fetch the current weather for New York state (NY) in fahrenheit ' +
+          'using the weather tool available to you.'
 
       const subagentNYResult = is03
         ? 'The current weather in New York (NY) is 72 degrees Fahrenheit.'
@@ -124,45 +125,32 @@ describe('Plugin', () => {
           `  ${subagentNYResult}`
         : subagentNYResult
 
-      const outerThinkingText = is03
-        ? 'The user wants me to:\n' +
-          '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          '2. After that subagent completes, get the weather in California myself (in fahrenheit)\n' +
-          '\n' +
-          'Let me spawn the subagent for New York first, and wait for it to complete before doing California.'
-        : 'The user wants me to:\n' +
-          '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
-          '2. After that, get the weather in California directly (not in a subagent), also in fahrenheit\n' +
-          '\n' +
-          'Let me start with the subagent for New York.'
+      const outerThinkingText = 'The user wants me to:\n' +
+        '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
+        '2. After that, get the weather in California myself (fahrenheit)\n' +
+        '\n' +
+        'Let me start with the subagent for New York.'
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
-        ? "Sure! Let me first spawn a subagent to fetch the weather in New York, and then I'll fetch " +
-          "California's weather myself afterward.\n\n**Step 1: Spawning a subagent for New York...**"
-        : 'Sure! Let me start by spawning a subagent to fetch the New York weather first!'
+        ? "Sure! Let me start by spawning a subagent to fetch New York's weather first."
+        : "Sure! Let me first spawn a subagent to get the New York weather, and then I'll fetch " +
+          "California's weather myself after!\n\n**Step 1: Spawning a subagent for New York weather...**"
 
       // The assistant's text preamble before fetching CA weather directly
       const outerCaPreamble = hasSubagentHandback
-        ? "The subagent reported that **New York is currently 72°F**. Now let me fetch California's weather " +
-          "myself!\n\n**Step 2: Fetching California's weather directly...**"
+        ? "The subagent reports that New York is currently **72°F**. Now let me fetch California's weather directly!"
         : is03
           ? 'The subagent returned: **New York is currently 72°F.**\n\n' +
           "**Step 2: Now fetching California's weather myself...**"
-          : 'The subagent has returned — New York is currently **72°F**. ' +
-            'Now let me fetch the California weather directly!'
+          : 'The subagent returned: **New York is currently 72°F**. Now let me fetch ' +
+            "California's weather myself!\n\n**Step 2: Fetching California weather directly...**"
 
       // The Agent tool's `description` argument is chosen by the LLM at outer step-0.
       const agentDescription = 'Fetch NY weather'
 
-      const agentToolId = is03
-        ? 'toolu_01B6KvzhTYAZcSCPh27AMhWr'
-        : 'toolu_01J8D2bfeJuABv5T2kxWtn6w'
-      const caToolId = hasSubagentHandback
-        ? 'toolu_01FCANh4Kyi8xUHRowmeaUYM'
-        : is03
-          ? 'toolu_01R3LW8o9V7NUR3sDjVgkLnd'
-          : 'toolu_01E8hMpKVmX8f2sgk13QoN7S'
+      const agentToolId = llmobsSpans[1].meta.output.messages.at(-1).tool_calls[0].tool_id
+      const caToolId = llmobsSpans[7].meta.output.messages[0].tool_calls[0].tool_id
 
       // [0] root query span
       assertLlmObsSpanEvent(llmobsSpans[0], {
@@ -186,7 +174,7 @@ describe('Plugin', () => {
         modelProvider: 'anthropic',
         inputMessages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: PROMPT }],
         outputMessages: [
-          { role: 'thinking', content: outerThinkingText },
+          ...(!is03 ? [{ role: 'thinking', content: outerThinkingText }] : []),
           {
             role: 'assistant',
             content: MOCK_STRING,
@@ -226,7 +214,7 @@ describe('Plugin', () => {
         parentId: llmobsSpans[0].span_id,
         spanKind: 'step',
         name: 'step-0',
-        inputValue: outerThinkingText,
+        inputValue: is03 ? '' : outerThinkingText,
         outputValue: subagentHandback,
         sessionId,
         tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
@@ -313,7 +301,7 @@ describe('Plugin', () => {
         inputMessages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: PROMPT },
-          { role: 'thinking', content: outerThinkingText },
+          ...(!is03 ? [{ role: 'thinking', content: outerThinkingText }] : []),
           {
             role: 'assistant',
             content: outerAgentPreamble,
@@ -395,7 +383,7 @@ describe('Plugin', () => {
         inputMessages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: PROMPT },
-          { role: 'thinking', content: outerThinkingText },
+          ...(!is03 ? [{ role: 'thinking', content: outerThinkingText }] : []),
           {
             role: 'assistant',
             content: outerAgentPreamble,
