@@ -3975,14 +3975,6 @@ declare namespace tracer {
        * `DD_API_KEY` / `DD_APP_KEY` to be set.
        */
       experiments: Experiments,
-      BaseEvaluator: typeof BaseEvaluator,
-      BaseSummaryEvaluator: typeof BaseSummaryEvaluator,
-      EvaluatorContext: typeof EvaluatorContext,
-      SummaryEvaluatorContext: typeof SummaryEvaluatorContext,
-      EvaluatorResult: typeof EvaluatorResult,
-      MultiEvaluatorResult: typeof MultiEvaluatorResult,
-      RemoteEvaluator: typeof RemoteEvaluator,
-      RemoteEvaluatorError: typeof RemoteEvaluatorError,
 
       /** Prompt Management API. */
       prompts: Prompts,
@@ -4640,6 +4632,14 @@ declare namespace tracer {
     }
 
     interface Experiments {
+      BaseEvaluator: typeof BaseEvaluator
+      BaseSummaryEvaluator: typeof BaseSummaryEvaluator
+      EvaluatorContext: typeof EvaluatorContext
+      SummaryEvaluatorContext: typeof SummaryEvaluatorContext
+      EvaluatorResult: typeof EvaluatorResult
+      MultiEvaluatorResult: typeof MultiEvaluatorResult
+      RemoteEvaluator: typeof RemoteEvaluator
+      RemoteEvaluatorError: typeof RemoteEvaluatorError
       /** Create a local dataset buffer; pushed on the first experiment run. */
       createDataset (name: string, description?: string): Dataset
       createDataset (name: string, options?: CreateDatasetOptions): Dataset

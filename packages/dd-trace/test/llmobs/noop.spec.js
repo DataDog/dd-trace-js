@@ -85,35 +85,42 @@ describe('noop', () => {
     assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
   })
 
-  it('loads evaluator constructors lazily', () => {
+  it('loads experiments-scoped evaluator constructors lazily', () => {
     const noopPath = require.resolve('../../../dd-trace/src/llmobs/noop')
+    const noopExperimentsPath = require.resolve('../../../dd-trace/src/llmobs/experiments/noop')
     const cachedNoop = require.cache[noopPath]
+    const cachedNoopExperiments = require.cache[noopExperimentsPath]
     const originalLoad = Module._load
     const loaded = []
 
     try {
       delete require.cache[noopPath]
+      delete require.cache[noopExperimentsPath]
       Module._load = function (request, parent, isMain) {
-        if (parent?.filename === noopPath) loaded.push(request)
+        if (parent?.filename === noopPath || parent?.filename === noopExperimentsPath) loaded.push(request)
         return originalLoad.call(this, request, parent, isMain)
       }
 
       const FreshNoopLLMObs = require(noopPath)
       const freshLLMObs = new FreshNoopLLMObs(null)
 
-      assert.equal(loaded.includes('./experiments/evaluator'), false)
-      assert.equal(loaded.includes('./experiments/remote-evaluator'), false)
+      assert.equal(freshLLMObs.BaseEvaluator, undefined)
+      assert.equal(loaded.includes('./evaluator'), false)
+      assert.equal(loaded.includes('./remote-evaluator'), false)
 
-      assert.equal(typeof freshLLMObs.BaseEvaluator, 'function')
-      assert.equal(loaded.includes('./experiments/evaluator'), true)
-      assert.equal(loaded.includes('./experiments/remote-evaluator'), false)
+      const freshExperiments = freshLLMObs.experiments
+      assert.equal(typeof freshExperiments.BaseEvaluator, 'function')
+      assert.equal(loaded.includes('./evaluator'), true)
+      assert.equal(loaded.includes('./remote-evaluator'), false)
 
-      assert.equal(typeof freshLLMObs.RemoteEvaluator, 'function')
-      assert.equal(loaded.includes('./experiments/remote-evaluator'), true)
+      assert.equal(typeof freshExperiments.RemoteEvaluator, 'function')
+      assert.equal(loaded.includes('./remote-evaluator'), true)
     } finally {
       Module._load = originalLoad
       delete require.cache[noopPath]
+      delete require.cache[noopExperimentsPath]
       if (cachedNoop !== undefined) require.cache[noopPath] = cachedNoop
+      if (cachedNoopExperiments !== undefined) require.cache[noopExperimentsPath] = cachedNoopExperiments
     }
   })
 

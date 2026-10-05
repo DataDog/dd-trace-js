@@ -3,18 +3,6 @@
 const NoopPrompts = require('./prompts/noop')
 
 let NoopExperiments
-let evaluatorTypes
-let remoteEvaluatorTypes
-
-function getEvaluatorTypes () {
-  evaluatorTypes ??= require('./experiments/evaluator')
-  return evaluatorTypes
-}
-
-function getRemoteEvaluatorTypes () {
-  remoteEvaluatorTypes ??= require('./experiments/remote-evaluator')
-  return remoteEvaluatorTypes
-}
 
 class NoopLLMObs {
   constructor (noopTracer) {
@@ -36,38 +24,6 @@ class NoopLLMObs {
    */
   get prompts () {
     return new NoopPrompts()
-  }
-
-  get BaseEvaluator () {
-    return getEvaluatorTypes().BaseEvaluator
-  }
-
-  get BaseSummaryEvaluator () {
-    return getEvaluatorTypes().BaseSummaryEvaluator
-  }
-
-  get EvaluatorContext () {
-    return getEvaluatorTypes().EvaluatorContext
-  }
-
-  get SummaryEvaluatorContext () {
-    return getEvaluatorTypes().SummaryEvaluatorContext
-  }
-
-  get EvaluatorResult () {
-    return getEvaluatorTypes().EvaluatorResult
-  }
-
-  get MultiEvaluatorResult () {
-    return getEvaluatorTypes().MultiEvaluatorResult
-  }
-
-  get RemoteEvaluator () {
-    return getRemoteEvaluatorTypes().RemoteEvaluator
-  }
-
-  get RemoteEvaluatorError () {
-    return getRemoteEvaluatorTypes().RemoteEvaluatorError
   }
 
   enable (options) {}

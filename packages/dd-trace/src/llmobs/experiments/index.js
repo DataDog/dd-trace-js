@@ -42,6 +42,38 @@ class Experiments {
     this.#client = this.#clientForProject(this.#projectName)
   }
 
+  get BaseEvaluator () {
+    return evaluatorTypes.BaseEvaluator
+  }
+
+  get BaseSummaryEvaluator () {
+    return evaluatorTypes.BaseSummaryEvaluator
+  }
+
+  get EvaluatorContext () {
+    return evaluatorTypes.EvaluatorContext
+  }
+
+  get SummaryEvaluatorContext () {
+    return evaluatorTypes.SummaryEvaluatorContext
+  }
+
+  get EvaluatorResult () {
+    return evaluatorTypes.EvaluatorResult
+  }
+
+  get MultiEvaluatorResult () {
+    return evaluatorTypes.MultiEvaluatorResult
+  }
+
+  get RemoteEvaluator () {
+    return remoteEvaluatorTypes.RemoteEvaluator
+  }
+
+  get RemoteEvaluatorError () {
+    return remoteEvaluatorTypes.RemoteEvaluatorError
+  }
+
   /**
    * @param {string} projectName
    * @returns {ExperimentsClient}
