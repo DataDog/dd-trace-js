@@ -1,0 +1,8 @@
+[
+  {
+    "name": "react-router",
+    "source": "^dist\\/(?:development|production)\\/chunk-[A-Z0-9]+\\.mjs$",
+    "flags": "",
+    "sourceMatch": "function derive("
+  }
+]
