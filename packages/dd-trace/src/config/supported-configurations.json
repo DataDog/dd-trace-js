@@ -4143,6 +4143,19 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_STARTUP_LOG_LEVEL": [
+      {
+        "implementation": "C",
+        "type": "string",
+        "allowed": "info|warn",
+        "transform": "toLowerCase",
+        "configurationNames": [
+          "startupLogLevel"
+        ],
+        "default": "warn",
+        "description": "Level for startup configuration and loaded-integrations summaries. Diagnostics stay at warn."
+      }
+    ],
     "DD_TRACE_STATS_COMPUTATION_ENABLED": [
       {
         "implementation": "A",

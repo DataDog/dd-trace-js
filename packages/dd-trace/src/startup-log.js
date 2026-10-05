@@ -3,7 +3,7 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { warn } = require('./log/writer')
+const { info, warn } = require('./log/writer')
 
 const errors = {}
 let config
@@ -27,7 +27,7 @@ function startupLog () {
 
   const out = configInfo()
 
-  warn('DATADOG TRACER CONFIGURATION - ' + out)
+  logSummary('DATADOG TRACER CONFIGURATION - ' + out)
 }
 
 /**
@@ -41,7 +41,21 @@ function logIntegrations () {
 
   integrationsAlreadyRan = true
 
-  warn('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
+  logSummary('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
+}
+
+/**
+ * Startup summaries only. Agent errors, generic diagnostics, and load-order
+ * warnings stay on `warn` so they are not hidden by an info filter.
+ * The default remains `warn` (stderr) so application stdout stays untouched.
+ * @param {string} message
+ */
+function logSummary (message) {
+  if (config.startupLogLevel === 'info') {
+    info(message)
+    return
+  }
+  warn(message)
 }
 
 /**

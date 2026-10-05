@@ -43,6 +43,7 @@ tracer.init({
   apmTracingEnabled: false,
   logInjection: true,
   startupLogs: false,
+  startupLogLevel: 'info',
   env: 'test',
   version: '1.0.0',
   url: 'http://localhost',

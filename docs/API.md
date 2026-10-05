@@ -612,6 +612,14 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
+<h3 id="startup-logs">Startup logs</h3>
+
+`DD_TRACE_STARTUP_LOGS` prints the tracer configuration and the loaded integrations when the tracer starts. Those two summaries use the warning logger by default (`console.warn`, stderr). That keeps them out of application stdout and keeps them visible when info logs are filtered.
+
+Set `DD_TRACE_STARTUP_LOG_LEVEL=info`, or pass `startupLogLevel: 'info'` to `tracer.init()`, to emit those summaries through the info logger (`console.info`, stdout, with the default console logger). Accepted values are `info` and `warn`. Any other value is ignored and the summaries stay at `warn`.
+
+Agent errors, generic diagnostics, and messages about packages loaded before `dd-trace` stay at warning level. Set `DD_TRACE_STARTUP_LOGS=false` to disable the startup summaries and the startup-log diagnostics.
+
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
 Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
