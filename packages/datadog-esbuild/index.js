@@ -215,10 +215,12 @@ ${build.initialOptions.banner.js}`
 
     const internal = builtins.has(args.path)
 
-    // Only the generated wrapper module imports the real module unwrapped. Every other importer must get the wrapper,
-    // regardless of whether it has already been loaded: onLoad runs concurrently with onResolve, so tracking loaded
-    // modules makes which importer sees the wrapper depend on timing, leaving some bindings uninstrumented.
-    const isInterceptedImporter = args.importer.endsWith(ESM_INTERCEPTED_SUFFIX)
+    // Only the generated wrapper module, and the real module importing itself, must reach the real module unwrapped.
+    // Every other importer must get the wrapper regardless of whether it has already been loaded: onLoad runs
+    // concurrently with onResolve, so tracking loaded modules makes which importer sees the wrapper depend on timing,
+    // leaving some bindings uninstrumented. Routing a self-import to the wrapper would create a wrapper -> original ->
+    // wrapper cycle that can hit the wrapper's exports in their temporal dead zone.
+    const isInterceptedImporter = args.importer.endsWith(ESM_INTERCEPTED_SUFFIX) || args.importer === fullPathToModule
 
     if (args.namespace === 'file' && (
       modulesOfInterest.has(args.path) || modulesOfInterest.has(`${extracted.pkg}/${extracted.path}`))
