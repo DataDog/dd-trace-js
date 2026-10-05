@@ -14,8 +14,10 @@ class DebugLoggingHook {
     try {
       log.debug('Feature Flags: evaluated %s: %o', hookContext?.flagKey, evaluationDetails)
     } catch (error) {
-      // Defense in depth; the OpenFeature SDK already guards finally hooks.
-      log.warn('DebugLoggingHook: error in finally hook: %s', error.message)
+      try {
+        // Defense in depth; the OpenFeature SDK already guards finally hooks.
+        log.warn('DebugLoggingHook: error in finally hook: %s', error.message)
+      } catch { /* logging failure must not crash evaluation */ }
     }
   }
 }
