@@ -223,6 +223,27 @@ describe('OTLP consistent probability sampling', () => {
     })
   }
 
+  for (const parentId of ['1', '18446744073709551615']) {
+    it(`exports span and shared parent IDs for Datadog parent ${parentId}`, () => {
+      config.sampler = { sampleRate: 1 }
+      const tracer = new Tracer(config)
+      const parent = tracer.extract(TEXT_MAP, {
+        'x-datadog-trace-id': '2',
+        'x-datadog-parent-id': parentId,
+      })
+      const root = tracer.startSpan('root', { childOf: parent })
+      const child = tracer.startSpan('child', { childOf: root })
+      child.finish()
+      root.finish()
+
+      const [exportedRoot, exportedChild] = exportedSpans()
+      assert.strictEqual(exportedRoot.parentSpanId, BigInt(parentId).toString(16).padStart(16, '0'))
+      assert.strictEqual(exportedRoot.spanId, BigInt(root.context().toSpanId()).toString(16).padStart(16, '0'))
+      assert.strictEqual(exportedChild.parentSpanId, exportedRoot.spanId)
+      assert.strictEqual(exportedChild.spanId, BigInt(child.context().toSpanId()).toString(16).padStart(16, '0'))
+    })
+  }
+
   it('builds empty sampling state once for a manually kept chunk', () => {
     const tracer = new Tracer(config)
     const update = sinon.spy(otelSampling, 'updateOtelTraceState')
