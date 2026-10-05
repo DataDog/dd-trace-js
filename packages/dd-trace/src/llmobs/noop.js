@@ -1,7 +1,6 @@
 'use strict'
 
 const NoopPrompts = require('./prompts/noop')
-const evaluatorTypes = require('./experiments/evaluator')
 
 let NoopExperiments
 
@@ -25,30 +24,6 @@ class NoopLLMObs {
    */
   get prompts () {
     return new NoopPrompts()
-  }
-
-  get BaseEvaluator () {
-    return evaluatorTypes.BaseEvaluator
-  }
-
-  get BaseSummaryEvaluator () {
-    return evaluatorTypes.BaseSummaryEvaluator
-  }
-
-  get EvaluatorContext () {
-    return evaluatorTypes.EvaluatorContext
-  }
-
-  get SummaryEvaluatorContext () {
-    return evaluatorTypes.SummaryEvaluatorContext
-  }
-
-  get EvaluatorResult () {
-    return evaluatorTypes.EvaluatorResult
-  }
-
-  get MultiEvaluatorResult () {
-    return evaluatorTypes.MultiEvaluatorResult
   }
 
   enable (options) {}
