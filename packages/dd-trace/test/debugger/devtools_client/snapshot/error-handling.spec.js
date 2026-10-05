@@ -60,6 +60,32 @@ describe('debugger -> devtools client -> snapshot', function () {
     describe('error handling', function () {
       const mockCallFrame = { callFrameId: 'frame-123' }
 
+      it('should report redacted expressions as evaluation errors without evaluating them', async function () {
+        const redactionError = {
+          expr: 'pw',
+          message: "Could not evaluate the expression because 'password' was redacted",
+        }
+        const expressions = [
+          { name: 'pw', redactionError },
+          { name: 'testExpr', expression: 'someVariable', limits: DEFAULT_CAPTURE_LIMITS },
+        ]
+
+        sessionPostStub = sinon.stub(session, 'post')
+        sessionPostStub.withArgs('Debugger.evaluateOnCallFrame')
+          .resolves({ result: { type: 'number', value: 42, description: '42' } })
+
+        const result = await evaluateCaptureExpressions(mockCallFrame, expressions)
+
+        sinon.assert.calledOnceWithExactly(sessionPostStub, 'Debugger.evaluateOnCallFrame', {
+          callFrameId: 'frame-123',
+          expression: 'someVariable',
+        })
+        assert.deepStrictEqual(result.evaluationErrors, [redactionError])
+        assert.strictEqual(result.fatalErrors.length, 0)
+        assert.strictEqual(result.incomplete.reasons, 0)
+        assert.deepStrictEqual(result.processCaptureExpressions(), { testExpr: { type: 'number', value: '42' } })
+      })
+
       it('should return fatalErrors when session.post throws an error', async function () {
         const expressions = [{
           name: 'testExpr',
