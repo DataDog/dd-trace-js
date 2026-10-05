@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import pug from 'pug'
-import dc from 'dc-polyfill'
 
 const pugCompileCh = dc.channel('datadog:pug:compile:start')
 let counter = 0

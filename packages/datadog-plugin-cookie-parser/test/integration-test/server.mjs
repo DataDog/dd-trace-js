@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import cookieParser from 'cookie-parser'
-import dc from 'dc-polyfill'
 const cookieParserReadCh = dc.channel('datadog:cookie-parser:read:finish')
 let counter = 0
 cookieParserReadCh.subscribe(() => {

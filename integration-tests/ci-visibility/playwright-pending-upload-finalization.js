@@ -3,7 +3,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { channel } = require('dc-polyfill')
+const { channel } = require('node:diagnostics_channel')
 
 const tracer = require('dd-trace/init')
 require('@playwright/test')

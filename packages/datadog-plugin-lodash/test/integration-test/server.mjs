@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import lodash from 'lodash'
-import dc from 'dc-polyfill'
 
 const lodashOperationCh = dc.channel('datadog:lodash:operation')
 let counter = 0

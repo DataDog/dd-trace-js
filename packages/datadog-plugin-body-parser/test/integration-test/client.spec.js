@@ -16,7 +16,7 @@ withVersions('body-parser', 'body-parser', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'body-parser@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox([`'body-parser@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-body-parser/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

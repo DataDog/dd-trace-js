@@ -16,7 +16,7 @@ withVersions('express-session', 'express-session', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'express-session@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox([`'express-session@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-express-session/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

@@ -16,7 +16,7 @@ withVersions('multer', 'multer', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'multer@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox([`'multer@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-multer/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

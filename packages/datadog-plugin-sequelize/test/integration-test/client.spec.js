@@ -16,7 +16,7 @@ withVersions('sequelize', 'sequelize', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'sequelize@${version}'`, 'dc-polyfill@0.1.11', 'sqlite3', 'express'], false,
+    useSandbox([`'sequelize@${version}'`, 'sqlite3', 'express'], false,
       ['./packages/datadog-plugin-sequelize/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

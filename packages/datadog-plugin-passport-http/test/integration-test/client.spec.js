@@ -16,7 +16,7 @@ withVersions('passport-http', 'passport-http', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox(['passport', `passport-http@${version}`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox(['passport', `passport-http@${version}`, 'express'], false,
       ['./packages/datadog-plugin-passport-http/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

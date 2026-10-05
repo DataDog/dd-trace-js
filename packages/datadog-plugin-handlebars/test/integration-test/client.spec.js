@@ -16,7 +16,7 @@ withVersions('handlebars', 'handlebars', '>=4.0.0', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'handlebars@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox([`'handlebars@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-handlebars/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

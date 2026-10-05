@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import ldapjs from 'ldapjs'
-import dc from 'dc-polyfill'
 
 const ldapSearchCh = dc.channel('datadog:ldapjs:client:search')
 let counter = 0

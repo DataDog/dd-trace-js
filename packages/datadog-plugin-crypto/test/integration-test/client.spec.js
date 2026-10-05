@@ -14,7 +14,7 @@ const {
 describe('ESM', () => {
   let proc, agent
 
-  useSandbox(['crypto', 'dc-polyfill@0.1.11', 'express'], false,
+  useSandbox(['crypto', 'express'], false,
     ['./packages/datadog-plugin-crypto/test/integration-test/*'])
 
   const variants = varySandbox('server.mjs', {

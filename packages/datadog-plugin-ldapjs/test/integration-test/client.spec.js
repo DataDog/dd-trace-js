@@ -16,7 +16,7 @@ withVersions('ldapjs', 'ldapjs', '>=2', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'ldapjs@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox([`'ldapjs@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-ldapjs/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

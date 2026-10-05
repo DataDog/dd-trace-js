@@ -449,7 +449,7 @@ versions.forEach((version) => {
 
     this.timeout(80000)
 
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'dc-polyfill@0.1.11', 'typescript'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI

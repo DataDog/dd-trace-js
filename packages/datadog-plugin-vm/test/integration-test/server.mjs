@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import vmLib from 'node:vm'
 import express from 'express'
-import dc from 'dc-polyfill'
 
 const runScriptCh = dc.channel('datadog:vm:run-script:start')
 let counter = 0

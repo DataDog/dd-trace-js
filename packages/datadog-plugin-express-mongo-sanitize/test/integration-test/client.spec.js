@@ -16,7 +16,7 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'express-mongo-sanitize@${version}'`, 'dc-polyfill@0.1.11', 'express@<=4.0.0'], false,
+    useSandbox([`'express-mongo-sanitize@${version}'`, 'express@<=4.0.0'], false,
       ['./packages/datadog-plugin-express-mongo-sanitize/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {

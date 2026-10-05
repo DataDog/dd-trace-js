@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import dc from 'node:diagnostics_channel'
 import express from 'express'
 import expressMongoSanitize from 'express-mongo-sanitize'
-import dc from 'dc-polyfill'
 const app = express()
 
 const sanitizeMiddlewareFinished = dc.channel('datadog:express-mongo-sanitize:filter:finish')

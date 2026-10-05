@@ -18,7 +18,7 @@ const {
 describe('test-api-manual', () => {
   let cwd, receiver, childProcess
 
-  useSandbox(['dc-polyfill@0.1.11'], true)
+  useSandbox([], true)
 
   before(async () => {
     cwd = sandboxCwd()

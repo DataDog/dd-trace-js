@@ -61,7 +61,6 @@ versions.forEach((version) => {
       `vitest@${version}`,
       `@vitest/coverage-istanbul@${version}`,
       `@vitest/coverage-v8@${version}`,
-      'dc-polyfill@0.1.11',
       'tinypool',
     ], true)
 

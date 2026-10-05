@@ -16,7 +16,7 @@ withVersions('lodash', 'lodash', version => {
   describe('ESM', () => {
     let proc, agent
 
-    useSandbox([`'lodash@${version}'`, 'dc-polyfill@0.1.11', 'express'], false,
+    useSandbox([`'lodash@${version}'`, 'express'], false,
       ['./packages/datadog-plugin-lodash/test/integration-test/*'])
 
     const variants = varySandbox('server.mjs', {
