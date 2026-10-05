@@ -120,8 +120,8 @@ function start (config, rcInstance) {
     probeChannel.port2.postMessage({ action, probe, ackId })
   })
 
-  probeChannel.port2.on('message', ({ ackId, error, reason }) => {
-    if (error && reason !== undefined) logWorkerError(error, reason)
+  probeChannel.port2.on('message', ({ ackId, error, reason, action, phase }) => {
+    if (error && reason !== undefined) logWorkerError(error, reason, action, phase)
     const ack = rcAckCallbacks.get(ackId)
     if (ack === undefined) {
       // This should never happen, but just in case something changes in the future, we should guard against it
@@ -213,8 +213,10 @@ function onWorkerError (error) {
  *
  * @param {Error & { code?: unknown, reason?: unknown }} error - The worker failure
  * @param {unknown} [reason] - Explicit reason preserved across a probe acknowledgement's structured clone
+ * @param {string} [action] - The remote config operation
+ * @param {string} [phase] - The failed phase of the operation
  */
-function logWorkerError (error, reason = error.reason) {
+function logWorkerError (error, reason = error.reason, action, phase) {
   // Telemetry omits printf arguments, so the failure metadata must be part of the message.
   // eslint-disable-next-line eslint-rules/eslint-log-printf-style
   log.error(() => `[debugger] worker thread error name=${
@@ -223,7 +225,7 @@ function logWorkerError (error, reason = error.reason) {
       typeof error.code === 'string' ? error.code : 'unknown'
     } reason=${
       typeof reason === 'string' ? reason : 'unknown'
-    }`, error)
+    }${action ? ` action=${action}` : ''}${phase ? ` phase=${phase}` : ''}`, error)
 }
 
 /**

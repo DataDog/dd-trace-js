@@ -2,6 +2,7 @@
 
 const createMutex = require('../../../../../vendor/dist/mutexify/promise')
 const mutex = createMutex()
+const { WORKER_ERROR_REASON } = require('../constants')
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const {
@@ -32,6 +33,7 @@ const {
   samplingIndexToProbe,
 } = require('./state')
 const log = require('./log')
+const { ackInstalled } = require('./status')
 
 /**
  * @typedef {import('inspector').Debugger.SetBreakpointReturnType} SetBreakpointResponse
@@ -42,6 +44,7 @@ const probes = new Map()
 let nextSamplingIndex = 0
 let scriptLoadingStabilizedResolve
 const scriptLoadingStabilized = new Promise((resolve) => { scriptLoadingStabilizedResolve = resolve })
+const reEvaluate = lock(reEvaluateProbe)
 
 // There's a race condition when a probe is first added, where the actual script that the probe is supposed to match
 // hasn't been loaded yet. This will result in either the probe not being added at all, or an incorrect script being
@@ -53,7 +56,7 @@ session.on('scriptLoadingStabilized', () => {
   log.debug('[debugger:devtools_client] Re-evaluating probes')
   scriptLoadingStabilizedResolve()
   for (const probe of probes.values()) {
-    reEvaluateProbe(probe).catch(err => {
+    reEvaluate(probe).catch(err => {
       log.error('[debugger:devtools_client] Error re-evaluating probe %s', probe.id, err)
     })
   }
@@ -67,9 +70,11 @@ module.exports = {
 }
 
 async function addBreakpoint (probe) {
+  const previous = probes.get(probe.id)
+  if (previous) samplingIndexToProbe.delete(previous.samplingIndex)
+  probes.set(probe.id, probe)
   if (!sessionStarted) await start()
 
-  probes.set(probe.id, probe)
   probe.samplingIndex = nextSamplingIndex++
   samplingIndexToProbe.set(probe.samplingIndex, probe)
 
@@ -81,12 +86,15 @@ async function addBreakpoint (probe) {
   probe.location = { file, lines: [String(lineNumber)] }
 
   // Optimize for fast calculations when probe is hit
-  probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
-  if (probe.templateRequiresEvaluation) {
-    probe.template = compileSegments(probe.segments)
-    probe.templateRedactionErrors = getSegmentRedactionErrors(probe.segments)
+  // Re-evaluation reuses the compiled probe after its segments have been discarded.
+  if (probe.segments !== undefined) {
+    probe.templateRequiresEvaluation = templateRequiresEvaluation(probe.segments)
+    if (probe.templateRequiresEvaluation) {
+      probe.template = compileSegments(probe.segments)
+      probe.templateRedactionErrors = getSegmentRedactionErrors(probe.segments)
+    }
+    delete probe.segments
   }
-  delete probe.segments
 
   // Warning: The code below relies on undocumented behavior of the inspector!
   // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
@@ -211,23 +219,27 @@ async function addBreakpoint (probe) {
 }
 
 async function removeBreakpoint ({ id }) {
-  if (!sessionStarted) {
-    // We should not get in this state, but abort if we do, so the code doesn't fail unexpected
-    throw new Error(`Cannot remove probe ${id}: Debugger not started`)
-  }
-  if (!probeToLocation.has(id)) {
-    throw new Error(`Unknown probe id: ${id}`)
+  const probe = probes.get(id)
+  const locationKey = probeToLocation.get(id)
+  if (!probe && locationKey === undefined) {
+    log.error('[debugger:devtools_client] Probe state mismatch reason=probe_state_mismatch',
+      new Error(`No local state for probe ${id} requested for removal`))
   }
 
   probes.delete(id)
-  await removeProbeFromSampler(id)
+  if (probe) samplingIndexToProbe.delete(probe.samplingIndex)
+  if (sessionStarted) await removeProbeFromSampler(id)
 
-  const locationKey = probeToLocation.get(id)
+  // Failed installations remain pending for later script loading, but cancellation must remove them too.
+  if (locationKey === undefined) {
+    if (sessionStarted && probes.size === 0 && breakpointToProbes.size === 0) await stop()
+    return
+  }
+
   const breakpoint = locationToBreakpoint.get(locationKey)
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
-  const probe = probesAtLocation.get(id)
 
-  samplingIndexToProbe.delete(probe.samplingIndex)
+  samplingIndexToProbe.delete(probesAtLocation.get(id)?.samplingIndex)
   probesAtLocation.delete(id)
   probeToLocation.delete(id)
 
@@ -235,7 +247,7 @@ async function removeBreakpoint ({ id }) {
     locationToBreakpoint.delete(locationKey)
     breakpointToProbes.delete(breakpoint.id)
     // TODO: If anything below in this if-block throws, the state is out of sync.
-    if (breakpointToProbes.size === 0) {
+    if (breakpointToProbes.size === 0 && probes.size === 0) {
       await stop() // This will also remove the breakpoint
     } else {
       try {
@@ -252,7 +264,13 @@ async function removeBreakpoint ({ id }) {
 // TODO: Modify existing probe instead of removing it (DEBUG-2817)
 async function modifyBreakpoint (probe) {
   await removeBreakpoint(probe)
-  await addBreakpoint(probe)
+  try {
+    await addBreakpoint(probe)
+  } catch (err) {
+    err.reason ??= WORKER_ERROR_REASON.PROBE_INSTALLATION_FAILED
+    err.phase = 'install'
+    throw err
+  }
 }
 
 /**
@@ -315,8 +333,6 @@ async function updateBreakpointInternal (breakpoint, probe) {
   // location changed. In all cases the breakpoint condition must be rebuilt to match the probes at the location.
   let context // identifies the update in the error messages below
   if (probe) {
-    probesAtLocation.set(probe.id, probe)
-    probeToLocation.set(probe.id, breakpoint.locationKey)
     context = `while adding probe ${probe.id} (version: ${probe.version})`
   } else {
     context = `at ${breakpoint.locationKey}`
@@ -328,6 +344,10 @@ async function updateBreakpointInternal (breakpoint, probe) {
     throw new Error(`Error replacing breakpoint ${context}`, { cause: err })
   }
   breakpointToProbes.delete(breakpoint.id)
+  if (probe) {
+    probesAtLocation.set(probe.id, probe)
+    probeToLocation.set(probe.id, breakpoint.locationKey)
+  }
   let result
   try {
     result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
@@ -335,31 +355,41 @@ async function updateBreakpointInternal (breakpoint, probe) {
       condition: compileBreakpointCondition([...probesAtLocation.values()]),
     }))
   } catch (err) {
-    throw new Error(`Error setting breakpoint ${context}`, { cause: err })
+    // The old breakpoint was removed, so none of its probes are installed until a retry succeeds.
+    locationToBreakpoint.delete(breakpoint.locationKey)
+    for (const probe of probesAtLocation.values()) {
+      probeToLocation.delete(probe.id)
+      samplingIndexToProbe.delete(probe.samplingIndex)
+    }
+    throw Object.assign(new Error(`Error setting breakpoint ${context}`, { cause: err }), {
+      reason: WORKER_ERROR_REASON.PROBE_STATE_MISMATCH,
+    })
   }
   breakpoint.id = result.breakpointId
   breakpointToProbes.set(result.breakpointId, probesAtLocation)
 }
 
 async function reEvaluateProbe (probe) {
+  // A queued retry may belong to a probe that was canceled or replaced before it acquired the mutex.
+  if (probes.get(probe.id) !== probe) return
+
   const script = findScriptFromPartialPath(probe.where.sourceFile)
   log.debug('[debugger:devtools_client] re-evaluating probe %s: %s => %s', probe.id, probe.scriptId, script?.scriptId)
 
-  if (probe.scriptId !== script?.scriptId) {
+  if (!probeToLocation.has(probe.id) || probe.scriptId !== script?.scriptId) {
     log.debug('[debugger:devtools_client] Better match found for probe %s, re-evaluating', probe.id)
     if (probeToLocation.has(probe.id)) {
       await removeBreakpoint(probe)
     }
-    // TODO: Revisit diagnostic status handling for probes that recover during re-evaluation. A probe can initially
-    // report ERROR because no script matched, then attach successfully here without reporting INSTALLED.
     await addBreakpoint(probe)
+    ackInstalled(probe)
   }
 }
 
 async function start () {
-  sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
   await session.post('Debugger.enable')
+  sessionStarted = true
 
   // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
   // a guarantee, but best effort.
