@@ -199,6 +199,53 @@ describe('Plugin', () => {
           return Promise.all([agentPromise, reqPromise])
         })
       })
+
+      describe('with disabled OPTIONS request tracing', () => {
+        before(() => {
+          process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED = 'false'
+          return agent.load(['http', 'router'], [{ client: false }, {}])
+        })
+
+        after(() => {
+          delete process.env.DD_TRACE_HTTP_SERVER_OPTIONS_REQUESTS_ENABLED
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          Router = require(`../../../versions/router@${version}`).get()
+        })
+
+        it('should stay enabled after repeated middleware continuation', async () => {
+          const router = Router()
+
+          router.use((req, res, next) => {
+            next()
+            if (req.method === 'OPTIONS') next()
+          })
+          router.use((req, res, next) => {
+            if (req.method !== 'OPTIONS') next()
+          })
+          router.get('/user', (req, res) => res.end())
+
+          appListener = server(router).listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
+
+          await Promise.all([
+            agent.assertNoTraces(() => {
+              assert.fail('OPTIONS requests should not be traced')
+            }, { timeoutMs: 100 }),
+            axios.options(`http://localhost:${port}/user`),
+          ])
+
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].resource, 'GET /user')
+            }),
+            axios.get(`http://localhost:${port}/user`),
+          ])
+        })
+      })
     })
   })
 })
