@@ -3,12 +3,14 @@
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
+const { storage } = require('../../../datadog-core')
 const SonicSession = require('./session')
 
 const captureChannel = dc.channel('dd-trace:aws:bedrockruntime:sonic:capture-context')
 const spanChannel = dc.tracingChannel('apm:aws:bedrockruntime:sonic:span')
 const MODEL = 'amazon.nova-2-sonic-v1:0'
-const originalInputs = new WeakMap()
+const sessionStorage = storage('nova-sonic')
+const instrumentedClients = new WeakSet()
 
 function noop () {}
 
@@ -98,6 +100,31 @@ function observeIterable (source, session, outbound, finish) {
   }
 }
 
+/** @param {object} client */
+function instrumentInput (client) {
+  if (instrumentedClients.has(client)) return true
+  try {
+    // Install before even an uncaptured send can cache the SDK handler. Cached handlers must
+    // look up the invocation's session at execution time, not retain the first session.
+    client.middlewareStack.add((next, context) => args => {
+      const capture = sessionStorage.getStore()
+      if (capture?.client !== client || context.commandName !== 'InvokeModelWithBidirectionalStreamCommand') {
+        return next(args)
+      }
+      const { session, finish } = capture
+      const input = { ...args.input, body: observeIterable(args.input.body, session, true, finish) }
+      // Smithy passes the shared Command as args. Copy it before asynchronous middleware can
+      // read input, so overlapping sends never modify the command or observe another session.
+      return next({ ...args, input })
+    }, { name: 'datadogSonicInput', step: 'initialize', priority: 'high' })
+    instrumentedClients.add(client)
+    return true
+  } catch {
+    log.debug('Cannot observe Nova Sonic input')
+    return false
+  }
+}
+
 /**
  * Called from the existing Smithy send seam. The bidi operation bypasses the ordinary AWS response
  * accumulator: retaining every chunk there would retain a whole conversation twice.
@@ -107,48 +134,32 @@ function observeIterable (source, session, outbound, finish) {
  * @param {Array<object | Function>} args
  */
 function sendSonic (send, client, command, args) {
-  if (command.input?.modelId !== MODEL || !captureChannel.hasSubscribers) return send.call(client, command, ...args)
+  const instrumented = instrumentInput(client)
+  const passthrough = () => sessionStorage.run(undefined, () => send.call(client, command, ...args))
+  if (!instrumented || command.input?.modelId !== MODEL || !captureChannel.hasSubscribers) return passthrough()
   const context = {}
   captureChannel.publish(context)
   // Only the LLMObs plugin enables capture; the tracing plugin alone does not buffer conversations.
-  if (!context.enabled || !context.runInContext) return send.call(client, command, ...args)
+  if (!context.enabled || !context.runInContext) return passthrough()
   const session = new SonicSession(descriptor => emitTurn(descriptor, context.runInContext))
   const signal = args[0] !== null && typeof args[0] === 'object' ? args[0]?.abortSignal : undefined
+  // Smithy's legacy AbortSignal only exposes onabort; leave that slot to the SDK's transport.
+  const hasListeners = typeof signal?.addEventListener === 'function' &&
+    typeof signal?.removeEventListener === 'function'
   const finish = error => {
-    signal?.removeEventListener('abort', onAbort)
+    if (hasListeners) signal.removeEventListener('abort', onAbort)
+    // Aborting an already delivered HTTP/2 response can surface as clean iterator EOF.
+    if (!error && signal?.aborted) {
+      error = new Error('Nova Sonic request aborted')
+      error.name = 'AbortError'
+    }
     session.finish(error)
   }
-  const onAbort = () => {
-    const error = new Error('Nova Sonic request aborted')
-    error.name = 'AbortError'
-    finish(error)
-  }
+  const onAbort = () => finish()
   if (signal?.aborted) onAbort()
-  else signal?.addEventListener('abort', onAbort, { once: true })
+  else if (hasListeners) signal.addEventListener('abort', onAbort, { once: true })
 
-  // Concurrent sends can encounter another invocation's observer. Always wrap the caller's input
-  // so each session observes only its own iterator and restores the same original object.
-  const input = originalInputs.get(command.input) ?? command.input
-  const observedInput = { ...input, body: observeIterable(input.body, session, true, finish) }
-  originalInputs.set(observedInput, input)
-  try {
-    command.input = observedInput
-  } catch {
-    finish()
-    log.debug('Cannot observe Nova Sonic input')
-    return send.call(client, command, ...args)
-  }
-  const restoreInput = () => {
-    // Undo our temporary input replacement without overwriting a middleware's replacement.
-    // Middleware can freeze a command while it is in flight; restoration must remain best effort.
-    try {
-      if (command.input === observedInput) command.input = input
-    } catch {
-      log.debug('Cannot restore Nova Sonic input')
-    }
-  }
   const completed = result => {
-    restoreInput()
     try {
       if (typeof result?.body?.[Symbol.asyncIterator] === 'function') {
         result.body = observeIterable(result.body, session, false, finish)
@@ -162,21 +173,19 @@ function sendSonic (send, client, command, args) {
     return result
   }
   const failed = error => {
-    restoreInput()
     finish(error)
     throw error
   }
   const callback = args.at(-1)
   if (typeof callback === 'function') {
     args[args.length - 1] = function (error, result) {
-      restoreInput()
       if (error) finish(error)
       else completed(result)
       return callback.apply(this, arguments)
     }
   }
   try {
-    const result = send.call(client, command, ...args)
+    const result = sessionStorage.run({ client, session, finish }, () => send.call(client, command, ...args))
     return typeof callback === 'function' ? result : result.then(completed, failed)
   } catch (error) {
     return failed(error)

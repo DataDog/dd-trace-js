@@ -132,6 +132,52 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       return values
     }
 
+    // Keep the SDK serializer, signer and decoder, replacing only its HTTP transport.
+    function serializedClient (respond, config = {}) {
+      const requestHandler = {
+        metadata: { handlerProtocol: 'h2' },
+        async handle (request) {
+          assert.equal(request.method, 'POST')
+          assert.match(request.path, /\/invoke-with-bidirectional-stream$/)
+          assert.match(request.headers.authorization, /^AWS4-HMAC-SHA256/)
+          const marshaller = transport.config.eventStreamMarshaller
+          const dependencies = require(`../../../../../../versions/@aws-sdk/client-bedrock-runtime@${version}`)
+          const { EventStreamCodec } = dependencies.get('@smithy/eventstream-codec')
+          const codec = new EventStreamCodec(bytes => Buffer.from(bytes).toString(), text => Buffer.from(text))
+          // SigV4 wraps each input event in a signed envelope. Unwrap it before decoding the chunk.
+          const unsigned = (async function * () {
+            for await (const chunk of request.body) {
+              const envelope = codec.decode(chunk)
+              assert.ok(envelope.headers[':chunk-signature'])
+              if (envelope.body.length) yield envelope.body
+            }
+          })()
+          const decoded = marshaller.deserialize(unsigned, async message => {
+            assert.ok(message.chunk)
+            const payload = JSON.parse(Buffer.from(message.chunk.body).toString())
+            return JSON.parse(Buffer.from(payload.bytes, 'base64').toString())
+          })
+          const accepted = []
+          for await (const value of decoded) accepted.push(value)
+          const source = await respond(accepted)
+          const stream = marshaller.serialize(source, value => ({
+            headers: {
+              ':message-type': { type: 'string', value: 'event' },
+              ':event-type': { type: 'string', value: 'chunk' },
+              ':content-type': { type: 'string', value: 'application/json' },
+            },
+            body: Buffer.from(JSON.stringify({ bytes: Buffer.from(value.chunk.bytes).toString('base64') })),
+          }))
+          return { response: { statusCode: 200, headers: {}, body: stream } }
+        },
+        destroy () {},
+      }
+      const transport = new AWS.BedrockRuntimeClient({
+        region: 'us-east-1', credentials: { accessKeyId: 'test', secretAccessKey: 'test' }, requestHandler, ...config,
+      })
+      return transport
+    }
+
     it('serializes the exact hierarchy, WAV placement, and receipt-based TTFA', async () => {
       const records = speech()
       const run = command(records)
@@ -178,7 +224,6 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       const records = speech()
       const outbound = records.filter(r => r.outbound)
       const inbound = records.filter(r => !r.outbound)
-      const accepted = []
       let closed = false
       const body = (async function * () {
         try {
@@ -190,55 +235,19 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
           closed = true
         }
       })()
-      const requestHandler = {
-        metadata: { handlerProtocol: 'h2' },
-        async handle (request) {
-          assert.equal(request.method, 'POST')
-          assert.match(request.path, /\/invoke-with-bidirectional-stream$/)
-          assert.match(request.headers.authorization, /^AWS4-HMAC-SHA256/)
-          const marshaller = transport.config.eventStreamMarshaller
-          const dependencies = require(`../../../../../../versions/@aws-sdk/client-bedrock-runtime@${version}`)
-          const { EventStreamCodec } = dependencies.get('@smithy/eventstream-codec')
-          const codec = new EventStreamCodec(bytes => Buffer.from(bytes).toString(), text => Buffer.from(text))
-          // SigV4 wraps each input event in a signed envelope. Unwrap it before decoding the chunk.
-          const unsigned = (async function * () {
-            for await (const chunk of request.body) {
-              const envelope = codec.decode(chunk)
-              assert.ok(envelope.headers[':chunk-signature'])
-              if (envelope.body.length) yield envelope.body
-            }
-          })()
-          const decoded = marshaller.deserialize(unsigned, async message => {
-            if (!message.chunk) return { $unknown: true }
-            return JSON.parse(Buffer.from(message.chunk.body).toString())
-          })
-          for await (const value of decoded) accepted.push(value)
-          assert.equal(closed, true)
-          const source = (async function * () {
-            for (const r of inbound) {
-              clock.setSystemTime(EPOCH + r.at)
-              yield r.value
-            }
-          })()
-          const stream = marshaller.serialize(source, value => ({
-            headers: {
-              ':message-type': { type: 'string', value: 'event' },
-              ':event-type': { type: 'string', value: 'chunk' },
-              ':content-type': { type: 'string', value: 'application/json' },
-            },
-            body: Buffer.from(JSON.stringify({ bytes: Buffer.from(value.chunk.bytes).toString('base64') })),
-          }))
-          return { response: { statusCode: 200, headers: {}, body: stream } }
-        },
-        destroy () {},
-      }
-      const transport = new AWS.BedrockRuntimeClient({
-        region: 'us-east-1', credentials: { accessKeyId: 'test', secretAccessKey: 'test' }, requestHandler,
+      const transport = serializedClient(accepted => {
+        assert.deepEqual(accepted, outbound.map(r => JSON.parse(Buffer.from(r.value.chunk.bytes).toString())))
+        assert.equal(closed, true)
+        return (async function * () {
+          for (const r of inbound) {
+            clock.setSystemTime(EPOCH + r.at)
+            yield r.value
+          }
+        })()
       })
       try {
         const request = new AWS.InvokeModelWithBidirectionalStreamCommand({ modelId: MODEL, body })
         const response = await transport.send(request)
-        assert.equal(accepted.length, outbound.length)
         await drain(response)
         const { llm } = tree((await getEvents(4)).llmobsSpans)
         assert.equal(llm.meta.input.messages[0].content, 'question 1')
@@ -249,6 +258,94 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
         transport.destroy()
       }
     })
+
+    for (const cacheMiddleware of [false, true]) {
+      for (const reverse of [false, true]) {
+        for (const callback of [false, true]) {
+          const title = `isolates serialized sends (cache=${cacheMiddleware}, reverse=${reverse}, callback=${callback})`
+          it(title, async () => {
+            let iterations = 0
+            const body = {
+              async * [Symbol.asyncIterator] () {
+                yield event('contentStart', { contentName: 'user', role: 'USER', type: 'TEXT', interactive: true })
+                yield event('textInput', { contentName: 'user', content: `question ${++iterations}` })
+                yield event('contentEnd', { contentName: 'user' })
+              },
+            }
+            const input = { modelId: MODEL, body }
+            const request = new AWS.InvokeModelWithBidirectionalStreamCommand(input)
+            const owners = new Map()
+            const expected = []
+            const releases = []
+            let ready
+            const started = new Promise(resolve => { ready = resolve })
+            let warmup = true
+            const transport = serializedClient(async accepted => {
+              if (warmup) return (async function * () {})()
+              const owner = owners.get(tracer.scope().active())
+              assert.notEqual(owner, undefined)
+              const question = accepted.find(value => value.event.textInput).event.textInput.content
+              expected[owner] = question
+              if (owner < 2) {
+                const released = new Promise(resolve => { releases[owner] = resolve })
+                if (releases[0] && releases[1]) ready()
+                await released
+              }
+              return (async function * () {
+                yield event('contentStart', { contentId: 'answer', role: 'ASSISTANT', type: 'TEXT' })
+                yield event('textOutput', { contentId: 'answer', content: `answer to ${question}` })
+                yield event('contentEnd', { contentId: 'answer', stopReason: 'END_TURN' })
+              })()
+            }, { cacheMiddleware })
+            const send = request => callback
+              ? new Promise((resolve, reject) => {
+                transport.send(request, (error, output) => error ? reject(error) : resolve(output))
+              })
+              : transport.send(request)
+            const invoke = (id, request) => tracer.llmobs.trace({ kind: 'workflow', name: `invocation ${id}` }, () => {
+              owners.set(tracer.scope().active(), id)
+              return send(request)
+            })
+            try {
+              // A handler resolved without capture must still obtain the session of later sends.
+              tracer.use('aws-sdk', { llmobs: false })
+              await drain(await send(request))
+              tracer.use('aws-sdk', { llmobs: true })
+              warmup = false
+              const pending = [invoke(0, request), invoke(1, request)]
+                .map(promise => promise.then(output => ({ output }), error => ({ error })))
+              const both = Promise.all(pending)
+              await started
+              assert.equal(request.input, input, 'do not modify command input while sends are pending')
+              for (const index of reverse ? [1, 0] : [0, 1]) {
+                releases[index]()
+                await pending[index]
+              }
+              const responses = await both
+              for (const response of responses) assert.equal(response.error, undefined)
+              await Promise.all(responses.map(response => drain(response.output)))
+              // A new command of the same constructor can reuse the SDK's cached handler too.
+              await drain(await invoke(2, new AWS.InvokeModelWithBidirectionalStreamCommand(input)))
+              assert.equal(request.input, input)
+              const { llmobsSpans } = await getEvents(9)
+              const llms = llmobsSpans.filter(span => span.name === 'nova sonic response')
+              assert.equal(llms.length, 3)
+              assert.equal(new Set(expected).size, 3)
+              for (let id = 0; id < 3; id++) {
+                const parent = named(llmobsSpans, `invocation ${id}`)
+                const turn = llmobsSpans.find(span => span.parent_id === parent.span_id)
+                const llm = llms.find(span => span.parent_id === turn.span_id)
+                assert.equal(llm.meta.input.messages[0].content, expected[id])
+                assert.equal(llm.meta.output.messages[0].content, `answer to ${expected[id]}`)
+              }
+            } finally {
+              tracer.use('aws-sdk', { llmobs: true })
+              transport.destroy()
+            }
+          })
+        }
+      }
+    }
 
     it('uses one encoded budget for both roles while preserving transcripts and valid timing', async () => {
       const records = speech({ outputMs: 40_000 })
@@ -430,10 +527,10 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
             const releases = []
             const expected = []
             const failure = new Error('first send failed')
-            request.middlewareStack.add(() => async ({ input }) => {
+            request.middlewareStack.add(() => async args => {
               const id = releases.length
               await new Promise(resolve => releases.push(resolve))
-              for await (const chunk of input.body) {
+              for await (const chunk of args.input.body) {
                 const text = JSON.parse(Buffer.from(chunk.chunk.bytes).toString()).event.textInput
                 if (text) expected[id] = text.content
               }
@@ -534,13 +631,12 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       })
     }
 
-    for (const mode of ['disabled', 'original-model', 'immutable-input']) {
+    for (const mode of ['disabled', 'original-model']) {
       it(`passes through unchanged when ${mode}`, async () => {
         if (mode === 'disabled') tracer.use('aws-sdk', { llmobs: false })
         try {
           const run = command(speech(), { model: mode === 'original-model' ? 'amazon.nova-sonic-v1:0' : MODEL })
           const original = run.request.input
-          if (mode === 'immutable-input') Object.defineProperty(run.request, 'input', { writable: false })
           run.request.middlewareStack.addRelativeTo(next => async args => {
             assert.equal(args.input, original)
             return next(args)
@@ -555,6 +651,16 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
         }
       })
     }
+
+    it('captures frozen commands and input without modifying either', async () => {
+      const run = command(speech())
+      Object.freeze(run.request.input)
+      Object.freeze(run.request)
+      await drain(await client.send(run.request))
+      assert.equal(run.request.input.body, run.body)
+      const { llm } = tree((await getEvents(4)).llmobsSpans)
+      assert.equal(llm.meta.input.messages[0].content, 'question 1')
+    })
 
     it('flushes an aborted response once and preserves AbortSignal behavior', async () => {
       const controller = new AbortController()
