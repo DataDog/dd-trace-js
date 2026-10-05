@@ -820,6 +820,18 @@
         "default": "false"
       }
     ],
+    "DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "namespace": "dynamicInstrumentation",
+        "configurationNames": [
+          "dynamicInstrumentation.evaluationTimeoutMs"
+        ],
+        "default": "50",
+        "allowed": "\\d+"
+      }
+    ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [
       {
         "implementation": "B",
