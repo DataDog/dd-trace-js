@@ -31,6 +31,15 @@ const MOCK_TELEMETRY_METADATA = {
   conversationId: 'convAbc123',
 }
 
+// ai 7.0.114+ only exposes runtime context keys that are explicitly opted into telemetry.
+const MOCK_TELEMETRY_SETTINGS = {
+  includeRuntimeContext: {
+    userId: true,
+    organizationId: true,
+    conversationId: true,
+  },
+}
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
@@ -60,6 +69,7 @@ describe('Plugin', () => {
         maxOutputTokens: 100,
         temperature: 0.5,
         runtimeContext: MOCK_TELEMETRY_METADATA,
+        telemetry: MOCK_TELEMETRY_SETTINGS,
       })
 
       // generateText (workflow) + step (step) + languageModelCall (llm)
@@ -262,6 +272,7 @@ describe('Plugin', () => {
         maxOutputTokens: 100,
         temperature: 0.5,
         runtimeContext: MOCK_TELEMETRY_METADATA,
+        telemetry: MOCK_TELEMETRY_SETTINGS,
       })
 
       for await (const part of result.textStream) {} // eslint-disable-line
