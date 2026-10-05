@@ -199,6 +199,45 @@ describe('debugger/index', () => {
         '[debugger] worker thread error name=Error code=unknown reason=unsupported_probe_type')
     })
 
+    it('should report a failed replacement with operation context and redact its exception', () => {
+      const ack = sinon.spy()
+      rc.setProductHandler.lastCall.args[1]('modify', { id: 'probe1', version: 2 }, 'config-id', ack)
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      const error = new Error('customer-secret')
+      onMessage({
+        ackId: 1, error, reason: 'probe_installation_failed', action: 'modify', phase: 'install',
+      })
+
+      sinon.assert.calledOnceWithExactly(ack, error)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      const [entry] = logCollector.drain()
+      assert.strictEqual(entry.message,
+        '[debugger] worker thread error name=Error code=unknown ' +
+        'reason=probe_installation_failed action=modify phase=install')
+      assert.ok(!entry.stack_trace.includes('customer-secret'))
+    })
+
+    it('should report a recovered state mismatch through the worker log port with debug logging disabled', () => {
+      const ack = sinon.spy()
+      rc.setProductHandler.lastCall.args[1]('unapply', { id: 'probe1' }, 'config-id', ack)
+      const onLog = messageChannels[1].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      onLog({
+        level: 'error',
+        args: [
+          '[debugger:devtools_client] Probe state mismatch reason=probe_state_mismatch',
+          new Error('No local state for probe customer-secret requested for removal'),
+        ],
+      })
+      onMessage({ ackId: 1 })
+
+      sinon.assert.calledOnceWithExactly(ack, undefined)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      const [entry] = logCollector.drain()
+      assert.strictEqual(entry.message, '[debugger:devtools_client] Probe state mismatch reason=probe_state_mismatch')
+      assert.ok(!entry.stack_trace.includes('customer-secret'))
+    })
+
     it('should not report intentional worker shutdown as an unexpected exit', () => {
       DynamicInstrumentation.stop()
 

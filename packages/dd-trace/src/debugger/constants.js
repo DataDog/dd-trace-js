@@ -6,6 +6,8 @@ const WORKER_ERROR_REASON = Object.freeze({
   UNSUPPORTED_INSERTION_POINT: 'unsupported_insertion_point',
   CONFLICTING_CAPTURE_OPTIONS: 'conflicting_capture_options',
   UNKNOWN_REMOTE_CONFIG_ACTION: 'unknown_remote_config_action',
+  PROBE_INSTALLATION_FAILED: 'probe_installation_failed',
+  PROBE_STATE_MISMATCH: 'probe_state_mismatch',
 })
 
 module.exports = {
