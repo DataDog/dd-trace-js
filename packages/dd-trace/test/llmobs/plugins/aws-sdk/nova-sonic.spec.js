@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const { storage: llmobsStorage } = require('../../../../src/llmobs/storage')
 const {
-  MODEL, EPOCH, OUTPUT, pcm, record, fixture, speech,
+  MODEL, EPOCH, OUTPUT, event, pcm, record, fixture, speech,
 } = require('../../../../../datadog-instrumentations/test/nova-sonic/helpers')
 const { useLlmObs, assertLlmObsSpanEvent } = require('../../util')
 const { withVersions } = require('../../../setup/mocha')
@@ -411,6 +411,80 @@ withVersions('aws-sdk', '@aws-sdk/client-bedrock-runtime', '>=3.785.0', version 
       await drain(response)
       tree((await getEvents(4)).llmobsSpans)
     })
+
+    for (const reverse of [false, true]) {
+      for (const callback of [false, true]) {
+        for (const fail of [false, true]) {
+          it(`isolates reused commands (reverse=${reverse}, callback=${callback}, fail=${fail})`, async () => {
+            let iterations = 0
+            const body = {
+              async * [Symbol.asyncIterator] () {
+                const content = `input ${++iterations}`
+                yield event('contentStart', { contentName: 'user', role: 'USER', type: 'TEXT', interactive: true })
+                yield event('textInput', { contentName: 'user', content })
+                yield event('contentEnd', { contentName: 'user' })
+              },
+            }
+            const input = { modelId: MODEL, body }
+            const request = new AWS.InvokeModelWithBidirectionalStreamCommand(input)
+            const releases = []
+            const expected = []
+            const failure = new Error('first send failed')
+            request.middlewareStack.add(() => async ({ input }) => {
+              const id = releases.length
+              await new Promise(resolve => releases.push(resolve))
+              for await (const chunk of input.body) {
+                const text = JSON.parse(Buffer.from(chunk.chunk.bytes).toString()).event.textInput
+                if (text) expected[id] = text.content
+              }
+              if (fail && id === 0) throw failure
+              return {
+                output: {
+                  $metadata: {},
+                  body: (async function * () {
+                    yield event('contentStart', { contentId: 'answer', role: 'ASSISTANT', type: 'TEXT' })
+                    yield event('textOutput', { contentId: 'answer', content: `answer ${id}` })
+                    yield event('contentEnd', { contentId: 'answer' })
+                  })(),
+                },
+              }
+            }, { name: 'fixtureTransport', step: 'initialize', priority: 'high' })
+            const send = () => callback
+              ? new Promise((resolve, reject) => {
+                client.send(request, (error, output) => error ? reject(error) : resolve(output))
+              })
+              : client.send(request)
+            const pending = [send(), send()]
+            const settled = pending.map(promise => promise.then(output => ({ output }), error => ({ error })))
+            const both = Promise.all(settled)
+            const order = reverse ? [1, 0] : [0, 1]
+            for (const index of order) {
+              releases[index]()
+              await settled[index]
+            }
+            const results = await both
+            assert.equal(request.input, input, 'restore original input after either completion order')
+            if (fail) assert.equal(results[0].error, failure)
+            // Keep both sessions alive until both inputs have been consumed to expose cross-observation.
+            await Promise.all(results.filter(result => result.output).map(result => drain(result.output)))
+            const reused = send()
+            releases[2]()
+            await drain(await reused)
+            assert.equal(request.input, input, 'subsequent reuse preserves the original input')
+            const { llmobsSpans } = await getEvents(6)
+            const responses = llmobsSpans.filter(span => span.name === 'nova sonic response')
+            assert.equal(responses.length, 3)
+            for (let id = 0; id < 3; id++) {
+              const response = responses.find(span => fail && id === 0
+                ? span.meta['error.message'] === failure.message
+                : span.meta.output.messages[0].content === `answer ${id}`)
+              assert.ok(response, `missing response ${id}`)
+              assert.equal(response.meta.input.messages[0].content, expected[id], 'input belongs to its invocation')
+            }
+          })
+        }
+      }
+    }
 
     for (const callback of [false, true]) {
       it(`preserves a send failure and restores the command (${callback ? 'callback' : 'promise'})`, async () => {

@@ -6,33 +6,34 @@ const log = require('../../../dd-trace/src/log')
 const { InputAudio, OutputAudio } = require('./audio')
 
 const MAX_TEXT = 65_536
+// Replayed history can exceed 16 messages after only eight exchanges. Allow longer resumed
+// conversations while bounding tiny/empty message overhead independently of the total text budget.
+const MAX_HISTORY_MESSAGES = 128
 const MAX_BLOCKS = 256
 const MAX_TOOLS = 16
 const MAX_TOOL_TEXT = 4096
 
-function newTurn () {
-  return {
-    windows: [],
-    userText: '',
-    finalText: '',
-    speculativeText: '',
-    tools: [],
-    toolResults: [],
-    inputPcm: undefined,
-    inputRate: 0,
-    inputStart: undefined,
-    inputEnd: undefined,
-    output: new OutputAudio(),
-    started: undefined,
-    generationEnd: undefined,
-    completionId: undefined,
-    metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-    missingAudioMetrics: new Set(),
-    emitted: false,
-  }
+class Turn {
+  windows = []
+  userText = ''
+  finalText = ''
+  speculativeText = ''
+  tools = []
+  toolResults = []
+  inputPcm
+  inputRate = 0
+  inputStart
+  inputEnd
+  output = new OutputAudio()
+  started
+  generationEnd
+  completionId
+  metrics = { input_tokens: 0, output_tokens: 0, total_tokens: 0 }
+  missingAudioMetrics = new Set()
+  emitted = false
 }
 
-/** @param {ReturnType<typeof newTurn>} turn */
+/** @param {Turn} turn */
 function hasInput (turn) {
   return turn.windows.length || turn.userText || turn.toolResults.length
 }
@@ -61,7 +62,7 @@ function parse (text, fallback = {}) {
 class SonicSession {
   #emit
   #audio = new InputAudio()
-  #pending = newTurn()
+  #pending = new Turn()
   #current
   #outbound = new Map()
   #blocks = new Map()
@@ -97,8 +98,11 @@ class SonicSession {
       if (!object(payload?.event)) return
       for (const [name, data] of Object.entries(payload.event)) {
         if (!object(data)) continue
-        if (outbound) this.#sent(name, data, now)
-        else this.#received(name, data, now)
+        if (outbound) {
+          this.#sent(name, data, now)
+        } else {
+          this.#received(name, data, now)
+        }
         if (this.#closed) break
       }
     } catch {
@@ -172,7 +176,7 @@ class SonicSession {
         if (block?.type !== 'TEXT') break
         if (block.role === 'USER' && block.interactive) {
           this.#pending.userText = (this.#pending.userText + block.text).slice(0, MAX_TEXT)
-        } else if (this.#history.length < 16) {
+        } else if (this.#history.length < MAX_HISTORY_MESSAGES) {
           const remaining = MAX_TEXT - this.#history.reduce((n, message) => n + message.content.length, 0)
           this.#history.push({
             role: String(block.role ?? 'USER').toLowerCase(), content: block.text.slice(0, remaining),
@@ -198,7 +202,7 @@ class SonicSession {
     if (!this.#current || hasInput(this.#pending)) {
       if (this.#current) this.#emitTurn(this.#current, now)
       const turn = this.#pending
-      this.#pending = newTurn()
+      this.#pending = new Turn()
       turn.started = now
       turn.completionId = data.completionId
       this.#snapshotInput(turn)
@@ -210,7 +214,7 @@ class SonicSession {
     return this.#current
   }
 
-  /** @param {ReturnType<typeof newTurn>} turn */
+  /** @param {Turn} turn */
   #snapshotInput (turn) {
     if (turn.windows.length && !turn.inputPcm) {
       turn.inputRate = this.#audio.rate
@@ -364,7 +368,7 @@ class SonicSession {
   }
 
   /**
-   * @param {ReturnType<typeof newTurn>} turn
+   * @param {Turn} turn
    * @param {number} now
    * @param {Error} [error]
    */
@@ -419,7 +423,7 @@ class SonicSession {
       this.#emitTurn(this.#pending, now, error)
     }
     this.#current = undefined
-    this.#pending = newTurn()
+    this.#pending = new Turn()
     this.#blocks.clear()
     this.#outbound.clear()
     this.#completed.clear()

@@ -8,6 +8,7 @@ const SonicSession = require('./session')
 const captureChannel = dc.channel('dd-trace:aws:bedrockruntime:sonic:capture-context')
 const spanChannel = dc.tracingChannel('apm:aws:bedrockruntime:sonic:span')
 const MODEL = 'amazon.nova-2-sonic-v1:0'
+const originalInputs = new WeakMap()
 
 function noop () {}
 
@@ -125,8 +126,11 @@ function sendSonic (send, client, command, args) {
   if (signal?.aborted) onAbort()
   else signal?.addEventListener('abort', onAbort, { once: true })
 
-  const input = command.input
+  // Concurrent sends can encounter another invocation's observer. Always wrap the caller's input
+  // so each session observes only its own iterator and restores the same original object.
+  const input = originalInputs.get(command.input) ?? command.input
   const observedInput = { ...input, body: observeIterable(input.body, session, true, finish) }
+  originalInputs.set(observedInput, input)
   try {
     command.input = observedInput
   } catch {
@@ -135,6 +139,7 @@ function sendSonic (send, client, command, args) {
     return send.call(client, command, ...args)
   }
   const restoreInput = () => {
+    // Undo our temporary input replacement without overwriting a middleware's replacement.
     // Middleware can freeze a command while it is in flight; restoration must remain best effort.
     try {
       if (command.input === observedInput) command.input = input

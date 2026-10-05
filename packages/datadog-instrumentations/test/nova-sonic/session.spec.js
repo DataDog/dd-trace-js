@@ -16,7 +16,46 @@ function replay (records) {
   return emitted
 }
 
+function history (contents) {
+  return contents.flatMap((content, index) => {
+    const contentName = `history-${index}`
+    return [
+      record('contentStart', {
+        contentName, role: index === 0 ? 'SYSTEM' : index % 2 ? 'USER' : 'ASSISTANT', type: 'TEXT', interactive: false,
+      }, 0, true),
+      record('textInput', { contentName, content }, 0, true),
+      record('contentEnd', { contentName }, 0, true),
+    ]
+  })
+}
+
 describe('Nova Sonic protocol', () => {
+  for (const count of [17, 128, 129]) {
+    it(`captures resumed history within the message bound (${count} messages) without limiting live turns`, () => {
+      const contents = Array.from({ length: count }, (_, index) => `message ${index}`)
+      const turns = replay([
+        ...history(contents), ...speech(), ...speech({ id: '2', offset: 1000, at: 4000 }),
+      ])
+      assert.equal(turns.length, 2)
+      for (const [index, turn] of turns.entries()) {
+        assert.deepEqual(turn.history.map(message => message.content), contents.slice(0, 128))
+        assert.equal(turn.history[0].role, 'system')
+        assert.equal(turn.turn.userText, `question ${index + 1}`)
+      }
+    })
+  }
+
+  for (const lastLength of [512, 513]) {
+    it(`preserves the aggregate history text budget at ${127 * 512 + lastLength} code units`, () => {
+      const contents = [...Array(127).fill('x'.repeat(512)), 'y'.repeat(lastLength)]
+      const [turn] = replay([...history(contents), ...speech()])
+      assert.equal(turn.history.length, 128)
+      assert.equal(turn.history.reduce((length, message) => length + message.content.length, 0), 65_536)
+      assert.equal(turn.history.at(-1).content, 'y'.repeat(512))
+      assert.equal(turn.turn.userText, 'question 1')
+    })
+  }
+
   for (const [name, count] of [['voice-session-1', 5], ['voice-session-2', 6]]) {
     it(`replays ${name} with local turns and reconciled cumulative usage`, () => {
       const { records, capture } = fixture(name)
