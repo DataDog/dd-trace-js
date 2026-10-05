@@ -208,6 +208,45 @@ describe('OTel Context Manager', () => {
     })
   })
 
+  describe('bind', () => {
+    it('should return a promise target unchanged so it can still be awaited', async () => {
+      const promise = Promise.resolve('value')
+
+      const bound = api.context.bind(api.context.active(), promise)
+
+      assert.strictEqual(bound, promise)
+      assert.strictEqual(await bound, 'value')
+    })
+
+    it('should return non-function targets unchanged', () => {
+      const ctx = api.context.active()
+      const object = { foo: 'bar' }
+
+      assert.strictEqual(api.context.bind(ctx, object), object)
+      assert.strictEqual(api.context.bind(ctx, 'string'), 'string')
+      assert.strictEqual(api.context.bind(ctx, 42), 42)
+      assert.strictEqual(api.context.bind(ctx, null), null)
+      assert.strictEqual(api.context.bind(ctx, undefined), undefined)
+    })
+
+    it('should run a bound function in the bound context with its receiver, arguments and return value', () => {
+      const key = api.createContextKey('bind key')
+      const ctx = api.context.active().setValue(key, 'bound')
+      const receiver = {}
+
+      const bound = api.context.bind(ctx, function (a, b) {
+        assert.strictEqual(this, receiver)
+        assert.strictEqual(api.context.active().getValue(key), 'bound')
+        return a + b
+      })
+
+      assert.strictEqual(typeof bound, 'function')
+      assert.strictEqual(api.context.active().getValue(key), undefined)
+      assert.strictEqual(bound.call(receiver, 1, 2), 3)
+      assert.strictEqual(api.context.active().getValue(key), undefined)
+    })
+  })
+
   describe('with an active Datadog span', () => {
     const ddTracer = require('../../')
 
