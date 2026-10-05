@@ -1,13 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { once } = require('node:events')
+const http = require('node:http')
+const { promisify } = require('node:util')
 const { describe, it, afterEach, beforeEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
 
 const log = require('../../../src/log')
 const OtlpHttpExporterBase = require('../../../src/opentelemetry/otlp/otlp_http_exporter_base')
+const TelemetryDeliveryTracker = require('../../../src/serverless/telemetry-delivery-tracker')
 const { version: tracerVersion } = require('../../../../../package.json')
 
 const proxyEnvironmentNames = [
@@ -71,6 +76,63 @@ describe('OtlpHttpExporterBase', () => {
     assert.ok(exporter.options.agent)
     assert.strictEqual(exporter.options.agent.proxy.hostname, '127.0.0.1')
     assert.strictEqual(exporter.options.agent.proxy.port, '9999')
+  })
+
+  it('retains log delivery when serverless tracking is available', async () => {
+    const createServerlessDeliveryTracker = sinon.stub().returns(new TelemetryDeliveryTracker())
+    const loadBase = proxyquire.noPreserveCache()
+    const ServerlessBase = loadBase('../../../src/opentelemetry/otlp/otlp_http_exporter_base', {
+      '../../serverless': { createServerlessDeliveryTracker },
+    })
+    const loadExporter = proxyquire.noPreserveCache()
+    const ServerlessLogExporter = loadExporter('../../../src/opentelemetry/logs/otlp_http_log_exporter', {
+      '../otlp/otlp_http_exporter_base': ServerlessBase,
+    })
+    const receiver = http.createServer()
+    receiver.listen(0, '127.0.0.1')
+    await once(receiver, 'listening')
+
+    try {
+      const { port } = receiver.address()
+      const exporter = new ServerlessLogExporter(`http://127.0.0.1:${port}/v1/logs`, undefined, 1000, 'http/json', {})
+      const requestReceived = once(receiver, 'request')
+      exporter.sendPayload(Buffer.from('log'), () => {})
+      let settled = false
+      const flushExporter = promisify(exporter.flush.bind(exporter))
+      const flush = flushExporter().then(() => { settled = true })
+      const [request, response] = await requestReceived
+
+      request.resume()
+      sinon.assert.calledOnce(createServerlessDeliveryTracker)
+      assert.strictEqual(settled, false)
+      response.end()
+      await flush
+      assert.strictEqual(settled, true)
+    } finally {
+      const closed = once(receiver, 'close')
+      receiver.close()
+      await closed
+    }
+  })
+
+  it('completes a log exporter flush without serverless tracking', () => {
+    const createServerlessDeliveryTracker = sinon.stub().returns(undefined)
+    const loadBase = proxyquire.noPreserveCache()
+    const NormalBase = loadBase('../../../src/opentelemetry/otlp/otlp_http_exporter_base', {
+      '../../serverless': { createServerlessDeliveryTracker },
+    })
+    const loadExporter = proxyquire.noPreserveCache()
+    const NormalLogExporter = loadExporter('../../../src/opentelemetry/logs/otlp_http_log_exporter', {
+      '../otlp/otlp_http_exporter_base': NormalBase,
+    })
+    const exporter = new NormalLogExporter('http://intake.example/v1/logs', undefined, 1000, 'http/json', {})
+    const done = sinon.spy()
+
+    exporter.flush(done)
+    exporter.flush()
+
+    sinon.assert.calledOnceWithExactly(createServerlessDeliveryTracker)
+    sinon.assert.calledOnceWithExactly(done)
   })
 
   describe('setUrl', () => {

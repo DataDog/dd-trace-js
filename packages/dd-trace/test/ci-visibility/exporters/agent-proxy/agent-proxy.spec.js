@@ -121,6 +121,26 @@ describe('AgentProxyCiVisibilityExporter', () => {
     sinon.assert.calledOnceWithExactly(done)
   })
 
+  it('preserves pending agent info initialization when an empty force flush completes', () => {
+    const controlled = createControlledExporter()
+    const done = sinon.spy()
+    const { signal } = controlled.getRequestOptions()
+
+    controlled.exporter.forceFlush(done)
+
+    assert.strictEqual(signal.aborted, false)
+    sinon.assert.calledOnceWithExactly(done, undefined)
+  })
+
+  it('preserves pending agent info initialization during a callback-free flush', () => {
+    const controlled = createControlledExporter()
+    const { signal } = controlled.getRequestOptions()
+
+    controlled.exporter.flush()
+
+    assert.strictEqual(signal.aborted, false)
+  })
+
   it('exports buffered data and flushes it when initialization finishes within the final deadline', async () => {
     const clock = sinon.useFakeTimers()
     try {
@@ -135,6 +155,35 @@ describe('AgentProxyCiVisibilityExporter', () => {
       assert.strictEqual(requestOptions.keepProcessAlive, true)
       assert.strictEqual(requestOptions.signal.aborted, false)
       assert.strictEqual(requestOptions.deadline, Date.now() + agentInfoTimeoutMs)
+
+      controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
+      await Promise.resolve()
+
+      assert.strictEqual(controlled.writers.length, 2)
+      sinon.assert.calledOnceWithExactly(controlled.writers[0].append, trace)
+      for (const writer of controlled.writers) {
+        sinon.assert.calledOnce(writer.flush)
+        assert.strictEqual(writer.flush.firstCall.args[1].deadline, Date.now() + FINAL_FLUSH_TIMEOUT)
+      }
+      sinon.assert.calledOnceWithExactly(done, undefined)
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('waits for initialization and flushes buffered data without finalizing', async () => {
+    const clock = sinon.useFakeTimers()
+    try {
+      const controlled = createControlledExporter()
+      const trace = [{ type: 'test' }]
+      const done = sinon.spy()
+
+      controlled.exporter.export(trace)
+      controlled.exporter.forceFlush(done)
+
+      const { signal } = controlled.getRequestOptions()
+      assert.strictEqual(signal.aborted, false)
+      sinon.assert.notCalled(done)
 
       controlled.finishAgentInfo(null, { endpoints: ['/evp_proxy/v2'] })
       await Promise.resolve()
