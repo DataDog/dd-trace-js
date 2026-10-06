@@ -277,6 +277,31 @@ describe('register', () => {
     assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'without-setup' }]])
   })
 
+  it('permanently blocks a group when a later activation setup fails', () => {
+    const error = new Error('metadata failed')
+    const setup = sinon.stub().onSecondCall().throws(error)
+    getActivationSetupMock.withArgs('first').returns(setup)
+    getActivationSetupMock.withArgs('second').returns(setup)
+    const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
+    const { activate } = loadRegisterWithEnv()
+
+    activate('first', '1.0.0')
+    activate('second', '2.0.0')
+    activate('first', '1.0.1')
+
+    assert.strictEqual(setup.callCount, 2)
+    sinon.assert.calledOnceWithExactly(load, { name: 'first' })
+    sinon.assert.calledOnceWithExactly(logMock.error,
+      'Error during activation setup of %s: %s', 'second', 'metadata failed', error)
+    sinon.assert.calledOnceWithExactly(telemetryMock, 'error', [
+      'error_type:Error', 'integration:second', 'integration_version:2.0.0',
+    ], {
+      result: 'error',
+      result_class: 'internal_error',
+      result_reason: 'Error during activation of second: metadata failed',
+    })
+  })
+
   it('does not publish re-entrant group activations before setup has completed', () => {
     const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
     const setup = sinon.stub().callsFake(() => {
