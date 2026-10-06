@@ -62,23 +62,12 @@ function createFakeDc () {
 
 function loadInstrumentation () {
   const fakeDc = createFakeDc()
-  let hookCallback
 
+  // The instrumentation subscribes to the query channel at module scope on
+  // require, so loading it with a fake `dc-polyfill` is all the setup needed.
   proxyquire.noPreserveCache().load('../../datadog-instrumentations/src/claude-agent-sdk', {
     'dc-polyfill': fakeDc,
-    './helpers/instrument': {
-      getHooks: () => [{
-        name: '@anthropic-ai/claude-agent-sdk',
-        versions: ['>=0.2.113'],
-        file: 'sdk.mjs',
-      }],
-      addHook: (hook, callback) => {
-        hookCallback = callback
-      },
-    },
   })
-
-  hookCallback({})
 
   return fakeDc
 }
