@@ -72,6 +72,10 @@ module.exports = {
 /**
  * Install a probe received from remote config, classifying any failure for the main thread telemetry.
  *
+ * The classification only matters for failures acknowledged to remote config: `remote_config.js` sends `reason` and
+ * `phase` along with the acknowledgement, and the main thread includes them in its log message. Other callers, such
+ * as re-evaluation, use `installProbe` directly.
+ *
  * @param {object} probe - The probe to install.
  */
 async function addBreakpoint (probe) {
@@ -286,6 +290,8 @@ async function removeBreakpoint ({ id }) {
 
 // TODO: Modify existing probe instead of removing it (DEBUG-2817)
 async function modifyBreakpoint (probe) {
+  // Only failures to install the new version are classified as installation failures; failing to remove the old
+  // version is acknowledged without `phase=install`.
   await removeBreakpoint(probe)
   await addBreakpoint(probe)
 }
@@ -405,6 +411,8 @@ async function reEvaluateProbe (probe) {
   if (probeToLocation.has(probe.id)) {
     await removeBreakpoint(probe)
   }
+  // Not `addBreakpoint`: a failure here isn't acknowledged to remote config. It's only logged by the
+  // `scriptLoadingStabilized` handler, which has no use for the classification.
   await installProbe(probe)
   ackInstalled(probe)
 }
