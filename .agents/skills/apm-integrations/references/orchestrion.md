@@ -42,7 +42,7 @@ shimmer is still necessary, leave a code comment naming the reason.
 ```text
 packages/datadog-instrumentations/src/
 └── helpers/rewriter/
-    ├── instrumentation-registry.js            # Add the config group and optional activate: true flag
+    ├── instrumentation-registry.js            # Add the config group and optional activate flag or setup function
     └── instrumentations/<name>.js             # The config array
 ```
 
@@ -51,7 +51,7 @@ required lifecycle.
 
 Pure Orchestrion integrations are discovered from their rewrite targets and publish plugin activation from successfully
 rewritten source when the module is evaluated. They do not need an identity instrumentation file or `hooks.js` entry.
-Hybrid integrations still need both when runtime setup or export modification complements source rewriting. Pure
+Hybrid integrations still need both when export modification complements source rewriting. Pure
 integrations report compatibility at the rewrite-target level when an exact target is evaluated, so loading other files
 from the same package is not reported. Bundler rewrites keep their existing activation path and do not report this
 compatibility telemetry.
@@ -59,6 +59,11 @@ compatibility telemetry.
 Register a pure integration by adding its config and a config-registry entry with `activate: true`, then run
 `npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; the registry's
 `activate` flag controls evaluation-time plugin activation using the module name from the config.
+
+For runtime subscribers, use `activate: () => require('../../<name>')`. The function runs synchronously once per group,
+before plugin activation, takes no arguments, and its return value is ignored. The setup file subscribes at module top
+level, must not call `addHook`, and must not depend on subscriber order relative to plugins. A throwing setup permanently
+prevents activation for every module in the group.
 
 ## Config Schema
 
