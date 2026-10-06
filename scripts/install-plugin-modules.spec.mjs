@@ -7,12 +7,14 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, it } from 'mocha'
+import { satisfies } from 'semver'
 
 const require = createRequire(import.meta.url)
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const { getAllInstrumentations, getInstrumentation, getInstrumentationNames } = require(
   '../packages/dd-trace/test/setup/helpers/load-inst'
 )
+const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
 
 const pureIntegrations = {
   'azure-cosmos': '@azure/cosmos',
@@ -94,6 +96,63 @@ describe('plugin fixture discovery', () => {
       assert.ok(!packages.includes('@supabase/supabase-js@2.112.2'))
     })
   })
+
+  for (const packageVersionRange of ['', '16.14.2']) {
+    const selection = packageVersionRange ? 'a sharded GraphQL version' : 'GraphQL'
+    it(`installs isolated graphql-jit layouts and compatible peers with ${selection}`, () => {
+      withInstallerFixture({
+        PLUGINS: 'graphql',
+        PACKAGE_VERSION_RANGE: packageVersionRange,
+        RANGE: '',
+      }, fixtureRoot => {
+        const { packages } = JSON.parse(readFileSync(join(fixtureRoot, 'versions', 'package.json'))).workspaces
+        const jitWorkspaces = packages.filter(name => name === 'graphql-jit' || name.startsWith('graphql-jit@'))
+        const floors = ['0.7.0', '0.8.0', '0.8.5', '0.8.7']
+        const ranges = [
+          '>=0.7.0 <0.8.5 || >=0.8.7 <0.9.0',
+          '>=0.8.0 <0.8.5',
+          '>=0.8.5 <0.8.7',
+          '>=0.8.7 <0.9.0',
+        ]
+        assert.deepEqual(jitWorkspaces, [
+          'graphql-jit',
+          ...[...floors, ...ranges].map(version => `graphql-jit@${version}`),
+        ].sort())
+
+        for (const name of jitWorkspaces) {
+          const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', name, 'package.json')))
+          assert.deepEqual(manifest.workspaces?.nohoist, ['**/**'], `${name} should be isolated`)
+          assert.equal(manifest.dependencies.graphql, '^16.0.0', `${name} should use its declared GraphQL peer`)
+
+          if (name === 'graphql-jit') {
+            for (const version of [...floors, '0.8.4', '0.8.6']) {
+              assert.ok(satisfies(version, manifest.dependencies['graphql-jit']), `${name} should support ${version}`)
+            }
+            for (const version of ['0.6.9', '0.9.0']) {
+              assert.ok(!satisfies(version, manifest.dependencies['graphql-jit']), `${name} should exclude ${version}`)
+            }
+          } else {
+            const versionKey = name.slice('graphql-jit@'.length)
+            assert.equal(manifest.dependencies['graphql-jit'], getCappedRange('graphql-jit', versionKey))
+          }
+        }
+
+        const yogaWorkspaces = packages.filter(name => name === 'graphql-yoga' || name.startsWith('graphql-yoga@'))
+        assert.ok(yogaWorkspaces.length > 0, 'ordinary GraphQL externals should still be installed')
+        for (const name of yogaWorkspaces) {
+          const manifest = JSON.parse(readFileSync(join(fixtureRoot, 'versions', name, 'package.json')))
+          assert.equal(manifest.workspaces?.nohoist, undefined, `${name} should remain hoistable`)
+        }
+
+        if (packageVersionRange) {
+          assert.deepEqual(packages.filter(name => name === 'graphql' || name.startsWith('graphql@')), [
+            'graphql',
+            'graphql@16.14.2',
+          ])
+        }
+      })
+    })
+  }
 })
 
 /**
@@ -122,6 +181,15 @@ require.cache[execPath] = {
     const packagePath = path.join(options.cwd, 'node_modules/bullmq')
     fs.mkdirSync(packagePath, { recursive: true })
     fs.writeFileSync(path.join(packagePath, 'package.json'), '{"name":"bullmq","version":"5.66.0"}\n')
+    if (process.env.PLUGINS === 'graphql') {
+      const jitPath = path.join(options.cwd, 'node_modules/graphql-jit')
+      fs.mkdirSync(jitPath, { recursive: true })
+      fs.writeFileSync(path.join(jitPath, 'package.json'), JSON.stringify({
+        name: 'graphql-jit',
+        version: '0.8.9',
+        peerDependencies: { graphql: '^16.0.0' },
+      }) + '\n')
+    }
   },
 }
 `)
