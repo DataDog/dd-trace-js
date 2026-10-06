@@ -13,7 +13,7 @@
 <h1>Interface ExternalExperiment</h1></div>
 <div class="tsd-signature"><span class="tsd-signature-keyword">interface</span> <span class="tsd-kind-interface">ExternalExperiment</span> <span class="tsd-signature-symbol">{</span><br/>    <a class="tsd-kind-call-signature" href="#close-1">close</a><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?:</span> <a href="llmobs.ExternalExperimentCloseOptions.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentCloseOptions</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#experimentid-1">experimentId</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#name-1">name</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#submitevaluationmetrics-1">submitEvaluationMetrics</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">span</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{</span> <span class="tsd-kind-property">experimentId</span><span class="tsd-signature-symbol">?:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">spanId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">;</span> <span class="tsd-kind-property">traceId</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">,</span><br/>        <span class="tsd-kind-parameter">metrics</span><span class="tsd-signature-symbol">:</span> <a href="llmobs.ExternalExperimentMetric.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentMetric</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#submitspan-1">submitSpan</a><span class="tsd-signature-symbol">(</span><br/>        <span class="tsd-kind-parameter">input</span><span class="tsd-signature-symbol">?:</span> <a href="llmobs.ExternalExperimentSpanInput.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentSpanInput</a><span class="tsd-signature-symbol">,</span><br/>    <span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="llmobs.ExternalExperimentSpan.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentSpan</a><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">;</span><br/>    <a class="tsd-kind-call-signature" href="#url-1">url</a><span class="tsd-signature-symbol">()</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol">;</span><br/><span class="tsd-signature-symbol">}</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4248">index.d.ts:4248</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4381">index.d.ts:4381</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-accordion" open><summary class="tsd-accordion-summary tsd-index-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg>
@@ -43,7 +43,7 @@
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">options</span>: <a href="llmobs.ExternalExperimentCloseOptions.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentCloseOptions</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4257">index.d.ts:4257</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4390">index.d.ts:4390</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="experimentid"><span>experiment<wbr/>Id</span><a href="#experimentid" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -52,7 +52,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4249">index.d.ts:4249</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4382">index.d.ts:4382</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="name"><span>name</span><a href="#name" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -61,7 +61,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4250">index.d.ts:4250</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4383">index.d.ts:4383</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="submitevaluationmetrics"><span>submit<wbr/>Evaluation<wbr/>Metrics</span><a href="#submitevaluationmetrics" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -75,7 +75,7 @@
 <li><span><span class="tsd-kind-parameter">metrics</span>: <a href="llmobs.ExternalExperimentMetric.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentMetric</a><span class="tsd-signature-symbol">[]</span></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4253">index.d.ts:4253</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4386">index.d.ts:4386</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="submitspan"><span>submit<wbr/>Span</span><a href="#submitspan" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -88,7 +88,7 @@
 <li><span><code class="tsd-tag">Optional</code><span class="tsd-kind-parameter">input</span>: <a href="llmobs.ExternalExperimentSpanInput.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentSpanInput</a></span></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="llmobs.ExternalExperimentSpan.html" class="tsd-signature-type tsd-kind-interface">ExternalExperimentSpan</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4252">index.d.ts:4252</a></li></ul></aside></div></li></ul></section>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4385">index.d.ts:4385</a></li></ul></aside></div></li></ul></section>
 <section class="tsd-panel tsd-member">
 <h3 class="tsd-anchor-link" id="url"><span>url</span><a href="#url" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -97,7 +97,7 @@
 <div class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span> <span class="tsd-signature-symbol">|</span> <span class="tsd-signature-type">null</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/ee31dc7d5d5848aa3e3db33acaec1c0694bb5ed4/index.d.ts#L4251">index.d.ts:4251</a></li></ul></aside></div></li></ul></section></section></details></div>
+<li>Defined in <a href="https://github.com/DataDog/dd-trace-js/blob/306e37fff86059bf9c3e2bcb05ed699d728fce26/index.d.ts#L4384">index.d.ts:4384</a></li></ul></aside></div></li></ul></section></section></details></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">

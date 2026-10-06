@@ -25,6 +25,28 @@ best-effort formatted <code>console.warn</code> and <code>console.error</code> c
 <code>DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false</code> to disable this behavior. Set <code>DD_LOGS_OTEL_ENABLED=true</code> to use the
 OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
 <code>DD_AGENTLESS_LOG_SUBMISSION_URL</code> overrides the Datadog logs intake URL.</p>
+<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
+<p>The tracer-managed Datadog OpenFeature provider emits aggregated <code>flagevaluation</code> track EVP events by default. Set
+<code>DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false</code> to disable this collection. This setting does not disable
+flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.</p>
+<p>Privacy consent comes from <code>observeFullEvaluationData</code> in the flag configuration used for each evaluation:</p>
+<ul>
+<li>Unless it is literally <code>true</code>, valid targeting keys are sent as unsalted SHA-256 hashes and evaluation context is omitted.
+Hashing is pseudonymization, not anonymity: a predictable targeting key can still be guessed and hashed.</li>
+<li>With consent, events may include the raw targeting key and a bounded, flattened evaluation-context snapshot.</li>
+<li>When aggregation reaches its identity-level limits, degraded rows omit targeting keys and context even with consent.</li>
+<li>Events may include approved error codes, but never free-form evaluation error messages.</li>
+</ul>
+<p>The background worker starts with the first evaluation batch. Partial batches are scheduled after 20 ms
+when the application event loop can run. There is no public flush API for these events. Internal flush signals and
+graceful shutdown bypass the batching delay. On Node.js <code>beforeExit</code>, shutdown attempts to drain pending evaluations
+for up to five seconds. Diagnostic counters already recorded by the worker are collected before instrumentation
+telemetry's final send; counters produced during the subsequent drain may miss that send. Delivery is best-effort:
+<code>process.exit()</code>, terminating signals, crashes, and frozen runtimes can prevent the drain and lose pending events.</p>
+<p>The worker requires its JavaScript file and dependencies to be available at runtime. Bundling <code>dd-trace</code> into a single
+file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep <code>dd-trace</code>
+external to the bundle with its installed package available. If the worker cannot load, <code>flagevaluation</code> track EVP events
+are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.</p>
 <h2 id="llmobs-experiments">LLM Observability Experiments</h2>
 <p>LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:</p>
 <pre><code class="javascript"><span class="hl-0">const</span><span class="hl-1"> </span><span class="hl-2">tracer</span><span class="hl-1"> = </span><span class="hl-3">require</span><span class="hl-1">(</span><span class="hl-4">&#39;dd-trace&#39;</span><span class="hl-1">).</span><span class="hl-3">init</span><span class="hl-1">({</span><br/><span class="hl-1">  </span><span class="hl-5">llmobs:</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-5">projectName:</span><span class="hl-1"> </span><span class="hl-4">&#39;experiments-project&#39;</span><br/><span class="hl-1">  }</span><br/><span class="hl-1">})</span>
