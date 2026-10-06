@@ -66,6 +66,25 @@ describe('end to end sdk integration tests', () => {
     })
   })
 
+  it('preserves structured experiment input and output', async () => {
+    const input = { prompt: 'smoke test' }
+    const output = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
+
+    llmobs.trace({ kind: 'experiment', name: 'json-stringify-repro' }, () => {
+      llmobs.annotate({ inputData: input, outputData: output, tags: { experiment_id: 'exp-1' } })
+    })
+
+    const { llmobsSpans } = await getEvents()
+    assert.equal(llmobsSpans.length, 1)
+    assert.deepStrictEqual(llmobsSpans[0].meta.input, input)
+    assert.deepStrictEqual(llmobsSpans[0].meta.output, output)
+    assert.equal(llmobsSpans[0]._dd.scope, 'experiments')
+  })
+
   it('uses wrap correctly', async () => {
     function agent (input) {
       llmobs.annotate({ inputData: 'hello' })
@@ -407,13 +426,19 @@ describe('end to end sdk integration tests', () => {
 
     describe('with a processor that returns a valid LLMObservabilitySpan', () => {
       function processor (span) {
+        const removeInput = span.getTag('remove_input')
         const redactInput = span.getTag('redact_input')
-        if (redactInput) {
+        if (removeInput) {
+          span.input = []
+        } else if (redactInput) {
           span.input = span.input.map(message => ({ ...message, content: 'REDACTED' }))
         }
 
+        const removeOutput = span.getTag('remove_output')
         const redactOutput = span.getTag('redact_output')
-        if (redactOutput) {
+        if (removeOutput) {
+          span.output = []
+        } else if (redactOutput) {
           span.output = span.output.map(message => ({ ...message, content: 'REDACTED' }))
         }
 
@@ -437,6 +462,36 @@ describe('end to end sdk integration tests', () => {
 
         assert.equal(llmobsSpans[0].meta.input.value, 'REDACTED')
         assert.equal(llmobsSpans[1].meta.output.messages[0].content, 'REDACTED')
+      })
+
+      it('redacts structured experiment input and output', async () => {
+        llmobs.trace({ kind: 'experiment', name: 'experiment' }, () => {
+          llmobs.annotate({
+            tags: { redact_input: true, redact_output: true },
+            inputData: { prompt: 'sensitive input' },
+            outputData: { result: ['sensitive output'] },
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.equal(llmobsSpans[0].meta.input, 'REDACTED')
+        assert.equal(llmobsSpans[0].meta.output, 'REDACTED')
+      })
+
+      it('preserves the experiment span when the processor removes input and output', async () => {
+        llmobs.trace({ kind: 'experiment', name: 'experiment' }, () => {
+          llmobs.annotate({
+            tags: { remove_input: true, remove_output: true },
+            inputData: { prompt: 'sensitive input' },
+            outputData: { result: ['sensitive output'] },
+          })
+        })
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+        assert.deepStrictEqual(llmobsSpans[0].meta.input, {})
+        assert.deepStrictEqual(llmobsSpans[0].meta.output, {})
       })
 
       it('redacts embedding input document content while preserving other document fields', async () => {

@@ -1981,6 +1981,9 @@ function getWrappedOn (on) {
     if (event !== 'message') {
       return on.apply(this, arguments)
     }
+    // Reply through Vitest's pool worker, which owns its version-specific serialization.
+    // The listener's `this` is the underlying ChildProcess or Worker instead.
+    const worker = this
     // `arguments[1]` is the callback function, which
     // we modify to intercept our messages to not interfere
     // with vitest's own messages
@@ -1988,7 +1991,7 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (
-          handleEfdAdmissionMessage(this, interprocessCode, data) ||
+          handleEfdAdmissionMessage(worker, interprocessCode, data) ||
           handleWorkerReport(interprocessCode, data)
         ) {
           // If we execute the callback vitest crashes, as the message is not supported

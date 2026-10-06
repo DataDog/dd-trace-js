@@ -159,6 +159,35 @@ function makeFailingStream (chunks, error) {
 }
 
 describe('claude-agent-sdk hook index instrumentation', () => {
+  it('uses init metadata when another system message arrives first', async () => {
+    const { channels } = loadActiveInstrumentation()
+    const queryChannel = channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query')
+    const ctx = {
+      arguments: [{ prompt: 'hello' }],
+      result: makeStream([
+        { type: 'system', subtype: 'session_title_changed', session_id: 'title-session' },
+        {
+          type: 'system',
+          subtype: 'init',
+          session_id: 'init-session',
+          cwd: '/project',
+          permissionMode: 'default',
+        },
+        { type: 'result', result: 'done' },
+      ]),
+    }
+
+    queryChannel.start.publish(ctx)
+    queryChannel.end.publish(ctx)
+
+    for await (const message of ctx.result) assert.ok(message.type)
+
+    assert.equal(ctx.session_id, 'init-session')
+    assert.equal(ctx.cwd, '/project')
+    assert.equal(ctx.permissionMode, 'default')
+    assert.equal(ctx.output, 'done')
+  })
+
   it('does not add tracer hooks when no downstream subscribers exist', async () => {
     const { channels, events } = loadInstrumentation()
     const queryChannel = channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query')
@@ -198,6 +227,7 @@ describe('claude-agent-sdk hook index instrumentation', () => {
         prompt: 'get weather',
         options: {
           model: 'claude-sonnet-4-6',
+          systemPrompt: 'Be concise',
           resume: 'session-123',
           maxTurns: 3,
           permissionMode: 'acceptEdits',
@@ -399,6 +429,9 @@ describe('claude-agent-sdk hook index instrumentation', () => {
     assert.equal(stepStart.ctx.stepIndex, 0)
     assert.equal(llmStart.ctx.model, 'claude-sonnet-4-6')
     assert.equal(llmStarts.length, 4)
+    for (const event of llmStarts) {
+      assert.equal(event.ctx.systemPrompt, event.ctx.parentToolUseId ? undefined : 'Be concise')
+    }
     assert.equal(toolStarts.length, 3)
 
     const agentTool = toolStarts.find(event => event.ctx.id === 'agent-tool').ctx

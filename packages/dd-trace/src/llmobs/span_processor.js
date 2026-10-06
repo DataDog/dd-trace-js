@@ -18,6 +18,8 @@ const {
   METADATA,
   COST_TAGS,
   TOOL_DEFINITIONS,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_MESSAGES,
   INPUT_VALUE,
   INTEGRATION,
@@ -41,40 +43,12 @@ const {
   SAMPLING_DECISION,
   TRACE_ID,
   LLMOBS_META_STRUCT_KEY,
-  INPUT_TOKENS_METRIC_KEY,
-  OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY,
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  REASONING_OUTPUT_TOKENS_METRIC_KEY,
-  GEN_AI_OPERATION_NAME,
-  GEN_AI_REQUEST_MODEL,
-  GEN_AI_PROVIDER_NAME,
-  GEN_AI_APPLICATION_NAME,
-  GEN_AI_CONVERSATION_ID,
-  GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY,
-  ARTIFICIAL_GEN_AI_TAGS,
+  DEFAULT_MODEL,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
+const { setGenAiApmTags } = require('./gen-ai-tags')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
-
-const DEFAULT_MODEL = 'custom'
-const MODEL_BACKED_SPAN_KINDS = new Set(['llm', 'embedding'])
-
-const GEN_AI_TOKEN_METRIC_KEYS = [
-  [INPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_INPUT_TOKENS_METRIC_KEY],
-  [OUTPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_OUTPUT_TOKENS_METRIC_KEY],
-  [TOTAL_TOKENS_METRIC_KEY, GEN_AI_USAGE_TOTAL_TOKENS_METRIC_KEY],
-  [CACHE_READ_INPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS_METRIC_KEY],
-  [CACHE_WRITE_INPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_CACHE_WRITE_INPUT_TOKENS_METRIC_KEY],
-  [REASONING_OUTPUT_TOKENS_METRIC_KEY, GEN_AI_USAGE_REASONING_OUTPUT_TOKENS_METRIC_KEY],
-]
 
 class LLMObservabilitySpan {
   /**
@@ -274,8 +248,13 @@ class LLMObsSpanProcessor {
     }
 
     const llmObsSpan = new LLMObservabilitySpan(spanKind)
+    const isExperiment = spanKind === 'experiment'
+    const hasExperimentInput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_INPUT)
+    const hasExperimentOutput = isExperiment && Object.hasOwn(mlObsTags, EXPERIMENT_OUTPUT)
 
-    if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
+    if (hasExperimentInput) {
+      llmObsSpan.input = [{ role: '', content: mlObsTags[EXPERIMENT_INPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[INPUT_MESSAGES]) {
       llmObsSpan.input = mlObsTags[INPUT_MESSAGES]
       inputType = 'messages'
     } else if (spanKind === 'embedding' && mlObsTags[INPUT_DOCUMENTS]) {
@@ -286,7 +265,9 @@ class LLMObsSpanProcessor {
       inputType = 'value'
     }
 
-    if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
+    if (hasExperimentOutput) {
+      llmObsSpan.output = [{ role: '', content: mlObsTags[EXPERIMENT_OUTPUT] }]
+    } else if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
       llmObsSpan.output = mlObsTags[OUTPUT_MESSAGES]
       outputType = 'messages'
     } else if (spanKind === 'retrieval' && mlObsTags[OUTPUT_DOCUMENTS]) {
@@ -318,34 +299,41 @@ class LLMObsSpanProcessor {
     const processedSpan = this.#runProcessor(llmObsSpan)
     if (processedSpan === undefined) return null
 
-    if (processedSpan.input) {
-      if (inputType === 'messages') {
-        input.messages = processedSpan.input
-      } else if (inputType === 'value') {
-        input.value = processedSpan.input[0].content
-      } else if (inputType === 'documents') {
-        input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+    if (isExperiment) {
+      const [processedInput] = processedSpan.input
+      const [processedOutput] = processedSpan.output
+      if (hasExperimentInput && processedInput !== undefined) meta.input = processedInput.content
+      if (hasExperimentOutput && processedOutput !== undefined) meta.output = processedOutput.content
+    } else {
+      if (processedSpan.input) {
+        if (inputType === 'messages') {
+          input.messages = processedSpan.input
+        } else if (inputType === 'value') {
+          input.value = processedSpan.input[0].content
+        } else if (inputType === 'documents') {
+          input.documents = processedSpan.input.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[INPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (processedSpan.output) {
-      if (outputType === 'messages') {
-        output.messages = processedSpan.output
-      } else if (outputType === 'value') {
-        output.value = processedSpan.output[0].content
-      } else if (outputType === 'documents') {
-        output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
-          ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
-          text: processedDocument.content,
-        }))
+      if (processedSpan.output) {
+        if (outputType === 'messages') {
+          output.messages = processedSpan.output
+        } else if (outputType === 'value') {
+          output.value = processedSpan.output[0].content
+        } else if (outputType === 'documents') {
+          output.documents = processedSpan.output.map((processedDocument, processedDocumentIdx) => ({
+            ...mlObsTags[OUTPUT_DOCUMENTS][processedDocumentIdx],
+            text: processedDocument.content,
+          }))
+        }
       }
-    }
 
-    if (input) meta.input = input
-    if (output) meta.output = output
+      meta.input = input
+      meta.output = output
+    }
 
     const prompt = mlObsTags[INPUT_PROMPT]
     if (prompt && spanKind === 'llm') {
@@ -499,46 +487,19 @@ class LLMObsSpanProcessor {
   }
 
   /**
-   * Writes the scalar `gen_ai.*` attributes onto the APM span, so model, provider, application,
-   * conversation and token usage are searchable in APM. Message bodies stay off the APM span.
-   *
    * @param {import('../opentracing/span')} span
    */
   #setGenAiApmTags (span) {
     const mlObsTags = LLMObsTagger.tagMap.get(span)
-    const spanContext = span.context()
-    const spanKind = mlObsTags[SPAN_KIND]
 
-    if (spanKind) spanContext.setTag(GEN_AI_OPERATION_NAME, spanKind)
-
-    const modelName = mlObsTags[MODEL_NAME]
-    const modelProvider = mlObsTags[MODEL_PROVIDER]
-    const modelBacked = MODEL_BACKED_SPAN_KINDS.has(spanKind)
-    if (modelBacked) {
-      spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName || DEFAULT_MODEL)
-      spanContext.setTag(GEN_AI_PROVIDER_NAME, (modelProvider || DEFAULT_MODEL).toLowerCase())
-    } else {
-      if (modelName) spanContext.setTag(GEN_AI_REQUEST_MODEL, modelName)
-      if (modelProvider) spanContext.setTag(GEN_AI_PROVIDER_NAME, modelProvider.toLowerCase())
-    }
-
-    const mlApp = mlObsTags[ML_APP]
-    if (mlApp) spanContext.setTag(GEN_AI_APPLICATION_NAME, mlApp)
-
-    const sessionId = mlObsTags[SESSION_ID]
-    if (sessionId) spanContext.setTag(GEN_AI_CONVERSATION_ID, sessionId)
-
-    const metrics = mlObsTags[METRICS]
-    // Other kinds carry unrelated metrics that would be misleading under a `gen_ai.usage.*` key.
-    if (modelBacked && metrics) {
-      for (const [metricKey, genAiKey] of GEN_AI_TOKEN_METRIC_KEYS) {
-        const value = metrics[metricKey]
-        if (value != null) spanContext.setTag(genAiKey, value)
-      }
-    }
-
-    // matches the value dd-trace-py writes
-    spanContext.setTag(ARTIFICIAL_GEN_AI_TAGS, 'true')
+    setGenAiApmTags(span, {
+      spanKind: mlObsTags[SPAN_KIND],
+      modelName: mlObsTags[MODEL_NAME],
+      modelProvider: mlObsTags[MODEL_PROVIDER],
+      mlApp: mlObsTags[ML_APP],
+      sessionId: mlObsTags[SESSION_ID],
+      metrics: mlObsTags[METRICS],
+    })
   }
 
   // For now, this only applies to metadata, as we let users annotate this field with any object

@@ -75,6 +75,7 @@ const artifactsRecorderScreenshotPathCh =
 const snapshotRecorderScreenshotPathCh = tracingChannel('orchestrion:playwright:SnapshotRecorder_createAttachmentPath')
 const saveAutomaticVideoCh = tracingChannel('orchestrion:playwright:saveAutomaticVideo')
 const pageGotoCh = tracingChannel('orchestrion:playwright-core:Page_goto')
+const fullProjectInternalCh = tracingChannel('orchestrion:playwright:FullProjectInternal')
 
 const testToCtx = new WeakMap()
 const originalTestIdsByRetry = new WeakMap()
@@ -91,6 +92,8 @@ const isFailureScreenshotUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED') === true
 const isFailureVideoUploadEnabled =
   getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED') === true
+const shouldEnableFailureScreenshots = getValueFromEnvSources('DD_TEST_FAILURE_SCREENSHOTS_ENABLED', true) === true
+const shouldEnableFailureVideos = getValueFromEnvSources('DD_TEST_FAILURE_VIDEOS_ENABLED', true) === true
 
 let applyRepeatEachIndex = null
 let reporterError
@@ -1057,6 +1060,8 @@ function testEndHandler ({
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
     !(test._ddIsNew || test._ddIsModified) &&
     atrRetryCount != null && atrRetryCount > 0 &&
+    // Serial suites can add skipped results before a test's first execution.
+    results.some((result, index) => index < results.length - 1 && result.status !== 'skipped') &&
     !willRetry && testResultStatus !== expectedStatus &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
@@ -1879,6 +1884,27 @@ function commonIndexHook (commonExport) {
 dispatcherRunCh.subscribe({
   start (ctx) {
     prepareDispatcherRun(ctx.self, ctx.arguments)
+  },
+})
+
+fullProjectInternalCh.subscribe({
+  end ({ self, error }) {
+    if (error || !libraryConfigurationCh.hasSubscribers) return
+
+    // Workers reload the config, so apply capture settings as each project is resolved in either process.
+    const { project } = self
+    if (shouldEnableFailureScreenshots && !isFailureScreenshotCaptureEnabled([project])) {
+      const screenshot = project.use.screenshot
+      project.use.screenshot = typeof screenshot === 'object' && screenshot !== null
+        ? { ...screenshot, mode: 'only-on-failure' }
+        : 'only-on-failure'
+    }
+    if (shouldEnableFailureVideos && !isFailureVideoCaptureEnabled([project])) {
+      const video = project.use.video
+      project.use.video = typeof video === 'object' && video !== null
+        ? { ...video, mode: 'retain-on-failure' }
+        : 'retain-on-failure'
+    }
   },
 })
 

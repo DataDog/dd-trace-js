@@ -579,6 +579,14 @@ describe('tagger', () => {
         })
       })
 
+      it('keeps a custom metric named after an Object.prototype member', () => {
+        tagger._register(span)
+        tagger.tagMetrics(span, { constructor: 1, toString: 2 })
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.metrics': { constructor: 1, toString: 2 },
+        })
+      })
+
       it('throws for non-number entries', () => {
         const metrics = {
           a: 1,
@@ -1335,6 +1343,40 @@ describe('tagger', () => {
       it('throws when the value is not JSON serializable', () => {
         const data = unserializableObject()
         assert.throws(() => tagger.tagTextIO(span, data, 'output'))
+      })
+    })
+
+    describe('tagExperimentIO', () => {
+      it('preserves structured experiment io', () => {
+        const inputData = { prompt: 'smoke test' }
+        const outputData = {
+          status: 'ok',
+          count: 3,
+          nested: { a: 1, b: [1, 2, 3] },
+        }
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, inputData, outputData)
+
+        assertObjectContains(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.input': inputData,
+          '_ml_obs.meta.output': outputData,
+        })
+      })
+
+      it('preserves falsey JSON values', () => {
+        tagger._register(span)
+
+        tagger.tagExperimentIO(span, false, null)
+
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.input'], false)
+        assert.deepStrictEqual(Tagger.tagMap.get(span)['_ml_obs.meta.output'], null)
+      })
+
+      it('throws when a value is not JSON serializable', () => {
+        tagger._register(span)
+
+        assert.throws(() => tagger.tagExperimentIO(span, undefined, unserializableObject()))
       })
     })
 
