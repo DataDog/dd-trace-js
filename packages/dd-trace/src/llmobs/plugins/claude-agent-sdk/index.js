@@ -5,6 +5,7 @@ const { storage: llmobsStorage } = require('../../storage')
 const { NAME, SESSION_ID } = require('../../constants/tags')
 const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/src/util')
 
+const SYSTEM_PROMPT_DYNAMIC_BOUNDARY = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'
 const subagentToolIds = new Set()
 
 function normalizeToolOutputString (raw) {
@@ -127,6 +128,11 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
 
     if (cwd) metadata.cwd = cwd
     if (permissionMode) metadata.permissionMode = permissionMode
+    const systemPrompt = ctx.arguments?.[0]?.options?.systemPrompt
+    if (systemPrompt?.type === 'preset') {
+      if (typeof systemPrompt.preset === 'string') metadata.systemPromptPreset = systemPrompt.preset
+      if (typeof systemPrompt.append === 'string') metadata.systemPromptAppend = systemPrompt.append
+    }
 
     this._tagger.tagMetadata(span, metadata)
   }
@@ -193,10 +199,10 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, usage } = ctx
+    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, systemPrompt, usage } = ctx
 
     if (chunks) {
-      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt)
+      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt, systemPrompt)
       const outputMessages = buildOutputMessages(chunks, llmStartIdx, llmEndIdx)
       this._tagger.tagLLMIO(span, inputMessages, outputMessages)
     }
@@ -205,8 +211,20 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     if (metrics) this._tagger.tagMetrics(span, metrics)
   }
 
-  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt) {
+  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt, systemPrompt) {
     const messages = []
+    let configuredPrompt = systemPrompt
+    if (systemPrompt?.type === 'custom') configuredPrompt = systemPrompt.prompt
+    else if (systemPrompt?.type === 'preset') configuredPrompt = systemPrompt.append
+    if (typeof configuredPrompt === 'string') {
+      if (configuredPrompt) messages.push({ role: 'system', content: configuredPrompt })
+    } else if (Array.isArray(configuredPrompt)) {
+      for (const part of configuredPrompt) {
+        if (typeof part === 'string' && part && part !== SYSTEM_PROMPT_DYNAMIC_BOUNDARY) {
+          messages.push({ role: 'system', content: part })
+        }
+      }
+    }
     if (initialPrompt) messages.push({ role: 'user', content: initialPrompt })
     const seenIds = new Set()
 

@@ -5,6 +5,12 @@ const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+} = require('../../../src/llmobs/experiments/evaluator')
 
 const {
   buildTags,
@@ -39,8 +45,31 @@ describe('LLMObs Experiments util', () => {
 
     assert.throws(() => validateEvaluatorName('bad name'), /invalid/)
     assert.throws(() => validateEvaluatorName('bad.name'), /invalid/)
+    assert.throws(() => validateEvaluatorName('__proto__'), /reserved/)
     assert.throws(() => validateEvaluatorName(''), /empty/)
     assert.throws(() => validateEvaluatorName(1), /must be a string/)
+  })
+
+  it('requires base evaluator subclasses to implement evaluate', () => {
+    assert.throws(() => new BaseEvaluator().evaluate({}), /BaseEvaluator subclasses must implement evaluate/)
+    assert.throws(() => new BaseSummaryEvaluator().evaluate({}), /BaseSummaryEvaluator subclasses must implement evaluate/)
+  })
+
+  it('preserves JSON object values in evaluator results', () => {
+    const value = { value: 1, unit: 'ms' }
+
+    const result = new EvaluatorResult(value)
+    const richResult = new EvaluatorResult(value, { reasoning: 'Latency measurement' })
+
+    assert.strictEqual(result.value, value)
+    assert.strictEqual(richResult.value, value)
+    assert.equal(richResult.reasoning, 'Latency measurement')
+  })
+
+  it('validates multi-evaluator result values', () => {
+    assert.throws(() => new MultiEvaluatorResult(null), /must be an object/)
+    assert.throws(() => new MultiEvaluatorResult([]), /must be an object/)
+    assert.throws(() => new MultiEvaluatorResult(JSON.parse('{"__proto__":true}'), false), /reserved/)
   })
 
   it('normalizes evaluator maps and arrays', () => {
@@ -50,6 +79,19 @@ describe('LLMObs Experiments util', () => {
     assert.deepEqual(normalizeEvaluators([namedEvaluator], 'summary'), [['namedEvaluator', namedEvaluator]])
     assert.throws(() => normalizeEvaluators({ 'bad.name': namedEvaluator }, 'row'), /invalid/)
     assert.throws(() => normalizeEvaluators([true], 'summary'), /summary evaluator must be a function/)
+  })
+
+  it('normalizes class evaluator instances by their configured names', () => {
+    class RowEvaluator extends BaseEvaluator {}
+    class SummaryEvaluator extends BaseSummaryEvaluator {}
+
+    const row = new RowEvaluator('row-check')
+    const summary = new SummaryEvaluator()
+
+    assert.deepEqual(normalizeEvaluators([row], 'row'), [['row-check', row]])
+    assert.deepEqual(normalizeEvaluators([summary], 'summary'), [['SummaryEvaluator', summary]])
+    assert.throws(() => normalizeEvaluators([summary], 'row'), /row evaluator must be a function or a BaseEvaluator/)
+    assert.throws(() => normalizeEvaluators([row], 'summary'), /summary evaluator must be a function or a BaseSummaryEvaluator/)
   })
 
   it('warns and keeps the last array evaluator when inferred names collide', () => {
