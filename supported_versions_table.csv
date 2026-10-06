@@ -66,6 +66,7 @@ fastify,fastify,1.0.0,5.12.5,True
 find-my-way,find-my-way,1.0.0,9.9.0,True
 fs,fs,22.0.0,26.10.0,True
 graphql,graphql,0.10.0,16.14.2,True
+graphql-jit,graphql,0.7.0,0.8.9,True
 hapi,hapi,16.0.0,18.1.0,True
 hono,hono,4.0.0,4.13.9,True
 http,http,22.0.0,26.10.0,True
