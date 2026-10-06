@@ -63,13 +63,34 @@ session.on('scriptLoadingStabilized', () => {
 })
 
 module.exports = {
-  addBreakpoint: lock(installBreakpoint),
+  addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
   modifyBreakpoint: lock(modifyBreakpoint),
   refreshBreakpoints: lock(refreshBreakpoints),
 }
 
+/**
+ * Install a probe received from remote config, classifying any failure for the main thread telemetry.
+ *
+ * @param {object} probe - The probe to install.
+ */
 async function addBreakpoint (probe) {
+  try {
+    await installProbe(probe)
+  } catch (err) {
+    err.reason ??= WORKER_ERROR_REASON.PROBE_INSTALLATION_FAILED
+    err.phase = 'install'
+    throw err
+  }
+}
+
+/**
+ * Register a probe and set or update the breakpoint at its location. A probe that fails to install stays registered,
+ * so re-evaluation can retry it and a removal can cancel it.
+ *
+ * @param {object} probe - The probe to install.
+ */
+async function installProbe (probe) {
   // Re-evaluation retries a failed installation with the same probe, which gets a new sampling index below
   if (probes.get(probe.id) === probe) samplingIndexToProbe.delete(probe.samplingIndex)
   probes.set(probe.id, probe)
@@ -266,22 +287,7 @@ async function removeBreakpoint ({ id }) {
 // TODO: Modify existing probe instead of removing it (DEBUG-2817)
 async function modifyBreakpoint (probe) {
   await removeBreakpoint(probe)
-  await installBreakpoint(probe)
-}
-
-/**
- * Add a breakpoint for a probe received from remote config, classifying any failure for the main thread telemetry.
- *
- * @param {object} probe - The probe to install.
- */
-async function installBreakpoint (probe) {
-  try {
-    await addBreakpoint(probe)
-  } catch (err) {
-    err.reason ??= WORKER_ERROR_REASON.PROBE_INSTALLATION_FAILED
-    err.phase = 'install'
-    throw err
-  }
+  await addBreakpoint(probe)
 }
 
 /**
@@ -399,7 +405,7 @@ async function reEvaluateProbe (probe) {
   if (probeToLocation.has(probe.id)) {
     await removeBreakpoint(probe)
   }
-  await addBreakpoint(probe)
+  await installProbe(probe)
   ackInstalled(probe)
 }
 
