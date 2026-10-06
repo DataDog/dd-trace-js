@@ -2,6 +2,7 @@
 
 const { fetchAgentInfo } = require('../../agent/info')
 const { getValueFromEnvSources } = require('../../config/helper')
+const { LLMOBS_META_STRUCT_KEY } = require('../../llmobs/constants/tags')
 const AgentExporter = require('../agent')
 const AgentlessExporter = require('../agentless')
 const BufferingExporter = require('../common/buffering-exporter')
@@ -11,6 +12,7 @@ const BufferingExporter = require('../common/buffering-exporter')
  * agentless APM exporter.
  */
 class LLMObsExporter extends BufferingExporter {
+  #agentless = false
   #exporter
   /** @type {Array<Function | undefined>} */
   #pendingFlushes = []
@@ -25,7 +27,8 @@ class LLMObsExporter extends BufferingExporter {
     this.#prioritySampler = prioritySampler
     this._url = undefined
 
-    const agentlessEnabled = getValueFromEnvSources('DD_AGENTLESS_ENABLED', true)
+    const globalAgentlessEnabled = getValueFromEnvSources('DD_AGENTLESS_ENABLED', true)
+    const agentlessEnabled = globalAgentlessEnabled ?? config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED
 
     if (agentlessEnabled === undefined) {
       fetchAgentInfo(config.url, (err) => {
@@ -43,6 +46,7 @@ class LLMObsExporter extends BufferingExporter {
   #initialize (useAgentless) {
     const Exporter = useAgentless ? AgentlessExporter : AgentExporter
     const pendingUrl = this._url
+    this.#agentless = useAgentless
     this.#exporter = new Exporter(this._config, this.#prioritySampler)
     if (pendingUrl !== undefined) this.#exporter.setUrl?.(pendingUrl)
     this._url = this.#exporter._url
@@ -62,7 +66,22 @@ class LLMObsExporter extends BufferingExporter {
       return true
     }
 
+    if (this.#agentless) this.#normalizeTagKeys(trace)
     return this.#exporter.export(trace)
+  }
+
+  /** @param {object[]} trace */
+  #normalizeTagKeys (trace) {
+    for (const span of trace) {
+      const llmobs = span.meta_struct?.[LLMOBS_META_STRUCT_KEY]
+      if (!llmobs?.tags) continue
+
+      const tags = {}
+      for (const [key, value] of Object.entries(llmobs.tags)) {
+        tags[key.replaceAll('.', '_')] = value
+      }
+      llmobs.tags = tags
+    }
   }
 
   /** @param {Function} [done] */

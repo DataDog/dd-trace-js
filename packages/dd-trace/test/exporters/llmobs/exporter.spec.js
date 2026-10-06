@@ -47,7 +47,7 @@ describe('LLMObsExporter', () => {
 
   function getConfig () {
     return {
-      llmobs: {},
+      llmobs: { DD_LLMOBS_AGENTLESS_ENABLED: undefined },
       url: new URL('http://agent:8126'),
     }
   }
@@ -74,20 +74,73 @@ describe('LLMObsExporter', () => {
     const config = getConfig()
     const prioritySampler = {}
     const exporter = new Exporter(config, prioritySampler)
-    const trace = [{ name: 'llm.request' }]
+    const trace = [{
+      name: 'llm.request',
+      meta_struct: {
+        _llmobs: {
+          tags: {
+            'customer.tier': 'gold',
+            'ddtrace.version': '1.0.0',
+            service: 'test',
+          },
+        },
+      },
+    }]
 
     exporter.export(trace)
     fetchAgentInfo.yield(new Error('Agent unavailable'))
 
     sinon.assert.calledOnceWithExactly(AgentlessExporter, config, prioritySampler)
     sinon.assert.calledOnceWithExactly(agentlessExporter.export, trace)
+    assert.deepStrictEqual(trace[0].meta_struct._llmobs.tags, {
+      customer_tier: 'gold',
+      ddtrace_version: '1.0.0',
+      service: 'test',
+    })
     sinon.assert.notCalled(agentlessExporter.setUrl)
     sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('preserves dotted tag keys when using the Agent exporter', () => {
+    const config = getConfig()
+    const exporter = new Exporter(config, {})
+    const trace = [{ meta_struct: { _llmobs: { tags: { 'customer.tier': 'gold' } } } }]
+
+    exporter.export(trace)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    assert.deepStrictEqual(trace[0].meta_struct._llmobs.tags, { 'customer.tier': 'gold' })
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+  })
+
+  it('uses the LLMObs-specific agentless setting when global agentless mode is not configured', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
+    const exporter = new Exporter(config, {})
+
+    exporter.export([{ name: 'llm.request' }])
+
+    sinon.assert.calledOnce(AgentlessExporter)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('uses the LLMObs-specific Agent setting when global agentless mode is not configured', () => {
+    const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
+    const exporter = new Exporter(config, {})
+
+    exporter.export([{ name: 'llm.request' }])
+
+    sinon.assert.calledOnce(AgentExporter)
+    sinon.assert.notCalled(fetchAgentInfo)
+    sinon.assert.notCalled(AgentlessExporter)
   })
 
   it('uses the agentless exporter immediately when global agentless mode is explicitly enabled', () => {
     getValueFromEnvSources.returns(true)
     const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = false
     const prioritySampler = {}
     const exporter = new Exporter(config, prioritySampler)
     const trace = [{ name: 'llm.request' }]
@@ -103,6 +156,7 @@ describe('LLMObsExporter', () => {
   it('uses the Agent exporter immediately when global agentless mode is explicitly disabled', () => {
     getValueFromEnvSources.returns(false)
     const config = getConfig()
+    config.llmobs.DD_LLMOBS_AGENTLESS_ENABLED = true
     const prioritySampler = {}
     const exporter = new Exporter(config, prioritySampler)
     const trace = [{ name: 'llm.request' }]

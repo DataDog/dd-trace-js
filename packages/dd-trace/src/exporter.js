@@ -9,7 +9,7 @@ const { isTrue } = require('./util')
 module.exports = function getExporter (name) {
   switch (name) {
     case exporters.LLMOBS:
-      return require('./exporters/llmobs')
+      return usesLambdaLogExporter() ? require('./exporters/log') : require('./exporters/llmobs')
     case exporters.ELECTRON:
       return require('./exporters/electron')
     case exporters.LOG:
@@ -33,12 +33,13 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/test-worker')
   }
 
-  const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-  const usingAgent = inAWSLambda && (
-    fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
-    fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
-  )
-  return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
+  return usesLambdaLogExporter() ? require('./exporters/log') : require('./exporters/agent')
+}
+
+function usesLambdaLogExporter () {
+  return getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined &&
+    !fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) &&
+    !fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
 }
 
 function hasCiValidationEnvironment () {
