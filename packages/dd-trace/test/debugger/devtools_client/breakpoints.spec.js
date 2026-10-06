@@ -192,6 +192,28 @@ describe('breakpoints', function () {
       sinon.assert.calledTwice(stateMock.findScriptFromPartialPath)
     })
 
+    it('should retry enabling the debugger after an earlier enable failed', async function () {
+      sessionMock.post.withArgs('Debugger.enable').onFirstCall().rejects(new Error('enable failed'))
+      const probe = genProbeConfig()
+      await assert.rejects(breakpoints.addBreakpoint(probe), { message: 'enable failed' })
+
+      await breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 }))
+
+      assert.strictEqual(getInstalledProbe().version, 2)
+      assert.strictEqual(sessionMock.post.getCalls().filter(call => call.args[0] === 'Debugger.enable').length, 2)
+      assert.strictEqual(stateMock.samplingIndexToProbe.size, 1)
+    })
+
+    it('should keep resolving hits on an installed probe when its id is added again', async function () {
+      await addProbe()
+      const installed = getInstalledProbe()
+
+      await addProbe({ where: { sourceFile: 'test.js', lines: ['20'] } })
+
+      assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId).get('probe-1'), installed)
+      assert.strictEqual(stateMock.samplingIndexToProbe.get(installed.samplingIndex), installed)
+    })
+
     it('should set the probe sampling interval', async function () {
       await addProbe({ sampling: { snapshotsPerSecond: 0.5 } })
 
@@ -558,6 +580,8 @@ describe('breakpoints', function () {
         await assert.rejects(breakpoints.addBreakpoint(pending), {
           message: 'Error replacing breakpoint while adding probe probe-2 (version: 1)',
           cause,
+          reason: 'breakpoint_replacement_failed',
+          phase: 'install',
         })
         assert.strictEqual(stateMock.probeToLocation.has('probe-2'), false)
         assert.strictEqual(stateMock.breakpointToProbes.get(breakpointId).size, 1)
@@ -569,7 +593,7 @@ describe('breakpoints', function () {
         }
         sessionMock.post.withArgs('Debugger.removeBreakpoint').resolves()
         scriptLoadingStabilizedCallback()
-        await breakpoints.refreshBreakpoints([])
+        await waitForQueuedOperations()
 
         assert.strictEqual(getInstalledProbe().id, 'probe-1')
         if (nextAction === 'retry') {
@@ -1168,7 +1192,10 @@ describe('breakpoints', function () {
           sessionMock.post.withArgs('Debugger.setBreakpoint').rejects(new Error('boom'))
         }
 
-        await assert.rejects(breakpoints.addBreakpoint(probe), Error)
+        await assert.rejects(breakpoints.addBreakpoint(probe), {
+          reason: 'probe_installation_failed',
+          phase: 'install',
+        })
         await breakpoints.removeBreakpoint(probe)
         assert.strictEqual(stateMock.samplingIndexToProbe.size, 0)
         assert.strictEqual(stateMock.probeToLocation.size, 0)
@@ -1176,7 +1203,7 @@ describe('breakpoints', function () {
 
         sessionMock.post.resetHistory()
         scriptLoadingStabilizedCallback()
-        await breakpoints.refreshBreakpoints([])
+        await waitForQueuedOperations()
         sinon.assert.notCalled(sessionMock.post)
         sinon.assert.notCalled(ackInstalled)
       })
@@ -1189,7 +1216,7 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
       scriptLoadingStabilizedCallback()
-      await breakpoints.refreshBreakpoints([])
+      await waitForQueuedOperations()
 
       sinon.assert.notCalled(sessionMock.post)
       assert.strictEqual(stateMock.samplingIndexToProbe.size, 0)
@@ -1208,11 +1235,26 @@ describe('breakpoints', function () {
 
       stateMock.findScriptFromPartialPath.withArgs('pending.js').returns({ scriptId: 'script-2', url: 'file:///pending.js' })
       scriptLoadingStabilizedCallback()
-      await breakpoints.refreshBreakpoints([])
+      await waitForQueuedOperations()
 
       sinon.assert.calledOnceWithExactly(ackInstalled, pending)
       assert.strictEqual(stateMock.probeToLocation.has('pending'), true)
       assert.strictEqual(stateMock.samplingIndexToProbe.size, 1)
+    })
+
+    it('should stop the debugger once only probes that failed against their script remain', async function () {
+      await addProbe()
+      const broken = genProbeConfig({ id: 'broken', when: { json: { invalid: true }, dsl: 'invalid' } })
+      await assert.rejects(breakpoints.addBreakpoint(broken), { message: /Cannot compile expression/ })
+      sessionMock.post.resetHistory()
+
+      await breakpoints.removeBreakpoint({ id: 'probe-1' })
+      sinon.assert.calledWith(sessionMock.post, 'Debugger.disable')
+
+      sessionMock.post.resetHistory()
+      await breakpoints.removeBreakpoint(broken)
+      sinon.assert.notCalled(sessionMock.post)
+      sinon.assert.notCalled(logMock.error)
     })
   })
 
@@ -1234,7 +1276,7 @@ describe('breakpoints', function () {
         if (nextAction === 'remove') {
           await breakpoints.removeBreakpoint(replacement)
           scriptLoadingStabilizedCallback()
-          await breakpoints.refreshBreakpoints([])
+          await waitForQueuedOperations()
           assert.strictEqual(stateMock.samplingIndexToProbe.size, 0)
           sinon.assert.notCalled(ackInstalled)
         } else {
@@ -1252,8 +1294,11 @@ describe('breakpoints', function () {
       await addProbe({ id: 'probe-2' })
       sessionMock.post.withArgs('Debugger.setBreakpoint').rejects(new Error('inspector failure'))
 
-      await assert.rejects(breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 })), {
-        reason: 'probe_state_mismatch',
+      // The replacement fails while removing the old version, before the new version is installed
+      await assert.rejects(breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 })), (err) => {
+        assert.strictEqual(err.reason, 'breakpoint_replacement_failed')
+        assert.strictEqual(err.phase, undefined)
+        return true
       })
       assert.strictEqual(stateMock.probeToLocation.size, 0)
       assert.strictEqual(stateMock.locationToBreakpoint.size, 0)
@@ -1262,7 +1307,7 @@ describe('breakpoints', function () {
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
       sessionMock.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId })
       scriptLoadingStabilizedCallback()
-      await breakpoints.refreshBreakpoints([])
+      await waitForQueuedOperations()
 
       assert.strictEqual(getInstalledProbe('probe-2').id, 'probe-2')
       assert.strictEqual(stateMock.probeToLocation.has('probe-1'), false)
@@ -1547,7 +1592,7 @@ describe('breakpoints', function () {
 
       const removal = breakpoints.removeBreakpoint({ id: 'probe-1' })
       scriptLoadingStabilizedCallback()
-      await Promise.all([removal, breakpoints.refreshBreakpoints([])])
+      await Promise.all([removal, waitForQueuedOperations()])
 
       sinon.assert.neverCalledWith(sessionMock.post, 'Debugger.setBreakpoint')
       sinon.assert.notCalled(ackInstalled)
@@ -1560,7 +1605,7 @@ describe('breakpoints', function () {
 
       const modification = breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 }))
       scriptLoadingStabilizedCallback()
-      await Promise.all([modification, breakpoints.refreshBreakpoints([])])
+      await Promise.all([modification, waitForQueuedOperations()])
 
       assert.strictEqual(getInstalledProbe().version, 2)
       const installations = sessionMock.post.getCalls().filter(call => call.args[0] === 'Debugger.setBreakpoint')
@@ -1577,7 +1622,7 @@ describe('breakpoints', function () {
 
       stateMock.findScriptFromPartialPath.returns({ scriptId: 'script-1', url: 'file:///test.js' })
       scriptLoadingStabilizedCallback()
-      await breakpoints.refreshBreakpoints([])
+      await waitForQueuedOperations()
 
       assert.strictEqual(getInstalledProbe().templateRequiresEvaluation, true)
       assert.strictEqual(getInstalledProbe().template, template)
@@ -1585,16 +1630,54 @@ describe('breakpoints', function () {
       sinon.assert.calledOnceWithExactly(ackInstalled, probe)
     })
 
-    it('should retry enabling the debugger after an earlier enable failed', async function () {
-      sessionMock.post.withArgs('Debugger.enable').onFirstCall().rejects(new Error('enable failed'))
+    for (const failure of ['no script matches', 'the condition is invalid']) {
+      it(`should not retry installing a probe when ${failure} again`, async function () {
+        const probe = genProbeConfig()
+        if (failure === 'no script matches') stateMock.findScriptFromPartialPath.returns(undefined)
+        if (failure === 'the condition is invalid') probe.when = { json: { invalid: true }, dsl: 'invalid' }
+        await assert.rejects(breakpoints.addBreakpoint(probe))
+        logMock.error.resetHistory()
+        sessionMock.post.resetHistory()
+
+        scriptLoadingStabilizedCallback()
+        await waitForQueuedOperations()
+
+        sinon.assert.notCalled(sessionMock.post)
+        sinon.assert.notCalled(logMock.error)
+        sinon.assert.notCalled(ackInstalled)
+      })
+    }
+
+    it('should retry installing a probe once a different script matches', async function () {
+      stateMock.findScriptFromPartialPath.returns({ scriptId: 'script-1', url: 'file:///test.js', sourceMapURL: 'x.map' })
+      sourceMapsMock.getGeneratedPosition.resolves({ line: null, column: null })
       const probe = genProbeConfig()
-      await assert.rejects(breakpoints.addBreakpoint(probe), { message: 'enable failed' })
+      await assert.rejects(breakpoints.addBreakpoint(probe), { message: /Could not find generated position/ })
 
-      await breakpoints.modifyBreakpoint(genProbeConfig({ version: 2 }))
+      stateMock.findScriptFromPartialPath.returns({ scriptId: 'script-1', url: 'file:///test.js', sourceMapURL: null })
+      scriptLoadingStabilizedCallback()
+      await waitForQueuedOperations()
+      sinon.assert.notCalled(ackInstalled)
 
-      assert.strictEqual(getInstalledProbe().version, 2)
-      assert.strictEqual(sessionMock.post.getCalls().filter(call => call.args[0] === 'Debugger.enable').length, 2)
+      stateMock.findScriptFromPartialPath.returns({ scriptId: 'script-2', url: 'file:///test.js', sourceMapURL: null })
+      scriptLoadingStabilizedCallback()
+      await waitForQueuedOperations()
+
+      assert.strictEqual(stateMock.breakpointToProbes.get('bp-script-2:9:0').get('probe-1'), probe)
+      sinon.assert.calledOnceWithExactly(ackInstalled, probe)
+    })
+
+    it('should retry installing a probe against the same script after an inspector failure', async function () {
+      sessionMock.post.withArgs('Debugger.setBreakpoint').onFirstCall().rejects(new Error('inspector failure'))
+      const probe = genProbeConfig()
+      await assert.rejects(breakpoints.addBreakpoint(probe), { message: /Error setting breakpoint for probe/ })
+
+      scriptLoadingStabilizedCallback()
+      await waitForQueuedOperations()
+
+      assert.strictEqual(getInstalledProbe(), probe)
       assert.strictEqual(stateMock.samplingIndexToProbe.size, 1)
+      sinon.assert.calledOnceWithExactly(ackInstalled, probe)
     })
 
     it('should log errors from async probe re-evaluation', async function () {
@@ -1605,7 +1688,7 @@ describe('breakpoints', function () {
       stateMock.findScriptFromPartialPath.throws(cause)
 
       scriptLoadingStabilizedCallback()
-      await breakpoints.refreshBreakpoints([])
+      await waitForQueuedOperations()
 
       sinon.assert.calledWith(
         logMock.error,
@@ -1623,6 +1706,14 @@ describe('breakpoints', function () {
    */
   async function addProbe (probe) {
     await breakpoints.addBreakpoint(genProbeConfig(probe))
+  }
+
+  /**
+   * Wait for the operations queued on the breakpoint mutex, such as re-evaluations, to complete.
+   */
+  function waitForQueuedOperations () {
+    // The mutex runs operations in order, so a refresh without probes resolves after everything queued before it
+    return breakpoints.refreshBreakpoints([])
   }
 
   /**

@@ -56,10 +56,6 @@ probePort.on('message', async ({ action, probe, ackId }) => {
     probePort.postMessage({ ackId })
   } catch (err) {
     const knownAction = action === 'apply' || action === 'modify' || action === 'unapply' ? action : 'unknown'
-    if (action === 'apply') {
-      err.reason ??= WORKER_ERROR_REASON.PROBE_INSTALLATION_FAILED
-      err.phase = 'install'
-    }
     // Structured cloning an Error drops its custom properties, so send the reason separately.
     probePort.postMessage({ ackId, error: err, reason: err.reason, action: knownAction, phase: err.phase })
     ackError(err, probe)

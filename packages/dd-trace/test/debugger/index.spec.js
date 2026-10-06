@@ -217,7 +217,47 @@ describe('debugger/index', () => {
       assert.ok(!entry.stack_trace.includes('customer-secret'))
     })
 
-    it('should report a recovered state mismatch through the worker log port with debug logging disabled', () => {
+    it('should report a rejected probe without a reason', () => {
+      const ack = sinon.spy()
+      rc.setProductHandler.lastCall.args[1]('unapply', { id: 'probe1' }, 'config-id', ack)
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      const error = new Error('customer-secret')
+      onMessage({ ackId: 1, error, action: 'unapply' })
+
+      sinon.assert.calledOnceWithExactly(ack, error)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=Error code=unknown reason=unknown action=unapply',
+      ])
+      assert.ok(!entries[0].stack_trace.includes('customer-secret'))
+    })
+
+    it('should report a rejected probe from the probe file once', () => {
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      onMessage({ error: new Error('boom'), reason: 'probe_installation_failed', action: 'apply', phase: 'install' })
+
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=Error code=unknown reason=probe_installation_failed action=apply ' +
+          'phase=install',
+        '[debugger] Received an unknown ackId: %s',
+      ])
+    })
+
+    it('should omit operation context that is not a string', () => {
+      const ack = sinon.spy()
+      rc.setProductHandler.lastCall.args[1]('modify', { id: 'probe1', version: 2 }, 'config-id', ack)
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      onMessage({ ackId: 1, error: new Error('boom'), reason: 'probe_installation_failed', action: {}, phase: 42 })
+
+      const [entry] = logCollector.drain()
+      assert.strictEqual(entry.message,
+        '[debugger] worker thread error name=Error code=unknown reason=probe_installation_failed')
+    })
+
+    it('should report a state mismatch logged by the worker without its exception message', () => {
       const ack = sinon.spy()
       rc.setProductHandler.lastCall.args[1]('unapply', { id: 'probe1' }, 'config-id', ack)
       const onLog = messageChannels[1].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]

@@ -74,7 +74,7 @@ describe('remote config failure reasons', () => {
       assert.strictEqual(response.ackId, 42)
       assert.strictEqual(response.reason, reason)
       assert.strictEqual(response.action, action === 'customer-action' ? 'unknown' : action)
-      assert.strictEqual(response.phase, action === 'apply' ? 'install' : undefined)
+      assert.strictEqual(response.phase, undefined)
       assert.ok(response.error instanceof Error)
       assert.match(response.error.message, new RegExp(`^${message}`))
       sinon.assert.calledOnceWithExactly(ackError, sinon.match.instanceOf(Error), probe)
@@ -82,8 +82,8 @@ describe('remote config failure reasons', () => {
     })
   }
 
-  it('should classify other installation errors and preserve the original exception', async () => {
-    const error = new Error('boom')
+  it('should forward the classification of installation errors and preserve the original exception', async () => {
+    const error = Object.assign(new Error('boom'), { reason: 'probe_installation_failed', phase: 'install' })
     addBreakpoint.rejects(error)
     const probe = { id: 'probe', type: 'LOG_PROBE', where: { sourceFile: 'app.js', lines: ['1'] } }
 
@@ -94,6 +94,19 @@ describe('remote config failure reasons', () => {
     })
     sinon.assert.calledOnceWithExactly(ackError, error, probe)
     sinon.assert.notCalled(ackInstalled)
+  })
+
+  it('should not classify errors left unclassified by the breakpoints module', async () => {
+    const error = new Error('boom')
+    removeBreakpoint.rejects(error)
+    const probe = { id: 'probe', type: 'LOG_PROBE', where: { sourceFile: 'app.js', lines: ['1'] } }
+
+    await onMessage({ action: 'unapply', probe, ackId: 42 })
+
+    sinon.assert.calledOnceWithExactly(probePort.postMessage, {
+      ackId: 42, error, reason: undefined, action: 'unapply', phase: undefined,
+    })
+    sinon.assert.calledOnceWithExactly(ackError, error, probe)
   })
 
   it('should preserve failed update metadata across structured cloning', async () => {
