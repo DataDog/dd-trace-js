@@ -5,17 +5,13 @@ const { channel, tracingChannel } = require('dc-polyfill')
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { getActivationSetup } = require('../src/helpers/rewriter/instrumentation-registry')
+
 const modelInterceptChannel = channel('dd-trace:vercel-ai:model:intercept')
 const resolveLanguageModelChannel = tracingChannel('orchestrion:ai:resolveLanguageModel')
 
-// Same approach as openai.spec.js: stub `addHook` to capture the module callbacks, then
-// activate every rewrite hook so the instrumentation proves its subscriptions are idempotent.
+// Exercise repeated registry setup calls with the real require cache, counting subscriptions.
 function loadAiInstrumentation () {
-  const instrumentPath = require.resolve('../src/helpers/instrument')
-  const realInstrument = require(instrumentPath)
-  const hookCallbacks = []
-  const cache = require.cache[instrumentPath]
-  const previousExports = cache.exports
   const dcPath = require.resolve('dc-polyfill')
   const dcCache = require.cache[dcPath]
   const dcExports = dcCache.exports
@@ -23,15 +19,11 @@ function loadAiInstrumentation () {
     'orchestrion:ai:getTracer',
     'orchestrion:ai:selectTelemetryAttributes',
     'orchestrion:ai:resolveLanguageModel',
+    'orchestrion:ai:includeRuntimeContext',
+    'ai:telemetry',
   ]
   const subscriptionCounts = new Map(channelNames.map(name => [name, 0]))
 
-  cache.exports = {
-    ...realInstrument,
-    addHook (spec, callback) {
-      hookCallbacks.push({ spec, callback })
-    },
-  }
   dcCache.exports = {
     ...dcExports,
     tracingChannel (name) {
@@ -50,16 +42,14 @@ function loadAiInstrumentation () {
 
   try {
     delete require.cache[require.resolve('../src/ai')]
-    require('../src/ai')
+    const setup = getActivationSetup('ai')
+    setup({ moduleName: 'ai', version: '6.0.0' })
+    setup({ moduleName: 'ai', version: '7.0.0' })
+    setup({ moduleName: 'ai', version: '7.0.1' })
   } finally {
-    cache.exports = previousExports
     dcCache.exports = dcExports
     delete require.cache[require.resolve('../src/ai')]
   }
-
-  if (hookCallbacks.length === 0) throw new Error('ai instrumentation registered no hooks')
-
-  for (const { callback } of hookCallbacks) callback()
 
   return channelNames.map(name => subscriptionCounts.get(name))
 }
@@ -103,8 +93,8 @@ describe('vercel ai model interception', () => {
     sinon.restore()
   })
 
-  it('subscribes once when multiple rewrite hooks activate', () => {
-    assert.deepStrictEqual(subscriptionCounts, [1, 1, 1])
+  it('subscribes once when rewrite activation repeats', () => {
+    assert.deepStrictEqual(subscriptionCounts, [1, 1, 1, 1, 1])
   })
 
   it('calls the original directly when nothing is subscribed', () => {
