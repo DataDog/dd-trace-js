@@ -11,6 +11,7 @@ require('./setup/core')
 
 const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('../src/constants')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
+const TraceState = require('../src/opentracing/propagation/tracestate')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -25,6 +26,7 @@ describe('SpanProcessor', () => {
   let config
   let SpanSampler
   let SpanStatsProcessor
+  let updateOtelTraceState
   let sample
 
   before(() => {
@@ -69,6 +71,9 @@ describe('SpanProcessor', () => {
       appsec: {},
     }
     spanFormat = sinon.stub().callsFake(() => ({ formatted: true, meta: {} }))
+    updateOtelTraceState = sinon.stub().callsFake((context, traceState) => {
+      traceState.set('ot', 'rv:ef284ace7a91e1;th:e6666666666668')
+    })
 
     sample = sinon.stub()
     SpanSampler = sinon.stub().returns({
@@ -80,6 +85,7 @@ describe('SpanProcessor', () => {
       './span_format': spanFormat,
       './span_sampler': SpanSampler,
       './span_stats': { SpanStatsProcessor },
+      './otel-sampling': { updateOtelTraceState },
     })
     processor = new SpanProcessor(exporter, prioritySampler, config)
   })
@@ -382,6 +388,36 @@ describe('SpanProcessor', () => {
 
     const [chunk] = exporter.export.firstCall.args
     assert.ok(!Object.hasOwn(chunk[0].meta, SDK_OTLP_EXPORT_KEY))
+  })
+
+  it('should add live tracestate to spans exported through OTLP', () => {
+    config.OTEL_TRACES_EXPORTER = 'otlp'
+    const formattedSpan = { meta: {}, metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const context = finishedSpan.context()
+    context._tracestate = TraceState.fromString('dd=s:1,congo=value')
+    const processor = new SpanProcessor(exporter, prioritySampler, config, undefined, true)
+
+    processor.process(finishedSpan)
+
+    assert.strictEqual(formattedSpan.trace_state, 'ot=rv:ef284ace7a91e1;th:e6666666666668,dd=s:1,congo=value')
+    assert.strictEqual(context._tracestate.toString(), 'dd=s:1,congo=value')
+    sinon.assert.calledOnceWithExactly(updateOtelTraceState, context, sinon.match.instanceOf(TraceState))
+    sinon.assert.calledWith(exporter.export, [formattedSpan])
+  })
+
+  it('should not build tracestate for the Datadog exporter', () => {
+    const formattedSpan = { meta: {}, metrics: {} }
+    spanFormat.returns(formattedSpan)
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    assert.ok(!Object.hasOwn(formattedSpan, 'trace_state'))
+    sinon.assert.notCalled(updateOtelTraceState)
   })
 
   it('should add APM disabled marker to every span in a chunk when APM tracing is disabled', () => {

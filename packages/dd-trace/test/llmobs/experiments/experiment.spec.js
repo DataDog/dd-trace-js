@@ -13,6 +13,10 @@ const {
   MultiEvaluatorResult,
 } = require('../../../src/llmobs/experiments/evaluator')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
+const {
+  RemoteEvaluator,
+  RemoteEvaluatorError,
+} = require('../../../src/llmobs/experiments/remote-evaluator')
 
 function client () {
   return new ExperimentsClient({
@@ -75,6 +79,11 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       ['topic:math', 'topic:logic', 'project_name:record-project']
     )
     const callsToLlmobs = []
+    const structuredOutput = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
     const llmobs = {
       enabled: true,
       trace: (options, fn) => {
@@ -90,7 +99,7 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       name: 'exp-demo',
       projectName: 'demo-project',
       dataset,
-      task: (input) => input.q,
+      task: () => structuredOutput,
       evaluators: { ok: () => true },
       config: { temperature: 0 },
     }, llmobs).run()
@@ -98,6 +107,8 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(callsToLlmobs[0][0], 'trace')
     assert.equal(callsToLlmobs[0][1].kind, 'experiment')
     assert.equal(callsToLlmobs[0][1].name, 'task')
+    assert.deepEqual(callsToLlmobs[1][1].inputData, { q: 'apple' })
+    assert.deepEqual(callsToLlmobs[1][1].outputData, structuredOutput)
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
     assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
@@ -198,6 +209,87 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       )
     }
     assert.equal(events.spans[0].tags.includes('project_name:demo-project'), true)
+  })
+
+  it('runs managed evaluators with experiment context', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('question', 'answer', { difficulty: 'easy' })
+    c.evaluatorInfer = (evalName, context) => {
+      requests.push({ method: 'evaluatorInfer', evalName, context })
+      return Promise.resolve({
+        value: 0.9,
+        reasoning: 'The answer is correct.',
+        assessment: 'pass',
+        status: 'OK',
+      })
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'answer',
+      config: { model: 'test-model' },
+      evaluators: [new RemoteEvaluator({ evalName: 'managed-judge' })],
+    }).run()
+
+    const inference = requests.find(request => request.method === 'evaluatorInfer')
+    assert.deepEqual(inference, {
+      method: 'evaluatorInfer',
+      evalName: 'managed-judge',
+      context: {
+        span_input: 'question',
+        span_output: 'answer',
+        meta: {
+          expected_output: 'answer',
+          metadata: {
+            difficulty: 'easy',
+            experiment_config: { model: 'test-model' },
+          },
+        },
+        span_id: result.rows[0].spanId,
+        trace_id: result.rows[0].traceId,
+      },
+    })
+    assert.equal(result.rows[0].evaluations['managed-judge'], 0.9)
+
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    const metric = metrics.find(metric => metric.label === 'managed-judge')
+    assert.equal(metric.score_value, 0.9)
+    assert.equal(metric.reasoning, 'The answer is correct.')
+    assert.equal(metric.assessment, 'pass')
+    assert.equal(metric.status, 'OK')
+    assert.equal(metric.eval_source_type, 'managed')
+  })
+
+  it('preserves managed evaluator error details in metrics', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('question')
+    c.evaluatorInfer = () => Promise.reject(new RemoteEvaluatorError('Managed evaluation failed', {
+      status: 'WARN',
+      backendError: {
+        type: 'RATE_LIMIT_EXCEEDED',
+        message: 'Rate limit exceeded',
+        recommended_resolution: 'Wait before retrying',
+      },
+    }))
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'answer',
+      evaluators: [new RemoteEvaluator({ evalName: 'managed-judge' })],
+    }).run()
+
+    assert.equal(result.rows[0].evaluationErrors['managed-judge'], 'Rate limit exceeded')
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    const metric = metrics.find(metric => metric.label === 'managed-judge')
+    assert.deepEqual(metric.error, {
+      type: 'RATE_LIMIT_EXCEEDED',
+      message: 'Rate limit exceeded',
+      recommended_resolution: 'Wait before retrying',
+    })
+    assert.equal(metric.status, 'WARN')
+    assert.equal(metric.eval_source_type, 'managed')
   })
 
   it('supports multiple metrics from a class evaluator without a phantom base result', async () => {
