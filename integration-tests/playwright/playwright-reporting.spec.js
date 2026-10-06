@@ -1,11 +1,15 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { inspect } = require('node:util')
+
+const { Channel, tracingChannel } = require('dc-polyfill')
+const proxyquire = require('proxyquire').noPreserveCache()
 const satisfies = require('semifies')
+const sinon = require('sinon')
 
 const {
   sandboxCwd,
@@ -79,6 +83,92 @@ function assertRequestErrorTag (events, tag) {
     assert.strictEqual(event.content.meta[tag], 'true', `${eventType} should have ${tag} tag`)
   }
 }
+
+describe('Playwright failure media configuration', () => {
+  afterEach(() => sinon.restore())
+
+  const cases = []
+  for (const screenshot of [undefined, false, true]) {
+    for (const video of [undefined, false, true]) {
+      cases.push({ screenshot, video, pluginEnabled: true })
+    }
+  }
+  cases.push({ screenshot: true, video: true, pluginEnabled: false })
+
+  for (const { screenshot, video, pluginEnabled } of cases) {
+    const flags = `screenshots=${screenshot}, videos=${video}, plugin=${pluginEnabled}`
+    it(`only enables capture for explicit flags (${flags})`, () => {
+      const env = { ...process.env }
+      delete env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
+      delete env.DD_TEST_FAILURE_VIDEOS_ENABLED
+      if (screenshot !== undefined) env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = String(screenshot)
+      if (video !== undefined) env.DD_TEST_FAILURE_VIDEOS_ENABLED = String(video)
+      sinon.stub(process, 'env').value(env)
+
+      // Isolate the instrumentation's subscriptions without registering hooks in the test runner.
+      const channels = new Map()
+      const tracingChannels = new Map()
+      proxyquire('../../packages/datadog-instrumentations/src/playwright', {
+        './helpers/instrument': {
+          '@noCallThru': true,
+          addHook () {},
+          /** @param {string} name */
+          channel (name) {
+            if (!channels.has(name)) channels.set(name, new Channel(name))
+            return channels.get(name)
+          },
+          /** @param {string} name */
+          tracingChannel (name) {
+            if (!tracingChannels.has(name)) {
+              const events = {}
+              for (const event of ['start', 'end', 'asyncStart', 'asyncEnd', 'error']) {
+                events[event] = new Channel(`${name}:${event}`)
+              }
+              tracingChannels.set(name, tracingChannel(events))
+            }
+            return tracingChannels.get(name)
+          },
+        },
+      })
+      if (pluginEnabled) channels.get('ci:playwright:library-configuration').subscribe(() => {})
+
+      const screenshotEnabled = screenshot === true && pluginEnabled
+      const videoEnabled = video === true && pluginEnabled
+      const projects = [
+        [{}, {
+          ...(screenshotEnabled && { screenshot: 'only-on-failure' }),
+          ...(videoEnabled && { video: 'retain-on-failure' }),
+        }],
+        [{ screenshot: 'off', video: 'off' }, {
+          screenshot: screenshotEnabled ? 'only-on-failure' : 'off',
+          video: videoEnabled ? 'retain-on-failure' : 'off',
+        }],
+        [{
+          screenshot: { mode: 'off', fullPage: true },
+          video: { mode: 'on-first-retry', size: { width: 320, height: 240 } },
+        }, {
+          screenshot: { mode: screenshotEnabled ? 'only-on-failure' : 'off', fullPage: true },
+          video: {
+            mode: videoEnabled ? 'retain-on-failure' : 'on-first-retry', size: { width: 320, height: 240 },
+          },
+        }],
+        [{ screenshot: 'on', video: 'on' }, { screenshot: 'on', video: 'on' }],
+        [{
+          screenshot: { mode: 'on', fullPage: true },
+          video: { mode: 'on', size: { width: 320, height: 240 } },
+        }, {
+          screenshot: { mode: 'on', fullPage: true },
+          video: { mode: 'on', size: { width: 320, height: 240 } },
+        }],
+      ]
+      for (const [use, expected] of projects) {
+        const project = { use }
+        tracingChannels.get('orchestrion:playwright:FullProjectInternal').end.publish({ self: { project } })
+        assert.deepStrictEqual(project.use, expected)
+      }
+    })
+  }
+})
 
 const unboundRunnerExportContext = !PLAYWRIGHT_VERSION || PLAYWRIGHT_VERSION === 'latest'
   ? context
@@ -1414,7 +1504,7 @@ versions.forEach((version) => {
         receiver,
         run,
         screenshotMode = 'only-on-failure',
-        isScreenshotUploadEnabled = true,
+        isScreenshotUploadEnabled,
         testOptimizationConfig = getCiVisAgentlessConfig(receiver.port),
         additionalEnvironment = {}
       ) {
@@ -1429,7 +1519,7 @@ versions.forEach((version) => {
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: screenshotMode,
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-screenshots-${++screenshotRunId}`,
-              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled ? 'true' : undefined,
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: isScreenshotUploadEnabled?.toString(),
               DD_TRACE_DEBUG: 'true',
               DD_TRACE_LOG_LEVEL: 'warn',
               ...additionalEnvironment,
@@ -1442,8 +1532,14 @@ versions.forEach((version) => {
       }
 
       for (const screenshotMode of screenshotModes) {
-        it(`uploads only automatic failure screenshots with screenshot: '${screenshotMode}'`, async (receiver, run) => {
-          const { proc, getTestOutput } = runWithFailureScreenshots(receiver, run, screenshotMode)
+        it(`uploads failure screenshots by default with screenshot: '${screenshotMode}'`, async (receiver, run) => {
+          const { proc, getTestOutput } = runWithFailureScreenshots(
+            receiver, run, screenshotMode, undefined, getCiVisAgentlessConfig(receiver.port), {
+              // Also verify that disabling videos does not suppress default screenshot uploads.
+              PLAYWRIGHT_FAILURE_VIDEO_MODE: screenshotMode === 'on' ? 'retain-on-failure' : 'off',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'false',
+            }
+          )
           const payloadsPromise = receiver
             .gatherPayloadsUntilChildExit(
               proc,
@@ -1460,6 +1556,8 @@ versions.forEach((version) => {
                 assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
                 assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
                 assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
                 assert.strictEqual(
                   mediaPayloads.length,
                   1,
@@ -1500,7 +1598,7 @@ versions.forEach((version) => {
         })
       }
 
-      it('uploads a failed Playwright test video to the test-run media endpoint', async (receiver, run) => {
+      it('uploads a failed Playwright test video by default to the test-run media endpoint', async (receiver, run) => {
         let testOutput = ''
         const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1510,10 +1608,12 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              PLAYWRIGHT_FAILURE_SCREENSHOT_MODE: 'only-on-failure',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
               PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
               PLAYWRIGHT_OUTPUT_DIR: `./test-results-failure-videos-${++screenshotRunId}`,
               PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
-              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
             },
           }
         )
@@ -1533,6 +1633,9 @@ versions.forEach((version) => {
             assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
             assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
             assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_SCOPE], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media?.contentType === 'image/png').length, 0)
 
             const videoPayloads = payloads.filter(({ media }) => media?.contentType === 'video/webm')
             assert.strictEqual(videoPayloads.length, 1, `one test video should upload\n${testOutput}`)
@@ -1553,6 +1656,44 @@ versions.forEach((version) => {
 
         const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
         assert.strictEqual(exitCode, 1)
+      })
+
+      it('does not upload captured failure media when explicitly disabled', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'only-on-failure',
+          false,
+          getCiVisAgentlessConfig(receiver.port),
+          {
+            PLAYWRIGHT_FAILURE_VIDEO_MODE: 'retain-on-failure',
+            DD_TEST_FAILURE_VIDEOS_ENABLED: 'false',
+            PLAYWRIGHT_LOG_MEDIA_CONFIG: 'true',
+          }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .find(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+            assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOADED], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+            assert.strictEqual(failedTest.content.meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media).length, 0)
+          },
+          { hardTimeout: 60000 }
+        )
+
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+        const expectedConfig = { screenshot: 'only-on-failure', video: 'retain-on-failure' }
+        assert.ok(getTestOutput().includes(`FAILURE_MEDIA_CONFIG=${JSON.stringify(expectedConfig)}`), getTestOutput())
+        assert.ok(!getTestOutput().includes(SCREENSHOT_CAPTURE_DISABLED_WARNING), getTestOutput())
       })
 
       it('tags a failed Playwright test when its video upload fails', async (receiver, run) => {
@@ -1612,7 +1753,8 @@ versions.forEach((version) => {
               PW_BASE_URL: `http://localhost:${webAppPort}`,
               TEST_DIR: './ci-visibility/playwright-tests-screenshot',
               PLAYWRIGHT_FAILURE_VIDEO_MODE: 'on-first-retry',
-              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
               DD_TRACE_DEBUG: 'true',
               DD_TRACE_LOG_LEVEL: 'warn',
             },
@@ -1626,6 +1768,7 @@ versions.forEach((version) => {
         assert.strictEqual(exitCode, 1)
         const warningCount = testOutput.split(VIDEO_CAPTURE_DISABLED_WARNING).length - 1
         assert.strictEqual(warningCount, 1, testOutput)
+        assert.ok(!testOutput.includes(SCREENSHOT_CAPTURE_DISABLED_WARNING), testOutput)
       })
 
       it('does not upload a user attachment named like a recorder video when video capture is off',
@@ -1641,7 +1784,9 @@ versions.forEach((version) => {
                 TEST_DIR: './ci-visibility/playwright-tests-screenshot',
                 PLAYWRIGHT_OUTPUT_DIR: `./test-results-manual-video-${++screenshotRunId}`,
                 PLAYWRIGHT_AUTO_NAMED_MANUAL_VIDEO: 'true',
-                DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+                DD_TEST_FAILURE_VIDEOS_ENABLED: undefined,
+                DD_TRACE_DEBUG: 'true',
+                DD_TRACE_LOG_LEVEL: 'warn',
               },
             }
           )
@@ -1666,6 +1811,7 @@ versions.forEach((version) => {
 
           const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
           assert.strictEqual(exitCode, 1)
+          assert.strictEqual(testOutput.split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1, 1, testOutput)
         })
 
       // This race relies on Playwright 1.60 keeping the matching worker trace pending after testEnd.
@@ -1704,41 +1850,96 @@ versions.forEach((version) => {
         }
       )
 
-      for (const isScreenshotUploadEnabled of [true, false]) {
-        const testName = isScreenshotUploadEnabled
-          ? 'warns when screenshot upload is enabled but screenshot capture is off'
-          : 'does not warn when screenshot upload is disabled'
+      it('enables both captures when explicitly true', async (receiver, run) => {
+        const { proc, getTestOutput } = runWithFailureScreenshots(
+          receiver,
+          run,
+          'off',
+          true,
+          getCiVisAgentlessConfig(receiver.port),
+          { DD_TEST_FAILURE_VIDEOS_ENABLED: 'true', PLAYWRIGHT_LOG_MEDIA_CONFIG: 'true' }
+        )
+        const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
+          proc,
+          ({ url }) => url.includes('/media') || url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const failedTests = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test' && event.content.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failedTests.length, 1, getTestOutput())
+            const { meta } = failedTests[0].content
+            assert.strictEqual(meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+            assert.strictEqual(meta[TEST_FAILURE_VIDEO_UPLOADED], 'true')
+            assert.strictEqual(meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
+            assert.strictEqual(meta[TEST_FAILURE_VIDEO_UPLOAD_ERROR], undefined)
+            assert.strictEqual(payloads.filter(({ media }) => media?.contentType === 'image/png').length, 1)
+            assert.strictEqual(payloads.filter(({ media }) => media?.contentType === 'video/webm').length, 1)
+          },
+          { hardTimeout: 60000 }
+        )
 
-        it(testName, async (receiver, run) => {
-          const { proc, getTestOutput } = runWithFailureScreenshots(
-            receiver,
-            run,
-            'off',
-            isScreenshotUploadEnabled
-          )
-          const payloadsPromise = receiver.gatherPayloadsUntilChildExit(
-            proc,
-            ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
-              const failedTest = payloads
-                .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
-                .flatMap(({ payload }) => payload.events)
-                .filter(event => event.type === 'test')
-                .find(event => event.content.meta[TEST_NAME] === 'uploads only the automatic failure screenshot')
+        const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
+        assert.strictEqual(exitCode, 1)
+        const expectedConfig = { screenshot: 'only-on-failure', video: 'retain-on-failure' }
+        assert.ok(getTestOutput().includes(`FAILURE_MEDIA_CONFIG=${JSON.stringify(expectedConfig)}`), getTestOutput())
+      })
 
-              assert.ok(failedTest, `failed test event should be reported\n${getTestOutput()}`)
-              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
-              assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
-              assert.strictEqual(mediaPayloads.length, 0)
+      // The flag matrix is covered above without child processes; verify the real config hook in two runs.
+      for (const pluginEnabled of [true, false]) {
+        const name = `resolves capture configuration (plugin=${pluginEnabled})`
+        it(name, async (receiver, run) => {
+          let output = ''
+          const payloads = []
+          receiver.on('message', payload => { payloads.push(payload) })
+          const proc = run('./node_modules/.bin/playwright test -c playwright-failure-media.config.js --list', {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-screenshot',
+              DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              DD_TEST_FAILURE_VIDEOS_ENABLED: 'true',
+              DD_TRACE_PLAYWRIGHT_ENABLED: pluginEnabled.toString(),
             },
-            { hardTimeout: 60000 }
-          )
-
-          const [[exitCode]] = await Promise.all([once(proc, 'exit'), payloadsPromise])
-          assert.strictEqual(exitCode, 1)
-          const warningCount = getTestOutput().split(SCREENSHOT_CAPTURE_DISABLED_WARNING).length - 1
-          assert.strictEqual(warningCount, isScreenshotUploadEnabled ? 1 : 0, getTestOutput())
+          })
+          proc.stdout?.on('data', chunk => { output += chunk.toString() })
+          proc.stderr?.on('data', chunk => { output += chunk.toString() })
+          const [exitCode] = await once(proc, 'close')
+          assert.strictEqual(exitCode, 0, output)
+          const configLine = output.split('\n').find(line => line.startsWith('FAILURE_MEDIA_CONFIG='))
+          assert.ok(configLine, output)
+          const projects = JSON.parse(configLine.slice('FAILURE_MEDIA_CONFIG='.length))
+          const capturesScreenshot = pluginEnabled
+          const capturesVideo = pluginEnabled
+          assert.deepStrictEqual(projects, [
+            {
+              name: 'unset',
+              ...(capturesScreenshot && { screenshot: 'only-on-failure' }),
+              ...(capturesVideo && { video: 'retain-on-failure' }),
+            },
+            {
+              name: 'off',
+              screenshot: capturesScreenshot ? 'only-on-failure' : 'off',
+              video: capturesVideo ? 'retain-on-failure' : 'off',
+            },
+            {
+              name: 'options',
+              screenshot: { mode: capturesScreenshot ? 'only-on-failure' : 'off', fullPage: true },
+              video: {
+                mode: capturesVideo ? 'retain-on-failure' : 'on-first-retry', size: { width: 320, height: 240 },
+              },
+            },
+            { name: 'on', screenshot: 'on', video: 'on' },
+            {
+              name: 'enabled-options',
+              screenshot: { mode: 'on', fullPage: true },
+              video: { mode: 'on', size: { width: 320, height: 240 } },
+            },
+          ])
+          assert.strictEqual(payloads.filter(({ media }) => media).length, 0)
+          if (!pluginEnabled) {
+            assert.strictEqual(payloads.filter(({ url }) => url.endsWith('/api/v2/citestcycle')).length, 0)
+          }
         })
       }
 

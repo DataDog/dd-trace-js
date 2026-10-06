@@ -2,10 +2,11 @@
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
+const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
-const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const {
   INT_VALUED_OTEL_ATTRIBUTES,
   toSafeInteger,
@@ -57,6 +58,7 @@ const TRACE_ID_128 = '_dd.p.tid'
  * @property {number} start - Start time in nanoseconds since epoch
  * @property {number} duration - Duration in nanoseconds
  * @property {DDSpanEvent[]} [span_events] - Span events
+ * @property {string} [trace_state] - W3C tracestate for OTLP export
  */
 
 // Map DD span.kind string values to OTLP SpanKind numeric values
@@ -134,8 +136,6 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #transformScopeSpans (spans) {
     let traceKey
     let traceIdHigh
-    const priority = spans[0]?.metrics?.[SAMPLING_PRIORITY_KEY]
-    const flags = Number.isFinite(priority) && priority > 0 ? 1 : 0
     const otlpSpans = spans.map((span) => {
       // `_dd.p.tid` lives only on the first-in-chunk span of each trace.
       // Reset at each trace boundary for batching of multiple traces.
@@ -144,7 +144,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         traceKey = key
         traceIdHigh = span.meta?.[TRACE_ID_128]?.toLowerCase()
       }
-      return this.#transformSpan(span, traceIdHigh, flags)
+      return this.#transformSpan(span, traceIdHigh)
     })
     return [{
       scope: {
@@ -163,17 +163,18 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    *
    * @param {DDFormattedSpan} span - DD-formatted span to transform
    * @param {string | undefined} traceIdHigh - 16-char hex of the upper 64 bits of the trace ID
-   * @param {number} flags - Trace-level OTLP sampled flag
    * @returns {object} OTLP Span object
    */
-  #transformSpan (span, traceIdHigh, flags) {
+  #transformSpan (span, traceIdHigh) {
     const parentId = span.parent_id
     const links = this.#extractLinks(span.meta?.['_dd.span_links'])
+    const samplingPriority = span.metrics?.[SAMPLING_PRIORITY_KEY]
 
     return {
       traceId: span.trace_id.toTraceIdHex(traceIdHigh).padStart(32, '0'),
       spanId: this.#idToBytes(span.span_id, 8),
       parentSpanId: (parentId && !parentId.equals(ZERO_ID)) ? this.#idToBytes(parentId, 8) : undefined,
+      traceState: span.trace_state,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
       startTimeUnixNano: span.start,
@@ -185,7 +186,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       links: links.length ? links : undefined,
       droppedLinksCount: 0,
       status: this.#mapStatus(span),
-      flags,
+      flags: typeof samplingPriority === 'number' ? (samplingPriority >= AUTO_KEEP ? 1 : 0) : undefined,
     }
   }
 

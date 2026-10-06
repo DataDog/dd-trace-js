@@ -92,6 +92,23 @@ describe('sdk', () => {
       assert.strictEqual(typeof llmobs.experiments.createDataset, 'function')
       assert.strictEqual(typeof llmobs.experiments.pullDataset, 'function')
     })
+
+    it('exposes evaluator primitives only through the experiments facade', () => {
+      const experiments = llmobs.experiments
+      for (const name of [
+        'BaseEvaluator',
+        'BaseSummaryEvaluator',
+        'EvaluatorContext',
+        'SummaryEvaluatorContext',
+        'EvaluatorResult',
+        'MultiEvaluatorResult',
+        'RemoteEvaluator',
+        'RemoteEvaluatorError',
+      ]) {
+        assert.strictEqual(llmobs[name], undefined)
+        assert.strictEqual(typeof experiments[name], 'function')
+      }
+    })
   })
 
   describe('enable', () => {
@@ -590,6 +607,25 @@ describe('sdk', () => {
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': 'input',
+          })
+        })
+
+        it('auto-annotates experiment spans without stringifying structured values', () => {
+          let span
+          const output = { status: 'ok', nested: { count: 3 } }
+          function experimentTask (input) {
+            span = llmobs._active()
+            return output
+          }
+
+          const wrappedExperimentTask = llmobs.wrap({ kind: 'experiment' }, experimentTask)
+
+          wrappedExperimentTask({ prompt: 'smoke test' })
+
+          assertObjectContains(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.meta.span.kind': 'experiment',
+            '_ml_obs.meta.input': { prompt: 'smoke test' },
+            '_ml_obs.meta.output': output,
           })
         })
 
@@ -1175,6 +1211,25 @@ describe('sdk', () => {
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.value': inputData,
           '_ml_obs.meta.output.documents': outputData,
+        })
+      })
+    })
+
+    it('annotates experiment io without stringifying structured values', () => {
+      const inputData = { prompt: 'smoke test' }
+      const outputData = {
+        status: 'ok',
+        count: 3,
+        nested: { a: 1, b: [1, 2, 3] },
+      }
+
+      llmobs.trace({ kind: 'experiment', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
+
+        assertObjectContains(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'experiment',
+          '_ml_obs.meta.input': inputData,
+          '_ml_obs.meta.output': outputData,
         })
       })
     })

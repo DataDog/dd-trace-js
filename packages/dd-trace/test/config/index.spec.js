@@ -1383,6 +1383,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 50,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: undefined,
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 1,
       },
@@ -1523,6 +1524,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_PORT', value: 8125, origin: 'default' },
       { name: 'DD_DATA_STREAMS_ENABLED', value: false, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: false, origin: 'default' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 50, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: null, origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: '', origin: 'default' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: '', origin: 'default' },
@@ -1741,6 +1743,7 @@ describe('Config', () => {
     process.env.DD_DOGSTATSD_HOSTNAME = 'dsd-agent'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -1876,6 +1879,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 20,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo', 'bar'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a', 'b', 'c'],
@@ -2012,6 +2016,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'dsd-agent', origin: 'env_var' },
       { name: 'DD_DOGSTATSD_PORT', value: 5218, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'env_var' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 20, origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'env_var' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'env_var' },
@@ -2237,6 +2242,41 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.pollInterval, -Infinity)
   })
 
+  it('should reject non-finite dynamic instrumentation evaluation timeouts', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = 'Infinity'
+
+    const config = getConfig({
+      dynamicInstrumentation: {
+        evaluationTimeoutMs: -Infinity,
+      },
+    })
+
+    assert.strictEqual(config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: Infinity for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+    sinon.assert.calledWithExactly(
+      log.warn,
+      'Invalid value: -Infinity for dynamicInstrumentation.evaluationTimeoutMs (source: code), picked default'
+    )
+  })
+
+  it('should accept a zero dynamic instrumentation evaluation timeout and reject a negative one', () => {
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '0'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 0)
+    sinon.assert.notCalled(log.warn)
+
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '-1'
+
+    assert.strictEqual(getConfig().dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS, 50)
+    sinon.assert.calledOnceWithExactly(
+      log.warn,
+      'Invalid value: -1 for DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS (source: env_var), picked default'
+    )
+  })
+
   it('should ignore undefined programmatic option values', () => {
     const config = getConfig({ startupLogs: undefined })
 
@@ -2416,6 +2456,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: true,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes.json',
         redactedIdentifiers: ['foo', 'bar'],
         redactionExcludedIdentifiers: ['a', 'b', 'c'],
@@ -2529,6 +2570,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes.json',
         DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: 0.1,
       },
@@ -2683,6 +2725,7 @@ describe('Config', () => {
       { name: 'DD_DOGSTATSD_HOST', value: 'agent-dsd', origin: 'code' },
       { name: 'DD_DOGSTATSD_PORT', value: '5218', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_ENABLED', value: true, origin: 'code' },
+      { name: 'DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS', value: 30, origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE', value: 'probes.json', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS', value: 'foo,bar', origin: 'code' },
       { name: 'DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS', value: 'a,b,c', origin: 'code' },
@@ -3017,6 +3060,7 @@ describe('Config', () => {
     process.env.DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED = 'true'
     process.env.DD_DOGSTATSD_PORT = '5218'
     process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED = 'true'
+    process.env.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = '20'
     process.env.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = 'probes.json'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS = 'foo,bar'
     process.env.DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS = 'a,b,c'
@@ -3111,6 +3155,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         enabled: false,
+        evaluationTimeoutMs: 30,
         probeFile: 'probes2.json',
         redactedIdentifiers: ['foo2', 'bar2'],
         redactionExcludedIdentifiers: ['a2', 'b2'],
@@ -3218,6 +3263,7 @@ describe('Config', () => {
       },
       dynamicInstrumentation: {
         DD_DYNAMIC_INSTRUMENTATION_ENABLED: false,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 30,
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: 'probes2.json',
         DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo2', 'bar2'],
         DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['a2', 'b2'],
@@ -4379,9 +4425,9 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED, false)
       })
-      it('should disable test failure screenshots by default', () => {
+      it('should enable test failure screenshots by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, undefined)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, true)
       })
       it('should enable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
@@ -4393,9 +4439,9 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
-      it('should disable test failure videos by default', () => {
+      it('should enable test failure videos by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, undefined)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_VIDEOS_ENABLED, true)
       })
       it('should enable test failure videos if DD_TEST_FAILURE_VIDEOS_ENABLED is true', () => {
         process.env.DD_TEST_FAILURE_VIDEOS_ENABLED = 'true'
@@ -6091,6 +6137,21 @@ rules:
   })
 
   context('Feature Flagging configuration source', () => {
+    it('enables evaluation counts by default', () => {
+      assert.strictEqual(defaults['featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'], true)
+      assert.strictEqual(getConfig().featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, true)
+    })
+
+    for (const enabled of [false, true]) {
+      it(`sets evaluation counts to ${enabled} from the environment independently of Feature Flagging`, () => {
+        process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = String(enabled)
+        const config = getConfig()
+        assert.strictEqual(config.featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED, enabled)
+        assert.strictEqual(config.featureFlags.DD_FEATURE_FLAGS_ENABLED, true)
+        assert.strictEqual(config.getOrigin('featureFlags.DD_FLAGGING_EVALUATION_COUNTS_ENABLED'), 'env_var')
+      })
+    }
+
     it('uses agentless as the source default', () => {
       assert.strictEqual(defaults['featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE'], 'agentless')
       assert.strictEqual(getConfig().featureFlags.DD_FEATURE_FLAGS_CONFIGURATION_SOURCE, 'agentless')

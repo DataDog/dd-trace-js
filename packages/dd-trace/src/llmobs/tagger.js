@@ -10,6 +10,8 @@ const {
   SESSION_ID_TRACE_DEFAULT_KEY,
   ML_APP,
   SPAN_KIND,
+  EXPERIMENT_INPUT,
+  EXPERIMENT_OUTPUT,
   INPUT_VALUE,
   OUTPUT_DOCUMENTS,
   INPUT_DOCUMENTS,
@@ -29,14 +31,7 @@ const {
   PROPAGATED_PARENT_AGENT_ID_KEY,
   PROPAGATED_PARENT_AGENT_NAME_KEY,
   ROOT_PARENT_ID,
-  CACHE_READ_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
-  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
-  INPUT_TOKENS_METRIC_KEY,
-  OUTPUT_TOKENS_METRIC_KEY,
-  TOTAL_TOKENS_METRIC_KEY,
-  REASONING_OUTPUT_TOKENS_METRIC_KEY,
+  METRIC_KEY_ALIASES,
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
@@ -280,6 +275,18 @@ class LLMObsTagger {
     this.#tagDocuments(span, outputData, OUTPUT_DOCUMENTS)
   }
 
+  /**
+   * Tags arbitrary JSON-compatible experiment input and output without converting structured values to text.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} inputData
+   * @param {unknown} outputData
+   */
+  tagExperimentIO (span, inputData, outputData) {
+    this.#tagExperimentValue(span, inputData, EXPERIMENT_INPUT, 'input')
+    this.#tagExperimentValue(span, outputData, EXPERIMENT_OUTPUT, 'output')
+  }
+
   tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
@@ -307,35 +314,8 @@ class LLMObsTagger {
   tagMetrics (span, metrics) {
     const filterdMetrics = {}
     for (const [key, value] of Object.entries(metrics)) {
-      let processedKey = key
-
       // processing these specifically for our metrics ingestion
-      switch (key) {
-        case 'inputTokens':
-          processedKey = INPUT_TOKENS_METRIC_KEY
-          break
-        case 'outputTokens':
-          processedKey = OUTPUT_TOKENS_METRIC_KEY
-          break
-        case 'totalTokens':
-          processedKey = TOTAL_TOKENS_METRIC_KEY
-          break
-        case 'cacheReadTokens':
-          processedKey = CACHE_READ_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWriteTokens':
-          processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWrite5mTokens':
-          processedKey = CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'cacheWrite1hTokens':
-          processedKey = CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY
-          break
-        case 'reasoningOutputTokens':
-          processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY
-          break
-      }
+      const processedKey = METRIC_KEY_ALIASES[key] ?? key
 
       if (typeof value === 'number') {
         filterdMetrics[processedKey] = value
@@ -594,6 +574,27 @@ class LLMObsTagger {
         }
       }
     }
+  }
+
+  /**
+   * Validates and stores one free-form experiment I/O value.
+   *
+   * @param {import('../opentracing/span')} span
+   * @param {unknown} data
+   * @param {string} key
+   * @param {string} type
+   */
+  #tagExperimentValue (span, data, key, type) {
+    if (data === undefined) return
+
+    try {
+      if (JSON.stringify(data) !== undefined) {
+        this._setTag(span, key, data)
+        return
+      }
+    } catch {}
+
+    this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
   }
 
   #tagDocuments (span, data, key) {

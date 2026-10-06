@@ -17,6 +17,9 @@ class FetchPlugin extends HttpClientPlugin {
 
     const store = super.bindStart(ctx)
 
+    // Native undici diagnostics also fire for requests already traced by this wrapper.
+    store.skipUndici = true
+
     for (const name in options.headers) {
       if (!req.headers.has(name)) {
         req.headers.set(name, options.headers[name])

@@ -14,6 +14,7 @@ const ROOT = path.join(__dirname, '..')
 const PLUGINS_INDEX = path.join(ROOT, 'packages/dd-trace/src/plugins/index.js')
 const ROOT_PACKAGE = path.join(ROOT, 'package.json')
 const VERSIONS_PACKAGE = path.join(ROOT, 'packages/dd-trace/test/plugins/versions/package.json')
+const TEST_EXTERNALS = path.join(ROOT, 'packages/dd-trace/test/plugins/externals.js')
 const INSTRUMENTATION_HOOKS = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/hooks.js')
 const INSTRUMENTATION_REGISTRY = path.join(ROOT, 'packages/datadog-instrumentations/src/helpers/instrumentations.js')
 const {
@@ -35,6 +36,14 @@ const COLUMNS = [
 ]
 
 const NODE_BUILTINS = new Set(builtinModules)
+
+// Umbrella packages users install directly while the tracer only hooks their
+// subpackages, so they have no runtime hook or plugin getter of their own.
+// Maps the umbrella dependency to its integration; the supported range comes
+// from that integration's test externals entry for the umbrella package.
+const PACKAGE_ALIASES = new Map([
+  ['@supabase/supabase-js', 'supabase'],
+])
 
 // Capture `get '<key>' () { return require('.../datadog-plugin-<name>/src') }`
 // (and the bare-key form) from packages/dd-trace/src/plugins/index.js. Keys
@@ -113,6 +122,43 @@ function readInstrumentationRanges (engines) {
     }
   }
   return ranges
+}
+
+/**
+ * Add `PACKAGE_ALIASES` to the plugin and range maps, taking each alias range
+ * from the test externals that install the umbrella package for its integration.
+ *
+ * @param {Map<string, string>} plugins
+ * @param {Map<string, Set<string>>} ranges
+ */
+function addPackageAliases (plugins, ranges) {
+  const externals = require(TEST_EXTERNALS)
+  const integrations = new Set(plugins.values())
+
+  for (const [dependency, integration] of PACKAGE_ALIASES) {
+    if (plugins.has(dependency)) {
+      throw new Error(`Package alias ${dependency} has a plugin getter; remove the alias`)
+    }
+    if (!integrations.has(integration)) {
+      throw new Error(`Package alias ${dependency} targets unknown integration ${integration}`)
+    }
+
+    const set = ranges.get(dependency) ?? new Set()
+    if (externals[integration]) {
+      for (const { name, versions } of externals[integration]) {
+        if (name !== dependency || !Array.isArray(versions)) continue
+        for (const range of versions) {
+          if (range) set.add(range)
+        }
+      }
+    }
+    if (set.size === 0) {
+      throw new Error(`Package alias ${dependency} has no versions in the ${integration} test externals`)
+    }
+
+    plugins.set(dependency, integration)
+    ranges.set(dependency, set)
+  }
 }
 
 /**
@@ -221,6 +267,7 @@ async function generateSupportedIntegrations () {
     engines.maxMajor = pkg.nodeMaxMajor - 1
   }
   const ranges = readInstrumentationRanges(engines)
+  addPackageAliases(plugins, ranges)
   const versions = JSON.parse(readFileSync(VERSIONS_PACKAGE, 'utf8')).dependencies ?? {}
 
   const max = engines.maxMajor === undefined

@@ -2,7 +2,8 @@
 
 /** @typedef {import('../../../../../index').llmobs.FormattedPromptMessage} FormattedPromptMessage */
 
-const VARIABLE_PATTERN = /(?<!\{)(?:\{\{\s*(\w+)\s*\}\}(?!\})|\{\s*(\w+)\s*\}(?!\}))/g
+// Match double braces first; preserve surrounding braces such as the closing object in {"age": {age}}.
+const VARIABLE_PATTERN = /\{\{\s*(\w+)\s*\}\}|\{\s*(\w+)\s*\}/g
 
 function isMessage (value) {
   return typeof value?.role === 'string' &&

@@ -712,6 +712,7 @@ llmobs.registerProcessor((llmobsSpan) => {
     llmobsSpan.input = llmobsSpan.input.map(input => {
       return {
         ...input,
+        content: { redacted: true },
       }
     })
   }
@@ -761,6 +762,57 @@ llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: '
 
 // export a span
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
+
+class ExampleEvaluator extends llmobs.experiments.BaseEvaluator {
+  async evaluate (context: InstanceType<typeof llmobs.experiments.EvaluatorContext>) {
+    return context.outputData
+  }
+}
+
+const remoteEvaluator = new llmobs.experiments.RemoteEvaluator({
+  evalName: 'managed-judge',
+  transformFn: context => ({ span_input: context.inputData, span_output: context.outputData })
+})
+remoteEvaluator.name
+class ExampleSummaryEvaluator extends llmobs.experiments.BaseSummaryEvaluator {
+  async evaluate (context: InstanceType<typeof llmobs.experiments.SummaryEvaluatorContext>) {
+    return context.outputs.length
+  }
+}
+
+function checkEvaluatorTypes (dataset: ReturnType<typeof llmobs.experiments.createDataset>) {
+  llmobs.experiments.experiment({
+    name: 'typed-experiment',
+    dataset,
+    task: input => input,
+    evaluators: [new ExampleEvaluator()],
+    summaryEvaluators: [new ExampleSummaryEvaluator()]
+  })
+  // @ts-expect-error Evaluator class instances must extend the exported base class.
+  llmobs.experiments.experiment({ name: 'structural', dataset, task: input => input, evaluators: [{ name: 'structural', evaluate: () => true }] })
+  // @ts-expect-error Row and summary evaluator base classes are nominally distinct.
+  llmobs.experiments.experiment({ name: 'wrong-kind', dataset, task: input => input, evaluators: [new ExampleSummaryEvaluator()] })
+}
+
+const contextWithoutExpected = new llmobs.experiments.EvaluatorContext({ inputData: null, outputData: null })
+// @ts-expect-error Evaluator constructors are scoped to the experiments API.
+llmobs.BaseEvaluator
+// @ts-expect-error expectedOutput can be undefined when omitted from the constructor.
+const requiredExpectedOutput: Exclude<typeof contextWithoutExpected.expectedOutput, undefined> = contextWithoutExpected.expectedOutput
+
+type LocalExperiment = ReturnType<typeof llmobs.experiments.experiment>
+type LocalExperimentResult = Awaited<ReturnType<LocalExperiment['run']>>
+function inspectExperimentResult (result: LocalExperimentResult) {
+  result.summaryEvaluations.metric.reasoning
+  result.summaryEvaluations.metric.assessment
+  result.summaryEvaluations.metric.metadata
+  result.summaryEvaluations.metric.tags
+}
+
+checkEvaluatorTypes
+requiredExpectedOutput
+inspectExperimentResult
+
 llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
   const llmobsSpanCtx = llmobs.exportSpan(span)
   llmobsSpanCtx.traceId;

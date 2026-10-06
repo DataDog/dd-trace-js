@@ -2611,6 +2611,99 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 })
 
+describe(`jest@${JEST_VERSION} session errors`, () => {
+  let receiver
+  let childProcess
+
+  useSandbox([
+    `jest@${JEST_VERSION}`,
+    JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
+  ].filter(Boolean))
+
+  beforeEach(async () => {
+    receiver = await new FakeCiVisIntake().start()
+    receiver.setSettings({ itr_enabled: false, tests_skipping: false, code_coverage: false })
+  })
+
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver.stop()
+  })
+
+  for (const [args, withExecutedTests] of [
+    ['--runInBand', false],
+    ['--maxWorkers=2 --bail', false],
+    ['--runInBand', true],
+  ]) {
+    it(`reports errors on sessions and modules with ${args}, executed tests: ${withExecutedTests}`, async () => {
+      let output = ''
+      const setupProject = {
+        testRegex: 'jest-session-errors/test-(first|second)\\.js$',
+        testRunner: 'jest-circus/runner',
+        testEnvironment: 'node',
+        setupFilesAfterEnv: ['<rootDir>/ci-visibility/jest-session-errors/setup.js'],
+      }
+      const config = JSON.stringify(withExecutedTests
+        ? {
+            projects: [setupProject, {
+              testRegex: 'jest-session-errors/test-executed\\.js$',
+              testRunner: 'jest-circus/runner',
+              testEnvironment: 'node',
+            }],
+          }
+        : setupProject)
+      fs.writeFileSync(path.join(sandboxCwd(), 'session-errors.config.json'), config)
+      childProcess = exec(`node node_modules/jest/bin/jest ${args} --config session-errors.config.json`, {
+        cwd: sandboxCwd(),
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      childProcess.stdout.on('data', chunk => { output += chunk })
+      childProcess.stderr.on('data', chunk => { output += chunk })
+      const eventsPromise = receiver.gatherPayloadsUntilChildExit(
+        childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test')
+          assert.strictEqual(tests.length, withExecutedTests ? 3 : 0, output)
+          if (withExecutedTests) {
+            assert.strictEqual(tests.filter(event => event.content.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.strictEqual(tests.filter(event => event.content.meta[TEST_STATUS] === 'fail').length, 2)
+          }
+          // Jest serializes worker errors with type "Error"; the original type remains in the stack.
+          const errorType = args === '--runInBand' ? 'TypeError' : 'Error'
+          for (const type of ['test_session_end', 'test_module_end']) {
+            const event = events.find(event => event.type === type)?.content
+            assert.ok(event, output)
+            assert.strictEqual(event.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(event.meta[ERROR_TYPE], withExecutedTests ? 'Error' : errorType)
+            if (withExecutedTests) {
+              assert.match(event.meta[ERROR_MESSAGE], /^Failed test suites: 3\. Failed tests: 2\n\n/)
+              for (const field of [ERROR_MESSAGE, 'error.stack']) {
+                assert.match(event.meta[field], /Test setup unavailable/)
+                assert.match(event.meta[field], /expected value/)
+                assert.match(event.meta[field], /actual value/)
+                assert.match(event.meta[field], /Test hook failed/)
+                assert.match(event.meta[field], /Test teardown failed/)
+                assert.ok(event.meta[field].length <= 5000)
+              }
+            } else {
+              assert.strictEqual(event.meta[ERROR_MESSAGE],
+                `Failed test suites: 2. Failed tests: 0\n\n${errorType}: Test setup unavailable (2 suites)`)
+            }
+            assert.match(event.meta['error.stack'], /setup\.js/)
+          }
+          const suites = events.filter(event => event.type === 'test_suite_end')
+          assert.strictEqual(suites.length, withExecutedTests ? 3 : 2)
+          assert.strictEqual(suites.filter(event => event.content.meta['error.stack'].includes('setup.js')).length, 2)
+        }
+      )
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1, output)
+    })
+  }
+})
+
 describe(`jest@${JEST_VERSION} with pino@7.6.4`, () => {
   let receiver
   let childProcess

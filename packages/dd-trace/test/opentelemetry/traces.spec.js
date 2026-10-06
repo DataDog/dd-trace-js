@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('assert')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
@@ -231,26 +231,55 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
     })
 
-    it('applies the trace sampling priority to every span', () => {
+    it('exports W3C tracestate and the sampled flag as first-class OTLP fields', () => {
       const transformer = new OtlpTraceTransformer({})
-      for (const [priority, flags] of [[undefined, 0], [0, 0], [2, 1]]) {
-        const root = createMockSpan({
-          parent_id: id('0'),
-          metrics: { _sampling_priority_v1: priority },
-        })
+      const traceState = 'dd=s:1,ot=rv:ef284ace7a91e1;th:e6666666666668'
+      const span = createMockSpan({
+        trace_state: traceState,
+        metrics: { _sampling_priority_v1: 1 },
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+      assert.strictEqual(otlpSpan.traceState, traceState)
+      assert.strictEqual(otlpSpan.flags, 1)
+    })
+
+    for (const priority of [-1, 0, 1, 2, undefined]) {
+      it(`exports the sampled flag for priority ${priority}`, () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({ metrics: { _sampling_priority_v1: priority } })
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.flags, priority === undefined ? undefined : Number(priority > 0))
+        assert.strictEqual(otlpSpan.traceState, undefined)
+      })
+    }
+
+    for (const otelTraceSemanticsEnabled of [false, true]) {
+      it(`uses each span's sampling priority with OTel semantics ${otelTraceSemanticsEnabled}`, () => {
+        const transformer = new OtlpTraceTransformer({}, otelTraceSemanticsEnabled)
+        const root = createMockSpan({ parent_id: id('0'), metrics: { _sampling_priority_v1: 2 } })
         const child = createMockSpan({
           span_id: id('abcdef1234567891'),
           parent_id: root.span_id,
-          metrics: { _sampling_priority_v1: priority },
+          metrics: { _sampling_priority_v1: 0 },
         })
-
-        const decoded = decodePayload(transformer.transformSpans([root, child]))
+        const withoutPriority = createMockSpan({
+          span_id: id('abcdef1234567892'),
+          parent_id: root.span_id,
+          metrics: {},
+        })
+        const decoded = decodePayload(transformer.transformSpans([root, child, withoutPriority]))
         const spans = decoded.resourceSpans[0].scopeSpans[0].spans
 
-        assert.strictEqual(spans[0].flags, flags)
-        assert.strictEqual(spans[1].flags, flags)
-      }
-    })
+        assert.strictEqual(spans[0].flags, 1)
+        assert.strictEqual(spans[1].flags, 0)
+        assert.strictEqual(Object.hasOwn(spans[2], 'flags'), false)
+      })
+    }
 
     it('maps span kind correctly', () => {
       const transformer = new OtlpTraceTransformer({})
@@ -1056,6 +1085,50 @@ describe('OpenTelemetry Traces', () => {
       const exporter = buildExporter({ OTEL_TRACES_EXPORTER: 'otlp' })
 
       exporter.export([createMockSpan()])
+    })
+
+    describe('SDK adoption markers', () => {
+      /**
+       * @param {object} extraEnv
+       * @returns {{ resource: Record<string, string> }}
+       */
+      function exportAndCapture (extraEnv) {
+        let captured
+        const verify = mockOtlpExport((decoded) => {
+          const { resource } = decoded.resourceSpans[0]
+          captured = {
+            resource: Object.fromEntries(resource.attributes.map(attr => [attr.key, attr.value.stringValue])),
+          }
+        })
+
+        buildExporter({ OTEL_TRACES_EXPORTER: 'otlp', ...extraEnv }).export([createMockSpan()])
+        verify()
+
+        return captured
+      }
+
+      it('declares OTLP export and Datadog semantics on the resource by default', () => {
+        const { resource } = exportAndCapture({})
+
+        assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
+        assert.strictEqual(resource['datadog.sdk.semantics'], 'datadog')
+      })
+
+      it('declares OTel semantics on the resource when DD_TRACE_OTEL_SEMANTICS_ENABLED is set', () => {
+        const { resource } = exportAndCapture({ DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true' })
+
+        assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
+        assert.strictEqual(resource['datadog.sdk.semantics'], 'otel')
+      })
+
+      it('does not let global tags with the same keys override the resource', () => {
+        const { resource } = exportAndCapture({
+          DD_TAGS: '_dd.sdk.otlp_export:false,datadog.sdk.semantics:otel',
+        })
+
+        assert.strictEqual(resource['_dd.sdk.otlp_export'], 'true')
+        assert.strictEqual(resource['datadog.sdk.semantics'], 'datadog')
+      })
     })
   })
 

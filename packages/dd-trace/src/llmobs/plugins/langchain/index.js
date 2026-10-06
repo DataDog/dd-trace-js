@@ -3,8 +3,6 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
-const pluginManager = require('../../../../../..')._pluginManager
-
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
 const OPENAI_PROVIDER_NAME = 'openai'
@@ -74,6 +72,28 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       kind,
       name,
     }
+  }
+
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx, spanKind) {
+    // the helper reports zeros when the result carries no usage, and zeroed token metrics would
+    // read as a real measurement
+    const tokens = this._handlers[ctx.type]?.getTokenUsage(ctx.result ?? {})
+    const metrics = tokens?.totalTokens ? tokens : undefined
+
+    // langchain-openai calls an untraced beta client when `response_format` is set, so this span is
+    // the only model span for the call. `handlers/chat_model.js` applies the same correction through
+    // `changeKind` while building the LLMObs payload.
+    if (spanKind !== WORKFLOW || ctx.type !== 'chat_model' || !ctx.arguments?.[1]?.response_format) {
+      return { metrics }
+    }
+
+    const provider = ctx.currentStore?.span?.context().getTags()['langchain.request.provider']
+    const isOpenAI = this.getIntegrationName(ctx.type, provider) === OPENAI_PROVIDER_NAME
+
+    return isOpenAI ? { spanKind: LLM, metrics } : { metrics }
   }
 
   setLLMObsTags (ctx) {
@@ -158,6 +178,9 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   isLLMIntegrationEnabled (integration) {
+    // read off the owning manager rather than a module-scope capture: the tracer, and with it the
+    // plugin manager, can be rebuilt after this module is first loaded
+    const pluginManager = this._tracer?._pluginManager
     return SUPPORTED_INTEGRATIONS.has(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
   }
 }
