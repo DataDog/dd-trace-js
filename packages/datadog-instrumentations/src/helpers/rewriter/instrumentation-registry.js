@@ -2,6 +2,7 @@
 
 // Activated rewrites publish their module name to the plugin manager after evaluation.
 // Integrations can also provide synchronous runtime setup before plugin activation.
+// Setup must not load rewrite targets: re-entrant activations of the same group are dropped.
 // Other entries use hooks or another activation path, or do not need activation from a rewrite.
 /**
  * @typedef {object} Activation
