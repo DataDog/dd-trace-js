@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { GUARDRAIL_METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
+const { METRICS_FLUSH_INTERVAL_MS } = require('../../packages/dd-trace/src/debugger/constants')
 const { setup } = require('./utils')
 
 // `^(a+)+$` backtracks exponentially against a non-matching input, so a few dozen characters blow past the budget.
@@ -22,7 +22,7 @@ describe('Dynamic Instrumentation', function () {
   })
 
   describe('evaluation time budget', function () {
-    this.timeout(GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 3)
+    this.timeout(METRICS_FLUSH_INTERVAL_MS * 3)
 
     it('should report a condition that exceeds its time budget once and skip the probe afterwards', async function () {
       const rcConfig = t.generateRemoteConfig({ captureSnapshot: true, when: REDOS_CONDITION })
@@ -50,7 +50,7 @@ describe('Dynamic Instrumentation', function () {
           assert.strictEqual(skipped.points[0][1], 2)
         },
         requestType: 'generate-metrics',
-        timeout: GUARDRAIL_METRICS_FLUSH_INTERVAL_MS * 2,
+        timeout: METRICS_FLUSH_INTERVAL_MS * 2,
         resolveAtFirstSuccess: true,
         namespace: 'live_debugger',
       })
