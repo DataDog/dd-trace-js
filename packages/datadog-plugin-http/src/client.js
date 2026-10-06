@@ -37,7 +37,7 @@ class HttpClientPlugin extends ClientPlugin {
     const base = `${protocol}//${host}`
     const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const otelHostname = otelSemantics ? formatHostnameForUrl(hostname) : hostname
-    const otelHost = otelSemantics && options.port ? `${otelHostname}:${options.port}` : host
+    const otelHost = otelSemantics ? (options.port ? `${otelHostname}:${options.port}` : otelHostname) : host
     const redactedAuth = otelSemantics ? getRedactedAuth(options) : undefined
     let otelBase = base
     if (otelSemantics) {

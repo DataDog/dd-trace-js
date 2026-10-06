@@ -129,6 +129,33 @@ describe('Plugin', () => {
           }, '::1')
         })
 
+        for (const explicitPort of [false, true]) {
+          it(`brackets an IPv6 literal with ${explicitPort ? 'an explicit' : 'an implicit'} default port`, done => {
+            const app = express()
+            app.get('/user', (req, res) => {
+              res.status(200).send()
+            })
+
+            appListener = server(app, port => {
+              const defaultPort = protocol === 'https' ? 443 : 80
+              const localAgent = new http.Agent()
+              localAgent.defaultPort = port
+
+              agent.assertFirstTraceSpan(span => {
+                assert.strictEqual(span.meta['url.full'], `${protocol}://[::1]/user`)
+                assert.strictEqual(span.meta['server.address'], '::1')
+                assert.strictEqual(span.meta['server.port'], String(defaultPort))
+              }).then(done).catch(done)
+
+              const authority = explicitPort ? `[::1]:${defaultPort}` : '[::1]'
+              const req = http.request(`${protocol}://${authority}/user`, { agent: localAgent }, res => {
+                res.on('data', () => {})
+              })
+              req.end()
+            }, '::1')
+          })
+        }
+
         it('redacts credentials in url.full', done => {
           const app = express()
           app.get('/user', (req, res) => {
