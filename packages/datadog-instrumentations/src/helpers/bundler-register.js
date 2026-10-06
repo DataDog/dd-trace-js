@@ -4,7 +4,7 @@ const Module = require('module')
 const dc = require('dc-polyfill')
 
 const log = require('../../../dd-trace/src/log')
-const { loadChannel } = require('./register.js')
+const { activate, loadChannel } = require('./register.js')
 const {
   filename,
   getDisabledInstrumentations,
@@ -96,7 +96,7 @@ dc.subscribe(CHANNEL, (message) => {
   if (disabledInstrumentations.has(name)) return
 
   if (payload.activate && isRewriteActivationEnabled(name)) {
-    loadChannel.publish({ name })
+    activate(name)
     return
   }
 

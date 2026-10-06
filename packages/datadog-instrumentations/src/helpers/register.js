@@ -14,6 +14,7 @@ const {
   matchesInstrumentation,
 } = require('./instrumentation-utils')
 const rewriter = require('./rewriter')
+const { getActivationSetup } = require('./rewriter/instrumentation-registry')
 
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
@@ -58,6 +59,41 @@ const instrumentedIntegrationsSuccess = new Map()
 const alreadyLoggedIncompatibleIntegrations = new Set()
 /** @type {Set<string>} */
 const compatibleOrchestrionTargets = new Set()
+/** @type {Map<() => void, boolean>} */
+const activationSetupSuccess = new Map()
+
+/**
+ * @param {string} moduleName
+ */
+function activate (moduleName) {
+  const setup = getActivationSetup(moduleName)
+  if (setup) {
+    if (activationSetupSuccess.has(setup)) {
+      if (!activationSetupSuccess.get(setup)) return
+    } else {
+      // Block re-entrant activation until setup completes, and never retry a failed setup.
+      activationSetupSuccess.set(setup, false)
+      try {
+        setup()
+        activationSetupSuccess.set(setup, true)
+      } catch (error) {
+        const message = String(error?.message ?? error)
+        log.error('Error during activation setup of %s: %s', moduleName, message, error)
+        telemetry('error', [
+          `error_type:${error?.constructor?.name ?? typeof error}`,
+          `integration:${moduleName}`,
+          'integration_version:unknown',
+        ], {
+          result: 'error',
+          result_class: 'internal_error',
+          result_reason: `Error during activation of ${moduleName}: ${message}`,
+        })
+        return
+      }
+    }
+  }
+  loadChannel.publish({ name: moduleName })
+}
 
 orchestrionLoadChannel.subscribe(({ moduleName, version, result }) => {
   const nameVersion = `${moduleName}@${version}`
@@ -72,7 +108,7 @@ orchestrionLoadChannel.subscribe(({ moduleName, version, result }) => {
   if (result === 'matched' || result === 'rewritten') {
     compatibleOrchestrionTargets.add(nameVersion)
     instrumentedIntegrationsSuccess.set(nameVersion, true)
-    if (result === 'rewritten') loadChannel.publish({ name: moduleName })
+    if (result === 'rewritten') activate(moduleName)
   }
 })
 
@@ -176,6 +212,7 @@ function logAbortedIntegrations () {
 }
 
 module.exports = {
+  activate,
   filename,
   pathSepExpr,
   loadChannel,

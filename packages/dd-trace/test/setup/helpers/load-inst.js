@@ -55,12 +55,16 @@ function loadOneInst (name) {
     for (const file of splitFiles) loadInstFile(file, instrumentations)
   } else if (fs.existsSync(path.join(INSTRUMENTATIONS_PATH, mainFile))) {
     loadInstFile(mainFile, instrumentations)
-  } else if (fs.existsSync(path.join(INSTRUMENTATIONS_PATH, singleFile))) {
-    loadInstFile(singleFile, instrumentations)
   } else {
+    const hasSingleFile = fs.existsSync(path.join(INSTRUMENTATIONS_PATH, singleFile))
+    if (hasSingleFile) {
+      loadInstFile(singleFile, instrumentations)
+      if (instrumentations.length) return instrumentations
+    }
+
     const rewriterFile = path.join(REWRITER_INSTRUMENTATIONS_PATH, name)
     if (!fs.existsSync(`${rewriterFile}.js`)) {
-      loadInstFile(singleFile, instrumentations)
+      if (!hasSingleFile) loadInstFile(singleFile, instrumentations)
       return instrumentations
     }
 
