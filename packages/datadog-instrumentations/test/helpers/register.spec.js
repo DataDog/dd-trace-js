@@ -230,7 +230,7 @@ describe('register', () => {
     }
   })
 
-  it('runs setup once per function identity before activating every module in a group', () => {
+  it('passes metadata to setup before activating every module in a group', () => {
     const setup = sinon.stub().returns({ ignored: true })
     getActivationSetupMock.withArgs('first').returns(setup)
     getActivationSetupMock.withArgs('second').returns(setup)
@@ -246,11 +246,17 @@ describe('register', () => {
     channel('dd-trace:instrumentation:load:orchestrion').publish({
       moduleName: 'first', version: '1.0.0', result: 'rewritten',
     })
-    activate('second')
-    activate('first')
+    activate('second', '2.0.0')
+    activate('first', '1.0.1')
 
-    sinon.assert.calledOnceWithExactly(setup)
+    assert.deepStrictEqual(setup.args, [
+      [{ moduleName: 'first', version: '1.0.0' }],
+      [{ moduleName: 'second', version: '2.0.0' }],
+      [{ moduleName: 'first', version: '1.0.1' }],
+    ])
     sinon.assert.callOrder(setup, load)
+    assert.ok(setup.getCall(1).calledBefore(load.getCall(1)))
+    assert.ok(setup.getCall(2).calledBefore(load.getCall(2)))
     assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'first' }]])
   })
 
@@ -266,16 +272,17 @@ describe('register', () => {
     activate('second')
     activate('without-setup')
 
-    sinon.assert.calledOnceWithExactly(firstSetup)
-    sinon.assert.calledOnceWithExactly(secondSetup)
+    sinon.assert.calledOnceWithExactly(firstSetup, { moduleName: 'first', version: undefined })
+    sinon.assert.calledOnceWithExactly(secondSetup, { moduleName: 'second', version: undefined })
     assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'without-setup' }]])
   })
 
   it('does not publish re-entrant group activations before setup has completed', () => {
     const load = sinon.stub(channel('dd-trace:instrumentation:load'), 'publish')
     const setup = sinon.stub().callsFake(() => {
+      const publishCount = load.callCount
       activate('second')
-      sinon.assert.notCalled(load)
+      assert.strictEqual(load.callCount, publishCount)
     })
     getActivationSetupMock.withArgs('first').returns(setup)
     getActivationSetupMock.withArgs('second').returns(setup)
@@ -284,7 +291,7 @@ describe('register', () => {
     activate('first')
     activate('second')
 
-    sinon.assert.calledOnceWithExactly(setup)
+    assert.strictEqual(setup.callCount, 2)
     assert.deepStrictEqual(load.args, [[{ name: 'first' }], [{ name: 'second' }]])
   })
 
@@ -303,14 +310,14 @@ describe('register', () => {
       activate('second')
       activate('first')
 
-      sinon.assert.calledOnceWithExactly(setup)
+      sinon.assert.calledOnceWithExactly(setup, { moduleName: 'first', version: '1.0.0' })
       sinon.assert.notCalled(load)
       sinon.assert.calledOnceWithExactly(logMock.error,
         'Error during activation setup of %s: %s', 'first', message, error)
       sinon.assert.calledOnceWithExactly(telemetryMock, 'error', [
         `error_type:${error?.constructor?.name ?? typeof error}`,
         'integration:first',
-        'integration_version:unknown',
+        'integration_version:1.0.0',
       ], {
         result: 'error',
         result_class: 'internal_error',

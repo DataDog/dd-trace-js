@@ -60,10 +60,11 @@ Register a pure integration by adding its config and a config-registry entry wit
 `npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; the registry's
 `activate` flag controls evaluation-time plugin activation using the module name from the config.
 
-For runtime subscribers, use `activate: () => require('../../<name>')`. The function runs synchronously once per group,
-before plugin activation, takes no arguments, and its return value is ignored. The setup file subscribes at module top
-level, must not call `addHook`, and must not depend on subscriber order relative to plugins. A throwing setup permanently
-prevents activation for every module in the group.
+For runtime subscribers, use `activate: () => require('../../<name>')`. The function runs synchronously before each plugin
+activation, receives `{ moduleName, version }` (version may be undefined), and its return value is ignored. Module caching
+loads top-level subscribers once. The setup file must not call `addHook` or depend on subscriber order relative to plugins.
+A throwing setup permanently prevents activation for every module in the group. An activation callback may also record
+module metadata, for example `activate: activation => require('../../<name>').recordVersion(activation)`.
 
 ## Config Schema
 
