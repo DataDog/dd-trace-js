@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { EventEmitter } = require('node:events')
+const http = require('node:http')
 const { describe, it, afterEach, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
@@ -71,6 +73,42 @@ describe('OtlpHttpExporterBase', () => {
     assert.ok(exporter.options.agent)
     assert.strictEqual(exporter.options.agent.proxy.hostname, '127.0.0.1')
     assert.strictEqual(exporter.options.agent.proxy.port, '9999')
+  })
+
+  describe('flush with an outstanding HTTP request', () => {
+    it('control: completes an idle flush immediately', () => {
+      const exporter = new OtlpHttpExporterBase(
+        'http://intake.example/v1/traces', undefined, 1000, 'http/protobuf', 'traces'
+      )
+      const flushed = sinon.spy()
+
+      exporter.flush(flushed)
+
+      sinon.assert.calledOnce(flushed)
+    })
+
+    it('waits for pending HTTP delivery', () => {
+      const request = new EventEmitter()
+      request.write = sinon.spy()
+      request.end = sinon.spy()
+      request.destroy = sinon.spy()
+      const httpRequest = sinon.stub(http, 'request').returns(request)
+      const exporter = new OtlpHttpExporterBase(
+        'http://intake.example/v1/traces', undefined, 1000, 'http/protobuf', 'traces'
+      )
+      const resultCallback = sinon.spy()
+      const flushed = sinon.spy()
+
+      exporter.sendPayload('trace', resultCallback)
+
+      sinon.assert.calledOnce(httpRequest)
+      sinon.assert.calledOnce(request.end)
+      sinon.assert.notCalled(resultCallback)
+
+      exporter.flush(flushed)
+
+      assert.strictEqual(flushed.callCount, 0, 'flush completed while the HTTP request was still pending')
+    })
   })
 
   describe('setUrl', () => {
