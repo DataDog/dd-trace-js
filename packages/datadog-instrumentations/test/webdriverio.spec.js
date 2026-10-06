@@ -17,6 +17,7 @@ const { storage } = require('../../datadog-core')
 const log = require('../../dd-trace/src/log')
 const { channel, tracingChannel } = require('../src/helpers/instrument')
 const rewriter = require('../src/helpers/rewriter')
+const { getActivationSetup } = require('../src/helpers/rewriter/instrumentation-registry')
 const { createEfdRetryPolicy } = require('../../dd-trace/src/ci-visibility/efd-retry-policy')
 const { RUM_TEST_EXECUTION_ID_COOKIE_NAME } = require('../../dd-trace/src/ci-visibility/rum')
 const { detectRum, stopRumSession, stopRumSessionAndReportActivity } = require('../src/rum-browser-scripts')
@@ -172,7 +173,54 @@ async function cleanupPendingRumTest () {
   await context.rumCleanupCallback()
 }
 
+// Port 1 is reserved and never bound, so intake requests fail immediately instead of reaching a backend.
+const UNREACHABLE_INTAKE_URL = 'http://127.0.0.1:1'
+
 describe('webdriverio instrumentation', () => {
+  /** @type {Array<[string, string, string, boolean]>} */
+  const activationTargets = [
+    ['@wdio/cli', launcherFixturePath, 'build/index.js', true],
+    ['@wdio/jasmine-framework', jasmineFixturePath, 'build/index.js', true],
+    ['@wdio/local-runner', fixturePath, 'build/index.js', true],
+    ['@wdio/utils', utilsFixturePath, 'build/index.js', true],
+    ['webdriverio', browserFixturePath, 'build/index.js', true],
+    ['webdriverio', browserFixturePath, 'build/node.js', true],
+    ['@wdio/config', path.join(__dirname, 'fixtures', 'webdriverio-config.mjs'), 'build/node/index.js', false],
+    ['@wdio/runner', runnerFixturePath, 'build/index.js', false],
+    ['webdriver', webdriverFixturePath, 'build/index.js', false],
+    ['webdriver', webdriverFixturePath, 'build/node.js', false],
+    ['jasmine-core', jasmineCoreFixturePath, 'lib/jasmine-core/jasmine.js', false],
+  ]
+
+  for (const mode of ['regular', 'test-optimization']) {
+    for (const [moduleName, sourcePath, filePath, activate] of activationTargets) {
+      const behavior = activate ? 'activates runtime setup' : 'rewrites without activating runtime setup'
+      it(`${behavior} for ${moduleName}/${filePath} in ${mode} mode`, async () => {
+        await execFileAsync(process.execPath, [
+          '--import', path.join(__dirname, '../../../register.js'),
+          path.join(__dirname, 'fixtures', 'webdriverio-activation.js'),
+          moduleName, sourcePath, filePath, mode, String(activate),
+        ], {
+          env: {
+            ...process.env,
+            NODE_OPTIONS: '',
+            DD_INJECT_FORCE: 'true',
+            DD_CIVISIBILITY_ENABLED: 'true',
+            // These assertions only read channel subscriptions, so the child needs no backend. Agentless
+            // mode pointed at a closed port keeps it off the network: agent mode would instead hold the
+            // process alive for the full 5s agent-info discovery wherever no agent is listening.
+            DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
+            DD_CIVISIBILITY_AGENTLESS_URL: UNREACHABLE_INTAKE_URL,
+            DD_API_KEY: '1',
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+          },
+        })
+      })
+    }
+  }
+
   it('detects RUM before its initialization configuration is available', () => {
     const previousWindow = global.window
     global.window = {
@@ -4620,7 +4668,8 @@ describe('webdriverio instrumentation', () => {
     testSessionFinishCh.subscribe(onSessionFinish)
 
     try {
-      require('../src/webdriverio')
+      const setup = getActivationSetup('@wdio/utils')
+      setup({ moduleName: '@wdio/utils', version: '9.32.0' })
 
       const localRunner = {
         config: {
@@ -4646,6 +4695,70 @@ describe('webdriverio instrumentation', () => {
       libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
       testSessionStartCh.unsubscribe(onSessionStart)
       testSessionFinishCh.unsubscribe(onSessionFinish)
+    }
+  })
+
+  it('records the local-runner version after another package activates and reports empty workers', async () => {
+    const testFinishCh = channel('ci:mocha:test:finish')
+    const libraryConfigurationCh = channel('ci:mocha:library-configuration')
+    const testSessionStartCh = channel('ci:mocha:session:start')
+    const testSessionFinishCh = channel('ci:mocha:session:finish')
+    const testSuiteStartCh = channel('ci:mocha:test-suite:start')
+    const testSuiteFinishCh = channel('ci:mocha:test-suite:finish')
+    const configurationRequests = []
+    const sessionStarts = []
+    const suiteStarts = []
+    const suiteFinishes = []
+    const onTestFinish = () => {}
+    const onLibraryConfiguration = request => {
+      configurationRequests.push(request)
+      request.onDone({ libraryConfig: {}, repositoryRoot: process.cwd() })
+    }
+    const onSessionStart = event => sessionStarts.push(event)
+    const onSessionFinish = event => event.onDone()
+    const onSuiteStart = event => suiteStarts.push(event)
+    const onSuiteFinish = event => suiteFinishes.push(event)
+
+    testFinishCh.subscribe(onTestFinish)
+    libraryConfigurationCh.subscribe(onLibraryConfiguration)
+    testSessionStartCh.subscribe(onSessionStart)
+    testSessionFinishCh.subscribe(onSessionFinish)
+    testSuiteStartCh.subscribe(onSuiteStart)
+    testSuiteFinishCh.subscribe(onSuiteFinish)
+
+    try {
+      const setup = getActivationSetup('@wdio/cli')
+      assert.strictEqual(setup, getActivationSetup('@wdio/local-runner'))
+      assert.strictEqual(setup, getActivationSetup('@wdio/utils'))
+      setup({ moduleName: '@wdio/cli', version: '9.31.0' })
+      setup({ moduleName: '@wdio/local-runner', version: '9.30.0' })
+      setup({ moduleName: '@wdio/utils', version: '9.32.0' })
+
+      const localRunner = { config: { framework: 'mocha', rootDir: process.cwd() } }
+      const worker = createWorker()
+      const file = path.join(process.cwd(), 'empty.spec.js')
+      registerWorker(localRunner, worker, file)
+      worker.emit('message', { name: 'testFrameworkInit', content: { hasTests: false } })
+
+      assert.strictEqual(configurationRequests.length, 1)
+      assert.strictEqual(configurationRequests[0].frameworkVersion, '9.30.0')
+      assert.strictEqual(sessionStarts.length, 1)
+      assert.strictEqual(sessionStarts[0].frameworkVersion, '9.30.0')
+      assert.strictEqual(suiteStarts.length, 1)
+      assert.strictEqual(suiteStarts[0].testSuiteAbsolutePath, file)
+      assert.strictEqual(suiteFinishes.length, 1)
+      assert.strictEqual(suiteFinishes[0].status, 'skip')
+
+      worker.emit('exit', { exitCode: 0, retries: 0 })
+      await finishLocalRunner(localRunner)
+    } finally {
+      require('../src/webdriverio').recordLocalRunnerVersion({ moduleName: '@wdio/local-runner' })
+      testFinishCh.unsubscribe(onTestFinish)
+      libraryConfigurationCh.unsubscribe(onLibraryConfiguration)
+      testSessionStartCh.unsubscribe(onSessionStart)
+      testSessionFinishCh.unsubscribe(onSessionFinish)
+      testSuiteStartCh.unsubscribe(onSuiteStart)
+      testSuiteFinishCh.unsubscribe(onSuiteFinish)
     }
   })
 
