@@ -1,8 +1,15 @@
 'use strict'
 
 // Activated rewrites publish their module name to the plugin manager after evaluation.
-// Only pure Orchestrion integrations that need this activation set activate: true.
+// Integrations can also provide synchronous runtime setup before plugin activation.
 // Other entries use hooks or another activation path, or do not need activation from a rewrite.
+/**
+ * @typedef {object} InstrumentationRegistryEntry
+ * @property {boolean|(() => void)} [activate]
+ * @property {Array<{ module: { name: string } }>} instrumentations
+ */
+
+/** @satisfies {InstrumentationRegistryEntry[]} */
 const registry = [
   { instrumentations: require('./instrumentations/ai') },
   { activate: true, instrumentations: require('./instrumentations/azure-cosmos') },
@@ -24,9 +31,17 @@ const registry = [
 ]
 
 const activatedModules = new Set()
+/** @type {Map<string, () => void>} */
+const activationSetups = new Map()
 for (const { activate, instrumentations } of registry) {
+  if (activate !== undefined && typeof activate !== 'boolean' && typeof activate !== 'function') {
+    throw new TypeError('Instrumentation registry activate must be a boolean or a function')
+  }
   if (!activate) continue
-  for (const { module } of instrumentations) activatedModules.add(module.name)
+  for (const { module } of instrumentations) {
+    activatedModules.add(module.name)
+    if (typeof activate === 'function') activationSetups.set(module.name, activate)
+  }
 }
 
 const instrumentations = registry.flatMap(entry => entry.instrumentations)
@@ -38,4 +53,12 @@ function isRewriteActivationEnabled (moduleName) {
   return activatedModules.has(moduleName)
 }
 
-module.exports = { isRewriteActivationEnabled, instrumentations, registry }
+/**
+ * @param {string} moduleName
+ * @returns {(() => void)|undefined}
+ */
+function getActivationSetup (moduleName) {
+  return activationSetups.get(moduleName)
+}
+
+module.exports = { getActivationSetup, isRewriteActivationEnabled, instrumentations, registry }
