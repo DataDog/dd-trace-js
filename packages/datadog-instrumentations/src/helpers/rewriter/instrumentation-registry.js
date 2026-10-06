@@ -4,8 +4,12 @@
 // Integrations can also provide synchronous runtime setup before plugin activation.
 // Other entries use hooks or another activation path, or do not need activation from a rewrite.
 /**
+ * @typedef {object} Activation
+ * @property {string} moduleName
+ * @property {string} [version]
+ *
  * @typedef {object} InstrumentationRegistryEntry
- * @property {boolean|(() => void)} [activate]
+ * @property {boolean|((activation: Activation) => void)} [activate]
  * @property {Array<{ module: { name: string } }>} instrumentations
  */
 
@@ -31,7 +35,7 @@ const registry = [
 ]
 
 const activatedModules = new Set()
-/** @type {Map<string, () => void>} */
+/** @type {Map<string, (activation: Activation) => void>} */
 const activationSetups = new Map()
 for (const { activate, instrumentations } of registry) {
   if (activate !== undefined && typeof activate !== 'boolean' && typeof activate !== 'function') {
@@ -55,7 +59,7 @@ function isRewriteActivationEnabled (moduleName) {
 
 /**
  * @param {string} moduleName
- * @returns {(() => void)|undefined}
+ * @returns {((activation: Activation) => void)|undefined}
  */
 function getActivationSetup (moduleName) {
   return activationSetups.get(moduleName)
