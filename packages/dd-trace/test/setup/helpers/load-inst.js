@@ -10,9 +10,11 @@ const INSTRUMENT_HELPER_PATH = path.join(
 const REWRITER_INSTRUMENTATIONS_PATH = path.join(
   INSTRUMENTATIONS_PATH, 'helpers/rewriter/instrumentations'
 )
+const subscriberOnlyFiles = new Set()
 
-function loadInstFile (file, instrumentations) {
+function loadInstFile (file, instrumentations, cacheSubscribers = false) {
   const instPath = path.join(INSTRUMENTATIONS_PATH, file)
+  if (cacheSubscribers && subscriberOnlyFiles.has(instPath) && require.cache[instPath]) return
 
   // Patch `addHook` for the duration of this load and filter to the SUT's own
   // call sites; addHook calls from transitively-loaded siblings (e.g.
@@ -27,14 +29,18 @@ function loadInstFile (file, instrumentations) {
     }
   }
 
-  // Snapshot `require.cache` and drop everything this load adds, so production's
-  // `helpers/register.js` re-evaluation finds an empty cache and re-runs the
-  // integration's top-level `addHook` calls.
+  // Hook files must be re-evaluated by register.js, but subscriber-only entries
+  // must stay cached so discovery does not duplicate their runtime subscribers.
   const cacheBefore = new Set(Object.keys(require.cache))
+  const hookCount = instrumentations.length
 
   try {
     delete require.cache[instPath]
     require(instPath)
+    if (cacheSubscribers && instrumentations.length === hookCount) {
+      subscriberOnlyFiles.add(instPath)
+      cacheBefore.add(instPath)
+    }
   } finally {
     realInstrument.addHook = originalAddHook
     for (const id of Object.keys(require.cache)) {
@@ -57,13 +63,14 @@ function loadOneInst (name) {
     loadInstFile(mainFile, instrumentations)
   } else {
     const hasSingleFile = fs.existsSync(path.join(INSTRUMENTATIONS_PATH, singleFile))
+    const rewriterFile = path.join(REWRITER_INSTRUMENTATIONS_PATH, name)
+    const hasRewriterFile = fs.existsSync(`${rewriterFile}.js`)
     if (hasSingleFile) {
-      loadInstFile(singleFile, instrumentations)
+      loadInstFile(singleFile, instrumentations, hasRewriterFile)
       if (instrumentations.length) return instrumentations
     }
 
-    const rewriterFile = path.join(REWRITER_INSTRUMENTATIONS_PATH, name)
-    if (!fs.existsSync(`${rewriterFile}.js`)) {
+    if (!hasRewriterFile) {
       if (!hasSingleFile) loadInstFile(singleFile, instrumentations)
       return instrumentations
     }
