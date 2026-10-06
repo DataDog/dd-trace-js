@@ -17,7 +17,8 @@ module.exports = {
  * Fetches agent information from the /info endpoint
  * @param {URL} url - The agent URL
  * @param {Function} callback - Callback function with signature (err, agentInfo)
- * @param {{ deadline?: number, signal?: AbortSignal, path?: string, retry?: boolean }} [options]
+ * @param {{ deadline?: number, keepProcessAlive?: boolean, signal?: AbortSignal, path?: string, retry?: boolean }}
+ * [options]
  * Request finalization and routing options
  * @param {Function} [makeRequest] - Request implementation
  */

@@ -61,7 +61,7 @@ describe('LLMObsExporter', () => {
     assert.strictEqual(exporter.export(trace), true)
     sinon.assert.notCalled(AgentExporter)
     sinon.assert.calledOnceWithExactly(getValueFromEnvSources, 'DD_AGENTLESS_ENABLED', true)
-    sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, { retry: false })
+    sinon.assert.calledOnceWithExactly(fetchAgentInfo, config.url, sinon.match.func, { keepProcessAlive: true })
 
     fetchAgentInfo.yield(null, { endpoints: [] })
 

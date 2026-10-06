@@ -33,7 +33,7 @@ class LLMObsExporter extends BufferingExporter {
     if (agentlessEnabled === undefined) {
       fetchAgentInfo(config.url, (err) => {
         this.#initialize(err != null)
-      }, { retry: false })
+      }, { keepProcessAlive: true })
     } else {
       this.#initialize(agentlessEnabled)
     }
