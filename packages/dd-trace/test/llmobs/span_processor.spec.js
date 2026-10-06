@@ -360,10 +360,16 @@ describe('span processor', () => {
         assert.ok(!payload.tags.some(tag => tag.startsWith('agent_version:')))
       })
 
+      function makeAgent (version) {
+        const agent = {}
+        LLMObsTagger.tagMap.set(agent, { '_ml_obs.meta.span.kind': 'agent', '_ml_obs.agent_version': version })
+        return agent
+      }
+
       it('emits the version of the agent a non-agent span ran under', () => {
         processor.process(makeSpan({
           '_ml_obs.meta.span.kind': 'llm',
-          '_ml_obs.parent_agent_version': '1.0.0',
+          '_ml_obs.parent_agent': makeAgent('1.0.0'),
           '_ml_obs.tags': { agent_version: 'from_tags' },
         }))
         const { tags } = writer.append.getCall(0).firstArg
@@ -373,7 +379,7 @@ describe('span processor', () => {
       })
 
       it('does not emit the enclosing agent version on an agent span without its own', () => {
-        processor.process(makeSpan({ '_ml_obs.parent_agent_version': '1.0.0' }))
+        processor.process(makeSpan({ '_ml_obs.parent_agent': makeAgent('1.0.0') }))
         const payload = writer.append.getCall(0).firstArg
 
         assert.ok(!payload.tags.some(tag => tag.startsWith('agent_version:')))

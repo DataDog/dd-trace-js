@@ -56,6 +56,22 @@ describe('agent manifest', () => {
       })
     }
 
+    for (const version of [2, {}, true]) {
+      it(`warns when dropping a non-string version (${inspect(version)})`, () => {
+        buildAgentDeclaration({ version, name: 'a' })
+
+        sinon.assert.calledOnceWithExactly(log.warn, 'Dropping the agent version, it must be a string.')
+      })
+    }
+
+    for (const version of [undefined, null, '']) {
+      it(`ignores an unset version without a warning (${inspect(version)})`, () => {
+        buildAgentDeclaration({ version, name: 'a' })
+
+        sinon.assert.notCalled(log.warn)
+      })
+    }
+
     it('returns undefined for an agent that declares nothing', () => {
       assert.strictEqual(buildAgentDeclaration({}), undefined)
       assert.strictEqual(buildAgentDeclaration({ name: '', tools: [], modelSettings: {} }), undefined)

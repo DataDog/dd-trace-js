@@ -4868,7 +4868,7 @@ declare namespace tracer {
 
     /**
      * Declares the agent an `agent` span represents. `version` is set as an `agent_version` tag on the agent
-     * span and on the spans started under it after the declaration, up to a nested agent. The other fields are
+     * span and on the spans under it that have not finished, up to a nested agent. The other fields are
      * reported as the agent's manifest. Only applies to `agent` spans. Unreportable values are dropped with a
      * warning, and unset values (`undefined`, `null`, `''`, `[]`) leave what an earlier annotation declared in
      * place.

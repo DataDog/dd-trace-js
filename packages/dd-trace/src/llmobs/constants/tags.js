@@ -31,7 +31,7 @@ module.exports = {
 
   PARENT_AGENT_NAME: '_ml_obs.parent_agent_name',
   PARENT_AGENT_SPAN_ID: '_ml_obs.parent_agent_span_id',
-  PARENT_AGENT_VERSION: '_ml_obs.parent_agent_version',
+  PARENT_AGENT: '_ml_obs.parent_agent',
   PROPAGATED_PARENT_AGENT_ID_KEY: '_dd.p.llmobs_pagent_span_id',
   PROPAGATED_PARENT_AGENT_NAME_KEY: '_dd.p.llmobs_pagent_name',
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',

@@ -1065,6 +1065,42 @@ describe('sdk', () => {
         assert.ok(hasNoVersion('llm'))
       })
 
+      it('reports a version annotated after an intermediate span started on the spans under it', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent' }, agent => {
+          llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
+            llmobs.annotate(agent, { agent: { version: '2.0.0' } })
+            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+          })
+        })
+
+        assert.ok(emittedTags('step').includes('agent_version:2.0.0'))
+        assert.ok(emittedTags('llm').includes('agent_version:2.0.0'))
+      })
+
+      it('reports a replaced version on the spans under an intermediate span', () => {
+        llmobs.trace({ kind: 'agent', name: 'agent', version: '1.0.0' }, agent => {
+          llmobs.trace({ kind: 'workflow', name: 'step' }, () => {
+            llmobs.annotate(agent, { agent: { version: '2.0.0' } })
+            llmobs.trace({ kind: 'llm', name: 'llm' }, () => {})
+          })
+        })
+
+        assert.ok(emittedTags('llm').includes('agent_version:2.0.0'))
+        assert.ok(!emittedTags('llm').includes('agent_version:1.0.0'))
+      })
+
+      it('warns when dropping a non-string version option on an agent span', () => {
+        sinon.spy(logger, 'warn')
+        try {
+          llmobs.trace({ kind: 'agent', name: 'agent', version: 3 }, () => {})
+          sinon.assert.calledOnceWithExactly(logger.warn, 'Dropping the agent version, it must be a string.')
+        } finally {
+          logger.warn.restore()
+        }
+
+        assert.ok(hasNoVersion('agent'))
+      })
+
       it('reports an annotated version on the spans started after the annotation', () => {
         llmobs.trace({ kind: 'agent', name: 'agent' }, () => {
           llmobs.trace({ kind: 'tool', name: 'before' }, () => {})

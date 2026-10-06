@@ -107,10 +107,13 @@ function buildAgentManifest (agent) {
 }
 
 /**
+ * Unset values (`undefined`, `null`, `''`) are ignored without a warning, so they leave an earlier version in place.
+ *
  * @param {unknown} version
  */
 function toAgentVersion (version) {
-  return typeof version === 'string' && version !== '' ? version : undefined
+  if (typeof version === 'string' && version !== '') return version
+  if (!isUnset(version)) log.warn('Dropping the agent version, it must be a string.')
 }
 
 /**
