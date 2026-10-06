@@ -190,6 +190,46 @@ describe('AIGuard SDK integration tests', () => {
     })
   })
 
+  describe('with the AI tracing plugin disabled', () => {
+    // AI Guard consumes dd-trace:vercel-ai:model:intercept independently of AI tracing.
+    before(() => {
+      envOverrides = { DD_TRACE_AI_ENABLED: 'false' }
+    })
+
+    after(() => {
+      envOverrides = {}
+    })
+
+    for (const mode of ['point1', 'point2']) {
+      it(`keeps model interception and allows safe ${mode} messages`, async () => {
+        const response = await executeRequest(`${url}/auto?mode=${mode}&deny=false`)
+        assert.strictEqual(response.status, 200)
+        assert.deepStrictEqual(response.body, { blocked: false })
+
+        await agent.assertMessageReceived(({ payload }) => {
+          const spans = payload[0]
+          const guardSpans = spans.filter(span => span.name === 'ai_guard')
+          assert.strictEqual(guardSpans.length, 2)
+          assert.ok(guardSpans.every(span => span.meta['ai_guard.action'] === 'ALLOW'))
+          assert.strictEqual(spans.filter(span => span.name.startsWith('ai.')).length, 0)
+        })
+      })
+
+      it(`keeps model interception and blocks dangerous ${mode} messages`, async () => {
+        const response = await executeRequest(`${url}/auto?mode=${mode}&deny=true`)
+        assert.strictEqual(response.status, 403)
+        assert.deepStrictEqual(JSON.parse(response.body), { blocked: true, reason: 'Blocked by policy' })
+
+        await agent.assertMessageReceived(({ payload }) => {
+          assertHasGuardSpan(payload, span =>
+            span.meta['ai_guard.action'] === 'DENY' && span.meta['ai_guard.blocked'] === 'true'
+          )
+          assert.strictEqual(payload[0].filter(span => span.name.startsWith('ai.')).length, 0)
+        })
+      })
+    }
+  })
+
   describe('service entry tag mirroring', () => {
     it('copies http.useragent to ai_guard.http.useragent on the guard span', async () => {
       const response = await executeRequest(`${url}/allow`, 'GET', {

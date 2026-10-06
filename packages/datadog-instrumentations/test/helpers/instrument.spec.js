@@ -97,10 +97,8 @@ describe('helpers/instrument', () => {
     })
 
     it('hands out fresh hook objects so caller mutations cannot leak between calls', () => {
-      // the ai and aws-durable-execution-sdk-js plugins set
-      // `hook.file = null` before registering; the hooks (and their versions
-      // arrays) must not be shared cached objects or such a mutation would
-      // corrupt every later getHooks call in the same process.
+      // Hook snapshots and their versions arrays are caller-owned: mutating one
+      // must not corrupt later getHooks calls in the same process.
       const pristine = getHooks('ai')
       const mutated = getHooks('ai')
       for (const hook of mutated.values()) {
