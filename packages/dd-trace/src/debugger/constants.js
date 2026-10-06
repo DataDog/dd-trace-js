@@ -9,6 +9,7 @@ const WORKER_ERROR_REASON = Object.freeze({
   WORKER_ENTRY_POINT_NOT_FOUND: 'worker_entry_point_not_found',
   PROBE_INSTALLATION_FAILED: 'probe_installation_failed',
   PROBE_STATE_MISMATCH: 'probe_state_mismatch',
+  BREAKPOINT_REPLACEMENT_FAILED: 'breakpoint_replacement_failed',
 })
 
 module.exports = {

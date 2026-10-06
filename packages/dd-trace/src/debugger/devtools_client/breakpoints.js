@@ -63,15 +63,15 @@ session.on('scriptLoadingStabilized', () => {
 })
 
 module.exports = {
-  addBreakpoint: lock(addBreakpoint),
+  addBreakpoint: lock(installBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
   modifyBreakpoint: lock(modifyBreakpoint),
   refreshBreakpoints: lock(refreshBreakpoints),
 }
 
 async function addBreakpoint (probe) {
-  const previous = probes.get(probe.id)
-  if (previous) samplingIndexToProbe.delete(previous.samplingIndex)
+  // Re-evaluation retries a failed installation with the same probe, which gets a new sampling index below
+  if (probes.get(probe.id) === probe) samplingIndexToProbe.delete(probe.samplingIndex)
   probes.set(probe.id, probe)
   if (!sessionStarted) await start()
 
@@ -210,6 +210,7 @@ async function addBreakpoint (probe) {
         condition: compileBreakpointCondition([probe]),
       }))
     } catch (err) {
+      markForRetry(probe)
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
     probeToLocation.set(probe.id, locationKey)
@@ -222,7 +223,9 @@ async function removeBreakpoint ({ id }) {
   const probe = probes.get(id)
   const locationKey = probeToLocation.get(id)
   if (!probe && locationKey === undefined) {
-    log.error('[debugger:devtools_client] Probe state mismatch reason=probe_state_mismatch',
+    // Telemetry omits printf arguments, so the reason must be part of the message.
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.error(`[debugger:devtools_client] Probe state mismatch reason=${WORKER_ERROR_REASON.PROBE_STATE_MISMATCH}`,
       new Error(`No local state for probe ${id} requested for removal`))
   }
 
@@ -232,14 +235,13 @@ async function removeBreakpoint ({ id }) {
 
   // Failed installations remain pending for later script loading, but cancellation must remove them too.
   if (locationKey === undefined) {
-    if (sessionStarted && probes.size === 0 && breakpointToProbes.size === 0) await stop()
+    if (sessionStarted && canStop()) await stop()
     return
   }
 
   const breakpoint = locationToBreakpoint.get(locationKey)
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
 
-  samplingIndexToProbe.delete(probesAtLocation.get(id)?.samplingIndex)
   probesAtLocation.delete(id)
   probeToLocation.delete(id)
 
@@ -247,7 +249,7 @@ async function removeBreakpoint ({ id }) {
     locationToBreakpoint.delete(locationKey)
     breakpointToProbes.delete(breakpoint.id)
     // TODO: If anything below in this if-block throws, the state is out of sync.
-    if (breakpointToProbes.size === 0 && probes.size === 0) {
+    if (canStop()) {
       await stop() // This will also remove the breakpoint
     } else {
       try {
@@ -264,6 +266,15 @@ async function removeBreakpoint ({ id }) {
 // TODO: Modify existing probe instead of removing it (DEBUG-2817)
 async function modifyBreakpoint (probe) {
   await removeBreakpoint(probe)
+  await installBreakpoint(probe)
+}
+
+/**
+ * Add a breakpoint for a probe received from remote config, classifying any failure for the main thread telemetry.
+ *
+ * @param {object} probe - The probe to install.
+ */
+async function installBreakpoint (probe) {
   try {
     await addBreakpoint(probe)
   } catch (err) {
@@ -341,7 +352,10 @@ async function updateBreakpointInternal (breakpoint, probe) {
   try {
     await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
   } catch (err) {
-    throw new Error(`Error replacing breakpoint ${context}`, { cause: err })
+    if (probe) markForRetry(probe)
+    throw Object.assign(new Error(`Error replacing breakpoint ${context}`, { cause: err }), {
+      reason: WORKER_ERROR_REASON.BREAKPOINT_REPLACEMENT_FAILED,
+    })
   }
   breakpointToProbes.delete(breakpoint.id)
   if (probe) {
@@ -357,12 +371,13 @@ async function updateBreakpointInternal (breakpoint, probe) {
   } catch (err) {
     // The old breakpoint was removed, so none of its probes are installed until a retry succeeds.
     locationToBreakpoint.delete(breakpoint.locationKey)
-    for (const probe of probesAtLocation.values()) {
-      probeToLocation.delete(probe.id)
-      samplingIndexToProbe.delete(probe.samplingIndex)
+    for (const detached of probesAtLocation.values()) {
+      probeToLocation.delete(detached.id)
+      samplingIndexToProbe.delete(detached.samplingIndex)
+      markForRetry(detached)
     }
     throw Object.assign(new Error(`Error setting breakpoint ${context}`, { cause: err }), {
-      reason: WORKER_ERROR_REASON.PROBE_STATE_MISMATCH,
+      reason: WORKER_ERROR_REASON.BREAKPOINT_REPLACEMENT_FAILED,
     })
   }
   breakpoint.id = result.breakpointId
@@ -376,14 +391,39 @@ async function reEvaluateProbe (probe) {
   const script = findScriptFromPartialPath(probe.where.sourceFile)
   log.debug('[debugger:devtools_client] re-evaluating probe %s: %s => %s', probe.id, probe.scriptId, script?.scriptId)
 
-  if (!probeToLocation.has(probe.id) || probe.scriptId !== script?.scriptId) {
-    log.debug('[debugger:devtools_client] Better match found for probe %s, re-evaluating', probe.id)
-    if (probeToLocation.has(probe.id)) {
-      await removeBreakpoint(probe)
-    }
-    await addBreakpoint(probe)
-    ackInstalled(probe)
+  // Installing against the script of the previous attempt would repeat its outcome. Inspector failures are the
+  // exception, so they clear the script to be retried (see `markForRetry`).
+  if (!script || probe.scriptId === script.scriptId) return
+
+  log.debug('[debugger:devtools_client] Better match found for probe %s, re-evaluating', probe.id)
+  if (probeToLocation.has(probe.id)) {
+    await removeBreakpoint(probe)
   }
+  await addBreakpoint(probe)
+  ackInstalled(probe)
+}
+
+/**
+ * Let re-evaluation retry a probe against the same script, as its installation failed in the inspector rather than
+ * because of the probe or the script.
+ *
+ * @param {{ scriptId?: string }} probe - The probe that is not installed.
+ */
+function markForRetry (probe) {
+  probe.scriptId = undefined
+}
+
+/**
+ * Only an enabled debugger notices newly loaded scripts, so it must keep running while any breakpoint is set or any
+ * probe waits to be installed. Probes whose installation failed against their script do not count, as they are only
+ * retried if that script changes.
+ */
+function canStop () {
+  if (breakpointToProbes.size !== 0) return false
+  for (const probe of probes.values()) {
+    if (probe.scriptId === undefined) return false
+  }
+  return true
 }
 
 async function start () {
