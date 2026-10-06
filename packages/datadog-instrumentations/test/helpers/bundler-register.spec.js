@@ -122,7 +122,7 @@ describe('bundler register', () => {
     sinon.assert.notCalled(log.error)
   })
 
-  it('runs activation setup once before publishing for every bundled module in a group', () => {
+  it('passes metadata to activation setup before publishing for every bundled module in a group', () => {
     const setup = sinon.stub()
     const { activate, loadChannel, log, publish } = loadBundlerRegister({
       rewriteActivationEnabled: new Set(['first', 'second']),
@@ -131,13 +131,19 @@ describe('bundler register', () => {
       instrumentations: {},
     })
 
-    publish({ activate: true, package: 'first' })
-    publish({ activate: true, package: 'second' })
-    publish({ activate: true, package: 'first' })
+    publish({ activate: true, package: 'first', version: '1.0.0' })
+    publish({ activate: true, package: 'second', version: '2.0.0' })
+    publish({ activate: true, package: 'first', version: '1.0.1' })
 
-    sinon.assert.calledOnceWithExactly(setup)
+    assert.deepStrictEqual(setup.args, [
+      [{ moduleName: 'first', version: '1.0.0' }],
+      [{ moduleName: 'second', version: '2.0.0' }],
+      [{ moduleName: 'first', version: '1.0.1' }],
+    ])
     sinon.assert.callOrder(setup, loadChannel.publish)
-    assert.deepStrictEqual(activate.args, [['first'], ['second'], ['first']])
+    assert.ok(setup.getCall(1).calledBefore(loadChannel.publish.getCall(1)))
+    assert.ok(setup.getCall(2).calledBefore(loadChannel.publish.getCall(2)))
+    assert.deepStrictEqual(activate.args, [['first', '1.0.0'], ['second', '2.0.0'], ['first', '1.0.1']])
     assert.deepStrictEqual(loadChannel.publish.args,
       [[{ name: 'first' }], [{ name: 'second' }], [{ name: 'first' }]])
     sinon.assert.notCalled(log.error)
@@ -157,7 +163,7 @@ describe('bundler register', () => {
     publish({ activate: true, package: 'second' })
     publish({ activate: true, package: 'first' })
 
-    sinon.assert.calledOnceWithExactly(setup)
+    sinon.assert.calledOnceWithExactly(setup, { moduleName: 'first', version: undefined })
     sinon.assert.notCalled(loadChannel.publish)
     sinon.assert.calledOnceWithExactly(log.error,
       'Error during activation setup of %s: %s', 'first', 'setup failed', error)
@@ -314,7 +320,7 @@ function throwValue (value) {
  * @param {{
  *   disabled?: Set<string>,
  *   rewriteActivationEnabled?: Set<string>,
- *   activationSetups?: Map<string, () => void>,
+ *   activationSetups?: Map<string, (activation: { moduleName: string, version?: string }) => void>,
  *   hooks: Record<string, Function|{ fn: Function }>,
  *   instrumentations: Record<string, Array<object>>
  * }} options

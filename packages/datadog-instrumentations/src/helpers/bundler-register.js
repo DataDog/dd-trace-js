@@ -96,7 +96,7 @@ dc.subscribe(CHANNEL, (message) => {
   if (disabledInstrumentations.has(name)) return
 
   if (payload.activate && isRewriteActivationEnabled(name)) {
-    activate(name)
+    activate(name, payload.version)
     return
   }
 
