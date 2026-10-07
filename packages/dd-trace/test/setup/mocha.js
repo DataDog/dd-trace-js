@@ -23,6 +23,58 @@ const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
+const { FixtureDirectories, FIXTURE_ROOT_ENV } = require('./helpers/fixture-directories')
+
+const fixtureDirectories = new FixtureDirectories()
+let previousFixtureRoot
+
+exports.mochaGlobalSetup = async function () {
+  previousFixtureRoot = process.env[FIXTURE_ROOT_ENV]
+  try {
+    process.env[FIXTURE_ROOT_ENV] = fixtureDirectories.createRunRoot()
+  } catch (error) {
+    const errors = [error]
+    try {
+      await fixtureDirectories.cleanup()
+    } catch (cleanupError) {
+      errors.push(...cleanupError.errors)
+    }
+    restoreFixtureRoot()
+    failFixture('setup', errors)
+  }
+}
+
+exports.mochaGlobalTeardown = async function () {
+  try {
+    await fixtureDirectories.cleanup()
+  } catch (error) {
+    failFixture('cleanup', error.errors)
+  } finally {
+    restoreFixtureRoot()
+  }
+}
+
+function restoreFixtureRoot () {
+  if (previousFixtureRoot === undefined) delete process.env[FIXTURE_ROOT_ENV]
+  else process.env[FIXTURE_ROOT_ENV] = previousFixtureRoot
+  previousFixtureRoot = undefined
+}
+
+/**
+ * @param {'setup'|'cleanup'} phase
+ * @param {Array<Error & {code?: string, path?: string}>} errors
+ */
+function failFixture (phase, errors) {
+  const summaries = errors.map(error => {
+    const code = /^[A-Z0-9_]+$/.test(error.code ?? '') ? error.code : 'UNKNOWN'
+    return `phase=${phase} code=${code} path=${JSON.stringify(error.path ?? '[unavailable]')}`
+  })
+  const summary = `[dd-trace fixtures] ${summaries.join('; ')}`
+  // Mocha can lose the completion callback when a global fixture rejects. Set status before rejecting.
+  process.exitCode = 1
+  process.stderr.write(summary + '\n')
+  throw new Error(summary)
+}
 
 // dd-trace's mocha CI Visibility hook adds extra Runner listeners.
 if (dc.channel('ci:mocha:test:finish').hasSubscribers) {
@@ -484,10 +536,8 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
-// The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
-// hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
-// and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
-// runs always exit before it triggers; only a leaked handle — the actual bug — fires it.
+// Bound process lifetime after suite hooks finish. Leaked handles or pending global fixture reclamation can
+// keep the process alive; the unchanged watchdog covers both without imposing a per-hook deletion timeout.
 const EXIT_WATCHDOG_MS = 120_000
 
 exports.mochaHooks = {

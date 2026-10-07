@@ -7,19 +7,20 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
-const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
+const { copyFileSync, mkdirSync, writeFileSync, readdirSync } = require('node:fs')
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { satisfies } = require('semver')
 const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
-const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { assertObjectContains, stopProc } = require('../../../integration-tests/helpers')
 
 const { storage } = require('../../datadog-core')
 const instrumentations = require('../../datadog-instrumentations/src/helpers/instrumentations')
 require('../../datadog-instrumentations/src/next')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { FixtureDirectories, FIXTURE_ROOT_ENV } = require('../../dd-trace/test/setup/helpers/fixture-directories')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
@@ -84,6 +85,7 @@ describe('Plugin', function () {
 
     withVersions('next', 'next', min, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
+      let appDirectory
 
       before(done => {
         downstreamServer = http.createServer((_req, res) => {
@@ -110,14 +112,16 @@ describe('Plugin', function () {
         defaultToGlobalService = false
       ) => {
         before(async () => {
+          server = undefined
+          port = undefined
           return agent.load('next')
         })
 
         before(function (done) {
           this.timeout(300 * 1000)
           const cwd = standalone
-            ? path.join(__dirname, '.next/standalone')
-            : __dirname
+            ? path.join(appDirectory, '.next/standalone')
+            : appDirectory
 
           server = spawn('node', [serverFile], {
             cwd,
@@ -133,8 +137,8 @@ describe('Plugin', function () {
               WITH_HTTP_RESOURCE_RENAMING: String(httpResourceRenamingEnabled),
               DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: schemaVersion,
               DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED: defaultToGlobalService,
-              // eslint-disable-next-line n/no-path-concat
-              NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
+              NODE_OPTIONS: `--require ${JSON.stringify(path.join(appDirectory, 'datadog.js'))}`,
+              DD_TEST_NEXT_SEMVER: require.resolve('semver'),
               HOSTNAME: '127.0.0.1',
               TIMES_HOOK_CALLED: 0,
               ...(httpServerErrorStatuses === undefined
@@ -165,18 +169,37 @@ describe('Plugin', function () {
         after(async function () {
           this.timeout(30 * 1000)
 
-          server.kill()
-
-          await httpRequest.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
-          await agent.close()
+          const failures = []
+          try {
+            // Failed spawns have no pid and will never emit an exit acknowledgement.
+            if (server?.pid) await stopProc(server)
+          } catch (error) {
+            failures.push(error)
+          }
+          try {
+            await agent.close()
+          } catch (error) {
+            failures.push(error)
+          } finally {
+            server = undefined
+            port = undefined
+          }
+          if (failures.length) throw new AggregateError(failures, 'Next fixture shutdown failed')
         })
       }
 
       before(async function () {
         this.timeout(240 * 1000) // Webpack is very slow and builds on every test run
 
-        const cwd = __dirname
-        const pkg = require(`../../../versions/next@${version}/package.json`)
+        appDirectory = new FixtureDirectories().createFixture(
+          process.env[FIXTURE_ROOT_ENV],
+          'next',
+          __dirname,
+          ['app', 'pages', 'public', 'middleware.js', 'next.config.js', 'datadog.js', 'server.js', 'server-raw.js']
+        )
+        const cwd = appDirectory
+        const cachedPackage = require(`../../../versions/next@${version}/package.json`)
+        const pkg = { ...cachedPackage, dependencies: { ...cachedPackage.dependencies } }
         const realVersion = require(`../../../versions/next@${version}`).version()
 
         delete pkg.workspaces
@@ -188,7 +211,7 @@ describe('Plugin', function () {
           pkg.dependencies['react-dom'] = '^19'
         }
 
-        writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
+        writeFileSync(path.join(cwd, 'package.json'), JSON.stringify(pkg, null, 2))
 
         // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
         // if there is a way to re-use nodules from somewhere in the versions folder, this `execSync` will be reverted
@@ -211,7 +234,7 @@ describe('Plugin', function () {
         )
         writeFileSync(
           path.join(ddTraceStub, 'index.js'),
-          `module.exports = require(${JSON.stringify(path.join(__dirname, '..', '..', '..'))})\n`
+          `module.exports = require(${JSON.stringify(path.resolve(__dirname, '..', '..', '..'))})\n`
         )
 
         // building in-process makes tests fail for an unknown reason
@@ -224,29 +247,18 @@ describe('Plugin', function () {
             ...process.env,
             NODE_OPTIONS: legacyOpenssl,
             VERSION: realVersion,
+            DD_TEST_NEXT_SEMVER: require.resolve('semver'),
           },
           stdio: ['pipe', 'ignore', 'pipe'],
         })
 
         if (satisfiesStandalone(realVersion)) {
           // copy public and static files to the `standalone` folder
-          const publicOrigin = path.join(__dirname, 'public')
-          const publicDestination = path.join(__dirname, '.next/standalone/public')
-          execSync(`mkdir ${publicDestination}`)
-          execSync(`cp ${publicOrigin}/test.txt ${publicDestination}/test.txt`)
+          const publicOrigin = path.join(cwd, 'public')
+          const publicDestination = path.join(cwd, '.next/standalone/public')
+          mkdirSync(publicDestination)
+          copyFileSync(path.join(publicOrigin, 'test.txt'), path.join(publicDestination, 'test.txt'))
         }
-      })
-
-      after(function () {
-        this.timeout(5000)
-        const files = [
-          'package.json',
-          'node_modules',
-          '.next',
-          'yarn.lock',
-        ]
-        const paths = files.map(file => path.join(__dirname, file))
-        execSync(`rm -rf ${paths.join(' ')}`)
       })
 
       withNamingSchema(
@@ -628,7 +640,7 @@ describe('Plugin', function () {
 
           it('should do automatic instrumentation for static chunks', () => {
             // Get first static chunk file programmatically
-            const file = readdirSync(path.join(__dirname, '.next/static/chunks'))[0]
+            const file = readdirSync(path.join(appDirectory, '.next/static/chunks'))[0]
 
             const tracingPromise = agent
               .assertSomeTraces(traces => {

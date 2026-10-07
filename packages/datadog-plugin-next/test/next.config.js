@@ -2,7 +2,8 @@
 
 // Build config dynamically for ease in testing and modification
 
-const { satisfies } = require('semver')
+// Resolve this test-only dependency explicitly without widening Next's output tracing root.
+const { satisfies } = require(process.env.DD_TEST_NEXT_SEMVER)
 
 const { VERSION } = process.env // Next.js version to dynamically modify parts
 
