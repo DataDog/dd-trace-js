@@ -1043,6 +1043,54 @@ describe('Plugin', function () {
         }
       })
 
+      describe('request metadata without HTTP instrumentation', () => {
+        let previousSemantics
+
+        before(() => {
+          previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        })
+        startServer({ withConfig: false, standalone: false, withHttp: false })
+        after(() => {
+          if (previousSemantics === undefined) {
+            delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+          } else {
+            process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
+          }
+        })
+
+        const paths = ['/api/hello/world']
+        if (satisfies(pkg.version, '>=13.3')) paths.push('/api/appDir/world')
+        for (const pathname of paths) {
+          it(`captures request metadata for ${pathname}`, async () => {
+            const trace = agent.assertSomeTraces(traces => {
+              const span = traces.flat().find(span => span.name === 'next.request')
+              assert.ok(span)
+              assertObjectContains(span, {
+                meta: {
+                  'url.path': pathname,
+                  'url.scheme': 'http',
+                  'url.query': '<redacted>&keep=yes',
+                  'server.address': pathname.startsWith('/api/appDir/') ? 'localhost' : '127.0.0.1',
+                  'user_agent.original': 'next-metadata-test/1.0',
+                  'network.peer.address': '127.0.0.1',
+                },
+              })
+              // Next normalizes loopback Web URLs to localhost; this fixture gives Next port 0 before listen.
+              const expectedPort = pathname.startsWith('/api/appDir/') ? undefined : port
+              assert.strictEqual(span.metrics['server.port'], expectedPort)
+            })
+            const [response] = await Promise.all([
+              httpRequest.get(`http://127.0.0.1:${port}${pathname}?token=secret&keep=yes`, {
+                headers: { 'user-agent': 'next-metadata-test/1.0' },
+              }),
+              trace,
+            ])
+            assert.strictEqual(response.status, 200)
+          })
+        }
+      })
+
       describe('without HTTP instrumentation', () => {
         startServer({ withConfig: false, standalone: false, withHttp: false })
 
@@ -2013,4 +2061,111 @@ describe('compiled Next runtimes', () => {
       pageResponse.emit('finish')
     })
   })
+
+  for (const enabled of [true, false]) {
+    describe(`request metadata with OTel semantics ${enabled ? 'enabled' : 'disabled'}`, () => {
+      let previousSemantics
+
+      before(async () => {
+        previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = String(enabled)
+        await agent.load('next', { queryStringObfuscation: 'token=[^&]+' })
+        dc.channel('dd-trace:instrumentation:load').publish({ name: 'next' })
+      })
+
+      after(() => {
+        if (previousSemantics === undefined) {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        } else {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
+        }
+        return agent.close()
+      })
+
+      for (const withWebRequest of [false, true]) {
+        const association = withWebRequest ? 'with' : 'without'
+        it(`captures an App Route lifecycle ${association} an associated Web Request`, async () => {
+          class AppRouteRouteModule {
+            definition = { pathname: '/api/metadata' }
+
+            prepare () {
+              return Promise.resolve()
+            }
+
+            /** @param {{ responseGenerator: () => Promise<unknown> }} options */
+            handleResponse ({ responseGenerator }) {
+              return responseGenerator()
+            }
+
+            handle () {
+              return Promise.resolve({ status: 201 })
+            }
+          }
+          applyCompiledRuntimeHook('app-route', { AppRouteRouteModule })
+
+          const nodeRequest = {
+            headers: { host: 'node.example:8080', 'user-agent': 'node-agent/1.0' },
+            method: 'GET',
+            url: '/api/metadata?token=node-secret&keep=node',
+            socket: { remoteAddress: '192.0.2.1' },
+          }
+          const webRequest = new Request('https://web.example:8443/api/metadata?token=web-secret&keep=web', {
+            headers: { 'user-agent': 'web-agent/1.0' },
+          })
+          const nodeResponse = new http.ServerResponse(nodeRequest)
+          const routeModule = new AppRouteRouteModule()
+          const trace = agent.assertSomeTraces(traces => {
+            const [span] = traces[0]
+            assert.strictEqual(span.name, 'next.request')
+            if (enabled) {
+              assertObjectContains(span, {
+                meta: {
+                  'url.path': '/api/metadata',
+                  'url.scheme': withWebRequest ? 'https' : 'http',
+                  'url.query': `<redacted>&keep=${withWebRequest ? 'web' : 'node'}`,
+                  'server.address': withWebRequest ? 'web.example' : 'node.example',
+                  'user_agent.original': withWebRequest ? 'web-agent/1.0' : 'node-agent/1.0',
+                  'network.peer.address': '192.0.2.1',
+                },
+                metrics: { 'server.port': withWebRequest ? 8443 : 8080 },
+              })
+            } else {
+              for (const key of [
+                'http.url', 'http.useragent', 'network.peer.address',
+                'url.path', 'url.scheme', 'url.query', 'server.address', 'user_agent.original',
+              ]) {
+                assert.strictEqual(span.meta[key], undefined, key)
+              }
+              assert.strictEqual(span.metrics['server.port'], undefined)
+            }
+          })
+
+          const lifecycle = async () => {
+            await routeModule.prepare(nodeRequest, nodeResponse, {})
+            await routeModule.handleResponse({
+              req: nodeRequest,
+              responseGenerator: async () => {
+                const tags = storage('legacy').getStore().span.context().getTags()
+                if (enabled) {
+                  assertObjectContains(tags, {
+                    'http.url': 'http://node.example:8080/api/metadata?<redacted>&keep=node',
+                    'http.useragent': 'node-agent/1.0',
+                    'network.peer.address': '192.0.2.1',
+                  })
+                } else {
+                  for (const key of ['http.url', 'http.useragent', 'network.peer.address']) {
+                    assert.strictEqual(tags[key], undefined, key)
+                  }
+                }
+                const response = withWebRequest ? await routeModule.handle(webRequest, {}) : { status: 201 }
+                return { value: { status: response.status } }
+              },
+            })
+            nodeResponse.emit('finish')
+          }
+          await Promise.all([lifecycle(), trace])
+        })
+      }
+    })
+  }
 })

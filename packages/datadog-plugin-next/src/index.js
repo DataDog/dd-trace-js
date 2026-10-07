@@ -6,6 +6,7 @@ const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { HTTP_ROUTE, RESOURCE_NAME } = require('../../../ext/tags')
+const addOtelRequestTags = require('./request-tags')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 const reusedNextRequestStores = new WeakSet()
@@ -18,8 +19,7 @@ const nextParentRoutes = new WeakMap()
  *   backgroundRevalidationRequest?: import('node:http').IncomingMessage
  * }} NextRequestStore
  *
- * @typedef {object} NextRequest
- * @property {unknown} [error]
+ * @typedef {Request & { error?: unknown }} NextRequest
  *
  * @typedef {object} NextRequestContext
  * @property {import('node:http').IncomingMessage} req
@@ -83,6 +83,8 @@ class NextPlugin extends ServerPlugin {
       integrationName: this.constructor.id,
     })
 
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) addOtelRequestTags(span, this.config, req)
+
     this.stampIntegrationService(span, serviceName)
 
     analyticsSampler.sample(span, this.config.measured, true)
@@ -104,7 +106,7 @@ class NextPlugin extends ServerPlugin {
 
   /** @param {NextRequestContext} ctx */
   finish (ctx) {
-    const { req, res, nextRequest = {} } = ctx
+    const { req, res, nextRequest } = ctx
     const store = ctx.currentStore ?? storage('legacy').getStore()
 
     if (!store) return
@@ -112,7 +114,11 @@ class NextPlugin extends ServerPlugin {
 
     const span = store.span
     const error = ctx.error ?? span.context().getTag('error')
-    const requestError = req.error || nextRequest.error
+    const requestError = req.error || nextRequest?.error
+
+    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && nextRequest) {
+      addOtelRequestTags(span, this.config, nextRequest)
+    }
 
     if (requestError) {
       // prioritize user-set errors from API routes
