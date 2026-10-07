@@ -1445,6 +1445,35 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
+    getSnapshotState () {
+      return this.global.expect?.getState?.()?.snapshotState
+    }
+
+    /**
+     * Keeps the snapshot results of a quarantined test from failing the run.
+     *
+     * Jest fails the run on unmatched or obsolete snapshots even when no test failed.
+     *
+     * @param {object} test
+     * @param {string} status
+     */
+    ignoreQuarantinedSnapshotResults (test, status) {
+      const unmatchedBeforeTest = testContexts.get(test)?.unmatchedSnapshotsBeforeTest
+      // Jest retries the attempts that still have errors and resets their snapshot results itself.
+      if (unmatchedBeforeTest === undefined || test.errors?.length) return
+
+      const snapshotState = this.getSnapshotState()
+      if (!snapshotState) return
+
+      if (snapshotState.unmatched > unmatchedBeforeTest) {
+        snapshotState.unmatched = unmatchedBeforeTest
+      }
+      // Jest only marks the snapshots of failed tests as checked, and it no longer sees this test as failed.
+      if (status === 'fail') {
+        snapshotState.markSnapshotsAsCheckedForTest?.(getRawJestTestName(test))
+      }
+    }
+
     // This function returns an array if the known tests are valid and null otherwise.
     getKnownTestsForSuite (suiteKnownTests) {
       // `suiteKnownTests` is `this.testEnvironmentOptions._ddKnownTests`,
@@ -2044,6 +2073,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           ctx.concurrentTestState = concurrentTestState
           concurrentTestState.ctx = ctx
         }
+        if (isQuarantined && !isAttemptToFix && !this.hasConcurrentTests) {
+          ctx.unmatchedSnapshotsBeforeTest = this.getSnapshotState()?.unmatched
+        }
         testContexts.set(event.test, ctx)
 
         if (isAttemptToFix) {
@@ -2282,6 +2314,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             event.test.errors = []
           }
         }
+        this.ignoreQuarantinedSnapshotResults(event.test, status)
 
         // Quarantine must consume terminal failures before we save errors for Jest's final result.
         if (dynamicAtrCount !== undefined && failedAllTests && event.test.errors?.length) {
