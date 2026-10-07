@@ -13,7 +13,6 @@ const {
   getCappedRange,
   resolvePluginVersions,
 } = require('../packages/dd-trace/test/plugins/versions')
-const mapWithConcurrency = require('./helpers/concurrency')
 
 const NODE_RANGE_FLAG = '--node-range'
 const FETCH_TIMEOUT_MS = 10_000
@@ -33,6 +32,7 @@ const {
 } = require(
   '../packages/datadog-instrumentations/src/helpers/rewriter/instrumentation-registry'
 )
+const mapWithConcurrency = require('./helpers/concurrency')
 
 const JSON_OUTPUT_PATH = path.join(ROOT, 'supported_versions.json')
 
@@ -85,7 +85,6 @@ const PLUGIN_GETTER =
 
 /**
  * @param {string} dependency
- * @returns {boolean}
  */
 function isBuiltin (dependency) {
   return NODE_BUILTINS.has(dependency.replace(/^node:/, ''))
@@ -93,7 +92,6 @@ function isBuiltin (dependency) {
 
 /**
  * @param {string} dependency
- * @returns {string}
  */
 function normalizeDependency (dependency) {
   return dependency.startsWith('node:') || !isBuiltin(dependency) ? dependency : `node:${dependency}`
@@ -116,7 +114,6 @@ function readPluginMap () {
 
 /**
  * @param {string} cached
- * @returns {boolean}
  */
 function isRuntimeSpecificInstrumentation (cached) {
   return (cached.includes('/datadog-instrumentations/src/') && !cached.includes('/helpers/')) ||
@@ -188,12 +185,13 @@ function readInstrumentations (nodeProfiles) {
  *
  * @param {Map<string, string>} plugins
  * @param {Map<string, Map<string, InstrumentationDeclaration[]>>} instrumentations
+ * @param {Map<string, string>} [aliases]
  */
-function addPackageAliases (plugins, instrumentations) {
+function addPackageAliases (plugins, instrumentations, aliases = PACKAGE_ALIASES) {
   const externals = require(TEST_EXTERNALS)
   const integrations = new Set(plugins.values())
 
-  for (const [dependency, integration] of PACKAGE_ALIASES) {
+  for (const [dependency, integration] of aliases) {
     if (plugins.has(dependency)) {
       throw new Error(`Package alias ${dependency} has a plugin getter; remove the alias`)
     }
@@ -202,9 +200,12 @@ function addPackageAliases (plugins, instrumentations) {
     }
 
     const versions = []
-    for (const { name, versions: ranges } of externals[integration] ?? []) {
-      if (name !== dependency || !Array.isArray(ranges)) continue
-      versions.push(...ranges.filter(Boolean))
+    const integrationExternals = externals[integration]
+    if (integrationExternals) {
+      for (const { name, versions: ranges } of integrationExternals) {
+        if (name !== dependency || !Array.isArray(ranges)) continue
+        versions.push(...ranges.filter(Boolean))
+      }
     }
     if (versions.length === 0) {
       throw new Error(`Package alias ${dependency} has no versions in the ${integration} test externals`)
@@ -274,11 +275,10 @@ async function fetchPackageVersions (dependency) {
 
 /**
  * @param {string} supportedRange
- * @returns {string}
  */
 function simplifySupportedRange (supportedRange) {
   const ranges = [...new Set(supportedRange.split(' || '))]
-  const result = []
+  let result = ''
 
   for (let index = 0; index < ranges.length; index++) {
     const range = ranges[index]
@@ -295,10 +295,10 @@ function simplifySupportedRange (supportedRange) {
       }
     }
 
-    if (!covered) result.push(range)
+    if (!covered) result += result ? ` || ${range}` : range
   }
 
-  return result.join(' || ')
+  return result
 }
 
 /**
@@ -425,7 +425,14 @@ async function generateSupportedIntegrations (options = {}) {
   const nodeProfiles = options.nodeProfiles ?? readNodeProfiles(packageInfo, versions, options.nodeRange ?? '*')
   const plugins = options.plugins ?? readPluginMap()
   const instrumentations = options.instrumentations ?? readInstrumentations(nodeProfiles)
-  if (!options.plugins && !options.instrumentations) addPackageAliases(plugins, instrumentations)
+  if (!options.instrumentations) {
+    const integrations = new Set(plugins.values())
+    // A custom plugin map can select a subset of integrations; only add aliases for that subset.
+    const aliases = options.plugins
+      ? new Map([...PACKAGE_ALIASES].filter(([, integration]) => integrations.has(integration)))
+      : PACKAGE_ALIASES
+    addPackageAliases(plugins, instrumentations, aliases)
+  }
   const rows = await buildRows(
     plugins,
     nodeProfiles,
@@ -450,7 +457,6 @@ async function writeSupportedIntegrations (options = {}) {
 
 /**
  * @param {string[]} args
- * @returns {string}
  */
 function readNodeRange (args) {
   const index = args.indexOf(NODE_RANGE_FLAG)
