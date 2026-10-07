@@ -2,12 +2,15 @@
 
 const assert = require('node:assert/strict')
 const { Readable } = require('node:stream')
+const sinon = require('sinon')
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
   PAYLOAD_TAG_RESPONSE_PREFIX,
 } = require('../../src/constants')
+const log = require('../../src/log')
 const { tagsFromObject } = require('../../src/payload-tagging/tagging')
 const { computeTags } = require('../../src/payload-tagging')
+const { createSafeSnapshot } = require('../../src/payload-tagging/snapshot')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 const defaultOpts = { maxDepth: 10, prefix: 'http.payload' }
@@ -519,5 +522,284 @@ describe('Safe payload capture', () => {
     input.safe = 'ok'
 
     assert.deepStrictEqual(computeTags(safeConfig, input, responseOpts), {})
+  })
+
+  describe('binary capture safety', () => {
+    const requestOpts = { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX }
+
+    it('should redact a Buffer element without mutating the original bytes', () => {
+      const body = Buffer.from('abc')
+      const config = { expand: [], request: ['$.Body[1]'], response: [] }
+
+      const tags = computeTags(config, { Body: body }, requestOpts)
+
+      assert.strictEqual(body.toString('hex'), '616263')
+      // The redacted byte belongs to the snapshot copy, not to the caller.
+      assert.strictEqual(tags['aws.request.body.Body'], 'a\u0000c')
+    })
+
+    it('should redact a typed-array element without mutating the original bytes', () => {
+      const body = new Uint8Array([104, 105])
+      const config = { expand: [], request: ['$.Body[1]'], response: [] }
+
+      const tags = computeTags(config, { Body: body }, requestOpts)
+
+      assert.deepStrictEqual(Array.from(body), [104, 105])
+      // Per-index tag format is preserved and the redacted copy element no
+      // longer exposes the original value.
+      assert.strictEqual(tags['aws.request.body.Body.0'], '104')
+      assert.notStrictEqual(tags['aws.request.body.Body.1'], '105')
+    })
+
+    it('should copy aliased binary values independently per occurrence', () => {
+      const shared = Buffer.from('secret')
+      const config = { expand: [], request: ['$.a[0]'], response: [] }
+
+      const tags = computeTags(config, { a: shared, b: shared }, requestOpts)
+
+      assert.strictEqual(tags['aws.request.body.a'], '\u0000ecret')
+      assert.strictEqual(tags['aws.request.body.b'], 'secret')
+      assert.strictEqual(shared.toString(), 'secret')
+    })
+
+    it('should keep the Buffer string tag format below the binary budget', () => {
+      const tags = computeTags(safeConfig, { Body: Buffer.from('abc') }, responseOpts)
+
+      assert.strictEqual(tags['aws.response.body.Body'], 'abc')
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+    })
+
+    it('should keep the typed-array per-index tag format below the binary budget', () => {
+      const tags = computeTags(safeConfig, { Body: new Uint8Array([104, 105]) }, responseOpts)
+
+      assert.deepStrictEqual(tags, {
+        'aws.response.body.Body.0': '104',
+        'aws.response.body.Body.1': '105',
+      })
+    })
+
+    it('should accept a binary value at the last byte of the copy budget', () => {
+      const body = Buffer.alloc(1_000_000, 120)
+      const tags = computeTags(safeConfig, { Body: body }, responseOpts)
+
+      assert.strictEqual(tags['aws.response.body.Body'], 'x'.repeat(5000))
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], undefined)
+    })
+
+    it('should reject a binary value at the first byte beyond the copy budget', () => {
+      const body = Buffer.alloc(1_000_001, 120)
+      const tags = computeTags(safeConfig, { Body: body }, responseOpts)
+
+      assert.strictEqual(tags['aws.response.body.Body'], 'truncated')
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+    })
+
+    it('should exhaust the aggregate binary budget across multiple values', () => {
+      const first = Buffer.alloc(600_000, 97)
+      const second = Buffer.alloc(600_000, 98)
+
+      const tags = computeTags(safeConfig, { a: first, b: second }, responseOpts)
+
+      assert.strictEqual(tags['aws.response.body.a'], 'a'.repeat(5000))
+      assert.strictEqual(tags['aws.response.body.b'], 'truncated')
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+      // The oversized second value must not have consumed the first one.
+      assert.strictEqual(first[0], 97)
+      assert.strictEqual(second[0], 98)
+    })
+
+    it('should copy only the visible range of a view with a nonzero offset', () => {
+      const backing = new Uint8Array([1, 2, 3, 4, 5])
+      const view = backing.subarray(2)
+      const config = { expand: [], request: ['$.Body[0]'], response: [] }
+
+      const tags = computeTags(config, { Body: view }, requestOpts)
+
+      // Per-index tags cover the visible range only, starting at zero.
+      assert.deepStrictEqual(tags, {
+        'aws.request.body.Body.0': '0',
+        'aws.request.body.Body.1': '4',
+        'aws.request.body.Body.2': '5',
+      })
+      assert.deepStrictEqual(Array.from(backing), [1, 2, 3, 4, 5])
+    })
+
+    for (const byteLength of [0, 2]) {
+      it(`should isolate a DataView with a nonzero offset and ${byteLength} visible bytes`, () => {
+        const backing = new Uint8Array([1, 2, 3, 4, 5])
+        const view = new DataView(backing.buffer, 2, byteLength)
+
+        const snapshot = createSafeSnapshot({ Body: view })
+        const copy = /** @type {{ Body: DataView }} */ (snapshot.value).Body
+
+        assert.strictEqual(snapshot.incomplete, false)
+        assert.ok(copy instanceof DataView)
+        assert.notStrictEqual(copy.buffer, backing.buffer)
+        assert.strictEqual(copy.byteOffset, 0)
+        assert.strictEqual(copy.byteLength, byteLength)
+        assert.strictEqual(copy.buffer.byteLength, byteLength)
+        if (byteLength > 0) {
+          assert.strictEqual(copy.getUint8(0), 3)
+          assert.strictEqual(copy.getUint8(1), 4)
+          copy.setUint8(0, 0)
+        }
+        assert.deepStrictEqual(Array.from(backing), [1, 2, 3, 4, 5])
+      })
+    }
+
+    it('should omit payload tags without throwing when a typed-array buffer is detached', () => {
+      const body = new Uint8Array([1, 2])
+      structuredClone(body.buffer, { transfer: [body.buffer] })
+
+      assert.deepStrictEqual(computeTags(safeConfig, { Body: body, Ok: true }, responseOpts), {})
+    })
+
+    it('should keep partial tags and flag incompleteness when a binary value exceeds the budget', () => {
+      const body = Buffer.alloc(1_000_001, 120)
+      const config = { expand: [], request: ['$.Ok'], response: [] }
+
+      const tags = computeTags(config, { Body: body, Ok: true }, requestOpts)
+
+      assert.strictEqual(tags['aws.request.body.Ok'], 'redacted')
+      assert.strictEqual(tags['aws.request.body.Body'], 'truncated')
+      assert.strictEqual(tags['_dd.payload_tags_incomplete'], true)
+    })
+  })
+
+  describe('entry and width accounting', () => {
+    /**
+     * @param {number} count
+     * @param {number | null} throwAt index whose getter throws, or null
+     * @returns {{ container: object, reads: () => number }}
+     */
+    function getterProbe (count, throwAt) {
+      let reads = 0
+      const container = {}
+      for (let i = 0; i < count; i++) {
+        Object.defineProperty(container, `k${i}`, {
+          enumerable: true,
+          get () {
+            reads++
+            if (i === throwAt) throw new Error('boom')
+            return i
+          },
+        })
+      }
+      return { container, reads: () => reads }
+    }
+
+    /**
+     * @param {{ value: unknown, incomplete: boolean }} snapshot
+     * @returns {Record<string, unknown>}
+     */
+    function captured (snapshot) {
+      return /** @type {Record<string, unknown>} */ (snapshot.value)
+    }
+
+    it('should keep a snapshot complete at the entry budget boundary', () => {
+      // Root plus 9,999 admitted children is exactly the 10,000-entry budget.
+      const input = Object.fromEntries([...Array(9_999).keys()].map(i => [`k${i}`, i]))
+
+      const snapshot = createSafeSnapshot(input)
+
+      assert.strictEqual(snapshot.incomplete, false)
+      assert.strictEqual(Object.keys(captured(snapshot)).length, 9_999)
+    })
+
+    it('should omit overflow properties instead of materializing placeholders past the budget', () => {
+      const input = Object.fromEntries([...Array(10_000).keys()].map(i => [`k${i}`, i]))
+
+      const snapshot = createSafeSnapshot(input)
+
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.strictEqual(Object.keys(captured(snapshot)).length, 9_999)
+      assert.strictEqual(captured(snapshot).k0, 0)
+      assert.ok(!('k9999' in captured(snapshot)))
+    })
+
+    it('should bound getter reads on wide objects and never read past the budget', () => {
+      // A throwing getter past the retained prefix must never be read.
+      const { container, reads } = getterProbe(20_000, 15_000)
+
+      const snapshot = createSafeSnapshot(container)
+
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.ok(reads() <= 9_999)
+      assert.ok(Object.keys(captured(snapshot)).length < 20_000)
+    })
+
+    it('should not read pending sibling work once the entry budget is exhausted', () => {
+      // The first container alone exhausts the budget, so the second
+      // container's getters must never run.
+      const first = getterProbe(10_000, null)
+      const second = getterProbe(10_000, null)
+      const input = { a: first.container, b: second.container }
+
+      const snapshot = createSafeSnapshot(input)
+
+      assert.strictEqual(snapshot.incomplete, true)
+      assert.ok(Object.keys(/** @type {Record<string, unknown>} */ (captured(snapshot).a)).length > 0)
+      assert.ok(!('b' in captured(snapshot)))
+      assert.strictEqual(second.reads(), 0)
+      assert.ok(first.reads() <= 9_999)
+    })
+
+    it('should preserve original key order and array indexes in partial captures', () => {
+      const input = { z: 1, a: 2, list: ['x', 'y'] }
+
+      const snapshot = createSafeSnapshot(input)
+
+      assert.deepStrictEqual(Object.keys(captured(snapshot)), ['z', 'a', 'list'])
+      assert.deepStrictEqual(captured(snapshot).list, ['x', 'y'])
+    })
+  })
+
+  describe('suppression diagnostics', () => {
+    const snapshotMessage =
+      'Omitting payload tags: the snapshot was truncated and the rules are data-dependent'
+    const expansionMessage =
+      'Omitting payload tags: expansion was truncated and the redaction rules are data-dependent'
+
+    afterEach(() => {
+      sinon.restore()
+    })
+
+    it('should emit a payload-safe debug reason for snapshot-truncation suppression', () => {
+      const debug = sinon.stub(log, 'debug')
+      const input = { Body: makeReadable(), token: 's3cret' }
+      const config = { expand: [], request: [], response: ['$..[?(@.token)]'] }
+
+      assert.deepStrictEqual(computeTags(config, input, responseOpts), {})
+
+      assert.ok(debug.getCalls().some(call => call.args[0] === snapshotMessage))
+      // The diagnostic must never carry payload values or rule text.
+      for (const call of debug.getCalls()) {
+        const text = call.args.join(' ')
+        assert.ok(!text.includes('s3cret'))
+        assert.ok(!text.includes('token'))
+      }
+    })
+
+    it('should emit a payload-safe debug reason for expansion-truncation suppression', () => {
+      const debug = sinon.stub(log, 'debug')
+      const huge = `{ "a": "${'x'.repeat(1000001)}" }`
+      const config = { expand: ['$.body'], request: [], response: ['$..[?(@.token)]'] }
+
+      assert.deepStrictEqual(
+        computeTags(config, { body: huge, token: 's3cret' }, { maxDepth: 10, prefix: 'foo' }),
+        {}
+      )
+
+      assert.ok(debug.getCalls().some(call => call.args[0] === expansionMessage))
+      assert.ok(!debug.getCalls().some(call => call.args[0] === snapshotMessage))
+    })
+
+    it('should not emit a suppression diagnostic for successful captures', () => {
+      const debug = sinon.stub(log, 'debug')
+
+      computeTags(safeConfig, { ETag: '"etag"' }, responseOpts)
+
+      assert.strictEqual(debug.getCalls().length, 0)
+    })
   })
 })

@@ -10,7 +10,8 @@ const jsonpath = require('../../../../vendor/dist/jsonpath-plus').JSONPath
 const log = require('../log')
 
 const { tagsFromObject } = require('./tagging')
-const { createSafeSnapshot, truncated } = require('./snapshot')
+const { createSafeSnapshot } = require('./snapshot')
+const { truncated } = require('./constants')
 
 // JSONPath constructs that select based on data values (predicates, script
 // expressions, type, parent and property-name selectors, slices, literal
@@ -174,6 +175,11 @@ function computeBoundedTags (config, object, opts) {
     snapshot.incomplete &&
     (hasDataDependentRules(redactionRules) || hasDataDependentRules(expansionRules))
   ) {
+    // Fixed, payload-safe diagnostic: no payload values, rule text, exception
+    // messages or stacks are ever included.
+    log.debug(
+      'Omitting payload tags: the snapshot was truncated and the rules are data-dependent'
+    )
     return {}
   }
 
@@ -181,6 +187,11 @@ function computeBoundedTags (config, object, opts) {
   expand(payload, expansionRules, capture)
 
   if (capture.incomplete && hasDataDependentRules(redactionRules)) {
+    // Fixed, payload-safe diagnostic: no payload values, rule text, exception
+    // messages or stacks are ever included.
+    log.debug(
+      'Omitting payload tags: expansion was truncated and the redaction rules are data-dependent'
+    )
     return {}
   }
 
