@@ -313,6 +313,7 @@
 /integration-tests/opentelemetry-logs.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-traces.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
+/integration-tests/otel-http-transport.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/remote_config/ @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/remote_config.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /integration-tests/telemetry-forwarder.sh @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js

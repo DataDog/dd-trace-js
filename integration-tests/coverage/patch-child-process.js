@@ -1,6 +1,7 @@
 'use strict'
 
 const childProcess = require('node:child_process')
+const { promisify } = require('node:util')
 const workerThreads = require('node:worker_threads')
 
 const {
@@ -69,6 +70,33 @@ function installWorkerPatch () {
   }
 }
 
+/**
+ * Node's custom promisifiers close over the original functions, so copying them would skip coverage injection.
+ * Call the patched function outside the executor to preserve synchronous argument validation and promise.child.
+ *
+ * @param {typeof childProcess.exec | typeof childProcess.execFile} execute
+ */
+function installExecPromisify (execute) {
+  execute[promisify.custom] = function (...args) {
+    let resolve
+    let reject
+    const promise = new Promise((_resolve, _reject) => {
+      resolve = _resolve
+      reject = _reject
+    })
+    promise.child = execute(...args, (error, stdout, stderr) => {
+      if (error !== null) {
+        error.stdout = stdout
+        error.stderr = stderr
+        reject(error)
+      } else {
+        resolve({ stdout, stderr })
+      }
+    })
+    return promise
+  }
+}
+
 function installPatch () {
   if (!isCoverageActive() || childProcess[PATCHED]) return
 
@@ -117,7 +145,7 @@ function installPatch () {
     const n = normalizeArgs(args, options)
     return originalExecFile.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
   }
-  execFile.__promisify__ = originalExecFile.__promisify__
+  installExecPromisify(execFile)
   childProcess.execFile = execFile
   function exec (command, options, callback) {
     if (typeof options === 'function') {
@@ -126,7 +154,7 @@ function installPatch () {
     }
     return originalExec.call(this, command, patchExecOptions(options), callback)
   }
-  exec.__promisify__ = originalExec.__promisify__
+  installExecPromisify(exec)
   childProcess.exec = exec
 
   childProcess.execSync = function (command, options) {

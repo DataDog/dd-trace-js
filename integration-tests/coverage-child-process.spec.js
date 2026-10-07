@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { inspect } = require('node:util')
+const { inspect, promisify } = require('node:util')
 
 const libCoverage = require('istanbul-lib-coverage')
 
@@ -31,6 +31,7 @@ describe('integration coverage child process hook', () => {
   let coverageRoot
   let prevRoot
   let prevV8
+  let execFixture
 
   before(async () => {
     appRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-coverage-'))
@@ -85,6 +86,18 @@ fs.writeFileSync(path.join(__dirname, 'worker-debug.json'), JSON.stringify({
   v8Dir: process.env.${V8_COVERAGE_ENV} || '',
   nodeOptions: process.env.NODE_OPTIONS || '',
 }))
+`)
+
+    execFixture = path.join(appRoot, 'coverage-fixtures', 'exec-output.js')
+    await fsp.writeFile(execFixture, `
+'use strict'
+process.stdout.write(JSON.stringify({
+  marker: process.env.COVERAGE_EXEC_MARKER,
+  v8Dir: process.env.${V8_COVERAGE_ENV},
+  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
+}))
+process.stderr.write('child stderr')
+process.exitCode = Number(process.argv[2] || 0)
 `)
 
     prevRoot = process.env[ROOT_ENV]
@@ -225,6 +238,123 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     assert.deepEqual(JSON.parse(fs.readFileSync(asyncOut, 'utf8')), expected)
     assert.deepEqual(JSON.parse(fs.readFileSync(syncOut, 'utf8')), expected)
   })
+
+  for (const method of ['execFile', 'exec']) {
+    describe(`promisified ${method}`, () => {
+      /**
+       * @param {import('node:child_process').ExecFileOptions} options
+       * @param {number} [exitCode]
+       */
+      function run (options, exitCode = 0) {
+        const execute = promisify(childProcess[method])
+        return method === 'execFile'
+          ? execute(process.execPath, [execFixture, String(exitCode)], options)
+          : execute(`${JSON.stringify(process.execPath)} ${JSON.stringify(execFixture)} ${exitCode}`, options)
+      }
+
+      for (const encoding of ['utf8', 'buffer']) {
+        it(`preserves promisified success and coverage with ${encoding} output`, async () => {
+          const options = { cwd: appRoot, env: { COVERAGE_EXEC_MARKER: 'custom' }, encoding }
+          const promise = run(options)
+          assert.ok(promise.child instanceof childProcess.ChildProcess)
+          const { stdout, stderr } = await promise
+          assert.equal(typeof stdout, encoding === 'buffer' ? 'object' : 'string')
+          assert.equal(typeof stderr, encoding === 'buffer' ? 'object' : 'string')
+          assert.equal(Buffer.isBuffer(stdout), encoding === 'buffer')
+          assert.equal(Buffer.isBuffer(stderr), encoding === 'buffer')
+          assert.deepEqual(JSON.parse(stdout.toString()), {
+            marker: 'custom',
+            v8Dir: getV8CoverageDir(),
+            bootstrap: true,
+          })
+          assert.equal(stderr.toString(), 'child stderr')
+          assert.equal(options.env[V8_COVERAGE_ENV], undefined)
+        })
+
+        it(`preserves promisified failure and coverage with ${encoding} output`, async () => {
+          const promise = run({ cwd: appRoot, env: { COVERAGE_EXEC_MARKER: 'custom' }, encoding }, 7)
+          await assert.rejects(promise, error => {
+            assert.equal(error.code, 7)
+            assert.equal(error.signal, null)
+            assert.equal(error.killed, false)
+            assert.equal(typeof error.stdout, encoding === 'buffer' ? 'object' : 'string')
+            assert.equal(typeof error.stderr, encoding === 'buffer' ? 'object' : 'string')
+            assert.equal(Buffer.isBuffer(error.stdout), encoding === 'buffer')
+            assert.equal(Buffer.isBuffer(error.stderr), encoding === 'buffer')
+            assert.deepEqual(JSON.parse(error.stdout.toString()), {
+              marker: 'custom',
+              v8Dir: getV8CoverageDir(),
+              bootstrap: true,
+            })
+            assert.equal(error.stderr.toString(), 'child stderr')
+            return true
+          })
+        })
+      }
+
+      it('exposes the running child immediately and preserves signal errors', async () => {
+        const execute = promisify(childProcess[method])
+        const promise = method === 'execFile'
+          ? execute(process.execPath, ['-e', 'setInterval(() => {}, 1000)'])
+          : execute('unused', { shell: process.execPath })
+        assert.ok(promise.child instanceof childProcess.ChildProcess)
+        assert.equal(typeof promise.child.pid, 'number')
+        const rejection = assert.rejects(promise, {
+          signal: 'SIGKILL',
+          code: null,
+          killed: true,
+          stdout: '',
+          stderr: '',
+        })
+        promise.child.kill('SIGKILL')
+        await rejection
+      })
+
+      it('rejects with the original spawn error and both output fields', async () => {
+        const execute = promisify(childProcess[method])
+        const missing = path.join(appRoot, 'nonexistent-executable')
+        const promise = method === 'execFile' ? execute(missing) : execute('unused', { shell: missing })
+        let spawnError
+        promise.child.once('error', error => { spawnError = error })
+        await assert.rejects(promise, error => {
+          assert.equal(error, spawnError)
+          assert.equal(error.code, 'ENOENT')
+          assert.equal(error.signal, undefined)
+          assert.equal(error.stdout, '')
+          assert.equal(error.stderr, '')
+          return true
+        })
+      })
+
+      it('throws synchronously for invalid commands and option values', () => {
+        const execute = promisify(childProcess[method])
+        assert.throws(() => execute(42), { code: 'ERR_INVALID_ARG_TYPE' })
+        assert.throws(() => execute(process.execPath, { timeout: -1 }), { code: 'ERR_OUT_OF_RANGE' })
+      })
+
+      it('preserves omitted options and execFile argument overloads', async () => {
+        const execute = promisify(childProcess[method])
+        if (method === 'exec') {
+          const command = `${JSON.stringify(process.execPath)} ${JSON.stringify(execFixture)}`
+          for (const args of [[], [undefined], [null]]) {
+            const { stdout, stderr } = await execute(command, ...args)
+            assert.equal(JSON.parse(stdout).v8Dir, getV8CoverageDir())
+            assert.equal(stderr, 'child stderr')
+          }
+          return
+        }
+
+        const { stdout, stderr } = await execute(process.execPath, [execFixture])
+        assert.equal(JSON.parse(stdout).v8Dir, getV8CoverageDir())
+        assert.equal(stderr, 'child stderr')
+        for (const args of [[], [{ cwd: appRoot }], [undefined, { cwd: appRoot }], [null, { cwd: appRoot }]]) {
+          const promise = execute(process.execPath, ...args)
+          promise.child.stdin.end('process.stdout.write("stdin output"); process.stderr.write("stdin error")')
+          assert.deepEqual(await promise, { stdout: 'stdin output', stderr: 'stdin error' })
+        }
+      })
+    })
+  }
 
   it('probes fresh when a sandbox path has no dd-trace yet', async () => {
     const sandbox = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-late-install-'))
