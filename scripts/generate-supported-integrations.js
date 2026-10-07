@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 'use strict'
 
 const { readFileSync, writeFileSync } = require('node:fs')
@@ -14,7 +15,6 @@ const {
 } = require('../packages/dd-trace/test/plugins/versions')
 const mapWithConcurrency = require('./helpers/concurrency')
 
-const CHECK_FLAG = '--check'
 const NODE_RANGE_FLAG = '--node-range'
 const FETCH_TIMEOUT_MS = 10_000
 const FETCH_CONCURRENCY = 10
@@ -449,30 +449,6 @@ async function writeSupportedIntegrations (options = {}) {
 }
 
 /**
- * @param {string} file
- * @param {string} expected
- * @returns {boolean}
- */
-function reportDrift (file, expected) {
-  if (readFileSync(file, 'utf8').replaceAll('\r\n', '\n') === expected) return false
-  // eslint-disable-next-line no-console
-  console.error(`Out of date: ${path.relative(ROOT, file)}`)
-  return true
-}
-
-/**
- * @param {GenerationOptions} [options]
- * @returns {Promise<boolean>}
- */
-async function checkSupportedIntegrations (options = {}) {
-  const { json } = await generateSupportedIntegrations(options)
-  if (!reportDrift(options.outputPath ?? JSON_OUTPUT_PATH, json)) return true
-  // eslint-disable-next-line no-console
-  console.error('\nRun: npm run generate:supported-integrations')
-  return false
-}
-
-/**
  * @param {string[]} args
  * @returns {string}
  */
@@ -486,12 +462,7 @@ function readNodeRange (args) {
 
 /** @returns {Promise<void>} */
 async function main () {
-  const options = { nodeRange: readNodeRange(process.argv.slice(2)) }
-  if (process.argv.includes(CHECK_FLAG)) {
-    process.exitCode = Number(!await checkSupportedIntegrations(options))
-  } else {
-    await writeSupportedIntegrations(options)
-  }
+  await writeSupportedIntegrations({ nodeRange: readNodeRange(process.argv.slice(2)) })
 }
 
 if (require.main === module) {
@@ -504,7 +475,6 @@ if (require.main === module) {
 
 module.exports = {
   JSON_OUTPUT_PATH,
-  checkSupportedIntegrations,
   generateSupportedIntegrations,
   writeSupportedIntegrations,
 }

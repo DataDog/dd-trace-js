@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -8,13 +8,11 @@ import { fileURLToPath } from 'node:url'
 
 import { describe, it } from 'mocha'
 import sinon from 'sinon'
-import YAML from 'yaml'
 
 const require = createRequire(import.meta.url)
 const repositoryDirectory = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const generatorPath = path.join(repositoryDirectory, 'scripts/generate-supported-integrations.js')
 const {
-  checkSupportedIntegrations,
   generateSupportedIntegrations,
   writeSupportedIntegrations,
 } = require('./generate-supported-integrations')
@@ -257,7 +255,7 @@ describe('generate supported integrations', () => {
   })
 
   it('rejects a missing workflow Node.js range value from the CLI', () => {
-    for (const args of [['--node-range'], ['--node-range', '--check']]) {
+    for (const args of [['--node-range'], ['--node-range', '--node-range']]) {
       const result = spawnSync(process.execPath, [generatorPath, ...args], { encoding: 'utf8' })
 
       assert.strictEqual(result.status, 1)
@@ -265,7 +263,7 @@ describe('generate supported integrations', () => {
     }
   })
 
-  it('writes and verifies only the JSON artifact', async () => {
+  it('writes the JSON artifact', async () => {
     const directory = mkdtempSync(path.join(tmpdir(), 'dd-supported-versions-'))
     const outputPath = path.join(directory, 'supported_versions.json')
     const options = {
@@ -280,41 +278,8 @@ describe('generate supported integrations', () => {
       await writeSupportedIntegrations(options)
       const output = readFileSync(outputPath, 'utf8')
       assert.match(output, /^\[\n {4}\{\n {8}"dependencyName": "node:fs"/)
-      assert.strictEqual(await checkSupportedIntegrations(options), true)
-
-      writeFileSync(outputPath, '[]\n')
-      const consoleError = sinon.stub(console, 'error')
-      try {
-        assert.strictEqual(await checkSupportedIntegrations(options), false)
-        assert.match(consoleError.firstCall.args[0], /Out of date: /)
-      } finally {
-        consoleError.restore()
-      }
     } finally {
       rmSync(directory, { recursive: true, force: true })
     }
-  })
-})
-
-describe('generate supported versions workflow', () => {
-  const workflowPath = path.join(repositoryDirectory, '.github/workflows/generate-supported-versions.yml')
-  const workflowSource = readFileSync(workflowPath, 'utf8')
-  const workflow = YAML.parse(workflowSource)
-
-  it('only updates same-repository pull requests targeting master', () => {
-    assert.deepStrictEqual(workflow.on.pull_request.branches, ['master'])
-    assert.match(workflow.jobs['update-supported-versions'].if, /github\.base_ref == 'master'/)
-    assert.match(
-      workflow.jobs['update-supported-versions'].if,
-      /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/
-    )
-    assert.match(workflow.jobs['update-supported-versions'].if, /!\(startsWith\(.+?'v'\).+endsWith\(.+?'\.x'\)\)/s)
-  })
-
-  it('accepts a narrower Node.js range and only writes the JSON artifact', () => {
-    assert.strictEqual(workflow.on.workflow_dispatch.inputs['node-range'].default, '*')
-    assert.match(workflowSource, /--node-range "\$NODE_RANGE"/)
-    assert.match(workflowSource, /path: "supported_versions\.json", contents: \$json/)
-    assert.doesNotMatch(workflowSource, /supported_versions_(?:output|table)/)
   })
 })

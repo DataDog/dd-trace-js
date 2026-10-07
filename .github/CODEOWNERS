@@ -359,7 +359,6 @@
 /scripts/helpers/test-file-index.spec.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.js @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 /scripts/verify-exercised-tests.spec.mjs @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
-/supported_versions.json @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/dd-trace-js @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
@@ -401,7 +400,6 @@
 /.github/workflows/update-3rdparty-licenses.yml @DataDog/dd-trace-js @DataDog/lang-platform-js @dd-octo-sts
 
 /.github/workflows/apm-capabilities.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
-/.github/workflows/generate-supported-versions.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
 /.github/workflows/eslint-rules.yml @DataDog/dd-trace-js @DataDog/apm-sdk-capabilities-js @dd-octo-sts
 /.github/workflows/apm-integrations.yml @DataDog/dd-trace-js @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/aiguard.yml @DataDog/dd-trace-js @DataDog/asm-js @dd-octo-sts
