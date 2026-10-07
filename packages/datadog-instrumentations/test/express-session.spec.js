@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert')
-const axios = require('axios')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const httpRequest = require('../../dd-trace/test/setup/helpers/http-client')
 
 withVersions('express-session', 'express-session', version => {
   describe('express-session instrumentation', () => {
@@ -63,7 +63,7 @@ withVersions('express-session', 'express-session', version => {
     it('should not do anything when there are no subscribers', async () => {
       sessionMiddlewareCh.unsubscribe(subscriberStub)
 
-      const res = await axios.get(`http://localhost:${port}/`)
+      const res = await httpRequest.get(`http://localhost:${port}/`)
 
       assert.equal(res.data, 'OK')
       sinon.assert.notCalled(subscriberStub)
@@ -75,7 +75,7 @@ withVersions('express-session', 'express-session', version => {
         assert.equal(sessionId, 'sid_123')
       })
 
-      const res = await axios.get(`http://localhost:${port}/`)
+      const res = await httpRequest.get(`http://localhost:${port}/`)
 
       assert.equal(res.data, 'OK')
       sinon.assert.calledOnce(subscriberStub)
@@ -88,7 +88,7 @@ withVersions('express-session', 'express-session', version => {
         abortController.abort()
       })
 
-      const res = await axios.get(`http://localhost:${port}/`)
+      const res = await httpRequest.get(`http://localhost:${port}/`)
 
       assert.equal(res.data, 'BLOCKED')
       sinon.assert.calledOnce(subscriberStub)

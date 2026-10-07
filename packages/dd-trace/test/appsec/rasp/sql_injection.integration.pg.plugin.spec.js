@@ -4,12 +4,12 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
+const HttpRequest = require('../../setup/helpers/http-client')
 // These test are here and not in the integration tests
 // because they require postgres instance
 describe('RASP - sql_injection - integration', () => {
-  let axios, cwd, appFile, agent, proc
+  let httpRequest, cwd, appFile, agent, proc
 
   useSandbox(
     ['express', 'pg'],
@@ -32,7 +32,7 @@ describe('RASP - sql_injection - integration', () => {
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
       },
     })
-    axios = Axios.create({ baseURL: proc.url })
+    httpRequest = HttpRequest.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -42,7 +42,7 @@ describe('RASP - sql_injection - integration', () => {
 
   it('should block using pg.Client and unhandled promise', async () => {
     try {
-      await axios.get('/sqli/client/uncaught-promise?param=\' OR 1 = 1 --')
+      await httpRequest.get('/sqli/client/uncaught-promise?param=\' OR 1 = 1 --')
     } catch (e) {
       if (!e.response) {
         throw e
@@ -63,7 +63,7 @@ describe('RASP - sql_injection - integration', () => {
 
   it('should block using pg.Client and unhandled query object', async () => {
     try {
-      await axios.get('/sqli/client/uncaught-query-error?param=\' OR 1 = 1 --')
+      await httpRequest.get('/sqli/client/uncaught-query-error?param=\' OR 1 = 1 --')
     } catch (e) {
       if (!e.response) {
         throw e
@@ -84,7 +84,7 @@ describe('RASP - sql_injection - integration', () => {
 
   it('should block using pg.Pool and unhandled promise', async () => {
     try {
-      await axios.get('/sqli/pool/uncaught-promise?param=\' OR 1 = 1 --')
+      await httpRequest.get('/sqli/pool/uncaught-promise?param=\' OR 1 = 1 --')
     } catch (e) {
       if (!e.response) {
         throw e
