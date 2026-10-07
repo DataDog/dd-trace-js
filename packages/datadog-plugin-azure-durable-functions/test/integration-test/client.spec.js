@@ -47,32 +47,46 @@ describe('esm', () => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
 
-        // should expect spans for http.request, activity.hola, entity.counter.add_n, entity.counter.get_count
-        assert.strictEqual(payload.length, 4)
+        // should expect spans for http.request, orchestration.testOrchestrator, activity.hola,
+        // entity.counter.add_n, entity.counter.get_count
+        assert.strictEqual(payload.length, 5)
 
         for (const maybeArray of payload) {
           assert.ok(Array.isArray(maybeArray), `Expected array, got ${inspect(maybeArray)}`)
         }
 
-        const [maybeHttpSpan, maybeHolaActivity, maybeAddNEntity, maybeGetCountEntity] = payload
+        // The orchestrator is suspended and resumed between the activity and entity calls, so the
+        // order its span is flushed in is not stable. Look traces up by resource instead.
+        const traces = new Map(payload.map(trace => [trace[0].resource, trace]))
+        const durableSpan = resource => {
+          const trace = traces.get(resource)
+          assert.ok(trace, `Expected a trace for '${resource}', got ${inspect([...traces.keys()])}`)
+          assert.strictEqual(trace.length, 1)
+          return trace[0]
+        }
 
+        const maybeHttpSpan = traces.get('GET /api/httptest')
+        assert.ok(maybeHttpSpan, `Expected a trace for 'GET /api/httptest', got ${inspect([...traces.keys()])}`)
         assert.strictEqual(maybeHttpSpan.length, 2)
-        assert.strictEqual(maybeHttpSpan[0].resource, 'GET /api/httptest')
 
-        assert.strictEqual(maybeHolaActivity.length, 1)
-        assertObjectContains(maybeHolaActivity[0], {
+        assertObjectContains(durableSpan('Orchestration testOrchestrator'), {
           name: 'azure.functions.invoke',
-          resource: 'Activity hola',
+          meta: {
+            'aas.function.trigger': 'Orchestration',
+            'aas.function.name': 'testOrchestrator',
+          },
+        })
+
+        assertObjectContains(durableSpan('Activity hola'), {
+          name: 'azure.functions.invoke',
           meta: {
             'aas.function.trigger': 'Activity',
             'aas.function.name': 'hola',
           },
         })
 
-        assert.strictEqual(maybeAddNEntity.length, 1)
-        assertObjectContains(maybeAddNEntity[0], {
+        assertObjectContains(durableSpan('Entity counter add_n'), {
           name: 'azure.functions.invoke',
-          resource: 'Entity counter add_n',
           meta: {
             'aas.function.trigger': 'Entity',
             'aas.function.name': 'counter',
@@ -80,10 +94,8 @@ describe('esm', () => {
           },
         })
 
-        assert.strictEqual(maybeGetCountEntity.length, 1)
-        assertObjectContains(maybeGetCountEntity[0], {
+        assertObjectContains(durableSpan('Entity counter get_count'), {
           name: 'azure.functions.invoke',
-          resource: 'Entity counter get_count',
           meta: {
             'aas.function.trigger': 'Entity',
             'aas.function.name': 'counter',

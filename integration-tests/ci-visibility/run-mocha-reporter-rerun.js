@@ -1,6 +1,7 @@
 'use strict'
 
-const Mocha = require('mocha')
+const MochaPackage = require('mocha')
+const Mocha = MochaPackage.default ?? MochaPackage
 
 const reporterEvent = process.env.MOCHA_REUSABLE_REPORTER_EVENT
 const runCallbackThrows = process.env.MOCHA_REUSABLE_RUN_CALLBACK_THROWS

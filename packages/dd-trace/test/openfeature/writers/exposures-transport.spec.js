@@ -1,0 +1,475 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
+
+const { describe, it, afterEach } = require('mocha')
+const nock = require('nock')
+
+require('../../setup/core')
+const { clearCache, fetchAgentInfo } = require('../../../src/agent/info')
+const request = require('../../../src/exporters/common/request')
+const ExposuresWriter = require('../../../src/openfeature/writers/exposures')
+const { setExposureDeliveryStrategy } = require('../../../src/openfeature/writers/util')
+const tracerVersion = require('../../../../../package.json').version
+const fetchInfo = promisify(fetchAgentInfo)
+const sendRequest = promisify(request)
+
+describe('OpenFeature Exposures Writer transport', () => {
+  let writer
+  let stopDeliveryStrategy
+
+  afterEach(() => {
+    writer?.destroy()
+    stopDeliveryStrategy?.()
+    clearCache()
+    nock.cleanAll()
+  })
+
+  for (const { name, status, info, enabled } of [
+    {
+      name: 'legacy EVP v2 without identity capability headers',
+      status: 200,
+      info: { endpoints: ['/evp_proxy/v4', '/evp_proxy/v2'] },
+      enabled: true,
+    },
+    { name: 'no EVP support', status: 200, info: { endpoints: [] }, enabled: false },
+    { name: 'only EVP v4', status: 200, info: { endpoints: ['/evp_proxy/v4'] }, enabled: false },
+    { name: 'missing info endpoint', status: 404, info: '', enabled: false },
+  ]) {
+    it(`gates Remote Configuration exposure sends on Agent capability: ${name}`, async () => {
+      const config = {
+        url: new URL('http://localhost:8126/agent-prefix/'),
+        site: 'datadoghq.com',
+        DD_API_KEY: 'test-api-key',
+        service: 'test-service',
+        featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'remote_config' },
+      }
+      const infoRequest = nock('http://localhost:8126').get('/agent-prefix/info').reply(status, info)
+      const deliveries = []
+      const local = nock('http://localhost:8126')
+        .post('/agent-prefix/evp_proxy/v2/api/v2/exposures')
+        .twice()
+        .reply(function (path, body) {
+          deliveries.push({ body, headers: this.req.headers })
+          return [202, '']
+        })
+      const direct = nock('https://event-platform-intake.datadoghq.com').post('/api/v2/exposures').reply(202)
+
+      writer = new ExposuresWriter(config)
+      const actualEnabled = await new Promise(resolve => {
+        stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+          writer.setEnabled(enabled, route)
+          resolve(enabled)
+        })
+      })
+      assert.strictEqual(actualEnabled, enabled)
+      infoRequest.done()
+
+      for (const id of ['customer-1', 'customer-2']) {
+        writer.append({
+          timestamp: 1672531200000,
+          allocation: { key: 'allocation' },
+          flag: { key: 'checkout' },
+          variant: { key: 'enabled' },
+          subject: { id },
+        })
+        writer.flush()
+      }
+      if (enabled) {
+        await waitFor(() => deliveries.length === 2)
+        local.done()
+        assert.deepStrictEqual(deliveries.map(({ body }) => body.exposures[0].subject.id), ['customer-1', 'customer-2'])
+        for (const { headers } of deliveries) {
+          assert.strictEqual(headers['dd-api-key'], undefined)
+          assert.strictEqual(headers['x-datadog-evp-subdomain'], 'event-platform-intake')
+          assert.strictEqual(headers['dd-evp-origin'], 'dd-trace-js')
+          assert.strictEqual(headers['dd-evp-origin-version'], tracerVersion)
+        }
+      } else {
+        await new Promise(resolve => setImmediate(resolve))
+        assert.deepStrictEqual(deliveries, [])
+      }
+      assert.strictEqual(direct.isDone(), false)
+    })
+  }
+
+  it('should use local EVP when allowed headers omit the Agent-consumed routing header', async () => {
+    const config = {
+      url: new URL('http://localhost:8126'),
+      site: 'datadoghq.com',
+      DD_API_KEY: 'test-api-key',
+      service: 'test-service',
+      featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    }
+    const infoRequest = nock('http://localhost:8126')
+      .get('/info')
+      .reply(200, {
+        endpoints: ['/evp_proxy/v4/', '/evp_proxy/v2/'],
+        evp_proxy_allowed_headers: ['DD-EVP-ORIGIN', 'dd-evp-origin-version'],
+      })
+
+    const requestReceived = new Promise((resolve, reject) => {
+      nock('http://localhost:8126', {
+        reqheaders: {
+          'content-type': 'application/json',
+          'dd-evp-origin': 'dd-trace-js',
+          'dd-evp-origin-version': tracerVersion,
+          'x-datadog-evp-subdomain': 'event-platform-intake',
+        },
+      })
+        .post('/evp_proxy/v4/api/v2/exposures')
+        .reply(202, (uri, body) => {
+          try {
+            assert.strictEqual(uri, '/evp_proxy/v4/api/v2/exposures')
+            assert.strictEqual(body.context.service, 'test-service')
+            assert.strictEqual(body.exposures.length, 1)
+            assert.strictEqual(body.exposures[0].flag.key, 'checkout')
+            resolve()
+          } catch (error) {
+            reject(error)
+          }
+          return ''
+        })
+    })
+
+    writer = new ExposuresWriter(config)
+    await new Promise((resolve, reject) => {
+      stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+        try {
+          assert.strictEqual(enabled, true)
+          assert.strictEqual(route.basePath, '/evp_proxy/v4')
+          writer.setEnabled(enabled, route)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    infoRequest.done()
+
+    writer.append({
+      timestamp: 1672531200000,
+      allocation: { key: 'allocation' },
+      flag: { key: 'checkout' },
+      variant: { key: 'enabled' },
+      subject: { id: 'customer-1' },
+    })
+    writer.flush()
+
+    await requestReceived
+  })
+
+  it('should retry direct after a local EVP 405 response', async () => {
+    const config = {
+      url: new URL('http://localhost:8126'),
+      site: 'datadoghq.com',
+      DD_API_KEY: 'test-api-key',
+      service: 'test-service',
+      featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    }
+    const infoRequest = nock('http://localhost:8126')
+      .get('/info')
+      .reply(200, {
+        endpoints: ['/evp_proxy/v4'],
+        evp_proxy_allowed_headers: ['DD-EVP-ORIGIN', 'DD-EVP-ORIGIN-VERSION'],
+      })
+    const localRequest = nock('http://localhost:8126')
+      .post('/evp_proxy/v4/api/v2/exposures')
+      .reply(405)
+
+    let directHeaders
+    const directRequestReceived = new Promise(resolve => {
+      nock('https://event-platform-intake.datadoghq.com', {
+        reqheaders: {
+          'content-type': 'application/json',
+          'dd-api-key': 'test-api-key',
+          'dd-evp-origin': 'dd-trace-js',
+          'dd-evp-origin-version': tracerVersion,
+        },
+      })
+        .post('/api/v2/exposures')
+        .reply(202, function () {
+          directHeaders = this.req.headers
+          resolve()
+          return ''
+        })
+    })
+
+    writer = new ExposuresWriter(config)
+    await new Promise((resolve, reject) => {
+      stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+        try {
+          assert.strictEqual(enabled, true)
+          assert.strictEqual(route.basePath, '/evp_proxy/v4')
+          assert.strictEqual(route.fallback.basePath, '')
+          writer.setEnabled(enabled, route)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    infoRequest.done()
+
+    writer.append({
+      timestamp: 1672531200000,
+      allocation: { key: 'allocation' },
+      flag: { key: 'checkout' },
+      variant: { key: 'enabled' },
+      subject: { id: 'customer-1' },
+    })
+    writer.flush()
+
+    await directRequestReceived
+    assert.strictEqual(directHeaders['dd-api-key'], 'test-api-key')
+    assert.strictEqual(directHeaders['x-datadog-evp-subdomain'], undefined)
+    localRequest.done()
+  })
+
+  it('should send direct when no local receiver is listening', async () => {
+    const config = {
+      url: new URL('http://127.0.0.1:9'),
+      site: 'datadoghq.com',
+      DD_API_KEY: 'test-api-key',
+      service: 'test-service',
+      featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    }
+    const infoRequest = nock('http://127.0.0.1:9')
+      .get('/info')
+      .replyWithError(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+
+    let directHeaders
+    const directRequestReceived = new Promise(resolve => {
+      nock('https://event-platform-intake.datadoghq.com', {
+        reqheaders: {
+          'content-type': 'application/json',
+          'dd-api-key': 'test-api-key',
+          'dd-evp-origin': 'dd-trace-js',
+          'dd-evp-origin-version': tracerVersion,
+        },
+      })
+        .post('/api/v2/exposures')
+        .reply(202, function () {
+          directHeaders = this.req.headers
+          resolve()
+          return ''
+        })
+    })
+
+    writer = new ExposuresWriter(config)
+    await new Promise((resolve, reject) => {
+      stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+        try {
+          assert.strictEqual(enabled, true)
+          assert.strictEqual(route.basePath, '')
+          writer.setEnabled(enabled, route)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    infoRequest.done()
+
+    writer.append({
+      timestamp: 1672531200000,
+      allocation: { key: 'allocation' },
+      flag: { key: 'checkout' },
+      variant: { key: 'enabled' },
+      subject: { id: 'customer-1' },
+    })
+    writer.flush()
+
+    await directRequestReceived
+    assert.strictEqual(directHeaders['dd-api-key'], 'test-api-key')
+    assert.strictEqual(directHeaders['dd-evp-origin'], 'dd-trace-js')
+    assert.strictEqual(directHeaders['dd-evp-origin-version'], tracerVersion)
+    assert.strictEqual(directHeaders['x-datadog-evp-subdomain'], undefined)
+  })
+
+  it('discovers the prefixed Agent despite cached root info, without leaking the API key locally', async () => {
+    const config = {
+      url: new URL('http://localhost:8126/agent-prefix/'),
+      site: 'datadoghq.com',
+      DD_API_KEY: 'test-api-key',
+      service: 'test-service',
+      featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    }
+    const rootInfo = nock('http://localhost:8126').get('/info').reply(200, { endpoints: [] })
+    await fetchInfo(config.url)
+    rootInfo.done()
+    const infoRequest = nock('http://localhost:8126')
+      .get('/agent-prefix/info')
+      .reply(200, {
+        endpoints: ['/evp_proxy/v2'],
+        evp_proxy_allowed_headers: ['DD-EVP-ORIGIN', 'DD-EVP-ORIGIN-VERSION'],
+      })
+    let localHeaders
+    const localRequest = nock('http://localhost:8126')
+      .post('/agent-prefix/evp_proxy/v2/api/v2/exposures')
+      .reply(function () {
+        localHeaders = this.req.headers
+        return [202, '']
+      })
+
+    writer = new ExposuresWriter(config)
+    await new Promise((resolve, reject) => {
+      stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+        try {
+          writer.setEnabled(enabled, route)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    infoRequest.done()
+
+    writer.append({
+      timestamp: 1672531200000,
+      allocation: { key: 'allocation' },
+      flag: { key: 'prefix' },
+      variant: { key: 'enabled' },
+      subject: { id: 'customer-1' },
+    })
+    writer.flush()
+
+    await waitFor(() => localHeaders !== undefined)
+    localRequest.done()
+    assert.strictEqual(localHeaders['dd-api-key'], undefined)
+    assert.strictEqual(localHeaders['dd-evp-origin'], 'dd-trace-js')
+    assert.strictEqual(localHeaders['dd-evp-origin-version'], tracerVersion)
+    assert.strictEqual(localHeaders['x-datadog-evp-subdomain'], 'event-platform-intake')
+  })
+
+  for (const hasCredentials of [true, false]) {
+    it(`keeps local delivery after the real request buffer fills (credentials=${hasCredentials})`, async () => {
+      const config = {
+        url: new URL('http://localhost:8126'),
+        site: 'datadoghq.com',
+        DD_API_KEY: hasCredentials ? 'test-api-key' : undefined,
+        service: 'test-service',
+        featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+      }
+      const infoRequest = nock('http://localhost:8126').get('/info').reply(200, {
+        endpoints: ['/evp_proxy/v4'],
+        evp_proxy_allowed_headers: ['DD-EVP-ORIGIN', 'DD-EVP-ORIGIN-VERSION'],
+      })
+      const updates = []
+      writer = new ExposuresWriter(config)
+      await new Promise(resolve => {
+        stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+          updates.push({ enabled, path: route?.basePath })
+          writer.setEnabled(enabled, route)
+          resolve()
+        })
+      })
+      infoRequest.done()
+
+      const deliveries = []
+      const local = nock('http://localhost:8126')
+        .post('/evp_proxy/v4/api/v2/exposures')
+        .reply((path, body) => {
+          deliveries.push(body)
+          return [202, '']
+        })
+      const direct = nock('https://event-platform-intake.datadoghq.com')
+        .post('/api/v2/exposures')
+        .reply(202)
+      const busy = nock('http://localhost:8126').post('/busy').reply(202)
+      // Reserve the real sender's entire shared budget before any HTTP response can release it.
+      const drained = sendRequest(Buffer.alloc(64 * 1024 * 1024), {
+        url: config.url,
+        path: '/busy',
+        method: 'POST',
+        retry: false,
+      })
+      const event = {
+        timestamp: 1672531200000,
+        allocation: { key: 'allocation' },
+        flag: { key: 'checkout' },
+        variant: { key: 'enabled' },
+        subject: { id: 'dropped' },
+      }
+      try {
+        assert.strictEqual(request.writable, false)
+        writer.append(event)
+        writer.flush()
+      } finally {
+        await drained
+      }
+      busy.done()
+      assert.strictEqual(request.writable, true)
+      assert.deepStrictEqual(deliveries, [])
+      assert.strictEqual(direct.isDone(), false)
+      assert.deepStrictEqual(updates, [{ enabled: true, path: '/evp_proxy/v4' }])
+
+      writer.append({ ...event, subject: { id: 'next' } })
+      writer.flush()
+      await waitFor(() => deliveries.length > 0)
+
+      local.done()
+      assert.strictEqual(deliveries.length, 1)
+      assert.deepStrictEqual(deliveries[0].exposures, [{ ...event, subject: { id: 'next' } }])
+      assert.strictEqual(direct.isDone(), false)
+    })
+  }
+
+  it('does not follow a direct-intake redirect or forward credentials to its target', async () => {
+    const config = {
+      url: new URL('http://127.0.0.1:9'),
+      site: 'datadoghq.com',
+      DD_API_KEY: 'test-api-key',
+      service: 'test-service',
+      featureFlags: { DD_FEATURE_FLAGS_CONFIGURATION_SOURCE: 'agentless' },
+    }
+    const infoRequest = nock('http://127.0.0.1:9')
+      .get('/info')
+      .replyWithError(Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }))
+    const directRequest = nock('https://event-platform-intake.datadoghq.com')
+      .post('/api/v2/exposures')
+      .reply(302, '', { location: 'https://redirected.example/api/v2/exposures' })
+    const redirectedRequest = nock('https://redirected.example')
+      .post('/api/v2/exposures')
+      .reply(202)
+
+    writer = new ExposuresWriter(config)
+    await new Promise((resolve, reject) => {
+      stopDeliveryStrategy = setExposureDeliveryStrategy(config, (enabled, route) => {
+        try {
+          writer.setEnabled(enabled, route)
+          resolve()
+        } catch (error) {
+          reject(error)
+        }
+      })
+    })
+    infoRequest.done()
+
+    writer.append({
+      timestamp: 1672531200000,
+      allocation: { key: 'allocation' },
+      flag: { key: 'redirect' },
+      variant: { key: 'enabled' },
+      subject: { id: 'customer-1' },
+    })
+    writer.flush()
+
+    await waitFor(() => directRequest.isDone())
+    directRequest.done()
+    assert.strictEqual(redirectedRequest.isDone(), false)
+  })
+})
+
+/**
+ * @param {() => boolean} predicate - Completion predicate
+ * @returns {Promise<void>}
+ */
+async function waitFor (predicate) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (predicate()) return
+    await new Promise(resolve => setImmediate(resolve))
+  }
+  assert.fail('Timed out waiting for request')
+}

@@ -31,7 +31,6 @@ const COVERAGE_COLLECTORS = new Set([
 
 /**
  * @param {string} s
- * @returns {string}
  */
 function stripOuterQuotes (s) {
   if (s.length < 2) return s
@@ -98,7 +97,6 @@ function shellSplit (s) {
 
 /**
  * @param {string} token
- * @returns {boolean}
  */
 function looksLikeFileGlob (token) {
   // We only care about globs that can match paths in the repo.
@@ -115,7 +113,6 @@ function looksLikeFileGlob (token) {
  * Converts some shell-specific patterns in scripts into a conservative file glob.
  * @param {string} raw
  * @param {{ preserveEnv?: boolean }} [opts]
- * @returns {string}
  */
 function normalizeScriptGlob (raw, opts = {}) {
   const preserveEnv = Boolean(opts.preserveEnv)
@@ -127,6 +124,7 @@ function normalizeScriptGlob (raw, opts = {}) {
   // Convert bash extglob + command substitution patterns used in this repo into plain env vars.
   // Example: @($(echo $PLUGINS)) -> $PLUGINS
   // Example: @($(echo ${SPEC:-'*'})) -> ${SPEC:-*}
+  // eslint-disable-next-line regexp/no-super-linear-backtracking -- Parses bounded repository package scripts.
   p = p.replaceAll(/@\(\$\(\s*echo\s+([^)]+?)\s*\)\)/g, '$1')
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
@@ -162,7 +160,6 @@ function normalizeScriptGlob (raw, opts = {}) {
 /**
  * @param {string} s
  * @param {Record<string, string|undefined>} env
- * @returns {string}
  */
 function expandEnvInString (s, env) {
   // ${NAME} / ${NAME:-default}
@@ -182,7 +179,6 @@ function expandEnvInString (s, env) {
 /**
  * @param {string} name
  * @param {string|undefined} value
- * @returns {string}
  */
 function formatEnvValue (name, value) {
   const val = typeof value === 'string' && value.length ? value : ''
@@ -311,7 +307,7 @@ function parseExportAssignments (run) {
   const out = {}
   const lines = String(run).split('\n')
   for (const line of lines) {
-    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)\s*$/)
+    const m = line.match(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=(.*)$/)
     if (!m) continue
     out[m[1]] = stripOuterQuotes(m[2].trim())
   }
@@ -634,7 +630,6 @@ function collectStepEvents (stepValue, repoRoot, env, visiting) {
 
 /**
  * @param {string} command
- * @returns {boolean}
  */
 function invokesCoverageCollector (command) {
   const tokens = shellSplit(command)
@@ -676,7 +671,6 @@ function findCoverageScripts (scripts, knownScripts) {
  * @param {string} command
  * @param {Set<string>} knownScripts
  * @param {Set<string>} coverageScripts
- * @returns {boolean}
  */
 function commandProducesCoverage (command, knownScripts, coverageScripts) {
   if (invokesCoverageCollector(command)) return true
@@ -714,7 +708,6 @@ function getMatrixCombinations (matrix) {
  * Expands `${{ matrix.X }}` expressions in a string using the given matrix values.
  * @param {string} s
  * @param {Record<string, string>} matrixValues
- * @returns {string}
  */
 function expandMatrixExpressions (s, matrixValues) {
   return s.replaceAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_m, name) => {
@@ -981,7 +974,6 @@ function listDdTraceCategorySpecFiles (index, category) {
 /**
  * @param {Set<string>} scriptPrefixes
  * @param {string} category
- * @returns {boolean}
  */
 function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
   const aliases = {
@@ -1172,7 +1164,6 @@ function main (repoRootArg) {
    * coverage/non-coverage definitions from each forcing their own CI step.
    *
    * @param {string} scriptName
-   * @returns {boolean}
    */
   const isInvokedOrCoverageSibling = (scriptName) => {
     if (invokedScripts.has(scriptName)) return true

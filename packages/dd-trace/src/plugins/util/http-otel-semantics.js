@@ -104,7 +104,6 @@ function toHttpScheme (scheme) {
  * `REDACTED@host`. Returns the URL unchanged when no userinfo is present.
  *
  * @param {string} url
- * @returns {string}
  */
 function redactUrlCredentials (url) {
   const schemeEnd = url.indexOf('://')

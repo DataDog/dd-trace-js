@@ -1,6 +1,8 @@
 'use strict'
 
 const { VERSION } = require('../../../../../version')
+const { SDK_OTLP_EXPORT_KEY, SDK_SEMANTICS_KEY } = require('../../constants')
+const { registerResourceAttributeRefresh } = require('../resource-attributes')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
@@ -45,6 +47,10 @@ function buildResourceAttributes (config) {
   const { service, version, env, ...filteredTags } = config.tags
   Object.assign(resourceAttributes, filteredTags)
 
+  // Tracer-owned adoption markers; set after the global tags so a user tag can't contradict them.
+  resourceAttributes[SDK_OTLP_EXPORT_KEY] = 'true'
+  resourceAttributes[SDK_SEMANTICS_KEY] = config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? 'otel' : 'datadog'
+
   if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
     resourceAttributes['_dd.stats_computed'] = 'true'
   }
@@ -59,13 +65,17 @@ function buildResourceAttributes (config) {
  * @returns {OtlpHttpTraceExporter} The OTLP HTTP/JSON exporter
  */
 function createOtlpTraceExporter (config) {
-  return new OtlpHttpTraceExporter(
+  const exporter = new OtlpHttpTraceExporter(
     config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
     buildResourceAttributes(config),
     config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   )
+
+  registerResourceAttributeRefresh(exporter, () => buildResourceAttributes(config))
+
+  return exporter
 }
 
 module.exports = {

@@ -439,7 +439,7 @@ describe('WAF Manager', () => {
             'server.request.uri.raw': 'https://testurl',
             'processor.address': { 'extract-schema': true },
           },
-        }, config.appsec.wafTimeout)
+        }, config.appsec.DD_APPSEC_WAF_TIMEOUT)
       })
 
       it('should report attack when ddwafContext returns events', () => {

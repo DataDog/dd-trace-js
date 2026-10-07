@@ -10,9 +10,12 @@ const { join } = require('path')
 const semver = require('semver')
 
 const externals = require('../packages/dd-trace/test/plugins/externals')
-const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
+const {
+  getInstrumentation,
+  getInstrumentationNames,
+} = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
-const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
+const { dependencies: latests, resolutions } = require('../packages/dd-trace/test/plugins/versions/package.json')
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const mapWithConcurrency = require('./helpers/concurrency')
@@ -57,10 +60,7 @@ async function run () {
 async function assertPrerequisites () {
   const filter = process.env.PLUGINS?.split('|')
 
-  const instrumentationFiles = await readdir(join(__dirname, '..', 'packages', 'datadog-instrumentations', 'src'))
-  const moduleNames = instrumentationFiles.filter(file => file.endsWith('.js'))
-    .map(file => file.slice(0, -3))
-    .filter(file => !filter || filter.includes(file))
+  const moduleNames = getInstrumentationNames().filter(name => !filter || filter.includes(name))
 
   const packages = collectPackages(moduleNames)
 
@@ -93,11 +93,11 @@ function collectPackages (moduleNames) {
   }
 
   /**
-   * @param {Array<{ name: string, versions?: string[], node?: string }>} instrumentations
+   * @param {Array<{ name: string, versions?: string[], node?: string, honourEnvRange?: boolean }>} instrumentations
    * @param {boolean} external
    * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
    *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
-   *   major to install on every job.
+   *   major to install on every job. An external declaration can also opt in when it is itself the sharded test target.
    */
   const addInstrumentations = (instrumentations, external, pluginName) => {
     const declarationsByName = new Map()
@@ -288,7 +288,6 @@ async function patchPeerDependencies ({ folder, externalName }) {
  *
  * @param {string} entry
  * @param {string} [parent]
- * @returns {boolean}
  */
 function isGeneratedWorkspace (entry, parent = '') {
   const workspaceName = parent ? join(parent, entry) : entry
@@ -354,6 +353,7 @@ async function assertWorkspaces () {
     version: '1.0.0',
     license: 'BSD-3-Clause',
     private: true,
+    resolutions,
     workspaces: {
       packages: [...workspaces].sort(),
     },
@@ -399,7 +399,6 @@ function addFolderToWorkspaces (name, version) {
 /**
  * @param {string|null} [name]
  * @param {string|null} [version]
- * @returns {string}
  */
 function folder (name, version) {
   return join(__dirname, '..', 'versions', basename(name, version))
@@ -408,7 +407,6 @@ function folder (name, version) {
 /**
  * @param {string|null} [name]
  * @param {string|null} [version]
- * @returns {string}
  */
 function basename (name, version) {
   return name ? (version ? `${name}@${version}` : name) : ''
@@ -418,7 +416,6 @@ function basename (name, version) {
  * @param {string|null} name
  * @param {string|null} version
  * @param {string} file
- * @returns {string}
  */
 function filename (name, version, file) {
   return join(folder(name, version), file)

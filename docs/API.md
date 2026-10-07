@@ -6,6 +6,64 @@ This is the API documentation for the Datadog JavaScript Tracer. If you are just
 
 The module exported by this library is an instance of the [Tracer](./interfaces/tracer.html) class.
 
+<h2 id="agentless-mode">Agentless mode</h2>
+
+Set `DD_AGENTLESS_ENABLED=true` to send supported telemetry directly to Datadog without a local Agent.
+Agentless mode disables features that require an Agent.
+
+Set the API key with `DD_API_KEY` or `DATADOG_API_KEY`.
+Agentless crash tracking requires this key and sends crash data directly to Datadog.
+
+Agentless mode uses the Datadog trace intake and ignores `OTEL_TRACES_EXPORTER`.
+Explicit `DD_TRACE_SAMPLE_RATE`, `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SPAN_METRICS_ENABLED`, and
+`DD_METRICS_OTEL_ENABLED` settings still apply.
+
+Agentless mode submits Bunyan, Pino, and Winston logs directly by default. During Test Optimization, it also submits
+best-effort formatted `console.warn` and `console.error` calls made with an active test, suite, or session span. Set
+`DD_AGENTLESS_LOG_SUBMISSION_ENABLED=false` to disable this behavior. Set `DD_LOGS_OTEL_ENABLED=true` to use the
+OpenTelemetry log exporter instead. Direct log submission takes precedence if both exporters are explicitly enabled.
+`DD_AGENTLESS_LOG_SUBMISSION_URL` overrides the Datadog logs intake URL.
+
+<h2 id="feature-flag-evaluation-counts">Feature Flag Evaluation Events</h2>
+
+The tracer-managed Datadog OpenFeature provider emits aggregated `flagevaluation` track EVP events by default. Set
+`DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false` to disable this collection. This setting does not disable
+flag evaluation, exposure events, span enrichment, or OpenTelemetry evaluation metrics.
+
+Privacy consent comes from `observeFullEvaluationData` in the flag configuration used for each evaluation:
+
+- Unless it is literally `true`, valid targeting keys are sent as unsalted SHA-256 hashes and evaluation context is omitted.
+  Hashing is pseudonymization, not anonymity: a predictable targeting key can still be guessed and hashed.
+- With consent, events may include the raw targeting key and a bounded, flattened evaluation-context snapshot.
+- When aggregation reaches its identity-level limits, degraded rows omit targeting keys and context even with consent.
+- Events may include approved error codes, but never free-form evaluation error messages.
+
+The background worker starts with the first evaluation batch. Partial batches are scheduled after 20 ms
+when the application event loop can run. There is no public flush API for these events. Internal flush signals and
+graceful shutdown bypass the batching delay. On Node.js `beforeExit`, shutdown attempts to drain pending evaluations
+for up to five seconds. Diagnostic counters already recorded by the worker are collected before instrumentation
+telemetry's final send; counters produced during the subsequent drain may miss that send. Delivery is best-effort:
+`process.exit()`, terminating signals, crashes, and frozen runtimes can prevent the drain and lose pending events.
+
+The worker requires its JavaScript file and dependencies to be available at runtime. Bundling `dd-trace` into a single
+file does not automatically include the worker; the Datadog esbuild plugin does not currently package it. Keep `dd-trace`
+external to the bundle with its installed package available. If the worker cannot load, `flagevaluation` track EVP events
+are disabled for that provider and a bounded warning is logged; flag evaluations and existing exposure events continue.
+
+<h2 id="llmobs-experiments">LLM Observability Experiments</h2>
+
+LLM Observability Experiments use a project name separate from the ML app name. Configure the default Experiments project when initializing the tracer:
+
+```javascript
+const tracer = require('dd-trace').init({
+  llmobs: {
+    projectName: 'experiments-project'
+  }
+})
+```
+
+The equivalent environment variable is `DD_LLMOBS_PROJECT_NAME`. If no project name is configured, Experiments uses `default-project`. The `mlApp` and `service` settings are not used as Experiments project-name fallbacks. Dataset and experiment operations can override the default with an operation-level `projectName` option, for example `experiments.createDataset(name, { projectName: 'other-project' })` or `experiments.experiment({ projectName: 'other-project', ... })`.
+
 <h2 id="auto-instrumentation">Automatic Instrumentation</h2>
 
 APM provides out-of-the-box instrumentation for many popular frameworks and libraries by using a plugin system. By default, all built-in plugins are enabled. Disabling plugins can cause unexpected side effects, so it is highly recommended to leave them enabled.
@@ -21,11 +79,13 @@ tracer.use('pg', {
 })
 ```
 
-The `langchain` and `modelcontextprotocol-sdk` integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice:
+LLM Observability integrations accept an `llmobs` option. Setting it to `false` stops LLM Observability span capture for that integration only — APM spans and distributed trace context propagation are unaffected. This is useful when another enabled integration already captures the same operation and the input/output payloads would otherwise be stored twice.
+
+The option is supported by `ai`, `anthropic`, `aws-sdk` (Bedrock Runtime only), `claude-agent-sdk`, `google-cloud-vertexai`, `google-genai`, `langchain`, `langgraph`, `modelcontextprotocol-sdk`, `openai`, and `openai-agents`.
 
 ```javascript
-// Keep APM tracing for MCP, but let LangChain own the LLM Observability spans.
-tracer.use('modelcontextprotocol-sdk', {
+// Keep APM tracing for OpenAI, but let another integration own the LLM Observability spans.
+tracer.use('openai', {
   llmobs: false
 })
 ```
@@ -47,6 +107,7 @@ tracer.use('modelcontextprotocol-sdk', {
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
 <h5 id="azure-durable-functions"></h5>
+<h5 id="browser-bunyan"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
@@ -101,6 +162,7 @@ tracer.use('modelcontextprotocol-sdk', {
 <h5 id="pg"></h5>
 <h5 id="pino"></h5>
 <h5 id="playwright"></h5>
+<h5 id="postgres"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
@@ -109,6 +171,7 @@ tracer.use('modelcontextprotocol-sdk', {
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
 <h5 id="sharedb"></h5>
+<h5 id="supabase"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
 <h5 id="vitest"></h5>
@@ -132,6 +195,7 @@ tracer.use('modelcontextprotocol-sdk', {
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
 * [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
+* [browser-bunyan](./interfaces/export_.plugins.browser_bunyan.html)
 * [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
@@ -186,6 +250,7 @@ tracer.use('modelcontextprotocol-sdk', {
 * [pg](./interfaces/export_.plugins.pg.html)
 * [pino](./interfaces/export_.plugins.pino.html)
 * [playwright](./interfaces/export_.plugins.playwright.html)
+* [postgres](./interfaces/export_.plugins.postgres.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
@@ -194,6 +259,7 @@ tracer.use('modelcontextprotocol-sdk', {
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
+* [supabase](./interfaces/export_.plugins.supabase.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
 * [vitest](./interfaces/export_.plugins.vitest.html)
@@ -271,6 +337,25 @@ async function handle () {
 ```
 
 Any error from the awaited handler will automatically be added to the span.
+
+<h3 id="recording-handled-exceptions">Recording handled exceptions</h3>
+
+Use `span.recordException()` to add a handled exception as an event without marking the span as failed.
+
+```javascript
+tracer.trace('checkout', span => {
+  try {
+    authorizePayment()
+  } catch (error) {
+    span.recordException(error, {
+      handled: true,
+      'payment.provider': 'example',
+    })
+  }
+})
+```
+
+If the exception leaves the traced callback, `tracer.trace()` records it as a span error automatically.
 
 <h3 id="tracer-wrap">tracer.wrap(name[, options], fn)</h3>
 
@@ -464,7 +549,8 @@ dd-trace-js includes experimental support for OpenTelemetry metrics, designed as
 require('dd-trace').init()
 const { metrics } = require('@opentelemetry/api')
 
-const meter = metrics.getMeter('my-service', '1.0.0')
+const meterProvider = metrics.getMeterProvider()
+const meter = meterProvider.getMeter('my-service', '1.0.0')
 
 // Counter - monotonically increasing values
 const requestCounter = meter.createCounter('http.requests', {
@@ -499,6 +585,11 @@ cpuGauge.addCallback((result) => {
 })
 ```
 
+Short-lived processes can call `meterProvider.shutdown(callback)` after the final measurement to export once more and
+stop collection. The optional callback receives `null` on success or an error on failure. This method isn't part of the
+OpenTelemetry Metrics API. In TypeScript, intersect the provider type with
+`import('dd-trace').opentelemetry.MeterProvider` to use it.
+
 #### Supported Configuration
 
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
@@ -523,6 +614,14 @@ Options can be configured as a parameter to the [init()](./interfaces/tracer.htm
 
 <h3 id="test-optimization-settings">Test Optimization settings</h3>
 
+Failure screenshot and video uploads are enabled by default for supported browser test integrations and transports.
+When `DD_TEST_FAILURE_SCREENSHOTS_ENABLED` or `DD_TEST_FAILURE_VIDEOS_ENABLED` is unset, Playwright and Cypress must
+be configured to capture the corresponding media. Explicitly setting a flag to `true` also enables its capture in
+Playwright (1.38.0 or later) and Cypress. Playwright uses `only-on-failure` screenshots and `retain-on-failure` videos
+unless the project already captures failures; existing capture options are preserved. Cypress enables
+`screenshotOnRunFailure` or `video`. Setting either flag to `false` disables that upload without modifying the
+framework's capture settings. The flags operate independently. Only automatic failure media is uploaded.
+
 Set `DD_CODE_COVERAGE_FLAGS` to a comma-separated list of flags to attach to uploaded code coverage
 reports. Whitespace around each flag is removed and empty entries are ignored. Up to 32 flags are
 accepted; if more are provided, the report is uploaded without flags.
@@ -531,6 +630,19 @@ Set `DD_TEST_EARLY_FLAKE_DETECTION_RETRY_COUNT` to a non-negative integer to ove
 Early Flake Detection retries in every supported test-duration bucket. A value of `0` disables EFD retries.
 Tests that run for at least five minutes are not retried. When the variable is unset, the backend-provided
 duration-based retry policy applies.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED=true` to enable dynamic Auto Test Retries budgets based on test
+duration, instead of the flat per-test retry limit. When enabled, the number of retries allowed for a test is
+determined by the duration of its initial attempt. Dynamic ATR uses inclusive upper bounds of 5s, 10s, 30s,
+and 5m, followed by a >5m bucket. EFD retains its exclusive upper bounds.
+Requires Auto Test Retries to be enabled by the backend.
+For Mocha, dynamic ATR requires version 8 or newer. Older supported versions use the flat retry limit.
+
+Set `DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS` to a comma-separated list of five positive integers in `[1, 20]`
+overriding the five duration-based Auto Test Retries budgets (for the 5s, 10s, 30s, 5m, and >5m buckets
+respectively). When unset, empty, or invalid, the Early Flake Detection retry settings from the backend are
+used with a minimum of one ATR retry. Local EFD retry-count overrides do not affect dynamic ATR.
+Only takes effect when `DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED` is enabled.
 
 Set `DD_TEST_MANAGEMENT_REPORT_ENABLED=false` to hide the end-of-session Test Management report from CI logs.
 The report is enabled by default. Disabling the report does not disable Test Management or change whether tests

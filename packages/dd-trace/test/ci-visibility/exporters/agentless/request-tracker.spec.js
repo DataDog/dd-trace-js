@@ -73,6 +73,16 @@ describe('Test Optimization request tracker', () => {
     assert.strictEqual(done.firstCall.args[0].code, 'ERR_DD_TEST_OPTIMIZATION_FLUSH_TIMEOUT')
   })
 
+  it('aborts pending requests at the deadline without a completion callback', () => {
+    const writer = getWriter()
+    writer._encoder.count.returns(1)
+
+    writer.flush(undefined, { deadline: Date.now() + 1000 })
+    clock.tick(1000)
+
+    assert.strictEqual(pendingRequests[0].options.signal.aborted, true)
+  })
+
   it('does not wait for a timed-out request on a later final flush', () => {
     const writer = getWriter()
     writer._encoder.count.onFirstCall().returns(1).returns(0)

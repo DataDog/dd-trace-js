@@ -23,7 +23,11 @@ const {
   PR_NUMBER,
 } = require('../../../src/plugins/util/tags')
 
-const freshConfig = () => proxyquire.noPreserveCache()('../../../src/config', {})()
+const freshConfig = () => {
+  const loadConfig = proxyquire.noPreserveCache()
+  const createConfig = loadConfig('../../../src/config', {})
+  return createConfig()
+}
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
   './git-cache': {

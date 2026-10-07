@@ -27,7 +27,6 @@ const SCENARIO_TO_GENERATED_ID = {
  * Produces the deterministic execution plan shown before live validation.
  *
  * @param {object} input plan inputs
- * @returns {string} Markdown execution plan
  */
 function formatExecutionPlan (input) {
   return formatExecutionPlanArtifacts(input).plan
@@ -104,7 +103,6 @@ function formatExecutionPlanArtifacts ({
  * @param {object|undefined} input.packageCheck installed package-load result
  * @param {string|null} input.requestedScenario selected scenario
  * @param {string[]} input.validatorArgv exact validator command
- * @returns {string} Markdown plan
  */
 function formatApprovalPlan ({
   approvalArtifacts,
@@ -449,7 +447,6 @@ function getSelectedSupportFiles (framework, selectedScenarios) {
  *
  * @param {object} framework framework entry
  * @param {object} scenario generated scenario
- * @returns {string} source
  */
 function getGeneratedSource (framework, scenario) {
   const filename = path.resolve(scenario.testIdentities[0].file)
@@ -461,7 +458,6 @@ function getGeneratedSource (framework, scenario) {
  * Returns the execution plan path.
  *
  * @param {string} out output directory
- * @returns {string} plan path
  */
 function getExecutionPlanPath (out) {
   return path.join(out, EXECUTION_PLAN_FILENAME)
@@ -472,7 +468,6 @@ function getExecutionPlanPath (out) {
  *
  * @param {object} framework framework entry
  * @param {string} root repository root
- * @returns {string} label
  */
 function getFrameworkLabel (framework, root) {
   const project = framework.project?.name || relative(root, framework.project?.root || root)
@@ -483,7 +478,6 @@ function getFrameworkLabel (framework, root) {
  * Formats a framework status.
  *
  * @param {string} status status id
- * @returns {string} status text
  */
 function formatStatus (status) {
   return {
@@ -498,7 +492,6 @@ function formatStatus (status) {
  *
  * @param {string} root repository root
  * @param {string} filename absolute path
- * @returns {string} relative display path
  */
 function relative (root, filename) {
   const value = path.relative(root, filename)
@@ -509,7 +502,6 @@ function relative (root, filename) {
  * Formats a safe Markdown code block.
  *
  * @param {string} value text
- * @returns {string} code block
  */
 function codeBlock (value) {
   return `\`\`\`text\n${plainMultiline(value).replaceAll('```', String.raw`\u0060\u0060\u0060`)}\n\`\`\``
@@ -519,7 +511,6 @@ function codeBlock (value) {
  * Formats safe inline code.
  *
  * @param {string} value text
- * @returns {string} inline code
  */
 function inline (value) {
   return `\`${plain(value).replaceAll('`', String.raw`\u0060`)}\``
@@ -529,7 +520,6 @@ function inline (value) {
  * Sanitizes one line of plan text.
  *
  * @param {unknown} value text
- * @returns {string} safe text
  */
 function plain (value) {
   return sanitizeString(String(value ?? '')).replaceAll(/\p{Cc}+/gu, ' ').trim()
@@ -539,7 +529,6 @@ function plain (value) {
  * Sanitizes multiline plan text.
  *
  * @param {unknown} value text
- * @returns {string} safe text
  */
 function plainMultiline (value) {
   return sanitizeString(String(value ?? '')).replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim()

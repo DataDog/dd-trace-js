@@ -5,15 +5,25 @@ const { afterEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const log = require('../../../src/log')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+} = require('../../../src/llmobs/experiments/evaluator')
 
 const {
+  buildTags,
   durationNs,
+  generateRunId,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  recordTagsToObject,
   timestampMs,
   validateEvaluatorName,
+  validateTagsList,
 } = require('../../../src/llmobs/experiments/util')
 
 describe('LLMObs Experiments util', () => {
@@ -21,13 +31,45 @@ describe('LLMObs Experiments util', () => {
     sinon.restore()
   })
 
+  it('generates UUID run ids', () => {
+    const first = generateRunId()
+    const second = generateRunId()
+
+    assert.match(first, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.match(second, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    assert.notEqual(first, second)
+  })
+
   it('validates evaluator names against the backend contract', () => {
     validateEvaluatorName('ok_Name-1')
 
     assert.throws(() => validateEvaluatorName('bad name'), /invalid/)
     assert.throws(() => validateEvaluatorName('bad.name'), /invalid/)
+    assert.throws(() => validateEvaluatorName('__proto__'), /reserved/)
     assert.throws(() => validateEvaluatorName(''), /empty/)
     assert.throws(() => validateEvaluatorName(1), /must be a string/)
+  })
+
+  it('requires base evaluator subclasses to implement evaluate', () => {
+    assert.throws(() => new BaseEvaluator().evaluate({}), /BaseEvaluator subclasses must implement evaluate/)
+    assert.throws(() => new BaseSummaryEvaluator().evaluate({}), /BaseSummaryEvaluator subclasses must implement evaluate/)
+  })
+
+  it('preserves JSON object values in evaluator results', () => {
+    const value = { value: 1, unit: 'ms' }
+
+    const result = new EvaluatorResult(value)
+    const richResult = new EvaluatorResult(value, { reasoning: 'Latency measurement' })
+
+    assert.strictEqual(result.value, value)
+    assert.strictEqual(richResult.value, value)
+    assert.equal(richResult.reasoning, 'Latency measurement')
+  })
+
+  it('validates multi-evaluator result values', () => {
+    assert.throws(() => new MultiEvaluatorResult(null), /must be an object/)
+    assert.throws(() => new MultiEvaluatorResult([]), /must be an object/)
+    assert.throws(() => new MultiEvaluatorResult(JSON.parse('{"__proto__":true}'), false), /reserved/)
   })
 
   it('normalizes evaluator maps and arrays', () => {
@@ -37,6 +79,19 @@ describe('LLMObs Experiments util', () => {
     assert.deepEqual(normalizeEvaluators([namedEvaluator], 'summary'), [['namedEvaluator', namedEvaluator]])
     assert.throws(() => normalizeEvaluators({ 'bad.name': namedEvaluator }, 'row'), /invalid/)
     assert.throws(() => normalizeEvaluators([true], 'summary'), /summary evaluator must be a function/)
+  })
+
+  it('normalizes class evaluator instances by their configured names', () => {
+    class RowEvaluator extends BaseEvaluator {}
+    class SummaryEvaluator extends BaseSummaryEvaluator {}
+
+    const row = new RowEvaluator('row-check')
+    const summary = new SummaryEvaluator()
+
+    assert.deepEqual(normalizeEvaluators([row], 'row'), [['row-check', row]])
+    assert.deepEqual(normalizeEvaluators([summary], 'summary'), [['SummaryEvaluator', summary]])
+    assert.throws(() => normalizeEvaluators([summary], 'row'), /row evaluator must be a function or a BaseEvaluator/)
+    assert.throws(() => normalizeEvaluators([row], 'summary'), /summary evaluator must be a function or a BaseSummaryEvaluator/)
   })
 
   it('warns and keeps the last array evaluator when inferred names collide', () => {
@@ -61,6 +116,34 @@ describe('LLMObs Experiments util', () => {
     })
     assert.deepEqual(mergeTags(undefined, { tag: 'value' }), { tag: 'value' })
     assert.deepEqual(mergeTags({ tag: 'value' }, undefined), { tag: 'value' })
+  })
+
+  it('preserves repeated record tag keys in object and wire representations', () => {
+    const recordTags = ['topic:math', 'topic:logic', 'source:test']
+
+    assert.deepEqual(recordTagsToObject(recordTags), {
+      topic: ['math', 'logic'],
+      source: 'test',
+    })
+    assert.deepEqual(buildTags(recordTagsToObject(recordTags), { experiment_id: 'exp' }), [
+      'topic:math',
+      'topic:logic',
+      'source:test',
+      'experiment_id:exp',
+    ])
+  })
+
+  it('preserves record tags that collide with object prototype keys', () => {
+    const tags = recordTagsToObject(['toString:value', '__proto__:prototype', 'constructor:class'])
+
+    assert.equal(tags.toString, 'value')
+    assert.equal(Object.getOwnPropertyDescriptor(tags, '__proto__').value, 'prototype')
+    assert.equal(tags.constructor, 'class')
+    assert.equal(Object.hasOwn(tags, '__proto__'), true)
+  })
+
+  it('rejects record tags without a key', () => {
+    assert.throws(() => validateTagsList([':value']), /malformed/)
   })
 
   it('infers metric types with a normalized JSON fallback', () => {

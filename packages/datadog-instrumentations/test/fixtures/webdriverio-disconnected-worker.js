@@ -18,8 +18,12 @@ const existingMochaHookCount = instrumentations.mocha?.length || 0
 require('../../src/mocha/worker')
 
 const webdriverioMochaHooks = instrumentations.mocha.slice(existingMochaHookCount)
-const mochaHook = webdriverioMochaHooks.find(({ file }) => file === 'lib/mocha.js')
-const runnerHook = webdriverioMochaHooks.find(({ file }) => file === 'lib/runner.js')
+const mochaHook = webdriverioMochaHooks.find(
+  ({ filePattern }) => filePattern === String.raw`lib/mocha\.(?:c?js)$`
+)
+const runnerHook = webdriverioMochaHooks.find(
+  ({ filePattern }) => filePattern === String.raw`lib/runner\.(?:c?js)$`
+)
 
 assert.ok(mochaHook)
 assert.ok(runnerHook)
@@ -39,7 +43,6 @@ workerConfigurationCh.subscribe(onWorkerConfiguration)
 /**
  * Exercises worker-ready and suite-finish messages.
  *
- * @returns {void}
  */
 function exerciseWorkerMessages () {
   class FakeMocha {
@@ -68,14 +71,8 @@ function exerciseWorkerMessages () {
       }
     }
 
-    /**
-     * @returns {void}
-     */
     runTests () {}
 
-    /**
-     * @returns {void}
-     */
     run () {
       this.emit('fail', { file: 'hook-fail.e2e.js', type: 'hook' })
       this.emit('end')

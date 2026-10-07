@@ -1,5 +1,8 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
+const log = require('../../log')
 const { oomExportStrategies, ensureOOMExportStrategies, strategiesToCallbackMode, buildExportCommand } =
   require('../oom')
 const { encodeProfileAsync, getThreadLabels } = require('./shared')
@@ -11,10 +14,12 @@ const { encodeProfileAsync, getThreadLabels } = require('./shared')
  */
 
 const STACK_DEPTH = 64
+const identityRefreshChannel = channel('datadog:identity:refresh')
 
 class NativeSpaceProfiler {
   #config
   #exporters
+  #identityRefreshListener
   #mapper
   #pprof
   #samplingInterval
@@ -39,20 +44,36 @@ class NativeSpaceProfiler {
   start ({ mapper, nearOOMCallback } = {}) {
     if (this.#started) return
 
-    const config = this.#config
     this.#mapper = mapper
     this.#pprof = require('@datadog/pprof')
-    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH, config.DD_PROFILING_ALLOCATION_ENABLED)
-    if (config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED) {
+    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH, this.#config.DD_PROFILING_ALLOCATION_ENABLED)
+
+    if (this.#config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED) {
+      const config = this.#config
       const strategies = ensureOOMExportStrategies(config.DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES)
-      this.#pprof.heap.monitorOutOfMemory(
-        config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
-        config.DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
-        strategies.includes(oomExportStrategies.LOGS),
-        strategies.includes(oomExportStrategies.PROCESS) ? buildExportCommand(this.#exporters, this.#tags) : [],
-        (profile) => nearOOMCallback(this.type, this.#pprof.encodeSync(profile), this.getInfo()),
-        strategiesToCallbackMode(strategies, this.#pprof.heap.CallbackMode)
-      )
+      const monitorOutOfMemory = () => {
+        this.#pprof.heap.monitorOutOfMemory(
+          config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+          config.DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+          strategies.includes(oomExportStrategies.LOGS),
+          strategies.includes(oomExportStrategies.PROCESS) ? buildExportCommand(this.#exporters, this.#tags) : [],
+          (profile) => nearOOMCallback(this.type, this.#pprof.encodeSync(profile), this.getInfo()),
+          strategiesToCallbackMode(strategies, this.#pprof.heap.CallbackMode)
+        )
+      }
+      monitorOutOfMemory()
+
+      if (strategies.includes(oomExportStrategies.PROCESS)) {
+        this.#identityRefreshListener = () => {
+          try {
+            Object.assign(this.#tags, config.tags)
+            monitorOutOfMemory()
+          } catch (error) {
+            log.error(error)
+          }
+        }
+        identityRefreshChannel.subscribe(this.#identityRefreshListener)
+      }
     }
 
     this.#started = true
@@ -66,9 +87,7 @@ class NativeSpaceProfiler {
     return profile
   }
 
-  getInfo () {
-    return {}
-  }
+  getInfo () {}
 
   encode (profile) {
     return encodeProfileAsync(profile)
@@ -76,6 +95,12 @@ class NativeSpaceProfiler {
 
   stop () {
     if (!this.#started) return
+
+    if (this.#identityRefreshListener !== undefined) {
+      identityRefreshChannel.unsubscribe(this.#identityRefreshListener)
+      this.#identityRefreshListener = undefined
+    }
+
     this.#pprof.heap.stop()
     this.#started = false
   }

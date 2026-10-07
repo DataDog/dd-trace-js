@@ -8,7 +8,6 @@ const MAX_PREFIX_LENGTH = 72
  * Maps an arbitrary manifest identifier to a bounded, portable, collision-resistant path segment.
  *
  * @param {string} value original identifier
- * @returns {string} artifact path segment
  */
 function getArtifactId (value) {
   const source = String(value)

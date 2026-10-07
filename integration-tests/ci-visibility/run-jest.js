@@ -40,6 +40,9 @@ function getJestRunArgs (options) {
   if (options.randomize) {
     args.push('--randomize', `--seed=${options.seed}`, '--showSeed')
   }
+  if (options.testSequencer) {
+    args.push('--testSequencer', options.testSequencer)
+  }
 
   return args
 }
@@ -67,6 +70,10 @@ if (process.env.USE_WORKER_THREADS) {
   delete options.runInBand
   options.maxWorkers = 2
   options.workerThreads = true
+}
+
+if (process.env.CUSTOM_REPORTER) {
+  options.reporters = [process.env.CUSTOM_REPORTER]
 }
 
 if (process.env.OLD_RUNNER) {
@@ -122,16 +129,18 @@ if (process.env.JEST_TEST_NAME_PATTERN) {
   options.testNamePattern = process.env.JEST_TEST_NAME_PATTERN
 }
 
+if (process.env.TEST_SEQUENCER) {
+  options.testSequencer = process.env.TEST_SEQUENCER
+}
+
 if (process.env.USE_JEST_RUN) {
   jest.run(getJestRunArgs(options)).catch((error) => {
     // eslint-disable-next-line no-console
     console.error(error)
   })
 } else {
-  jest.runCLI(
-    options,
-    options.projects
-  ).then((results) => {
+  const runJest = () => jest.runCLI(options, options.projects)
+  const handleResults = (results) => {
     if (process.send) {
       process.send('finished')
     }
@@ -139,5 +148,17 @@ if (process.env.USE_JEST_RUN) {
       const exitCode = results.results.success ? 0 : 1
       process.exit(exitCode)
     }
-  })
+  }
+
+  let runPromise = runJest()
+  if (process.env.RUN_JEST_TWICE) {
+    runPromise = runPromise.then(() => {
+      process.env.JEST_RUN_INDEX = '2'
+      if (process.env.DYNAMIC_ATR_SECOND_BUCKETS) {
+        process.env.DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS = process.env.DYNAMIC_ATR_SECOND_BUCKETS
+      }
+      return runJest()
+    })
+  }
+  runPromise.then(handleResults)
 }

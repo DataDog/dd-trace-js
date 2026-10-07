@@ -156,6 +156,13 @@ const storage = {
         return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'pg' })
       },
     },
+    postgres: {
+      opName: () => 'postgres.query',
+      serviceName: withSuffixFunction('postgres'),
+      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
+        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'postgres' })
+      },
+    },
     prisma: {
       opName: ({ operation }) => `prisma.${operation}`,
       serviceName: withSuffixFunction('prisma'),

@@ -27,8 +27,6 @@ addHook({ name: 'net' }, (net) => {
     }
 
     const options = getOptions(args)
-    const lastIndex = args.length - 1
-    const callback = args[lastIndex]
 
     if (!options) return connect.apply(this, args)
 
@@ -38,42 +36,39 @@ addHook({ name: 'net' }, (net) => {
     const errorCh = protocol === 'ipc' ? errorICPCh : errorTCPCh
     const ctx = { options }
 
-    if (typeof callback === 'function') {
-      args[lastIndex] = function (...args) {
-        return finishCh.runStores(ctx, callback, this, ...args)
-      }
-    }
-
     return startCh.runStores(ctx, () => {
-      setupListeners(this, protocol, ctx, finishCh, errorCh)
+      const cleanup = setupListeners(this, protocol, ctx, finishCh, errorCh)
 
-      const emit = this.emit
+      const originalEmit = this.emit
       let pendingReadyEvents = 2
       // Named `emit`/arity-1 mirrors the socket method so the per-socket wrap
       // skips its name/length rewrite.
-      this.emit = shimmer.wrapFunction(emit, originalEmit => function emit (eventName) {
+      this.emit = shimmer.wrapFunction(originalEmit, wrappedEmit => function emit (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
             if (--pendingReadyEvents === 0) this.emit = originalEmit
             return readyCh.runStores(ctx, () => {
-              return Reflect.apply(originalEmit, this, arguments)
+              return Reflect.apply(wrappedEmit, this, arguments)
             })
           case 'error':
           case 'close':
             this.emit = originalEmit
-            return Reflect.apply(originalEmit, this, arguments)
+            return Reflect.apply(wrappedEmit, this, arguments)
           default:
-            return Reflect.apply(originalEmit, this, arguments)
+            return Reflect.apply(wrappedEmit, this, arguments)
         }
       })
 
       try {
         return connect.apply(this, args)
-      } catch (err) {
-        errorCh.publish(err)
+      } catch (error) {
+        cleanup()
+        this.emit = originalEmit
+        errorCh.publish(error)
+        finishCh.runStores(ctx, () => {})
 
-        throw err
+        throw error
       }
     })
   })
@@ -142,4 +137,6 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
   for (const event of events) {
     socket.once(event, wrapListener)
   }
+
+  return cleanupOtherListeners
 }

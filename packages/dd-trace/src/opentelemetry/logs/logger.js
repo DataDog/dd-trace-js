@@ -112,7 +112,6 @@ class Logger {
    * Emits a log record.
    *
    * @param {LogRecord} logRecord - The log record to emit
-   * @returns {void}
    */
   emit (logRecord) {
     if (this.loggerProvider.isShutdown || !this.loggerProvider.processor) {

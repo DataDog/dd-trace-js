@@ -3,24 +3,6 @@
 module.exports = {
   /**
    * @constant
-   * @type {string} Base path for EVP proxy agent endpoint
-   */
-  EVP_PROXY_AGENT_BASE_PATH: '/evp_proxy/v2/',
-
-  /**
-   * @constant
-   * @type {string} HTTP header name for EVP subdomain routing
-   */
-  EVP_SUBDOMAIN_HEADER_NAME: 'X-Datadog-EVP-Subdomain',
-
-  /**
-   * @constant
-   * @type {string} EVP subdomain value for event platform intake
-   */
-  EVP_SUBDOMAIN_VALUE: 'event-platform-intake',
-
-  /**
-   * @constant
    * @type {string} API endpoint for exposure events EVP track
    */
   EXPOSURES_ENDPOINT: '/api/v2/exposures',
@@ -36,6 +18,16 @@ module.exports = {
    * @type {number} Maximum individual event size (999KB, actual limit is 1MB)
    */
   EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024,
+
+  FLAG_EVALUATION_ENDPOINT: '/api/v2/flagevaluation',
+  FLAG_EVALUATION_FLUSH_INTERVAL: 10_000,
+  FLAG_EVALUATION_QUEUE_CAP: 4096,
+  FLAG_EVALUATION_GLOBAL_CAP: 131_072,
+  FLAG_EVALUATION_PER_FLAG_CAP: 10_000,
+  FLAG_EVALUATION_DEGRADED_CAP: 32_768,
+
+  // ECMAScript Date's maximum absolute time value, in milliseconds.
+  MAX_EVALUATION_TIMESTAMP_MS: 8_640_000_000_000_000,
 
   /**
    * @constant

@@ -1,11 +1,11 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const Module = require('node:module')
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
-const { describe, it, before, beforeEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 require('./setup/core')
 const Hook = require('../src/ritm')
@@ -51,6 +51,57 @@ describe('Ritm', () => {
 
     moduleLoadStartChannel.subscribe(startListener)
     moduleLoadEndChannel.subscribe(endListener)
+  })
+
+  afterEach(() => {
+    moduleLoadStartChannel.unsubscribe(startListener)
+    moduleLoadEndChannel.unsubscribe(endListener)
+  })
+
+  it('balances nested failed loads, preserves thrown values, and instruments a successful retry', () => {
+    const state = require('./ritm-tests/module-load-state')
+    const events = []
+    const start = payload => events.push(['start', payload.filename])
+    const end = payload => events.push(['end', payload.filename, Object.hasOwn(payload, 'module')])
+    const onRequire = sinon.spy(exports => ({ ...exports, patched: true }))
+    const hook = Hook(['./ritm-tests/module-load-parent'], onRequire)
+    moduleLoadStartChannel.subscribe(start)
+    moduleLoadEndChannel.subscribe(end)
+    try {
+      for (const failure of [new Error('module evaluation failed'), undefined]) {
+        events.length = 0
+        state.load = () => { throw failure }
+        let threw = false
+        try {
+          require('./ritm-tests/module-load-parent')
+        } catch (error) {
+          threw = true
+          assert.equal(error, failure)
+        }
+        assert.equal(threw, true)
+        const stack = []
+        for (const [kind, filename] of events) {
+          if (kind === 'start') stack.push(filename)
+          else assert.equal(stack.pop(), filename)
+        }
+        assert.deepEqual(stack, [])
+        for (const basename of ['module-load-parent.js', 'module-load-retry.js']) {
+          const matching = events.filter(([, filename]) => filename.endsWith(basename))
+          assert.deepEqual(matching.map(([kind, , hasModule]) => [kind, hasModule]), [
+            ['start', undefined], ['end', false],
+          ])
+        }
+        assert.equal(onRequire.callCount, 0)
+      }
+      state.load = () => ({ loaded: true })
+      assert.deepEqual(require('./ritm-tests/module-load-parent'), { loaded: true, patched: true })
+      assert.equal(onRequire.callCount, 1)
+    } finally {
+      state.load = () => ({ loaded: true })
+      moduleLoadStartChannel.unsubscribe(start)
+      moduleLoadEndChannel.unsubscribe(end)
+      hook.unhook()
+    }
   })
 
   it('should shim util', () => {
@@ -148,5 +199,38 @@ describe('Ritm', () => {
         delete require.cache[prefixedKey]
       }
     }
+  })
+
+  describe('unhook', () => {
+    /** @param {Record<string, unknown>} exports */
+    function markPatched (exports) {
+      exports.patched = true
+      return exports
+    }
+
+    it('removes the hook and leaves unrelated registrations intact', () => {
+      Hook(['./ritm-tests/module-sibling'], markPatched)
+      const hook = Hook(['./ritm-tests/module-unhooked'], markPatched)
+
+      hook.unhook()
+      hook.unhook()
+
+      assert.equal(require('./ritm-tests/module-unhooked').patched, undefined)
+      assert.equal(require('./ritm-tests/module-sibling').patched, true)
+    })
+
+    it('keeps the hooks a module still has registered', () => {
+      const hook = Hook(['./ritm-tests/module-partially-unhooked'], markPatched)
+      Hook(['./ritm-tests/module-partially-unhooked'], (exports) => {
+        exports.kept = true
+        return exports
+      })
+
+      hook.unhook()
+
+      const patchedModule = require('./ritm-tests/module-partially-unhooked')
+      assert.equal(patchedModule.patched, undefined)
+      assert.equal(patchedModule.kept, true)
+    })
   })
 })

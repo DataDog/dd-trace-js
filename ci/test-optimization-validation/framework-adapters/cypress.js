@@ -11,7 +11,6 @@ const TEST_FILE_PATTERN = /(?:\.cy\.[cm]?[jt]sx?|\.(?:spec|test)\.[cm]?[jt]sx?)$
  * @param {string} filename candidate filename
  * @param {string} directory candidate parent directory
  * @param {string} projectRoot detected project root
- * @returns {boolean} whether the candidate can be selected by Cypress
  */
 function isTestFile (filename, directory, projectRoot) {
   if (/\.cy\.[cm]?[jt]sx?$/.test(filename)) return true
@@ -25,7 +24,6 @@ function isTestFile (filename, directory, projectRoot) {
  * Returns the complete suffix that a generated Cypress spec must preserve.
  *
  * @param {string} filename representative Cypress spec
- * @returns {string} generated spec suffix
  */
 function getTestExtension (filename) {
   return TEST_FILE_PATTERN.exec(path.basename(filename))?.[0] || '.cy.js'
@@ -37,23 +35,20 @@ function getTestExtension (filename) {
  * @param {object} input generated source input
  * @param {string} input.scenarioId generated scenario id
  * @param {string} input.testName generated test name
- * @returns {string} canonical generated Cypress source
  */
 function getGeneratedTestContent ({ scenarioId, testName }) {
-  const lines = []
+  let content = ''
   if (scenarioId === 'atr-fail-once') {
-    lines.push('let attempt = 0', '')
+    content = 'let attempt = 0\n\n'
   }
-  lines.push(
-    "describe('dd-test-optimization-validation', () => {",
-    `  it(${JSON.stringify(testName)}, () => {`,
-    scenarioId === 'atr-fail-once'
-      ? '    expect(attempt++).to.equal(1)'
-      : '    expect(true).to.equal(true)',
-    '  })',
+  content += "describe('dd-test-optimization-validation', () => {\n" +
+    `  it(${JSON.stringify(testName)}, () => {\n` +
+    (scenarioId === 'atr-fail-once'
+      ? '    expect(attempt++).to.equal(1)\n'
+      : '    expect(true).to.equal(true)\n') +
+    '  })\n' +
     '})'
-  )
-  return lines.join('\n')
+  return content
 }
 
 /**

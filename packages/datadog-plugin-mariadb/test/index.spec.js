@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const dc = require('node:diagnostics_channel')
 const net = require('node:net')
-const { performance } = require('node:perf_hooks')
 const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
@@ -15,6 +14,7 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
+const { withFakeNow, withoutImmediateClockRead } = require('./helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
@@ -51,21 +51,6 @@ async function getClosedPort () {
   const port = probe.address().port
   await new Promise(resolve => probe.close(resolve))
   return port
-}
-
-/**
- * @param {number} start
- * @param {(advanceTo: (value: number) => void) => Promise<unknown>} run
- * @returns {Promise<void>}
- */
-async function withFakeNow (start, run) {
-  const nowStub = sinon.stub(performance, 'now').returns(start)
-
-  try {
-    await run(value => nowStub.returns(value))
-  } finally {
-    nowStub.restore()
-  }
 }
 
 describe('Plugin', () => {
@@ -907,16 +892,12 @@ describe('Plugin', () => {
                 const tracePromise = agent.assertSomeTraces(traces => {
                   assert.strictEqual(traces[0][0].metrics['mariadb.pool.wait_time'], 0)
                 }, { spanResourceMatch: /^SELECT 12 AS recent_idle_probe$/ })
-                const nowStub = sinon.stub(performance, 'now').returns(100)
 
-                try {
-                  const queryPromise = recentPool.query('SELECT 12 AS recent_idle_probe')
+                const queryPromise = withoutImmediateClockRead(() => {
+                  return recentPool.query('SELECT 12 AS recent_idle_probe')
+                })
 
-                  sinon.assert.notCalled(nowStub)
-                  await Promise.all([tracePromise, queryPromise])
-                } finally {
-                  nowStub.restore()
-                }
+                await Promise.all([tracePromise, queryPromise])
               } finally {
                 await recentPool.end()
               }
@@ -959,15 +940,10 @@ describe('Plugin', () => {
 
               try {
                 await batchPool.query('CREATE TEMPORARY TABLE dd_batch_probe (value INT)')
-                const nowStub = sinon.stub(performance, 'now').returns(100)
 
-                try {
-                  await batchPool.batch('INSERT INTO dd_batch_probe VALUES (?)', [[1], [2]])
-
-                  sinon.assert.notCalled(nowStub)
-                } finally {
-                  nowStub.restore()
-                }
+                await withoutImmediateClockRead(() => {
+                  return batchPool.batch('INSERT INTO dd_batch_probe VALUES (?)', [[1], [2]])
+                })
               } finally {
                 await batchPool.end()
               }
@@ -1021,19 +997,14 @@ describe('Plugin', () => {
               it('does not time a sibling batch as a pool query acquire', async () => {
                 let nestedBatch
                 batchPool.once('acquire', () => {
-                  nestedBatch = batchPool.batch('INSERT INTO dd_reentrant_batch_probe VALUES (?)', [[1]])
+                  nestedBatch = withoutImmediateClockRead(() => {
+                    return batchPool.batch('INSERT INTO dd_reentrant_batch_probe VALUES (?)', [[1]])
+                  })
                 })
-                const nowStub = sinon.stub(performance, 'now').returns(100)
 
-                try {
-                  await batchPool.query('SELECT 15 AS reentrant_batch_probe')
-                  assert.ok(nestedBatch, 'nested batch did not start')
-                  await nestedBatch
-
-                  sinon.assert.notCalled(nowStub)
-                } finally {
-                  nowStub.restore()
-                }
+                await batchPool.query('SELECT 15 AS reentrant_batch_probe')
+                assert.ok(nestedBatch, 'nested batch did not start')
+                await nestedBatch
               })
             })
 

@@ -88,6 +88,31 @@ module.exports = [
     },
     channelName: 'resolveLanguageModel',
   },
+  // AI SDK v7 filters runtime context from tracing channel events unless each key is included.
+  {
+    module: {
+      name: 'ai',
+      versionRange: '>=7.0.0',
+      filePath: 'dist/index.js',
+    },
+    functionQuery: {
+      functionName: 'generateText',
+      kind: 'Async',
+    },
+    channelName: 'includeRuntimeContext',
+  },
+  {
+    module: {
+      name: 'ai',
+      versionRange: '>=7.0.0',
+      filePath: 'dist/index.js',
+    },
+    functionQuery: {
+      functionName: 'streamText',
+      kind: 'Sync',
+    },
+    channelName: 'includeRuntimeContext',
+  },
   {
     module: {
       name: 'ai',
@@ -99,30 +124,5 @@ module.exports = [
       kind: 'Sync',
     },
     channelName: 'resolveLanguageModel',
-  },
-  // tool
-  {
-    module: {
-      name: 'ai',
-      versionRange: '>=4.0.0 <7.0.0',
-      filePath: 'dist/index.js',
-    },
-    functionQuery: {
-      functionName: 'tool',
-      kind: 'Sync',
-    },
-    channelName: 'tool',
-  },
-  {
-    module: {
-      name: 'ai',
-      versionRange: '>=4.0.0 <7.0.0',
-      filePath: 'dist/index.mjs',
-    },
-    functionQuery: {
-      functionName: 'tool',
-      kind: 'Sync',
-    },
-    channelName: 'tool',
   },
 ]

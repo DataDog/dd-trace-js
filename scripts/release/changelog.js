@@ -12,9 +12,8 @@ const CONVENTIONAL_PATTERN = new RegExp(
   '^(?:(revert)(!)?: )?' +
     String.raw`(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(?:\(([^)]+)\))?(!)?: (.+)$`
 )
-const PULL_REQUEST_PATTERN = /\s+\(#([0-9]+)\)$/
+const PULL_REQUEST_PATTERN = /([ \t])\(#([0-9]+)\)$/
 const REFERENCE_PATTERN = /#([0-9]+)/g
-const MARKDOWN_PUNCTUATION_PATTERN = /[\x21-\x2F\x3A-\x40\x5B-\x60\x7B-\x7E]/g
 const GITHUB_URL = 'https://github.com'
 const REPO_URL = `${GITHUB_URL}/DataDog/dd-trace-js`
 const UNCATEGORIZED_PRODUCT = 'Other'
@@ -260,7 +259,6 @@ function parseChange (entry, options = {}) {
 /**
  * @param {string[]} paths
  * @param {ChangedFile[]} changedFiles
- * @returns {void}
  */
 function appendChangedPaths (paths, changedFiles) {
   for (const file of changedFiles) {
@@ -291,12 +289,14 @@ function isInternalOnly (files) {
 /**
  * @param {Map<string, Contributor>} contributors
  * @param {Contributor[]} additions
- * @returns {void}
  */
 function addContributors (contributors, additions) {
   for (const contributor of additions) {
     const identity = contributor.login?.toLowerCase() ?? contributor.name.toLowerCase()
-    if (!contributors.has(identity)) contributors.set(identity, contributor)
+    const existing = contributors.get(identity)
+    if (existing === undefined || (existing.login === undefined && contributor.login !== undefined)) {
+      contributors.set(identity, contributor)
+    }
   }
 }
 
@@ -340,9 +340,12 @@ function parsePullRequest (subject) {
     return { subject, pr: '' }
   }
 
+  let subjectEnd = match.index
+  while (subjectEnd > 0 && (subject[subjectEnd - 1] === ' ' || subject[subjectEnd - 1] === '\t')) subjectEnd--
+
   return {
-    subject: subject.slice(0, match.index),
-    pr: match[1],
+    subject: subject.slice(0, subjectEnd),
+    pr: match[2],
   }
 }
 
@@ -408,17 +411,17 @@ function selectProduct (scopes) {
  */
 function selectLabeledProduct (labels) {
   const labelSet = new Set(labels)
-  const selected = []
+  let selected
   for (const [product, , productLabels = []] of PRODUCTS) {
     for (const label of productLabels) {
       if (labelSet.has(label)) {
-        selected.push(product)
+        selected = selected === undefined ? product : `${selected} / ${product}`
         break
       }
     }
   }
 
-  return selected.length > 0 ? selected.join(' / ') : undefined
+  return selected
 }
 
 /**
@@ -444,33 +447,44 @@ function sentenceCase (subject) {
  * @param {Change[]} breakingChanges
  */
 function renderMarkdown (sections, contributors, breakingChanges) {
-  const lines = []
+  let markdown = ''
 
   if (breakingChanges.length > 0) {
-    lines.push('### Breaking Changes')
+    markdown = '### Breaking Changes\n'
     for (const change of breakingChanges.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   for (const category of CATEGORY_ORDER) {
     const changes = sections.get(category)
     if (!changes?.length) continue
 
-    lines.push(renderHeading(category))
+    if (markdown) markdown += '\n'
+    markdown += `${renderHeading(category)}\n`
     for (const change of changes.sort(compareChanges)) {
-      lines.push(renderChange(change))
+      markdown += `${renderChange(change)}\n`
     }
-    lines.push('')
   }
 
   if (contributors.size > 0) {
-    const badges = [...contributors.values()].sort(compareContributors).map(renderContributor)
-    lines.push('### Contributors', '', badges.join(' '), '')
+    const iconContributors = []
+    for (const contributor of contributors.values()) {
+      if (contributor.login) iconContributors.push(contributor)
+    }
+    if (iconContributors.length > 0) {
+      iconContributors.sort(compareContributors)
+      let avatars = ''
+      for (const contributor of iconContributors) {
+        if (avatars) avatars += ' '
+        avatars += renderContributor(contributor)
+      }
+      if (markdown) markdown += '\n'
+      markdown += `### Contributors\n\n${avatars}\n`
+    }
   }
 
-  return lines.join('\n')
+  return markdown
 }
 
 /**
@@ -509,8 +523,6 @@ function compareContributors (a, b) {
  * @param {Contributor} contributor
  */
 function renderContributor (contributor) {
-  if (!contributor.login) return escapeMarkdown(contributor.name)
-
   const { login, name } = contributor
   return `[<img src="${GITHUB_URL}/${login}.png?size=48" width="24" height="24" ` +
     `alt="${name}" title="${name}" />](${GITHUB_URL}/${login})`
@@ -521,32 +533,12 @@ function renderContributor (contributor) {
  */
 function renderChange (change) {
   const subject = linkifyReferences(change.subject)
-  let suffix = change.pr ? ` ${renderPullRequest(change.pr)}` : ''
-  if (change.contributors.length > 0) {
-    suffix += ` — by ${change.contributors.map(renderContributorLink).join(', ')}`
-  }
+  const suffix = change.pr ? ` ${renderPullRequest(change.pr)}` : ''
   if (change.product === UNCATEGORIZED_PRODUCT) {
     return `- ${subject}${suffix}`
   }
 
   return `- **${change.product}:** ${subject}${suffix}`
-}
-
-/**
- * @param {Contributor} contributor
- * @returns {string}
- */
-function renderContributorLink (contributor) {
-  if (!contributor.login) return escapeMarkdown(contributor.name)
-
-  return `[${contributor.name}](${GITHUB_URL}/${contributor.login})`
-}
-
-/**
- * @param {string} text
- */
-function escapeMarkdown (text) {
-  return text.replaceAll(MARKDOWN_PUNCTUATION_PATTERN, String.raw`\$&`)
 }
 
 /**

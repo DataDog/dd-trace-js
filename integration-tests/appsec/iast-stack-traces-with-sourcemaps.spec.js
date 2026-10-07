@@ -5,10 +5,9 @@ const assert = require('node:assert/strict')
 const childProcess = require('child_process')
 const path = require('path')
 const { inspect } = require('node:util')
-const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
-  let axios, cwd, appDir, appFile, agent, proc
+  let cwd, appDir, appFile, agent, proc
 
   useSandbox(['@types/node', 'typescript', 'express'])
 
@@ -36,8 +35,6 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
         NODE_OPTIONS: `--enable-source-maps --require ${appDir}/init.js`,
       },
     })
-
-    axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
@@ -45,21 +42,30 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
     await agent.stop()
   })
 
+  /**
+   * @param {string} url
+   */
+  async function request (url) {
+    const response = await fetch(new URL(url, proc.url))
+    assert.strictEqual(response.status, 200)
+    return response.text()
+  }
+
   describe('in rewritten file', () => {
     it('should detect correct stack trace in unnamed function', async () => {
-      const response = await axios.get('/rewritten/stack-trace-from-unnamed-function')
+      const response = await request('/rewritten/stack-trace-from-unnamed-function')
 
-      assert.match(response.data, /\/rewritten-routes\.ts:7:13/)
+      assert.match(response, /\/rewritten-routes\.ts:7:13/)
     })
 
     it('should detect correct stack trace in named function', async () => {
-      const response = await axios.get('/rewritten/stack-trace-from-named-function')
+      const response = await request('/rewritten/stack-trace-from-named-function')
 
-      assert.match(response.data, /\/rewritten-routes\.ts:11:13/)
+      assert.match(response, /\/rewritten-routes\.ts:11:13/)
     })
 
     it('should detect vulnerability in the correct location', async () => {
-      await axios.get('/rewritten/vulnerability')
+      await request('/rewritten/vulnerability')
 
       await agent.assertMessageReceived(({ payload }) => {
         const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))
@@ -79,19 +85,19 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
 
   describe('in not rewritten file', () => {
     it('should detect correct stack trace in unnamed function', async () => {
-      const response = await axios.get('/not-rewritten/stack-trace-from-unnamed-function')
+      const response = await request('/not-rewritten/stack-trace-from-unnamed-function')
 
-      assert.match(response.data, /\/not-rewritten-routes\.ts:7:13/)
+      assert.match(response, /\/not-rewritten-routes\.ts:7:13/)
     })
 
     it('should detect correct stack trace in named function', async () => {
-      const response = await axios.get('/not-rewritten/stack-trace-from-named-function')
+      const response = await request('/not-rewritten/stack-trace-from-named-function')
 
-      assert.match(response.data, /\/not-rewritten-routes\.ts:11:13/)
+      assert.match(response, /\/not-rewritten-routes\.ts:11:13/)
     })
 
     it('should detect vulnerability in the correct location', async () => {
-      await axios.get('/not-rewritten/vulnerability')
+      await request('/not-rewritten/vulnerability')
 
       await agent.assertMessageReceived(({ payload }) => {
         const spans = payload.flatMap(p => p.filter(span => span.name === 'express.request'))

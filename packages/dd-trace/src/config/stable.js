@@ -22,16 +22,16 @@ class StableConfig {
 
     // Note: we don't enforce loading because there may be cases where the library is not available and we
     // want to avoid breaking the application. In those cases, we will not have the file-based configuration.
-    let libdatadog
+    let libdatadogExtras
     try {
-      libdatadog = require('@datadog/libdatadog')
+      libdatadogExtras = require('@datadog/libdatadog-extras')
       this.wasm_loaded = true
     } catch {
       this.warnings.push('Can\'t load libdatadog library')
       return
     }
 
-    const libconfig = libdatadog.maybeLoad('library_config')
+    const libconfig = libdatadogExtras.maybeLoad('library_config')
     if (libconfig === undefined) {
       this.warnings.push('Can\'t load library_config library')
       return

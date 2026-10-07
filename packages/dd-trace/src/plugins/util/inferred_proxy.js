@@ -69,26 +69,27 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
 
   log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
+  const meta = {
+    service: proxyContext.domainName || tracer._config.service,
+    component: proxySpanInfo.component,
+    [SPAN_TYPE]: 'web',
+    [SPAN_KIND]: 'server',
+    [HTTP_METHOD]: proxyContext.method,
+    [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
+    stage: proxyContext.stage,
+    region: proxyContext.region,
+  }
+  if (proxyContext.resourcePath) meta[HTTP_ROUTE] = proxyContext.resourcePath
+  if (proxyContext.accountId) meta.account_id = proxyContext.accountId
+  if (proxyContext.apiId) meta.apiid = proxyContext.apiId
+  if (proxyContext.awsUser) meta.aws_user = proxyContext.awsUser
+
   const span = startSpanHelper(tracer, proxySpanInfo.spanName, {
     childOf,
     type: 'web',
     startTime: proxyContext.requestTime,
     integrationName: proxySpanInfo.component,
-    meta: {
-      service: proxyContext.domainName || tracer._config.service,
-      component: proxySpanInfo.component,
-      [SPAN_TYPE]: 'web',
-      [SPAN_KIND]: 'server',
-      [HTTP_METHOD]: proxyContext.method,
-      [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
-      stage: proxyContext.stage,
-      region: proxyContext.region,
-      ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath }),
-      ...(proxyContext.accountId && { account_id: proxyContext.accountId }),
-      ...(proxyContext.apiId && { apiid: proxyContext.apiId }),
-      ...(proxyContext.region && { region: proxyContext.region }),
-      ...(proxyContext.awsUser && { aws_user: proxyContext.awsUser }),
-    },
+    meta,
   }, traceCtx, config)
 
   reqCtx.inferredProxySpan = span

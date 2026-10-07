@@ -8,18 +8,28 @@
         "default": null
       }
     ],
+    "DD_AGENTLESS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "description": "Enable agentless mode for supported features and disable Agent-only features."
+      }
+    ],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "description": "Submit supported logger output directly to the Datadog logs intake."
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_URL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "description": "Override the automatic log submission intake URL."
       }
     ],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
@@ -43,10 +53,20 @@
         ]
       }
     ],
+    "DD_AI_GUARD_ANALYZE_STREAM_RESPONSES_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "aiguard",
+        "default": "false",
+        "description": "Analyze streamed Anthropic, OpenAI, and Vercel AI responses with AI Guard After Model evaluation."
+      }
+    ],
     "DD_AI_GUARD_BLOCK": [
       {
         "implementation": "C",
         "type": "boolean",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.block"
         ],
@@ -57,6 +77,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.enabled"
         ],
@@ -67,6 +88,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.endpoint"
         ],
@@ -77,6 +99,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.maxContentSize"
         ],
@@ -87,16 +110,29 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.maxMessagesLength"
         ],
         "default": "16"
       }
     ],
+    "DD_AI_GUARD_REDACTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "namespace": "aiguard",
+        "configurationNames": [
+          "experimental.aiguard.redactionEnabled"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_AI_GUARD_TIMEOUT": [
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "aiguard",
         "configurationNames": [
           "experimental.aiguard.timeout"
         ],
@@ -219,6 +255,7 @@
       {
         "implementation": "E",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.eventTracking.mode",
           "experimental.appsec.eventTracking.mode"
@@ -233,6 +270,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.enabled",
           "experimental.appsec.extendedHeadersCollection.enabled"
@@ -245,6 +283,7 @@
       {
         "implementation": "C",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.enabled",
           "appsec",
@@ -258,6 +297,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateGraphql",
           "experimental.appsec.blockedTemplateGraphql"
@@ -270,6 +310,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.redaction",
           "experimental.appsec.extendedHeadersCollection.redaction"
@@ -282,6 +323,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateHtml",
           "experimental.appsec.blockedTemplateHtml"
@@ -294,6 +336,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.blockedTemplateJson",
           "experimental.appsec.blockedTemplateJson"
@@ -306,6 +349,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.extendedHeadersCollection.maxHeaders",
           "experimental.appsec.extendedHeadersCollection.maxHeaders"
@@ -318,6 +362,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.maxStackTraces",
           "experimental.appsec.stackTrace.maxStackTraces"
@@ -332,6 +377,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.maxDepth",
           "experimental.appsec.stackTrace.maxDepth"
@@ -346,6 +392,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.obfuscatorKeyRegex",
           "experimental.appsec.obfuscatorKeyRegex"
@@ -357,6 +404,7 @@
       {
         "implementation": "G",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.obfuscatorValueRegex",
           "experimental.appsec.obfuscatorValueRegex"
@@ -368,6 +416,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rasp.bodyCollection",
           "experimental.appsec.rasp.bodyCollection"
@@ -380,6 +429,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rasp.enabled",
           "experimental.appsec.rasp.enabled"
@@ -391,6 +441,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rules",
           "experimental.appsec.rules"
@@ -410,6 +461,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.stackTrace.enabled",
           "experimental.appsec.stackTrace.enabled"
@@ -421,6 +473,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.rateLimit",
           "experimental.appsec.rateLimit"
@@ -432,6 +485,7 @@
       {
         "implementation": "E",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.wafTimeout",
           "experimental.appsec.wafTimeout"
@@ -496,6 +550,22 @@
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_BUCKETS": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_CIVISIBILITY_DYNAMIC_ATR_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -724,6 +794,7 @@
         "configurationNames": [
           "dogstatsd.port"
         ],
+        "allowed": "[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5]",
         "default": "8125"
       }
     ],
@@ -731,6 +802,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.captureTimeoutMs"
         ],
@@ -741,16 +813,30 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.enabled"
         ],
         "default": "false"
       }
     ],
+    "DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "namespace": "dynamicInstrumentation",
+        "configurationNames": [
+          "dynamicInstrumentation.evaluationTimeoutMs"
+        ],
+        "default": "50",
+        "allowed": "\\d+"
+      }
+    ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
         ],
@@ -761,6 +847,7 @@
       {
         "implementation": "A",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
@@ -771,6 +858,7 @@
       {
         "implementation": "C",
         "type": "array",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
@@ -781,6 +869,7 @@
       {
         "implementation": "C",
         "type": "decimal",
+        "namespace": "dynamicInstrumentation",
         "configurationNames": [
           "dynamicInstrumentation.uploadIntervalSeconds"
         ],
@@ -808,6 +897,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "appsec",
         "default": "false",
         "configurationNames": [
           "experimental.appsec.standalone.enabled"
@@ -818,6 +908,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.initializationTimeoutMs"
         ],
@@ -828,6 +919,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
         ],
@@ -838,6 +930,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "featureFlags",
         "configurationNames": [
           "experimental.flaggingProvider.spanEnrichment.enabled"
         ],
@@ -889,6 +982,15 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
+        "namespace": "featureFlags"
+      }
+    ],
+    "DD_FLAGGING_EVALUATION_COUNTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "description": "Enable aggregated Feature Flagging evaluation telemetry.",
         "namespace": "featureFlags"
       }
     ],
@@ -1094,6 +1196,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.dbRowsToTaint",
           "experimental.iast.dbRowsToTaint"
@@ -1105,6 +1208,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.deduplicationEnabled",
           "experimental.iast.deduplicationEnabled"
@@ -1116,6 +1220,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.enabled",
           "iast",
@@ -1129,6 +1234,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.maxConcurrentRequests",
           "experimental.iast.maxConcurrentRequests"
@@ -1140,6 +1246,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.maxContextOperations",
           "experimental.iast.maxContextOperations"
@@ -1151,6 +1258,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionEnabled",
           "experimental.iast.redactionEnabled"
@@ -1162,6 +1270,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionNamePattern",
           "experimental.iast.redactionNamePattern"
@@ -1173,6 +1282,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.redactionValuePattern",
           "experimental.iast.redactionValuePattern"
@@ -1184,6 +1294,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "iast",
         "configurationNames": [
           "iast.requestSampling",
           "experimental.iast.requestSampling"
@@ -1205,6 +1316,7 @@
       {
         "implementation": "B",
         "type": "boolean",
+        "namespace": "iast",
         "configurationNames": [
           "iast.stackTrace.enabled",
           "experimental.iast.stackTrace.enabled"
@@ -1216,6 +1328,7 @@
       {
         "implementation": "B",
         "type": "string",
+        "namespace": "iast",
         "configurationNames": [
           "iast.telemetryVerbosity",
           "experimental.iast.telemetryVerbosity"
@@ -1320,7 +1433,8 @@
         "configurationNames": [
           "llmobs.agentlessEnabled"
         ],
-        "default": null
+        "default": null,
+        "namespace": "llmobs"
       }
     ],
     "DD_LLMOBS_ENABLED": [
@@ -1338,7 +1452,54 @@
         "configurationNames": [
           "llmobs.mlApp"
         ],
+        "default": null,
+        "namespace": "llmobs"
+      }
+    ],
+    "DD_LLMOBS_PROJECT_NAME": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "llmobs.projectName"
+        ],
+        "default": null,
+        "namespace": "llmobs"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_DIR": [
+      {
+        "implementation": "A",
+        "type": "string",
         "default": null
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_CACHE_TTL": [
+      {
+        "implementation": "B",
+        "type": "decimal",
+        "default": "60",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_CACHE_TTL_SECONDS"
+        ]
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_FILE_CACHE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_LLMOBS_PROMPTS_TIMEOUT": [
+      {
+        "implementation": "B",
+        "type": "decimal",
+        "default": "5.0",
+        "allowed": "\\d+(\\.\\d+)?",
+        "aliases": [
+          "DD_LLMOBS_PROMPTS_TIMEOUT_SECONDS"
+        ]
       }
     ],
     "DD_LLMOBS_SAMPLE_RATE": [
@@ -1348,7 +1509,8 @@
         "configurationNames": [
           "llmobs.sampleRate"
         ],
-        "default": "1.0"
+        "default": "1.0",
+        "namespace": "llmobs"
       }
     ],
     "DD_LOGS_INJECTION": [
@@ -1415,10 +1577,19 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "openai",
         "default": "false",
         "configurationNames": [
           "openAiLogsEnabled"
         ]
+      }
+    ],
+    "DD_OPENAI_REALTIME_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "namespace": "openai"
       }
     ],
     "DD_OPENAI_SPAN_CHAR_LIMIT": [
@@ -1445,9 +1616,9 @@
     ],
     "DD_PROFILING_ALLOCATION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -1562,9 +1733,10 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": [
       {
-        "implementation": "A",
-        "type": "int",
-        "default": "0"
+        "implementation": "B",
+        "type": "string",
+        "transform": "normalizeProfilingHeapLimitExtensionSize",
+        "default": "auto"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": [
@@ -1804,6 +1976,7 @@
         "implementation": "C",
         "type": "string",
         "default": "datadoghq.com",
+        "transform": "toLowerCase",
         "configurationNames": [
           "site"
         ]
@@ -1903,9 +2076,17 @@
     ],
     "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": null,
+        "default": "true",
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_TEST_FAILURE_VIDEOS_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "default": "true",
         "namespace": "testOptimization"
       }
     ],
@@ -1990,6 +2171,7 @@
         "configurationNames": [
           "port"
         ],
+        "allowed": "[1-9]\\d{0,3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5]",
         "default": "8126"
       }
     ],
@@ -2452,6 +2634,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_BROWSER_BUNYAN_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_BSON_ENABLED": [
       {
         "implementation": "A",
@@ -2712,6 +2901,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
+        "namespace": "tracing",
         "default": ""
       }
     ],
@@ -2722,6 +2912,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
+        "namespace": "rum",
         "default": "false"
       }
     ],
@@ -2990,6 +3181,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_HTTP_CLIENT_ERROR_STATUSES": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "400-499"
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [
@@ -3639,6 +3837,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_POSTGRES_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_PRISMA_ENABLED": [
       {
         "implementation": "A",
@@ -3956,6 +4161,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_SUPABASE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_TAGS": [
       {
         "implementation": "B",
@@ -4134,6 +4346,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4149,6 +4362,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4169,6 +4383,7 @@
         "type": "string",
         "default": "http/json",
         "allowed": "http/json",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4188,6 +4403,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4207,6 +4423,8 @@
         "implementation": "D",
         "type": "string",
         "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4227,6 +4445,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "validateHttpUrl",
         "default": null
       }
     ],
@@ -4246,6 +4465,8 @@
         "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -4275,7 +4496,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http/protobuf"
+        "default": "http/protobuf",
+        "allowed": "grpc|http/json|http/protobuf",
+        "transform": "toLowerCase"
       }
     ],
     "OTEL_EXPORTER_OTLP_TIMEOUT": [

@@ -170,7 +170,6 @@ const MAJOR_CEILING_PROBE = 999_999
  *
  * @param {number} major
  * @param {string} range
- * @returns {boolean}
  */
 function reachesMajorCeiling (major, range) {
   return satisfies(`${major}.${MAJOR_CEILING_PROBE}.${MAJOR_CEILING_PROBE}`, range)
@@ -181,7 +180,6 @@ function reachesMajorCeiling (major, range) {
  * range whose top resolves to the same newest version.
  *
  * @param {string} name
- * @returns {string}
  */
 function latestMajor (name) {
   const latest = coerce(latests[name])
@@ -200,7 +198,6 @@ function latestMajor (name) {
  * @param {string} name
  * @param {string} range
  * @param {number} floorMajor
- * @returns {number}
  */
 function highestMajor (name, range, floorMajor) {
   const latest = coerce(latests[name])
@@ -218,11 +215,12 @@ function highestMajor (name, range, floorMajor) {
  *
  * @param {object} options
  * @param {string} options.name The module name, e.g. `fastify`.
- * @param {Array<{ versions?: string[], node?: string }>} options.declarations
+ * @param {Array<{ versions?: string[], node?: string, honourEnvRange?: boolean }>} options.declarations
  * @param {string} [options.nodeVersion] The current Node.js version; injectable for testing.
  * @param {boolean} [options.honourEnvRange] Whether `PACKAGE_VERSION_RANGE` applies to this module. False for sibling
- *   externals that must stay on their declared versions while the matrix shards a different package.
- * @param {NodeJS.ProcessEnv} [options.env] Injectable for testing.
+ *   externals that must stay on their declared versions while the matrix shards a different package. A declaration can
+ *   opt in when it is itself the sharded test target.
+ * @param {typeof process.env} [options.env] Injectable for testing.
  * @returns {{ versionList: Array<{ versionKey: string, range: string }>, unversioned: string|undefined }} The ordered,
  *   `RANGE`-filtered key set, and the range the default `versions/<name>` folder resolves from.
  */
@@ -233,9 +231,9 @@ function resolvePluginVersions ({
   honourEnvRange = true,
   env = process.env,
 }) {
-  const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honourEnvRange
-  const versions = []
+  const declaredVersions = []
   let hasActiveDeclaration = false
+  let honoursEnvRange = honourEnvRange
 
   for (const declaration of declarations) {
     if (declaration.node !== undefined) {
@@ -246,11 +244,14 @@ function resolvePluginVersions ({
     }
 
     hasActiveDeclaration = true
-    if (!useEnvRange) versions.push(...(declaration.versions ?? []))
+    if (declaration.honourEnvRange) honoursEnvRange = true
+    declaredVersions.push(...(declaration.versions ?? []))
   }
 
   if (!hasActiveDeclaration) return { versionList: [], unversioned: undefined }
-  if (useEnvRange) versions.push(env.PACKAGE_VERSION_RANGE)
+
+  const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honoursEnvRange
+  const versions = useEnvRange ? [env.PACKAGE_VERSION_RANGE] : declaredVersions
 
   let versionList = getVersionList(name, versions)
   if (env.RANGE) {

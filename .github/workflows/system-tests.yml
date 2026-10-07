@@ -40,7 +40,7 @@ jobs:
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
-      desired_execution_time: 300 # 5 minutes
+      desired_execution_time: 120 # 2 minutes
       scenarios_groups: tracer-release
       excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN # require AWS and datadog credentials
       parametric_job_count: 8

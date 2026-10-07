@@ -1,5 +1,7 @@
 'use strict'
 
+const { randomUUID } = require('node:crypto')
+
 const log = require('../../log')
 
 // Matches the backend and dd-trace-py evaluator metric label contract.
@@ -12,7 +14,6 @@ const EVALUATOR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/
 
 /**
  * @param {object | null | undefined} value
- * @returns {boolean}
  */
 function hasEntries (value) {
   if (!value) return false
@@ -22,12 +23,46 @@ function hasEntries (value) {
   return false
 }
 
+function validateTagsList (tags) {
+  if (tags == null) return []
+  if (!Array.isArray(tags)) throw new TypeError('Tags must be an array of strings')
+  for (const tag of tags) {
+    if (typeof tag !== 'string') throw new TypeError('Each tag must be a string')
+    if (tag.indexOf(':') <= 0) {
+      throw new Error(`Tag '${tag}' is malformed. Tags must be in 'key:value' format (e.g., 'env:prod').`)
+    }
+  }
+  return [...tags]
+}
+
+function tagOperationsAreEmpty (operations) {
+  return operations == null || (
+    !Object.hasOwn(operations, 'replace') &&
+    !Object.hasOwn(operations, 'add') &&
+    !Object.hasOwn(operations, 'remove')
+  )
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} name
+ */
+function normalizePositiveInteger (value, name) {
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer`)
+  return /** @type {number} */ (value)
+}
+
+function generateRunId () {
+  return randomUUID()
+}
+
 /**
  * @param {string} name
  */
 function validateEvaluatorName (name) {
   if (typeof name !== 'string') throw new TypeError('Evaluator name must be a string')
   if (name.length === 0) throw new Error('Evaluator name cannot be empty')
+  if (name === '__proto__') throw new Error("Evaluator name '__proto__' is reserved")
   if (!EVALUATOR_NAME_PATTERN.test(name)) {
     throw new Error(
       `Evaluator name '${name}' is invalid. Name must contain only alphanumeric characters, underscores, and hyphens.`
@@ -38,16 +73,39 @@ function validateEvaluatorName (name) {
 /**
  * @param {(...args: unknown[]) => unknown} fn
  * @param {string} fallback
- * @returns {string}
  */
 function functionName (fn, fallback) {
   return typeof fn.name === 'string' && fn.name.length > 0 ? fn.name : fallback
 }
 
 /**
+ * @param {unknown} evaluator
+ * @param {string} kind
+ */
+function isClassEvaluator (evaluator, kind) {
+  // Lazy loading avoids a cycle: evaluator.js uses validateEvaluatorName from this module.
+  const { BaseEvaluator, BaseSummaryEvaluator } = require('./evaluator')
+  return kind === 'summary'
+    ? evaluator instanceof BaseSummaryEvaluator
+    : evaluator instanceof BaseEvaluator
+}
+
+/**
+ * @param {unknown} evaluator
+ * @param {string} kind
+ * @param {number} index
+ */
+function evaluatorName (evaluator, kind, index) {
+  if (isClassEvaluator(evaluator, kind)) return evaluator.name
+  if (typeof evaluator === 'function') return functionName(evaluator, `${kind}_evaluator_${index}`)
+  const baseName = kind === 'summary' ? 'BaseSummaryEvaluator' : 'BaseEvaluator'
+  throw new TypeError(`${kind} evaluator must be a function or a ${baseName} instance`)
+}
+
+/**
  * @param {unknown} evaluators
  * @param {string} kind
- * @returns {Array<[string, (...args: unknown[]) => unknown]>}
+ * @returns {Array<[string, Function | object]>}
  */
 function normalizeEvaluators (evaluators, kind) {
   if (evaluators == null) return []
@@ -57,8 +115,7 @@ function normalizeEvaluators (evaluators, kind) {
     const indexesByName = new Map()
     for (let i = 0; i < evaluators.length; i++) {
       const evaluator = evaluators[i]
-      if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator must be a function`)
-      const name = functionName(evaluator, `${kind}_evaluator_${i}`)
+      const name = evaluatorName(evaluator, kind, i)
       validateEvaluatorName(name)
       if (indexesByName.has(name)) {
         log.warn('Duplicate %s evaluator name %s; previous evaluator will be overwritten', kind, name)
@@ -71,13 +128,17 @@ function normalizeEvaluators (evaluators, kind) {
     return normalized
   }
 
-  if (typeof evaluators !== 'object') {
-    throw new TypeError(`${kind} evaluators must be an array of functions or an object keyed by evaluator name`)
+  if (typeof evaluators !== 'object' || evaluators === null) {
+    throw new TypeError(
+      `${kind} evaluators must be an array of functions or class instances, or an object keyed by evaluator name`
+    )
   }
 
   for (const [name, evaluator] of Object.entries(evaluators)) {
     validateEvaluatorName(name)
-    if (typeof evaluator !== 'function') throw new TypeError(`${kind} evaluator '${name}' must be a function`)
+    if (!isClassEvaluator(evaluator, kind) && typeof evaluator !== 'function') {
+      throw new TypeError(`${kind} evaluator '${name}' must be a function or a class instance`)
+    }
     normalized.push([name, evaluator])
   }
   return normalized
@@ -85,7 +146,6 @@ function normalizeEvaluators (evaluators, kind) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function inferMetricType (value) {
   if (typeof value === 'boolean') return 'boolean'
@@ -145,7 +205,6 @@ function normalizeJsonMetricValue (value) {
 
 /**
  * @param {unknown} value
- * @returns {string}
  */
 function stringify (value) {
   if (value == null) return ''
@@ -165,16 +224,20 @@ function stringify (value) {
  * @returns {string[]}
  */
 function buildTags (userTags, autoTags) {
-  const tags = new Map()
+  const tagsByKey = new Map()
   if ((userTags) != null) {
     for (const [key, value] of Object.entries(userTags)) {
-      tags.set(key, `${key}:${value}`)
+      const values = Array.isArray(value) ? value : [value]
+      tagsByKey.set(key, values.map(item => `${key}:${item}`))
     }
   }
   for (const [key, value] of Object.entries(autoTags)) {
-    if (value !== undefined && value !== null && value !== '') tags.set(key, `${key}:${value}`)
+    if (value !== undefined && value !== null && value !== '') tagsByKey.set(key, [`${key}:${value}`])
   }
-  return [...tags.values()]
+
+  const tags = []
+  for (const values of tagsByKey.values()) tags.push(...values)
+  return tags
 }
 
 /**
@@ -184,6 +247,35 @@ function buildTags (userTags, autoTags) {
  */
 function mergeTags (baseTags, overrideTags) {
   return { ...baseTags, ...overrideTags }
+}
+
+/**
+ * @param {string[] | undefined} tags
+ * @returns {Record<string, string | string[]>}
+ */
+function recordTagsToObject (tags) {
+  const result = {}
+  if (!Array.isArray(tags)) return result
+  for (const tag of tags) {
+    const separator = tag.indexOf(':')
+    if (separator <= 0) continue
+
+    const key = tag.slice(0, separator)
+    const value = tag.slice(separator + 1)
+    if (!Object.hasOwn(result, key)) {
+      Object.defineProperty(result, key, {
+        configurable: true,
+        enumerable: true,
+        value,
+        writable: true,
+      })
+    } else if (Array.isArray(result[key])) {
+      result[key].push(value)
+    } else {
+      result[key] = [result[key], value]
+    }
+  }
+  return result
 }
 
 /**
@@ -198,7 +290,6 @@ function sleep (ms) {
 /**
  * @param {unknown} value
  * @param {number} fallback
- * @returns {number}
  */
 function timestampMs (value, fallback = Date.now()) {
   if (value === null || value === undefined) return fallback
@@ -214,7 +305,6 @@ function timestampMs (value, fallback = Date.now()) {
 /**
  * @param {{ durationMs?: unknown, completedAt?: unknown }} row
  * @param {number} startMs
- * @returns {number}
  */
 function durationNs (row, startMs) {
   if (typeof row.durationMs === 'number' && Number.isFinite(row.durationMs)) {
@@ -244,13 +334,18 @@ module.exports = {
   buildSpanMetadata,
   buildTags,
   durationNs,
+  generateRunId,
   hasEntries,
   inferMetricType,
   mergeTags,
   normalizeEvaluators,
   normalizeJsonMetricValue,
+  normalizePositiveInteger,
+  recordTagsToObject,
   sleep,
   stringify,
+  tagOperationsAreEmpty,
   timestampMs,
   validateEvaluatorName,
+  validateTagsList,
 }

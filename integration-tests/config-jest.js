@@ -11,6 +11,10 @@ const config = {
   testEnvironment: 'node',
 }
 
+if (process.env.USE_DEFAULT_TEST_RUNNER) {
+  delete config.testRunner
+}
+
 if (process.env.COLLECT_COVERAGE_FROM) {
   config.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
 }
@@ -25,6 +29,14 @@ if (process.env.COVERAGE_REPORTERS) {
 
 if (process.env.CONFIG_TRANSFORM) {
   config.transform = JSON.parse(process.env.CONFIG_TRANSFORM)
+}
+
+if (process.env.CONFIG_MODULE_NAME_MAPPER) {
+  config.moduleNameMapper = JSON.parse(process.env.CONFIG_MODULE_NAME_MAPPER)
+}
+
+if (process.env.CONFIG_RESOLVER) {
+  config.resolver = process.env.CONFIG_RESOLVER
 }
 
 if (process.env.JEST_THROWING_REPORTER) {

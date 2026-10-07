@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = [
+const instrumentations = [
   {
     module: {
       name: 'graphql',
@@ -24,6 +24,54 @@ module.exports = [
       kind: 'Sync',
     },
     channelName: 'apm:graphql:execute',
+  },
+  {
+    module: {
+      name: 'graphql',
+      versionRange: '>=0.10 <16',
+      filePath: 'execution/execute.js',
+    },
+    functionQuery: {
+      functionName: 'asErrorInstance',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:resolve:error',
+  },
+  {
+    module: {
+      name: 'graphql',
+      versionRange: '>=0.10 <16',
+      filePath: 'execution/execute.mjs',
+    },
+    functionQuery: {
+      functionName: 'asErrorInstance',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:resolve:error',
+  },
+  {
+    module: {
+      name: 'graphql',
+      versionRange: '>=0.10',
+      filePath: 'error/locatedError.js',
+    },
+    functionQuery: {
+      functionName: 'locatedError',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:resolve:error',
+  },
+  {
+    module: {
+      name: 'graphql',
+      versionRange: '>=0.10',
+      filePath: 'error/locatedError.mjs',
+    },
+    functionQuery: {
+      functionName: 'locatedError',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:resolve:error',
   },
   {
     module: {
@@ -101,6 +149,30 @@ module.exports = [
       kind: 'Sync',
     },
     channelName: 'apm:graphql:execute',
+  },
+  {
+    module: {
+      name: '@graphql-tools/executor',
+      versionRange: '>=0.0.14',
+      filePath: 'cjs/execution/execute.js',
+    },
+    functionQuery: {
+      functionName: 'handleFieldError',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:resolve:error',
+  },
+  {
+    module: {
+      name: '@graphql-tools/executor',
+      versionRange: '>=0.0.14',
+      filePath: 'esm/execution/execute.js',
+    },
+    functionQuery: {
+      functionName: 'handleFieldError',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:resolve:error',
   },
   {
     module: {
@@ -199,3 +271,15 @@ module.exports = [
     channelName: 'dd:graphql:utilities:load',
   },
 ]
+
+const fastPathInstrumentations = []
+for (const instrumentation of instrumentations) {
+  if (instrumentation.functionQuery?.functionName === '__module_export__') continue
+
+  fastPathInstrumentations.push({
+    ...instrumentation,
+    transform: 'configureGraphqlFastPath',
+  })
+}
+
+module.exports = [...instrumentations, ...fastPathInstrumentations]

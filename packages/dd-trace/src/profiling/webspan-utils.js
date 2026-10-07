@@ -8,10 +8,13 @@ function isWebServerSpan (tags) {
 }
 
 function endpointNameFromTags (tags) {
-  return tags[RESOURCE_NAME] || [
-    tags[HTTP_METHOD],
-    tags[HTTP_ROUTE],
-  ].filter(Boolean).join(' ')
+  const resource = tags[RESOURCE_NAME]
+  if (resource) return resource
+
+  let endpoint = tags[HTTP_METHOD] || ''
+  const route = tags[HTTP_ROUTE]
+  if (route) endpoint += endpoint ? ` ${route}` : route
+  return endpoint
 }
 
 // The endpoint name a web-server span's tag bag yields changes over the span's

@@ -236,13 +236,16 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
       })
 
       runFsMethodTest(`test fs.${methodName}Sync method`, vulnerableIndex, (args) => {
-        require(fsSyncWayMethodPath)(methodName, args, cb)
+        const invokeFsMethod = require(fsSyncWayMethodPath)
+        invokeFsMethod(methodName, args, cb)
       }, ...args)
       runFsMethodTest(`test fs.${methodName} method`, vulnerableIndex, (args) => {
-        return require(fsAsyncWayMethodPath)(methodName, args, cb)
+        const invokeFsMethod = require(fsAsyncWayMethodPath)
+        return invokeFsMethod(methodName, args, cb)
       }, ...args)
       runFsMethodTest(`test fs.promises.${methodName} method`, vulnerableIndex, (args) => {
-        return require(fsPromiseWayMethodPath)(methodName, args, cb)
+        const invokeFsMethod = require(fsPromiseWayMethodPath)
+        return invokeFsMethod(methodName, args, cb)
       }, ...args)
     })
   }

@@ -15,7 +15,6 @@ const processTags = require('../../process-tags')
  * profile event.
  *
  * @param {string} [enabled] - config.profiling.DD_PROFILING_ENABLED ('true' | 'false' | 'auto')
- * @returns {string}
  */
 function getActivation (enabled) {
   if (enabled === 'auto') return 'auto'

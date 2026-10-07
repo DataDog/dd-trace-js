@@ -4,7 +4,6 @@
  * Formats tool call input as a JSON string.
  * @param {string} toolName - The name of the tool being called
  * @param {object} toolArguments - The arguments passed to the tool
- * @returns {string} Formatted input string
  */
 function formatInput (toolName, toolArguments) {
   if (!toolName && !toolArguments) return ''
@@ -25,7 +24,6 @@ function formatInput (toolName, toolArguments) {
  * MCP tool results contain a `content` array with items like:
  * `[{ type: 'text', text: '...' }, { type: 'image', data: '...', mimeType: '...' }]`
  * @param {object} result - The MCP CallToolResult
- * @returns {string} JSON string of `{ content: Array<{type, text, annotations, meta}>, isError: boolean }`
  */
 function formatOutput (result) {
   if (!result) return ''

@@ -116,6 +116,110 @@ describe('vitest utilities', () => {
 })
 
 describe('vitest main instrumentation', () => {
+  for (const method of ['start', 'reportCoverage']) {
+    it(`preserves ${method} results and synchronous errors without subscribers`, () => {
+      const hooks = []
+      proxyquire('../src/vitest-main', {
+        './helpers/instrument': {
+          ...require('../src/helpers/instrument'),
+          addHook (target, hook) { hooks.push({ target, hook }) },
+        },
+        './vitest-util': {
+          ...require('../src/vitest-util'),
+          testSessionFinishCh: { hasSubscribers: false },
+        },
+      })
+      let result
+      class Vitest {
+        /** @param {string} argument */
+        start (argument) {
+          assert.strictEqual(this, vitest)
+          assert.strictEqual(argument, 'argument')
+          if (result instanceof Error) throw result
+          return result
+        }
+
+        /** @param {string} argument */
+        reportCoverage (argument) { return this.start(argument) }
+        runFiles () {}
+      }
+      const vitest = new Vitest()
+      const hook = hooks.find(({ target }) => target.versions[0] === '>=5.0.0').hook
+      hook({ Vitest }, '5.0.1')
+
+      for (result of [undefined, {}, Promise.resolve('result')]) {
+        assert.strictEqual(vitest[method]('argument'), result)
+      }
+      result = new Error('synchronous failure')
+      assert.throws(() => vitest[method]('argument'), result)
+    })
+  }
+
+  for (const method of ['start', 'runFiles']) {
+    for (const reason of [null, undefined, false, 0, '', 'startup failure', new Error('startup failure')]) {
+      it(`preserves ${method} rejection ${String(reason) || 'empty string'} and reports a failed session`, async () => {
+        const hooks = []
+        const finishes = []
+        const testSessionFinishCh = { hasSubscribers: true }
+        proxyquire('../src/vitest-main', {
+          './helpers/instrument': {
+            ...require('../src/helpers/instrument'),
+            addHook (target, hook) { hooks.push({ target, hook }) },
+          },
+          './helpers/channel': {
+            getChannelPromise (channel, payload) {
+              if (channel === testSessionFinishCh) finishes.push(payload)
+              return Promise.resolve({ libraryConfig: {} })
+            },
+          },
+          './vitest-util': {
+            ...require('../src/vitest-util'),
+            testSessionFinishCh,
+            testSessionConfigurationCh: { hasSubscribers: false },
+          },
+        })
+        class Vitest {
+          config = { passWithNoTests: true }
+          state = {
+            pathsSet: new Set(),
+            getFailedFilepaths: () => [],
+            getFiles: () => [],
+            getCountOfFailedTests: () => 0,
+            getUnhandledErrors: () => [],
+          }
+
+          start () {
+            // A framework or user hook can reject with any JavaScript value.
+            return Promise.reject(reason)
+          }
+
+          runFiles () {
+            return Promise.reject(reason)
+          }
+
+          close () {}
+          exit () {}
+          reportCoverage () {}
+          getRootProject () { return { _provided: {} } }
+        }
+        const hook = hooks.find(({ target }) => target.versions[0] === '>=5.0.0').hook
+        hook({ Vitest }, '5.0.1')
+        const vitest = new Vitest()
+
+        await assert.rejects(vitest[method]([]), error => {
+          assert.strictEqual(error, reason)
+          return true
+        })
+        await vitest.close()
+
+        assert.strictEqual(finishes.length, 1)
+        assert.strictEqual(finishes[0].status, 'fail')
+        assert.strictEqual(finishes[0].testSessionEmptyReason, undefined)
+        assert.strictEqual(finishes[0].error, reason)
+      })
+    }
+  }
+
   it('keeps no-worker capabilities active and handles EFD admission boundaries', async () => {
     const hooks = []
     const libraryConfigurationRequests = []
@@ -123,6 +227,7 @@ describe('vitest main instrumentation', () => {
     const knownTestsCh = {}
     const noWorkerInitStates = []
     const providedContexts = []
+    const testSessionFinishPayloads = []
     const testSuiteFinishPayloads = []
     let reserveEarlyFlakeDetectionSuite
     let shouldUseNoWorkerInit = false
@@ -144,6 +249,7 @@ describe('vitest main instrumentation', () => {
       },
     }
     const realInstrument = require('../src/helpers/instrument')
+    const realNoWorkerInit = require('../src/vitest-main-no-worker-init')
     const realVitestUtil = require('../src/vitest-util')
 
     proxyquire('../src/vitest-main', {
@@ -171,6 +277,9 @@ describe('vitest main instrumentation', () => {
           if (currentChannel === testSuiteFinishCh) {
             testSuiteFinishPayloads.push(data)
           }
+          if (currentChannel === testSessionFinishCh) {
+            testSessionFinishPayloads.push(data)
+          }
           return Promise.resolve()
         },
       },
@@ -181,6 +290,7 @@ describe('vitest main instrumentation', () => {
         },
       },
       './vitest-main-no-worker-init': {
+        ...realNoWorkerInit,
         configure (_ctx, _frameworkVersion, _testSpecifications, _setupData, options) {
           reserveEarlyFlakeDetectionSuite = options.reserveEarlyFlakeDetectionSuite
           noWorkerInitStates.push(options.state)
@@ -232,10 +342,19 @@ describe('vitest main instrumentation', () => {
 
     const ctx = {
       close () {},
-      config: {},
+      config: { passWithNoTests: false, shard: { index: 2, count: 2 } },
       exit () {},
       getTestFilepaths () {
         return []
+      },
+      state: {
+        getFiles: () => [],
+        getCountOfFailedTests: () => 0,
+        getUnhandledErrors: () => [],
+        getFailedFilepaths () {
+          return []
+        },
+        pathsSet: new Set(),
       },
     }
     const sequencer = new BaseSequencer()
@@ -262,6 +381,42 @@ describe('vitest main instrumentation', () => {
     await typechecker.prepareResults()
     assert.strictEqual(testSuiteFinishPayloads.length, 1)
     assert.strictEqual(testSuiteFinishPayloads[0].deferFlush, true)
+
+    const typecheckFiles = [
+      { filepath: '/repo/first-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+      { filepath: '/repo/second-typecheck.ts', result: { state: 'pass' }, tasks: [] },
+    ]
+    class TypecheckPoolWorker {
+      constructor () {
+        this.project = {
+          typechecker: {
+            getResult () {
+              return { files: typecheckFiles }
+            },
+          },
+          vitest: ctx,
+        }
+      }
+
+      send () {}
+
+      on (event, callback) {
+        this[event] = callback
+      }
+    }
+    const VitestV5 = class Vitest {}
+    const vitestV5IndexHook = hooks.find(({ target }) =>
+      target.filePattern === 'dist/chunks/index.*' && target.versions[0] === '>=5.0.0'
+    ).hook
+    vitestV5IndexHook({ TypecheckPoolWorker, Vitest: VitestV5 }, '5.0.0')
+
+    const typecheckPoolWorker = new TypecheckPoolWorker()
+    typecheckPoolWorker.on('message', () => {})
+    for (const file of typecheckFiles) {
+      typecheckPoolWorker.send({ type: 'run', context: { files: [{ filepath: file.filepath }] } })
+      await typecheckPoolWorker.message({ type: 'testfileFinished' })
+    }
+    assert.strictEqual(testSuiteFinishPayloads.length, 3)
 
     const customPoolTypechecker = new Typechecker()
     customPoolTypechecker.ctx = {
@@ -299,6 +454,38 @@ describe('vitest main instrumentation', () => {
     ]])
     assert.strictEqual(noWorkerInitStates[noWorkerInitStates.length - 1].isEfdSuiteAdmissionEnabled, false)
 
+    class Vitest {
+      /** @param {object[]} testSpecifications test specifications */
+      async runFiles (testSpecifications) {
+        return testSpecifications
+      }
+    }
+    const cliApiHook = hooks.find(({ target }) => target.filePattern === 'dist/chunks/cli-api.*').hook
+    cliApiHook({ async startVitest () {}, Vitest }, '4.1.10')
+    await Vitest.prototype.runFiles.call(ctx, [[
+      { config: { pool: 'forks' } },
+      { filepath: '/repo/no-worker.mjs', pool: 'threads' },
+    ]])
+
+    class TinyPool {
+      /** @param {{ env: Record<string, string>, filename: string }} options worker pool options */
+      constructor (options) {
+        this.options = options
+      }
+    }
+    const tinyPoolHook = hooks.find(({ target }) => target.name === 'tinypool').hook
+    const DatadogTinyPool = tinyPoolHook(TinyPool)
+    const pool = new DatadogTinyPool({
+      env: {
+        NODE_OPTIONS: '--require dd-trace/ci/init --conditions "custom condition"',
+        VITEST: 'true',
+      },
+      filename: '/repo/node_modules/vitest/dist/worker.js',
+    })
+    assert.strictEqual(pool.options.env.NODE_OPTIONS, '--conditions "custom condition"')
+    assert.strictEqual(pool.options.env.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
+    assert.strictEqual(pool.options.env.DD_VITEST_WORKER, '1')
+
     assert.deepStrictEqual(
       libraryConfigurationRequests.map(request => request.isVitestNoWorkerInitActive),
       [true, true, true, true, true, true, true]
@@ -306,5 +493,12 @@ describe('vitest main instrumentation', () => {
     const efdAdmissionContexts = providedContexts.filter(context => '_ddIsEfdSuiteAdmissionEnabled' in context)
     assert.ok(efdAdmissionContexts.some(context => context._ddIsEfdSuiteAdmissionEnabled === true))
     assert.strictEqual(efdAdmissionContexts[efdAdmissionContexts.length - 1]._ddIsEfdSuiteAdmissionEnabled, false)
+
+    await sequencer.sort([])
+    await ctx.close()
+    assert.strictEqual(testSessionFinishPayloads.length, 1)
+    assert.strictEqual(testSessionFinishPayloads[0].status, 'fail')
+    assert.strictEqual(testSessionFinishPayloads[0].testSessionEmptyReason, undefined)
+    assert.match(testSessionFinishPayloads[0].error.message, /No test files were found/)
   })
 })

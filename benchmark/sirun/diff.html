@@ -24,7 +24,10 @@ td {
     <h1>Sirun differences between REPLACE_ME_PREV and REPLACE_ME_CURR</h1>
     <div id=summary>
       <h3>Summary Statistics</h3>
-      <p>These are the geometric mean (i.e. \(\sqrt[n]{\prod_{i=0}^n {x_i}}\)) of the measurements across all tests and variants, excluding control cases.</p>
+      <p>
+        These are the geometric mean (i.e. \(\sqrt[n]{\prod_{i=0}^n {x_i}}\)) of the measurements across all tests
+        and variants, excluding control cases. Instruction means only include variants available in every result.
+      </p>
       <table>
         <tr style="font-weight: bold">
           <td></td>
@@ -65,14 +68,21 @@ const goalSummary = REPLACE_ME_GOAL_DATA
 const diffData = REPLACE_ME_DIFF_DATA
 const readmes = REPLACE_ME_READMES
 
-const beforeStats = summaryStats(beforeSummary)
-const afterStats = summaryStats(afterSummary)
-const goalStats = summaryStats(goalSummary)
+const comparedSummaries = [beforeSummary, afterSummary, goalSummary]
+const beforeStats = summaryStats(beforeSummary, comparedSummaries)
+const afterStats = summaryStats(afterSummary, comparedSummaries)
+const goalStats = summaryStats(goalSummary, comparedSummaries)
 
-document.getElementById('prev-instructions').innerHTML = Math.floor(beforeStats.instructions)
-document.getElementById('curr-instructions').innerHTML = Math.floor(afterStats.instructions)
+if (beforeStats.instructions !== undefined) {
+  document.getElementById('prev-instructions').innerHTML = Math.floor(beforeStats.instructions)
+}
+if (afterStats.instructions !== undefined) {
+  document.getElementById('curr-instructions').innerHTML = Math.floor(afterStats.instructions)
+}
 diffPctElem('diff-instructions', beforeStats, afterStats, 'instructions')
-document.getElementById('goal-instructions').innerHTML = Math.floor(goalStats.instructions)
+if (goalStats.instructions !== undefined) {
+  document.getElementById('goal-instructions').innerHTML = Math.floor(goalStats.instructions)
+}
 diffPctElem('diff-goal-instructions', goalStats, afterStats, 'instructions')
 
 document.getElementById('prev-mem').innerHTML = Math.floor(beforeStats.mem)
@@ -82,6 +92,8 @@ document.getElementById('goal-mem').innerHTML = Math.floor(goalStats.mem)
 diffPctElem('diff-goal-mem', goalStats, afterStats, 'mem')
 
 function diffPctElem(elemName, beforeStats, afterStats, prop) {
+  if (beforeStats[prop] === undefined || afterStats[prop] === undefined) return
+
   const elem = document.getElementById(elemName)
   const val = (100*(afterStats[prop] - beforeStats[prop])/beforeStats[prop]).toFixed(2)
   elem.innerHTML = val
@@ -94,8 +106,16 @@ function diffPctElem(elemName, beforeStats, afterStats, prop) {
   }
 }
 
-function summaryStats(summary) {
+/** @typedef {{instructions?: number, summary: Record<string, {mean: number}>}} BenchmarkVariant */
+/** @typedef {Record<string, Record<string, BenchmarkVariant>>} BenchmarkSummary */
+
+/**
+ * @param {BenchmarkSummary} summary
+ * @param {BenchmarkSummary[]} comparedSummaries
+ */
+function summaryStats(summary, comparedSummaries) {
   let count = 0
+  let instructionCount = 0
   let instructions = 1
   let mem = 1
   for (const testName in summary) {
@@ -109,12 +129,18 @@ function summaryStats(summary) {
       }
       count++
       const variant = test[variantName]
-      instructions *= variant.instructions
+      const hasComparableInstructions = comparedSummaries.every((comparedSummary) => {
+        return comparedSummary[testName]?.[variantName]?.instructions !== undefined
+      })
+      if (hasComparableInstructions) {
+        instructionCount++
+        instructions *= variant.instructions
+      }
       mem *= variant.summary['max.res.size'].mean
     }
   }
   return {
-    instructions: Math.pow(instructions, 1/count),
+    instructions: instructionCount === 0 ? undefined : Math.pow(instructions, 1/instructionCount),
     mem: Math.pow(mem, 1/count)
   }
 }

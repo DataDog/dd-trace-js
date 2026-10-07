@@ -6,7 +6,8 @@ const {
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
-const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../audio-utils')
+const { safeJsonParse } = require('../../util')
 const { AUDIO_MIME_TYPES } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
@@ -14,7 +15,7 @@ const {
   extractTextFromContentItem,
   extractContentParts,
   hasMultimodalInputs,
-  getOpenAIModelProvider,
+  getModelProviderAndClient,
 } = require('./utils')
 
 const allowedParamKeys = new Set([
@@ -73,6 +74,19 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  /**
+   * @override
+   */
+  getGenAiApmEndTags (ctx) {
+    const response = ctx.result?.data
+
+    return {
+      // the response model is the resolved one, e.g. the dated version behind an alias
+      modelName: response?.model,
+      metrics: response && this._extractMetrics(response),
+    }
+  }
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     const resource = ctx.methodName
@@ -80,8 +94,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (!methodName) return // we will not trace all openai methods for llmobs
 
     const inputs = ctx.args[0] // completion, chat completion, and embeddings take one argument
-    const response = ctx.result?.data // no result if error
-    const error = !!span.context().getTag('error')
+    const response = ctx.result?.data // no result if error, or if a stream ended before any response arrived
+    const error = !!span.context().getTag('error') || response == null
 
     const operation = getOperation(methodName)
 
@@ -108,10 +122,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   }
 
   _getModelProviderAndClient (baseUrl = '') {
-    const modelProvider = getOpenAIModelProvider(baseUrl)
-    if (modelProvider === 'azure_openai') return { modelProvider, client: 'AzureOpenAI' }
-    if (modelProvider === 'deepseek') return { modelProvider, client: 'DeepSeek' }
-    return { modelProvider, client: 'OpenAI' }
+    return getModelProviderAndClient(baseUrl)
   }
 
   _extractMetrics (response) {

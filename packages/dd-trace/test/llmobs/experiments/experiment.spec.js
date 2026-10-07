@@ -6,7 +6,17 @@ const { describe, it } = require('mocha')
 
 const { API_BASE_PATH, ExperimentsClient } = require('../../../src/llmobs/experiments/client')
 const { Dataset, DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
+const {
+  BaseEvaluator,
+  BaseSummaryEvaluator,
+  EvaluatorResult,
+  MultiEvaluatorResult,
+} = require('../../../src/llmobs/experiments/evaluator')
 const { Experiment } = require('../../../src/llmobs/experiments/experiment')
+const {
+  RemoteEvaluator,
+  RemoteEvaluatorError,
+} = require('../../../src/llmobs/experiments/remote-evaluator')
 
 function client () {
   return new ExperimentsClient({
@@ -51,11 +61,29 @@ function clientWithMockBackend ({ createDatasetError } = {}) {
   return { client: c, requests }
 }
 
+async function waitFor (condition) {
+  for (let i = 0; i < 20; i++) {
+    if (condition()) return
+    await Promise.resolve()
+  }
+  assert.equal(condition(), true)
+}
+
 describe('LLMObs Experiments — dataset + experiment run', () => {
   it('runs task inside an LLMObs experiment span', async () => {
-    const { client: c } = clientWithMockBackend()
-    const dataset = new Dataset(c, 'demo').addRecord({ q: 'apple' }, 'apple', { row: 0 })
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord(
+      { q: 'apple' },
+      'apple',
+      { row: 0 },
+      ['topic:math', 'topic:logic', 'project_name:record-project']
+    )
     const callsToLlmobs = []
+    const structuredOutput = {
+      status: 'ok',
+      count: 3,
+      nested: { a: 1, b: [1, 2, 3] },
+    }
     const llmobs = {
       enabled: true,
       trace: (options, fn) => {
@@ -69,18 +97,339 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
 
     const result = await new Experiment(c, {
       name: 'exp-demo',
+      projectName: 'demo-project',
       dataset,
-      task: (input) => input.q,
+      task: () => structuredOutput,
       evaluators: { ok: () => true },
+      config: { temperature: 0 },
     }, llmobs).run()
 
     assert.equal(callsToLlmobs[0][0], 'trace')
     assert.equal(callsToLlmobs[0][1].kind, 'experiment')
     assert.equal(callsToLlmobs[0][1].name, 'task')
+    assert.deepEqual(callsToLlmobs[1][1].inputData, { q: 'apple' })
+    assert.deepEqual(callsToLlmobs[1][1].outputData, structuredOutput)
     assert.equal(callsToLlmobs[1][1].tags.experiment_id, 'exp')
     assert.equal(callsToLlmobs[1][1].tags.dataset_record_id, dataset.records()[0].id)
+    assert.equal(callsToLlmobs[1][1].tags.project_name, 'demo-project')
+    assert.deepEqual(callsToLlmobs[1][1].tags.topic, ['math', 'logic'])
+    assert.equal(callsToLlmobs[1][1].tags.run_iteration, 1)
     assert.equal(result.rows[0].spanId, '000000000000abcd')
     assert.equal(result.rows[0].traceId, '0000000000000000000000000000abcd')
+    assert.deepEqual(requests.find(request => request.method === 'createExperiment').attributes.config, {
+      temperature: 0,
+    })
+  })
+
+  it('runs class evaluators with contexts and serializes rich results', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input', 'expected', { source: 'test' })
+    let recordContext
+    let summaryContext
+
+    class ExactMatchEvaluator extends BaseEvaluator {
+      constructor () {
+        super('exact_match')
+      }
+
+      async evaluate (context) {
+        recordContext = context
+        return new EvaluatorResult(context.outputData === context.expectedOutput, {
+          reasoning: 'The output matches the expected value.',
+          assessment: 'pass',
+          metadata: { source: 'class' },
+          tags: { evaluator: 'exact', project_name: 'wrong-project' },
+        })
+      }
+    }
+
+    class CountEvaluator extends BaseSummaryEvaluator {
+      constructor () {
+        super('match_count')
+      }
+
+      async evaluate (context) {
+        summaryContext = context
+        return new EvaluatorResult(context.evaluationResults.exact_match.filter(Boolean).length, {
+          reasoning: 'Counted the matching rows.',
+          assessment: 'pass',
+          metadata: { source: 'summary' },
+          tags: { evaluator: 'summary', project_name: 'wrong-project' },
+        })
+      }
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      projectName: 'demo-project',
+      dataset,
+      task: input => input,
+      evaluators: [new ExactMatchEvaluator()],
+      summaryEvaluators: [new CountEvaluator()],
+    }).run()
+
+    assert.deepEqual({
+      inputData: recordContext.inputData,
+      outputData: recordContext.outputData,
+      expectedOutput: recordContext.expectedOutput,
+      metadata: recordContext.metadata,
+      spanId: recordContext.spanId,
+      traceId: recordContext.traceId,
+    }, {
+      inputData: 'input',
+      outputData: 'input',
+      expectedOutput: 'expected',
+      metadata: { source: 'test', experiment_config: {} },
+      spanId: result.rows[0].spanId,
+      traceId: result.rows[0].traceId,
+    })
+    assert.deepEqual(summaryContext.evaluationResults, { exact_match: [false] })
+    assert.equal(result.rows[0].evaluations.exact_match, false)
+    const expectedSummary = {
+      value: 0,
+      error: null,
+      reasoning: 'Counted the matching rows.',
+      assessment: 'pass',
+      metadata: { source: 'summary' },
+      tags: { evaluator: 'summary', project_name: 'wrong-project' },
+    }
+    assert.deepEqual(result.summaryEvaluations.match_count, expectedSummary)
+    assert.deepEqual(result.runs[0].summaryEvaluations.match_count, expectedSummary)
+
+    const events = requests.find(request => request.method === 'postExperimentEvents').attributes
+    const metric = events.metrics.find(item => item.label === 'exact_match')
+    assert.equal(metric.assessment, 'pass')
+    assert.equal(metric.reasoning, 'The output matches the expected value.')
+    assert.deepEqual(metric.metadata, { source: 'class' })
+    assert.deepEqual(metric.tags.filter(tag => tag === 'evaluator:exact'), ['evaluator:exact'])
+    for (const emittedMetric of events.metrics) {
+      assert.deepEqual(
+        emittedMetric.tags.filter(tag => tag.startsWith('project_name:')),
+        ['project_name:demo-project']
+      )
+    }
+    assert.equal(events.spans[0].tags.includes('project_name:demo-project'), true)
+  })
+
+  it('runs managed evaluators with experiment context', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('question', 'answer', { difficulty: 'easy' })
+    c.evaluatorInfer = (evalName, context) => {
+      requests.push({ method: 'evaluatorInfer', evalName, context })
+      return Promise.resolve({
+        value: 0.9,
+        reasoning: 'The answer is correct.',
+        assessment: 'pass',
+        status: 'OK',
+      })
+    }
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'answer',
+      config: { model: 'test-model' },
+      evaluators: [new RemoteEvaluator({ evalName: 'managed-judge' })],
+    }).run()
+
+    const inference = requests.find(request => request.method === 'evaluatorInfer')
+    assert.deepEqual(inference, {
+      method: 'evaluatorInfer',
+      evalName: 'managed-judge',
+      context: {
+        span_input: 'question',
+        span_output: 'answer',
+        meta: {
+          expected_output: 'answer',
+          metadata: {
+            difficulty: 'easy',
+            experiment_config: { model: 'test-model' },
+          },
+        },
+        span_id: result.rows[0].spanId,
+        trace_id: result.rows[0].traceId,
+      },
+    })
+    assert.equal(result.rows[0].evaluations['managed-judge'], 0.9)
+
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    const metric = metrics.find(metric => metric.label === 'managed-judge')
+    assert.equal(metric.score_value, 0.9)
+    assert.equal(metric.reasoning, 'The answer is correct.')
+    assert.equal(metric.assessment, 'pass')
+    assert.equal(metric.status, 'OK')
+    assert.equal(metric.eval_source_type, 'managed')
+  })
+
+  it('preserves managed evaluator error details in metrics', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('question')
+    c.evaluatorInfer = () => Promise.reject(new RemoteEvaluatorError('Managed evaluation failed', {
+      status: 'WARN',
+      backendError: {
+        type: 'RATE_LIMIT_EXCEEDED',
+        message: 'Rate limit exceeded',
+        recommended_resolution: 'Wait before retrying',
+      },
+    }))
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'answer',
+      evaluators: [new RemoteEvaluator({ evalName: 'managed-judge' })],
+    }).run()
+
+    assert.equal(result.rows[0].evaluationErrors['managed-judge'], 'Rate limit exceeded')
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    const metric = metrics.find(metric => metric.label === 'managed-judge')
+    assert.deepEqual(metric.error, {
+      type: 'RATE_LIMIT_EXCEEDED',
+      message: 'Rate limit exceeded',
+      recommended_resolution: 'Wait before retrying',
+    })
+    assert.equal(metric.status, 'WARN')
+    assert.equal(metric.eval_source_type, 'managed')
+  })
+
+  it('supports multiple metrics from a class evaluator without a phantom base result', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    let summaryEvaluatorResults
+
+    class DetailsEvaluator extends BaseEvaluator {
+      evaluate () {
+        return new MultiEvaluatorResult({
+          length: 5,
+          valid: new EvaluatorResult(true),
+        })
+      }
+    }
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+      evaluators: [new DetailsEvaluator()],
+      summaryEvaluators: {
+        inspect: (_inputs, _outputs, _expectedOutputs, evaluatorResults) => {
+          summaryEvaluatorResults = evaluatorResults
+          return true
+        },
+      },
+    }).run()
+
+    assert.deepEqual(summaryEvaluatorResults, {
+      'DetailsEvaluator-length': [5],
+      'DetailsEvaluator-valid': [true],
+    })
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    assert.deepEqual(
+      metrics.filter(metric => metric.metric_source === 'custom').map(metric => metric.label),
+      ['DetailsEvaluator-length', 'DetailsEvaluator-valid']
+    )
+  })
+
+  it('rejects colliding generated evaluator labels', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'row-collision',
+        dataset,
+        task: input => input,
+        evaluators: {
+          details: () => new MultiEvaluatorResult({ length: 1 }),
+          'details-length': () => 2,
+        },
+      }).run(),
+      /Evaluator metric label 'details-length' was emitted more than once/
+    )
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'summary-collision',
+        dataset,
+        task: input => input,
+        summaryEvaluators: {
+          details: () => new MultiEvaluatorResult({ length: 1 }),
+          'details-length': () => 2,
+        },
+      }).run(),
+      /Summary evaluator metric label 'details-length' was emitted more than once/
+    )
+  })
+
+  it('preserves repeated record tags in fallback experiment spans', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord(
+      'input',
+      'expected',
+      {},
+      ['topic:math', 'topic:logic']
+    )
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+    }).run()
+
+    const spans = requests.find(request => request.method === 'postExperimentEvents').attributes.spans
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('topic:')), ['topic:math', 'topic:logic'])
+  })
+
+  it('keeps automatic tags authoritative in fallback experiment spans', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord(
+      'input',
+      'expected',
+      {},
+      [
+        'experiment_id:fake',
+        'dataset_id:fake',
+        'project_id:fake',
+        'dataset_name:fake',
+        'experiment_name:fake',
+      ]
+    )
+
+    await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: input => input,
+    }).run()
+
+    const spans = requests.find(request => request.method === 'postExperimentEvents').attributes.spans
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_id:')), ['experiment_id:exp'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_id:')), ['dataset_id:ds'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('project_id:')), ['project_id:proj'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('dataset_name:')), ['dataset_name:demo'])
+    assert.deepEqual(spans[0].tags.filter(tag => tag.startsWith('experiment_name:')), ['experiment_name:exp-demo'])
+  })
+
+  it('keeps the project name authoritative in external metric tags', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const experiment = await new Experiment(c, {
+      name: 'external-exp',
+      projectName: 'demo-project',
+      external: true,
+    }).start()
+
+    const span = await experiment.submitSpan({ input: 'input' })
+    await experiment.submitEvaluationMetrics(span, [{
+      label: 'score',
+      value: 1,
+      tags: { project_name: 'other-project' },
+    }])
+
+    const metricRequest = requests.find(request => request.method === 'postExperimentEvents' &&
+      request.attributes.metrics.length > 0)
+    assert.deepEqual(
+      metricRequest.attributes.metrics[0].tags.filter(tag => tag.startsWith('project_name:')),
+      ['project_name:demo-project']
+    )
   })
 
   it('surfaces backend failures', async () => {
@@ -162,6 +511,207 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     ])
   })
 
+  it('keeps inverse tag edits made while a push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0', ['split:eval'])],
+      1,
+      1
+    )
+
+    const push = dataset.removeTags(0, ['split:eval']).push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.addTags(0, ['split:eval'])
+    resolvePush()
+    await push
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      tag_operations: { remove: ['split:eval'] },
+    }])
+
+    await dataset.push()
+    assert.deepEqual(requests[1].attributes.update_records, [{
+      id: 'record-0',
+      tag_operations: { add: ['split:eval'] },
+    }])
+    await dataset.push()
+    assert.equal(requests.length, 2)
+  })
+
+  it('keeps tag edits made while an insert is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    dataset.addTags(0, ['topic:initial'])
+
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.removeTags(0, ['topic:initial'])
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'input',
+      expected_output: null,
+      metadata: {},
+      tags: ['topic:initial'],
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      tag_operations: { remove: ['topic:initial'] },
+    }])
+  })
+
+  it('combines replace tag operations and clears inverse changes', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0', ['topic:old'])],
+      1,
+      1
+    )
+
+    dataset.replaceTags(0, ['topic:new', 'topic:keep'])
+    dataset.addTags(0, ['topic:add'])
+    dataset.removeTags(0, ['topic:new'])
+    dataset.update(0, { metadata: { changed: true } })
+    await dataset.push()
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { changed: true },
+      tag_operations: { set: ['topic:add', 'topic:keep'] },
+    }])
+
+    dataset.addTags(0, ['topic:temporary'])
+    dataset.removeTags(0, ['topic:temporary'])
+    await dataset.push()
+    assert.equal(requests.length, 1)
+  })
+
+  it('retains field updates when inverse tag edits cancel', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0')],
+      1,
+      1
+    )
+
+    dataset.update(0, { metadata: { changed: true } })
+    dataset.addTags(0, ['topic:temporary'])
+    dataset.removeTags(0, ['topic:temporary'])
+    await dataset.push()
+
+    assert.deepEqual(requests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { changed: true },
+    }])
+  })
+
+  it('restores tag operations when a push fails', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, {}, 'record-0')],
+      1,
+      1
+    )
+    let shouldFail = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (shouldFail) {
+        shouldFail = false
+        throw new Error('temporary failure')
+      }
+      return { records: [], version: 2 }
+    }
+
+    dataset.addTags(0, ['topic:retry'])
+    await assert.rejects(() => dataset.push(), /temporary failure/)
+    await dataset.push()
+
+    assert.deepEqual(requests[1].attributes.update_records, [{
+      id: 'record-0',
+      tag_operations: { add: ['topic:retry'] },
+    }])
+  })
+
+  it('clears tags for a deleted new record before reusing its id', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let isFirstPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (isFirstPush) {
+        isFirstPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo')
+      .addRecord(new DatasetRecord('deleted', null, {}, 'record-0'))
+
+    dataset.addTags(0, ['topic:stale'])
+    dataset.delete(0)
+    dataset.addRecord(new DatasetRecord('before', null, {}, 'record-0'))
+
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.update(0, { input: 'after' })
+    resolvePush()
+    await push
+    await dataset.push()
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[1].attributes.update_records, [{
+      id: 'record-0',
+      input: 'after',
+    }])
+  })
+
   it('preserves edits to a new record made while its insert is in flight', async () => {
     const { client: c, requests } = clientWithMockBackend()
     let resolvePush
@@ -194,6 +744,120 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       input: 'after',
       expected_output: 'new-expected',
       metadata: { row: 1 },
+    }])
+  })
+
+  it('preserves in-place mutations to an inserted record while its push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord({ values: ['before'] })
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].input.values.push('during')
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: { values: ['before'] },
+      expected_output: null,
+      metadata: {},
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      input: { values: ['before', 'during'] },
+    }])
+  })
+
+  it('preserves in-place mutations to an updated record while its push is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const metadata = { values: ['before'] }
+    const dataset = Dataset.fromExisting(
+      c,
+      'demo',
+      '',
+      'ds',
+      'proj',
+      [new DatasetRecord('input', null, metadata, 'record-0')],
+      1,
+      1
+    )
+    dataset.update(0, { metadata })
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].metadata.values.push('during')
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { values: ['before'] },
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: 'record-0',
+      metadata: { values: ['before', 'during'] },
+    }])
+  })
+
+  it('preserves direct tag mutations made while an insert is in flight', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let resolvePush
+    let blockPush = true
+    c.batchUpdateDatasetRecords = async (projectId, datasetId, attributes) => {
+      requests.push({ method: 'batchUpdateDatasetRecords', projectId, datasetId, attributes })
+      if (blockPush) {
+        blockPush = false
+        await new Promise(resolve => { resolvePush = resolve })
+      }
+      return { records: [], version: 2 }
+    }
+    const dataset = new Dataset(c, 'demo').addRecord('input')
+    const push = dataset.push()
+    await new Promise(resolve => setImmediate(resolve))
+    dataset.records()[0].tags.push('topic:new')
+    resolvePush()
+    await push
+
+    const batchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(batchRequests[0].attributes.insert_records, [{
+      id: dataset.recordIds()[0],
+      input: 'input',
+      expected_output: null,
+      metadata: {},
+    }])
+
+    await dataset.push()
+    const updatedBatchRequests = requests.filter(request => request.method === 'batchUpdateDatasetRecords')
+    assert.deepEqual(updatedBatchRequests[1].attributes.update_records, [{
+      id: dataset.recordIds()[0],
+      tag_operations: { set: ['topic:new'] },
     }])
   })
 
@@ -385,6 +1049,257 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.deepEqual(summaryOutputs, ['good', 'eval-bad', null])
     assert.deepEqual(summaryEvaluatorResults.exactMatch, [true, null, null])
     assert.equal(result.summaryEvaluations.passRate.value, 1 / 3)
+    assert.equal(result.runs[0].hasError, true)
+  })
+
+  it('marks an empty summary evaluator error as a run error', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('good'),
+      task: input => input,
+      summaryEvaluators: {
+        emptyError: () => { throw new Error() },
+      },
+    }).run()
+
+    assert.deepEqual(result.summaryEvaluations.emptyError, { value: null, error: '' })
+    assert.equal(result.runs[0].hasError, true)
+    assert.deepEqual(
+      requests.find(request => request.method === 'updateExperiment').attributes,
+      { status: 'failed', error: 'one or more rows failed' }
+    )
+    const metrics = requests.find(request => request.method === 'postExperimentEvents').attributes.metrics
+    assert.deepEqual(metrics.find(metric => metric.label === 'emptyError').error, { message: '' })
+  })
+
+  it('runs multiple iterations and aliases top-level results to the first run', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo')
+      .addRecord('a', 'a')
+      .addRecord('b', 'b')
+    let taskCalls = 0
+    let summaryCalls = 0
+
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      runs: 2,
+      task: (input) => {
+        taskCalls++
+        return input
+      },
+      evaluators: { exactMatch: (_input, output, expectedOutput) => output === expectedOutput },
+      summaryEvaluators: {
+        rowCount: (inputs) => {
+          summaryCalls++
+          return inputs.length
+        },
+      },
+      tags: { suite: 'multi-run' },
+    }).run()
+
+    const createExperiment = requests.find(request => request.method === 'createExperiment')
+    assert.equal(createExperiment.attributes.run_count, 2)
+    assert.equal(taskCalls, 4)
+    assert.equal(summaryCalls, 2)
+    assert.equal(result.runs.length, 2)
+    assert.equal(result.rows, result.runs[0].rows)
+    assert.equal(result.summaryEvaluations, result.runs[0].summaryEvaluations)
+    assert.deepEqual(result.runs.map(run => run.runIteration), [1, 2])
+    assert.deepEqual(result.runs.map(run => run.hasError), [false, false])
+    assert.notEqual(result.runs[0].runId, result.runs[1].runId)
+    assert.deepEqual(result.runs.map(run => run.rows.map(row => row.output)), [['a', 'b'], ['a', 'b']])
+    assert.deepEqual(result.runs.map(run => run.summaryEvaluations.rowCount.value), [2, 2])
+
+    const events = requests.filter(request => request.method === 'postExperimentEvents')
+    assert.equal(events.length, 2)
+    assert.equal(events[0].attributes.spans.length, 2)
+    assert.equal(events[0].attributes.metrics.length, 3)
+    assert.equal(events[1].attributes.spans.length, 2)
+    assert.equal(events[1].attributes.metrics.length, 3)
+    assert.equal(events[0].attributes.spans[0].tags.includes('run_iteration:1'), true)
+    assert.equal(events[1].attributes.spans[0].tags.includes('run_iteration:2'), true)
+    assert.equal(events[0].attributes.metrics[0].tags.includes('run_iteration:1'), true)
+    assert.equal(events[1].attributes.metrics[0].tags.includes('run_iteration:2'), true)
+    assert.equal(events[0].attributes.metrics[0].tags.includes(`run_id:${result.runs[0].runId}`), true)
+    assert.equal(events[1].attributes.metrics[0].tags.includes(`run_id:${result.runs[1].runId}`), true)
+  })
+
+  it('uploads each run before starting the next iteration', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let releaseFirstUpload
+    const firstUpload = new Promise(resolve => { releaseFirstUpload = resolve })
+    let uploadCalls = 0
+    let taskCalls = 0
+    c.postExperimentEvents = async (experimentId, attributes) => {
+      requests.push({ method: 'postExperimentEvents', experimentId, attributes })
+      uploadCalls++
+      if (uploadCalls === 1) await firstUpload
+    }
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('a').addRecord('b'),
+      runs: 2,
+      task: input => {
+        taskCalls++
+        return input
+      },
+    }).run()
+
+    await waitFor(() => uploadCalls === 1)
+    assert.equal(taskCalls, 2)
+    assert.equal(uploadCalls, 1)
+
+    releaseFirstUpload()
+    const result = await pendingResult
+    assert.equal(result.runs.length, 2)
+    assert.equal(uploadCalls, 2)
+  })
+
+  it('records errors on the individual run that failed', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    let taskCalls = 0
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('a'),
+      runs: 2,
+      task: input => {
+        taskCalls++
+        if (taskCalls === 2) throw new Error('second run failed')
+        return input
+      },
+    }).run()
+
+    assert.deepEqual(result.runs.map(run => run.hasError), [false, true])
+    assert.equal(requests.filter(request => request.method === 'postExperimentEvents').length, 2)
+    assert.deepEqual(
+      requests.find(request => request.method === 'updateExperiment').attributes,
+      { status: 'failed', error: 'one or more rows failed' }
+    )
+  })
+
+  it('processes records concurrently while preserving row order', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo')
+      .addRecord('a')
+      .addRecord('b')
+      .addRecord('c')
+      .addRecord('d')
+    const releases = []
+    let active = 0
+    let maxActive = 0
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: async (input) => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise(resolve => releases.push(resolve))
+        active--
+        return `out-${input}`
+      },
+    }).run({ concurrency: 2 })
+
+    await waitFor(() => releases.length === 2)
+    assert.equal(maxActive, 2)
+    releases[0]()
+    await waitFor(() => releases.length === 3)
+    assert.equal(maxActive, 2)
+    releases[1]()
+    releases[2]()
+    await waitFor(() => releases.length === 4)
+    releases[3]()
+
+    const result = await pendingResult
+    assert.equal(maxActive, 2)
+    assert.equal(active, 0)
+    assert.deepEqual(result.rows.map(row => row.output), ['out-a', 'out-b', 'out-c', 'out-d'])
+    assert.deepEqual(result.rows.map(row => row.index), [0, 1, 2, 3])
+  })
+
+  it('processes evaluators concurrently while preserving labels', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const releases = []
+    let active = 0
+    let maxActive = 0
+
+    function evaluator (value) {
+      return async () => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise(resolve => releases.push(resolve))
+        active--
+        return value
+      }
+    }
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: (input) => `out-${input}`,
+      evaluators: {
+        first: evaluator('first'),
+        second: evaluator('second'),
+        third: evaluator('third'),
+      },
+    }).run({ concurrency: 2 })
+
+    await waitFor(() => releases.length === 2)
+    assert.equal(maxActive, 2)
+    releases[0]()
+    await waitFor(() => releases.length === 3)
+    assert.equal(maxActive, 2)
+    releases[1]()
+    releases[2]()
+
+    const result = await pendingResult
+    assert.equal(maxActive, 2)
+    assert.equal(active, 0)
+    assert.deepEqual(result.rows[0].evaluations, {
+      first: 'first',
+      second: 'second',
+      third: 'third',
+    })
+  })
+
+  it('defaults concurrency to ten task or evaluator executions', async () => {
+    const { client: c } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const evaluators = {}
+    const releases = []
+    let active = 0
+    let maxActive = 0
+
+    for (let i = 0; i < 11; i++) {
+      evaluators[`eval${i}`] = async () => {
+        active++
+        maxActive = Math.max(maxActive, active)
+        await new Promise(resolve => releases.push(resolve))
+        active--
+        return i
+      }
+    }
+
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset,
+      task: (input) => `out-${input}`,
+      evaluators,
+    }).run()
+
+    await waitFor(() => releases.length === 10)
+    assert.equal(maxActive, 10)
+    releases[0]()
+    await waitFor(() => releases.length === 11)
+    for (let i = 1; i < releases.length; i++) releases[i]()
+
+    const result = await pendingResult
+    assert.equal(maxActive, 10)
+    assert.equal(Object.keys(result.rows[0].evaluations).length, 11)
   })
 
   it('throws task and evaluator errors when throwOnErrors is true', async () => {
@@ -408,6 +1323,117 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       }).run({ throwOnErrors: true }),
       /eval-fail/
     )
+  })
+
+  it('does not start queued task work after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const inputs = ['bad', 'later-1', 'later-2']
+    let taskCalls = 0
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'exp-demo',
+        dataset: new Dataset(c, 'demo').addRecord(inputs[0]).addRecord(inputs[1]).addRecord(inputs[2]),
+        task: (input) => {
+          taskCalls++
+          if (input === 'bad') throw new Error('task-fail')
+          return input
+        },
+      }).run({ concurrency: 1, throwOnErrors: true }),
+      /task-fail/
+    )
+    assert.equal(taskCalls, 1)
+  })
+
+  it('does not start queued evaluator work after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const evaluatorInputs = []
+    const taskInputs = []
+
+    await assert.rejects(
+      () => new Experiment(c, {
+        name: 'exp-demo',
+        dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('later'),
+        task: input => {
+          taskInputs.push(input)
+          return input
+        },
+        evaluators: {
+          failing: (input) => {
+            evaluatorInputs.push(input)
+            if (input === 'bad') throw new Error('eval-fail')
+            return true
+          },
+        },
+      }).run({ concurrency: 1, throwOnErrors: true }),
+      /eval-fail/
+    )
+    assert.deepEqual(taskInputs, ['bad'])
+    assert.deepEqual(evaluatorInputs, ['bad'])
+  })
+
+  it('rejects before waiting for other active records after a throw-on-error failure', async () => {
+    const { client: c } = clientWithMockBackend()
+    const taskInputs = []
+    let releaseBad
+    let releaseSlow
+    let resolveBadStarted
+    let resolveSlowStarted
+    let rejection
+    const badStarted = new Promise(resolve => { resolveBadStarted = resolve })
+    const slowStarted = new Promise(resolve => { resolveSlowStarted = resolve })
+    const badGate = new Promise(resolve => { releaseBad = resolve })
+    const slowGate = new Promise(resolve => { releaseSlow = resolve })
+    const pendingResult = new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('slow').addRecord('later'),
+      task: async (input) => {
+        taskInputs.push(input)
+        if (input === 'bad') {
+          resolveBadStarted()
+          await badGate
+          throw new Error('task-fail')
+        }
+        if (input === 'slow') {
+          resolveSlowStarted()
+          await slowGate
+        }
+        return input
+      },
+    }).run({ concurrency: 2, throwOnErrors: true }).then(
+      () => { rejection = new Error('experiment unexpectedly resolved') },
+      error => { rejection = error }
+    )
+
+    try {
+      await Promise.all([badStarted, slowStarted])
+      releaseBad()
+      await waitFor(() => rejection !== undefined)
+      assert.match(rejection.message, /task-fail/)
+      assert.deepEqual(taskInputs, ['bad', 'slow'])
+    } finally {
+      releaseBad()
+      releaseSlow()
+      await pendingResult
+    }
+  })
+
+  it('continues processing task errors when throwOnErrors is false', async () => {
+    const { client: c } = clientWithMockBackend()
+    const taskInputs = []
+    const result = await new Experiment(c, {
+      name: 'exp-demo',
+      dataset: new Dataset(c, 'demo').addRecord('bad').addRecord('later'),
+      task: (input) => {
+        taskInputs.push(input)
+        if (input === 'bad') throw new Error('task-fail')
+        return input
+      },
+    }).run({ concurrency: 1 })
+
+    assert.deepEqual(taskInputs, ['bad', 'later'])
+    assert.equal(result.rows[0].isError, true)
+    assert.equal(result.rows[1].isError, false)
   })
 
   it('normalizes fallback JSON evaluator metrics', async () => {
@@ -461,6 +1487,29 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
       () => new Experiment(c, { name: 'n', dataset, task: (input) => input, summaryEvaluators: [true] }),
       /summary evaluator must be a function/
     )
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, runs: 0 }),
+      /runs must be a positive integer/
+    )
+    assert.throws(
+      () => new Experiment(c, { name: 'n', dataset, task: (input) => input, runs: 1.5 }),
+      /runs must be a positive integer/
+    )
+  })
+
+  it('validates run options', async () => {
+    const c = client()
+    const dataset = new Dataset(c, 'demo').addRecord('a')
+    const experiment = new Experiment(c, { name: 'n', dataset, task: (input) => input })
+
+    await assert.rejects(
+      () => experiment.run({ concurrency: 0 }),
+      /concurrency must be a positive integer/
+    )
+    await assert.rejects(
+      () => experiment.run({ concurrency: 1.5 }),
+      /concurrency must be a positive integer/
+    )
   })
 
   it('preserves records from an existing dataset and rejects duplicates or missing ids', () => {
@@ -478,6 +1527,14 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     const dataset = Dataset.fromExisting(c, 'demo', '', 'ds', 'proj', [existing], 1, 1)
     assert.deepEqual(dataset.recordIds(), ['record-0'])
     assert.equal(dataset.records()[0], existing)
+
+    const taggedDataset = Dataset.fromExisting(c, 'tagged', '', 'tagged-ds', 'proj', [{
+      input: 'tagged-input',
+      metadata: {},
+      id: 'tagged-record',
+      tags: ['topic:math'],
+    }], 1, 1)
+    assert.deepEqual(taggedDataset.records()[0].tags, ['topic:math'])
   })
 
   it('exposes dataset getters and accepts a DatasetRecord instance', () => {
@@ -493,9 +1550,81 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.equal(record.expectedOutput, 'out')
     assert.deepEqual(record.metadata, { m: 1 })
     assert.equal(record.id, 'rec')
-    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, id: 'rec' })
+    assert.deepEqual({ ...record }, { input: 'in', expectedOutput: 'out', metadata: { m: 1 }, tags: [], id: 'rec' })
     assert.deepEqual(dataset.records()[1].input, { inputData: 'payload' })
     assert.equal(dataset.records()[1].expectedOutput, 'expected')
     assert.deepEqual(dataset.records()[1].metadata, { explicit: true })
+  })
+
+  it('adds multiple records with custom and generated ids', async () => {
+    const { client: c, requests } = clientWithMockBackend()
+    const dataset = new Dataset(c, 'demo')
+    const returned = dataset.addRecords([
+      {
+        id: 'custom-record',
+        inputData: 'first',
+        expectedOutput: 'one',
+        metadata: { row: 0 },
+        tags: ['tag:first'],
+      },
+      { inputData: { value: 2 } },
+    ])
+
+    assert.equal(returned, dataset)
+    const records = dataset.records()
+    assert.equal(records.length, 2)
+    assert.equal(records[0].id, 'custom-record')
+    assert.ok(records[1].id)
+
+    await dataset.push()
+
+    const attributes = requests.find(request => request.method === 'batchUpdateDatasetRecords').attributes
+    assert.deepEqual(attributes.insert_records, [
+      {
+        id: 'custom-record',
+        input: 'first',
+        expected_output: 'one',
+        metadata: { row: 0 },
+        tags: ['tag:first'],
+      },
+      {
+        id: records[1].id,
+        input: { value: 2 },
+        expected_output: null,
+        metadata: {},
+      },
+    ])
+  })
+
+  it('validates the entire addRecords batch before mutating the dataset', () => {
+    const dataset = new Dataset(client(), 'demo')
+      .addRecord(new DatasetRecord('existing', null, {}, 'existing'))
+
+    assert.throws(
+      () => dataset.addRecords([
+        { id: 'new', inputData: 'first' },
+        { id: 'existing', inputData: 'duplicate' },
+      ]),
+      /Duplicate record id 'existing'/
+    )
+    assert.deepEqual(dataset.recordIds(), ['existing'])
+
+    assert.throws(
+      () => dataset.addRecords([
+        { id: 'same', inputData: 'first' },
+        { id: 'same', inputData: 'duplicate' },
+      ]),
+      /Duplicate record id 'same'/
+    )
+    assert.deepEqual(dataset.recordIds(), ['existing'])
+
+    assert.throws(
+      () => dataset.addRecords([
+        { id: 'new', inputData: 'first' },
+        { id: 'bad', inputData: 'invalid', tags: ['malformed'] },
+      ]),
+      /Tag 'malformed' is malformed/
+    )
+    assert.deepEqual(dataset.recordIds(), ['existing'])
   })
 })

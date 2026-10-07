@@ -25,6 +25,13 @@ const KNOWN_CHANNEL_SUFFIXES = new Set([
   'bedrockruntime',
 ])
 
+// Older SDK clients report EventBridge under its CloudWatch Events name or its `events` endpoint
+// prefix; both share the EventBridge channels.
+const CHANNEL_SUFFIX_ALIASES = new Map([
+  ['cloudwatchevents', 'eventbridge'],
+  ['events', 'eventbridge'],
+])
+
 /**
  * @typedef {object} ChannelBag
  * @property {ReturnType<typeof channel>} start
@@ -70,7 +77,6 @@ const clientNameCache = new WeakMap()
 
 /**
  * @param {Function} clientCtor
- * @returns {string}
  */
 function getClientName (clientCtor) {
   let name = clientNameCache.get(clientCtor)
@@ -86,7 +92,6 @@ const operationCache = new WeakMap()
 
 /**
  * @param {Function} commandCtor
- * @returns {string}
  */
 function getOperationName (commandCtor) {
   let operation = operationCache.get(commandCtor)
@@ -193,11 +198,11 @@ function wrapSmithySend (send) {
     }
 
     return channels.start.runStores(ctx, () => {
-      // When the region is not set this never resolves so we can't await.
+      // Resolve region tags independently; send reports provider failures through its promise or callback.
       this.config.region().then(region => {
         ctx.region = region
         channels.region.publish(ctx)
-      })
+      }, () => {})
 
       if (cbExists) {
         args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
@@ -314,7 +319,8 @@ function addResponse (ctx, error, result) {
 function getChannelSuffix (name) {
   // some resource identifiers have spaces between ex: bedrock runtime
   name = String(name).replaceAll(' ', '')
-  return KNOWN_CHANNEL_SUFFIXES.has(name) ? name : 'default'
+  if (KNOWN_CHANNEL_SUFFIXES.has(name)) return name
+  return CHANNEL_SUFFIX_ALIASES.get(name) ?? 'default'
 }
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {

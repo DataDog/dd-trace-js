@@ -2,18 +2,28 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+const { Worker: NativeWorker } = require('node:worker_threads')
 
+const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/mocha')
 
+const telemetryMetrics = require('../../src/telemetry/metrics')
+const { GuardrailMetrics, TELEMETRY_NAMESPACE } = require('../../src/debugger/guardrail-metrics')
+const { PauseDurationHistogram } = require('../../src/debugger/pause-duration-histogram')
+const telemetryLogs = require('../../src/telemetry/logs')
+const logCollector = require('../../src/telemetry/logs/log-collector')
+const { DDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+
 describe('debugger/index', () => {
   let DynamicInstrumentation
   let Worker
   let config
   let rc
+  let fetchAgentInfo
   let readFileStub
   let messageChannels
 
@@ -26,6 +36,9 @@ describe('debugger/index', () => {
     Worker.prototype.removeAllListeners = sinon.stub()
 
     readFileStub = sinon.stub()
+    fetchAgentInfo = sinon.stub().callsFake((url, callback) => {
+      callback(null, { endpoints: ['/debugger/v2/input'] })
+    })
     messageChannels = []
 
     DynamicInstrumentation = proxyquire('../../src/debugger/index', {
@@ -33,9 +46,7 @@ describe('debugger/index', () => {
         readFile: readFileStub,
       },
       '../agent/info': {
-        fetchAgentInfo: sinon.stub().callsFake((url, callback) => {
-          callback(null, { endpoints: ['/debugger/v2/input'] })
-        }),
+        fetchAgentInfo,
       },
       './config': proxyquire('../../src/debugger/config', {
         '../git_metadata': () => ({ commitSHA: 'test-sha', repositoryUrl: 'https://github.com/test/repo' }),
@@ -61,14 +72,20 @@ describe('debugger/index', () => {
     })
 
     config = {
+      DD_AGENTLESS_ENABLED: false,
+      DD_API_KEY: undefined,
       debug: false,
       dynamicInstrumentation: {
         enabled: true,
+        DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 10,
+        DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],
+        DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['password'],
       },
       hostname: 'test-host',
       logLevel: 'info',
       port: 8126,
       service: 'test-service',
+      site: 'datadoghq.com',
       tags: {
         'runtime-id': 'test-runtime-id',
       },
@@ -88,6 +105,107 @@ describe('debugger/index', () => {
     if (DynamicInstrumentation.isStarted()) {
       DynamicInstrumentation.stop()
     }
+  })
+
+  describe('worker failure telemetry', () => {
+    let worker
+
+    beforeEach(() => {
+      logCollector.reset(10_000)
+      telemetryLogs.start({ telemetry: { DD_TELEMETRY_LOG_COLLECTION_ENABLED: true } })
+      DynamicInstrumentation.start(config, rc)
+      worker = Worker.lastCall.returnValue
+    })
+
+    afterEach(() => {
+      telemetryLogs.stop()
+      logCollector.reset()
+    })
+
+    it('should report the exit code with debug logging disabled', () => {
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      onExit(1)
+
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
+        '[debugger] worker thread exited unexpectedly exit_code=1')
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    for (const code of ['MODULE_NOT_FOUND', 'ERR_WORKER_OUT_OF_MEMORY', 'ERR_INSPECTOR_COMMAND', undefined]) {
+      it(`should report the error name and code ${code}`, () => {
+        const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+        const error = Object.assign(new TypeError('customer-secret'), { code })
+        onError(error)
+
+        const entries = logCollector.drain()
+        assert.ok(entries)
+        const [entry] = entries
+        assert.strictEqual(entry.message,
+          `[debugger] worker thread error name=TypeError code=${code ?? 'unknown'} reason=unknown`)
+        assert.ok(!entry.stack_trace.includes('customer-secret'))
+        assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      })
+    }
+
+    it('should report the reason of a fatal debugger error', () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      onError(Object.assign(new Error('Unexpected Debugger.paused reason: secret'), {
+        reason: 'unexpected_pause_reason',
+      }))
+
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
+        '[debugger] worker thread error name=Error code=unknown reason=unexpected_pause_reason')
+    })
+
+    it('should retain discriminants across a real worker failure', async () => {
+      const onError = worker.on.getCalls().find(call => call.args[0] === 'error').args[1]
+      const onExit = worker.once.getCalls().find(call => call.args[0] === 'exit').args[1]
+      // Match the debugger worker's preload isolation, including under the CI coverage runner.
+      const { execArgv, env } = Worker.lastCall.args[1]
+      const failingWorker = new NativeWorker(`
+        throw Object.assign(new TypeError('customer-secret'), {
+          code: 'MODULE_NOT_FOUND', reason: 'unexpected_pause_reason'
+        })
+      `, { eval: true, execArgv, env })
+      failingWorker.on('error', onError)
+      failingWorker.once('exit', onExit)
+      const exitCode = await new Promise(resolve => failingWorker.once('exit', resolve))
+
+      assert.strictEqual(exitCode, 1)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.deepStrictEqual(entries.map(entry => entry.message), [
+        '[debugger] worker thread error name=TypeError code=MODULE_NOT_FOUND reason=unexpected_pause_reason',
+        '[debugger] worker thread exited unexpectedly exit_code=1',
+      ])
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+    })
+
+    it('should report a rejected probe without terminating the worker', () => {
+      const ack = sinon.spy()
+      rc.setProductHandler.lastCall.args[1]('apply', { id: 'probe1' }, 'config-id', ack)
+      const onMessage = messageChannels[0].port2.on.getCalls().find(call => call.args[0] === 'message').args[1]
+      const error = new Error('Unsupported probe type: customer-secret')
+      onMessage({ ackId: 1, error, reason: 'unsupported_probe_type' })
+
+      sinon.assert.calledOnceWithExactly(ack, error)
+      assert.strictEqual(DynamicInstrumentation.isStarted(), true)
+      const entries = logCollector.drain()
+      assert.ok(entries)
+      assert.strictEqual(entries[0].message,
+        '[debugger] worker thread error name=Error code=unknown reason=unsupported_probe_type')
+    })
+
+    it('should not report intentional worker shutdown as an unexpected exit', () => {
+      DynamicInstrumentation.stop()
+
+      assert.strictEqual(logCollector.drain(), undefined)
+      sinon.assert.calledOnce(worker.removeAllListeners)
+    })
   })
 
   describe('isStarted', () => {
@@ -118,9 +236,46 @@ describe('debugger/index', () => {
       assert.strictEqual(firstWorker, secondWorker)
     })
 
+    it('should install a template value inspector honoring the redaction configuration', () => {
+      DynamicInstrumentation.start(config, rc)
+
+      const inspectSegment = globalThis[Symbol.for('dd-trace')].debuggerInspectSegment
+      assert.strictEqual(
+        inspectSegment({ foo: 1, password: 'hunter2', token: 'secret' }),
+        "{ foo: '{redacted}', password: 'hunter2', token: '{redacted}' }"
+      )
+    })
+
     it('should set product handler for LIVE_DEBUGGING', () => {
       DynamicInstrumentation.start(config, rc)
       sinon.assert.calledOnceWithExactly(rc.setProductHandler, 'LIVE_DEBUGGING', sinon.match.func)
+    })
+
+    it('should use the direct debugger intake in agentless mode', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'us3.datadoghq.com'
+
+      DynamicInstrumentation.start(config, rc)
+
+      sinon.assert.notCalled(fetchAgentInfo)
+      const workerConfig = Worker.firstCall.args[1].workerData.config
+      assert.strictEqual(workerConfig.agentless, true)
+      assert.strictEqual(workerConfig.apiKey, 'test-api-key')
+      assert.strictEqual(workerConfig.inputPath, '/api/v2/debugger')
+      assert.strictEqual(workerConfig.url, 'https://debugger-intake.us3.datadoghq.com')
+    })
+
+    it('should not start agentless Dynamic Instrumentation for an invalid site', () => {
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      DynamicInstrumentation.start(config, rc)
+
+      assert.strictEqual(DynamicInstrumentation.isStarted(), false)
+      sinon.assert.notCalled(Worker)
+      sinon.assert.notCalled(rc.setProductHandler)
     })
 
     it('should unref all handles to prevent keeping process alive', () => {
@@ -139,6 +294,119 @@ describe('debugger/index', () => {
         sinon.assert.calledOnce(channel.port2.unref)
       }
     })
+  })
+
+  describe('pause duration telemetry', () => {
+    const appClosingChannel = dc.channel('datadog:telemetry:app-closing')
+    /** @type {sinon.SinonFakeTimers} */
+    let clock
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    afterEach(() => {
+      DynamicInstrumentation.stop()
+      clock.restore()
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    it('should share the pause durations with the worker instead of receiving a message per pause', () => {
+      DynamicInstrumentation.start(config, rc)
+
+      const { workerData } = Worker.firstCall.args[1]
+      assert.ok(workerData.pauseDurationBuffer instanceof SharedArrayBuffer)
+      sinon.assert.neverCalledWith(Worker.lastCall.returnValue.on, 'message')
+    })
+
+    it('should periodically report the recorded durations as an untagged distribution', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(1.25)
+      workerPauseDurations.record(1.25)
+      workerPauseDurations.record(3.5)
+
+      assert.strictEqual(getPauseDurationSketch(), undefined, 'should not report before the flush interval')
+
+      clock.tick(10_000)
+
+      const { metrics, sketches } = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).toJSON()
+      assert.strictEqual(metrics, undefined)
+      assert.strictEqual(sketches.namespace, 'live_debugger')
+      assert.strictEqual(sketches.series.length, 1)
+      const [series] = sketches.series
+      assert.strictEqual(series.metric, 'execution.pause.duration')
+      assert.strictEqual(series.common, true)
+      assert.deepStrictEqual(series.tags, [])
+      const sketch = getPauseDurationSketch()
+      assert.strictEqual(sketch?.count, 3)
+      assertApproximately(sketch.getValueAtQuantile(0), 1.25)
+      assertApproximately(sketch.getValueAtQuantile(0.5), 1.25)
+      assertApproximately(sketch.getValueAtQuantile(1), 3.5)
+
+      workerPauseDurations.record(2)
+      clock.tick(10_000)
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 4, 'should accumulate into the same distribution')
+    })
+
+    it('should continue recording after a telemetry flush', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(2)
+      clock.tick(10_000)
+      telemetryMetrics.manager.get(TELEMETRY_NAMESPACE).reset()
+      workerPauseDurations.record(3)
+      clock.tick(10_000)
+
+      const sketch = getPauseDurationSketch()
+      assert.strictEqual(sketch?.count, 1)
+      assertApproximately(sketch.getValueAtQuantile(0.5), 3)
+    })
+
+    it('should report the remaining durations when stopped', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(2)
+      DynamicInstrumentation.stop()
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 1)
+    })
+
+    it('should report the durations when telemetry is about to send its final metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerPauseDurations = getWorkerPauseDurations()
+      workerPauseDurations.record(2)
+      appClosingChannel.publish()
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 1, 'should report without waiting for the flush interval')
+
+      DynamicInstrumentation.stop()
+      workerPauseDurations.record(3)
+      appClosingChannel.publish()
+
+      assert.strictEqual(getPauseDurationSketch()?.count, 1, 'should stop listening once stopped')
+    })
+
+    function getWorkerPauseDurations () {
+      return new PauseDurationHistogram(Worker.firstCall.args[1].workerData.pauseDurationBuffer)
+    }
+
+    function getPauseDurationSketch () {
+      const series = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE)?.toJSON().sketches?.series
+      if (series === undefined) return
+      return DDSketch.fromProto(Buffer.from(series[0].sketch_b64, 'base64'))
+    }
+
+    /**
+     * @param {number} actual
+     * @param {number} expected
+     */
+    function assertApproximately (actual, expected) {
+      // Telemetry distributions have a relative accuracy of 1%
+      assert.ok(Math.abs(actual - expected) <= expected * 0.01, `Expected ${actual} to be ~${expected}`)
+    }
   })
 
   describe('stop', () => {
@@ -224,10 +492,15 @@ describe('debugger/index', () => {
 
       const postedConfig = configPort.postMessage.firstCall.args[0]
       assert.deepStrictEqual(postedConfig, {
+        agentless: false,
+        apiKey: undefined,
         commitSHA: 'test-sha',
         debug: false,
         dynamicInstrumentation: {
           enabled: true,
+          DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS: 10,
+          DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS: ['foo'],
+          DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS: ['password'],
         },
         env: 'test-env',
         hostname: 'test-host',
@@ -241,6 +514,48 @@ describe('debugger/index', () => {
         url: 'http://localhost:8126/',
         version: '1.2.3',
       })
+    })
+
+    it('should apply the evaluation time budget to the probe sampler', () => {
+      DynamicInstrumentation.start(config, rc)
+      const sampler = globalThis[Symbol.for('dd-trace')][Symbol.for('dd-trace.debugger.probeSampler')]
+      const hrtime = sinon.stub(process.hrtime, 'bigint')
+      try {
+        // A 15ms evaluation is within the configured 10ms budget only once the budget is raised
+        hrtime.returns(0n)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), true)
+        hrtime.returns(15_000_000n)
+        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', true, 0n, false), true)
+        assert.strictEqual(
+          sampler.takeConditionError('probe-1'),
+          'Condition evaluation exceeded its time budget of 10ms (took 15.0ms)'
+        )
+
+        config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_EVALUATION_TIMEOUT_MS = 20
+        DynamicInstrumentation.configure(config)
+        sampler.remove('probe-1')
+
+        hrtime.returns(0n)
+        assert.strictEqual(sampler.shouldEvaluateCondition('probe-1', false), true)
+        hrtime.returns(15_000_000n)
+        assert.strictEqual(sampler.conditionEvaluated(0, 'probe-1', true, 0n, false), true)
+        assert.strictEqual(sampler.takeConditionError('probe-1'), undefined)
+      } finally {
+        hrtime.restore()
+      }
+    })
+
+    it('should ignore an invalid agentless site', () => {
+      DynamicInstrumentation.start(config, rc)
+      const configPort = messageChannels[2].port2
+      configPort.postMessage.resetHistory()
+      config.DD_AGENTLESS_ENABLED = true
+      config.DD_API_KEY = 'test-api-key'
+      config.site = 'datadoghq.com@evil.example'
+
+      DynamicInstrumentation.configure(config)
+
+      sinon.assert.notCalled(configPort.postMessage)
     })
   })
 
@@ -292,6 +607,110 @@ describe('debugger/index', () => {
     })
   })
 
+  describe('guardrail metrics', () => {
+    const appClosingChannel = dc.channel('datadog:telemetry:app-closing')
+    /** @type {sinon.SinonFakeTimers} */
+    let clock
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    afterEach(() => {
+      clock.restore()
+      telemetryMetrics.manager.delete(TELEMETRY_NAMESPACE)
+    })
+
+    it('should share the guardrail counters with the worker', () => {
+      DynamicInstrumentation.start(config, rc)
+
+      const { workerData } = Worker.firstCall.args[1]
+      assert.ok(workerData.guardrailMetricsBuffer instanceof SharedArrayBuffer)
+    })
+
+    it('should periodically report the counters as telemetry metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventDropped(0, 0, 3) // queueFull, snapshot
+      workerMetrics.captureIncomplete(0b100, 1) // depth, log
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [], 'should not report before the flush interval')
+
+      clock.tick(10_000)
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:snapshot', 'reason:queueFull'], value: 3 },
+        { metric: 'capture.incomplete', tags: ['event_type:log', 'reason:depth'], value: 1 },
+      ])
+
+      workerMetrics.eventDropped(0, 0, 1)
+      clock.tick(10_000)
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:snapshot', 'reason:queueFull'], value: 4 },
+        { metric: 'capture.incomplete', tags: ['event_type:log', 'reason:depth'], value: 1 },
+      ], 'should accumulate into the same telemetry counters')
+    })
+
+    it('should report the remaining counters and stop the timer when stopped', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventSkipped(1, 0) // rateLimitProbe, snapshot
+      DynamicInstrumentation.stop()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.skipped', tags: ['event_type:snapshot', 'reason:rateLimitProbe'], value: 1 },
+      ])
+      assert.strictEqual(clock.countTimers(), 0)
+    })
+
+    it('should report the counters when telemetry is about to send its final metrics', () => {
+      DynamicInstrumentation.start(config, rc)
+      const workerMetrics = new GuardrailMetrics(Worker.firstCall.args[1].workerData.guardrailMetricsBuffer)
+
+      workerMetrics.eventDropped(0, 1, 2) // queueFull, log
+      appClosingChannel.publish()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:log', 'reason:queueFull'], value: 2 },
+      ], 'should report without waiting for the flush interval')
+
+      DynamicInstrumentation.stop()
+      workerMetrics.eventDropped(0, 1, 1)
+      appClosingChannel.publish()
+
+      assert.deepStrictEqual(getTelemetryMetrics(), [
+        { metric: 'events.dropped', tags: ['event_type:log', 'reason:queueFull'], value: 2 },
+      ], 'should stop listening once stopped')
+    })
+
+    it('should not keep the process alive', () => {
+      const setIntervalSpy = sinon.spy(global, 'setInterval')
+      try {
+        DynamicInstrumentation.start(config, rc)
+      } finally {
+        setIntervalSpy.restore()
+      }
+
+      sinon.assert.calledOnce(setIntervalSpy)
+      assert.strictEqual(setIntervalSpy.firstCall.returnValue.hasRef(), false)
+    })
+
+    /**
+     * @returns {Array<{ metric: string, tags: string[], value: number }>}
+     */
+    function getTelemetryMetrics () {
+      const namespace = telemetryMetrics.manager.get(TELEMETRY_NAMESPACE)
+      if (namespace === undefined) return []
+      return [...namespace.metrics.values()]
+        .filter((metric) => metric.hasPoints())
+        .map(({ metric, tags, points }) => ({ metric, tags, value: points[0][1] }))
+    }
+  })
+
   describe('readProbeFile', () => {
     it('should do nothing when path is not provided', () => {
       // probeFile is undefined by default (not set in config)
@@ -305,7 +724,7 @@ describe('debugger/index', () => {
         { id: 'probe2', type: 'metric' },
       ]
       const probeFileContent = JSON.stringify(probes)
-      config.dynamicInstrumentation.probeFile = '/path/to/probes.json'
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = '/path/to/probes.json'
 
       readFileStub.callsFake((path, encoding, callback) => {
         callback(null, probeFileContent)
@@ -334,7 +753,7 @@ describe('debugger/index', () => {
     })
 
     it('should handle file read error gracefully', () => {
-      config.dynamicInstrumentation.probeFile = '/path/to/missing.json'
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = '/path/to/missing.json'
       const readError = new Error('ENOENT: no such file or directory')
 
       readFileStub.callsFake((path, encoding, callback) => {
@@ -348,7 +767,7 @@ describe('debugger/index', () => {
     })
 
     it('should handle invalid JSON gracefully', () => {
-      config.dynamicInstrumentation.probeFile = '/path/to/invalid.json'
+      config.dynamicInstrumentation.DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE = '/path/to/invalid.json'
       const invalidJSON = '{ invalid json content'
 
       readFileStub.callsFake((path, encoding, callback) => {

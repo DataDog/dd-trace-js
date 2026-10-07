@@ -14,7 +14,6 @@ const PLAYWRIGHT_PACKAGE = '@playwright/test'
  * @param {string} filename candidate filename
  * @param {string} directory candidate parent directory
  * @param {string} projectRoot detected project root
- * @returns {boolean} whether the candidate can be selected by Playwright Test
  */
 function isTestFile (filename, directory, projectRoot) {
   if (!TEST_FILE_PATTERN.test(filename)) return false
@@ -26,7 +25,6 @@ function isTestFile (filename, directory, projectRoot) {
  * Returns the complete suffix that a generated Playwright spec must preserve.
  *
  * @param {string} filename representative Playwright spec
- * @returns {string} generated spec suffix
  */
 function getTestExtension (filename) {
   return TEST_FILE_PATTERN.exec(path.basename(filename))?.[0] || '.spec.js'
@@ -39,7 +37,6 @@ function getTestExtension (filename) {
  * @param {string} input.moduleSystem generated module system
  * @param {string} input.scenarioId generated scenario id
  * @param {string} input.testName generated test name
- * @returns {string} canonical generated Playwright source
  */
 function getGeneratedTestContent ({ moduleSystem, scenarioId, testName }) {
   const assertion = scenarioId === 'atr-fail-once'
@@ -60,7 +57,6 @@ function getGeneratedTestContent ({ moduleSystem, scenarioId, testName }) {
 /**
  * Returns the isolated Playwright config shared by generated validation tests.
  *
- * @returns {string} canonical generated Playwright config
  */
 function getGeneratedConfigContent () {
   return [
@@ -81,7 +77,6 @@ function getGeneratedConfigContent () {
  * Returns the generated Playwright config path for a test directory.
  *
  * @param {string} testDirectory generated test directory
- * @returns {string} generated config path
  */
 function getGeneratedConfigPath (testDirectory) {
   return path.join(testDirectory, GENERATED_CONFIG_FILENAME)
@@ -125,7 +120,6 @@ function getGeneratedTestArgs (filename, configFile) {
  * Returns the validator-owned Playwright output directory for a selected spec.
  *
  * @param {string} filename selected or generated Playwright spec
- * @returns {string} absolute output directory
  */
 function getOutputPath (filename) {
   return path.join(path.dirname(filename), VALIDATION_OUTPUT_DIRECTORY)

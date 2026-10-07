@@ -1,8 +1,10 @@
 'use strict'
 
+const { INCOMPLETE_REASON } = require('../../guardrail-metrics')
 const session = require('../session')
 const { collectObjectProperties } = require('./collector')
 const { processRawState, processRemoteObject } = require('./processor')
+const { fieldCountSym } = require('./symbols')
 
 const BIGINT_MAX = (1n << 256n) - 1n
 
@@ -26,8 +28,13 @@ module.exports = {
  * @param {CaptureLimits} limits - The capture limits
  * @param {bigint} [deadlineNs] - The deadline in nanoseconds compared to `process.hrtime.bigint()`. Defaults to
  *   {@link BIGINT_MAX}. If the deadline is reached, the snapshot will be truncated.
- * @returns {Promise<{ processLocalState: () => ReturnType<typeof processRawState>, fatalErrors: Error[] }>} The local
- *   state for the call frame
+ * @returns {Promise<{
+ *   processLocalState: () => ReturnType<typeof processRawState>,
+ *   fatalErrors: Error[],
+ *   incomplete: import('./processor').IncompleteCapture
+ * }>} The local state for the call frame. `incomplete` is only fully populated once `processLocalState` has run.
+ *   Not every fatal error is recorded as a runtime error: the collector also raises one when it hits its large object
+ *   safety threshold, which is reported as the field count limit it is.
  */
 async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT_MAX) {
   const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
@@ -35,37 +42,61 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
   const ctx = { deadlineReached: false, fatalErrors: [] }
   const opts = { maxReferenceDepth, maxCollectionSize, maxFieldCount, deadlineNs, ctx }
   const rawState = []
+  /** @type {import('./processor').IncompleteCapture} */
+  const incomplete = { reasons: 0 }
   /** @type {ReturnType<typeof processRawState> | null} */
   let processedState = null
 
-  for (const scope of callFrame.scopeChain) {
-    if (scope.type === 'global') continue // The global scope is too noisy
-    const { objectId } = scope.object
-    if (objectId === undefined) continue // I haven't seen this happen, but according to the types it's possible
+  const { scopeChain } = callFrame
+  for (const scope of scopeChain) {
+    if (!isCollectable(scope)) continue
+    const objectId = /** @type {string} */ (scope.object.objectId)
     try {
       // The objectId for a scope points to a pseudo-object whose properties are the actual variables in the scope.
       // This is why we can just call `collectObjectProperties` directly and expect it to return the in-scope variables
       // as an array.
       // eslint-disable-next-line no-await-in-loop
-      rawState.push(...await collectObjectProperties(objectId, opts))
+      const variables = await collectObjectProperties(objectId, opts)
+      // A scope with more variables than the field count limit is trimmed like any other object, but since the scope
+      // itself is not part of the snapshot, the marker would be lost once its variables are spread into the state
+      if (variables[fieldCountSym] !== undefined) incomplete.reasons |= INCOMPLETE_REASON.FIELD_COUNT
+      rawState.push(...variables)
     } catch (err) {
+      incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       ctx.fatalErrors.push(new Error(
         `Error getting local state for closure scope (type: ${scope.type}). ` +
         'Future snapshots for existing probes in this location will be skipped until the probes are re-applied',
         { cause: err } // TODO: The cause is not used by the backend
       ))
     }
-    if (ctx.deadlineReached === true) break // TODO: Bad UX; Variables in remaining scopes are silently dropped
+    if (ctx.deadlineReached === true) {
+      // Nodes skipped within this scope carry the timeout marker and are recorded when processed (unless they end up
+      // redacted), but the remaining scopes are dropped without any marker.
+      // TODO: Bad UX; Variables in remaining scopes are silently dropped
+      // @ts-expect-error - findLast is available in Node.js 18+ but TypeScript doesn't know about it without ES2023 lib
+      if (scope !== scopeChain.findLast(isCollectable)) incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
+      break
+    }
   }
 
   // Delay calling `processRawState` so caller can resume the main thread before processing `rawState`
   return {
     processLocalState () {
-      processedState ??= processRawState(rawState, maxLength)
+      processedState ??= processRawState(rawState, maxLength, incomplete)
       return processedState
     },
     fatalErrors: ctx.fatalErrors,
+    incomplete,
   }
+}
+
+/**
+ * Returns whether the scope variables are collected into the snapshot.
+ * @param {import('inspector').Debugger.Scope} scope
+ */
+function isCollectable (scope) {
+  // The global scope is too noisy, and a scope without an object id is possible according to the types
+  return scope.type !== 'global' && scope.object.objectId !== undefined
 }
 
 /**
@@ -76,12 +107,23 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
  */
 
 /**
+ * @typedef {object} RedactedCaptureExpression
+ * @property {string} name - The name of the expression
+ * @property {{ expr: string, message: string }} redactionError - Reported instead of evaluating the expression, as it
+ *   reads a redacted identifier
+ */
+
+/**
  * @typedef {object} CaptureExpressionResult
  * @property {() => Record<string, ReturnType<typeof processRemoteObject>>} processCaptureExpressions - Callback to
  *   process raw data into snapshot format
  * @property {{ expr: string, message: string }[]} evaluationErrors - Transient errors from expression evaluation
  *   (safe to retry)
  * @property {Error[]} fatalErrors - Fatal errors that should disable capture expressions for this probe permanently
+ * @property {import('./processor').IncompleteCapture} incomplete - The capture limits enforced on the expressions,
+ *   including a runtime error for every expression that threw or could not be evaluated. Only fully populated once
+ *   `processCaptureExpressions` has run.
+ * @property {boolean} timedOut - Whether evaluating an expression exceeded the evaluation time budget
  */
 
 /**
@@ -96,26 +138,44 @@ async function getLocalStateForCallFrame (callFrame, limits, deadlineNs = BIGINT
  * Collects raw data while paused, returns a callback to process after resume.
  *
  * @param {import('inspector').Debugger.CallFrame} callFrame - The call frame to evaluate expressions on
- * @param {CompiledCaptureExpression[]} expressions - The compiled expressions with precomputed capture limits
+ * @param {(CompiledCaptureExpression|RedactedCaptureExpression)[]} expressions - The compiled expressions with
+ *   precomputed capture limits
  * @param {bigint} [deadlineNs] - The deadline in nanoseconds. Defaults to {@link BIGINT_MAX}. If the deadline is
  *   reached, the snapshot will be truncated.
+ * @param {bigint} [evaluationTimeoutNs] - The time budget in nanoseconds for evaluating a single expression. Defaults
+ *   to {@link BIGINT_MAX}. Evaluation can't be interrupted, so an exceeded budget is reported as an evaluation error.
  * @returns {Promise<CaptureExpressionResult>} Raw results with deferred processing callback
  */
-async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = BIGINT_MAX) {
+async function evaluateCaptureExpressions (
+  callFrame,
+  expressions,
+  deadlineNs = BIGINT_MAX,
+  evaluationTimeoutNs = BIGINT_MAX
+) {
   /** @type {{ name: string, remoteObject: object, maxLength: number }[]} */
   const rawResults = []
   /** @type {{ expr: string, message: string }[]} */
   const evaluationErrors = []
   /** @type {Error[]} */
   const fatalErrors = []
+  /** @type {import('./processor').IncompleteCapture} */
+  const incomplete = { reasons: 0 }
   /** @type {Record<string, ReturnType<typeof processRemoteObject>> | null} */
   let processedResult = null
+  let timedOut = false
 
   for (let i = 0; i < expressions.length; i++) {
-    const { name, expression, limits } = expressions[i]
+    const captureExpression = expressions[i]
+    if ('redactionError' in captureExpression) {
+      evaluationErrors.push(captureExpression.redactionError)
+      continue
+    }
+
+    const { name, expression, limits } = captureExpression
     const { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength } = limits
 
     try {
+      const evaluationStart = process.hrtime.bigint()
       const { result, exceptionDetails } = /** @type {EvaluateOnCallFrameResult} */ (
         // eslint-disable-next-line no-await-in-loop
         await session.post('Debugger.evaluateOnCallFrame', {
@@ -123,9 +183,17 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
           expression,
         })
       )
+      if (process.hrtime.bigint() - evaluationStart > evaluationTimeoutNs) {
+        timedOut = true
+        evaluationErrors.push({
+          expr: name,
+          message: `Expression evaluation exceeded its time budget of ${evaluationTimeoutNs / 1_000_000n}ms`,
+        })
+      }
 
       // Handle evaluation exceptions (maybe transient - bad expression, undefined var, etc.)
       if (exceptionDetails) {
+        incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
         evaluationErrors.push({ expr: name, message: extractErrorMessage(exceptionDetails) })
         continue
       }
@@ -156,12 +224,20 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
         }
 
         if (ctx.deadlineReached) {
-          // Add the current expression (properties may be incomplete due to timeout)
+          // Add the current expression (properties may be incomplete due to timeout). Those carry the timeout marker
+          // and are recorded when processed, unless they end up redacted.
           rawResults.push({ name, remoteObject: result, maxLength })
-          // Add stub entries for remaining uncaptured expressions
+          // Add stub entries for remaining uncaptured expressions. The stubs are used as-is, so record them here.
+          // Redacted expressions are never evaluated, so they are reported the same way as without a timeout.
           for (let j = i + 1; j < expressions.length; j++) {
+            const remaining = expressions[j]
+            if ('redactionError' in remaining) {
+              evaluationErrors.push(remaining.redactionError)
+              continue
+            }
+            incomplete.reasons |= INCOMPLETE_REASON.TIMEOUT
             rawResults.push({
-              name: expressions[j].name,
+              name: remaining.name,
               remoteObject: { notCapturedReason: 'timeout' },
               maxLength: 0,
             })
@@ -172,6 +248,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
 
       rawResults.push({ name, remoteObject: result, maxLength })
     } catch (err) {
+      incomplete.reasons |= INCOMPLETE_REASON.RUNTIME_ERROR
       fatalErrors.push(new Error(
         `Error capturing expression "${name}". ` +
         'Capture expressions for this probe will be skipped until the probe is re-applied',
@@ -189,7 +266,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
       for (const { name, remoteObject, maxLength } of rawResults) {
         // If the remote object has notCapturedReason (e.g., timeout), use it as-is without processing
         processedResult[name] = remoteObject.notCapturedReason === undefined
-          ? processRemoteObject(remoteObject, maxLength)
+          ? processRemoteObject(remoteObject, maxLength, incomplete)
           : remoteObject
       }
 
@@ -197,6 +274,8 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
     },
     evaluationErrors,
     fatalErrors,
+    incomplete,
+    timedOut,
   }
 }
 
@@ -204,7 +283,6 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
  * Extract the error message from the exception details.
  *
  * @param {import('inspector').Runtime.ExceptionDetails} exceptionDetails - The exception details
- * @returns {string} The error message
  */
 function extractErrorMessage (exceptionDetails) {
   const description = exceptionDetails.exception?.description

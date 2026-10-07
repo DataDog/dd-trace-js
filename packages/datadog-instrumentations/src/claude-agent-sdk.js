@@ -44,6 +44,7 @@ const chunkEmitTimes = new WeakMap()
  *   tools: Map<string, ToolState>,
  *   subagents: Map<string, Record<string, unknown>>,
  *   prompt?: string,
+ *   systemPrompt?: string | string[] | { type: string, prompt?: string | string[], append?: string },
  *   model?: string,
  *   resume?: string,
  *   maxTurns?: number,
@@ -235,6 +236,7 @@ function onQueryStart (ctx) {
   const prompt = queryArg.prompt
   const sessionCtx = {
     prompt: typeof prompt === 'string' ? prompt : undefined,
+    systemPrompt: options.systemPrompt,
     model: options.model,
     resume: options.resume,
     maxTurns: options.maxTurns,
@@ -353,7 +355,6 @@ function getToolResultContent (chunk, toolUseId) {
  * @param {SessionContext | null | undefined} sessionCtx
  * @param {GetLifecycle} getLifecycle
  * @param {ToolLifecycle} lifecycle
- * @returns {number} index in chunks where the next step should start iteration
  */
 function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, lifecycle) {
   let chunkIndex = startIndex
@@ -412,7 +413,6 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
  * @param {StepContext | null | undefined} stepCtx
  * @param {SessionContext | null | undefined} sessionCtx
  * @param {GetLifecycle} getLifecycle
- * @returns {number} index in chunks where the next step should start iteration
  */
 function processStep (
   chunks,
@@ -453,6 +453,7 @@ function processStep (
     llmCh.traceSync(() => {}, {
       model,
       usage,
+      systemPrompt: parentToolUseId ? undefined : sessionCtx?.systemPrompt,
       startTime: stepStartTime,
       finishTime: chunkEmitTimes.get(chunks[messageEndIdx - 1]),
       chunks,
@@ -531,7 +532,8 @@ function processChunks (chunks, agentCtx) {
   const sessionCtx = agentCtx.sessionCtx
   const getLifecycle = createStreamLookup(chunks)
 
-  const { type, subtype, ...rest } = chunks[0]
+  const initChunk = chunks.find(chunk => chunk.type === 'system' && chunk.subtype === 'init') || chunks[0]
+  const { type, subtype, ...rest } = initChunk
   Object.assign(agentCtx, rest)
   if (sessionCtx) {
     if (sessionCtx.sessionId) agentCtx.session_id = sessionCtx.sessionId
@@ -638,7 +640,7 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
 
 let querySubscribed = false
 
-for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
+for (const hook of getHooks('@anthropic-ai/claude-agent-sdk').values()) {
   hook.file = null
 
   addHook(hook, exports => {

@@ -20,6 +20,7 @@ const origRequire = Module.prototype.require
 module.exports = Hook
 
 let moduleHooks = Object.create(null)
+let hookedModuleCount = 0
 let cache = Object.create(null)
 let patching = Object.create(null)
 let patchedRequire = null
@@ -64,6 +65,7 @@ function Hook (modules, options, onrequire) {
         hooks.push(onrequire)
       } else {
         moduleHooks[mod] = [onrequire]
+        hookedModuleCount++
       }
     }
   }
@@ -116,16 +118,19 @@ function Hook (modules, options, onrequire) {
     if (moduleLoadStartChannel.hasSubscribers) {
       moduleLoadStartChannel.publish(payload)
     }
-    let exports = origRequire.apply(this, arguments)
-    payload.module = exports
-    if (moduleLoadEndChannel.hasSubscribers) {
-      moduleLoadEndChannel.publish(payload)
-      exports = payload.module
+    let exports
+    try {
+      exports = origRequire.apply(this, arguments)
+      payload.module = exports
+    } finally {
+      // Failed loads must close the subscriber's load stack too. Leave module
+      // unset on failure and preserve the original exception for the caller.
+      if (moduleLoadEndChannel.hasSubscribers) {
+        moduleLoadEndChannel.publish(payload)
+        exports = payload.module
+      }
+      delete patching[moduleId]
     }
-
-    // The module has already been loaded,
-    // so the patching mark can be cleaned up.
-    delete patching[moduleId]
 
     if (builtin) {
       hooks = moduleHooks[moduleId]
@@ -205,6 +210,7 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
+  hookedModuleCount = 0
 }
 
 function findProjectRoot (startDir) {
@@ -221,16 +227,20 @@ function findProjectRoot (startDir) {
 
 Hook.prototype.unhook = function () {
   for (const mod of this.modules) {
-    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
+    const registeredHooks = moduleHooks[mod]
+    if (registeredHooks === undefined) continue
+
+    const hooks = registeredHooks.filter(hook => hook !== this.onrequire)
 
     if (hooks.length > 0) {
       moduleHooks[mod] = hooks
     } else {
       delete moduleHooks[mod]
+      hookedModuleCount--
     }
   }
 
-  if (Object.keys(moduleHooks).length === 0) {
+  if (hookedModuleCount === 0) {
     Hook.reset()
   }
 }

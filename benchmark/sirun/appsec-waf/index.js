@@ -37,7 +37,6 @@ const waf = new DDWAF(rules, 'benchmark/sirun/appsec-waf', {
 
 /**
  * @param {boolean} verify
- * @returns {void}
  */
 function runRequest (verify) {
   const context = waf.createContext()

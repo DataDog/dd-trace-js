@@ -58,7 +58,6 @@ class KafkajsProducerPlugin extends ProducerPlugin {
   /**
    *
    * @param {{ result: ProducerResponseItem[] }} ctx
-   * @returns {void}
    */
   commit (ctx) {
     const commitList = ctx.result

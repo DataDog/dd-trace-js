@@ -6,6 +6,8 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+const logSubmissionCh = channel('ci:log-submission:log')
+
 /**
  * @param {string} symbol
  * @param {(original: Function) => Function} wrapper
@@ -36,13 +38,22 @@ function wrapAsJson (asJson) {
     obj = arguments[0] = obj || {}
 
     // Caller-provided `dd` wins -- skip the splice so a bespoke `dd` survives.
+    let line
     if (!jsonCh.hasSubscribers || Object.hasOwn(obj, 'dd')) {
-      return asJson.apply(this, arguments)
+      line = asJson.apply(this, arguments)
+    } else {
+      const payload = { line: asJson.apply(this, arguments) }
+      jsonCh.publish(payload)
+      line = payload.line
     }
 
-    const payload = { line: asJson.apply(this, arguments) }
-    jsonCh.publish(payload)
-    return payload.line
+    // Submit the serialized line for agentless log collection only when trace
+    // correlation is active, matching the Bunyan contract.
+    if (jsonCh.hasSubscribers && logSubmissionCh.hasSubscribers) {
+      logSubmissionCh.publish({ source: 'pino', message: line })
+    }
+
+    return line
   }
 }
 

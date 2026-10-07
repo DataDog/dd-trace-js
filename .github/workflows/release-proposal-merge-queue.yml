@@ -1,0 +1,70 @@
+name: "[Release Proposal Merge Queue]"
+
+on:
+  pull_request:
+    branches:
+      - v*.x
+    # Enqueueing is the final merge command. Dequeueing is intentionally unsupported
+    # and does not cancel an already-triggered fast-forward.
+    types:
+      - enqueued
+      - opened
+      - reopened
+      - synchronize
+  merge_group:
+    branches:
+      - v*.x
+    types:
+      - checks_requested
+
+jobs:
+  release-proposal-merge-queue:
+    name: Release proposal merge queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read
+    steps:
+      - name: Get read-only GitHub token
+        if: github.event_name == 'merge_group'
+        uses: DataDog/dd-octo-sts-action@c85802a58e202b7e764b5441e4378c76043c8108 # v1.0.5
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal-check
+      - name: Check out trusted repository state
+        if: github.event_name == 'merge_group'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+          ref: master
+          token: ${{ steps.octo-sts.outputs.token }}
+      - name: Confirm the release proposal was fast-forwarded
+        if: github.event_name == 'merge_group'
+        env:
+          BASE_REF: ${{ github.event.merge_group.base_ref }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/release/confirm-proposal-fast-forward.js "$REPOSITORY" "$BASE_REF" "$HEAD_REF"
+      - name: Allow the pull request into the queue
+        if: github.event_name == 'pull_request'
+        run: echo "Release proposal is eligible to enter the merge queue."
+
+  trigger-release-proposal-merge:
+    name: Fast-forward release proposal
+    needs: release-proposal-merge-queue
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.action == 'enqueued' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.base.ref, 'v') &&
+      endsWith(github.event.pull_request.base.ref, '.x')
+    permissions:
+      id-token: write
+    uses: DataDog/dd-trace-js/.github/workflows/release-proposal-merge.yml@master
+    with:
+      pull-request-number: ${{ github.event.pull_request.number }}

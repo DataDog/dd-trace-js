@@ -320,9 +320,11 @@ function withVersions (plugin, modules, range, cb) {
       !semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
 
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
-  const names = new Set(instrumentations.map(instrumentation => instrumentation.name))
+  const externalNames = new Set(instrumentations.map(instrumentation => instrumentation.name))
 
-  for (const name of names) {
+  if (typeof plugin === 'string') externalNames.add(plugin)
+
+  for (const name of externalNames) {
     if (!externals[name]) continue
     for (const external of externals[name]) {
       instrumentations.push(external)

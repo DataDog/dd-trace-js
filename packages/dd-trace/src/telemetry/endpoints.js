@@ -52,15 +52,11 @@ let isFirstPayload = true
 /**
  * @param {string} method
  * @param {string} path
- * @returns {string}
  */
 function endpointKey (method, path) {
   return `${method.toUpperCase()} ${path}`
 }
 
-/**
- * @returns {void}
- */
 function scheduleFlush () {
   if (flushScheduled) return
   flushScheduled = true
@@ -73,7 +69,6 @@ function scheduleFlush () {
  * @param {string} method
  * @param {string} path
  * @param {string} operationName
- * @returns {void}
  */
 function recordEndpoint (method, path, operationName) {
   const key = endpointKey(method, path)
@@ -134,9 +129,6 @@ function buildEndpointObjects (endpoints) {
   })
 }
 
-/**
- * @returns {void}
- */
 function flushAndSend () {
   flushScheduled = false
   if (pendingEndpoints.size === 0) return

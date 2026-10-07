@@ -10,7 +10,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./s3-naming')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaCallback, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -81,135 +81,105 @@ describe('Plugin', () => {
         )
 
         describe('span pointers', () => {
-          it('should add span pointer for putObject operation', (done) => {
-            agent.assertSomeTraces(traces => {
-              try {
-                const span = traces[0].find(s => s.meta?.['aws.operation'] === 'putObject')
-                assert.ok(span)
-                const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+          it('should add span pointer for putObject operation', async () => {
+            const tracePromise = agent.assertFirstTraceSpan(span => {
+              const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                assert.strictEqual(links.length, 1)
-                assert.deepStrictEqual(links[0].attributes, {
-                  'ptr.kind': S3_PTR_KIND,
-                  'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                  'ptr.hash': '6d1a2fe194c6579187408f827f942be3',
-                  'link.kind': 'span-pointer',
-                })
-                done()
-              } catch (error) {
-                done(error)
-              }
-            }).catch(done)
+              assert.strictEqual(links.length, 1)
+              assert.deepStrictEqual(links[0].attributes, {
+                'ptr.kind': S3_PTR_KIND,
+                'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                'ptr.hash': '6d1a2fe194c6579187408f827f942be3',
+                'link.kind': 'span-pointer',
+              })
+            }, { spanResourceMatch: /^putObject / })
 
-            s3.putObject({
-              Bucket: bucketName,
-              Key: 'test-key',
-              Body: 'test body',
-            }, (err) => {
-              if (err) {
-                done(err)
-              }
-            })
+            await Promise.all([
+              tracePromise,
+              callViaCallback(s3, 'putObject', {
+                Bucket: bucketName,
+                Key: 'test-key',
+                Body: 'test body',
+              }),
+            ])
           })
 
-          it('should add span pointer for copyObject operation', (done) => {
-            agent.assertSomeTraces(traces => {
-              try {
-                const span = traces[0].find(s => s.meta?.['aws.operation'] === 'copyObject')
-                assert.ok(span)
-                const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+          it('should add span pointer for copyObject operation', async () => {
+            const tracePromise = agent.assertFirstTraceSpan(span => {
+              const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                assert.strictEqual(links.length, 1)
-                assert.deepStrictEqual(links[0].attributes, {
-                  'ptr.kind': S3_PTR_KIND,
-                  'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                  'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5',
-                  'link.kind': 'span-pointer',
-                })
-                done()
-              } catch (error) {
-                done(error)
-              }
-            }).catch(done)
+              assert.strictEqual(links.length, 1)
+              assert.deepStrictEqual(links[0].attributes, {
+                'ptr.kind': S3_PTR_KIND,
+                'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5',
+                'link.kind': 'span-pointer',
+              })
+            }, { spanResourceMatch: /^copyObject / })
 
-            s3.copyObject({
-              Bucket: bucketName,
-              Key: 'new-key',
-              CopySource: `${bucketName}/test-key`,
-            }, (err) => {
-              if (err) {
-                done(err)
-              }
-            })
+            await Promise.all([
+              tracePromise,
+              callViaCallback(s3, 'copyObject', {
+                Bucket: bucketName,
+                Key: 'new-key',
+                CopySource: `${bucketName}/test-key`,
+              }),
+            ])
           })
 
-          it('should add span pointer for completeMultipartUpload operation', (done) => {
-            // Create 5MiB+ buffers for parts
+          it('should add span pointer for completeMultipartUpload operation', async () => {
             const partSize = 5 * 1024 * 1024
             const part1Data = Buffer.alloc(partSize, 'a')
             const part2Data = Buffer.alloc(partSize, 'b')
 
-            // Start the multipart upload process
-            s3.createMultipartUpload({
+            const multipartData = await callViaCallback(s3, 'createMultipartUpload', {
               Bucket: bucketName,
               Key: 'multipart-test',
-            }, (err, multipartData) => {
-              if (err) return done(err)
-
-              // Upload both parts in parallel
-              Promise.all([
-                new Promise((resolve, reject) => {
-                  s3.uploadPart({
-                    Bucket: bucketName,
-                    Key: 'multipart-test',
-                    PartNumber: 1,
-                    UploadId: multipartData.UploadId,
-                    Body: part1Data,
-                  }, (err, data) => err ? reject(err) : resolve({ PartNumber: 1, ETag: data.ETag }))
-                }),
-                new Promise((resolve, reject) => {
-                  s3.uploadPart({
-                    Bucket: bucketName,
-                    Key: 'multipart-test',
-                    PartNumber: 2,
-                    UploadId: multipartData.UploadId,
-                    Body: part2Data,
-                  }, (err, data) => err ? reject(err) : resolve({ PartNumber: 2, ETag: data.ETag }))
-                }),
-              ]).then(parts => {
-                // Now complete the multipart upload
-                const completeParams = {
-                  Bucket: bucketName,
-                  Key: 'multipart-test',
-                  UploadId: multipartData.UploadId,
-                  MultipartUpload: {
-                    Parts: parts,
-                  },
-                }
-
-                s3.completeMultipartUpload(completeParams, (err) => {
-                  if (err) done(err)
-                  agent.assertSomeTraces(traces => {
-                    const span = traces[0].find(s => s.meta?.['aws.operation'] === 'completeMultipartUpload')
-                    if (span) {
-                      try {
-                        const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
-                        assert.strictEqual(links.length, 1)
-                        assert.deepStrictEqual(links[0].attributes, {
-                          'ptr.kind': S3_PTR_KIND,
-                          'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
-                          'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6',
-                          'link.kind': 'span-pointer',
-                        })
-                        done()
-                      } catch (error) {
-                        done(error)
-                      }
-                    }
-                  })
-                })
-              }).catch(done)
             })
+
+            const [part1, part2] = await Promise.all([
+              callViaCallback(s3, 'uploadPart', {
+                Bucket: bucketName,
+                Key: 'multipart-test',
+                PartNumber: 1,
+                UploadId: multipartData.UploadId,
+                Body: part1Data,
+              }),
+              callViaCallback(s3, 'uploadPart', {
+                Bucket: bucketName,
+                Key: 'multipart-test',
+                PartNumber: 2,
+                UploadId: multipartData.UploadId,
+                Body: part2Data,
+              }),
+            ])
+            const completeParams = {
+              Bucket: bucketName,
+              Key: 'multipart-test',
+              UploadId: multipartData.UploadId,
+              MultipartUpload: {
+                Parts: [
+                  { PartNumber: 1, ETag: part1.ETag },
+                  { PartNumber: 2, ETag: part2.ETag },
+                ],
+              },
+            }
+            const tracePromise = agent.assertFirstTraceSpan(span => {
+              const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
+
+              assert.strictEqual(links.length, 1)
+              assert.deepStrictEqual(links[0].attributes, {
+                'ptr.kind': S3_PTR_KIND,
+                'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
+                'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6',
+                'link.kind': 'span-pointer',
+              })
+            }, { spanResourceMatch: /^completeMultipartUpload / })
+
+            await Promise.all([
+              tracePromise,
+              callViaCallback(s3, 'completeMultipartUpload', completeParams),
+            ])
           })
         })
 
