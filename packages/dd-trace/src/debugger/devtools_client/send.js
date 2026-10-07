@@ -23,6 +23,8 @@ const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
+// Identifies the process, e.g. to tell apart snapshots from before and after a restart inside the same container
+const runtimeId = config.runtimeId
 
 const ddtags = buildTags(config, hostname, version, log)
 
@@ -57,6 +59,7 @@ function send (message, logger, dd, snapshot, processTags, eventType, incomplete
     ddsource,
     hostname,
     service,
+    runtime_id: runtimeId,
     message,
     logger,
     dd,

@@ -20,6 +20,7 @@ const version = 'my-version'
 const service = 'my-service'
 const commitSHA = 'my-commit-sha'
 const repositoryUrl = 'my-repository-url'
+const runtimeId = 'my-runtime-id'
 const url = 'my-url'
 const ddsource = 'dd_debugger'
 const hostname = getHostname()
@@ -215,6 +216,7 @@ describe('input message http requests', function () {
     clock.tick(1000)
 
     sinon.assert.calledOnce(request)
+    assert.strictEqual(JSON.parse(request.firstCall.args[0])[0].runtime_id, 'test-runtime-id')
     const options = getRequestOptions(request)
     assert.match(options.path, /^\/api\/v2\/debugger\?ddtags=/)
     assert.match(options.path, /runtime_id%3Atest-runtime-id/)
@@ -637,6 +639,7 @@ function getPayload (_message = message, _snapshot = snapshot) {
     ddsource,
     hostname,
     service,
+    runtime_id: runtimeId,
     message: _message,
     logger,
     dd,
@@ -667,6 +670,7 @@ function createConfigMock (overrides = {}) {
     service,
     commitSHA,
     repositoryUrl,
+    runtimeId,
     url,
     inputPath: '/debugger/v2/input',
     maxTotalPayloadSize: 5 * 1024 * 1024,
