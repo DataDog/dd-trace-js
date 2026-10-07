@@ -31,6 +31,7 @@ const {
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
+  getTestSuiteItrTags,
   TEST_SUITE_ID,
   TEST_MODULE_ID,
   TEST_SESSION_ID,
@@ -51,6 +52,8 @@ const {
   TEST_ITR_UNSKIPPABLE,
   TEST_ITR_FORCED_RUN,
   TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_TESTS_SKIPPED,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
@@ -1041,6 +1044,7 @@ class CypressPlugin {
   getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
     const testSuiteSpanMetadata = {
       ...getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME),
+      ...getTestSuiteItrTags(this.isItrEnabled),
       ...this.getSessionRequestErrorTags(),
       ...this.getSessionItrSkippingEnabledTags(),
     }
@@ -2092,6 +2096,16 @@ class CypressPlugin {
           if (!this.skippedTestIds.has(skippedTestId)) {
             this.skippedTestIds.add(skippedTestId)
             this.skippedTests.push(test)
+            const testSuiteSpan = this.#pendingTestSuiteSpans.get(testSuite)
+            if (this.isItrEnabled && testSuiteSpan) {
+              try {
+                const count = testSuiteSpan.context().getTag(TEST_ITR_SKIPPING_COUNT) || 0
+                testSuiteSpan.setTag(TEST_ITR_SKIPPING_COUNT, count + 1)
+                testSuiteSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+              } catch (error) {
+                log.error('Could not report Test Impact Analysis skips for suite %s: %s', testSuite, error)
+              }
+            }
           }
           this.isTestsSkipped = true
           return { shouldSkip: true }

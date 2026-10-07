@@ -10,6 +10,7 @@ const {
   getRelativeCoverageFiles,
   getTestEndLine,
   getTestSuiteCommonTags,
+  getTestSuiteItrTags,
   getTestSuitePath,
   isModifiedTest,
   CUCUMBER_IS_PARALLEL,
@@ -165,6 +166,7 @@ class CucumberPlugin extends CiPlugin {
           testSuitePath,
           'cucumber'
         ),
+        ...getTestSuiteItrTags(this.libraryConfig?.isItrEnabled),
         ...this.getSessionRequestErrorTags(),
         ...this.getSessionItrSkippingEnabledTags(),
       }

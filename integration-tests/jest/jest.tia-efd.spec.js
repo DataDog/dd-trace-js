@@ -132,6 +132,55 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     await receiver.stop()
   })
 
+  const suiteReportingModes = [
+    { name: 'serial', env: {} },
+    { name: 'process workers', env: { RUN_IN_PARALLEL: '1' } },
+    { name: 'thread workers', env: { USE_WORKER_THREADS: '1' } },
+  ]
+  for (const mode of suiteReportingModes) {
+    // Jest workerThreads was introduced in 29.5; older release-line frameworks use processes.
+    const supportsMode = mode.name !== 'thread workers' || JEST_VERSION === 'latest' ||
+      Number(JEST_VERSION.split('.')[0]) > 29 ||
+      (Number(JEST_VERSION.split('.')[0]) === 29 && Number(JEST_VERSION.split('.')[1]) >= 5)
+    const modeIt = supportsMode ? it : it.skip
+    modeIt(`reports suite TIA skips without coverage in ${mode.name}`, async () => {
+      const prefix = 'ci-visibility/unskippable-test/'
+      const skipped = `${prefix}test-to-skip.js`
+      const forced = `${prefix}test-unskippable.js`
+      receiver.setSettings({ itr_enabled: true, code_coverage: false, tests_skipping: true })
+      receiver.setSuitesToSkip([skipped, forced].map(suite => ({ type: 'suite', attributes: { suite } })))
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'unskippable-test/test-',
+          ...mode.env,
+        },
+      })
+      childProcess.stdout.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr.on('data', chunk => { testOutput += chunk.toString() })
+      await receiver.gatherPayloadsUntilChildExit(childProcess,
+        ({ url }) => url.endsWith('/api/v2/citestcycle') || url.endsWith('/api/v2/citestcov'),
+        payloads => {
+          assert.strictEqual(payloads.some(({ url }) => url.endsWith('/api/v2/citestcov')), false)
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const suites = events.filter(event => event.type === 'test_suite_end')
+          assert.strictEqual(suites.length, 3, testOutput)
+          const session = events.find(event => event.type === 'test_session_end').content
+          for (const { content } of suites) {
+            const count = content.meta[TEST_SUITE] === skipped ? 1 : 0
+            assert.strictEqual(content.metrics[TEST_ITR_SKIPPING_COUNT], count)
+            assert.strictEqual(content.meta[TEST_ITR_TESTS_SKIPPED], count > 0 ? 'true' : 'false')
+            if (count === 0 && mode.name !== 'serial') {
+              assert.notStrictEqual(content.meta['runtime-id'], session.meta['runtime-id'])
+            }
+          }
+          assert.strictEqual(session.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        })
+      assert.strictEqual(childProcess.exitCode, 0, testOutput)
+    })
+  }
+
   context('intelligent test runner', () => {
     context('if the agent is not event platform proxy compatible', () => {
       it('does not do any intelligent test runner request', (done) => {

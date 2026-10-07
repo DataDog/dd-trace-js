@@ -60,9 +60,11 @@ const {
   TEST_TYPE,
   TEST_SESSION_NAME,
   getTestSuiteCommonTags,
+  getTestSuiteItrTags,
   TEST_STATUS,
   TEST_SKIPPED_BY_ITR,
   TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_COUNT,
   ITR_CORRELATION_ID,
   TEST_SOURCE_FILE,
   TEST_SUITE,
@@ -346,6 +348,7 @@ module.exports = class CiPlugin extends Plugin {
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.testFramework),
+          ...getTestSuiteItrTags(this.libraryConfig?.isItrEnabled, 1),
           ...getSessionRequestErrorTags(this.testSessionSpan),
           ...getSessionItrSkippingEnabledTags(this.testSessionSpan),
         }
@@ -639,6 +642,12 @@ module.exports = class CiPlugin extends Plugin {
         span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
         if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
           Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
+        }
+        // Jest and Vitest emit suite spans in workers that do not fetch the TIA configuration.
+        if (span.type === 'test_suite_end') {
+          const { [TEST_ITR_SKIPPING_COUNT]: count, ...meta } = getTestSuiteItrTags(this.libraryConfig?.isItrEnabled)
+          Object.assign(span.meta, meta)
+          if (count !== undefined) span.metrics[TEST_ITR_SKIPPING_COUNT] = count
         }
         // augment with git information (since it will not be available in the worker)
         for (const key in this.testEnvironmentMetadata) {

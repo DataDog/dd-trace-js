@@ -526,6 +526,7 @@ module.exports = {
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
+  getTestSuiteItrTags,
   TEST_COMMAND,
   TEST_TOOLCHAIN,
   TEST_SESSION_ID,
@@ -1268,6 +1269,20 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
     ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
+  }
+}
+
+/**
+ * @param {boolean|undefined} isItrEnabled
+ * @param {number} [skippingCount] Skipped executions, or skipped suites in suite-skipping mode.
+ * @returns {Record<string, string|number>}
+ */
+function getTestSuiteItrTags (isItrEnabled, skippingCount = 0) {
+  if (!isItrEnabled) return {}
+
+  return {
+    [TEST_ITR_SKIPPING_COUNT]: skippingCount,
+    [TEST_ITR_TESTS_SKIPPED]: skippingCount > 0 ? 'true' : 'false',
   }
 }
 

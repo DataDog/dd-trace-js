@@ -3716,6 +3716,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddForcedToRun',
   '_ddUnskippable',
   '_ddItrCorrelationId',
+  '_ddIsItrEnabled',
   '_ddKnownTests',
   '_ddIsEarlyFlakeDetectionEnabled',
   '_ddEarlyFlakeDetectionRetryPolicy',
