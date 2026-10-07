@@ -13,6 +13,7 @@ describe('LLMObsExporter', () => {
   let agentlessExporter
   let fetchAgentInfo
   let getValueFromEnvSources
+  let logger
   let Exporter
 
   beforeEach(() => {
@@ -32,10 +33,12 @@ describe('LLMObsExporter', () => {
     AgentlessExporter = sinon.stub().returns(agentlessExporter)
     fetchAgentInfo = sinon.stub()
     getValueFromEnvSources = sinon.stub().returns(undefined)
+    logger = { warn: sinon.stub() }
 
     Exporter = proxyquire('../../../src/exporters/llmobs', {
       '../../agent/info': { fetchAgentInfo },
       '../../config/helper': { getValueFromEnvSources },
+      '../../log': logger,
       '../agent': AgentExporter,
       '../agentless': AgentlessExporter,
     })
@@ -99,6 +102,54 @@ describe('LLMObsExporter', () => {
     })
     sinon.assert.notCalled(agentlessExporter.setUrl)
     sinon.assert.notCalled(AgentExporter)
+  })
+
+  it('limits the buffer by span count and evicts the oldest whole trace chunks', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const oldestTrace = Array.from({ length: 300 }, () => ({}))
+    const retainedTrace1 = Array.from({ length: 400 }, () => ({}))
+    const retainedTrace2 = Array.from({ length: 300 }, () => ({}))
+    const newestTrace = Array.from({ length: 250 }, () => ({}))
+
+    exporter.export(oldestTrace)
+    exporter.export(retainedTrace1)
+    exporter.export(retainedTrace2)
+    assert.strictEqual(exporter.export(newestTrace), true)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.callCount(agentExporter.export, 3)
+    assert.strictEqual(agentExporter.export.getCall(0).args[0], retainedTrace1)
+    assert.strictEqual(agentExporter.export.getCall(1).args[0], retainedTrace2)
+    assert.strictEqual(agentExporter.export.getCall(2).args[0], newestTrace)
+    sinon.assert.calledOnceWithExactly(
+      logger.warn,
+      'LLMObs exporter trace buffer full (limit is %d spans), dropping trace data',
+      1000
+    )
+  })
+
+  it('drops a trace chunk that cannot fit in an empty buffer', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const retainedTrace = [{ name: 'retained' }]
+    const oversizedTrace = Array.from({ length: 1001 }, () => ({}))
+
+    exporter.export(retainedTrace)
+    assert.strictEqual(exporter.export(oversizedTrace), false)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.calledOnceWithExactly(agentExporter.export, retainedTrace)
+    sinon.assert.calledOnce(logger.warn)
+  })
+
+  it('buffers a trace chunk at the exact span limit', () => {
+    const exporter = new Exporter(getConfig(), {})
+    const trace = Array.from({ length: 1000 }, () => ({}))
+
+    assert.strictEqual(exporter.export(trace), true)
+    fetchAgentInfo.yield(null, { endpoints: [] })
+
+    sinon.assert.calledOnceWithExactly(agentExporter.export, trace)
+    sinon.assert.notCalled(logger.warn)
   })
 
   it('preserves dotted tag keys when using the Agent exporter', () => {

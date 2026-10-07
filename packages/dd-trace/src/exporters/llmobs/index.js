@@ -3,9 +3,12 @@
 const { fetchAgentInfo } = require('../../agent/info')
 const { getValueFromEnvSources } = require('../../config/helper')
 const { LLMOBS_META_STRUCT_KEY } = require('../../llmobs/constants/tags')
+const logger = require('../../log')
 const AgentExporter = require('../agent')
 const AgentlessExporter = require('../agentless')
 const BufferingExporter = require('../common/buffering-exporter')
+
+const MAX_BUFFERED_SPANS = 1000
 
 /**
  * Buffers traces until LLMObs transport discovery selects either the Agent or
@@ -13,6 +16,8 @@ const BufferingExporter = require('../common/buffering-exporter')
  */
 class LLMObsExporter extends BufferingExporter {
   #agentless = false
+  #bufferLimitWarned = false
+  #bufferedSpanCount = 0
   #exporter
   /** @type {Array<Function | undefined>} */
   #pendingFlushes = []
@@ -53,6 +58,7 @@ class LLMObsExporter extends BufferingExporter {
 
     this._isInitialized = true
     this.exportUncodedTraces()
+    this.#bufferedSpanCount = 0
 
     const pendingFlushes = this.#pendingFlushes
     this.#pendingFlushes = []
@@ -62,12 +68,30 @@ class LLMObsExporter extends BufferingExporter {
   /** @param {object[]} trace */
   export (trace) {
     if (!this._isInitialized) {
+      if (trace.length > MAX_BUFFERED_SPANS) {
+        this.#warnBufferLimit()
+        return false
+      }
+
+      if (this.#bufferedSpanCount + trace.length > MAX_BUFFERED_SPANS) this.#warnBufferLimit()
+      while (this.#bufferedSpanCount + trace.length > MAX_BUFFERED_SPANS) {
+        this.#bufferedSpanCount -= this._traceBuffer.shift().length
+      }
+
       this._traceBuffer.push(trace)
+      this.#bufferedSpanCount += trace.length
       return true
     }
 
     if (this.#agentless) this.#normalizeTagKeys(trace)
     return this.#exporter.export(trace)
+  }
+
+  #warnBufferLimit () {
+    if (this.#bufferLimitWarned) return
+
+    this.#bufferLimitWarned = true
+    logger.warn('LLMObs exporter trace buffer full (limit is %d spans), dropping trace data', MAX_BUFFERED_SPANS)
   }
 
   /** @param {object[]} trace */
