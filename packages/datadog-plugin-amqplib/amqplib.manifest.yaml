@@ -1,8 +1,8 @@
 _v: 1
 name: amqplib
 display_name: amqplib
-description: Instruments AMQP message publishing, consumption, and broker commands through amqplib, including trace-context
-  propagation and optional Data Streams Monitoring checkpoints.
+description: "Instruments AMQP message publishing, consumption, and broker commands through amqplib, including\
+  \ trace-context propagation and optional Data Streams Monitoring checkpoints."
 packages:
 - name: amqplib
 category:

@@ -1,8 +1,8 @@
 _v: 1
 name: bullmq
 display_name: BullMQ
-description: Instruments BullMQ job publishing through queues and flow producers and worker job processing, with distributed
-  trace propagation and optional Data Streams Monitoring checkpoints.
+description: "Instruments BullMQ job publishing through queues and flow producers and worker job processing, with\
+  \ distributed trace propagation and optional Data Streams Monitoring checkpoints."
 packages:
 - name: bullmq
 category:

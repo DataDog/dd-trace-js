@@ -1,8 +1,8 @@
 _v: 1
 name: azure-functions
 display_name: Azure Functions
-description: Instruments Azure Functions invocations for HTTP request handlers, Service Bus and Event Hubs message consumers,
-  and Cosmos DB change triggers, with HTTP trace propagation and messaging span links.
+description: "Instruments Azure Functions invocations for HTTP request handlers, Service Bus and Event Hubs message\
+  \ consumers, and Cosmos DB change triggers, with HTTP trace propagation and messaging span links."
 packages:
 - name: '@azure/functions'
 category:

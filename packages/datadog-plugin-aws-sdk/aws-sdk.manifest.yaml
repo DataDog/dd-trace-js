@@ -1,9 +1,9 @@
 _v: 1
 name: aws-sdk
 display_name: AWS SDK
-description: Instruments AWS SDK service requests, including database and object-storage operations, CloudWatch Logs API requests,
-  message production and consumption with trace context propagation, Lambda invocations and Step Functions execution starts
-  with context injection, and Bedrock Runtime model calls with LLM Observability.
+description: "Instruments AWS SDK service requests, including database and object-storage operations, CloudWatch Logs\
+  \ API requests, message production and consumption with trace context propagation, Lambda invocations and Step\
+  \ Functions execution starts with context injection, and Bedrock Runtime model calls with LLM Observability."
 packages:
 - name: '@aws-sdk/client-bedrock-runtime'
 - name: '@aws-sdk/client-cloudwatch-logs'

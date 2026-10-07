@@ -1,8 +1,8 @@
 _v: 1
 name: google-cloud-pubsub
 display_name: Google Cloud Pub/Sub
-description: Instruments Google Cloud Pub/Sub message publishing, pull and push consumption, acknowledgements, and topic,
-  subscription, snapshot, and schema API requests.
+description: "Instruments Google Cloud Pub/Sub message publishing, pull and push consumption, acknowledgements, and\
+  \ topic, subscription, snapshot, and schema API requests."
 packages:
 - name: '@google-cloud/pubsub'
 category:

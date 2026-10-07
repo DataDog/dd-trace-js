@@ -1,8 +1,8 @@
 _v: 1
 name: aws-durable-execution-sdk-js
 display_name: AWS Durable Execution SDK for JavaScript
-description: Instruments AWS Lambda durable handler execution, workflow operations, and function invocations, including replay
-  and retry metadata and trace-context checkpointing across invocations.
+description: "Instruments AWS Lambda durable handler execution, workflow operations, and function invocations,\
+  \ including replay and retry metadata and trace-context checkpointing across invocations."
 packages:
 - name: '@aws/durable-execution-sdk-js'
 category:

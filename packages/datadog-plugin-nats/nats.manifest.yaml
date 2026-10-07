@@ -1,8 +1,8 @@
 _v: 1
 name: nats
 display_name: NATS
-description: Instruments NATS message publishing, request/reply operations, and consumption through subscription callbacks
-  and async iterators.
+description: "Instruments NATS message publishing, request/reply operations, and consumption through subscription\
+  \ callbacks and async iterators."
 packages:
 - name: '@nats-io/nats-core'
 - name: '@nats-io/transport-node'

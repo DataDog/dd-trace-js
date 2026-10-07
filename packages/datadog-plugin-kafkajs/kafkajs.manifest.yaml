@@ -1,8 +1,8 @@
 _v: 1
 name: kafkajs
 display_name: KafkaJS
-description: Instruments KafkaJS message production and individual or batch consumption, with trace-context propagation and
-  optional Data Streams Monitoring.
+description: "Instruments KafkaJS message production and individual or batch consumption, with trace-context\
+  \ propagation and optional Data Streams Monitoring."
 packages:
 - name: kafkajs
 category:

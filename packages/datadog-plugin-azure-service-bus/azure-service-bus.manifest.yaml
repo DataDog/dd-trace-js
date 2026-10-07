@@ -1,8 +1,8 @@
 _v: 1
 name: azure-service-bus
 display_name: Azure Service Bus
-description: Instruments Azure Service Bus message creation, sending, and scheduling, including batch sends and trace context
-  propagation.
+description: "Instruments Azure Service Bus message creation, sending, and scheduling, including batch sends and trace\
+  \ context propagation."
 packages:
 - name: '@azure/service-bus'
 category:
