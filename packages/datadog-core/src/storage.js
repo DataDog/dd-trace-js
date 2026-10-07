@@ -71,7 +71,6 @@ if (!isACFActive) {
    * @param {object} resource
    * @param {object | undefined} triggerResource
    * @param {string} type
-   * @returns {void}
    */
   AsyncLocalStorage.prototype._propagate = function _propagate (resource, triggerResource, type) {
     if (triggerResource) {
