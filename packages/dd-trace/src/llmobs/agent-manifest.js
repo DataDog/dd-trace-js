@@ -72,16 +72,15 @@ function buildAgentDeclaration (agent) {
 function buildAgentManifest (agent) {
   /** @type {string[]} */
   const dropped = []
-  /** @type {AgentManifestFields} */
-  const manifest = {}
-  let hasField = false
+  /** @type {AgentManifestFields | undefined} */
+  let manifest
 
   for (const key of LABEL_FIELDS) {
     const value = agent[key]
     if (isUnset(value)) continue
     if (typeof value === 'string') {
+      manifest ??= {}
       manifest[key] = value
-      hasField = true
     } else {
       dropped.push(key)
     }
@@ -89,21 +88,21 @@ function buildAgentManifest (agent) {
 
   const modelSettings = buildModelSettings(agent.modelSettings, dropped)
   if (modelSettings) {
+    manifest ??= {}
     manifest.model_settings = modelSettings
-    hasField = true
   }
 
   const tools = buildTools(agent.tools, dropped)
   if (tools) {
+    manifest ??= {}
     manifest.tools = tools
-    hasField = true
   }
 
   if (dropped.length > 0) {
     log.warn('Dropping unsupported agent manifest fields: %s', dropped.join(', '))
   }
 
-  return hasField ? manifest : undefined
+  return manifest
 }
 
 /**
@@ -189,7 +188,7 @@ function buildTools (declared, dropped) {
 
     /** @type {AgentTool} */
     const built = { name }
-    const { description } = tool
+    const description = tool.description
     if (typeof description === 'string' && description !== '') built.description = description
     const parameters = buildToolParameters(tool.parameters)
     if (parameters === null) {
