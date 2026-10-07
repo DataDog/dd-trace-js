@@ -190,7 +190,7 @@
     "moleculer": "0.15.2",
     "mongodb": "7.7.0",
     "mongodb-core": "3.2.7",
-    "mongoose": "9.10.3",
+    "mongoose": "9.10.4",
     "mquery": "6.0.0",
     "multer": "2.4.0",
     "mysql": "2.18.1",
