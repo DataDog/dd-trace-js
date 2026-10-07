@@ -5,13 +5,13 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const axios = require('axios')
 const { before, describe } = require('mocha')
 const satisfies = require('semifies')
 
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { prepareTestServerForIastInExpress } = require('../utils')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
@@ -70,7 +70,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
             cb: function (vulnerabilities) {
               const vulnerability = vulnerabilities[0]
@@ -97,7 +97,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
             cb: function (vulnerabilities) {
               const vulnerability = vulnerabilities[0]
@@ -124,7 +124,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
           })
 
@@ -143,7 +143,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
           })
 
@@ -169,7 +169,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
           })
 
@@ -178,7 +178,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             fn: function noop () {},
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/path/parameterValue`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/path/parameterValue`).catch(done)
             },
           })
 
@@ -195,7 +195,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
             occurrences: {
               occurrences: 1,
@@ -226,7 +226,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
             cb: function (vulnerabilities) {
               const vulnerability = vulnerabilities[0]
@@ -264,7 +264,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
             },
             vulnerability: 'NOSQL_MONGODB_INJECTION',
             makeRequest: (done, config) => {
-              axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
+              httpRequest.get(`http://localhost:${config.port}/?key=value`).catch(done)
             },
           })
         })

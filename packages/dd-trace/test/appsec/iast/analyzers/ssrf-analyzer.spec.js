@@ -3,11 +3,11 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const axios = require('axios')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 describe('ssrf analyzer', () => {
   prepareTestServerForIast('ssrf',
@@ -128,7 +128,7 @@ describe('ssrf analyzer', () => {
                   requestMethodData.methodToExecute(https, url)
                   res.end()
                 }, 'SSRF', (done, config) => {
-                  axios.get(`http://localhost:${config.port}`, {
+                  httpRequest.get(`http://localhost:${config.port}`, {
                     headers: {
                       hash: 'taintedHash',
                     },
