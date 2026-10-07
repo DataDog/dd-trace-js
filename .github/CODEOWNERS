@@ -360,8 +360,6 @@
 /scripts/verify-exercised-tests.js @DataDog/apm-sdk-capabilities
 /scripts/verify-exercised-tests.spec.mjs @DataDog/apm-sdk-capabilities
 
-/supported_versions.json @DataDog/apm-sdk-capabilities
-
 # Feature Flagging
 /integration-tests/esbuild/*openfeature* @DataDog/apm-idm-js @DataDog/feature-flagging-and-experimentation-sdk
 /integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
@@ -402,7 +400,6 @@
 /.github/workflows/update-3rdparty-licenses.yml @DataDog/lang-platform-js @dd-octo-sts
 
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities @dd-octo-sts
-/.github/workflows/generate-supported-versions.yml @DataDog/apm-sdk-capabilities @dd-octo-sts
 /.github/workflows/eslint-rules.yml @DataDog/apm-sdk-capabilities @dd-octo-sts
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js @dd-octo-sts
 /.github/workflows/aiguard.yml @DataDog/asm-js @dd-octo-sts
