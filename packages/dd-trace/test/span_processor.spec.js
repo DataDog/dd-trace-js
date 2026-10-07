@@ -12,6 +12,7 @@ require('./setup/core')
 const { APM_TRACING_ENABLED_KEY, SDK_OTLP_EXPORT_KEY } = require('../src/constants')
 const { AUTO_REJECT, USER_KEEP } = require('../../../ext/priority')
 const TraceState = require('../src/opentracing/propagation/tracestate')
+const { SpanAggKey, SpanAggStats } = require('../src/span_stats')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -511,11 +512,12 @@ describe('SpanProcessor', () => {
 
       const exported = exporter.export.firstCall.args[0][0]
       assert.strictEqual(exported.meta['http.request.method'], 'GET')
-      assert.strictEqual(exported.metrics['http.response.status_code'], 200)
+      assert.strictEqual(exported.meta['http.response.status_code'], '200')
+      assert.ok(!Object.hasOwn(exported.metrics, 'http.response.status_code'))
       assert.ok(!('http.method' in exported.meta))
     })
 
-    it('records span stats from the Datadog tag names, before the export-only rename', () => {
+    it('records span stats from canonical attributes after conversion', () => {
       spanFormat.returns(formattedHttpSpan())
       const otelConfig = {
         flushMinSpans: 3,
@@ -527,8 +529,8 @@ describe('SpanProcessor', () => {
       const statsView = {}
       processor._stats = {
         onSpanFinished: sinon.spy(span => {
-          statsView.method = span.meta['http.method']
-          statsView.statusCode = span.meta['http.status_code']
+          statsView.method = span.meta['http.request.method']
+          statsView.statusCode = span.meta['http.response.status_code']
           statsView.endpoint = span.meta['http.endpoint']
         }),
       }
@@ -539,5 +541,48 @@ describe('SpanProcessor', () => {
 
       assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
     })
+
+    for (const enabled of [true, false]) {
+      for (const method of ['GET', 'PROPFIND']) {
+        it(`aligns resource, method, status and error distributions for ${method}, semantics ${enabled}`, () => {
+          config.DD_TRACE_OTEL_SEMANTICS_ENABLED = enabled
+          const formatted = {
+            ...formattedHttpSpan(),
+            name: 'web.request',
+            resource: `${method} /u`,
+            duration: 100,
+            error: 0,
+          }
+          formatted.meta['http.method'] = method
+          formatted.meta['http.status_code'] = '500oops'
+          formatted.meta['http.route'] = '/route'
+          spanFormat.returns(formatted)
+          let row
+          processor._stats = {
+            onSpanFinished (span) {
+              const stats = new SpanAggStats(new SpanAggKey(span))
+              stats.record(span)
+              row = stats.toJSON()[0]
+              assert.strictEqual(exporter.export.callCount, 0)
+            },
+          }
+          trace.started = [finishedSpan]
+          trace.finished = [finishedSpan]
+
+          processor.process(finishedSpan)
+
+          const exported = exporter.export.firstCall.args[0][0]
+          assert.strictEqual(row.Resource, exported.resource)
+          assert.strictEqual(row.Resource, enabled && method === 'PROPFIND' ? 'HTTP /u' : `${method} /u`)
+          assert.strictEqual(row.HTTPMethod, enabled && method === 'PROPFIND' ? '_OTHER' : method)
+          assert.strictEqual(row.HTTPStatusCode, enabled ? 500 : '500oops')
+          assert.strictEqual(row.Errors, exported.error)
+          assert.strictEqual(row.Errors, enabled ? 1 : 0)
+          assert.strictEqual(row.HTTPEndpoint, '/route')
+          assert.strictEqual(row.Hits, 1)
+          assert.strictEqual(exported.meta['http.endpoint'], '/u')
+        })
+      }
+    }
   })
 })

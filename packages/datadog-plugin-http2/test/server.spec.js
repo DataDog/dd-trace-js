@@ -270,9 +270,7 @@ describe('Plugin', () => {
                 'url.path': '/user',
                 'url.scheme': 'http',
                 'server.address': 'localhost',
-              },
-              metrics: {
-                'http.response.status_code': 200,
+                'http.response.status_code': '200',
               },
             })
             assert.ok(!Object.hasOwn(span.meta, 'http.method'))
@@ -844,13 +842,19 @@ describe('Plugin', () => {
 
         it('makes the core server span a child of the client span', async () => {
           const spans = []
-          const collect = traces => spans.push(...traces.flat())
+          let resolveDelivery
+          const delivered = new Promise(resolve => { resolveDelivery = resolve })
+          const collect = traces => {
+            spans.push(...traces.flat())
+            if (spans.some(span => span.meta?.['span.kind'] === 'client') &&
+                spans.some(span => span.name === 'web.request')) {
+              resolveDelivery()
+            }
+          }
           agent.subscribe(collect)
 
           try {
-            await request(http2, `http://localhost:${port}/user`)
-
-            for (let drain = 0; drain < 5; drain++) await setImmediate()
+            await Promise.all([request(http2, `http://localhost:${port}/user`), delivered])
 
             const clientSpan = spans.find(span => span.meta?.['span.kind'] === 'client')
             const serverSpan = spans.find(span => span.name === 'web.request')

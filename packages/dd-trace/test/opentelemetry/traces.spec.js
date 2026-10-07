@@ -610,6 +610,56 @@ describe('OpenTelemetry Traces', () => {
     })
 
     describe('otelTraceSemanticsEnabled', () => {
+      for (const key of ['http.response.status_code', 'server.port']) {
+        const cases = [
+          { meta: '200', metric: 201, expected: 200 },
+          { meta: 200, metric: 201, expected: 200 },
+          { meta: 'bogus', metric: 204, expected: 204 },
+          { meta: '0200', metric: 204, expected: 204 },
+          { meta: undefined, metric: 204, expected: 204 },
+          { meta: 'bogus', metric: 1.5 },
+          { meta: undefined, metric: Number.MAX_SAFE_INTEGER + 1 },
+          { meta: '9007199254740992', metric: Number.MIN_SAFE_INTEGER - 1 },
+          { meta: String(Number.MAX_SAFE_INTEGER), metric: 1, expected: Number.MAX_SAFE_INTEGER },
+          { meta: undefined, metric: Number.MAX_SAFE_INTEGER, expected: Number.MAX_SAFE_INTEGER },
+          { meta: String(Number.MIN_SAFE_INTEGER), metric: 1, expected: Number.MIN_SAFE_INTEGER },
+          { meta: undefined, metric: Number.MIN_SAFE_INTEGER, expected: Number.MIN_SAFE_INTEGER },
+          { meta: '0', metric: 1, expected: 0 },
+        ]
+        for (const [index, { meta, metric, expected }] of cases.entries()) {
+          it(`emits at most one safe integer for pure OTel ${key}, case ${index}`, () => {
+            const transformer = new OtlpTraceTransformer({}, true)
+            const span = createMockSpan({ meta: { [key]: meta }, metrics: { [key]: metric } })
+            require('../../src/plugins/util/http-otel-semantics').applyHttpOtelSemantics(span)
+            const decoded = decodePayload(transformer.transformSpans([span]))
+            const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+            assert.deepStrictEqual(attributes.filter(attribute => attribute.key === key),
+              expected === undefined ? [] : [{ key, value: { intValue: expected } }])
+          })
+        }
+
+        for (const value of ['0200', '+1', '1e2', ' 200 ', '', '-0', '1.5', 'Infinity']) {
+          it(`omits non-canonical ${key} string ${JSON.stringify(value)} without a valid fallback`, () => {
+            const transformer = new OtlpTraceTransformer({}, true)
+            const span = createMockSpan({ meta: { [key]: value }, metrics: { [key]: NaN } })
+            const decoded = decodePayload(transformer.transformSpans([span]))
+            const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+            assert.deepStrictEqual(attributes.filter(attribute => attribute.key === key), [])
+          })
+        }
+
+        it(`keeps legacy serialization and duplicate ${key} when semantics are disabled`, () => {
+          const transformer = new OtlpTraceTransformer({}, false)
+          const span = createMockSpan({ meta: { [key]: '0200' }, metrics: { [key]: 1.5 } })
+          const decoded = decodePayload(transformer.transformSpans([span]))
+          const attributes = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+          assert.deepStrictEqual(attributes.filter(attribute => attribute.key === key), [
+            { key, value: { stringValue: '0200' } },
+            { key, value: { doubleValue: 1.5 } },
+          ])
+        })
+      }
+
       it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })

@@ -4,6 +4,7 @@ const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { VERSION } = require('../../../../../version')
+const { INT_VALUED_OTEL_ATTRIBUTES, toSafeInteger } = require('../../plugins/util/http-otel-semantics')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const id = require('../../id')
 const { eventTimeNano } = require('../../encode/tags-processors')
@@ -220,7 +221,14 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     if (span.meta) {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
-        if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
+        if (this.#otelTraceSemanticsEnabled) {
+          if (DD_ERROR_META_KEYS.has(key)) continue
+          if (INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+            const integer = toSafeInteger(value)
+            if (integer !== undefined) attributes.push({ key, value: { intValue: integer } })
+            continue
+          }
+        }
         attributes.push({ key, value: { stringValue: value } })
       }
     }
@@ -228,6 +236,14 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     // Add metrics as numeric attributes
     if (span.metrics) {
       for (const [key, value] of Object.entries(span.metrics)) {
+        if (this.#otelTraceSemanticsEnabled && INT_VALUED_OTEL_ATTRIBUTES.has(key)) {
+          // Pure OTel spans can bypass the HTTP helper. Valid meta still wins,
+          // while invalid meta allows a valid metric to supply the integer.
+          if (toSafeInteger(span.meta?.[key]) !== undefined) continue
+          const integer = toSafeInteger(value)
+          if (integer !== undefined) attributes.push({ key, value: { intValue: integer } })
+          continue
+        }
         if (Number.isInteger(value)) {
           attributes.push({ key, value: { intValue: value } })
         } else {

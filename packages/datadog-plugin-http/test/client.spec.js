@@ -89,10 +89,8 @@ describe('Plugin', () => {
                   'http.request.method': 'GET',
                   'url.full': `${protocol}://localhost:${port}/user`,
                   'server.address': 'localhost',
-                },
-                metrics: {
-                  'http.response.status_code': 200,
-                  'server.port': port,
+                  'http.response.status_code': '200',
+                  'server.port': String(port),
                 },
               })
               // ...and the Datadog ones are absent.
@@ -119,8 +117,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
               assertObjectContains(span, {
-                meta: { 'error.type': '400' },
-                metrics: { 'http.response.status_code': 400 },
+                meta: { 'error.type': '400', 'http.response.status_code': '400' },
               })
             }).then(done).catch(done)
 

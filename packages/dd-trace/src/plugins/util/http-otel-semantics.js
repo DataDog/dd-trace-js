@@ -27,9 +27,23 @@ const KNOWN_METHODS = new Set([
 
 // Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
 const DD_HTTP_META_KEYS = new Set([
-  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.endpoint', 'http.url', 'out.host',
+  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.url', 'out.host',
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
+const INT_VALUED_OTEL_ATTRIBUTES = new Set([HTTP_RESPONSE_STATUS_CODE, SERVER_PORT])
+
+/**
+ * Accept safe integer numbers and decimal strings that round-trip exactly.
+ * Legacy HTTP status parsing is intentionally separate from this canonical policy.
+ *
+ * @param {unknown} value
+ */
+function toSafeInteger (value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : undefined
+  if (typeof value !== 'string') return
+  const integer = Number(value)
+  if (Number.isSafeInteger(integer) && String(integer) === value) return integer
+}
 
 // IPv6 literals arrive bracketed (URL.hostname / out.host = `[::1]`); OTel
 // `server.address` is the bare address.
@@ -41,7 +55,7 @@ function stripIpv6Brackets (host) {
  * @typedef {object} ServerUrlParts
  * @property {string} [scheme] value for `url.scheme`
  * @property {string} [address] value for `server.address`
- * @property {number} [port] value for `server.port`
+ * @property {string} [port] value for `server.port`
  * @property {string} path value for `url.path`
  * @property {string} [query] value for `url.query` (omitted when empty)
  */
@@ -70,9 +84,14 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
     if (hostname && hostname !== 'undefined') {
       address = stripIpv6Brackets(hostname)
     }
-    if (parsed.port) {
-      const parsedPort = Number.parseInt(parsed.port, 10)
-      if (parsedPort > 0) port = parsedPort
+    if (address !== undefined) {
+      if (parsed.port) {
+        if (parsed.port !== '0') port = parsed.port
+      } else if (scheme === 'http' || scheme === 'ws') {
+        port = '80'
+      } else if (scheme === 'https' || scheme === 'wss') {
+        port = '443'
+      }
     }
     path = parsed.pathname || '/'
   } catch {
@@ -151,12 +170,11 @@ function defaultPortForUrl (url) {
 
 /**
  * Rewrite a formatted span's Datadog HTTP tags to OpenTelemetry HTTP
- * semantic-convention names, in place. Called at serialization time (from
- * `span_format`) when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set, so every HTTP
+ * semantic-convention names, in place. Called by `SpanProcessor` before stats
+ * and export when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set, so every HTTP
  * integration is covered from one place. No-op for non-HTTP spans. The span
- * keeps the Datadog tag names throughout its lifetime — only the serialized
- * output is renamed — so runtime consumers (peer.service, AppSec, trace stats)
- * are unaffected.
+ * keeps the Datadog tag names throughout its lifetime. Stats consume the renamed
+ * formatted span; runtime consumers (peer.service, AppSec) see the original tags.
  *
  * @param {FormattedHttpSpan} formattedSpan
  */
@@ -173,11 +191,11 @@ function applyHttpOtelSemantics (formattedSpan) {
   // properties and can't leak a renamed key as `undefined` on the OTLP path.
   const newMeta = {}
   for (const key of Object.keys(meta)) {
-    if (!DD_HTTP_META_KEYS.has(key)) newMeta[key] = meta[key]
+    if (!DD_HTTP_META_KEYS.has(key) && !INT_VALUED_OTEL_ATTRIBUTES.has(key)) newMeta[key] = meta[key]
   }
   const newMetrics = {}
   for (const key of Object.keys(metrics)) {
-    if (key !== NETWORK_DESTINATION_PORT) newMetrics[key] = metrics[key]
+    if (key !== NETWORK_DESTINATION_PORT && !INT_VALUED_OTEL_ATTRIBUTES.has(key)) newMetrics[key] = metrics[key]
   }
 
   const kind = meta['span.kind']
@@ -205,12 +223,10 @@ function applyHttpOtelSemantics (formattedSpan) {
   const status = meta['http.status_code']
   let statusCode
   if (status !== undefined) {
-    // OTel types http.response.status_code as an int, so emit it as a numeric
-    // metric (the OTLP exporter serializes meta as stringValue but metrics as
-    // intValue) — mirroring how server.port is handled below. Guard against a
-    // non-numeric status, which would otherwise write a NaN metric.
+    // Keep legacy parseInt conversion and error classification independent of
+    // canonical integer validation, including statuses such as "500oops".
     statusCode = Number.parseInt(status, 10)
-    if (Number.isFinite(statusCode)) newMetrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
+    if (Number.isSafeInteger(statusCode)) newMeta[HTTP_RESPONSE_STATUS_CODE] = String(statusCode)
   }
 
   const userAgent = meta['http.useragent']
@@ -218,8 +234,6 @@ function applyHttpOtelSemantics (formattedSpan) {
 
   const clientIp = meta['http.client_ip']
   if (clientIp !== undefined) newMeta[CLIENT_ADDRESS] = clientIp
-
-  // http.endpoint is Datadog-only (omitted above); it has no OTel equivalent.
 
   if (kind === 'server') {
     // FIXME: some server frameworks (e.g. Next.js — `packages/datadog-plugin-next`)
@@ -234,7 +248,7 @@ function applyHttpOtelSemantics (formattedSpan) {
       if (scheme !== undefined) newMeta[URL_SCHEME] = toHttpScheme(scheme)
       if (query !== undefined) newMeta[URL_QUERY] = query
       if (address !== undefined) newMeta[SERVER_ADDRESS] = address
-      if (port !== undefined) newMetrics[SERVER_PORT] = port
+      if (port !== undefined) newMeta[SERVER_PORT] = port
     }
   } else {
     if (url !== undefined) {
@@ -247,10 +261,17 @@ function applyHttpOtelSemantics (formattedSpan) {
     if (clientPort === undefined) {
       // server.port is required for client spans; fall back to the scheme default.
       const defaultPort = defaultPortForUrl(url)
-      if (defaultPort !== undefined) newMetrics[SERVER_PORT] = defaultPort
-    } else {
-      newMetrics[SERVER_PORT] = clientPort
+      if (defaultPort !== undefined) newMeta[SERVER_PORT] = String(defaultPort)
+    } else if (toSafeInteger(clientPort) !== undefined) {
+      newMeta[SERVER_PORT] = String(clientPort)
     }
+  }
+
+  // A valid derived value wins; invalid candidates must not hide canonical
+  // meta or metric fallbacks. Both integer attributes use string meta internally.
+  for (const key of INT_VALUED_OTEL_ATTRIBUTES) {
+    const integer = toSafeInteger(newMeta[key]) ?? toSafeInteger(meta[key]) ?? toSafeInteger(metrics[key])
+    if (integer !== undefined) newMeta[key] = String(integer)
   }
 
   // OTel error semantics for an error response (no-clobber on an exception-derived
@@ -269,6 +290,8 @@ function applyHttpOtelSemantics (formattedSpan) {
 }
 
 module.exports = {
+  INT_VALUED_OTEL_ATTRIBUTES,
+  toSafeInteger,
   NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
   decomposeServerUrl, // exercised directly by the helper spec
   applyHttpOtelSemantics,

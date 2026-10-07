@@ -14,6 +14,7 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
+const { toSafeInteger } = require('./plugins/util/http-otel-semantics')
 const id = require('./id')
 const log = require('./log')
 
@@ -106,10 +107,12 @@ class SpanAggKey {
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
     this.type = span.type || ''
-    this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
+    this.statusCode = span.meta[HTTP_STATUS_CODE] ||
+      (toSafeInteger(span.meta['http.response.status_code']) ??
+        toSafeInteger(span.metrics?.['http.response.status_code']) ?? 0)
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
-    this.method = span.meta[HTTP_METHOD] || ''
+    this.method = span.meta[HTTP_METHOD] || span.meta['http.request.method'] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.

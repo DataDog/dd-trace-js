@@ -175,6 +175,43 @@ describe('SpanAggKey', () => {
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,')
   })
 
+  for (const value of ['0200', '+1', '1e2', ' 200 ', '500oops', 'bogus', 200]) {
+    it(`keeps truthy legacy status ${JSON.stringify(value)} without normalization`, () => {
+      const key = new SpanAggKey({
+        meta: { [HTTP_STATUS_CODE]: value, 'http.response.status_code': '204' },
+        metrics: { 'http.response.status_code': 205 },
+      })
+      assert.strictEqual(key.statusCode, value)
+    })
+  }
+
+  for (const legacy of [undefined, '', 0]) {
+    for (const [meta, metric, expected] of [
+      ['204', 205, 204], ['bogus', 205, 205], ['0200', 205, 205],
+      ['+1', 205, 205], ['1e2', 205, 205], [' 200 ', 205, 205], ['-0', 205, 205],
+      [undefined, 205, 205], ['bogus', NaN, 0], ['9007199254740992', Number.MAX_SAFE_INTEGER + 1, 0],
+      [String(Number.MAX_SAFE_INTEGER), 205, Number.MAX_SAFE_INTEGER],
+      [String(Number.MIN_SAFE_INTEGER), 205, Number.MIN_SAFE_INTEGER],
+      [undefined, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+      [undefined, Number.MIN_SAFE_INTEGER, Number.MIN_SAFE_INTEGER], ['0', 205, 0],
+    ]) {
+      it(`uses safe canonical status after legacy ${JSON.stringify(legacy)}, meta ${meta}, metric ${metric}`, () => {
+        const key = new SpanAggKey({
+          meta: { [HTTP_STATUS_CODE]: legacy, 'http.response.status_code': meta },
+          metrics: { 'http.response.status_code': metric },
+        })
+        assert.strictEqual(key.statusCode, expected)
+      })
+    }
+  }
+
+  it('uses canonical method only when the legacy method is falsy', () => {
+    for (const [legacy, expected] of [['POST', 'POST'], ['', 'GET'], [undefined, 'GET']]) {
+      const key = new SpanAggKey({ meta: { [HTTP_METHOD]: legacy, 'http.request.method': 'GET' } })
+      assert.strictEqual(key.method, expected)
+    }
+  })
+
   it('should include service source in aggregation key', () => {
     const span = {
       ...basicSpan,
