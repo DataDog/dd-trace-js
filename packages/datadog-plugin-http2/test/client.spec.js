@@ -143,6 +143,7 @@ describe('Plugin', () => {
 
               const authority = explicitPort ? `[::1]:${defaultPort}` : '[::1]'
               const client = http2.connect(`${protocol}://username@${authority}`, {
+                servername: 'localhost',
                 createConnection: () => protocol === 'https'
                   ? tls.connect({ host: '::1', port, rejectUnauthorized: false, ALPNProtocols: ['h2'] })
                   : net.connect({ host: '::1', port }),
@@ -166,7 +167,9 @@ describe('Plugin', () => {
               assert.strictEqual(span.metrics['server.port'], port)
             }).then(done).catch(done)
 
-            const client = http2.connect(new URL(`${protocol}://username:password@[::1]:${port}`)).on('error', done)
+            const client = http2.connect(new URL(`${protocol}://username:password@[::1]:${port}`), {
+              servername: 'localhost',
+            }).on('error', done)
             client.request({ ':path': '/user?foo=bar&token=secret' })
               .on('error', done).once('end', () => client.close()).resume().end()
           }, '::1')
@@ -264,7 +267,9 @@ describe('Plugin', () => {
               assert.strictEqual(span.metrics['network.destination.port'], port)
             }).then(done).catch(done)
 
-            const client = http2.connect(`${protocol}://username:password@[::1]:${port}`).on('error', done)
+            const client = http2.connect(`${protocol}://username:password@[::1]:${port}`, {
+              servername: 'localhost',
+            }).on('error', done)
             client.request({ ':path': '/user?token=secret' })
               .on('error', done).once('end', () => client.close()).resume().end()
           }, '::1')
