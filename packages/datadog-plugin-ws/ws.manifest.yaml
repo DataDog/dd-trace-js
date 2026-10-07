@@ -1,0 +1,10 @@
+_v: 1
+name: ws
+display_name: ws
+description: Instruments ws server-side WebSocket upgrade handshakes, message sending and receiving, and connection closure.
+packages:
+- name: ws
+category:
+- websocket.server
+systems: []
+creation_date: '2025-09-09'

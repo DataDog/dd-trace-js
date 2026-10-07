@@ -1,0 +1,11 @@
+_v: 1
+name: undici
+display_name: Undici
+description: Instruments outbound HTTP requests made with Undici, including fetch calls, with trace context propagation, response
+  status, and error tracking.
+packages:
+- name: undici
+category:
+- http.client
+systems: []
+creation_date: '2024-06-10'

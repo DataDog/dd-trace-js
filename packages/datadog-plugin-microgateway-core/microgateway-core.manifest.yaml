@@ -1,0 +1,10 @@
+_v: 1
+name: microgateway-core
+display_name: microgateway-core
+description: Instruments incoming HTTP requests in microgateway-core, recording proxy routes and request errors.
+packages:
+- name: microgateway-core
+category:
+- http.server
+systems: []
+creation_date: '2020-03-25'

@@ -1,0 +1,11 @@
+_v: 1
+name: next
+display_name: Next.js
+description: Instruments Next.js HTTP requests, API routes, server-side page rendering, and static resource serving, with
+  request body and query data published for AppSec.
+packages:
+- name: next
+category:
+- http.server
+systems: []
+creation_date: '2021-05-20'
