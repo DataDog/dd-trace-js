@@ -4,10 +4,10 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const Axios = require('axios')
 const { UNVALIDATED_REDIRECT } = require('../../../../src/appsec/iast/vulnerabilities')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
+const HttpRequest = require('../../../setup/helpers/http-client')
 
 describe('Unvalidated Redirect vulnerability', () => {
   let redirectFunctions
@@ -24,7 +24,7 @@ describe('Unvalidated Redirect vulnerability', () => {
   })
 
   function getAxiosInstance (config) {
-    return Axios.create({
+    return HttpRequest.create({
       baseURL: `http://localhost:${config.port}`,
     })
   }

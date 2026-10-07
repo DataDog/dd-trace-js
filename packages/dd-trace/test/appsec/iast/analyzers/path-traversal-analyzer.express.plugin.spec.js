@@ -4,12 +4,12 @@ const path = require('node:path')
 const fs = require('node:fs')
 const os = require('node:os')
 
-const axios = require('axios')
 const semver = require('semver')
 
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
 const { NODE_MAJOR } = require('../../../../../../version')
+const httpRequest = require('../../../setup/helpers/http-client')
 
 describe('Path traversal analyzer', () => {
   let renderFunctionPath
@@ -50,7 +50,7 @@ describe('Path traversal analyzer', () => {
               vulnerability: 'PATH_TRAVERSAL',
               occurrences: 1,
               makeRequest: (done, config) => {
-                axios.get(`http://localhost:${config.port}/?file=template`)
+                httpRequest.get(`http://localhost:${config.port}/?file=template`)
                   .catch((err, ...args) => {
                     done(err)
                   })
@@ -66,7 +66,7 @@ describe('Path traversal analyzer', () => {
               },
               vulnerability: 'PATH_TRAVERSAL',
               makeRequest: (done, config) => {
-                axios.get(`http://localhost:${config.port}/?file=template`)
+                httpRequest.get(`http://localhost:${config.port}/?file=template`)
                   .catch(done)
               },
             })
