@@ -64,11 +64,12 @@ class SupabaseTestSetup {
   }
 
   /**
-   * @param {{ abort?: boolean, fail?: boolean, reject?: boolean, throwOnError?: boolean }} [options] Client behavior.
+   * @param {{ abort?: boolean, fail?: boolean, reject?: boolean, throwOnError?: boolean, url?: string }} [options]
+   * Client behavior.
    * @returns {import('@supabase/supabase-js').SupabaseClient}
    */
   createSupabaseClient (options) {
-    return this.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    return this.createClient(options?.url || SUPABASE_URL, SUPABASE_KEY, {
       auth: {
         autoRefreshToken: false,
         detectSessionInUrl: false,
@@ -83,6 +84,16 @@ class SupabaseTestSetup {
   /** @returns {Promise<object>} */
   storageFileList () {
     return this.createSupabaseClient().storage.from('files').list()
+  }
+
+  /**
+   * @param {{ url?: string }} [options] Client URL override.
+   * @returns {Promise<object>}
+   */
+  storageFileDownloadWithTransform (options) {
+    return this.createSupabaseClient(options).storage.from('files').download('avatar.png', {
+      transform: { width: 100, height: 200 },
+    })
   }
 
   /** @returns {Promise<object>} */

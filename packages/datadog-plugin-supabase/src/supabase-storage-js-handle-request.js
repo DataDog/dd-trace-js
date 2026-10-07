@@ -1,7 +1,7 @@
 'use strict'
 
 const StoragePlugin = require('../../dd-trace/src/plugins/storage')
-const { extractPathFromUrl } = require('../../dd-trace/src/plugins/util/url')
+const { extractPathFromUrl, getQsObfuscator, obfuscateQs } = require('../../dd-trace/src/plugins/util/url')
 const { stripQueryAndFragment } = require('../../dd-trace/src/util')
 const getHostname = require('./url')
 
@@ -54,6 +54,8 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
   bindStart (ctx) {
     const method = String(ctx.arguments?.[1] || 'GET').toUpperCase()
     const url = ctx.arguments?.[2]
+    const rawUrl = String(url)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
     this.startSpan('supabase.storage.request', {
       service: { name: this.tracer._service },
@@ -63,7 +65,9 @@ class SupabaseStorageHandleRequestPlugin extends StoragePlugin {
         component: 'supabase',
         'span.kind': 'client',
         'http.method': method,
-        'http.url': stripQueryAndFragment(String(url)),
+        'http.url': otelSemantics
+          ? obfuscateQs({ queryStringObfuscation: getQsObfuscator(this.config) }, rawUrl)
+          : stripQueryAndFragment(rawUrl),
         'out.host': getHostname(url),
       },
     }, ctx)
