@@ -1,6 +1,6 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
 
@@ -621,6 +621,71 @@ describe('Plugin', () => {
             )
           })
         })
+      })
+
+      describe('handshake request metadata', () => {
+        for (const scenario of [
+          { enabled: true, obfuscation: 'password=[^&]*', query: 'active=true&<redacted>' },
+          { enabled: true, obfuscation: false, query: 'active=true&password=secret' },
+          { enabled: true, obfuscation: true, query: undefined },
+          { enabled: false, obfuscation: false, query: undefined },
+        ]) {
+          describe(`semantics=${scenario.enabled}, obfuscation=${scenario.obfuscation}`, () => {
+            beforeEach(async () => {
+              process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = String(scenario.enabled)
+              await agent.load(['ws'], [{
+                service: 'some',
+                traceWebsocketMessagesEnabled: true,
+                queryStringObfuscation: scenario.obfuscation,
+              }])
+              WebSocket = require(`../../../versions/ws@${version}`).get()
+              wsServer = new WebSocket.Server({ port: 0, host: '127.0.0.1' })
+              await once(wsServer, 'listening')
+              clientPort = wsServer.address().port
+            })
+
+            afterEach(async () => {
+              client?.terminate()
+              await closeWsServer(wsServer)
+              delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+              await agent.close()
+            })
+
+            it('exports request metadata without changing handshake or message resources', async () => {
+              const trace = agent.assertSomeTraces(traces => {
+                const span = findSpan(traces, span => span.name === 'web.request' && span.type === 'websocket')
+                assert.ok(span, inspect(traces, { depth: 5 }))
+                assert.strictEqual(span.resource, 'GET /test')
+                if (scenario.enabled) {
+                  assertObjectContains(span.meta, {
+                    'http.request.method': 'GET',
+                    'url.path': '/test',
+                    'url.scheme': 'http',
+                    'server.address': '127.0.0.1',
+                    'network.peer.address': '127.0.0.1',
+                    'user_agent.original': 'test-user-agent',
+                  })
+                  assert.strictEqual(span.meta['url.query'], scenario.query)
+                } else {
+                  assert.strictEqual(span.meta['http.url'], `ws://127.0.0.1:${clientPort}/test`)
+                  assert.strictEqual(span.meta['http.useragent'], undefined)
+                  assert.strictEqual(span.meta['network.peer.address'], undefined)
+                  assert.strictEqual(span.meta['url.query'], undefined)
+                }
+              })
+              const messageTrace = agent.assertSomeTraces(traces => {
+                const messageSpan = findSpan(traces, span => span.name === 'websocket.send')
+                assert.ok(messageSpan)
+                assert.strictEqual(messageSpan.resource, 'websocket /test')
+              })
+              wsServer.once('connection', ws => ws.send('metadata test'))
+              client = new WebSocket(`ws://127.0.0.1:${clientPort}/test?active=true&password=secret`, {
+                headers: { 'user-agent': 'test-user-agent' },
+              })
+              await Promise.all([once(client, 'message'), trace, messageTrace])
+            })
+          })
+        }
       })
 
       describe('with service configuration', () => {
