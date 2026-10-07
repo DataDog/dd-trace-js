@@ -16,22 +16,12 @@ describe('instrumentation registry', () => {
     assert.deepStrictEqual(instrumentations, registry.flatMap(entry => entry.instrumentations))
   })
 
-  it('uses the module name to activate opted-in rewrite targets', () => {
+  it('activates only the explicitly listed rewrite modules', () => {
     for (const { activate, instrumentations: entryInstrumentations } of registry) {
-      if (!activate) continue
-
+      const modules = new Set(activate?.modules)
       for (const { module } of entryInstrumentations) {
-        assert.strictEqual(isRewriteActivationEnabled(module.name), true)
-      }
-    }
-  })
-
-  it('does not activate rewrite targets without the opt-in flag', () => {
-    for (const { activate, instrumentations: entryInstrumentations } of registry) {
-      if (activate) continue
-
-      for (const { module } of entryInstrumentations) {
-        assert.strictEqual(isRewriteActivationEnabled(module.name), false)
+        assert.strictEqual(isRewriteActivationEnabled(module.name), modules.has(module.name))
+        assert.strictEqual(getActivationSetup(module.name), modules.has(module.name) ? activate?.setup : undefined)
       }
     }
   })
@@ -41,18 +31,24 @@ describe('instrumentation registry', () => {
     assert.strictEqual(getActivationSetup('not-a-registered-module'), undefined)
   })
 
-  it('normalizes boolean and function forms without running setup', () => {
+  it('normalizes explicit activation modules without running setup', () => {
     let setupCalls = 0
     const setup = () => { setupCalls++ }
     const entries = [
       { instrumentations: [{ module: { name: 'unset' } }] },
-      { activate: false, instrumentations: [{ module: { name: 'disabled' } }] },
-      { activate: true, instrumentations: [{ module: { name: 'enabled' } }] },
-      { activate: setup, instrumentations: [{ module: { name: 'first' } }, { module: { name: 'second' } }] },
+      { activate: { modules: ['enabled'] }, instrumentations: [{ module: { name: 'enabled' } }] },
+      {
+        activate: { modules: ['first', 'second'], setup },
+        instrumentations: [
+          { module: { name: 'first' } },
+          { module: { name: 'second' } },
+          { module: { name: 'shared' } },
+        ],
+      },
     ]
     const registry = loadRegistry(entries)
 
-    for (const name of ['unset', 'disabled', 'unknown']) {
+    for (const name of ['unset', 'shared', 'unknown']) {
       assert.strictEqual(registry.isRewriteActivationEnabled(name), false)
       assert.strictEqual(registry.getActivationSetup(name), undefined)
     }
@@ -65,11 +61,11 @@ describe('instrumentation registry', () => {
     assert.strictEqual(setupCalls, 0)
   })
 
-  for (const value of [null, 0, 1, '', 'true', {}, [], Symbol('activate')]) {
+  for (const value of [null, false, true, 0, 1, '', 'true', [], Symbol('activate'), () => {}]) {
     it(`rejects invalid activation value ${String(value)} at registry load`, () => {
       assert.throws(() => loadRegistry([{ activate: value, instrumentations: [] }]), {
         name: 'TypeError',
-        message: 'Instrumentation registry activate must be a boolean or a function',
+        message: 'Instrumentation registry activate must be an object',
       })
     })
   }
@@ -77,7 +73,7 @@ describe('instrumentation registry', () => {
   it('keeps setup functions out of rewrite targets', () => {
     const setup = () => {}
     const registry = loadRegistry([{
-      activate: setup,
+      activate: { modules: ['example'], setup },
       instrumentations: [{ module: { name: 'example' } }],
     }])
     const targetModule = { exports: {} }
