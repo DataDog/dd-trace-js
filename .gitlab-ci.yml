@@ -116,12 +116,6 @@ requirements_json_test:
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
 
 generate-supported-versions:
-  # TEMPORARY: lets the job be started manually on PR pipelines. Remove before merging.
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" || $CI_COMMIT_BRANCH
-      when: manual
-      allow_failure: true
-    - when: never
   before_script:
     # The packaging image has no yarn; lifecycle scripts must run to build the vendored bundle instrumentations load.
     - npx --yes yarn@1 install --frozen-lockfile --non-interactive
