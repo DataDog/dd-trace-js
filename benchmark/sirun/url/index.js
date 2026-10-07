@@ -2,12 +2,7 @@
 
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
-const {
-  extractURL,
-  obfuscateQs,
-  getQsObfuscator,
-  calculateHttpEndpoint,
-} = require('../../../packages/dd-trace/src/plugins/util/url')
+const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('../../../packages/dd-trace/src/plugins/util/url')
 const configManifest = require('../../../packages/dd-trace/src/config/supported-configurations.json')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
@@ -20,7 +15,7 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // snapshot.
 const qsDefault =
   configManifest.supportedConfigurations.DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP[0].default
-const config = { queryStringObfuscation: getQsObfuscator({ queryStringObfuscation: qsDefault }) }
+const config = { queryStringObfuscation: new RegExp(qsDefault, 'gi') }
 
 // Duck-typed inbound requests matching what Node's HTTP server hands the tracer:
 // headers (host, user-agent), a socket (tls flag) and the raw url. A mix of REST
