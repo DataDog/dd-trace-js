@@ -318,7 +318,8 @@ function setupAssertionListeners (t, done, probe, traceOptions = {}) {
       }
 
       const isFastifyRequest = span.attributes?.some(({ key, value }) => (
-        key === 'operation.name' && value.stringValue === 'fastify.request'
+        (key === 'operation.name' && value.stringValue === 'fastify.request') ||
+        (key === 'component' && value.stringValue === 'fastify')
       ))
       return isFastifyRequest && (!dd || BigInt(`0x${span.spanId}`).toString() === dd.span_id)
     })

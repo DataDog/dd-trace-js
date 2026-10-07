@@ -65,15 +65,15 @@ if (!isACFActive) {
   const stores = new WeakMap()
 
   /**
-   * Node can omit the trigger resource while the inspector is paused. There
-   * is no context to inherit in that case, and the native method would throw.
+   * Node can omit the trigger resource while the inspector is paused. Guard
+   * the shared hook because every enabled AsyncLocalStorage receives the call.
    *
    * @param {object} resource
    * @param {object | undefined} triggerResource
    * @param {string} type
+   * @returns {void}
    */
-  // @ts-expect-error Node calls this undocumented AsyncLocalStorage hook.
-  DatadogStorage.prototype._propagate = function _propagate (resource, triggerResource, type) {
+  AsyncLocalStorage.prototype._propagate = function _propagate (resource, triggerResource, type) {
     if (triggerResource) {
       superPropagate.call(this, resource, triggerResource, type)
     }

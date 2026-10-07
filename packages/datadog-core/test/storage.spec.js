@@ -6,7 +6,7 @@ const { AsyncLocalStorage, executionAsyncResource } = require('async_hooks')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 
 require('../../dd-trace/test/setup/core')
-const { storage } = require('../src/storage')
+const { storage, isACFActive } = require('../src/storage')
 
 describe('storage', () => {
   let testStorage
@@ -89,11 +89,18 @@ describe('storage', () => {
     assert.strictEqual(testStorage.getStore(), undefined)
   })
 
-  it('should only guard missing trigger resources without AsyncContextFrame', () => {
-    if (Object.hasOwn(testStorage.constructor.prototype, '_propagate')) {
-      testStorage._propagate({}, undefined, 'PROMISE')
-    } else {
+  it('should guard missing trigger resources for every legacy AsyncLocalStorage', () => {
+    assert.strictEqual(Object.hasOwn(testStorage.constructor.prototype, '_propagate'), false)
+
+    if (isACFActive) {
       assert.strictEqual(testStorage._propagate, AsyncLocalStorage.prototype._propagate)
+      return
     }
+
+    const nativeStorage = new AsyncLocalStorage()
+    nativeStorage.enterWith('native')
+
+    testStorage._propagate({}, undefined, 'PROMISE')
+    nativeStorage._propagate({}, undefined, 'PROMISE')
   })
 })

@@ -5,6 +5,7 @@ const { writeFileSync } = require('fs')
 const os = require('os')
 const { join } = require('path')
 
+const { isACFActive } = require('../../packages/datadog-core/src/storage')
 const { setup, setupAssertionListeners, testBasicInputWithoutRC } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -27,15 +28,17 @@ describe('Dynamic Instrumentation', function () {
       testApp: 'target-app/basic.js',
       env: (agent) => ({
         DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE: probeFile,
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
+        ...(!isACFActive && { TRIGGER_MISSING_ASYNC_RESOURCE: 'true' }),
         OTEL_TRACES_EXPORTER: 'otlp',
         OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${agent.port}/v1/traces`,
       }),
       dependencies: ['fastify'],
     })
-    const probe = t.generateProbeConfig()
+    const probe = t.generateProbeConfig({ captureSnapshot: true })
     writeFileSync(probeFile, JSON.stringify([probe]))
 
-    it('should send debugger snapshots while traces use OTLP', function (done) {
+    it('should send debugger snapshots while traces use OTLP semantics', function (done) {
       t.triggerBreakpoint()
       setupAssertionListeners(t, done, probe, {
         event: 'otlp-traces',
