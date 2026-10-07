@@ -1,8 +1,8 @@
 _v: 1
 name: mongoose
 display_name: Mongoose
-description: Instruments Mongoose database operations to preserve trace context and tracks query filters and sanitization
-  for IAST NoSQL injection detection.
+description: Instruments Mongoose database operations with trace context propagation to MongoDB driver spans and query filter
+  and sanitization tracking for NoSQL injection detection.
 packages:
 - name: mongoose
 category:
