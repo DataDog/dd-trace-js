@@ -42,7 +42,7 @@ shimmer is still necessary, leave a code comment naming the reason.
 ```text
 packages/datadog-instrumentations/src/
 └── helpers/rewriter/
-    ├── instrumentation-registry.js            # Add the config group and optional activate flag or setup function
+    ├── instrumentation-registry.js            # Add the config group and optional activation modules/setup
     └── instrumentations/<name>.js             # The config array
 ```
 
@@ -56,15 +56,40 @@ integrations report compatibility at the rewrite-target level when an exact targ
 from the same package is not reported. Bundler rewrites keep their existing activation path and do not report this
 compatibility telemetry.
 
-Register a pure integration by adding its config and a config-registry entry with `activate: true`, then run
-`npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; the registry's
-`activate` flag controls evaluation-time plugin activation using the module name from the config.
+Register a pure integration by adding its config and explicitly listing its activation packages:
 
-For runtime subscribers, use `activate: () => require('../../<name>')`. The function runs synchronously before each plugin
-activation, receives `{ moduleName, version }` (version may be undefined), and its return value is ignored. Module caching
-loads top-level subscribers once. The setup file must not call `addHook` or depend on subscriber order relative to plugins.
-A throwing setup permanently prevents activation for every module in the group. An activation callback may also record
-module metadata, for example `activate: activation => require('../../<name>').recordVersion(activation)`.
+```javascript
+{
+  activate: { modules: ['bullmq'] },
+  instrumentations: require('./instrumentations/bullmq'),
+}
+```
+
+Then run `npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery. Only packages in
+`activate.modules` trigger evaluation-time plugin activation; the loader still receives a boolean activation flag.
+Omitting `activate` makes the entry rewrite-only. Adding a descriptor for another package never implicitly enables its
+activation, so shared dependencies can remain in the same descriptor array without loading the integration's runtime.
+Activation modules must be unique, non-empty package names with rewrite descriptors in their entry. Boolean and function
+shorthands are not supported. Conflicting setup callbacks for one package are rejected.
+
+For runtime subscribers, add an optional synchronous setup callback:
+
+```javascript
+{
+  activate: {
+    modules: ['<npm-package>'],
+    setup: activation => require('../../<name>').recordVersion(activation),
+  },
+  instrumentations: require('./instrumentations/<name>'),
+}
+```
+
+For subscriber-only setup without metadata, use `setup: () => require('../../<name>')`. Setup runs before each plugin
+activation, receives `{ moduleName, version }` (version may be undefined), and its return value is ignored. Do not turn it
+into a once-per-group callback: a later package activation may supply additional metadata. Module caching loads top-level
+subscribers once. The setup file must not call `addHook`, load rewrite targets, or depend on subscriber order relative to
+plugins. Re-entrant activation using the same setup callback is blocked until it returns. A throwing setup permanently
+prevents activation for every package sharing that callback.
 
 ## Config Schema
 
