@@ -1,0 +1,13 @@
+_v: 1
+name: confluentinc-kafka-javascript
+display_name: Confluent Kafka JavaScript
+description: Instruments Kafka message production and single-message or batch consumption through Confluent's native and KafkaJS-compatible
+  APIs, including trace-context propagation and Data Streams Monitoring.
+packages:
+- name: '@confluentinc/kafka-javascript'
+category:
+- messaging.consumer
+- messaging.producer
+systems:
+- kafka
+creation_date: '2025-05-09'

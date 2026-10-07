@@ -1,0 +1,13 @@
+_v: 1
+name: azure-durable-functions
+display_name: Azure Durable Functions
+description: Instruments Azure Durable Functions activity and entity invocations and durable orchestration execution, including
+  orchestration failures and host trace-context propagation.
+packages:
+- name: durable-functions
+category:
+- faas
+- workflow.durable_execution
+systems:
+- azure.functions
+creation_date: '2026-03-13'

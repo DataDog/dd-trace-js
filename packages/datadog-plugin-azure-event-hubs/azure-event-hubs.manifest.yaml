@@ -1,0 +1,12 @@
+_v: 1
+name: azure-event-hubs
+display_name: Azure Event Hubs
+description: Instruments Azure Event Hubs event creation within batches and batch sending, with trace-context propagation
+  and optional batch span linking.
+packages:
+- name: '@azure/event-hubs'
+category:
+- messaging.producer
+systems:
+- eventhubs
+creation_date: '2025-10-15'

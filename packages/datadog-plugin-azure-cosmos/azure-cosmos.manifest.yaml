@@ -1,0 +1,12 @@
+_v: 1
+name: azure-cosmos
+display_name: Azure Cosmos DB
+description: Instruments Azure Cosmos DB client operations on databases, containers, and documents, including CRUD operations
+  and queries, through the JavaScript SDK.
+packages:
+- name: '@azure/cosmos'
+category:
+- db.client
+systems:
+- azure.cosmosdb
+creation_date: '2026-05-22'

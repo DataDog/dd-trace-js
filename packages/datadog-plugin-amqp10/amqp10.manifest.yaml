@@ -1,0 +1,11 @@
+_v: 1
+name: amqp10
+display_name: amqp10
+description: Instruments AMQP message sending and receiving through the amqp10 client.
+packages:
+- name: amqp10
+category:
+- messaging.consumer
+- messaging.producer
+systems: []
+creation_date: '2018-08-22'
