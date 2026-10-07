@@ -1,0 +1,12 @@
+_v: 1
+name: oracledb
+display_name: Oracle Database
+description: Instruments Oracle Database SQL query execution through node-oracledb, with optional Database Monitoring SQL
+  comment propagation.
+packages:
+- name: oracledb
+category:
+- db.client
+systems:
+- oracle.db
+creation_date: '2021-05-21'
