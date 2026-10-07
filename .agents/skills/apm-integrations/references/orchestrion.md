@@ -42,7 +42,7 @@ shimmer is still necessary, leave a code comment naming the reason.
 ```text
 packages/datadog-instrumentations/src/
 └── helpers/rewriter/
-    ├── instrumentation-registry.js            # Add the config group and optional activate flag or setup function
+    ├── instrumentation-registry.js            # Add the config group and optional activation flag or config
     └── instrumentations/<name>.js             # The config array
 ```
 
@@ -57,14 +57,46 @@ from the same package is not reported. Bundler rewrites keep their existing acti
 compatibility telemetry.
 
 Register a pure integration by adding its config and a config-registry entry with `activate: true`, then run
-`npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; the registry's
-`activate` flag controls evaluation-time plugin activation using the module name from the config.
+`npm run generate:rewriter:targets`. Generated targets control runtime and bundler discovery; `activate` controls
+evaluation-time plugin activation and covers every rewrite target in the entry. Omitting `activate` makes the entry
+rewrite-only.
 
-For runtime subscribers, use `activate: () => require('../../<name>')`. The function runs synchronously before each plugin
-activation, receives `{ moduleName, version }` (version may be undefined), and its return value is ignored. Module caching
-loads top-level subscribers once. The setup file must not call `addHook` or depend on subscriber order relative to plugins.
-A throwing setup permanently prevents activation for every module in the group. An activation callback may also record
-module metadata, for example `activate: activation => require('../../<name>').recordVersion(activation)`.
+```javascript
+{
+  activate: true,
+  instrumentations: require('./instrumentations/bullmq'),
+}
+```
+
+When an entry also rewrites helper packages that must not trigger activation, name the packages that should:
+
+```javascript
+{
+  activate: { modules: ['@wdio/cli', '@wdio/local-runner', 'webdriverio'] },
+  instrumentations: require('./instrumentations/webdriverio'),
+}
+```
+
+Listed modules must be unique, non-empty package names with rewrite descriptors in the same entry. Under
+`activate: true` a newly added descriptor also activates its package, so prefer the explicit list for entries
+spanning several packages.
+
+For runtime subscribers, add a synchronous setup callback:
+
+```javascript
+{
+  activate: { setup: activation => require('../../<name>').recordVersion(activation) },
+  instrumentations: require('./instrumentations/<name>'),
+}
+```
+
+For subscriber-only setup without metadata, use `setup: () => require('../../<name>')`. Setup runs before each plugin
+activation, receives `{ moduleName, version }` (version may be undefined), and its return value is ignored. Do not
+turn it into a once-per-group callback: a later package activation may supply additional metadata. Module caching
+loads top-level subscribers once. The setup file must not call `addHook`, load rewrite targets, or depend on
+subscriber order relative to plugins. Re-entrant activation using the same setup callback is blocked until it
+returns. A throwing setup permanently prevents activation for every package sharing that callback. Conflicting
+setup callbacks for one package are rejected.
 
 ## Config Schema
 
