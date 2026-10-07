@@ -23,6 +23,37 @@ describe('test agent helper', () => {
       assert.strictEqual(tracer, global._ddtrace)
     })
 
+    it('substitutes only OTLP transport while keeping the semantics transform', async () => {
+      const previousSemantics = process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      try {
+        const tracer = await agent.load([])
+        const AgentExporter = require('../../src/exporters/agent')
+        assert.ok(tracer._tracer._exporter instanceof AgentExporter)
+        assert.strictEqual(tracer._tracer._processor._exporter, tracer._tracer._exporter)
+        const received = agent.assertFirstTraceSpan(span => {
+          assert.strictEqual(span.meta['http.request.method'], 'GET')
+          assert.strictEqual(span.metrics['http.response.status_code'], 200)
+          assert.strictEqual(span.meta['http.method'], undefined)
+        })
+        tracer.startSpan('http.request', {
+          tags: {
+            'span.kind': 'client',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            'http.url': 'http://localhost:8080/transport',
+          },
+        }).finish()
+        await received
+      } finally {
+        if (previousSemantics === undefined) {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        } else {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = previousSemantics
+        }
+      }
+    })
+
     it('binds the mock agent on the IPv4 loopback address', async () => {
       await agent.load([])
       assert.strictEqual(agent.server.address().address, '127.0.0.1')

@@ -44,3 +44,17 @@ function hasCiValidationEnvironment () {
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_MANIFEST_FILE') &&
     getEnvironmentVariable('_DD_TEST_OPTIMIZATION_VALIDATION_OUTPUT_DIR')
 }
+
+/**
+ * Whether the tracer effectively uses OTLP for APM spans.
+ * Test Optimization and Electron do not support OTLP even when `OTEL_TRACES_EXPORTER` is `otlp`.
+ *
+ * @param {Pick<import('./config/config-base'), 'OTEL_TRACES_EXPORTER' | 'isCiVisibility' | 'tracing'>} config
+ */
+function usesOtlpTraceExporter (config) {
+  return config.OTEL_TRACES_EXPORTER === 'otlp' &&
+    !config.isCiVisibility &&
+    config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER !== exporters.ELECTRON
+}
+
+module.exports.usesOtlpTraceExporter = usesOtlpTraceExporter

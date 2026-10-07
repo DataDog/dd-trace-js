@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
 
@@ -253,6 +254,29 @@ describe('OpenTelemetry Traces', () => {
 
         assert.strictEqual(otlpSpan.flags, priority === undefined ? undefined : Number(priority > 0))
         assert.strictEqual(otlpSpan.traceState, undefined)
+      })
+    }
+
+    for (const otelTraceSemanticsEnabled of [false, true]) {
+      it(`uses each span's sampling priority with OTel semantics ${otelTraceSemanticsEnabled}`, () => {
+        const transformer = new OtlpTraceTransformer({}, otelTraceSemanticsEnabled)
+        const root = createMockSpan({ parent_id: id('0'), metrics: { _sampling_priority_v1: 2 } })
+        const child = createMockSpan({
+          span_id: id('abcdef1234567891'),
+          parent_id: root.span_id,
+          metrics: { _sampling_priority_v1: 0 },
+        })
+        const withoutPriority = createMockSpan({
+          span_id: id('abcdef1234567892'),
+          parent_id: root.span_id,
+          metrics: {},
+        })
+        const decoded = decodePayload(transformer.transformSpans([root, child, withoutPriority]))
+        const spans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        assert.strictEqual(spans[0].flags, 1)
+        assert.strictEqual(spans[1].flags, 0)
+        assert.strictEqual(Object.hasOwn(spans[2], 'flags'), false)
       })
     }
 
@@ -784,6 +808,95 @@ describe('OpenTelemetry Traces', () => {
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
     })
 
+    it('keeps the constructed exporter and transformer aligned through remote policy changes', () => {
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const config = getConfigFresh()
+      const DatadogTracer = require('../../src/opentracing/tracer')
+      const tracer = new DatadogTracer(config)
+      const exporter = tracer._exporter
+      let exports = 0
+      const verify = mockOtlpExport(decoded => {
+        const span = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attributes = Object.fromEntries(span.attributes.map(({ key, value }) => [key, value]))
+        assert.deepStrictEqual(attributes['http.request.method'], { stringValue: 'GET' })
+        assert.deepStrictEqual(attributes['http.response.status_code'], { intValue: 200 })
+        assert.strictEqual(attributes['operation.name'], undefined)
+        assert.strictEqual(attributes['resource.name'], undefined)
+        exports++
+      })
+
+      for (const remote of [
+        {
+          DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron',
+          OTEL_TRACES_EXPORTER: 'none',
+          DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: 'v1',
+          DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://remote:9999',
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://remote:9999/traces',
+        },
+        { DD_AGENTLESS_ENABLED: 'true', DD_TRACE_SAMPLE_RATE: '1' },
+        null,
+      ]) {
+        config.setRemoteConfig(remote)
+        assert.strictEqual(tracer._exporter, exporter)
+        assert.strictEqual(require('../../src/exporter').usesOtlpTraceExporter(config), true)
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
+        assert.strictEqual(config.spanAttributeSchema, 'v0')
+        assert.strictEqual(config.spanComputePeerService, false)
+        assert.strictEqual(exporter.options.hostname, new URL(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).hostname)
+        assert.strictEqual(exporter.options.port, new URL(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT).port)
+        tracer.startSpan('http.request', {
+          tags: {
+            'span.kind': 'client',
+            'http.method': 'GET',
+            'http.status_code': '200',
+            'http.url': 'http://localhost:8080/transport',
+          },
+        }).finish()
+      }
+      verify()
+      assert.strictEqual(exports, 3)
+    })
+
+    for (const platform of ['electron', 'test-optimization', 'lambda']) {
+      it(`does not enable semantics or replace the constructed ${platform} exporter remotely`, () => {
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        if (platform === 'lambda') process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+        const config = getConfigFresh({
+          experimental: { exporter: platform === 'electron' ? 'electron' : 'log' },
+          isCiVisibility: platform === 'test-optimization',
+        })
+        const DatadogTracer = require('../../src/opentracing/tracer')
+        const tracer = new DatadogTracer(config)
+        const exporter = tracer._exporter
+        for (const remote of [
+          {
+            DD_TRACE_EXPERIMENTAL_EXPORTER: 'agent',
+            OTEL_TRACES_EXPORTER: 'otlp',
+            OTEL_EXPORTER_OTLP_ENDPOINT: 'http://remote:4318',
+          },
+          { DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' },
+          null,
+        ]) {
+          config.setRemoteConfig(remote)
+          assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+          assert.strictEqual(require('../../src/exporter').usesOtlpTraceExporter(config), false)
+          assert.strictEqual(tracer._exporter, exporter)
+          const exportSpan = sinon.stub(exporter, 'export')
+          tracer.startSpan('http.request', {
+            tags: {
+              'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '200',
+            },
+          }).finish()
+          const [[span]] = exportSpan.firstCall.args
+          assert.strictEqual(span.meta['http.method'], 'GET')
+          assert.strictEqual(span.meta['http.status_code'], '200')
+          assert.strictEqual(span.meta['http.request.method'], undefined)
+          exportSpan.restore()
+        }
+      })
+    }
+
     it('DatadogTracer uses the OTLP exporter when OTEL_TRACES_EXPORTER=otlp', () => {
       process.env.OTEL_TRACES_EXPORTER = 'otlp'
       const loadTracer = proxyquire.noPreserveCache()
@@ -802,15 +915,74 @@ describe('OpenTelemetry Traces', () => {
         'Exporter should not be the OTLP exporter when OTEL_TRACES_EXPORTER is not otlp')
     })
 
-    it('DatadogTracer prefers the Electron exporter over OTLP when OTEL_TRACES_EXPORTER=otlp', () => {
-      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    for (const semantics of ['false', 'true']) {
+      it(`DatadogTracer prefers the Electron exporter over OTLP with requested semantics ${semantics}`, () => {
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = semantics
+        process.env.OTEL_TRACES_EXPORTER = 'otlp'
+        const loadTracer = proxyquire.noPreserveCache()
+        const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+        const ElectronExporter = require('../../src/exporters/electron')
+        const config = getConfigFresh({ experimental: { exporter: 'electron' } })
+        const tracer = new DatadogTracer(config)
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
+        assert(tracer._exporter instanceof ElectronExporter,
+          'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
+      })
+    }
+
+    it('DatadogTracer disables OTel semantics and keeps the Lambda log exporter without an OTLP endpoint', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
       const loadTracer = proxyquire.noPreserveCache()
       const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
-      const ElectronExporter = require('../../src/exporters/electron')
-      const config = getConfigFresh({ experimental: { exporter: 'electron' } })
-      const tracer = new DatadogTracer(config)
-      assert(tracer._exporter instanceof ElectronExporter,
-        'Exporter should be the Electron exporter even when OTEL_TRACES_EXPORTER=otlp')
+      const LogExporter = require('../../src/exporters/log')
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of [undefined, 'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        if (key) process.env[key] = ''
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, key)
+        assert(tracer._exporter instanceof LogExporter, key)
+        if (key) delete process.env[key]
+      }
+    })
+
+    it('DatadogTracer does not infer Lambda OTLP support from transport markers', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      const AgentExporter = require('../../src/exporters/agent')
+      const existsSync = sinon.stub(fs, 'existsSync')
+
+      for (const marker of ['/opt/extensions/datadog-agent', '/tmp/datadog/mini_agent_ready']) {
+        existsSync.callsFake(path => path === marker)
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false, marker)
+        assert(tracer._exporter instanceof AgentExporter, marker)
+      }
+    })
+
+    it('DatadogTracer uses OTLP semantics in Lambda with either explicit OTLP endpoint', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+      process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      const loadTracer = proxyquire.noPreserveCache()
+      const DatadogTracer = loadTracer('../../src/opentracing/tracer', {})
+      sinon.stub(fs, 'existsSync').returns(false)
+
+      for (const key of ['OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT']) {
+        process.env[key] = 'http://collector:4318'
+        const config = getConfigFresh()
+        const tracer = new DatadogTracer(config)
+
+        assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, true, key)
+        assert(tracer._exporter instanceof OtlpHttpTraceExporter, key)
+        delete process.env[key]
+      }
     })
   })
 

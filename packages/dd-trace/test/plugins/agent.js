@@ -313,6 +313,27 @@ function unformatSpanEvents (span) {
 }
 
 /**
+ * Plugin tests inspect spans through the mock Datadog Agent, which cannot decode OTLP payloads.
+ * Replace only the exporter; `SpanProcessor` still applies OTel semantics. Call before `setUrl`.
+ *
+ * @param {import('../../src/index')} initializedTracer
+ */
+function useAgentExporterForOtelSemantics (initializedTracer) {
+  const datadogTracer = initializedTracer._tracer
+  const { _config: config, _processor: processor } = datadogTracer
+
+  // Mirrors `opentracing/tracer.js`; any other exporter already posts to the mock agent.
+  const getExporter = require('../../src/exporter')
+  if (!getExporter.usesOtlpTraceExporter(config)) return
+
+  const Exporter = getExporter(config.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER)
+  const exporter = new Exporter(config, datadogTracer._prioritySampler)
+
+  datadogTracer._exporter = exporter
+  processor._exporter = exporter
+}
+
+/**
  * @param {express.Request} req
  * @param {express.Response} res
  */
@@ -734,6 +755,8 @@ module.exports = {
           plugins: false,
           ...tracerConfig,
         })
+
+        useAgentExporterForOtelSemantics(tracer)
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 

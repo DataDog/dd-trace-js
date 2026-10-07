@@ -40,6 +40,37 @@ describe('exporter', () => {
     assert.strictEqual(Exporter, LogExporter)
   })
 
+  describe('usesOtlpTraceExporter', () => {
+    function config (overrides = {}) {
+      return {
+        OTEL_TRACES_EXPORTER: 'otlp',
+        isCiVisibility: false,
+        tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: '' },
+        ...overrides,
+      }
+    }
+
+    it('should select OTLP when requested without a transport exception', () => {
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config()), true)
+    })
+
+    it('should not select OTLP when it is not requested', () => {
+      assert.strictEqual(
+        require('../src/exporter').usesOtlpTraceExporter(config({ OTEL_TRACES_EXPORTER: 'none' })),
+        false
+      )
+    })
+
+    it('should not select OTLP for Test Optimization', () => {
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(config({ isCiVisibility: true })), false)
+    })
+
+    it('should not select OTLP for Electron', () => {
+      const electronConfig = config({ tracing: { DD_TRACE_EXPERIMENTAL_EXPORTER: 'electron' } })
+      assert.strictEqual(require('../src/exporter').usesOtlpTraceExporter(electronConfig), false)
+    })
+  })
+
   it('should create an AgentExporter when in Lambda environment with an extension', () => {
     process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
     const stub = sinon.stub(fs, 'existsSync')

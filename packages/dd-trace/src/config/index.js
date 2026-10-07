@@ -199,6 +199,14 @@ class Config extends ConfigBase {
   #parsedDdTags
 
   /**
+   * Trace decisions captured only when semantics was requested before platform exclusions.
+   * Generic OTLP endpoints remain configurable for logs and metrics.
+   * @type {{ enabled: boolean, exporter: string, exporterOrigin: TelemetrySource,
+   *   endpoint: string, endpointOrigin: TelemetrySource } | undefined}
+   */
+  #otelTracePolicy
+
+  /**
    * @type {Record<string, string>}
    */
   get parsedDdTags () {
@@ -251,7 +259,17 @@ class Config extends ConfigBase {
       this.#applyOptions(experimental, 'code', 'experimental')
     }
     this.#applyOptions(rest, 'code')
+    const otelSemanticsRequested = this.DD_TRACE_OTEL_SEMANTICS_ENABLED
     this.#applyCalculated()
+    if (otelSemanticsRequested) {
+      this.#otelTracePolicy = {
+        enabled: this.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+        exporter: this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER,
+        exporterOrigin: this.getOrigin('tracing.DD_TRACE_EXPERIMENTAL_EXPORTER'),
+        endpoint: this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+        endpointOrigin: this.getOrigin('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'),
+      }
+    }
 
     warnWrongOtelSettings()
 
@@ -342,6 +360,12 @@ class Config extends ConfigBase {
    *   configs received via the SDK_CONFIGURATION remote config product, or null to reset all remote configuration
    */
   setRemoteConfig (options) {
+    if (this.#otelTracePolicy) {
+      // Remove the previous calculations before applying remote inputs. Otherwise a calculated
+      // OTLP sampler or endpoint can overwrite a newly supplied remote value during recalculation.
+      undo(this, 'calculated')
+      changeTracker.calculated.clear()
+    }
     // Replace the complete RC layer so omitted fields fall back to their previous source.
     // TODO: Remove this reset once forward-fixing configurations explicitly unapply removed values.
     undo(this, 'remote_config')
@@ -349,8 +373,19 @@ class Config extends ConfigBase {
     // Special case: if options is null, nothing to apply
     // This happens when all remote configs are removed
     if (options !== null) {
-      // Resolve aliases and drop configs this tracer version doesn't recognize
-      this.#applyEnvs(getEnvironmentVariables(options, true), 'remote_config')
+      const remoteOptions = getEnvironmentVariables(options, true)
+      // The exporter and OTLP transformer are constructed once. Filter after alias resolution
+      // so remote updates cannot change their semantics or transport dependencies.
+      delete remoteOptions.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      if (this.#otelTracePolicy) {
+        delete remoteOptions.DD_TRACE_EXPERIMENTAL_EXPORTER
+        delete remoteOptions.OTEL_TRACES_EXPORTER
+        delete remoteOptions.DD_TRACE_AGENT_PROTOCOL_VERSION
+        delete remoteOptions.DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+        delete remoteOptions.DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+        delete remoteOptions.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      }
+      this.#applyEnvs(remoteOptions, 'remote_config')
     }
 
     this.#applyCalculated()
@@ -419,7 +454,41 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+    // Disable OTel semantics when the active trace transport cannot export OTLP.
+    const awsLambdaFuncName = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+    if (this.#otelTracePolicy) {
+      setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', this.#otelTracePolicy.enabled)
+    }
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED && !this.#otelTracePolicy) {
+      const hasOtlpTraceEndpoint = this.OTEL_EXPORTER_OTLP_ENDPOINT !== undefined ||
+        this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT !== undefined
+      let warning
+
+      if (this.tracing.DD_TRACE_EXPERIMENTAL_EXPORTER === exporters.ELECTRON) {
+        // The Electron SDK has no OTLP trace exporter.
+        warning = 'DD_TRACE_EXPERIMENTAL_EXPORTER=electron overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      } else if (awsLambdaFuncName !== undefined && !hasOtlpTraceEndpoint) {
+        // Lambda Extension and mini-agent OTLP receivers are optional. An explicit endpoint signals
+        // user intent to use OTLP.
+        warning = 'AWS Lambda without an explicit OTLP endpoint overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      } else if (this.isCiVisibility) {
+        // Test Optimization has no OTLP trace exporter.
+        warning = 'Test Optimization overrode DD_TRACE_OTEL_SEMANTICS_ENABLED to false'
+      }
+
+      if (warning) {
+        log.warn(warning)
+        setAndTrack(this, 'DD_TRACE_OTEL_SEMANTICS_ENABLED', false)
+      }
+    }
+
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'otlp')
+    }
+
+    if (!this.DD_TRACE_OTEL_SEMANTICS_ENABLED &&
+        this.OTEL_TRACES_EXPORTER === 'otlp' &&
+        trackedConfigOrigins.has('protocolVersion')) {
       log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
@@ -442,7 +511,18 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.DD_APPSEC_ENABLED ?? false)
     }
 
-    if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
+    if (this.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+      if (this.spanAttributeSchema !== 'v0') {
+        log.warn('Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_SPAN_ATTRIBUTE_SCHEMA to v0')
+      }
+      if (this.spanComputePeerService) {
+        log.warn(
+          'Enabling DD_TRACE_OTEL_SEMANTICS_ENABLED overrode DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED to false'
+        )
+      }
+      setAndTrack(this, 'spanAttributeSchema', 'v0')
+      setAndTrack(this, 'spanComputePeerService', false)
+    } else if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
       setAndTrack(this, 'spanComputePeerService', true)
     }
 
@@ -470,7 +550,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'tracePropagationStyle.extract', this.tracePropagationStyle.extract)
     }
 
-    if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+    if (awsLambdaFuncName && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       setAndTrack(this, 'flushInterval', 0)
     }
 
@@ -597,7 +677,7 @@ class Config extends ConfigBase {
       if (!this.service) {
         const serverlessName = IS_SERVERLESS
           ? (
-              getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
+              awsLambdaFuncName ||
               getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
               getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
               getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions
@@ -683,6 +763,13 @@ class Config extends ConfigBase {
       }
     }
 
+    if (this.#otelTracePolicy) {
+      // Agentless mode also serves other signals; keep its remote updates without replacing
+      // the already-constructed trace exporter.
+      const { exporter, exporterOrigin } = this.#otelTracePolicy
+      setAndTrack(this, 'tracing.DD_TRACE_EXPERIMENTAL_EXPORTER', exporter, exporter, exporterOrigin)
+    }
+
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {
@@ -722,7 +809,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_METRICS_HEADERS')
     }
-    if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+    if (this.#otelTracePolicy) {
+      const { endpoint, endpointOrigin } = this.#otelTracePolicy
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', endpoint, endpoint, endpointOrigin)
+    } else if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
       assignOtlpHeaderApiKey('OTEL_EXPORTER_OTLP_TRACES_HEADERS')
     }
